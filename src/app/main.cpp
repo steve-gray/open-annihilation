@@ -1058,8 +1058,19 @@ void diag_line(const char* text) {
 }
 
 void diag_at_exit() {
-    diag_line("diag: the C library's exit handlers run");
+    diag_line("diag: the exit handler registered as main starts runs");
 }
+
+void diag_at_exit_late() {
+    diag_line("diag: the exit handler registered as main returns runs (exit() is under way)");
+}
+
+// Built before main and destroyed after every exit handler main registered.
+struct DiagStatic {
+    DiagStatic() { diag_line("diag: static objects are built"); }
+    ~DiagStatic() { diag_line("diag: static objects are destroyed"); }
+};
+DiagStatic diag_static;
 
 #ifdef _WIN32
 LONG WINAPI diag_unhandled(EXCEPTION_POINTERS* info) {
@@ -1078,7 +1089,8 @@ LONG WINAPI diag_unhandled(EXCEPTION_POINTERS* info) {
 
 int main(int argc, char** argv) {
     diag_line("diag: main starts");
-    std::atexit(diag_at_exit);
+    if (std::atexit(diag_at_exit) != 0)
+        diag_line("diag: atexit refused the exit handler");
     std::set_terminate([] {
         diag_line("diag: std::terminate");
         std::abort();
@@ -1168,6 +1180,8 @@ int main(int argc, char** argv) {
             if (status != kSoftRestartStatus) {
                 std::fprintf(stderr, "diag: main returns %d\n", status);
                 std::fflush(stderr);
+                if (std::atexit(diag_at_exit_late) != 0)
+                    diag_line("diag: atexit refused the late exit handler");
                 return status;
             }
             // A change to the mod played is made now, with the runtime and
