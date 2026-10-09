@@ -274,8 +274,13 @@ struct HostDisplay {
         // their own hints from the first event; a desktop build keeps SDL's.
         if constexpr (kTouchFirst)
             set_input_hints();
-        if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+        if (!SDL_Init(SDL_INIT_VIDEO))
             throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
+        // Sound starts on its own: a system with no sound driver SDL can use,
+        // such as a Windows 95 that lacks the sound library SDL loads, plays
+        // silently rather than not at all.
+        if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+            std::cerr << "warning: sound is not available: " << SDL_GetError() << '\n';
         active = true;
         // Gamepads reach the folder chooser and the Game files screen too.
         start_gamepad_subsystem();
