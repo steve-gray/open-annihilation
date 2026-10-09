@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -1046,7 +1047,45 @@ void report_fatal(const std::string& message) {
 
 using namespace oa::app;
 
+// DIAGNOSTIC (win95-exit-diag, not for landing): how a run ends, for the
+// Windows 95 build, which ends with exit code -1 after a clean quit.
+namespace {
+
+void diag_line(const char* text) {
+    std::fputs(text, stderr);
+    std::fputc('\n', stderr);
+    std::fflush(stderr);
+}
+
+void diag_at_exit() {
+    diag_line("diag: the C library's exit handlers run");
+}
+
+#ifdef _WIN32
+LONG WINAPI diag_unhandled(EXCEPTION_POINTERS* info) {
+    std::fprintf(
+        stderr,
+        "diag: unhandled exception 0x%08lx at %p\n",
+        static_cast<unsigned long>(info->ExceptionRecord->ExceptionCode),
+        info->ExceptionRecord->ExceptionAddress
+    );
+    std::fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
+} // namespace
+
 int main(int argc, char** argv) {
+    diag_line("diag: main starts");
+    std::atexit(diag_at_exit);
+    std::set_terminate([] {
+        diag_line("diag: std::terminate");
+        std::abort();
+    });
+#ifdef _WIN32
+    SetUnhandledExceptionFilter(diag_unhandled);
+#endif
 #if defined(SDL_PLATFORM_MACOS) && SDL_VERSION_ATLEAST(3, 4, 0)
     // A held key repeats while text is typed, as on the other systems,
     // rather than opening macOS's accents menu. SDL reads the hint once, as
@@ -1126,8 +1165,11 @@ int main(int argc, char** argv) {
             const int status = run_once(
                 std::move(options), extension, display, game_files, lookup_log.get(), switch_memory
             );
-            if (status != kSoftRestartStatus)
+            if (status != kSoftRestartStatus) {
+                std::fprintf(stderr, "diag: main returns %d\n", status);
+                std::fflush(stderr);
                 return status;
+            }
             // A change to the mod played is made now, with the runtime and
             // its archives gone, before the next run reads the folder.
             mod_install::ChangeOptions change{};
