@@ -3,6 +3,7 @@
 
 // Built-in frontend screens, dispatcher steps and the services table handed to
 // registered screen packages.
+#include "diag_exit.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/defs/layout.hpp"
@@ -22,6 +23,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+
 
 namespace oa::app {
 
@@ -168,6 +170,7 @@ struct BuiltinScreens {
     }
 
     static renderer::MainMenuResources load_main_menu(Runtime& runtime) {
+        oa_diag_mark<7>("the main menu is loaded");
         return renderer::load_main_menu(
             runtime.assets_,
             runtime.main_menu_overlay_ ? renderer::MainMenuLayout::with_overlay

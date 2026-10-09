@@ -14,6 +14,7 @@
 // screens' lobby and never changes the simulation: its hooks that could
 // take over a simulation step, resources, a departing player or a close
 // request are left null, and so is the hook that tells the session's kind.
+#include "../diag_exit.hpp"
 #include "endpoint.hpp"
 #include "options.hpp"
 #include "serve_reports.hpp"
@@ -40,6 +41,7 @@ static_assert(
     "the engine's extension table changed: follow its change, then raise "
     "kExtensionApiVersionFollowed"
 );
+
 
 namespace oa::app::automation {
 namespace {
@@ -89,6 +91,7 @@ void startup(void* /*context*/, Runtime& runtime) {
             ": the automation endpoint is served from the game's main loop"
         );
     automation.endpoint.open(automation.options.listen, endpoint_file(automation.options, run));
+    oa_diag_mark<6>("the automation endpoint is open");
 }
 
 /// Serves the endpoint at each stage of a frame (Extension::frame).

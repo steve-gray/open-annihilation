@@ -4,6 +4,7 @@
 // oa-game entry point: display setup, the Game files screen where the game
 // folder is missing and the platform brings game files in, intro playback
 // and runtime launch.
+#include "diag_exit.hpp"
 #include "oa/app/runtime.hpp"
 #include "folder_chooser_screen.hpp"
 #include "game_files_check.hpp"
@@ -76,21 +77,6 @@
 #ifndef OA_TOUCH_FIRST
 #error "OA_TOUCH_FIRST (0 or 1) says whether the touch controls are on from the start"
 #endif
-
-// DIAGNOSTIC (win95-exit-diag, not for landing): exit handlers registered at
-// marked points; exit() runs them in reverse, so the last mark printed puts
-// the handler that ends the process between it and the next.
-namespace {
-const char* diag_marks[8] = {};
-template <int N> void diag_mark_runs() {
-    std::fprintf(stderr, "diag: exit handler of mark %d (%s) runs\n", N, diag_marks[N]);
-    std::fflush(stderr);
-}
-template <int N> void diag_mark(const char* name) {
-    diag_marks[N] = name;
-    std::atexit(diag_mark_runs<N>);
-}
-} // namespace
 
 namespace oa::app {
 namespace {
@@ -742,7 +728,7 @@ int run_once(
     LookupLog* lookup_log,
     ModSwitchMemory& switch_memory
 ) {
-    diag_mark<2>("run_once starts");
+    oa_diag_mark<2>("run_once starts");
     // A soft restart reads the settings the switch saved: the mod the Game
     // files screen would play and the backups setting.
     if (options.restarts > 0 && game_files.installed &&
@@ -869,7 +855,7 @@ int run_once(
     const uint32_t restarts = options.restarts;
     // The runtime holds hundreds of kilobytes of game state, so it lives
     // on the heap: the main thread's stack is 1 MiB on Windows.
-    diag_mark<3>("before the runtime is built");
+    oa_diag_mark<3>("before the runtime is built");
     const auto runtime = std::make_unique<Runtime>(
         std::move(options),
         assets,
@@ -882,9 +868,9 @@ int run_once(
     runtime->take_full_screen_switch(display.full_screen);
     if (check_mod_switch)
         switch_memory.sample(restarts);
-    diag_mark<4>("the runtime is built, before it runs");
+    oa_diag_mark<4>("the runtime is built, before it runs");
     const int status = runtime->run();
-    diag_mark<5>("the runtime ran");
+    oa_diag_mark<5>("the runtime ran");
     if (!runtime->soft_restart_requested()) {
         if (checked_options)
             return finish_game_files_check(*checked_options, status);
@@ -1134,7 +1120,7 @@ int main(int argc, char** argv) {
         // Every registered extension fills its table before the command
         // line is parsed; the runtime gets the table that combines them.
         const ExtensionList extensions(registered_extensions());
-        diag_mark<1>("the extensions are read");
+        oa_diag_mark<1>("the extensions are read");
         const Extension& extension = extensions.combined();
         const Options parsed = parse_options(argc, argv, extension);
         // The Game files screen's check installs its scripted platform

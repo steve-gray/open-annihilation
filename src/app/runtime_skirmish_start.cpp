@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Skirmish match bootstrap from the selected map and players.
+#include "diag_exit.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/ui/hud/unit_labels.hpp"
 #include "engine_settings_state.hpp"
@@ -41,6 +42,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
 
 namespace oa::app {
 
@@ -1399,6 +1401,7 @@ void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
         bootstrap.multiplayer || (current_extension_state() &
                                   (extension_state::shared_match | extension_state::replay)) != 0
     );
+    oa_diag_mark<8>("the match world is prepared");
     status_ = "Offline match world prepared for " + selected_map_name_runtime_ + " with " +
               std::to_string(unit_definitions_.size()) + " unit runtimes, " +
               std::to_string(feature_table_.defs.size()) + " feature definitions and " +
