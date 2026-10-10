@@ -936,6 +936,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
+  src/app/runtime_pack_maps.cpp
   src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
@@ -983,6 +984,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_briefing_narration_check.cpp src/app/runtime_build_site_check.cpp
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
+  src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
@@ -1515,6 +1517,21 @@ if(OA_BUILD_PLATFORM)
         --user-folder "${oa_mod_switch_dir}/Open Annihilation")
       set_tests_properties(native-mod-switch PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_switch_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Two map packs written into the player's own Maps folder: one whose
+      # map fits, listed after the base maps, mounted alone when it is chosen,
+      # unmounted for a base map, played for 30 ticks with its files readable
+      # and unmounted when the match ends; and one whose feature the game
+      # already defines, refused, the map picker showing why and keeping the
+      # earlier map.
+      set(oa_map_packs_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-packs")
+      file(MAKE_DIRECTORY "${oa_map_packs_dir}")
+      add_test(NAME native-map-packs COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-map-packs
+        --preferences-file "${oa_map_packs_dir}/map-packs.conf"
+        --user-folder "${oa_map_packs_dir}/Open Annihilation")
+      set_tests_properties(native-map-packs PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_map_packs_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
