@@ -88,5 +88,20 @@ int main() {
     OA_CHECK(!install::registry_files_waiting());
     OA_CHECK(!install::package_files_waiting());
 
+    // The package queue drops a repeat under another spelling of the same path.
+    install::post_package_file("a.oamod");
+    install::post_package_file("./a.oamod");
+    OA_CHECK(file_name(install::take_package_file()) == "a.oamod");
+    install::finish_package_file();
+    OA_CHECK(!install::take_package_file());
+    OA_CHECK(!install::package_files_waiting());
+
+    // A path through a parent step is the same file.
+    install::post_registry_file("sub/../one.oareg");
+    install::post_registry_file("one.oareg");
+    OA_CHECK(file_name(install::take_registry_file()) == "one.oareg");
+    OA_CHECK(!install::take_registry_file());
+    OA_CHECK(!install::registry_files_waiting());
+
     return oa::test::check_exit_status();
 }

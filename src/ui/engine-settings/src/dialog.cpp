@@ -1386,25 +1386,6 @@ void set_choice(Dialog& dialog, Setting setting, std::size_t index) {
         settings.modern_fonts = true;
 }
 
-int32_t shown_choices(std::size_t choices) noexcept {
-    return static_cast<int32_t>(std::min<std::size_t>(choices, most_shown_choices));
-}
-
-SourceRect choice_list(const SourceRect& field, std::size_t choices) noexcept {
-    const int32_t height = shown_choices(choices) * choice_item_height + 2;
-    int32_t top = field.y + field.height;
-    // A list that would reach below the footer's line opens over its field.
-    if (top + height > footer_rule_row)
-        top = std::max(field.y - height, body_top);
-    return {field.x, top, field.width, height};
-}
-
-SourceRect choice_item(const SourceRect& list, int32_t shown) noexcept {
-    return {
-        list.x + 1, list.y + 1 + shown * choice_item_height, list.width - 2, choice_item_height
-    };
-}
-
 std::string_view shown_text(std::string_view english) {
     return oa::data::languages::interface_text(english);
 }
@@ -1780,31 +1761,6 @@ SourceRect footer_button(int32_t control) noexcept {
     if (control == cancel_control)
         return cancel_button;
     return ok_button;
-}
-
-int32_t knob_column(const SourceRect& track, int32_t stop, int32_t stops) noexcept {
-    const int32_t first = track.x + knob_width / 2;
-    const int32_t travel = track.width - knob_width;
-    if (stops < 2)
-        return first;
-    return first +
-           (travel * std::clamp(stop, int32_t{0}, stops - 1) + (stops - 1) / 2) / (stops - 1);
-}
-
-int32_t stop_at(const SourceRect& track, int32_t column, int32_t stops) noexcept {
-    const int32_t first = track.x + knob_width / 2;
-    const int32_t travel = track.width - knob_width;
-    if (stops < 2 || travel <= 0)
-        return 0;
-    const int32_t along = std::clamp(column - first, int32_t{0}, travel);
-    return (along * (stops - 1) + travel / 2) / travel;
-}
-
-std::size_t level_at(const SourceRect& area, const Strip& strip, int32_t column) noexcept {
-    if (strip.levels == 0 || strip.level_width <= 0)
-        return 0;
-    const int32_t along = std::max(column - area.x - 1, int32_t{0}) / strip.level_width;
-    return std::min(static_cast<std::size_t>(along), strip.levels - 1);
 }
 
 std::size_t level_index(AntiAliasing level) noexcept {

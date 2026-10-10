@@ -135,7 +135,13 @@ namespace oa::media::director {
 struct EngineView;
 } // namespace oa::media::director
 
+namespace oa::platform::text_font {
+class FontStack;
+} // namespace oa::platform::text_font
+
 namespace oa::app {
+
+struct PresenceFacts;
 
 /// Loads the session palette, PALETTE.PAL, through the palette file loader.
 ///
@@ -259,6 +265,10 @@ struct PackageOptions;
 } // namespace package_install
 
 class MapPacks;
+
+namespace content {
+class Service;
+} // namespace content
 
 class Runtime final : public menu::Host,
                       public entry::SinglePlayerHost,
@@ -620,13 +630,37 @@ class Runtime final : public menu::Host,
     /// @return the folders; empty when no pack holds the language
     [[nodiscard]] std::vector<std::filesystem::path> language_pack_folders() const;
 
+    /// Returns the generation of the language's font faces and warm-up text.
+    ///
+    /// It changes when the faces or the warm-up of the language shown change.
+    ///
+    /// @return the generation; 0 before start_language
+    [[nodiscard]] uint64_t language_fonts_generation() const noexcept;
+
+    /// Returns the warm-up text of the language shown.
+    ///
+    /// It is the first pack of the language, in lookup order, that has one.
+    ///
+    /// @return the text; empty when no pack has one, valid until the
+    ///     language changes
+    [[nodiscard]] std::string_view language_warmup() const;
+
+    /// Puts the language shown's font faces on an open stack.
+    ///
+    /// The stack's pack faces are removed, then each font of the language is
+    /// added with its role. A face that does not open is logged and skipped.
+    ///
+    /// @param stack the open stack
+    void use_language_fonts(oa::platform::text_font::FontStack& stack) const;
+
     /// Readies the modern fonts for the language shown now, as the first
     /// line drawn after the language changes does by itself: forgets the
     /// lines drawn before, draws ideographs at 12 px at the least while a
-    /// Chinese, Japanese or Korean language is shown, and then draws its
-    /// most common characters into the glyph store at the text size, so
-    /// that the first screen in it draws few new glyphs. Call it where the
-    /// language is chosen, or while a loading screen shows.
+    /// Chinese, Japanese or Korean language is shown, adds the language
+    /// packs' font faces, and lays out the pack's warm-up text into the
+    /// glyph store at the text size, so that the first screen in it draws
+    /// few new glyphs. Call it where the language is chosen, or while a
+    /// loading screen shows.
     void warm_game_text();
 
     /// Returns how game text is drawn now: the Language settings,
@@ -1858,6 +1892,13 @@ class Runtime final : public menu::Host,
     /// @param runtime the running app
     /// @return the hash, 64 lower-case hexadecimal digits
     friend std::string simulation_hash(const Runtime& runtime);
+    /// Reads what this machine is playing (presence_facts in
+    /// presence_facts.hpp): Developer Mode, the simulation hash, whether the
+    /// rules differ from 3.1c, the mod and which standard hacks are on.
+    ///
+    /// @param runtime the running app
+    /// @return those facts
+    friend PresenceFacts presence_facts(const Runtime& runtime);
 
     // ---- Touch controls (docs/touch-controls.md) --------------------------------------
 
@@ -3503,7 +3544,8 @@ class Runtime final : public menu::Host,
     /// With no mod it is the plain baseline's. With a mod that changes the
     /// simulation it is that profile's, and not the baseline's. Turning a
     /// simulation-changing Developer Mode override on then changes it, with
-    /// no new start. Throws std::runtime_error at the first failure.
+    /// no new start. The same run checks the presence facts that follow
+    /// those settings. Throws std::runtime_error at the first failure.
     void check_simulation_hash();
 
     /// Checks the services and hooks the screens and the extension reach the
@@ -3925,6 +3967,25 @@ class Runtime final : public menu::Host,
     ///
     /// @return the index
     [[nodiscard]] MapPacks& map_packs() const;
+
+    /// The registries and cached catalogues (runtime_content.cpp).
+    struct ContentState;
+
+    /// Frees the content service, joining its worker.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_content_state(ContentState* state) noexcept;
+
+    /// Reads the registries and starts a refresh where one is due.
+    void start_content();
+
+    /// Passes Developer mode on when it changed.
+    void tick_content();
+
+    /// Returns the content service, starting it on first use.
+    ///
+    /// @return the service
+    [[nodiscard]] content::Service& content_service();
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
@@ -14505,6 +14566,10 @@ class Runtime final : public menu::Host,
     // The installed map packs and a map pack's fit check; null until first used.
     mutable std::unique_ptr<MapPackState, void (*)(MapPackState*) noexcept> map_pack_state_{
         nullptr, destroy_map_pack_state
+    };
+    // The registries and their catalogues; null until start_content.
+    std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{
+        nullptr, destroy_content_state
     };
     // The in-game menu's OA button and dialog; null until first used.
     std::unique_ptr<EngineSettingsMatchHost, void (*)(EngineSettingsMatchHost*) noexcept>

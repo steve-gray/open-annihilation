@@ -934,7 +934,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/modern_text.cpp src/app/text_input_area.cpp
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
-  src/app/runtime_mod_install.cpp src/app/runtime_package_kinds.cpp src/app/mod_install_watch.cpp
+  src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
+  src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
   src/app/world_scaling.cpp src/app/far_view.cpp
@@ -959,7 +960,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_pad.cpp src/app/runtime_pad_actions.cpp src/app/runtime_pad_pointer.cpp
   src/app/runtime_pad_haptics.cpp src/app/runtime_text_input.cpp
   src/app/folder_chooser_screen.cpp src/app/runtime_found_install.cpp
-  src/app/simulation_hash.cpp)
+  src/app/simulation_hash.cpp
+  src/app/presence_facts.cpp)
 # The self-checks: the --check-* options with which the game drives itself
 # through its screens and orders and reports a verdict, for the native
 # checks. OA_SELF_CHECKS=OFF leaves them out, as the release packages do.
@@ -1040,7 +1042,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-language-packs-test src/app/language_packs_test.cpp
     src/app/language_packs.cpp)
   target_link_libraries(oa-app-language-packs-test PRIVATE oa-app-headers oa-data-languages
-    oa-formats-oamod oa-formats-tdf oa-test-support oa-options)
+    oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
 endif()
@@ -2718,6 +2720,17 @@ endif()
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
 add_subdirectory(src/netgame)
+# Catalogues are fetched with the HTTP client src/netgame adds, so this
+# library follows that directory. oa-game is linked earlier in this file,
+# before the client exists: the content library cannot be named in
+# oa_game_libraries at that list's declaration. The game is linked with it
+# here, and the name is appended for the extension SDK below, which reads
+# the same list.
+add_subdirectory(src/app/content)
+if(TARGET oa-game)
+  target_link_libraries(oa-game PRIVATE oa-app-content)
+endif()
+list(APPEND oa_game_libraries oa-app-content)
 add_subdirectory(src/session/demo)
 add_subdirectory(src/app/netgame)
 if(TARGET oa-app-netgame)

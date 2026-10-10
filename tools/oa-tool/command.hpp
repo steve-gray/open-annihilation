@@ -108,10 +108,12 @@ class Failure : public std::runtime_error {
 
 // The package command, defined in pack.cpp.
 
-/// Packs a folder as a .oamod or a .oalang.
+/// Packs a folder as a .oamod, a .oalang or a .oamap.
 ///
 /// One positional argument is the folder. `--out FILE` names the package,
-/// and `--force` replaces a file that already exists. Options may be written
+/// and `--force` replaces a file that already exists. `--game-dir DIR` is
+/// the game's data; map packs need the game's palette for previews, and
+/// giving it for another kind is a usage error. Options may be written
 /// before or after the folder. The manifest is written first and every other
 /// file follows in byte order of its path.
 ///

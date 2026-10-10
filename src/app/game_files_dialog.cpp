@@ -110,22 +110,51 @@ languages::InterfaceText& screen_catalogue() {
     }
 }
 
+/// Tells whether two words are the same, ignoring the case of ASCII letters.
+///
+/// @param left a word
+/// @param right a word
+/// @return true when they match
+[[nodiscard]] bool same_word(std::string_view left, std::string_view right) {
+    const languages::UnitTexts::NoCaseLess less{};
+    return !less(left, right) && !less(right, left);
+}
+
+/// The engine's and the player's packs the Game files screen and the folder
+/// chooser draw with. They are read once. published is set when they are
+/// registered as installed languages; the management screen does not
+/// register them, because the runtime already has.
+struct HeldLanguagePacks {
+    bool read{};
+    bool published{};
+    std::vector<std::unique_ptr<LoadedLanguagePack>> engine;
+    std::vector<std::unique_ptr<LoadedLanguagePack>> player;
+};
+
+/// The packs, kept for as long as the game runs.
+///
+/// @return the packs
+HeldLanguagePacks& held_language_packs() {
+    static HeldLanguagePacks held;
+    return held;
+}
+
 /// Reads the catalogue files beside the game once, then the engine's
-/// language packs and the player's, and registers the installed languages.
+/// language packs and the player's, without registering them.
 ///
 /// The player's folder is read even when the program's own folder is not
 /// there. The first call is the one that decides the folder.
 ///
 /// @param user_folder_option --user-folder; empty leaves the folder to the preferences
 /// @param preferences_file --preferences-file; empty: the player's own file
-void read_screen_catalogue(
+void read_held_language_packs(
     const std::optional<fs::path>& user_folder_option,
     const std::optional<fs::path>& preferences_file
 ) {
-    static bool read = false;
-    if (read)
+    HeldLanguagePacks& held = held_language_packs();
+    if (held.read)
         return;
-    std::vector<std::unique_ptr<LoadedLanguagePack>> engine_packs;
+    std::vector<std::unique_ptr<LoadedLanguagePack>>& engine_packs = held.engine;
     const std::string base = oa::platform::program_directory();
     if (!base.empty()) {
         const fs::path folder = path_from_utf8(base.c_str()) / path_from_utf8(catalogue_folder);
@@ -168,15 +197,29 @@ void read_screen_catalogue(
         std::cerr << "open-annihilation: no Documents folder (" << note
                   << "); the player's language packs are read from " << path_to_utf8(player_root)
                   << '\n';
-    std::vector<std::unique_ptr<LoadedLanguagePack>> player_packs;
     if (!player_root.empty())
         read_language_packs(
-            player_root / path_from_utf8(player_languages_folder), player_packs, &screen_catalogue()
+            player_root / path_from_utf8(player_languages_folder), held.player, &screen_catalogue()
         );
-    // The player's pack wins over the engine's when both hold one tag.
-    // No mod's packs: this screen adds none of a mod's languages.
-    languages::set_pack_languages(installed_entries({&player_packs, &engine_packs}), {});
-    read = true;
+    held.read = true;
+}
+
+/// Reads the catalogue and the packs once, then registers the installed
+/// languages. The player's pack wins over the engine's when both hold one
+/// tag. No mod's packs: this screen adds none of a mod's languages.
+///
+/// @param user_folder_option --user-folder; empty leaves the folder to the preferences
+/// @param preferences_file --preferences-file; empty: the player's own file
+void read_screen_catalogue(
+    const std::optional<fs::path>& user_folder_option,
+    const std::optional<fs::path>& preferences_file
+) {
+    read_held_language_packs(user_folder_option, preferences_file);
+    HeldLanguagePacks& held = held_language_packs();
+    if (held.published)
+        return;
+    languages::set_pack_languages(installed_entries({&held.player, &held.engine}), {});
+    held.published = true;
 }
 
 /// Puts a language choice in effect for the interface's words.
@@ -480,6 +523,50 @@ void install_game_files_language(
     );
 }
 
+void read_game_files_language_packs(
+    const std::optional<fs::path>& user_folder_option,
+    const std::optional<fs::path>& preferences_file
+) {
+    read_held_language_packs(user_folder_option, preferences_file);
+}
+
+void use_game_files_language_fonts(text_font::FontStack& stack) {
+    stack.remove_pack_faces();
+    const languages::Language& chosen = languages::interface_language();
+    const HeldLanguagePacks& held = held_language_packs();
+    std::vector<PackFontFile> fonts;
+    const auto add_group = [&](const std::vector<std::unique_ptr<LoadedLanguagePack>>& packs) {
+        for (const auto& loaded : packs) {
+            if (loaded == nullptr)
+                continue;
+            const languages::PackManifest& manifest = loaded->pack.manifest();
+            if (manifest.tag != chosen.tag && !same_word(manifest.word, chosen.game_name))
+                continue;
+            for (const PackFontFile& font : pack_fonts(*loaded)) {
+                const bool held_already =
+                    std::any_of(fonts.begin(), fonts.end(), [&font](const PackFontFile& have) {
+                        return have.file == font.file;
+                    });
+                if (held_already)
+                    continue;
+                // Ones past the stack's room are not tried, so they are not
+                // reported as faces that did not open.
+                if (fonts.size() >= text_font::most_pack_faces)
+                    continue;
+                fonts.push_back(font);
+            }
+        }
+    };
+    // The player's pack wins over the engine's when both name one file.
+    add_group(held.player);
+    add_group(held.engine);
+    for (const PackFontFile& font : fonts) {
+        if (!stack.add_face(font.file, font.role))
+            std::cerr << "open-annihilation: the language font " << path_to_utf8(font.file)
+                      << " did not open\n";
+    }
+}
+
 bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
     const fs::path file =
         request.preferences_file.value_or(oa::platform::preferences::default_file());
@@ -534,6 +621,10 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             use_language(dialog.chosen.language, request.preferences_file, request.user_folder);
         } else {
             use_language(dialog.opened.language, request.preferences_file, request.user_folder);
+        }
+        if (request.fonts != nullptr) {
+            use_game_files_language_fonts(*request.fonts);
+            text.lines.clear();
         }
         return accepted;
     };
@@ -660,6 +751,10 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             case settings::DialogAction::changed:
                 // The language chosen shows at once, in the dialog's own words too.
                 use_language(dialog.chosen.language, request.preferences_file, request.user_folder);
+                if (request.fonts != nullptr) {
+                    use_game_files_language_fonts(*request.fonts);
+                    text.lines.clear();
+                }
                 dirty = true;
                 break;
             case settings::DialogAction::accepted:
