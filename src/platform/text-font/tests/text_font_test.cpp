@@ -11,15 +11,21 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <vector>
 
 namespace {
 
 namespace text_font = oa::platform::text_font;
 using text_font::Face;
+using text_font::FaceRole;
 using text_font::Rendering;
 using text_font::Style;
 using text_font::Weight;
@@ -376,6 +382,191 @@ void holds_ideographs_to_a_least_size() {
     OA_CHECK(!stack->draw("H", beyond));
 }
 
+/// The fonts folder without Noto Sans CJK, removed when this dies. The stack
+/// that opened it must die first: it keeps the files open.
+struct TemporaryFonts {
+    std::filesystem::path directory;
+
+    TemporaryFonts() {
+        static int made = 0;
+        directory = std::filesystem::temp_directory_path() /
+                    ("oa-text-font-" + std::to_string(++made) + "-" +
+                     std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(directory);
+        const auto bundled = text_font::bundled_font_directory();
+        for (const std::string_view name :
+             {std::string_view("DejaVuSans-Bold.ttf"),
+              std::string_view("DejaVuSans.ttf"),
+              std::string_view("NotoEmoji.ttf")}) {
+            std::error_code error;
+            std::filesystem::copy_file(
+                bundled / std::filesystem::path(name),
+                directory / std::filesystem::path(name),
+                error
+            );
+            OA_CHECK(!error);
+        }
+    }
+
+    ~TemporaryFonts() {
+        std::error_code error;
+        std::filesystem::remove_all(directory, error);
+    }
+
+    TemporaryFonts(const TemporaryFonts&) = delete;
+    TemporaryFonts& operator=(const TemporaryFonts&) = delete;
+};
+
+/// Covered pixels cropped to their bounding box, so two lines can be compared
+/// when their heights and baselines differ by a row.
+std::vector<uint8_t> covered_pixels(const text_font::Coverage& line) {
+    int32_t left = line.width;
+    int32_t top = line.height;
+    int32_t right = 0;
+    int32_t bottom = 0;
+    for (int32_t row = 0; row < line.height; ++row)
+        for (int32_t column = 0; column < line.width; ++column)
+            if (line.alpha[static_cast<std::size_t>(row * line.width + column)] != 0) {
+                left = std::min(left, column);
+                top = std::min(top, row);
+                right = std::max(right, column + 1);
+                bottom = std::max(bottom, row + 1);
+            }
+    std::vector<uint8_t> pixels;
+    if (left >= right || top >= bottom)
+        return pixels;
+    pixels.reserve(static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top));
+    for (int32_t row = top; row < bottom; ++row)
+        for (int32_t column = left; column < right; ++column)
+            pixels.push_back(line.alpha[static_cast<std::size_t>(row * line.width + column)]);
+    return pixels;
+}
+
+void opens_without_the_cjk_face() {
+    TemporaryFonts fonts;
+    auto stack = text_font::FontStack::open(fonts.directory);
+    OA_CHECK(stack != nullptr);
+    if (!stack)
+        return;
+    OA_CHECK(stack->has_face(Face::dejavu_sans_bold));
+    OA_CHECK(stack->has_face(Face::dejavu_sans));
+    OA_CHECK(!stack->has_face(Face::noto_sans_cjk));
+    OA_CHECK(stack->has_face(Face::noto_emoji));
+    OA_CHECK(stack->pack_face_count() == 0);
+    // No face has U+4E2D, so it draws the chain's first missing-glyph box.
+    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == Face::dejavu_sans_bold);
+    OA_CHECK(!stack->face_metrics(Face::noto_sans_cjk, style_of(14, Weight::bold)));
+    const auto line = stack->metrics(style_of(14, Weight::bold));
+    // The full stack's 14-px bold line is 14 above the baseline and 4 below,
+    // because Noto Sans CJK at 12 px sets those rows. Without that face the
+    // line is the bold sans face's 13 and 4.
+    OA_CHECK(line && line->ascent == 13 && line->descent == 4);
+}
+
+void pack_faces_join_the_chain() {
+    TemporaryFonts fonts;
+    auto stack = text_font::FontStack::open(fonts.directory);
+    auto full = open_beside();
+    OA_CHECK(stack != nullptr && full != nullptr);
+    if (!stack || !full)
+        return;
+    const Style style = style_of(14, Weight::bold);
+    const auto rows = stack->metrics(style);
+    const auto bundled = text_font::bundled_font_directory();
+    OA_CHECK(stack->add_face(bundled / "NotoSansCJKsc-Bold.otf", FaceRole::ideographs));
+    OA_CHECK(stack->pack_face_count() == 1);
+    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == text_font::pack_face(0));
+    const auto from_pack = stack->draw("\xE4\xB8\xAD", style);
+    const auto from_full = full->draw("\xE4\xB8\xAD", style);
+    OA_CHECK(from_pack && from_full);
+    if (from_pack && from_full) {
+        const auto pack_ink = covered_pixels(*from_pack);
+        const auto full_ink = covered_pixels(*from_full);
+        OA_CHECK(!pack_ink.empty() && pack_ink == full_ink);
+    }
+    // A pack face does not change the line's rows.
+    const auto after = stack->metrics(style);
+    OA_CHECK(rows && after && rows->ascent == after->ascent && rows->descent == after->descent);
+    OA_CHECK(after && after->ascent == 13 && after->descent == 4);
+
+    OA_CHECK(stack->add_face(fonts.directory / "DejaVuSans.ttf", FaceRole::letters));
+    const auto bold = stack->chain(Weight::bold);
+    const auto regular = stack->chain(Weight::regular);
+    OA_CHECK(bold.size() == 5 && regular.size() == 4);
+    if (bold.size() == 5) {
+        OA_CHECK(bold[0] == Face::dejavu_sans_bold);
+        OA_CHECK(bold[1] == Face::dejavu_sans);
+        OA_CHECK(bold[2] == text_font::pack_face(1));
+        OA_CHECK(bold[3] == text_font::pack_face(0));
+        OA_CHECK(bold[4] == Face::noto_emoji);
+    }
+    if (regular.size() == 4) {
+        OA_CHECK(regular[0] == Face::dejavu_sans);
+        OA_CHECK(regular[1] == text_font::pack_face(1));
+        OA_CHECK(regular[2] == text_font::pack_face(0));
+        OA_CHECK(regular[3] == Face::noto_emoji);
+    }
+    // U+4E2D is still the ideographs face: the letters face has no such character.
+    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == text_font::pack_face(0));
+
+    // Refused while there is room, so a full stack is not what refuses them.
+    OA_CHECK(!stack->add_face(fonts.directory / "missing.otf", FaceRole::letters));
+    {
+        std::ofstream notes(fonts.directory / "notes.otf", std::ios::binary);
+        notes << "not a font\n";
+    }
+    OA_CHECK(!stack->add_face(fonts.directory / "notes.otf", FaceRole::ideographs));
+    OA_CHECK(stack->pack_face_count() == 2);
+
+    OA_CHECK(stack->add_face(fonts.directory / "DejaVuSans-Bold.ttf", FaceRole::letters));
+    OA_CHECK(stack->add_face(fonts.directory / "NotoEmoji.ttf", FaceRole::letters));
+    OA_CHECK(stack->pack_face_count() == 4);
+    OA_CHECK(!stack->add_face(bundled / "NotoSansCJKsc-Bold.otf", FaceRole::ideographs));
+    OA_CHECK(stack->pack_face_count() == 4);
+}
+
+void removed_faces_leave_no_glyphs() {
+    TemporaryFonts fonts;
+    auto stack = text_font::FontStack::open(fonts.directory);
+    auto plain = text_font::FontStack::open(fonts.directory);
+    OA_CHECK(stack != nullptr && plain != nullptr);
+    if (!stack || !plain)
+        return;
+    const Style style = style_of(14, Weight::bold);
+    const auto bundled = text_font::bundled_font_directory();
+    OA_CHECK(stack->add_face(bundled / "NotoSansCJKsc-Bold.otf", FaceRole::ideographs));
+    const auto ideograph = stack->draw("\xE4\xB8\xAD", style);
+    const auto missing_box = plain->draw("\xE4\xB8\xAD", style);
+    OA_CHECK(ideograph && missing_box && stack->cached_glyphs() >= 1);
+    const auto ideograph_ink = ideograph ? covered_pixels(*ideograph) : std::vector<uint8_t>{};
+    stack->remove_pack_faces();
+    OA_CHECK(stack->pack_face_count() == 0);
+    OA_CHECK(stack->cached_glyphs() == 0);
+    // The same index, a face with no U+4E2D. The cached ideograph must not be drawn.
+    OA_CHECK(stack->add_face(fonts.directory / "DejaVuSans.ttf", FaceRole::ideographs));
+    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == Face::dejavu_sans_bold);
+    const auto drawn = stack->draw("\xE4\xB8\xAD", style);
+    OA_CHECK(drawn && missing_box);
+    if (drawn && missing_box) {
+        const auto ink = covered_pixels(*drawn);
+        OA_CHECK(ink == covered_pixels(*missing_box));
+        OA_CHECK(ink != ideograph_ink);
+    }
+}
+
+void face_file_opens() {
+    const auto bundled = text_font::bundled_font_directory();
+    for (const std::string_view name : text_font::face_files)
+        OA_CHECK(text_font::FontStack::face_file_opens(bundled / std::filesystem::path(name)));
+    TemporaryFonts fonts;
+    {
+        std::ofstream notes(fonts.directory / "notes.otf", std::ios::binary);
+        notes << "not a font\n";
+    }
+    OA_CHECK(!text_font::FontStack::face_file_opens(fonts.directory / "notes.otf"));
+    OA_CHECK(!text_font::FontStack::face_file_opens(fonts.directory / "missing.otf"));
+}
+
 /// "Ab", a Chinese character and the rocket emoji, bold at 14 px, mono:
 /// the line as FreeType 2.14.3 draws it with the pinned fonts.
 constexpr std::string_view mixed_line = "Ab\xE4\xB8\xAD\xF0\x9F\x9A\x80";
@@ -440,5 +631,9 @@ int main(int argc, char** argv) {
     draws_mono_and_antialiased();
     keeps_the_glyphs_used_last();
     holds_ideographs_to_a_least_size();
+    opens_without_the_cjk_face();
+    pack_faces_join_the_chain();
+    removed_faces_leave_no_glyphs();
+    face_file_opens();
     return oa::test::check_exit_status();
 }
