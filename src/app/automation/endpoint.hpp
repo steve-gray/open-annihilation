@@ -28,7 +28,7 @@
 // is held back by the connection itself.
 #pragma once
 
-#include "oa/app/automation/json.hpp"
+#include "oa/formats/json.hpp"
 #include "oa/app/automation/protocol.hpp"
 #include "oa/app/automation_host.hpp"
 #include "oa/app/check_host.hpp"
@@ -50,6 +50,28 @@ struct Options;
 }
 
 namespace oa::app::automation {
+
+// A source can include more than one of these headers, so each name is declared once.
+#ifndef OA_APP_AUTOMATION_USING_JSON
+#define OA_APP_AUTOMATION_USING_JSON
+using oa::formats::json::Json;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_JSON_WRITER
+#define OA_APP_AUTOMATION_USING_JSON_WRITER
+using oa::formats::json::JsonWriter;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_JSON_TYPE
+#define OA_APP_AUTOMATION_USING_JSON_TYPE
+using oa::formats::json::JsonType;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_JSON_ERROR
+#define OA_APP_AUTOMATION_USING_JSON_ERROR
+using oa::formats::json::JsonError;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_PARSE_JSON
+#define OA_APP_AUTOMATION_USING_PARSE_JSON
+using oa::formats::json::parse_json;
+#endif
 
 /// Connections the endpoint keeps waiting for their first frame, at most.
 inline constexpr size_t max_waiting_connections = 4;

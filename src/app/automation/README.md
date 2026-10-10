@@ -209,9 +209,10 @@ rows (`load_progress`), and a match's end as the match is torn down
 ## The codec
 
 `oa-app-automation-protocol` reads and writes the protocol's frames
-(`include/oa/app/automation/protocol.hpp`) and their JSON
-(`include/oa/app/automation/json.hpp`). A frame is one ASCII header line, a
-JSON part and an optional payload:
+(`include/oa/app/automation/protocol.hpp`). Their JSON is the engine's
+strict reader and writer, `oa-formats-json` in
+[src/formats/json](../../formats/json/README.md). A frame is one ASCII
+header line, a JSON part and an optional payload:
 
 ```
 AUTO/1 <route> <json-length> <payload-length> <crc32>\n
@@ -267,7 +268,7 @@ text in a code page that is not UTF-8 comes out so: the four bytes of
 | `reports.cpp` | what `match` and `room` answer, from a match's world and the lobby (`oa-app-automation-reports`) |
 | `events.cpp` | the kinds of event and the watch that learns them (`oa-app-automation-reports`) |
 | `serve_reports.cpp` | `match`, `room` and `subscribe`, and the work that sends the events of a frame, a load and a match's end |
-| `protocol.cpp`, `json.cpp` | the codec |
+| `protocol.cpp` | the codec's frames |
 
 The listener and its connections are TCP streams on the loopback address
 (`oa/netgame/stream_socket.hpp`), served by the socket driver network play
@@ -283,9 +284,10 @@ system's sockets elsewhere.
   too long or cut short, a JSON part not where the header says, a stream
   that ends inside a frame); checks that one call pauses over headers that
   each announce the same bytes and over long noise, and that limits
-  changed under bytes already fed apply to them; checks the JSON reader
-  against malformed texts, and the writer against text that is not UTF-8,
-  written as the marker and its base64, and against base64's test vectors.
+  changed under bytes already fed apply to them. The JSON reader and
+  writer, malformed texts, text that is not UTF-8 written as the marker
+  and its base64, and base64's test vectors, are checked by `formats-json`
+  ([src/formats/json](../../formats/json/README.md)).
   `tests/vectors/make_vectors.py` writes the vectors and explains
   each, and `automation-protocol-vectors` checks that they are the ones it
   writes.
