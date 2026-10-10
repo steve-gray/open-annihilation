@@ -8,6 +8,8 @@
 
 #include "command.hpp"
 
+#include "oa/base/signing/sealed_key.hpp"
+
 #include <monocypher.h>
 
 #include <array>
@@ -46,17 +48,17 @@ const char* const too_short = "the passphrase must be at least 12 bytes";
 const char* const mismatch = "the passphrases do not match";
 
 /// A passphrase held only until it is returned or discarded.
-class SecretText {
+class HeldLine {
   public:
 
     std::string text;
 
-    SecretText() { text.reserve(passphrase_most); }
+    HeldLine() { text.reserve(passphrase_most); }
 
-    SecretText(const SecretText&) = delete;
-    SecretText& operator=(const SecretText&) = delete;
+    HeldLine(const HeldLine&) = delete;
+    HeldLine& operator=(const HeldLine&) = delete;
 
-    ~SecretText() { crypto_wipe(text.data(), text.size()); }
+    ~HeldLine() { crypto_wipe(text.data(), text.size()); }
 };
 
 void wipe_string(std::string& text) {
@@ -404,7 +406,7 @@ std::string read_terminal(std::string_view prompt) {
     TerminalSession terminal;
     terminal.open();
     terminal.write(prompt);
-    SecretText secret;
+    HeldLine secret;
     for (;;) {
         char byte = 0;
         const auto got = ::read(terminal.fd(), &byte, 1);
@@ -468,7 +470,48 @@ std::string read_file(const std::filesystem::path& path) {
     return std::string(buffer.bytes.data(), length);
 }
 
+/// Views text as bytes, without copying them.
+std::span<const uint8_t> as_bytes(std::string_view text) {
+    return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
+}
+
 } // namespace
+
+SecretText::SecretText(std::string value) : text(std::move(value)) {
+}
+
+SecretText::SecretText(SecretText&& other) noexcept : text(std::move(other.text)) {
+    if (!other.text.empty())
+        crypto_wipe(other.text.data(), other.text.size());
+    other.text.clear();
+}
+
+SecretText::~SecretText() {
+    if (!text.empty())
+        crypto_wipe(text.data(), text.size());
+}
+
+oa::base::signing::Signature sign_with_sealed_key(
+    std::span<const uint8_t> sealed,
+    const std::optional<std::filesystem::path>& passphrase_file,
+    std::span<const uint8_t> bytes,
+    oa::base::signing::PublicKey& public_key
+) {
+    SecretText passphrase(read_passphrase("Passphrase: ", passphrase_file));
+    oa::base::signing::SecretKey secret{};
+
+    struct KeyGuard {
+        oa::base::signing::SecretKey& secret;
+
+        ~KeyGuard() { crypto_wipe(secret.data(), secret.size()); }
+    } guard{secret};
+
+    const oa::base::signing::SealStatus status =
+        oa::base::signing::unseal_key(sealed, as_bytes(passphrase.text), secret, public_key);
+    if (status != oa::base::signing::SealStatus::ok)
+        throw Failure(std::string(oa::base::signing::seal_status_text(status)));
+    return oa::base::signing::sign(secret, bytes);
+}
 
 std::string
 read_passphrase(std::string_view prompt, const std::optional<std::filesystem::path>& file) {
