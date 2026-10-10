@@ -1,0 +1,5 @@
+{
+  "error": "release_mismatch",
+  "message": "That release is not the one this catalogue offers.",
+  "current_release": 4
+}

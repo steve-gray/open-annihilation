@@ -1,0 +1,12 @@
+{
+  "install": "7f3a90d2-5b1c-4e8a-9d2f-0a6b3c4dc91e",
+  "package": "example-mod",
+  "kind": "oamod",
+  "release": 3,
+  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "engine": "0.8.0",
+  "platform": "linux",
+  "arch": "x64",
+  "language": "en",
+  "reason": "install"
+}

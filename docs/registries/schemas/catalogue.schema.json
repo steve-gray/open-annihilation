@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/catalogue.schema.json",
+  "title": "Catalogue",
+  "description": "A registry catalogue, format 1. Members this specification does not name are ignored by OA, except that a member named twice refuses the catalogue.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["catalogue", "registry", "sequence", "generated", "expires", "packages"],
+  "properties": {
+    "catalogue": { "type": "integer", "const": 1 },
+    "registry": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "minLength": 1, "maxLength": 32 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "generated": { "type": "string" },
+    "expires": { "type": "string" },
+    "downloads": { "type": "string" },
+    "keys": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/key" }
+    },
+    "mirrors": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "packages": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": { "$ref": "#/$defs/package" }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "public"],
+      "properties": {
+        "id": { "type": "string" },
+        "public": { "type": "string", "minLength": 52, "maxLength": 52 }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "base": { "type": "string" }
+      }
+    },
+    "hacks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sim": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "view": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "ids": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["map", "name", "players", "size"],
+      "properties": {
+        "map": { "type": "string" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "players": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "size": { "type": "string", "pattern": "^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-6])x([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-6])$" },
+        "preview": { "type": "string" },
+        "compatible": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "name", "release", "size", "sha256", "file"],
+      "properties": {
+        "kind": { "enum": ["oalang", "oamod", "oamap"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "release": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "size": { "type": "integer", "minimum": 1, "maximum": 4294967296 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "file": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "publisher": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "author": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 200 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "homepage": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "badge": { "type": "string" },
+        "tags": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 32 } },
+        "requires": { "$ref": "#/$defs/requires" },
+        "sim_hash": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+        "hacks": { "$ref": "#/$defs/hacks" },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "english_name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "word": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "locales": { "type": "array", "maxItems": 16, "items": { "type": "string" } },
+        "fallbacks": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+        "needs": { "enum": ["game-fonts", "modern-fonts"] },
+        "maps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/map" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/result.schema.json",
+  "title": "Download result",
+  "description": "POST <api>/downloads/<download>/result. bytes is 0 to 2^40. seconds is 0 to 604800.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["result", "bytes", "seconds"],
+  "properties": {
+    "result": { "enum": ["installed", "refused", "failed", "cancelled"] },
+    "bytes": { "type": "integer", "minimum": 0, "maximum": 1099511627776 },
+    "seconds": { "type": "integer", "minimum": 0, "maximum": 604800 }
+  }
+}

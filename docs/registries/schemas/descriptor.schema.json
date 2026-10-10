@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/descriptor.schema.json",
+  "title": "Registry descriptor",
+  "description": "The data a registry.yaml or .oareg file holds. registry must be 1. An unknown key is refused.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry", "id", "name", "catalogue", "downloads"],
+  "properties": {
+    "registry": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "minLength": 1, "maxLength": 32 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "homepage": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "catalogue": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "mirrors": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 1, "maxLength": 2048 }
+    },
+    "keys": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/key" }
+    },
+    "downloads": { "$ref": "#/$defs/downloads" }
+  },
+  "$defs": {
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "public"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$" },
+        "public": { "type": "string", "pattern": "^ed25519:[A-Za-z0-9+/]{43}=$", "minLength": 52, "maxLength": 52 }
+      }
+    },
+    "downloads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["direct", "tokens"] },
+        "api": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "install-id": { "enum": ["required", "none"] }
+      }
+    }
+  }
+}

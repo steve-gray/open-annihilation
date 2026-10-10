@@ -1,0 +1,21 @@
+{
+  "counts": 1,
+  "generated": "2026-11-02T04:10:00Z",
+  "packages": [
+    {
+      "kind": "oalang",
+      "id": "xx-Test",
+      "downloads": 4
+    },
+    {
+      "kind": "oamap",
+      "id": "example-maps",
+      "downloads": 2
+    },
+    {
+      "kind": "oamod",
+      "id": "example-mod",
+      "downloads": 7
+    }
+  ]
+}
