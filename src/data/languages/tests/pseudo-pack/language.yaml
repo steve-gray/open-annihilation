@@ -14,3 +14,6 @@ locales: [en-XA]
 fallbacks: []
 text: {needs: modern-fonts}
 unicode: true
+homepage: "https://example.org/pseudo"
+tags: [test]
+requires: {engine: ">= 0.0.1"}

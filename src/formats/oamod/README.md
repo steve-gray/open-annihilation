@@ -41,6 +41,16 @@ digit with no floating point. `compare_numbers`, `integer_value` and
 `tools/oamod_yaml.py` reads the same subset for the registry generator
 (`tools/gen_mod_registry.py`).
 
+`oa/formats/oamod/package_keys.hpp` is the homepage, the tags and the
+engine requirement shared by `oamod.yaml`, `language.yaml` and, later,
+`oamap.yaml`. `parse_engine_range` reads a requirement of one to four
+comparisons; `describe_engine_range` is the wording a player sees;
+`read_package_keys` checks the three keys and reports each broken rule.
+Whether this build meets the requirement is the caller's decision: a mod
+profile refuses at resolve time, and a language pack is refused when it is
+installed. `tools/oamod_yaml.py` checks the same rules, and both read
+`src/formats/oamod/tests/package_keys_cases.txt`.
+
 `formats-oamod` checks what each rule accepts, every refusal with its rule
 and position, the limits, and the numbers' canonical text and comparison.
 

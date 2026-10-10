@@ -21,6 +21,7 @@ loads(text) reads a document; loads_value(text) reads one value of any kind.
 """
 
 import re
+from pathlib import Path
 
 MAX_INPUT_BYTES = 256 * 1024
 MAX_NESTING_DEPTH = 16
@@ -248,7 +249,9 @@ class _Reader:
         if c in rules:
             self.fail(rules[c])
         if c in ("|", ">"):
-            self.fail("unexpected_character" if flow else "block_scalar")
+            # A value that starts with these is a block scalar, including
+            # `engine: >= 0.8.0` written inside a flow mapping.
+            self.fail("block_scalar")
         if c == "?":
             if self.blank_or_end(self.peek(1)) or (flow and self.flow_indicator(self.peek(1))):
                 self.fail("complex_key")
@@ -578,3 +581,359 @@ def loads_value(data):
 def load_file(path):
     with open(path, "rb") as f:
         return loads(f.read())
+
+
+# ---------------------------------------------------------------- package keys
+# Homepage, tags and requires.engine, shared by every manifest. The same
+# rules as src/formats/oamod/src/package_keys.cpp, checked against
+# src/formats/oamod/tests/package_keys_cases.txt.
+
+ENGINE_RANGE_MAX_BYTES = 64
+ENGINE_RANGE_MAX_TERMS = 4
+HOMEPAGE_MAX_BYTES = 256
+TAG_MAX_BYTES = 32
+TAGS_MAX_COUNT = 8
+VERSION_PART_MAX = 65535
+_HTTPS_SCHEME = "https://"
+_HTTP_SCHEME = "http://"
+_OPERATORS = (
+    (">=", "at_least"),
+    ("<=", "at_most"),
+    (">", "above"),
+    ("<", "below"),
+    ("=", "exactly"),
+)
+
+
+def _byte_of(index):
+    """The 1-based byte a 0-based index names."""
+    return str(index + 1)
+
+
+def _starts_with_scheme(text, scheme):
+    """True when text begins with scheme, ignoring the case of letters."""
+    if len(text) < len(scheme):
+        return False
+    for index, expected in enumerate(scheme):
+        byte = text[index]
+        if "A" <= byte <= "Z":
+            byte = chr(ord(byte) - ord("A") + ord("a"))
+        if byte != expected:
+            return False
+    return True
+
+
+def _read_version_part(text, index):
+    """One version part, and the index after it."""
+    if index >= len(text) or not text[index].isdigit():
+        raise ValueError(f"expected a version part at byte {_byte_of(index)}")
+    if text[index] == "0" and index + 1 < len(text) and text[index + 1].isdigit():
+        raise ValueError(f"a version part has a leading zero at byte {_byte_of(index)}")
+    value = 0
+    start = index
+    while index < len(text) and text[index].isdigit():
+        value = value * 10 + int(text[index])
+        index += 1
+        if value > VERSION_PART_MAX:
+            raise ValueError(f"a version part is above 65535 at byte {_byte_of(start)}")
+    return value, index
+
+
+def _read_version_at(text, index):
+    """MAJOR.MINOR.PATCH starting at index, and the index after it."""
+    major, index = _read_version_part(text, index)
+    if index >= len(text) or text[index] != ".":
+        raise ValueError(f"expected '.' in a version at byte {_byte_of(index)}")
+    index += 1
+    minor, index = _read_version_part(text, index)
+    if index >= len(text) or text[index] != ".":
+        raise ValueError(f"expected '.' in a version at byte {_byte_of(index)}")
+    index += 1
+    patch, index = _read_version_part(text, index)
+    if index < len(text) and text[index] == ".":
+        raise ValueError(f"a version has three parts at byte {_byte_of(index)}")
+    return (major, minor, patch), index
+
+
+def _read_operator(text, index):
+    """The operator at index and how many bytes it occupies, or (None, 0)."""
+    rest = text[index:]
+    for spelling, name in _OPERATORS:
+        if rest.startswith(spelling):
+            return name, spelling, len(spelling)
+    return None, "", 0
+
+
+def _skip_spaces(text, index):
+    """The index after a run of ASCII spaces."""
+    while index < len(text) and text[index] == " ":
+        index += 1
+    return index
+
+
+def parse_engine_version(text):
+    """MAJOR.MINOR.PATCH as (major, minor, patch), or None.
+
+    Each part is a decimal from 0 to 65535 with no leading zero. The whole
+    text must be the version."""
+    if not isinstance(text, str):
+        return None
+    try:
+        version, index = _read_version_at(text, 0)
+    except ValueError:
+        return None
+    if index != len(text):
+        return None
+    return version
+
+
+def parse_engine_range(text):
+    """The comparisons of an engine requirement, as (operator, version) pairs.
+
+    One to four comparisons separated by commas that spaces may surround.
+    Each is an operator (>=, >, <=, < or =), optional spaces, then a version.
+    Nothing else may appear, and the text is at most 64 bytes. Raises
+    ValueError with what is wrong and the 1-based byte where."""
+    if not isinstance(text, str):
+        raise ValueError("requires.engine must be a string")
+    if len(text.encode("utf-8")) > ENGINE_RANGE_MAX_BYTES:
+        raise ValueError("an engine requirement is longer than 64 bytes")
+    if text == "":
+        raise ValueError("an engine requirement is empty")
+    terms = []
+    index = 0
+    while True:
+        if len(terms) == ENGINE_RANGE_MAX_TERMS:
+            raise ValueError(f"at most 4 comparisons at byte {_byte_of(index)}")
+        comparison, spelling, length = _read_operator(text, index)
+        if comparison is None:
+            raise ValueError(f"expected a comparison at byte {_byte_of(index)}")
+        index += length
+        index = _skip_spaces(text, index)
+        version_at = index
+        version_started = version_at < len(text) and text[version_at].isdigit()
+        try:
+            version, index = _read_version_at(text, index)
+        except ValueError as error:
+            if not version_started:
+                raise ValueError(
+                    f"expected a version after '{spelling}' at byte {_byte_of(version_at)}"
+                ) from error
+            raise
+        terms.append((comparison, version))
+        if index == len(text):
+            return terms
+        after = index
+        index = _skip_spaces(text, index)
+        if index >= len(text) or text[index] != ",":
+            raise ValueError(f"unexpected text at byte {_byte_of(after)}")
+        index += 1
+        index = _skip_spaces(text, index)
+        if index >= len(text):
+            raise ValueError(f"expected a comparison at byte {_byte_of(index)}")
+
+
+def engine_range_met(engine_range, version):
+    """True when every comparison holds for version, compared as three numbers."""
+    for comparison, required in engine_range:
+        if comparison == "at_least" and not version >= required:
+            return False
+        if comparison == "above" and not version > required:
+            return False
+        if comparison == "at_most" and not version <= required:
+            return False
+        if comparison == "below" and not version < required:
+            return False
+        if comparison == "exactly" and version != required:
+            return False
+    return True
+
+
+def homepage_valid(text):
+    """True for an http or https address of 1 to 256 bytes that can be opened.
+
+    The scheme's letters may be either case. At least one byte follows it,
+    and the address holds no ASCII control character, delete or space."""
+    if not isinstance(text, str) or text == "":
+        return False
+    if len(text.encode("utf-8")) > HOMEPAGE_MAX_BYTES:
+        return False
+    if _starts_with_scheme(text, _HTTPS_SCHEME):
+        body = text[len(_HTTPS_SCHEME):]
+    elif _starts_with_scheme(text, _HTTP_SCHEME):
+        body = text[len(_HTTP_SCHEME):]
+    else:
+        return False
+    if body == "":
+        return False
+    for byte in body:
+        value = ord(byte)
+        if value <= ord(" ") or value == 0x7F:
+            return False
+    return True
+
+
+def tag_valid(text):
+    """True for 1 to 32 bytes of lower-case kebab-case."""
+    if not isinstance(text, str) or text == "":
+        return False
+    if len(text.encode("utf-8")) > TAG_MAX_BYTES or text[0] == "-" or text[-1] == "-":
+        return False
+    previous = ""
+    for character in text:
+        word = ("a" <= character <= "z") or ("0" <= character <= "9")
+        if not word and character != "-":
+            return False
+        if character == "-" and previous == "-":
+            return False
+        previous = character
+    return True
+
+
+def _tag_problems(value):
+    """The problems of a tags value, each naming its path."""
+    if not isinstance(value, list):
+        return ["tags: tags must be a list of 1 to 8 strings"]
+    if len(value) == 0:
+        return ["tags: tags must list 1 to 8 tags; leave the key out instead"]
+    if len(value) > TAGS_MAX_COUNT:
+        return [f"tags: tags lists {len(value)} tags; at most 8"]
+    problems = []
+    seen = []
+    for index, item in enumerate(value):
+        path = f"tags[{index}]"
+        if not isinstance(item, str) or not tag_valid(item):
+            problems.append(f"{path}: {path} must be 1 to 32 bytes of lower-case kebab-case")
+            continue
+        if item in seen:
+            problems.append(f"{path}: {path} repeats {item}")
+            continue
+        seen.append(item)
+    return problems
+
+
+def package_key_problems(mapping, requires):
+    """The broken homepage, tags and requires.engine rules, each as one line.
+
+    mapping is the manifest. requires is its requires mapping, or None when
+    the manifest has none. A key that is absent is not a problem. An empty
+    tag list is."""
+    problems = []
+    if isinstance(mapping, dict) and "homepage" in mapping:
+        value = mapping["homepage"]
+        if not isinstance(value, str):
+            problems.append("homepage: homepage must be a string")
+        elif not homepage_valid(value):
+            problems.append(
+                "homepage: homepage must be an http or https address of 1 to 256 bytes"
+            )
+    if isinstance(mapping, dict) and "tags" in mapping:
+        problems.extend(_tag_problems(mapping["tags"]))
+    if isinstance(requires, dict) and "engine" in requires:
+        value = requires["engine"]
+        if not isinstance(value, str):
+            problems.append("requires.engine: requires.engine must be a string")
+        else:
+            try:
+                parse_engine_range(value)
+            except ValueError as error:
+                problems.append(f"requires.engine: {error}")
+    return problems
+
+
+def _case_versions(text):
+    """The versions in one side of an ok range, or a failure when one is not."""
+    if text == "":
+        return []
+    versions = []
+    for item in text.split(","):
+        version = parse_engine_version(item)
+        if version is None:
+            raise ValueError(f"case version {item!r} does not parse")
+        versions.append(version)
+    return versions
+
+
+def _check_case(line):
+    """Raises ValueError when one case line does not hold."""
+    parts = line.split(" ", 2)
+    if len(parts) < 2 or parts[0] not in ("range", "version", "homepage", "tag"):
+        raise ValueError(f"not a case: {line!r}")
+    kind, status = parts[0], parts[1]
+    text = parts[2] if len(parts) == 3 else ""
+    if status not in ("ok", "bad"):
+        raise ValueError(f"not ok or bad: {line!r}")
+    if kind == "range" and status == "ok":
+        fields = text.split(" :: ")
+        if len(fields) != 3:
+            raise ValueError(f"an ok range needs meet and miss: {line!r}")
+        parsed = parse_engine_range(fields[0])
+        for version in _case_versions(fields[1]):
+            if not engine_range_met(parsed, version):
+                raise ValueError(f"{fields[0]!r} should meet {version}")
+        for version in _case_versions(fields[2]):
+            if engine_range_met(parsed, version):
+                raise ValueError(f"{fields[0]!r} should not meet {version}")
+        return
+    if kind == "range":
+        try:
+            parse_engine_range(text)
+        except ValueError:
+            return
+        raise ValueError(f"range should be refused: {text!r}")
+    if kind == "version":
+        parsed = parse_engine_version(text)
+        if (parsed is None) != (status == "bad"):
+            raise ValueError(f"version {status} failed for {text!r}")
+        return
+    valid = homepage_valid(text) if kind == "homepage" else tag_valid(text)
+    if valid != (status == "ok"):
+        raise ValueError(f"{kind} {status} failed for {text!r}")
+
+
+def package_keys_self_test(cases_path=None):
+    """Checks every line of the shared case table. Returns 0, or raises."""
+    path = cases_path or (
+        Path(__file__).resolve().parents[1] / "src" / "formats" / "oamod" / "tests"
+        / "package_keys_cases.txt"
+    )
+    count = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line == "" or line.startswith("#"):
+            continue
+        _check_case(line)
+        count += 1
+    if count < 40:
+        raise ValueError(f"the case table has {count} lines, and needs at least 40")
+    listed = package_key_problems(
+        {"homepage": "javascript:alert(1)", "tags": ["Balance", "balance", "balance"]},
+        {"engine": ">= 1.2"},
+    )
+    if [item.split(":", 1)[0] for item in listed] != [
+        "homepage", "tags[0]", "tags[2]", "requires.engine"
+    ]:
+        raise ValueError(f"package_key_problems returned {listed}")
+    if package_key_problems({"tags": []}, None) == []:
+        raise ValueError("an empty tag list was accepted")
+    if package_key_problems({}, {"engine": ">= 0.0.1"}) != []:
+        raise ValueError("a met-shaped requirement was refused")
+    return count
+
+
+def main(argv):
+    """Runs the shared-key self-test."""
+    import argparse
+    parser = argparse.ArgumentParser(description="The strict YAML reader, and its package-key self-test.")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.self_test:
+        parser.error("pass --self-test")
+    count = package_keys_self_test()
+    print(f"oamod_yaml self-test: {count} package-key cases passed")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    sys.exit(main(sys.argv[1:]))

@@ -8,7 +8,7 @@
 // this part only reads and checks them, and needs no running game.
 #pragma once
 
-#include "oa/app/automation/json.hpp"
+#include "oa/formats/json.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +17,24 @@
 #include <vector>
 
 namespace oa::app::automation {
+
+// A source can include more than one of these headers, so each name is declared once.
+#ifndef OA_APP_AUTOMATION_USING_JSON
+#define OA_APP_AUTOMATION_USING_JSON
+using oa::formats::json::Json;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_JSON_TYPE
+#define OA_APP_AUTOMATION_USING_JSON_TYPE
+using oa::formats::json::JsonType;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_JSON_ERROR
+#define OA_APP_AUTOMATION_USING_JSON_ERROR
+using oa::formats::json::JsonError;
+#endif
+#ifndef OA_APP_AUTOMATION_USING_PARSE_JSON
+#define OA_APP_AUTOMATION_USING_PARSE_JSON
+using oa::formats::json::parse_json;
+#endif
 
 /// The most events one input request may carry.
 inline constexpr size_t max_input_events = 1024;

@@ -80,6 +80,13 @@ struct PackManifest {
     /// unicode: true asks that multiplayer chat be sent and read as UTF-8
     /// while the language is shown, whatever the player's setting.
     bool unicode{};
+    /// An http or https address for the pack; empty when the manifest has none.
+    std::string homepage{};
+    /// How the pack is filed, in the order written; empty when the manifest has none.
+    std::vector<std::string> tags{};
+    /// The engine requirement as written; empty when the manifest has none.
+    /// Reading the pack does not refuse one this build does not meet.
+    std::string requires_engine{};
 };
 
 /// Reads a pack's manifest, in the strict YAML of mod profiles
@@ -87,8 +94,11 @@ struct PackManifest {
 ///
 /// oalang, tag and word are required, and oalang must be
 /// pack_format_version; name, english-name, version, locales, fallbacks,
-/// text (needs: game-fonts or modern-fonts) and unicode are optional. Keys
-/// it does not know are refused, so that a misspelt one is noticed.
+/// text (needs: game-fonts or modern-fonts), unicode, homepage, tags and
+/// requires (an engine requirement only) are optional. homepage, tags and
+/// requires.engine follow the shared package-key rules. An engine
+/// requirement this build does not meet is still read. Keys it does not
+/// know are refused, so that a misspelt one is noticed.
 ///
 /// @param bytes the manifest's bytes
 /// @param[out] manifest the manifest; left unchanged on failure

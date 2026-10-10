@@ -13,9 +13,9 @@
 // uploaded.
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
-#include "pad_glyphs.hpp"
+#include "oa/ui/paint/pad_glyphs.hpp"
 #include "render_run.hpp"
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 #include "touch_state.hpp"
 
 #include <algorithm>
@@ -36,7 +36,8 @@ namespace {
 
 namespace hud = oa::ui::touch_hud;
 namespace pad = oa::ui::pad_controls;
-namespace paint = touch_paint;
+namespace paint = oa::ui::paint;
+namespace pad_glyphs = oa::ui::paint::pad_glyphs;
 namespace text_font = oa::platform::text_font;
 using hud::Control;
 
