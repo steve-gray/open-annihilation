@@ -89,6 +89,12 @@ struct ModProfile {
     std::string version{}; ///< the mod's version
     /// One line about the mod for the Mods page; empty when the profile has none.
     std::string description{};
+    /// An http or https address for the mod; empty when the profile has none.
+    std::string homepage{};
+    /// How the mod is filed, in the order written; empty when the profile has none.
+    std::vector<std::string> tags{};
+    /// The engine requirement as written; empty when the profile has none.
+    std::string requires_engine{};
     Author author{};
     Packaging packaging{};
     Identity identity{};

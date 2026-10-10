@@ -117,6 +117,9 @@ locales: [zh-Hans, zh-CN, zh-SG, zh-MY, zh]
 fallbacks: []
 text: {needs: modern-fonts}
 unicode: true
+homepage: "https://example.org/languages"
+tags: [translation]
+requires: {engine: ">= 0.8.0"}
 ```
 
 `tag` names the language, `word` the word the game data knows it by
@@ -125,7 +128,11 @@ pack is used for a language the game knows; `unicode: true` turns Enable
 Unicode Multiplayer Chat on while the language is shown
 ([Settings](settings.md#language)). A language whose text needs the
 modern fonts turns it on too, with or without its pack, since its text
-is UTF-8.
+is UTF-8. The installer checks `requires.engine` when a pack is
+installed, and reading a pack that is already installed does not, so an
+installed pack stays available when this Open Annihilation is older than
+the pack asks for. Quote the requirement: a value that starts with `>`
+is refused unless it is quoted.
 
 The tables are UTF-8 TDF files, each starting with its licence in `//`
 comments. TDF has no escapes, so a value never holds `;`: write the
