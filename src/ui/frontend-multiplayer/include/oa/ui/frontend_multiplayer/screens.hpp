@@ -9,12 +9,14 @@
 // screens rather than taking ids of their own.
 #pragma once
 
+#include "oa/netgame/presence.hpp"
 #include "oa/ui/frontend_multiplayer/connect.hpp"
 #include "oa/ui/frontend_multiplayer/dialogs.hpp"
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 #include "oa/ui/frontend_multiplayer/restrict.hpp"
 #include "oa/ui/screen_registry.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -117,12 +119,79 @@ void multiplayer_bind_wire_rules(const netgame::WireRules& rules, const char* pr
 /// @param on Unicode chat is on.
 void multiplayer_bind_unicode_chat(bool on) noexcept;
 
+/// Binds the presence record this machine sends to the OA players in the battle room
+/// (PresenceRecords::source), without a map pack.
+///
+/// The screens keep a copy, which survives multiplayer_reset. The battle
+/// room sends it as it changes (presence_refresh, presence_send_due), the
+/// host's with the map pack of its selected map.
+///
+/// @param record the record, type byte first; null binds none
+/// @param size its length; 0, or more than netgame::presence_record_max_bytes, binds none
+void multiplayer_bind_presence_record(const uint8_t* record, std::size_t size) noexcept;
+
+/// Binds the map packs' answer to which pack the host's selected map comes from (LobbyMaps::pack).
+///
+/// The binding survives multiplayer_reset. The battle room asks it once
+/// after each binding and once each time the selected map changes. Until
+/// one is bound, no record names a map pack.
+///
+/// @param context passed back to pack
+/// @param pack the answer; null for none
+void multiplayer_bind_map_pack(
+    void* context, bool (*pack)(void* context, netgame::PresenceMapPack* out)
+) noexcept;
+
 /// Binds the launch the connection screens, the battle room and the session read.
 ///
 /// The binding survives multiplayer_reset.
 ///
 /// @param link The launch block and the launch's answers; a null block reads as empty.
 void multiplayer_bind_launch_link(const LaunchLink& link) noexcept;
+
+/// One installed pack map, as the battle room's map list shows it.
+///
+/// The pointers stay valid until the next call of the source that wrote them.
+struct LobbyPackMap {
+    const char* name{};        ///< `<stem>@<id>`, the name the list shows
+    const char* description{}; ///< one line about the map; empty when unwritten
+    const char* size{};        ///< the map's width and height, as the list shows it
+    int32_t memory_mb{};       ///< memory the map needs, in MB
+};
+
+/// Where the battle room reads installed pack maps, and mounts the one it plays.
+///
+/// A null member does nothing. The binding survives multiplayer_reset.
+struct LobbyMapSource {
+    void* context{};
+    /// Returns how many pack maps are installed.
+    int32_t (*count)(void* context){};
+    /// Writes the pack map at `index`.
+    ///
+    /// @param context the source's context
+    /// @param index the map's place, from 0
+    /// @param[out] out the map; left unchanged when `index` is out of range
+    /// @return true when `out` was written
+    bool (*at)(void* context, int32_t index, LobbyPackMap* out){};
+    /// Mounts the named pack map's files, and no other pack map's.
+    ///
+    /// @param context the source's context
+    /// @param name the map's name, `<stem>@<id>`
+    /// @param[out] reason receives why the map was refused, when not null
+    /// @param capacity bytes of `reason`, counting the terminating NUL
+    /// @return true when the map's files are mounted
+    bool (*prepare)(void* context, const char* name, char* reason, std::size_t capacity){};
+    /// Unmounts the pack map whose files are mounted.
+    void (*release)(void* context){};
+};
+
+/// Binds the pack maps the battle room lists beside the base maps.
+///
+/// The binding survives multiplayer_reset. A null member does nothing. The
+/// list is read again the next time the battle room opens.
+///
+/// @param source the pack maps; a null member keeps that part unused
+void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept;
 
 /// A TCP/IP game the multiplayer screens host or join at once, as a player
 /// would through them: the address typed into TCP.GUI and accepted, the
@@ -286,6 +355,28 @@ struct PanelOffset {
 ///
 /// @return the offset its controls' positions take on the canvas
 [[nodiscard]] PanelOffset multiplayer_panel_offset() noexcept;
+
+/// Where the battle room draws one OA badge.
+struct PresenceBadgeSpot {
+    int32_t slot{}; ///< the row's player slot, 0..9
+    /// The badge's rectangle on the 640x480 frame: the row's CD<slot>
+    /// rectangle and the screen's offset, in pixels.
+    int32_t x{}, y{}, width{}, height{};
+    bool rules_differ{}; ///< the badge carries the dot (lobby_rules_differ_from_host)
+};
+
+/// Lists the OA badges the battle room draws now, in slot order.
+///
+/// A row shows the badge when lobby_row_badge says open_annihilation and the
+/// battle room's GUI has its CD<slot> control. The rectangles are in the
+/// 640x480 frame the battle room is drawn in, before the menu frame scales
+/// it.
+///
+/// @param[out] out receives the badges; null receives none
+/// @param capacity how many badges out holds
+/// @return how many badges were written: 0 when the battle room is not shown
+///         or a dialog covers it, or its GUI has no CD<slot> control
+int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) noexcept;
 
 /// Returns the gadget records of the current base screen as its loader left them.
 [[nodiscard]] const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept;

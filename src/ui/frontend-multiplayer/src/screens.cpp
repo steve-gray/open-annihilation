@@ -159,12 +159,26 @@ struct Ui {
     netgame::WireRules wire_rules{};
     /// This machine sends and reads chat as UTF-8; off until bound.
     bool unicode_chat{};
+    /// The presence record this machine sends, without a map pack; empty
+    /// until one is bound. It survives multiplayer_reset.
+    std::vector<uint8_t> presence_record;
+    /// The map packs' answer to which pack the selected map comes from
+    /// (LobbyMaps::pack), and its context; null until bound. It survives
+    /// multiplayer_reset.
+    void* pack_context = nullptr;
+    bool (*pack)(void* context, netgame::PresenceMapPack* out) = nullptr;
     /// The line this machine's recorder answers .report with.
     std::string program_line;
     std::string message;
     std::vector<MapInfo> maps;
     int32_t map = -1;
     bool maps_loaded = false;
+    // The pack map whose choice was refused, and why. Empty when the last
+    // choice was accepted.
+    std::string pack_refused_name;
+    std::string pack_refusal;
+    // A pack map's files are mounted for the battle room.
+    bool pack_prepared = false;
     // The map context (Game.game_options) the content hash is computed from.
     data::campaign::CampaignFile map_context{};
     data::campaign::MapList map_list{};
@@ -240,6 +254,80 @@ struct DirectGameState {
 };
 
 DirectGameState g_direct{};
+
+// The pack maps the battle room lists beside the base maps. A null member
+// does nothing. The binding survives multiplayer_reset.
+LobbyMapSource g_map_source{};
+
+/// Tells whether the bound source lists a map by this exact name.
+///
+/// @param name the map's name
+/// @return true when the source lists it
+bool source_lists(const char* name) {
+    if (name == nullptr || g_map_source.count == nullptr || g_map_source.at == nullptr)
+        return false;
+    const int32_t count = g_map_source.count(g_map_source.context);
+    for (int32_t index = 0; index < count; ++index) {
+        LobbyPackMap pack{};
+        if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr)
+            continue;
+        if (std::strcmp(pack.name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+/// Forgets the last refused pack map.
+void clear_pack_refusal() {
+    auto& state = ui();
+    state.pack_refused_name.clear();
+    state.pack_refusal.clear();
+}
+
+/// Remembers why a pack map was refused.
+///
+/// @param name the map's name
+/// @param reason the reason; null is an empty reason
+void remember_pack_refusal(const std::string& name, const char* reason) {
+    auto& state = ui();
+    state.pack_refused_name = name;
+    state.pack_refusal = reason != nullptr ? reason : "";
+}
+
+/// Unmounts the pack map whose files are mounted. A second call does nothing.
+void release_pack_source() {
+    auto& state = ui();
+    if (!state.pack_prepared)
+        return;
+    state.pack_prepared = false;
+    if (g_map_source.release != nullptr)
+        g_map_source.release(g_map_source.context);
+}
+
+/// Mounts a listed pack map's files.
+///
+/// A source with no prepare leaves the files as they are and accepts the map.
+/// A refusal keeps the reason and mounts nothing.
+///
+/// @param name the map's name
+/// @return true when the map may be chosen
+bool prepare_listed(const std::string& name) {
+    auto& state = ui();
+    if (g_map_source.prepare == nullptr) {
+        clear_pack_refusal();
+        state.pack_prepared = false;
+        return true;
+    }
+    char reason[1024]{};
+    if (!g_map_source.prepare(g_map_source.context, name.c_str(), reason, sizeof reason)) {
+        state.pack_prepared = false;
+        remember_pack_refusal(name, reason);
+        return false;
+    }
+    clear_pack_refusal();
+    state.pack_prepared = true;
+    return true;
+}
 
 uint32_t elapsed_ms() {
     if (g_clock.now_ms != nullptr)
@@ -385,6 +473,29 @@ void load_maps() {
         }
     }
     std::free(names);
+    // Installed pack maps join the list from the source's own fields. Their
+    // map files are read when one is chosen, not while the list is built.
+    if (g_map_source.count != nullptr && g_map_source.at != nullptr) {
+        const int32_t extra = g_map_source.count(g_map_source.context);
+        for (int32_t index = 0; index < extra; ++index) {
+            LobbyPackMap pack{};
+            if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr ||
+                pack.name[0] == '\0')
+                continue;
+            const bool listed =
+                std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
+                    return info.name == pack.name;
+                });
+            if (listed)
+                continue;
+            MapInfo info;
+            info.name = pack.name;
+            info.description = pack.description != nullptr ? pack.description : "";
+            info.size = pack.size != nullptr ? pack.size : "";
+            info.memory = pack.memory_mb;
+            state.maps.push_back(std::move(info));
+        }
+    }
     std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
         return a.name < b.name;
     });
@@ -429,12 +540,33 @@ const char* maps_name(void*) {
 bool maps_select(void*, const char* name) {
     auto& state = ui();
     load_maps();
-    for (std::size_t index = 0; index < state.maps.size(); ++index)
-        if (name != nullptr && state.maps[index].name == name) {
-            state.map = static_cast<int32_t>(index);
-            return true;
+    if (name == nullptr)
+        return false;
+    for (std::size_t index = 0; index < state.maps.size(); ++index) {
+        if (state.maps[index].name != name)
+            continue;
+        if (source_lists(name)) {
+            if (!prepare_listed(state.maps[index].name))
+                return false;
+        } else if (state.pack_prepared) {
+            release_pack_source();
+            clear_pack_refusal();
         }
+        state.map = static_cast<int32_t>(index);
+        return true;
+    }
     return false;
+}
+
+/// Returns why the named map was refused the last time it was chosen.
+///
+/// @param name the map's name
+/// @return the reason, valid until the next choice; null when there is none
+const char* maps_refusal(void*, const char* name) {
+    const auto& state = ui();
+    if (name == nullptr || state.pack_refusal.empty() || state.pack_refused_name != name)
+        return nullptr;
+    return state.pack_refusal.c_str();
 }
 
 uint32_t maps_hash(void*) {
@@ -675,6 +807,18 @@ bool service_read_file(void*, const char* name, std::size_t limit, std::string* 
     return true;
 }
 
+/// Copies the bound presence record into a lobby's source (PresenceRecords::source).
+///
+/// @param[in,out] lobby the lobby
+/// @param record the record; empty for none
+void take_presence_record(Lobby& lobby, const std::vector<uint8_t>& record) noexcept {
+    auto& records = lobby.presence_records;
+    const auto size = std::min(record.size(), sizeof records.source);
+    if (size != 0)
+        std::memcpy(records.source, record.data(), size);
+    records.source_size = static_cast<uint16_t>(size);
+}
+
 /// Binds the lobby to the screens' transport, services, map list and units.
 ///
 /// A lobby with no game is reset first. The unit limits, the canvas size and
@@ -719,6 +863,14 @@ void bind_boundaries() {
         [](void*) -> const data::campaign::CampaignFile* { return bound_map_context(); },
         maps_read
     };
+    // Set by name. LobbyMaps gains members at its end, and a positional
+    // list would assign the next one to refusal.
+    lobby.maps.refusal = maps_refusal;
+    // The map packs' answer, bound by name; the battle room asks it again.
+    lobby.maps.pack_context = state.pack_context;
+    lobby.maps.pack = state.pack;
+    lobby.presence_records.pack_rebound = true;
+    take_presence_record(lobby, state.presence_record);
     lobby.wire_rules = state.wire_rules;
     lobby.unicode_chat = state.unicode_chat;
     lobby.local_version_major = state.wire_rules.version_major;
@@ -1623,6 +1775,102 @@ void draw_text_in(
         }
 }
 
+/// A colour of the drawn screen.
+struct ScreenColor {
+    uint8_t r{}; ///< red, 0 to 255
+    uint8_t g{}; ///< green, 0 to 255
+    uint8_t b{}; ///< blue, 0 to 255
+};
+
+/// A rectangle of the drawn screen, its edges included.
+struct ScreenBox {
+    int32_t left{};   ///< first column
+    int32_t top{};    ///< first row
+    int32_t right{};  ///< last column
+    int32_t bottom{}; ///< last row
+};
+
+/// The most columns and rows of a text's box that draw_text_in_color draws.
+constexpr int32_t kColorTextMostWidth = 64;
+constexpr int32_t kColorTextMostHeight = 32;
+
+/// Draws text's letters in one colour, laid out in a box as draw_text_in lays it out.
+///
+/// The text is drawn through the font's coverage, as draw_text_in draws it.
+/// A glyph's letter pixels, those at least half as light as the font's ink
+/// (renderer::fnt_font_ink), take the colour whatever palette index the font
+/// gives them; its darker outline is left out, so that what lies under the
+/// text shows around the letters. Only the pixels inside the box, the clip
+/// rectangle and the surface are drawn, and of the box only its first
+/// kColorTextMostWidth columns and kColorTextMostHeight rows. Nothing is
+/// allocated.
+///
+/// @param[in,out] surface image drawn on
+/// @param res screen resources, whose palette the font's indices select from
+/// @param font font the text is drawn in
+/// @param text text drawn, in the font's own characters
+/// @param x left of the box in pixels
+/// @param y top of the box in pixels
+/// @param width box width in pixels
+/// @param height box height in pixels
+/// @param clip the only pixels that may be drawn
+/// @param color the letters' colour
+void draw_text_in_color(
+    renderer::Surface& surface,
+    const Resources& res,
+    const formats::fnt::Font& font,
+    std::string_view text,
+    int32_t x,
+    int32_t y,
+    int32_t width,
+    int32_t height,
+    const ScreenBox& clip,
+    ScreenColor color
+) {
+    width = std::min(width, kColorTextMostWidth);
+    height = std::min(height, kColorTextMostHeight);
+    if (surface.width == 0 || width <= 0 || height <= 0)
+        return;
+    const auto& palette = res.screen.background.palette.has_value() ? *res.screen.background.palette
+                                                                    : res.screen.gui_palette;
+    // Lightness as the sum of the three channels, as fnt_font_ink judges it.
+    const auto lightness = [&palette](uint8_t index) {
+        const auto at = static_cast<std::size_t>(index) * 4U;
+        return palette[at] + palette[at + 1] + palette[at + 2];
+    };
+    const auto ink_lightness = lightness(renderer::fnt_font_ink(font, palette));
+    uint8_t pixels[kColorTextMostWidth * kColorTextMostHeight]{};
+    uint8_t coverage[kColorTextMostWidth * kColorTextMostHeight]{};
+    const auto area = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    formats::fnt::IndexedSurface target{
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        static_cast<std::size_t>(width),
+        std::span<uint8_t>(pixels, area),
+        std::span<uint8_t>(coverage, area)
+    };
+    (void)formats::fnt::raster_text(target, font, text, 0, 0);
+    for (int32_t row = 0; row < height; ++row)
+        for (int32_t column = 0; column < width; ++column) {
+            const auto at = static_cast<std::size_t>(row * width + column);
+            if (coverage[at] == 0 || lightness(pixels[at]) * 2 < ink_lightness)
+                continue;
+            const auto px = x + column;
+            const auto py = y + row;
+            if (px < clip.left || px > clip.right || py < clip.top || py > clip.bottom || px < 0 ||
+                py < 0 || px >= static_cast<int32_t>(surface.width) ||
+                py >= static_cast<int32_t>(surface.height))
+                continue;
+            auto* out = &surface.rgb
+                             [(static_cast<std::size_t>(py) * surface.width +
+                               static_cast<std::size_t>(px)) *
+                              3U];
+            out[0] = color.r;
+            out[1] = color.g;
+            out[2] = color.b;
+        }
+}
+
 /// Draws text in the screen's GUI font, clipped to a box, as draw_text_in does.
 ///
 /// @param[in,out] surface image drawn on
@@ -1715,6 +1963,156 @@ void fill(
             out[1] = g;
             out[2] = b;
         }
+}
+
+// The OA badge, drawn where a 3.1c player's row shows the CD icon, in the
+// design's colours.
+/// The badge's text.
+constexpr std::string_view kBadgeText = "OA";
+/// Badge border, #7d6a2c: the badge's 1-pixel edge.
+constexpr ScreenColor kBadgeBorderColor{0x7d, 0x6a, 0x2c};
+/// Badge top, #2c332c: the top row of the badge's vertical gradient.
+constexpr ScreenColor kBadgeTopColor{0x2c, 0x33, 0x2c};
+/// Badge bottom, #151915: the bottom row of the badge's vertical gradient.
+constexpr ScreenColor kBadgeBottomColor{0x15, 0x19, 0x15};
+/// Amber, #e2b23d: the badge's text and its dot.
+constexpr ScreenColor kAmberColor{0xe2, 0xb2, 0x3d};
+/// Background, #0d100e: the ring around the dot.
+constexpr ScreenColor kBackgroundColor{0x0d, 0x10, 0x0e};
+/// The dot's ring is a square this many pixels across, its four corner
+/// pixels left out, reaching kBadgeDotOverhang pixels past the badge's right
+/// edge and above its top; the dot is the square one pixel inside it.
+constexpr int32_t kBadgeDotRingSize = 6;
+constexpr int32_t kBadgeDotOverhang = 2;
+
+/// Fills a square without its four corner pixels, skipping pixels outside the surface.
+///
+/// @param[in,out] surface image drawn on
+/// @param left first column
+/// @param top first row
+/// @param size columns and rows, 2 or more
+/// @param color the fill
+void fill_square_without_corners(
+    renderer::Surface& surface, int32_t left, int32_t top, int32_t size, ScreenColor color
+) {
+    for (int32_t row = 0; row < size; ++row) {
+        const int32_t inset = (row == 0 || row == size - 1) ? 1 : 0;
+        fill(surface, left + inset, top + row, size - 2 * inset, 1, color.r, color.g, color.b);
+    }
+}
+
+/// Draws the OA badge over its CD<slot> rectangle, and the dot on it when its player's rules differ.
+///
+/// The rectangle is filled row by row with a vertical gradient from badge
+/// top to badge bottom: row r of h takes, in each channel,
+/// top + (bottom - top) * r / (h - 1), truncated toward zero, and a
+/// rectangle one row high takes badge top. Its four edges are drawn in badge
+/// border, and "OA" in the label font in amber, centred as
+/// draw_player_versions centres a version and clipped to the rectangle
+/// inside the border. The dot is drawn last, over the top-right corner.
+///
+/// @param[in,out] surface image drawn on
+/// @param res the battle room's resources
+/// @param spot where the badge goes, and whether it carries the dot
+void draw_presence_badge(
+    renderer::Surface& surface, const Resources& res, const PresenceBadgeSpot& spot
+) {
+    const int32_t x = spot.x;
+    const int32_t y = spot.y;
+    const int32_t width = spot.width;
+    const int32_t height = spot.height;
+    if (width <= 0 || height <= 0)
+        return;
+    const auto shade = [&](uint8_t top, uint8_t bottom, int32_t row) {
+        return static_cast<uint8_t>(height == 1 ? top : top + (bottom - top) * row / (height - 1));
+    };
+    for (int32_t row = 0; row < height; ++row)
+        fill(
+            surface,
+            x,
+            y + row,
+            width,
+            1,
+            shade(kBadgeTopColor.r, kBadgeBottomColor.r, row),
+            shade(kBadgeTopColor.g, kBadgeBottomColor.g, row),
+            shade(kBadgeTopColor.b, kBadgeBottomColor.b, row)
+        );
+    const int32_t right = x + width - 1;
+    const int32_t bottom = y + height - 1;
+    const auto& border = kBadgeBorderColor;
+    fill(surface, x, y, width, 1, border.r, border.g, border.b);
+    fill(surface, x, bottom, width, 1, border.r, border.g, border.b);
+    fill(surface, x, y, 1, height, border.r, border.g, border.b);
+    fill(surface, right, y, 1, height, border.r, border.g, border.b);
+    const auto& font = res.screen.label_font;
+    const auto text_width = static_cast<int32_t>(formats::fnt::measure_text(font, kBadgeText));
+    const int32_t text_height = formats::fnt::line_height(font);
+    draw_text_in_color(
+        surface,
+        res,
+        font,
+        kBadgeText,
+        (x + right - text_width) / 2,
+        (y + bottom - text_height) / 2,
+        text_width,
+        text_height,
+        {x + 1, y + 1, right - 1, bottom - 1},
+        kAmberColor
+    );
+    if (!spot.rules_differ)
+        return;
+    const int32_t ring_left = x + width + kBadgeDotOverhang - kBadgeDotRingSize;
+    const int32_t ring_top = y - kBadgeDotOverhang;
+    fill_square_without_corners(surface, ring_left, ring_top, kBadgeDotRingSize, kBackgroundColor);
+    fill_square_without_corners(
+        surface, ring_left + 1, ring_top + 1, kBadgeDotRingSize - 2, kAmberColor
+    );
+}
+
+/// Lists the OA badges the battle room's rows show, in slot order, as multiplayer_presence_badges does.
+///
+/// @param res the battle room's resources
+/// @param lobby lobby whose slots are shown
+/// @param[out] out receives the badges; null receives none
+/// @param capacity how many badges out holds
+/// @return how many badges were written
+int32_t presence_badge_spots(
+    const Resources& res, Lobby& lobby, PresenceBadgeSpot* out, int32_t capacity
+) noexcept {
+    if (lobby.game == nullptr || out == nullptr)
+        return 0;
+    int32_t count = 0;
+    for (int32_t slot = 0; slot < kSlotCount && count < capacity; ++slot) {
+        const auto badge = lobby_row_badge(lobby, slot);
+        if (badge.badge != RowBadge::open_annihilation)
+            continue;
+        char name[16];
+        std::snprintf(name, sizeof(name), "CD%d", static_cast<int>(slot));
+        const auto* disc = panel_control(res.panel, name);
+        if (disc == nullptr || disc->width <= 0 || disc->height <= 0)
+            continue;
+        out[count++] = {
+            slot,
+            disc->x + res.offset_x,
+            disc->y + res.offset_y,
+            disc->width,
+            disc->height,
+            badge.rules_differ
+        };
+    }
+    return count;
+}
+
+/// Draws the OA badge, and its dot, in each OA player's CD<slot> rectangle (draw_presence_badge).
+///
+/// @param[in,out] surface image drawn on
+/// @param res the battle room's resources
+/// @param lobby lobby whose slots are shown
+void draw_presence_badges(renderer::Surface& surface, const Resources& res, Lobby& lobby) {
+    PresenceBadgeSpot spots[kSlotCount]{};
+    const auto count = presence_badge_spots(res, lobby, spots, kSlotCount);
+    for (int32_t index = 0; index < count; ++index)
+        draw_presence_badge(surface, res, spots[index]);
 }
 
 renderer::Surface render(Resources& res) {
@@ -2093,6 +2491,7 @@ bool click(ScreenContext* ctx, int32_t index, int32_t x, int32_t y, uint8_t butt
 ///
 /// @param ctx Screen context of the running frontend.
 void return_to_main_menu(ScreenContext* ctx) {
+    release_pack_source();
     const auto& link = ui().launch_link;
     if (link.request_app_mode != nullptr)
         link.request_app_mode(link.context, kAppModeFrontend);
@@ -2416,6 +2815,7 @@ void dispatch(ScreenContext* ctx) {
     case kScreenProviders: {
         const auto action = providers_handle_event(lobby, connect, panel);
         if (action == ConnectAction::main_menu) {
+            release_pack_source();
             app::screen_request(ctx, kScreenMainMenu);
         } else if (action == ConnectAction::options) {
             app::screen_request(ctx, kScreenOptions);
@@ -2584,6 +2984,12 @@ void enter_battleroom(ScreenContext* ctx, void*) {
     if (!load(state.base, ctx, "lounge2.gui", "bitmaps/battleroom.pcx", "anims/lounge2.gaf"))
         return;
     load_maps();
+    // A screen left on the way here unmounted the pack map. Mount it again
+    // before the battle room hashes the map it plays.
+    if (state.map >= 0 && static_cast<std::size_t>(state.map) < state.maps.size()) {
+        const std::string selected = state.maps[static_cast<std::size_t>(state.map)].name;
+        (void)maps_select(nullptr, selected.c_str());
+    }
     load_units();
     local_info(state.lobby).memory_mb = kMachineMemoryMb;
     lobby_enter_battleroom(state.lobby, state.base.panel);
@@ -2615,6 +3021,7 @@ void enter_battleroom(ScreenContext* ctx, void*) {
 void leave_screen(ScreenContext* ctx, void* /*state*/) {
     close_modal();
     set_text_input(ctx, false);
+    release_pack_source();
     ui().showing = false;
     ui().exit_confirm_requested = false;
 }
@@ -2894,8 +3301,10 @@ void screen_draw(ScreenContext* ctx, void*) {
     auto surface = render(res);
     draw_pictures(surface, res);
     draw_sliders(surface, res);
-    if (&res == &state.base && state.screen == kScreenBattleroom)
+    if (&res == &state.base && state.screen == kScreenBattleroom) {
         draw_player_versions(surface, res, state.lobby);
+        draw_presence_badges(surface, res, state.lobby);
+    }
     if (&res != &state.base)
         draw_text_boxes(surface, state.base);
     draw_text_boxes(surface, res);
@@ -2975,6 +3384,25 @@ void multiplayer_bind_unicode_chat(bool on) noexcept {
     ui().lobby.unicode_chat = on;
 }
 
+void multiplayer_bind_presence_record(const uint8_t* record, std::size_t size) noexcept {
+    auto& state = ui();
+    if (record == nullptr || size > netgame::presence_record_max_bytes)
+        size = 0;
+    state.presence_record.assign(record, record + size);
+    take_presence_record(state.lobby, state.presence_record);
+}
+
+void multiplayer_bind_map_pack(
+    void* context, bool (*pack)(void* context, netgame::PresenceMapPack* out)
+) noexcept {
+    auto& state = ui();
+    state.pack_context = context;
+    state.pack = pack;
+    state.lobby.maps.pack_context = context;
+    state.lobby.maps.pack = pack;
+    state.lobby.presence_records.pack_rebound = true;
+}
+
 void multiplayer_bind_wire_rules(const netgame::WireRules& rules, const char* program) noexcept {
     auto& state = ui();
     state.wire_rules = rules;
@@ -3021,6 +3449,16 @@ Panel& multiplayer_panel() noexcept {
 PanelOffset multiplayer_panel_offset() noexcept {
     const auto& res = front();
     return {res.offset_x, res.offset_y};
+}
+
+int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) noexcept {
+    auto& state = ui();
+    // Drawn only as screen_draw draws them: the battle room shows, with no
+    // dialog over it.
+    if (!state.showing || state.screen != kScreenBattleroom || !state.base.loaded ||
+        &front() != &state.base)
+        return 0;
+    return presence_badge_spots(state.base, state.lobby, out, capacity);
 }
 
 const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept {
@@ -3148,7 +3586,19 @@ void multiplayer_bind_display_modes(const LobbyDisplayModes& display_modes) noex
     g_display_modes = display_modes;
 }
 
+void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
+    release_pack_source();
+    g_map_source = source;
+    auto& state = ui();
+    state.maps.clear();
+    state.maps_loaded = false;
+    state.map = -1;
+    clear_pack_refusal();
+    state.pack_prepared = false;
+}
+
 void multiplayer_reset() noexcept {
+    release_pack_source();
     auto& state = ui();
     const bool custom = state.custom_net;
     const auto net = state.bound_net;

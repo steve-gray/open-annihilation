@@ -937,6 +937,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_mod_warning.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
+  src/app/pack_map_source.cpp
   src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
@@ -1878,8 +1879,9 @@ if(OA_BUILD_PLATFORM)
       # skirmish's in-game menu, from Simplified Chinese to English, German
       # and back: after each change, the settings closed with OK, the screen
       # under them shows what it shows opened again in the language, and
-      # back in Chinese what it showed as the run started in it. The test
-      # fixture pack installs first.
+      # back in Chinese what it showed as the run started in it. In Chinese
+      # every caption over the match's pictures shows each of its
+      # characters in the pack's face. The test fixture pack installs first.
       set(oa_language_switch_check_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-switch")
       file(MAKE_DIRECTORY "${oa_language_switch_check_dir}")
       file(WRITE "${oa_language_switch_check_dir}/language-switch.conf"

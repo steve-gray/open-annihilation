@@ -143,6 +143,10 @@ namespace oa::platform::text_font {
 class FontStack;
 } // namespace oa::platform::text_font
 
+namespace oa::ui::frontend_multiplayer {
+struct LobbyMapSource;
+} // namespace oa::ui::frontend_multiplayer
+
 namespace oa::app {
 
 struct PresenceFacts;
@@ -662,6 +666,23 @@ class Runtime final : public menu::Host,
     ///
     /// @param stack the open stack
     void use_language_fonts(oa::platform::text_font::FontStack& stack) const;
+
+    /// Puts the language shown's font faces on a stack (use_language_fonts)
+    /// when they changed since the stack last took them. Every stack that
+    /// draws the language's words follows them so: the game text's and the
+    /// picture captions'.
+    ///
+    /// @param stack the stack; null when it did not open, and only
+    ///     `generation` is kept
+    /// @param[in,out] generation the fonts generation the stack's faces are
+    ///     from (language_fonts_generation), empty before it took any; set
+    ///     to the current one
+    /// @return true when the faces changed since `generation`: the lines
+    ///     drawn in the stack before are stale, and a character they drew
+    ///     as the missing-glyph box may have a face now
+    [[nodiscard]] bool follow_language_fonts(
+        oa::platform::text_font::FontStack* stack, std::optional<uint64_t>& generation
+    ) const;
 
     /// Readies the modern fonts for the language shown now, as the first
     /// line drawn after the language changes does by itself: forgets the
@@ -1909,6 +1930,16 @@ class Runtime final : public menu::Host,
     /// @param runtime the running app
     /// @return those facts
     friend PresenceFacts presence_facts(const Runtime& runtime);
+    /// Returns the battle room's source of installed pack maps
+    /// (pack_map_source in pack_map_source.hpp).
+    ///
+    /// The names point into the installed packs, which live as long as the
+    /// runtime does. Choosing a map mounts its files; releasing them
+    /// unmounts that layer.
+    ///
+    /// @param runtime the running app
+    /// @return the source the multiplayer screens bind
+    friend oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime);
 
     // ---- Touch controls (docs/touch-controls.md) --------------------------------------
 
@@ -2639,6 +2670,14 @@ class Runtime final : public menu::Host,
     /// @param file the bitmap's path, as it was read
     /// @param[in,out] image the decoded bitmap: its indices and RGB
     void caption_bitmap(std::string_view file, Image& image);
+
+    /// Lists the captions of the language shown that the picture captions'
+    /// fonts, as the captions last drawn left them, draw with the
+    /// missing-glyph box: those with a character none of their faces holds.
+    ///
+    /// @return each such caption as "<picture>: <caption>"; every caption
+    ///     while no caption has opened the fonts
+    [[nodiscard]] std::vector<std::string> picture_captions_missing_glyphs();
 
     /// Blits the covered pixels of a rendered GAF frame into an RGB image through a palette,
     /// clipped to the image.
