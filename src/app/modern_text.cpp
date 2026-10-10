@@ -42,6 +42,10 @@ static_assert(
 static_assert(
     static_cast<uint8_t>(ModernTextFace::emoji) == static_cast<uint8_t>(text_font::Face::noto_emoji)
 );
+static_assert(
+    static_cast<uint8_t>(ModernTextFace::endonyms) ==
+    static_cast<uint8_t>(text_font::Face::endonyms)
+);
 
 /// The lock every use of the faces holds, from opening them to the last read.
 /// The engine's own Mutex, which Windows XP has, and ready before any static.
@@ -87,6 +91,8 @@ ModernTextFace modern_face(text_font::Face face) noexcept {
         return ModernTextFace::cjk;
     case text_font::Face::noto_emoji:
         return ModernTextFace::emoji;
+    case text_font::Face::endonyms:
+        return ModernTextFace::endonyms;
     }
     return ModernTextFace::sans_bold;
 }

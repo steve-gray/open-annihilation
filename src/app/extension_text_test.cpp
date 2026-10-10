@@ -123,13 +123,17 @@ void chain_at_the_message_log_size() {
     OA_CHECK(chain->faces[0].face == oa::app::ModernTextFace::sans_bold);
     OA_CHECK(chain->faces[1].face == oa::app::ModernTextFace::sans);
     OA_CHECK(chain->faces[2].face == oa::app::ModernTextFace::cjk);
-    OA_CHECK(chain->faces[3].face == oa::app::ModernTextFace::emoji);
+    OA_CHECK(chain->faces[3].face == oa::app::ModernTextFace::endonyms);
+    OA_CHECK(chain->faces[4].face == oa::app::ModernTextFace::emoji);
     OA_CHECK(chain->faces[0].pixel_size == 14 && chain->faces[1].pixel_size == 14);
     OA_CHECK(chain->faces[2].pixel_size == 12 && chain->faces[3].pixel_size == 12);
-    // Rows as the fonts report them at this size. The line is the CJK face's.
+    OA_CHECK(chain->faces[4].pixel_size == 12);
+    // Rows as the fonts report them at this size. The line is the CJK face's,
+    // and the endonym face keeps those rows.
     OA_CHECK(chain->faces[0].ascent == 13 && chain->faces[0].descent == 4);
     OA_CHECK(chain->faces[2].ascent == 14 && chain->faces[2].descent == 4);
-    OA_CHECK(chain->faces[3].ascent == 12 && chain->faces[3].descent == 3);
+    OA_CHECK(chain->faces[3].ascent == 14 && chain->faces[3].descent == 4);
+    OA_CHECK(chain->faces[4].ascent == 12 && chain->faces[4].descent == 3);
     OA_CHECK(chain->ascent == 14 && chain->descent == 4);
     chain_rows_are_its_faces(*chain);
 
@@ -138,14 +142,16 @@ void chain_at_the_message_log_size() {
     const auto plain = oa::app::modern_text_chain(regular);
     OA_CHECK(plain.has_value());
     if (plain) {
-        OA_CHECK(plain->count == 3);
+        OA_CHECK(plain->count == 4);
         OA_CHECK(plain->faces[0].face == oa::app::ModernTextFace::sans);
         OA_CHECK(plain->faces[1].face == oa::app::ModernTextFace::cjk);
-        OA_CHECK(plain->faces[2].face == oa::app::ModernTextFace::emoji);
-        OA_CHECK(plain->faces[3].pixel_size == 0 && plain->faces[3].ascent == 0);
+        OA_CHECK(plain->faces[2].face == oa::app::ModernTextFace::endonyms);
+        OA_CHECK(plain->faces[3].face == oa::app::ModernTextFace::emoji);
+        OA_CHECK(plain->faces[4].pixel_size == 0 && plain->faces[4].ascent == 0);
         OA_CHECK(plain->faces[0].pixel_size == 14);
         OA_CHECK(plain->faces[0].ascent == 13 && plain->faces[0].descent == 4);
         OA_CHECK(plain->faces[1].pixel_size == 12 && plain->faces[2].pixel_size == 12);
+        OA_CHECK(plain->faces[3].pixel_size == 12);
         OA_CHECK(plain->ascent == 14 && plain->descent == 4);
         chain_rows_are_its_faces(*plain);
     }

@@ -27,4 +27,14 @@ if(BUILD_TESTING)
     oa-options)
   add_test(NAME data-languages-packs COMMAND oa-data-languages-pack-test
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/pseudo-pack)
+  # Every language's own name, and every line of the endonym list, draws
+  # from a stack that has no Noto Sans CJK file.
+  add_executable(oa-data-languages-endonyms-test tests/endonyms_test.cpp)
+  target_link_libraries(oa-data-languages-endonyms-test PRIVATE oa-data-languages
+    oa-platform-text-font oa-test-support oa-options)
+  oa_copy_text_fonts(oa-data-languages-endonyms-test
+    "$<TARGET_FILE_DIR:oa-data-languages-endonyms-test>")
+  add_test(NAME data-languages-endonyms COMMAND oa-data-languages-endonyms-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../tools/text-fonts/endonyms.txt")
+  set_tests_properties(data-languages-endonyms PROPERTIES TIMEOUT 30)
 endif()
