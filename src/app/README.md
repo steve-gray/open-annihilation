@@ -2677,14 +2677,19 @@ into the records and decisions of the modules that carry them out, and
   `native-language-switch`) changes the language in the settings from
   Simplified Chinese to English, German and back, over the main menu and
   over a skirmish's in-game menu, and checks each screen shows what it
-  shows opened again in the language.
+  shows opened again in the language, and that in Chinese every caption
+  over the match's pictures shows each of its characters, none as the
+  missing-glyph box (`picture_captions_missing_glyphs`).
 - **Picture captions** (`runtime_picture_captions.cpp`): while a language
   other than English is shown, the words its packs' `pictures.tdf` gives
   (`language_pictures`, drawn by `oa/present/picture_captions.hpp`) are
-  drawn in the bundled fonts over the pictures they name as each is
-  loaded: the GAF files the runtime reads (`append_gaf_file`), the match
-  bar's `commongui.gaf` and side panel, a screen's sprites and the named
-  backgrounds. A picture the
+  drawn over the pictures they name as each is loaded: the GAF files the
+  runtime reads (`append_gaf_file`), the match bar's `commongui.gaf` and
+  side panel, a screen's sprites and the named backgrounds. They are drawn
+  in the faces game text is drawn in: the bundled fonts and the language
+  packs' faces, which both stacks take through `follow_language_fonts`,
+  again whenever the language's faces change, forgetting the lines drawn
+  before. A picture the
   game data holds in the language's own folder (`bitmaps-<word>`,
   `anims-<word>`) already shows its words and is left as it is, as is
   every picture no pack names.

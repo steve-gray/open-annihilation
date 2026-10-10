@@ -163,6 +163,21 @@ void Runtime::check_language_switch() {
         if (differing_pixels(switched, before) == 0)
             fail(std::string(screen) + " looks the same in " + std::string(tag) + " as before it");
     };
+    // Requires every caption the pack draws over the match's pictures, the
+    // top bar's metal and energy among them, to show each of its
+    // characters: the captions' fonts hold the pack's face, and none of its
+    // words draws the missing-glyph box.
+    const auto expect_captions_whole = [this](std::string_view when) {
+        if (language_pictures().all().empty())
+            fail("no installed pack gives " + std::string(kStartTag) + " captions over pictures");
+        const auto missing = picture_captions_missing_glyphs();
+        if (!missing.empty())
+            fail(
+                std::string(when) + " the caption " + missing.front() +
+                " draws the missing-glyph box, as do " + std::to_string(missing.size() - 1U) +
+                " more"
+            );
+    };
 
     // The main menu: each frame drawn from sparks started afresh, without
     // the pointer.
@@ -228,6 +243,7 @@ void Runtime::check_language_switch() {
     };
     const auto match_started = match_frame();
     snapshot("match-" + std::string(kStartTag) + "-start", match_started);
+    expect_captions_whole("as the skirmish starts,");
     auto match_before = match_started;
     for (const auto tag : kChosenTags) {
         open_engine_settings_in_match();
@@ -249,6 +265,8 @@ void Runtime::check_language_switch() {
         const auto reopened = match_frame();
         snapshot("match-" + std::string(tag) + "-opened-again", reopened);
         expect_shown("the in-game menu", tag, switched, reopened, match_before);
+        if (tag == kStartTag)
+            expect_captions_whole("back in " + std::string(kStartTag) + ",");
         match_before = switched;
     }
     if (const auto differing = differing_pixels(match_before, match_started); differing != 0)
@@ -258,6 +276,9 @@ void Runtime::check_language_switch() {
         );
     std::cout << "language switch check: the in-game menu shows each language as it opens in "
                  "it\n";
+    std::cout << "language switch check: every caption over the match's pictures shows each of "
+                 "its characters in "
+              << kStartTag << '\n';
 }
 
 } // namespace oa::app
