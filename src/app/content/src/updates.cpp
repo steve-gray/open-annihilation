@@ -42,7 +42,7 @@ namespace {
 /// A manifest's rules hash, remembered with the size and time it was read at.
 struct RulesKey {
     fs::path folder{};
-    std::uintmax_t size{};
+    uintmax_t size{};
     fs::file_time_type modified{};
 
     /// Orders two keys so a map can hold them.

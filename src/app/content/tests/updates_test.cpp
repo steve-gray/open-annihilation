@@ -335,7 +335,7 @@ fs::path write_package(const fs::path& folder, int revision) {
 /// One file's bytes and the time they were written.
 struct Stamp {
     std::string relative{};
-    std::uintmax_t size{};
+    uintmax_t size{};
     fs::file_time_type modified{};
     sha::Digest digest{};
 
