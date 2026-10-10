@@ -54,9 +54,27 @@ if(BUILD_TESTING)
   add_test(NAME app-content-registries COMMAND oa-app-content-registries-test)
   set_tests_properties(app-content-registries PROPERTIES TIMEOUT 120)
 
+  # The download API's bodies, and the queue against a local fixture.
+  add_executable(oa-app-content-download-api-test tests/download_api_test.cpp)
+  target_include_directories(oa-app-content-download-api-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(oa-app-content-download-api-test PRIVATE oa-app-content oa-test-support)
+  add_test(NAME app-content-download-api COMMAND oa-app-content-download-api-test)
+  set_tests_properties(app-content-download-api PROPERTIES TIMEOUT 30)
+
+  add_executable(oa-app-content-downloads-test tests/download_test.cpp)
+  target_include_directories(oa-app-content-downloads-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(oa-app-content-downloads-test
+    PRIVATE oa-app-content oa-netgame-http-fixture oa-base-signing oa-base-sha256 oa-base-threads
+      oa-test-support)
+  add_test(NAME app-content-downloads COMMAND oa-app-content-downloads-test)
+  set_tests_properties(app-content-downloads PROPERTIES TIMEOUT 180)
+
   if(WIN32)
     foreach(target oa-app-content-refresh-rules-test oa-app-content-settings-test
-        oa-app-content-test oa-app-content-updates-test oa-app-content-registries-test)
+        oa-app-content-test oa-app-content-updates-test oa-app-content-registries-test
+        oa-app-content-download-api-test oa-app-content-downloads-test)
       add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:${target}>"
           "-DDEST=$<TARGET_FILE_DIR:${target}>" -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")

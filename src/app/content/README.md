@@ -58,12 +58,29 @@ downloaded files.
 - `downloads_folder`, `downloaded_bytes` and `empty_downloads` are the
   downloaded files under the data folder.
 
-The runtime owns one service from start to quit
-(`start_content`, `tick_content`, `content_service` in
-`src/app/runtime_content.cpp`). `start_content` reads the update setting.
-`content_install_id` is how a download gets a registry's ID, making it
-then when none is stored. `tick_content` passes Developer mode on
-when it changes.
+`oa/app/content/downloads.hpp`, same namespace:
+
+- `Downloads` is the queue. `queue` adds one package, `cancel` and
+  `cancel_registry` stop items and keep their parts, `retry` queues a
+  failed item again, and `view` and `generation` are what a frame reads.
+  `busy` is true while any item has not ended. `files_in_use` names the
+  part and the final file of every item that has not ended.
+- `download_target` resolves a catalogue entry into the package a queue
+  item keeps. `reason_text` is the word the download API uses.
+- `set_match_running` holds the queue for a match. `set_install_id`
+  remembers one registry's install ID. `report_install` records what the
+  installer did with a file the queue handed over.
+
+The runtime owns one service and one queue from start to quit
+(`start_content`, `tick_content`, `content_service`, `content_downloads`
+in `src/app/runtime_content.cpp`). `queue_download` is how the game adds
+a package. `start_content` reads the update setting and each registry's
+install ID, without making one. `content_install_id` is how a download
+gets a registry's ID, making it then when none is stored.
+`content_install_ids_changed` reads them again after Settings changes
+one. `pause_content_for_match` runs before a match loads.
+`tick_content` passes Developer mode on when it changes, tells the queue
+whether a match is running, and reports each install.
 
 ## State
 
@@ -81,6 +98,7 @@ The install ID and the update setting live in the preference values the
 caller passes (`open-annihilation.install-id.<registry id>`,
 `open-annihilation.content-updates`). Downloaded files are
 `<data>/content/downloads/`.
+
 ## Updates
 
 An update is a catalogue release of the same kind and key, from the same
@@ -159,15 +177,35 @@ adopted, an unknown SHA-256, a folder with no record, the rules hash, a
 release this build cannot install, a roll back that offers the update
 again, and a listing that changes no file.
 
+`app-content-download-api` covers the key, challenge and result bodies.
+`app-content-downloads` fetches from a local fixture: resume, a match,
+a challenge, mirrors and the saved queue.
+
+## Downloads
+
+One package is fetched at a time, on a worker of its own. Nothing is
+fetched while a match runs. A package is handed to the installer only
+when the whole file's SHA-256 is the catalogue's. The install ID is sent
+only in the key request, and only when that registry requires one.
+Turning the ID off refuses downloads from that registry.
+
+Files land in `<data folder>/content/downloads`. A package is written as
+`<sha256>.<kind>.part` in steps of 1 MiB, then renamed to
+`<sha256>.<kind>` once it matches. The part is kept across a lost
+connection, a cancel and a quit. The unfinished queue is saved as
+`queue.yaml` in that folder.
+
+A registry in `tokens` mode asks `POST <api>/downloads` for a key, shows
+the code and page when the answer is 428, and posts one result to
+`POST <api>/downloads/<id>/result` when the item ends. A `direct`
+registry, and a mirror after the API cannot be reached, fetches the
+catalogue's file address. No refusal and no challenge falls through to
+a mirror.
+
 ## Limitations
 
-No downloads. A refresh in flight when the game quits is dropped. A
-check that has not finished is dropped with it.
-No downloads, and no adding or removing registries. A refresh in flight
-when the game quits is dropped. Turning an install ID off does not, by
-itself, refuse a download: the download asks for the ID and stops when
-there is none.
-when the game quits is dropped.
+A refresh in flight when the game quits is dropped. A check that has not
+finished is dropped with it.
 
 A file install of an older release cannot be matched, because a catalogue
 lists only each key's latest release. A mod whose manifest changes without
