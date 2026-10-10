@@ -216,6 +216,9 @@ Runtime::Runtime(
     load_engine_settings();
     // The settings the profile's display rules let the player change.
     load_view_settings();
+    // The registries and their catalogues, after the player's folder and
+    // Developer mode are known.
+    start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
     // system's fonts when the profile's text rendering asks for it.
     install_game_text_hooks();
@@ -737,6 +740,7 @@ void Runtime::idle_tick() {
     tell_saves_moved();
     tell_found_install();
     tell_incomplete_mod();
+    tick_content();
     tell_mod_installs();
     render();
     presentation_alpha_ = 1.0F;

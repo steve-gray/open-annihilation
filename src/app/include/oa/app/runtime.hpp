@@ -258,6 +258,10 @@ struct PackageKind;
 struct PackageOptions;
 } // namespace package_install
 
+namespace content {
+class Service;
+} // namespace content
+
 class Runtime final : public menu::Host,
                       public entry::SinglePlayerHost,
                       public frontend::Host,
@@ -3909,6 +3913,25 @@ class Runtime final : public menu::Host,
     ///
     /// @return the state
     ModInstallState& mod_install_state();
+
+    /// The registries and cached catalogues (runtime_content.cpp).
+    struct ContentState;
+
+    /// Frees the content service, joining its worker.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_content_state(ContentState* state) noexcept;
+
+    /// Reads the registries and starts a refresh where one is due.
+    void start_content();
+
+    /// Passes Developer mode on when it changed.
+    void tick_content();
+
+    /// Returns the content service, starting it on first use.
+    ///
+    /// @return the service
+    [[nodiscard]] content::Service& content_service();
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
@@ -14474,6 +14497,10 @@ class Runtime final : public menu::Host,
     // The mod packages opened in the game and their prompt; null until first used.
     std::unique_ptr<ModInstallState, void (*)(ModInstallState*) noexcept> mod_install_state_{
         nullptr, destroy_mod_install_state
+    };
+    // The registries and their catalogues; null until start_content.
+    std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{
+        nullptr, destroy_content_state
     };
     // The in-game menu's OA button and dialog; null until first used.
     std::unique_ptr<EngineSettingsMatchHost, void (*)(EngineSettingsMatchHost*) noexcept>
