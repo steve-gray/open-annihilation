@@ -1,19 +1,20 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The oamap kind's prompts: the English templates a map pack install shows,
-// looked up in the interface catalogue, then filled.
+// The oalang kind's prompts: the English templates a language pack install
+// shows, looked up in the interface catalogue, then filled.
 
 #include "prompt_text.hpp"
 
-#include "oa/app/package_install/oamap.hpp"
+#include "oa/app/package_install/oalang.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/ui/game_files.hpp"
 
 #include <string>
 #include <string_view>
 #include <utility>
 
-namespace oa::app::package_install::oamap {
+namespace oa::app::package_install::oalang {
 
 namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
@@ -23,7 +24,6 @@ using detail::cancel_caption;
 using detail::fill;
 using detail::ok_caption;
 using detail::open_folder_caption;
-using detail::play_now_caption;
 using detail::reinstall_caption;
 using detail::replace_caption;
 using detail::set_keys;
@@ -76,25 +76,19 @@ std::string backup_removed(const InstalledPackage& backup) {
     );
 }
 
-/// Tells whether a question replaces a pack from another registry.
+/// Returns the English name a question shows beside the endonym.
 ///
-/// @param plan the plan
 /// @param incoming the pack
-/// @return true when both records are catalogues and their registries differ
-bool other_registry(const InstallPlan& plan, const Incoming& incoming) {
-    return incoming.origin.kind == OriginKind::catalogue && plan.installed.origin &&
-           plan.installed.origin->kind == OriginKind::catalogue &&
-           plan.installed.origin->registry != incoming.origin.registry;
+/// @return its English name, or its tag when the manifest names none
+std::string english_of(const Incoming& incoming) {
+    return incoming.english_name.empty() ? incoming.id : incoming.english_name;
 }
 
-/// Adds OPEN FOLDER, PLAY NOW when offered, and OK.
+/// Adds OPEN FOLDER and OK. PLAY NOW is never offered for a language.
 ///
 /// @param[in,out] made the prompt
-/// @param play_now true to offer PLAY NOW
-void add_done_buttons(PackagePrompt& made, bool play_now) {
+void add_done_buttons(PackagePrompt& made) {
     add_button(made, open_folder_caption, Answer::open_folder);
-    if (play_now)
-        add_button(made, play_now_caption, Answer::play_now);
     add_button(made, ok_caption, Answer::ok, true);
     set_keys(made, Answer::ok, Answer::ok, Answer::ok);
 }
@@ -109,7 +103,7 @@ PackagePrompt installing_prompt(
     std::string_view file_name
 ) {
     PackagePrompt made{};
-    made.prompt.title = tr("INSTALLING MAP PACK");
+    made.prompt.title = tr("INSTALLING LANGUAGE");
     if (phase == InstallingPhase::checking) {
         made.prompt.paragraphs.push_back(
             text_of(fill("Checking {file}...", {{"file", std::string(file_name)}}))
@@ -154,20 +148,21 @@ PackagePrompt question_prompt(
     auto& text = made.prompt.paragraphs;
     const InstalledPackage& installed = plan.installed;
     const std::string title = incoming.name;
+    const std::string english = english_of(incoming);
     const std::string file(file_name);
     switch (plan.kind) {
     case PlanKind::ask_install:
-        made.prompt.title = tr("INSTALL MAP PACK");
+        made.prompt.title = tr("INSTALL LANGUAGE");
         text.push_back(text_of(fill(
-            "Install the map pack {name} {version} ({n} maps)?",
-            {{"name", title}, {"version", incoming.version}, {"n", std::to_string(incoming.maps)}}
+            "Install the language {endonym} ({english})?",
+            {{"endonym", title}, {"english", english}}
         )));
         add_button(made, cancel_caption, Answer::cancel);
         add_button(made, install_caption, Answer::alongside, true);
         set_keys(made, Answer::cancel, Answer::alongside, Answer::alongside);
         break;
     case PlanKind::ask_update: {
-        made.prompt.title = tr("UPDATE MAP PACK");
+        made.prompt.title = tr("UPDATE LANGUAGE");
         if (installed.revision == 0)
             text.push_back(text_of(fill(
                 "{title} {version}, an unknown revision, is installed. Replace it with "
@@ -205,7 +200,7 @@ PackagePrompt question_prompt(
         break;
     }
     case PlanKind::ask_reinstall:
-        made.prompt.title = tr("REINSTALL MAP PACK");
+        made.prompt.title = tr("REINSTALL LANGUAGE");
         text.push_back(text_of(fill(
             "{title} {version}, revision {revision}, is already installed. Install its "
             "files again from {file}?",
@@ -233,21 +228,20 @@ PackagePrompt question_prompt(
         set_keys(made, Answer::cancel, Answer::reinstall, Answer::cancel);
         break;
     case PlanKind::ask_version:
-        made.prompt.title = tr("REPLACE MAP PACK");
-        if (other_registry(plan, incoming))
-            text.push_back(text_of(fill(
-                "Replace {name} from {old} with the one from {new}?",
-                {{"name", title},
-                 {"old", installed.origin->registry},
-                 {"new", incoming.origin.registry}}
-            )));
-        else
+        made.prompt.title = tr("REPLACE LANGUAGE");
+        if (installed.kind == FolderKind::package)
             text.push_back(text_of(fill(
                 "{title} {installed} is installed. Replace it with {incoming} from {file}?",
-                {{"title", title},
+                {{"title", installed.name.empty() ? title : installed.name},
                  {"installed", installed.version},
                  {"incoming", incoming.version},
                  {"file", file}}
+            )));
+        else
+            text.push_back(text_of(fill(
+                "The folder {tag} does not hold this language. Replace it with {endonym} "
+                "({english}) from {file}? It is kept, and can be brought back.",
+                {{"tag", incoming.id}, {"endonym", title}, {"english", english}, {"file", file}}
             )));
         text.push_back(
             text_of(fill("The version installed is kept, and can be brought back.", {}))
@@ -268,16 +262,18 @@ PackagePrompt question_prompt(
     return made;
 }
 
-PackagePrompt installed_prompt(const Incoming& incoming, const fs::path& folder, bool play_now) {
+PackagePrompt installed_prompt(const Incoming& incoming, const fs::path& folder, bool) {
     PackagePrompt made{};
-    made.prompt.title = tr("MAP PACK INSTALLED");
+    made.prompt.title = tr("LANGUAGE INSTALLED");
     auto& text = made.prompt.paragraphs;
     text.push_back(text_of(fill(
-        "{title} {version} is installed in your Maps folder:",
-        {{"title", incoming.name}, {"version", incoming.version}}
+        "{endonym} ({english}) {version} is installed in your Languages folder:",
+        {{"endonym", incoming.name},
+         {"english", english_of(incoming)},
+         {"version", incoming.version}}
     )));
     text.push_back(path_of(folder));
-    add_done_buttons(made, play_now);
+    add_done_buttons(made);
     return made;
 }
 
@@ -287,10 +283,10 @@ PackagePrompt updated_prompt(
     const InstalledPackage& before,
     const fs::path& folder,
     const ChangeResult& result,
-    bool play_now
+    bool
 ) {
     PackagePrompt made{};
-    made.prompt.title = tr("MAP PACK UPDATED");
+    made.prompt.title = tr("LANGUAGE UPDATED");
     auto& text = made.prompt.paragraphs;
     const bool same_version = now.version == before.version;
     const std::string new_label = version_label(now.version, now.revision, same_version);
@@ -333,146 +329,58 @@ PackagePrompt updated_prompt(
         ));
         text.push_back(path_of(result.left_over));
     }
-    add_done_buttons(made, play_now);
+    add_done_buttons(made);
     return made;
 }
 
 std::string refusal_text(const Problem& problem) {
     const std::string name = problem.subject;
-    const auto size = [](uint64_t bytes) { return oa::ui::game_files::size_text(bytes); };
     switch (problem.refusal) {
-    case Refusal::none:
-    case Refusal::unreadable:
-        return fill("It cannot be read.", {});
-    case Refusal::not_zip:
-        return fill("It is not a zip archive.", {});
-    case Refusal::damaged:
-        return name.empty()
-                   ? fill("It is damaged.", {})
-                   : fill("It is damaged: {name} does not unpack as recorded.", {{"name", name}});
     case Refusal::no_manifest:
-        return fill("It holds no oamap.yaml at its top, or in a single folder at its top.", {});
-    case Refusal::manifest_too_large:
-        return fill("Its oamap.yaml is larger than 256 KiB.", {});
+        return fill("It holds no language.yaml.", {});
     case Refusal::manifest_errors:
-        return fill("Its oamap.yaml has errors:", {});
-    case Refusal::unsafe_name:
-        return fill("It holds a file it cannot unpack safely: {name}.", {{"name", name}});
-    case Refusal::case_clash:
-        return fill("It holds two names that differ only in case: {name}.", {{"name", name}});
-    case Refusal::link:
-        return fill("It holds a link to another file: {name}.", {{"name", name}});
-    case Refusal::encrypted:
-        return fill("It holds an encrypted file: {name}.", {{"name", name}});
-    case Refusal::method:
-        return fill(
-            "It holds a file packed in a way it cannot unpack: {name}. Pack it again with "
-            "standard (deflate) compression.",
-            {{"name", name}}
-        );
-    case Refusal::too_large:
-        return fill(
-            "It unpacks to {size}, more than the {limit} a map pack may take.",
-            {{"size", size(problem.size_bytes)}, {"limit", size(problem.limit_bytes)}}
-        );
-    case Refusal::bomb:
-        return fill(
-            "It unpacks to {size} from {packed}, far more than a map pack's files take.",
-            {{"size", size(problem.size_bytes)}, {"packed", size(problem.limit_bytes)}}
-        );
-    case Refusal::too_many_folders:
-        return fill(
-            "It holds more than {limit} folders, more than a map pack may take.",
-            {{"limit", std::to_string(max_package_folders)}}
-        );
-    case Refusal::no_space:
-        return fill(
-            "It needs {size} free, and the disk holding your Maps folder has {free}.",
-            {{"size", size(problem.size_bytes)}, {"free", size(problem.limit_bytes)}}
-        );
-    case Refusal::path_too_long:
-        return problem.detail;
-    case Refusal::reserved_id:
-        return fill("Its id, {id}, cannot name a folder on Windows.", {{"id", name}});
-    case Refusal::no_free_folder:
-        return fill("Your Maps folder has no free folder name for it.", {});
-    case Refusal::not_placed:
-        return fill(
-            "Its files could not be put in place. Another program, such as a file sync or a "
-            "virus scanner, may be using its files; try again in a moment.",
-            {}
-        );
-    case Refusal::changed:
-        return fill(
-            "Your Maps folder changed while this map pack was being installed; nothing was "
-            "changed. Open the file again.",
-            {}
-        );
-    case Refusal::busy:
-        return fill(
-            "Another copy of Open Annihilation is changing your Maps folder. Try again once it "
-            "has finished.",
-            {}
-        );
-    case Refusal::unknown_kind:
-        return fill("It is not a kind of package this game installs.", {});
-    case Refusal::missing_entry:
-        return fill("The pack lists {name}, which it does not hold.", {{"name", name}});
-    case Refusal::stray_file:
-        return fill("The pack holds {name}, which no map uses.", {{"name", name}});
-    case Refusal::outside_folder:
-        return fill(
-            "The pack holds {name}, which no map uses: it is outside the folders a map pack "
-            "may hold.",
-            {{"name", name}}
-        );
-    case Refusal::preview_unreadable:
-        return fill("The preview {name} is not a PNG.", {{"name", name}});
-    case Refusal::preview_too_big:
-        return problem.detail.empty()
-                   ? fill("The preview {name} is larger than 2 MiB.", {{"name", name}})
-                   : problem.detail;
+        return problem.detail.empty() ? fill("Its language.yaml has errors.", {}) : problem.detail;
     case Refusal::engine_unmet:
         return problem.detail.empty() ? fill("It needs a different Open Annihilation.", {})
                                       : problem.detail;
-    case Refusal::unfit:
-        if (!problem.detail.empty())
-            return problem.detail;
-        if (!problem.lines.empty()) {
-            std::string text;
-            for (const std::string& line : problem.lines) {
-                if (!text.empty())
-                    text += ' ';
-                text += line;
-            }
-            return text;
-        }
-        return fill("A map in the pack does not fit the base game.", {});
-    case Refusal::not_a_pack:
-        return fill(
-            "The folder {name} does not hold this map pack. It is left as it is.", {{"name", name}}
-        );
+    case Refusal::font_missing:
+        return fill("It lists a font it does not hold: {name}.", {{"name", name}});
+    case Refusal::font_unreadable:
+        return name.empty() ? fill("A font in the pack cannot be opened.", {})
+                            : fill("Its font {name} cannot be opened.", {{"name", name}});
+    case Refusal::warmup_invalid:
+        return problem.detail.empty() ? fill("Its warm-up text cannot be read.", {})
+                                      : problem.detail;
+    case Refusal::table_errors:
+        return problem.detail.empty() ? fill("A table in the pack does not parse.", {})
+                                      : problem.detail;
     default:
-        return fill("It cannot be read.", {});
+        return oamod::refusal_text(problem);
     }
 }
 
 PackagePrompt
 refused_prompt(std::string_view file_name, const Problem& problem, bool change_failed) {
     PackagePrompt made{};
-    made.prompt.title = tr("MAP PACK NOT INSTALLED");
+    made.prompt.title = tr("LANGUAGE NOT INSTALLED");
     auto& text = made.prompt.paragraphs;
     text.push_back(
         text_of(fill("{file} cannot be installed.", {{"file", std::string(file_name)}}))
     );
     text.push_back(text_of(refusal_text(problem)));
-    for (std::size_t index = 0; index < problem.lines.size() && index < shown_diagnostics; ++index)
-        text.push_back(text_of(problem.lines[index]));
-    if (problem.lines.size() > shown_diagnostics)
-        text.push_back(text_of(fill(
-            "And {n} more; the log has them all.",
-            {{"n", std::to_string(problem.lines.size() - shown_diagnostics)}}
-        )));
+    // The reader's message is the refusal sentence. Listing the same lines
+    // again would show it twice.
+    if (problem.refusal != Refusal::manifest_errors && problem.refusal != Refusal::table_errors &&
+        problem.refusal != Refusal::warmup_invalid && problem.refusal != Refusal::engine_unmet) {
+        for (std::size_t index = 0; index < problem.lines.size() && index < shown_diagnostics;
+             ++index)
+            text.push_back(text_of(problem.lines[index]));
+        if (problem.lines.size() > shown_diagnostics)
+            text.push_back(text_of(fill(
+                "And {n} more; the log has them all.",
+                {{"n", std::to_string(problem.lines.size() - shown_diagnostics)}}
+            )));
+    }
     if (change_failed && problem.refusal != Refusal::changed)
         text.push_back(text_of(fill("Nothing was changed.", {})));
     add_button(made, ok_caption, Answer::ok, true);
@@ -480,4 +388,16 @@ refused_prompt(std::string_view file_name, const Problem& problem, bool change_f
     return made;
 }
 
-} // namespace oa::app::package_install::oamap
+const KindPrompts& prompts() noexcept {
+    static const KindPrompts prompts{
+        .installing = &installing_prompt,
+        .question = &question_prompt,
+        .installed = &installed_prompt,
+        .updated = &updated_prompt,
+        .refusal_text = &refusal_text,
+        .refused = &refused_prompt,
+    };
+    return prompts;
+}
+
+} // namespace oa::app::package_install::oalang

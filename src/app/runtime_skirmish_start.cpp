@@ -508,6 +508,17 @@ void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
     // map selection, nor the last game's end screen.
     release_endgame();
     teardown_match();
+    // A pack map's files are mounted, and checked, before the match reads
+    // anything: the weapons, then the features its terrain names. The map
+    // chosen in the setup is mounted already; a map that does not fit is not
+    // played.
+    if (pack_map(selected_map_name_runtime_) != nullptr) {
+        std::string reason;
+        if (!prepare_pack_map(selected_map_name_runtime_, &reason))
+            throw std::runtime_error(
+                "the map " + selected_map_name_runtime_ + " can't be played: " + reason
+            );
+    }
     // From its loading screen a shared game or a replay keeps the tier it
     // has.
     begin_render_tier_match(

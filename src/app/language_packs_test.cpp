@@ -172,6 +172,26 @@ void a_warm_up_that_is_not_utf8_is_refused() {
     OA_CHECK(packs.empty());
 }
 
+/// A folder the installer is using, whose name starts with '.', is not a pack.
+/// A pack beside it still is.
+void a_staging_folder_is_not_read() {
+    const fs::path source = packs_folder / "pseudo-pack";
+    const fs::path root =
+        fs::temp_directory_path() /
+        ("oa-lang-staging-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code error;
+    fs::create_directories(root, error);
+    fs::copy(source, root / ".oalang-staging-1", fs::copy_options::recursive, error);
+    fs::copy(source, root / "en-XA", fs::copy_options::recursive, error);
+    std::vector<std::unique_ptr<LoadedLanguagePack>> packs;
+    oa::app::read_language_packs(root, packs, nullptr);
+    OA_CHECK(packs.size() == 1);
+    if (packs.size() == 1)
+        OA_CHECK(packs.front()->pack.manifest().tag == "en-XA");
+    fs::remove_all(root, error);
+}
+
 /// The pseudo pack's manifest is the registry entry of an installed language.
 void the_pseudo_pack_adds_its_language() {
     std::vector<std::unique_ptr<LoadedLanguagePack>> packs;
@@ -199,6 +219,7 @@ int main(int argc, char** argv) {
     a_missing_font_leaves_the_pack_out();
     a_long_warm_up_is_refused();
     a_warm_up_that_is_not_utf8_is_refused();
+    a_staging_folder_is_not_read();
     the_pseudo_pack_adds_its_language();
     return oa::test::check_exit_status();
 }

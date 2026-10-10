@@ -152,6 +152,14 @@ std::optional<OpenedPackage> take_package_file() {
     return opened;
 }
 
+std::optional<OpenedPackage> next_package_file() {
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    if (state.files.empty())
+        return std::nullopt;
+    return state.files.front();
+}
+
 void return_package_file(const OpenedPackage& package) {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);

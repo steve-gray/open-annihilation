@@ -65,8 +65,9 @@ struct Runtime::ModInstallState {
     bool check_shows_prompts{};
     /// Prompts this run has shown.
     uint32_t prompts_shown{};
-    /// A catalogue map pack installing off the main menu: nothing is shown,
-    /// and a finished install returns to idle instead of telling.
+    /// A catalogue map pack or language pack installing with nothing shown,
+    /// including off the main menu. A finished install returns to idle
+    /// instead of telling.
     bool quiet{};
     /// A catalogue map pack whose plan asks, put back until the main menu
     /// settles, so it is not opened again on every frame off the menu.
