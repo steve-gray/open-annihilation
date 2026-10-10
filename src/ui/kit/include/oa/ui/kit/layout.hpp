@@ -9,6 +9,7 @@
 #pragma once
 
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/looks.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -20,10 +21,6 @@
 #include <vector>
 
 namespace oa::ui::kit {
-
-/// A rectangle in points. One point is one pixel of the 640 by 480 picture.
-/// The same rectangle the settings geometry uses, so it passes straight through.
-using Rect = oa::ui::frontend_renderer::SourceRect;
 
 /// A place in a layout, in points.
 struct Point {
@@ -342,16 +339,27 @@ using ControlId = int32_t;
 /// No control.
 inline constexpr ControlId no_control = -1;
 
-/// What an item of a display list is. Later components add roles after mark.
+/// What an item of a display list is. Later components append roles.
 enum class Role : uint8_t {
-    fill,    ///< a flat rectangle
-    blend,   ///< a rectangle blended by the item's opacity
-    outline, ///< a one-pixel outline
-    bevel,   ///< a raised edge
-    rule,    ///< a hairline
-    text,    ///< a text
-    picture, ///< a picture
-    mark,    ///< a one-bit mark
+    fill,        ///< a flat rectangle
+    blend,       ///< a rectangle blended by the item's opacity
+    outline,     ///< a one-pixel outline
+    bevel,       ///< a raised edge
+    rule,        ///< a hairline
+    text,        ///< a text
+    picture,     ///< a picture: the canvas's icon
+    mark,        ///< a one-bit mark; its picture and colour are the item's MarkLook
+    button,      ///< a button
+    toggle,      ///< an Off/On switch
+    levels,      ///< a strip of levels
+    slider,      ///< a slider
+    choice,      ///< a drop-down's field
+    choice_menu, ///< a drop-down's open menu
+    lock,        ///< a padlock and its text
+    scroll_bar,  ///< a scroll bar
+    focus_ring,  ///< the keyboard focus outline
+    oa_button,   ///< the OA button
+    oa_mark,     ///< the OA mark alone
 };
 
 /// How a control looks, for the item that draws it.
@@ -379,6 +387,9 @@ struct Item {
     uint32_t opacity{};            ///< a blend's share of a pixel, in 256ths; 256 is opaque
     ControlId control{no_control}; ///< the control this draws, or none
     State state{};                 ///< how that control looks
+    /// How a component is drawn. Empty for a generic role. A component's look
+    /// owns its texts, so the list outlives the words it was built from.
+    Look look{};
 };
 
 /// What a control is. A screen maps these when it lists controls to automation.
