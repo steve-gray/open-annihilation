@@ -4270,17 +4270,17 @@ class Runtime final : public menu::Host,
     /// Settings stay open and no prompt shows (--check-language-install).
     void check_language_install();
 
-    /// The main menu's OA button and dialog (engine_settings_menu_host.hpp).
+    /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 
-    /// Frees the main menu's settings host.
+    /// Frees the main menu's OA button's state.
     ///
-    /// @param host host to free; null is allowed
+    /// @param host state to free; null is allowed
     static void destroy_engine_settings_menu_host(EngineSettingsMenuHost* host) noexcept;
 
-    /// Returns the main menu's settings host, made on first use.
+    /// Returns the main menu's OA button's state, made on first use.
     ///
-    /// @return the host
+    /// @return the state
     EngineSettingsMenuHost& engine_settings_menu_host();
 
     /// Registers the main menu's OA button: an overlay under the extensions'
@@ -4459,23 +4459,6 @@ class Runtime final : public menu::Host,
     /// @param action what the dialog asked
     void take_settings_screen_action(oa::ui::engine_settings::DialogAction action);
 
-    /// The in-game menu's OA button and dialog (engine_settings_match_host.hpp).
-    struct EngineSettingsMatchHost;
-
-    /// Frees the match's settings host.
-    ///
-    /// @param host host to free; null is allowed
-    static void destroy_engine_settings_match_host(EngineSettingsMatchHost* host) noexcept;
-
-    /// Returns the match's settings host, made on first use.
-    ///
-    /// @return the host
-    EngineSettingsMatchHost& engine_settings_match_host();
-
-    /// Registers the match's overlay: the OA button under Resume and the
-    /// dialog beside the in-game menu's column.
-    void register_engine_settings_match_overlay();
-
     /// Opens the dialog beside the darkened in-game menu, as the OA layer's
     /// settings screen, opening the menu first from play; a game played alone
     /// stays paused, a shared game runs on.
@@ -4609,20 +4592,6 @@ class Runtime final : public menu::Host,
     ///
     /// @return hertz; 0 without a window or when the display reports none
     [[nodiscard]] float display_refresh_rate() const;
-
-    /// Draws the match's settings layer, the OA button and the dialog with the
-    /// column darkened, over a composed match frame at the display gamma.
-    ///
-    /// @param[in,out] frame the composed frame, at the window's size
-    void compose_engine_settings_layer(renderer::Surface& frame);
-
-    /// Draws the match's settings layer over the presented layers, under the
-    /// message boxes and the cursor, as the other layers laid out 1:1 are
-    /// drawn (one_to_one_scale_mode).
-    void present_engine_settings_layer();
-
-    /// Destroys the match's settings layer's textures.
-    void destroy_engine_settings_textures();
 
     /// Checks the in-game menu's OA button and dialog (part of --check-engine-settings).
     void check_engine_settings_in_match();
@@ -14841,7 +14810,7 @@ class Runtime final : public menu::Host,
     // The captions drawn over the player's own pictures; null until first used.
     std::unique_ptr<PictureCaptionState, void (*)(PictureCaptionState*) noexcept>
         picture_caption_state_{nullptr, destroy_picture_caption_state};
-    // The main menu's OA button and dialog; null until first used.
+    // The main menu's OA button; null until first used.
     std::unique_ptr<EngineSettingsMenuHost, void (*)(EngineSettingsMenuHost*) noexcept>
         engine_settings_menu_{nullptr, destroy_engine_settings_menu_host};
     // The player's own folder for this run (start_user_folder); empty
@@ -14869,9 +14838,6 @@ class Runtime final : public menu::Host,
     std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{
         nullptr, destroy_content_state
     };
-    // The in-game menu's OA button and dialog; null until first used.
-    std::unique_ptr<EngineSettingsMatchHost, void (*)(EngineSettingsMatchHost*) noexcept>
-        engine_settings_match_{nullptr, destroy_engine_settings_match_host};
     // The state of the renderer borrowed with its host; null without one,
     // as in a headless run, on a window of the runtime's own or in the
     // second runtime of a loopback check.

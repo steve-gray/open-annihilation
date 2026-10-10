@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The main menu's OA button and the settings dialog over the darkened main
-// menu, as two overlays on the main menu: the button under the extensions'
-// overlays and the dialog over them. Also the shortcut and the requests that
-// open the settings on whichever screen can show them.
+// The main menu's OA button, an overlay on the main menu under the
+// extensions' overlays, and the settings dialog it opens over the darkened
+// main menu as a screen of the OA layer (oa_layer.hpp). Also the shortcut and
+// the requests that open the settings on whichever screen can show them.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
@@ -20,7 +20,6 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
-#include <tuple>
 
 namespace oa::app {
 
@@ -36,10 +35,8 @@ constexpr int32_t kButtonInset = 12;
 /// The button overlay's z: under the extensions' overlays, which draw over
 /// the button and see input before it.
 constexpr int16_t kButtonOverlayZ = -100;
-/// The sound the OA button and OK play.
+/// The sound the OA button plays as it opens the dialog.
 constexpr std::string_view kOpenSound = "Options";
-/// The sound Cancel plays.
-constexpr std::string_view kCancelSound = "Previous";
 
 /// Tells whether a point lies in a rectangle.
 ///
@@ -86,14 +83,6 @@ artless::SourceRect Runtime::EngineSettingsMenuHost::button_rect(const Runtime& 
     const int32_t y =
         runtime.main_menu_overlay_ ? kButtonInset : kCanvasHeight - kButtonInset - side;
     return {kCanvasWidth - kButtonInset - side, y, side, side};
-}
-
-artless::Placement Runtime::EngineSettingsMenuHost::dialog_placement() {
-    return {
-        (kCanvasWidth - settings::dialog_width) / 2,
-        (kCanvasHeight - settings::dialog_height) / 2,
-        1
-    };
 }
 
 int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*) {
@@ -158,123 +147,6 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         look,
         *runtime.engine_settings_fonts(),
         runtime.engine_settings_icon()
-    );
-}
-
-int Runtime::EngineSettingsMenuHost::dialog_event(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    auto& host = runtime.engine_settings_menu_host();
-    if (!host.dialog_shown || runtime.screen_ != Screen::main_menu)
-        return 0;
-    auto* dialog = runtime.engine_settings_dialog();
-    if (dialog == nullptr) {
-        host.dialog_shown = false;
-        return 0;
-    }
-    const auto& input = *context->input;
-    const auto placement = dialog_placement();
-    int32_t x = 0;
-    int32_t y = 0;
-    pointer_pixel(input, x, y);
-    x -= placement.x;
-    y -= placement.y;
-    auto action = settings::DialogAction::none;
-    uint32_t key_down = 0;
-    switch (input.kind) {
-    case ScreenInputKind::pointer_move:
-        action = settings::dialog_pointer_move(*dialog, x, y);
-        break;
-    case ScreenInputKind::pointer_down:
-        // A finger's press takes the nearest control within reach; the
-        // dialog lies on the picture at its own scale.
-        if (input.button == SDL_BUTTON_LEFT)
-            action = runtime.engine_settings_state().finger_pointer
-                         ? settings::dialog_finger_down(
-                               *dialog, x, y, EngineSettingsState::finger_reach(runtime, 1.0)
-                           )
-                         : settings::dialog_pointer_down(*dialog, x, y);
-        break;
-    case ScreenInputKind::pointer_up:
-        if (input.button == SDL_BUTTON_LEFT)
-            action = settings::dialog_pointer_up(*dialog, x, y);
-        break;
-    case ScreenInputKind::wheel:
-        action = settings::dialog_wheel(*dialog, x, y, input.wheel_y);
-        break;
-    case ScreenInputKind::key_down:
-        if (const auto key = engine_settings_dialog_key(input.key, input.modifiers)) {
-            action = settings::dialog_key(*dialog, *key);
-            key_down = input.key;
-        }
-        break;
-    default:
-        break;
-    }
-    take_action(runtime, action, key_down);
-    // The dialog is modal: nothing under it sees any input while it shows.
-    return 1;
-}
-
-void Runtime::EngineSettingsMenuHost::take_action(
-    Runtime& runtime, settings::DialogAction action, uint32_t key_down
-) {
-    if (action == settings::DialogAction::accepted || action == settings::DialogAction::switch_mod)
-        runtime.play_ui_sound(kOpenSound, 0);
-    else if (action == settings::DialogAction::cancelled)
-        runtime.play_ui_sound(kCancelSound, 0);
-    if (!runtime.take_engine_settings_action(action))
-        return;
-    auto& host = runtime.engine_settings_menu_host();
-    host.dialog_shown = false;
-    host.button_pressed = false;
-    host.latched_key = key_down;
-}
-
-void Runtime::EngineSettingsMenuHost::dialog_tick(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    auto& host = runtime.engine_settings_menu_host();
-    if (!host.dialog_shown)
-        return;
-    if (runtime.screen_ == Screen::main_menu) {
-        // Hardware acceleration's status follows the renderer while the
-        // dialog shows, Touch shows once a finger turns the touch controls
-        // on, and Controller once a gamepad sends input, with its Steam
-        // Input notice while that applies; the main menu is drawn every
-        // frame.
-        if (auto* dialog = runtime.engine_settings_dialog()) {
-            std::ignore =
-                settings::set_acceleration_status(*dialog, runtime.acceleration_report().status);
-            std::ignore = settings::set_touch_controls(*dialog, runtime.touch_controls_active());
-            std::ignore = settings::set_controller_section(
-                *dialog, runtime.pad_used(), runtime.pad_steam_input()
-            );
-        }
-        return;
-    }
-    host.dialog_shown = false;
-    // Cancel always closes an open dialog.
-    std::ignore = runtime.take_engine_settings_action(settings::DialogAction::cancelled);
-}
-
-void Runtime::EngineSettingsMenuHost::dialog_draw(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    const auto& host = runtime.engine_settings_menu_host();
-    if (!host.dialog_shown || runtime.screen_ != Screen::main_menu || context->surface == nullptr)
-        return;
-    const auto* dialog = runtime.engine_settings_dialog();
-    const auto* fonts = runtime.engine_settings_fonts();
-    if (dialog == nullptr || fonts == nullptr)
-        return;
-    auto& frame = *context->surface;
-    artless::blend_source_rect(
-        frame,
-        {0, 0, 1},
-        {0, 0, static_cast<int32_t>(frame.width), static_cast<int32_t>(frame.height)},
-        settings::backdrop_color,
-        settings::menu_backdrop_opacity
-    );
-    settings::draw_dialog(
-        frame, dialog_placement(), *dialog, *fonts, runtime.engine_settings_icon()
     );
 }
 
