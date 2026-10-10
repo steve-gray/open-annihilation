@@ -1879,8 +1879,9 @@ if(OA_BUILD_PLATFORM)
       # skirmish's in-game menu, from Simplified Chinese to English, German
       # and back: after each change, the settings closed with OK, the screen
       # under them shows what it shows opened again in the language, and
-      # back in Chinese what it showed as the run started in it. The test
-      # fixture pack installs first.
+      # back in Chinese what it showed as the run started in it. In Chinese
+      # every caption over the match's pictures shows each of its
+      # characters in the pack's face. The test fixture pack installs first.
       set(oa_language_switch_check_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-switch")
       file(MAKE_DIRECTORY "${oa_language_switch_check_dir}")
       file(WRITE "${oa_language_switch_check_dir}/language-switch.conf"

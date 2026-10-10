@@ -20,12 +20,12 @@ target_link_libraries(oa-ui-frontend-multiplayer
   PRIVATE oa-platform-shims oa-base-text oa-base-bytes oa-ui-frontend-renderer oa-ui-decoded oa-formats-hpi oa-data-defs-assets oa-formats-tnt oa-data-unit-definitions
     oa-formats-tdf
     oa-data-campaign-assets oa-data-defs oa-data-languages oa-netgame-sync oa-present oa-present-model
-    oa-base-game-loop oa-sim-messages oa-sim-mission-units)
+    oa-base-game-loop oa-sim-messages oa-sim-mission-units oa-data-mod-profile)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-frontend-multiplayer-lobby-test tests/lobby_test.cpp)
   target_link_libraries(oa-ui-frontend-multiplayer-lobby-test PRIVATE oa-ui-frontend-multiplayer oa-formats-hpi
-    oa-formats-gaf oa-data-languages oa-test-game-data)
+    oa-formats-gaf oa-data-languages oa-data-mod-profile oa-test-game-data)
   add_test(NAME ui-multiplayer-lobby COMMAND oa-ui-frontend-multiplayer-lobby-test)
   # The lounge and game list over the GUI files of the install OA_GAME_DIR
   # names, and the screens over its store.

@@ -3,8 +3,8 @@
 
 // Captions over the player's own pictures: the shown language's
 // pictures.tdf captions (Runtime::language_pictures) drawn in the bundled
-// fonts over the GAF sequences and bitmaps it names as they are loaded
-// (oa/present/picture_captions.hpp).
+// fonts and the language packs' faces over the GAF sequences and bitmaps it
+// names as they are loaded (oa/present/picture_captions.hpp).
 
 #include "oa/app/runtime.hpp"
 
@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -39,6 +40,8 @@ constexpr std::size_t palette_entry_bytes = 4;
 constexpr std::size_t rgb_pixel_bytes = 3;
 /// The most drawn lines kept before the store starts again.
 constexpr std::size_t kept_caption_lines = 4096;
+/// The weight captions are drawn in.
+constexpr text_font::Weight caption_weight = text_font::Weight::bold;
 
 /// Tells whether a picture's path lies in one of the game data's folders
 /// for a language, whose name joins a folder and the language's word with
@@ -148,8 +151,12 @@ struct Runtime::PictureCaptionState {
     std::mutex mutex{};
     /// The bundled fonts have been opened, or failed to.
     bool fonts_opened{};
-    /// The bundled fonts; null when they do not open.
+    /// The bundled fonts, with the language shown's pack faces; null when
+    /// they do not open.
     std::unique_ptr<text_font::FontStack> fonts{};
+    /// The fonts generation of the pack faces the fonts hold; empty before
+    /// they take any.
+    std::optional<uint64_t> fonts_generation{};
     /// The lines drawn so far, by text and pixel size; an empty one could
     /// not be drawn.
     std::map<std::pair<std::string, int32_t>, std::optional<oa::present::CaptionLine>> lines{};
@@ -165,6 +172,25 @@ void Runtime::destroy_picture_caption_state(PictureCaptionState* state) noexcept
 
 namespace {
 
+/// Opens a state's fonts (Runtime::PictureCaptionState) the first time
+/// they are asked for, and gives them the language shown's pack faces as
+/// the game text's fonts take them (Runtime::follow_language_fonts),
+/// forgetting the lines drawn before the faces changed.
+///
+/// @param[in,out] state the captions' state
+/// @param runtime the runtime that shows the language
+/// @return the fonts; null when the bundled fonts do not open
+template <typename CaptionState>
+text_font::FontStack* opened_caption_fonts(CaptionState& state, const Runtime& runtime) {
+    if (!state.fonts_opened) {
+        state.fonts_opened = true;
+        state.fonts = text_font::FontStack::open(text_font::bundled_font_directory());
+    }
+    if (runtime.follow_language_fonts(state.fonts.get(), state.fonts_generation))
+        state.lines.clear();
+    return state.fonts.get();
+}
+
 /// Draws captions in a state's fonts (Runtime::PictureCaptionState),
 /// keeping each line drawn.
 template <typename CaptionState>
@@ -178,7 +204,7 @@ oa::present::CaptionDraw caption_font(CaptionState& state) {
         std::optional<oa::present::CaptionLine> line;
         text_font::Style style;
         style.pixel_size = pixel_size;
-        style.weight = text_font::Weight::bold;
+        style.weight = caption_weight;
         style.rendering = text_font::Rendering::mono;
         if (state.fonts)
             if (const auto drawn = state.fonts->draw(text, style))
@@ -220,11 +246,7 @@ void Runtime::caption_gaf_pictures(
         const auto entry = oa::present::read_picture_caption(*keys);
         if (entry.texts.empty())
             continue;
-        if (!state.fonts_opened) {
-            state.fonts_opened = true;
-            state.fonts = text_font::FontStack::open(text_font::bundled_font_directory());
-        }
-        if (!state.fonts)
+        if (opened_caption_fonts(state, *this) == nullptr)
             return;
         const auto draw = caption_font(state);
         auto& frames = sequence.frames;
@@ -280,11 +302,7 @@ void Runtime::caption_bitmap(std::string_view file, oa::Image& image) {
         return;
     auto& state = *picture_caption_state_;
     const std::lock_guard lock(state.mutex);
-    if (!state.fonts_opened) {
-        state.fonts_opened = true;
-        state.fonts = text_font::FontStack::open(text_font::bundled_font_directory());
-    }
-    if (!state.fonts)
+    if (opened_caption_fonts(state, *this) == nullptr)
         return;
     std::array<oa::present::IndexedPicture, 1> frames{oa::present::IndexedPicture{
         static_cast<int32_t>(image.width), static_cast<int32_t>(image.height), image.indices
@@ -299,6 +317,19 @@ void Runtime::caption_bitmap(std::string_view file, oa::Image& image) {
             static_cast<std::size_t>(image.indices[pixel]) * palette_entry_bytes;
         std::memcpy(&image.rgb[pixel * rgb_pixel_bytes], &palette[entry_at], rgb_pixel_bytes);
     }
+}
+
+std::vector<std::string> Runtime::picture_captions_missing_glyphs() {
+    if (!picture_caption_state_)
+        picture_caption_state_.reset(new PictureCaptionState{});
+    auto& state = *picture_caption_state_;
+    const std::lock_guard lock(state.mutex);
+    std::vector<std::string> missing;
+    for (const auto& [picture, keys] : language_pictures().all())
+        for (const std::string& text : oa::present::read_picture_caption(keys).texts)
+            if (!text.empty() && (!state.fonts || !state.fonts->draws(text, caption_weight)))
+                missing.push_back(picture + ": " + text);
+    return missing;
 }
 
 } // namespace oa::app

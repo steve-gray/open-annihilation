@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Game text in the modern fonts: the bundled fonts, opened once and shared,
+// with the language packs' faces they and the picture captions' fonts take,
 // the lines they draw at the text size, kept for the frames that draw them
 // again, the game-text hooks the text loops reach them and the player's
 // settings through, how large the match's text is painted where it lies,
@@ -20,6 +21,7 @@
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <tuple>
@@ -78,9 +80,9 @@ struct ModernFonts {
     std::list<std::string> order{};
     /// the language the lines were drawn for; null before the first line
     const oa::data::languages::Language* language{};
-    /// the fonts generation the lines were drawn for; none matches a
-    /// language's, so the first line follows it
-    uint64_t fonts_generation{~uint64_t{0}};
+    /// the fonts generation the lines were drawn for; empty before the
+    /// first line, which follows the language's
+    std::optional<uint64_t> fonts_generation{};
     /// the least pixel size of ideographs for that language, 0 for none
     int32_t least_cjk_size{};
 };
@@ -124,8 +126,9 @@ face_style(oa::present::TextFace face, int32_t scale, int32_t text_size, int32_t
 
 /// Readies the fonts for the language shown when it, or the packs' faces
 /// and warm-up, are not what their lines were drawn for: the least size of
-/// ideographs for it, the packs' faces on the open stack, no lines kept
-/// from before, and the pack's warm-up text laid out in each face.
+/// ideographs for it, the packs' faces on the open stack
+/// (Runtime::follow_language_fonts), no lines kept from before, and the
+/// pack's warm-up text laid out in each face.
 void follow_language(
     ModernFonts& fonts,
     const Runtime& runtime,
@@ -133,17 +136,17 @@ void follow_language(
     int32_t scale,
     int32_t text_size
 ) {
-    if (fonts.language == &language &&
-        fonts.fonts_generation == runtime.language_fonts_generation())
+    // Another language shown takes the packs' faces afresh too.
+    if (fonts.language != &language) {
+        fonts.language = &language;
+        fonts.fonts_generation.reset();
+    }
+    text_font::FontStack* stack = opened_stack(fonts);
+    if (!runtime.follow_language_fonts(stack, fonts.fonts_generation))
         return;
-    fonts.language = &language;
-    fonts.fonts_generation = runtime.language_fonts_generation();
     fonts.least_cjk_size = writes_cjk(language) ? text_font::least_cjk_language_pixel_size : 0;
     fonts.lines.clear();
     fonts.order.clear();
-    text_font::FontStack* stack = opened_stack(fonts);
-    if (stack != nullptr)
-        runtime.use_language_fonts(*stack);
     const std::string_view warmup = runtime.language_warmup();
     if (stack == nullptr || warmup.empty())
         return;
@@ -188,6 +191,18 @@ draw_mask(text_font::FontStack& stack, std::string_view text, const text_font::S
 GameTextHooksInstall::~GameTextHooksInstall() {
     if (runtime != nullptr && oa::present::game_text_hooks().context == runtime)
         oa::present::set_game_text_hooks({});
+}
+
+bool Runtime::follow_language_fonts(
+    text_font::FontStack* stack, std::optional<uint64_t>& generation
+) const {
+    const uint64_t current = language_fonts_generation();
+    if (generation == current)
+        return false;
+    generation = current;
+    if (stack != nullptr)
+        use_language_fonts(*stack);
+    return true;
 }
 
 bool Runtime::modern_fonts_open() {

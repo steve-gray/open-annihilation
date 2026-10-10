@@ -73,7 +73,8 @@ endif()
 message(STATUS "Text fonts: FreeType ${OA_FREETYPE_VERSION}, fonts from ${OA_TEXT_FONTS_DIR}")
 
 # Copies the text fonts into the fonts folder of a directory after a target
-# is built, leaving files that are already current.
+# is built. The folder holds those fonts and nothing else: it is emptied
+# first, so a font the list drops leaves a build folder that built it before.
 #   oa_copy_text_fonts(<target> <directory>)
 # The directory may be a generator expression, such as the game's
 # OA_GAME_FILES_DIR.
@@ -83,6 +84,7 @@ function(oa_copy_text_fonts target directory)
     list(APPEND sources "${OA_TEXT_FONTS_DIR}/${font}")
   endforeach()
   add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${directory}/fonts"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${directory}/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${sources} "${directory}/fonts"
     VERBATIM)

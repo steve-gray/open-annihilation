@@ -174,8 +174,9 @@ void test_accepted_and_signature_failures() {
     }
 
     const SignedBytes signed_other = sign_text("[]", "release-2026", 0x11);
+    const std::vector<uint8_t> forged_bytes = bytes_of("{");
     catalogue::CheckRequest forged;
-    forged.catalogue = bytes_of("{");
+    forged.catalogue = forged_bytes;
     forged.signature = signed_other.signature;
     forged.registry_id = "coreprime";
     forged.trusted_keys = std::span<const registry::RegistryKey>(&first, 1);
@@ -205,9 +206,10 @@ void test_accepted_and_signature_failures() {
         std::string(257, 'x'),
     };
     for (const std::string& file : bad_files) {
+        const std::vector<uint8_t> signature_bytes = bytes_of(file);
         catalogue::CheckRequest request;
         request.catalogue = signed_bytes.catalogue;
-        request.signature = bytes_of(file);
+        request.signature = signature_bytes;
         request.registry_id = "coreprime";
         request.trusted_keys = std::span<const registry::RegistryKey>(&first, 1);
         const catalogue::Checked result = catalogue::check_catalogue(request);
@@ -310,7 +312,8 @@ void test_expiry_rotation_and_size() {
     OA_CHECK(unsigned_catalogue.verdict == catalogue::Verdict::accepted);
     OA_CHECK(unsigned_catalogue.usable());
     OA_CHECK(unsigned_catalogue.signed_by.empty());
-    unsigned_request.signature = bytes_of("not a signature");
+    const std::vector<uint8_t> not_a_signature = bytes_of("not a signature");
+    unsigned_request.signature = not_a_signature;
     const catalogue::Checked ignored = catalogue::check_catalogue(unsigned_request);
     OA_CHECK(ignored.verdict == catalogue::Verdict::accepted);
 

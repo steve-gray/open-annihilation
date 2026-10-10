@@ -498,6 +498,7 @@ void Runtime::bind_match_speech() {
 }
 
 void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
+    pause_content_for_match();
     // A shared game whose mod cannot start one is refused before anything is
     // dropped or loaded; its warning shows once the main menu does, where
     // the abandoned launch returns.

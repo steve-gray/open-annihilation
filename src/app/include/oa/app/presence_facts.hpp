@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // What this machine is playing, for the presence it tells other machines:
-// Developer Mode, the simulation hash, whether the rules differ from 3.1c,
-// the mod, and which standard hacks are on. The header includes no other
-// header of the engine's.
+// the platform and architecture, Developer Mode, the simulation hash, whether
+// the rules differ from 3.1c, the mod and where it was published, and which
+// standard hacks are on. The header includes no other header of the engine's.
 //
 // Limitations: an override Developer Mode holds still counts, and still
 // decides whether its hack is on, when the resolver refused it and the
@@ -37,6 +37,23 @@ struct PresenceMod {
     friend bool operator==(const PresenceMod& left, const PresenceMod& right) = default;
 };
 
+/// Where the mod in play was published: one release of a registry's catalogue.
+struct PresenceOrigin {
+    std::string registry{}; ///< the registry's id
+    /// The address the registry's descriptor was read from; empty for a
+    /// built-in registry, one added from a file, and one not in effect.
+    std::string descriptor_url{};
+    int64_t catalogue_release{};      ///< the catalogue release, from 1
+    std::array<uint8_t, 32> sha256{}; ///< the SHA-256 of the package file as installed
+
+    /// Compares two origins: every field.
+    ///
+    /// @param left one origin
+    /// @param right the other
+    /// @return true when every field is equal
+    friend bool operator==(const PresenceOrigin& left, const PresenceOrigin& right) = default;
+};
+
 /// One Developer Mode override: the hack and whether the override turns it on.
 struct PresenceOverride {
     std::string hack{}; ///< the hack's id
@@ -52,6 +69,12 @@ struct PresenceOverride {
 
 /// What this machine is playing.
 struct PresenceFacts {
+    /// The platform the game runs on, as SDL names it: "Windows", "macOS",
+    /// "Linux", "iOS", "Android" and so on.
+    std::string platform;
+    /// The processor architecture the game was built for: "x64", "x86",
+    /// "arm64" or "armhf", else "unknown".
+    std::string architecture;
     /// Developer Mode is on (Runtime::developer_mode).
     bool developer_mode{};
     /// The simulation hash the game plays, as simulation_hash chooses it:
@@ -65,6 +88,15 @@ struct PresenceFacts {
     /// (ModProfile::id, name, version, packaging.revision). None when the
     /// game plays no profile.
     std::optional<PresenceMod> mod;
+    /// Where the mod in play was published, from the installer's origin
+    /// record in the mod's folder (.oa-origin.yaml), the first of the game's
+    /// folders when there are two or more, and the registry's descriptor URL
+    /// from the registries in effect. Only a catalogue origin with its
+    /// SHA-256 gives one: none for a mod installed from a file, a folder
+    /// without a record, or no mod. The record is read again only when the
+    /// folder or the mod's id, version or packaging revision changes, and the
+    /// URL looked up again only when the registries change.
+    std::optional<PresenceOrigin> mod_origin;
     /// Standard hacks of simulation scope that are on, in registry order.
     /// A hack is on when the played profile's shipped state has it on, or,
     /// while Developer Mode is on and an override names it, when that

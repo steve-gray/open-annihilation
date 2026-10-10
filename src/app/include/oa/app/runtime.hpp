@@ -66,6 +66,8 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/renderer_records.hpp"
 #include "oa/ui/frontend_renderer/scroll_bars.hpp"
 #include "oa/present/world_renderer/world_radar.hpp"
@@ -667,6 +669,23 @@ class Runtime final : public menu::Host,
     ///
     /// @param stack the open stack
     void use_language_fonts(oa::platform::text_font::FontStack& stack) const;
+
+    /// Puts the language shown's font faces on a stack (use_language_fonts)
+    /// when they changed since the stack last took them. Every stack that
+    /// draws the language's words follows them so: the game text's and the
+    /// picture captions'.
+    ///
+    /// @param stack the stack; null when it did not open, and only
+    ///     `generation` is kept
+    /// @param[in,out] generation the fonts generation the stack's faces are
+    ///     from (language_fonts_generation), empty before it took any; set
+    ///     to the current one
+    /// @return true when the faces changed since `generation`: the lines
+    ///     drawn in the stack before are stale, and a character they drew
+    ///     as the missing-glyph box may have a face now
+    [[nodiscard]] bool follow_language_fonts(
+        oa::platform::text_font::FontStack* stack, std::optional<uint64_t>& generation
+    ) const;
 
     /// Readies the modern fonts for the language shown now, as the first
     /// line drawn after the language changes does by itself: forgets the
@@ -2655,6 +2674,14 @@ class Runtime final : public menu::Host,
     /// @param[in,out] image the decoded bitmap: its indices and RGB
     void caption_bitmap(std::string_view file, Image& image);
 
+    /// Lists the captions of the language shown that the picture captions'
+    /// fonts, as the captions last drawn left them, draw with the
+    /// missing-glyph box: those with a character none of their faces holds.
+    ///
+    /// @return each such caption as "<picture>: <caption>"; every caption
+    ///     while no caption has opened the fonts
+    [[nodiscard]] std::vector<std::string> picture_captions_missing_glyphs();
+
     /// Blits the covered pixels of a rendered GAF frame into an RGB image through a palette,
     /// clipped to the image.
     ///
@@ -4095,6 +4122,50 @@ class Runtime final : public menu::Host,
     /// @param registry the registry id
     /// @return the ID, or nothing when it is off or the generator cannot be read
     [[nodiscard]] std::optional<std::string> content_install_id(std::string_view registry);
+
+    /// Queues one catalogue package for download.
+    ///
+    /// The target comes from the current snapshot. A registry whose install
+    /// ID is required has one made or read first, and the download is refused
+    /// when that ID is off. Nothing is fetched on this thread.
+    ///
+    /// @param registry the registry id
+    /// @param key the package key
+    /// @param reason why the player asked
+    /// @param[out] why why it was not queued; may be null
+    /// @return the queue item, or nothing when it was refused
+    [[nodiscard]] std::optional<uint64_t> queue_download(
+        std::string_view registry,
+        std::string_view key,
+        oa::app::content::DownloadReason reason,
+        std::string* why
+    );
+
+    /// Returns the download queue, starting the content service on first use.
+    ///
+    /// @return the queue
+    [[nodiscard]] oa::app::content::Downloads& content_downloads();
+
+    /// Stops downloads for a match, before the match loads anything.
+    void pause_content_for_match();
+
+    /// Reads every registry's install ID again and tells the queue.
+    ///
+    /// Settings › Downloads calls this after it resets an ID or turns one on
+    /// or off. No ID is made here.
+    void content_install_ids_changed();
+
+    /// Returns the folder that holds downloaded packages.
+    ///
+    /// @return the downloads folder; empty when the game has no data folder
+    [[nodiscard]] std::filesystem::path content_downloads_folder() const;
+
+    /// Removes downloaded packages no queued item is using.
+    ///
+    /// This is the player's EMPTY in Settings › Downloads.
+    ///
+    /// @return what was removed, and how many files were left in use
+    oa::app::content::EmptyResult empty_content_downloads();
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
