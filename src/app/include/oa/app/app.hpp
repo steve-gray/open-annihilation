@@ -558,10 +558,10 @@ struct Options {
     // warning once over the main menu and over a refused Skirmish start,
     // and none for the second.
     bool check_mod_warning = false;
-    // --install-mod FILE, repeated, and the bare arguments that name a
-    // .oamod file, any case: mod packages to install once the main menu
-    // shows, each asked about first; absolute, in the order given.
-    std::vector<fs::path> install_mods;
+    // --open FILE and --install-mod FILE, repeated, and the bare arguments
+    // that name a .oamod, .oalang, .oamap or .oareg file, any case: files to
+    // open once the main menu shows; absolute, in the order given.
+    std::vector<fs::path> open_files;
     // Installs made-up mod packages through each of the main menu's
     // questions, by a dropped file and the command line, rolls a mod back on
     // the Mods page, and replaces and rolls back the mod played across soft

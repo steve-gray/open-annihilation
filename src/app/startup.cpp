@@ -7,6 +7,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/platform/display_modes.hpp"
 #include "oa/platform/job_pool.hpp"
 #include "oa/platform/system.hpp"
@@ -265,7 +266,7 @@ void check_game_files_options(Options& options) {
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
-        {!options.install_mods.empty(), "--install-mod"},
+        {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
         {options.check_briefing_narration, "--check-briefing-narration"},
         {options.check_match_layers, "--check-match-layers"},
@@ -513,7 +514,7 @@ void check_director_options(Options& options) {
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
-        {!options.install_mods.empty(), "--install-mod"},
+        {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
     };
     for (const auto& [given, name] : refused)
@@ -658,23 +659,23 @@ namespace {
 
 namespace {
 
-/// Returns a mod package's path as the command line names it, made absolute.
+/// Returns a file to open as the command line names it, made absolute.
 ///
 /// @param text the path, UTF-8
 /// @return the absolute path
-[[nodiscard]] fs::path mod_package_path(std::string_view text) {
+[[nodiscard]] fs::path opened_file_path(std::string_view text) {
     const fs::path file = path_from_utf8(text);
     std::error_code error;
     const fs::path whole = fs::absolute(file, error);
     return error ? file : whole;
 }
 
-/// Tells whether a bare argument names a mod package by its extension, any case.
+/// Tells whether a bare argument names a file to open, by its extension, any case.
 ///
 /// @param argument the argument
-/// @return true for a .oamod file
-[[nodiscard]] bool names_mod_package(std::string_view argument) {
-    return package_install::kind_for_file(path_from_utf8(argument)) != nullptr;
+/// @return true for a .oamod, .oalang, .oamap or .oareg file
+[[nodiscard]] bool names_opened_file(std::string_view argument) {
+    return package_install::opens_file(path_from_utf8(argument));
 }
 
 } // namespace
@@ -868,8 +869,8 @@ namespace {
             result.check_mod_warning = true;
         else if (argument == "--check-mod-install")
             result.check_mod_install = true;
-        else if (argument == "--install-mod")
-            result.install_mods.push_back(mod_package_path(value(argument)));
+        else if (argument == "--open" || argument == "--install-mod")
+            result.open_files.push_back(opened_file_path(value(argument)));
         else if (argument == "--check-renderer-ladder")
             result.check_renderer_ladder = true;
         else if (argument == "--render-fault")
@@ -1044,7 +1045,7 @@ namespace {
                    "[--trace-digest FILE] [--trace-units FILE] [--trace-lookups FILE] "
                    "[--draw-threads N] "
                    "[--capture-video PATH.mp4] [--showcase arm-first-mission|skirmish-battle] "
-                   "[--install-mod FILE.oamod]... "
+                   "[--open FILE]... [--install-mod FILE]... "
                    "[--generate-script RECORDING [--output PATH.oascript|PATH.oamovie] "
                    "[--resolution WxH]] "
                    "[--render-script PATH.oascript|PATH.oamovie [--output DIR] "
@@ -1077,9 +1078,9 @@ namespace {
         } else if (argument.starts_with("-psn_")) {
             // macOS names the process it started from the Finder; nothing to read.
             continue;
-        } else if (names_mod_package(argument)) {
-            // A .oamod file opened with the game, or dropped on it.
-            result.install_mods.push_back(mod_package_path(argument));
+        } else if (names_opened_file(argument)) {
+            // One of the four file types, opened with the game or dropped on it.
+            result.open_files.push_back(opened_file_path(argument));
         } else {
             if (!joined_line.empty())
                 joined_line += ' ';
@@ -1257,22 +1258,21 @@ namespace {
         throw std::runtime_error("--base-game and --mod-dir cannot be used together");
     if (result.choose_game_dir && !result.game_dir.empty())
         throw std::runtime_error("--choose-game-dir and --game-dir cannot be used together");
-    // A package is installed only once the player answers its questions,
-    // which a run nobody watches never shows; --check-mod-install answers
-    // them itself.
-    if (!result.install_mods.empty() && result.headless_check)
+    // A file is opened only once the player answers its questions, which a
+    // run nobody watches never shows; --check-mod-install answers them itself.
+    if (!result.open_files.empty() && result.headless_check)
         throw std::runtime_error(
-            "a .oamod file to install, after --install-mod or on its own, needs the game's "
-            "window, which asks before it installs"
+            "a file to open (.oamod, .oalang, .oamap or .oareg), after --open or on its own, "
+            "needs the game's window, which asks before it installs"
         );
-    if (!result.install_mods.empty() && result.unattended && !result.check_mod_install)
+    if (!result.open_files.empty() && result.unattended && !result.check_mod_install)
         throw std::runtime_error(
-            "a .oamod file to install, after --install-mod or on its own, is asked about "
-            "before it installs, which headless, check, benchmark, --frames and --snapshot "
-            "runs never show"
+            "a file to open (.oamod, .oalang, .oamap or .oareg), after --open or on its own, "
+            "is asked about before it installs, which headless, check, benchmark, --frames and "
+            "--snapshot runs never show"
         );
-    // A package opened with the game goes to the main menu at once.
-    if (!result.install_mods.empty())
+    // A file opened with the game goes to the main menu at once.
+    if (!result.open_files.empty())
         result.skip_intro = true;
     if (result.choose_game_dir && result.unattended)
         throw std::runtime_error(

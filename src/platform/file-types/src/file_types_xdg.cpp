@@ -54,8 +54,6 @@ constexpr const char* flatpak_variable = "FLATPAK_ID";
 constexpr const char* snap_variable = "SNAP";
 /// The size of the hicolor folder the icon goes in, in pixels.
 constexpr std::string_view icon_size_folder = "256x256";
-/// The MIME type's icon name: its type with the '/' a '-'.
-constexpr std::string_view type_icon_name = "application-x-oamod";
 /// What ends the name of the stamp file a database tool's run leaves in the
 /// folder it works on, after a dot and desktop_id, so that file managers hide it.
 constexpr std::string_view stamp_suffix = ".updated";
@@ -424,14 +422,17 @@ register_in(const fs::path& executable, std::span<const uint8_t> icon_png, const
     const fs::path applications_stamp = applications_folder / stamp_name;
     const fs::path icon_stamp = hicolor_folder / stamp_name;
 
-    // The icons first, so that the desktop entry finds its icon once it is read.
+    // The icons first, so that the desktop entry finds its icon once it is read: the
+    // program's, and one for each of the four file types.
     bool icon_written = false;
     if (!icon_png.empty()) {
-        const fs::path icons[] = {
-            hicolor_folder / icon_size_folder / "apps" / (name + ".png"),
-            hicolor_folder / icon_size_folder / "mimetypes" /
-                (std::string(type_icon_name) + ".png"),
-        };
+        std::vector<fs::path> icons;
+        icons.push_back(hicolor_folder / icon_size_folder / "apps" / (name + ".png"));
+        for (const FileType& type : file_types)
+            icons.push_back(
+                hicolor_folder / icon_size_folder / "mimetypes" /
+                ("application-x-" + std::string(type.extension) + ".png")
+            );
         for (const fs::path& icon : icons) {
             const Written written = write_if_different(icon, icon_png, icon_stamp, why);
             if (written == Written::failed) {

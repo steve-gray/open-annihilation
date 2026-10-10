@@ -2290,18 +2290,21 @@ into the player's own Mods folder (`src/app/package-install`,
 `oa-app-package-install`, says how a package is read, planned, unpacked and put
 in place, and how what a stop leaves is settled). The runtime's part:
 
-- **Opening a package.** `--install-mod FILE`, repeated, and any bare
-  argument ending in `.oamod`, any case, queue packages in the
-  process-wide inbox (`oa/app/package_install/inbox.hpp`); macOS's `-psn_`
+- **Opening a package.** `--open FILE` and `--install-mod FILE`, repeated,
+  and any bare argument naming a `.oamod`, `.oalang`, `.oamap` or `.oareg`
+  file, any case, are files to open once the main menu shows. `post_opened_file`
+  sends a `.oareg` file to the add-registry queue and every other file to
+  the package inbox (`oa/app/package_install/inbox.hpp`); macOS's `-psn_`
   argument is skipped. A file the system opens in the game, or one dropped
   on the window, arrives as SDL's drop event: a watch on SDL's events
   (`mod_install_watch.cpp`), started right after each start of SDL's video
-  (the window, the folder dialog's and the runtime's own), copies each into
-  the inbox as it is queued, whatever polls the queue then. A platform that
+  (the window, the folder dialog's and the runtime's own), copies each file
+  the game opens into the inbox as it is queued, whatever polls the queue
+  then, and logs any other. A platform that
   brings opened files into its own storage first does so through
   `PlatformHooks::take_opened_file`, and gets its copy back through
   `release_opened_file` once the install is done with it. On Windows and
-  Linux a second start that carries only packages, while another copy holds
+  Linux a second start that carries only such files, while another copy holds
   the instance lock, hands them over through the hand-off folder
   (`oa/app/package_install/handoff.hpp`) and ends; the running copy looks there
   once a second, in the background too, and brings its window forward.
@@ -2339,7 +2342,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
   version changed since the page listed it or the swap undone, is told in
   a prompt over the dialog (MOD NOT ROLLED BACK) whose OK returns to it.
 - **Registering the file type.** A start someone plays makes the game the
-  opener of `.oamod` files for the player where the system registers at run
+  opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files for the player
+  where the system registers at run
   time (`oa/platform/file_types.hpp`); none does with `--preferences-file`,
   `--user-folder`, `--data-dir`, unattended, headless or on SDL's dummy or
   offscreen video driver.

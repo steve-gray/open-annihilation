@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The watch on SDL's events that copies each .oamod file the system opens in
-// the game into the mod packages' inbox.
+// The watch on SDL's events that copies each file the system opens in the
+// game into the inbox.
 
 #include "mod_install_watch.hpp"
 
@@ -23,8 +23,8 @@ namespace {
 /// The queued drop events taken at once when the watch starts.
 constexpr int kQueuedDrops = 16;
 
-/// Copies a dropped .oamod file into the inbox; any other file is logged
-/// and left.
+/// Copies a dropped file the game opens into the inbox; any other file is
+/// logged and left.
 ///
 /// @param event the event
 void take_drop(const SDL_Event& event) {
@@ -32,19 +32,20 @@ void take_drop(const SDL_Event& event) {
         return;
     try {
         const fs::path file = path_from_utf8(event.drop.data);
-        if (package_install::kind_for_file(file) != nullptr) {
-            package_install::post_package_file(file);
+        if (package_install::opens_file(file)) {
+            package_install::post_opened_file(file);
             return;
         }
-        std::cerr << "open-annihilation: a file opened in the game is no mod package and is left: "
-                  << event.drop.data << '\n';
+        std::cerr
+            << "open-annihilation: a file opened in the game is none Open Annihilation opens: "
+            << event.drop.data << '\n';
     } catch (const std::exception& failure) {
         std::cerr << "open-annihilation: a file opened in the game is lost: " << failure.what()
                   << '\n';
     }
 }
 
-/// SDL's event watch: copies each dropped package as it is queued.
+/// SDL's event watch: copies each dropped file as it is queued.
 ///
 /// @param event the event
 /// @return true, which SDL ignores for a watch

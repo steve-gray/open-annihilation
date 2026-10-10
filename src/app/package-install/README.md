@@ -34,8 +34,11 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
 
 `oa/app/package_install/inbox.hpp` keeps what outlives each run of the game in
 one process: the packages waiting for the main menu (`post_package_file`,
-`take_package_file`), the change that waits for the run playing its target to
-end (`set_pending_change`, `finish_pending_change`) and its outcome, and the
+`take_package_file`), the `.oareg` files waiting on the add-registry queue
+(`post_registry_file`, `take_registry_file`), `post_opened_file`, which sends
+a `.oareg` file there and every other opened file to the package queue, the
+change that waits for the run playing its target to end
+(`set_pending_change`, `finish_pending_change`) and its outcome, and the
 discard folders the start's recovery found.
 
 `oa/app/package_install/prompts.hpp` builds every prompt the install shows
@@ -43,8 +46,8 @@ discard folders the start's recovery found.
 catalogue, its buttons and what each answers.
 
 `oa/app/package_install/handoff.hpp` has the instance lock and the hand-off
-folder a second start writes its packages into for the copy already
-running.
+folder a second start writes its files into for the copy already
+running. The folder's name stays `opened-mods`.
 
 ## Kinds
 
@@ -212,7 +215,11 @@ takes it. A reparse point whose tag cannot be read counts as a link.
   tags taken as links, as values, so that it runs everywhere; files made
   anew only; a target that changed; the lock; the room and path checks;
   the files a step makes held to its budget.
-- `app-mod-install-handoff`: the instance lock and the hand-off folder.
+- `app-mod-install-handoff`: the instance lock and the hand-off folder,
+  including a `.oareg` and a `.oalang` taken back in order.
+- `app-package-install-inbox`: `post_opened_file` routes each extension in
+  any case, the registry queue keeps order and drops a repeat, and a
+  `.oareg` file leaves the package queue untouched.
 - `app-package-install-kinds`: the kind table holds exactly `oamod`, a file
   is a package only by that extension, the seven `.oamod-` names, and a
   made-up kind built in the test installs, replaces, rolls back, recovers

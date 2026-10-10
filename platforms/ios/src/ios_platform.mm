@@ -492,15 +492,15 @@ void install_landscape_window() {
 
 // --- Files the system opens in the game ---------------------------------------------------
 
-/// The folder in the app's temporary folder that holds the mod packages the system opened in
-/// the game, each in a folder of its own, until the game is done with it: a file opened in
-/// place (from iCloud Drive or another app's files) can only be read while the access the
-/// system granted with it lasts, and the system empties its own Inbox folders, where it puts
-/// the copies it makes for the app. Emptied at each start.
+/// The folder in the app's temporary folder that holds each file opened in the game, in a
+/// folder of its own, until the game is done with it: a file opened in place (from iCloud
+/// Drive or another app's files) can only be read while the access the system granted with it
+/// lasts, and the system empties its own Inbox folders, where it puts the copies it makes for
+/// the app. Emptied at each start.
 NSString* const kOpenedFilesFolder = @"Opened mods";
 
-/// The file name extension of the files brought in, a mod package's; matched without case.
-NSString* const kModPackageExtension = @"oamod";
+/// The file name extensions of a file opened in the game; matched without case.
+NSString* const kOpenedExtensions[] = {@"oamod", @"oalang", @"oamap", @"oareg"};
 
 /// The name of the Documents folder where the system put the copies it made for the app on
 /// older iOS releases.
@@ -556,7 +556,7 @@ NSString* opened_files_folder() {
     return [NSTemporaryDirectory() stringByAppendingPathComponent:kOpenedFilesFolder];
 }
 
-/// What became of the mod packages brought in: their copies, and why the others could not be
+/// What became of each file opened in the game: its copy, and why another could not be
 /// copied, each by the path SDL gives the engine. Written on the main thread; kept under a
 /// lock, since the engine's hooks may be called from any thread.
 struct OpenedFiles {
@@ -573,13 +573,17 @@ OpenedFiles& opened_files() {
     return files;
 }
 
-/// Whether a URL names a mod package by its extension.
+/// Whether a URL names a file opened in the game by its extension.
 ///
 /// @param url the URL the system opened
-/// @return true for a file URL whose name ends in .oamod, in any case
-bool names_mod_package(NSURL* url) {
-    return url.isFileURL &&
-           [url.pathExtension caseInsensitiveCompare:kModPackageExtension] == NSOrderedSame;
+/// @return true for a file URL whose extension is one of the four, in any case
+bool names_opened_file(NSURL* url) {
+    if (!url.isFileURL)
+        return false;
+    for (NSString* extension : kOpenedExtensions)
+        if ([url.pathExtension caseInsensitiveCompare:extension] == NSOrderedSame)
+            return true;
+    return false;
 }
 
 /// Whether a file is a copy the system made for the app in one of its Inbox folders
@@ -615,7 +619,7 @@ void remove_empty_documents_inbox() {
         [NSFileManager.defaultManager removeItemAtPath:inbox error:nil];
 }
 
-/// Brings a mod package the system opened into a folder of its own under
+/// Brings a file opened in the game into a folder of its own under
 /// opened_files_folder(): a copy the system made in an Inbox is moved; any other file is
 /// copied inside a coordinated read, under the access its URL grants, which makes the system
 /// download a file a cloud service holds first. Runs on a background queue, since a download
@@ -666,7 +670,7 @@ NSURL* bring_in(NSURL* url, NSString** why) {
     return nil;
 }
 
-/// Records what became of a mod package the system opened, on the main thread, before SDL
+/// Records what became of a file opened in the game, on the main thread, before SDL
 /// hands the engine its path.
 ///
 /// @param kept the copy; nil when it could not be brought in
@@ -688,14 +692,14 @@ void record_opened_file(NSURL* kept, NSURL* url, NSString* why) {
         files.failures[path] = why != nil ? why : @"the system gave no reason";
 }
 
-/// Hands an opened URL on to SDL, which sends the engine its path as a dropped file: a mod
-/// package once it is brought into the app (bring_in), as its copy, or as itself with the
-/// reason recorded when it could not be; any other URL at once.
+/// Hands an opened URL on to SDL, which sends the engine its path as a dropped file: a file
+/// opened in the game once it is brought into the app (bring_in), as its copy, or as itself
+/// with the reason recorded when it could not be; any other URL at once.
 ///
 /// @param url the URL the system opened
 /// @param send SDL's own handling of a URL, run on the main thread
 void send_once_brought_in(NSURL* url, void (^send)(NSURL*)) {
-    if (!names_mod_package(url)) {
+    if (!names_opened_file(url)) {
         send(url);
         return;
     }
@@ -720,8 +724,8 @@ void send_once_brought_in(NSURL* url, void (^send)(NSURL*)) {
     });
 }
 
-/// Makes SDL's handling of the URLs the system opens in the game bring mod packages into the
-/// app first (send_once_brought_in): the scene delegate's handleURL:, through which every URL
+/// Makes SDL's handling of the URLs the system opens in the game bring each file opened in the
+/// game into the app first (send_once_brought_in): the scene delegate's handleURL:, through which every URL
 /// opened while the game runs, and every one it was started with, reaches SDL, and the older
 /// application delegate's sendDropFileForURL:fromSourceApplication:. A class or method this
 /// SDL does not have is left alone.
@@ -759,14 +763,14 @@ void bring_in_opened_files() {
     }
 }
 
-/// The take_opened_file hook: the copy of a mod package brought into the app answers with its
-/// own path; a package that could not be brought in answers with why, once; any other path
-/// answers with itself, to be read where it is.
+/// The take_opened_file hook: the copy of a file opened in the game answers with its own
+/// path; a file that could not be brought in answers with why, once; any other path answers
+/// with itself, to be read where it is.
 ///
 /// @param path the path SDL gave the engine, absolute, UTF-8
 /// @param copy receives the path to read
 /// @param why receives why the file could not be brought in
-/// @return false only for a package that could not be brought in
+/// @return false only for a file opened in the game that could not be brought in
 bool take_opened_file(void*, const char* path, std::string* copy, std::string* why) noexcept {
     if (path == nullptr || copy == nullptr)
         return false;
@@ -799,7 +803,7 @@ bool take_opened_file(void*, const char* path, std::string* copy, std::string* w
     return true;
 }
 
-/// The release_opened_file hook: removes a copy of a mod package brought into the app, with
+/// The release_opened_file hook: removes a copy of a file opened in the game, with
 /// the folder made for it; leaves any other file alone.
 ///
 /// @param path a path take_opened_file answered with, absolute, UTF-8

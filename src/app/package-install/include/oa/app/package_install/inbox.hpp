@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // What outlives each run of the game within one process: the packages opened
-// in the game and waiting for the main menu, the change that waits for the
-// run playing its target to end, its outcome for the next run, and the
-// discard folders the start's recovery found. Every function may be called
-// from any thread.
+// in the game and waiting for the main menu, the .oareg files waiting to be
+// added, the change that waits for the run playing its target to end, its
+// outcome for the next run, and the discard folders the start's recovery
+// found. Every function may be called from any thread.
 #pragma once
 
 #include "oa/app/package_install.hpp"
@@ -42,6 +42,37 @@ void finish_package_file();
 ///
 /// @return true while one does
 [[nodiscard]] bool package_files_waiting();
+
+/// Tells whether a file is one of the four the game opens: a .oamod, .oalang, .oamap or .oareg
+/// file, by its extension, without case.
+///
+/// @param file the file
+/// @return true when the extension is one of those
+[[nodiscard]] bool opens_file(const std::filesystem::path& file);
+
+/// Queues a .oareg file to be added once the main menu shows. A path already queued is not
+/// queued again: paths are compared as std::filesystem::weakly_canonical gives them. The file
+/// waits on the add-registry queue, and is logged.
+///
+/// @param file the .oareg file
+void post_registry_file(const std::filesystem::path& file);
+
+/// Takes the next .oareg file, oldest first. M08 takes the add-registry queue with this.
+///
+/// @return the .oareg file; nothing when none waits
+[[nodiscard]] std::optional<std::filesystem::path> take_registry_file();
+
+/// Tells whether any .oareg file waits on the add-registry queue.
+///
+/// @return true while one does
+[[nodiscard]] bool registry_files_waiting();
+
+/// Queues a file the game was opened with. A .oareg file, in any case, goes to the
+/// add-registry queue (post_registry_file); anything else goes to the package queue
+/// (post_package_file). This is the only place that chooses the queue.
+///
+/// @param file the file
+void post_opened_file(const std::filesystem::path& file);
 
 /// A change whose target is what the game plays: it waits for the run to end
 /// and its archives to close, then main() puts it in place before the next run.
@@ -96,13 +127,13 @@ void keep_discards(const std::vector<std::filesystem::path>& folders);
 /// @return the folders
 [[nodiscard]] std::vector<std::filesystem::path> take_discards();
 
-/// Keeps the hand-off folder this process takes a second start's packages
-/// from, while it holds the instance lock (handoff.hpp).
+/// Keeps the hand-off folder this process takes a second start's files from,
+/// while it holds the instance lock (handoff.hpp).
 ///
 /// @param folder the folder
 void set_handoff_folder(const std::filesystem::path& folder);
 
-/// Returns the hand-off folder this process takes packages from.
+/// Returns the hand-off folder this process takes files from.
 ///
 /// @return the folder; nothing when the process holds no instance lock
 [[nodiscard]] std::optional<std::filesystem::path> handoff_folder();
