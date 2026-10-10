@@ -1,0 +1,772 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// A catalogue's entries: the sample read field by field, every skipped
+// entry, and the catalogues the reader refuses whole.
+
+#include "oa/base/sha256.hpp"
+#include "oa/base/signing/ed25519.hpp"
+#include "oa/data/catalogue/catalogue.hpp"
+#include "oa/formats/oamod/package_keys.hpp"
+#include "oa/formats/url.hpp"
+#include "oa/test/check.hpp"
+
+#include <array>
+#include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace {
+
+namespace catalogue = oa::data::catalogue;
+namespace oamod = oa::formats::oamod;
+namespace sha = oa::base::sha256;
+namespace signing = oa::base::signing;
+namespace url = oa::formats::url;
+
+std::vector<uint8_t> bytes_of(std::string_view text) {
+    return {text.begin(), text.end()};
+}
+
+std::string hex_of(std::string_view body) {
+    const auto digest = sha::digest_of(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(body.data()), body.size())
+    );
+    const auto hex = sha::to_hex(digest);
+    return {hex.data(), hex.size()};
+}
+
+std::string json_escape(std::string_view text) {
+    std::string out;
+    for (const unsigned char byte : text) {
+        if (byte == '\\' || byte == '"') {
+            out += '\\';
+            out += static_cast<char>(byte);
+        } else if (byte < 0x20 || byte == 0x7F) {
+            constexpr char digits[] = "0123456789abcdef";
+            out += "\\u00";
+            out += digits[byte >> 4];
+            out += digits[byte & 0x0f];
+        } else {
+            out += static_cast<char>(byte);
+        }
+    }
+    return out;
+}
+
+std::string catalogue_of(std::string_view packages, std::string_view extra = {}) {
+    std::string json = "{\"catalogue\":1,\"registry\":\"coreprime\",\"sequence\":7,"
+                       "\"generated\":\"2026-11-02T04:10:00Z\","
+                       "\"expires\":\"2026-12-02T04:10:00Z\"";
+    if (!extra.empty()) {
+        json += ',';
+        json += extra;
+    }
+    json += ",\"packages\":[";
+    json += packages;
+    json += "]}";
+    return json;
+}
+
+/// A package that passes every rule, plus any extra members.
+std::string bare(
+    std::string_view kind, std::string_view id, std::string_view extra = {}, bool with_maps = true
+) {
+    const std::string hash = hex_of(std::string(kind) + "/" + std::string(id));
+    std::string json = "{\"kind\":\"";
+    json += kind;
+    json += "\",\"id\":\"";
+    json += id;
+    json += "\",\"name\":\"Name\",\"release\":1,\"size\":4,\"sha256\":\"";
+    json += hash;
+    json += "\",\"file\":\"/v1/p/";
+    json += hash;
+    json += '.';
+    json += kind;
+    json += '"';
+    if (kind == "oamod")
+        json += ",\"version\":\"1\",\"revision\":1";
+    if (kind == "oamap" && with_maps) {
+        json += ",\"maps\":[{\"map\":\"stem@";
+        json += id;
+        json += "\",\"name\":\"Stem\",\"players\":2,\"size\":\"16x16\"}]";
+    }
+    if (!extra.empty()) {
+        json += ',';
+        json += extra;
+    }
+    json += '}';
+    return json;
+}
+
+std::string entry_with(
+    std::string_view kind, std::string_view id, std::string_view hash, std::string_view file
+) {
+    std::string json = "{\"kind\":\"";
+    json += kind;
+    json += "\",\"id\":\"";
+    json += id;
+    json += "\",\"name\":\"Name\",\"version\":\"1\",\"revision\":1,\"release\":1,\"size\":4,"
+            "\"sha256\":\"";
+    json += hash;
+    json += "\",\"file\":\"";
+    json += file;
+    json += "\"}";
+    return json;
+}
+
+catalogue::Catalogue read_ok(std::string_view json) {
+    catalogue::Catalogue out;
+    std::string error = "set";
+    const bool ok = catalogue::read_catalogue(bytes_of(json), out, &error);
+    OA_CHECK(ok);
+    OA_CHECK(error == "set");
+    return out;
+}
+
+void refuse(std::string_view json, std::string_view needle) {
+    catalogue::Catalogue out;
+    out.registry = "untouched";
+    std::string error = "none";
+    OA_CHECK(!catalogue::read_catalogue(bytes_of(json), out, &error));
+    OA_CHECK(out.registry == "untouched");
+    OA_CHECK(error.find(needle) != std::string::npos);
+}
+
+void skips_one(std::string_view bad, std::string_view needle) {
+    const auto out = read_ok(catalogue_of(std::string(bad) + "," + bare("oamod", "keeper")));
+    OA_CHECK(out.packages.size() == 1);
+    if (!out.packages.empty())
+        OA_CHECK(out.packages[0].id == "keeper");
+    OA_CHECK(out.problems.size() == 1);
+    if (!out.problems.empty()) {
+        OA_CHECK(out.problems[0].find("packages[0]") != std::string::npos);
+        OA_CHECK(out.problems[0].find(needle) != std::string::npos);
+    }
+}
+
+std::string replace_token(std::string text, std::string_view token, std::string_view value) {
+    for (;;) {
+        const auto at = text.find(token);
+        if (at == std::string::npos)
+            return text;
+        text.replace(at, token.size(), value);
+    }
+}
+
+signing::PublicKey key_from_seed(uint8_t fill) {
+    std::array<uint8_t, 32> seed{};
+    seed.fill(fill);
+    signing::SecretKey secret{};
+    signing::PublicKey key{};
+    signing::key_pair_from_seed(seed, secret, key);
+    secret.fill(0);
+    return key;
+}
+
+void test_sample() {
+    // Made-up package id: the public tree does not name a shipped mod.
+    const signing::PublicKey key = key_from_seed(0x11);
+    const std::string ridge = hex_of("ridge-bytes");
+    const std::string map = hex_of("archipelago-bytes");
+    const std::string lang = hex_of("zh-hans-bytes");
+    const std::string future = hex_of("future-bytes");
+    const std::string sim = hex_of("sim-rules");
+    std::string json = R"JSON(
+{
+  "catalogue": 1,
+  "registry": "coreprime",
+  "sequence": 418,
+  "generated": "2026-11-02T04:10:00Z",
+  "expires": "2026-12-02T04:10:00Z",
+  "downloads": "http://downloads.coreprime.net/api/v1/downloads",
+  "later": true,
+  "keys": [ { "id": "release-2026", "public": "@PUBLIC@", "note": "ignored" } ],
+  "mirrors": [ "http://mirror.example.net/v1/catalogue.json" ],
+  "packages": [
+    {
+      "kind": "oamod", "id": "ridge", "name": "Ridge",
+      "version": "4.8", "revision": 4, "release": 28,
+      "publisher": "OA team", "summary": "A balance mod", "author": "OA team",
+      "notes": "What this release changes", "tags": ["balance"],
+      "homepage": "https://example.com/ridge",
+      "requires": { "engine": ">= 0.8.0, < 0.9.0", "base": "ta-3.1c" },
+      "sim_hash": "@SIM@",
+      "hacks": { "sim": 8, "view": 4, "ids": ["build-speed", "unit-limit"] },
+      "size": 43011223, "sha256": "@RIDGE@", "file": "/v1/p/@RIDGE@.oamod",
+      "badge": "/v1/i/badge.png"
+    },
+    {
+      "kind": "oamap", "id": "archipelago", "name": "Archipelago", "release": 3,
+      "size": 1000, "sha256": "@MAP@", "file": "/v1/p/@MAP@.oamap",
+      "maps": [ {
+        "map": "isle_of_ashes@archipelago", "name": "Isle of Ashes",
+        "players": 4, "size": "16x16", "preview": "/v1/i/preview.png",
+        "compatible": { "ta-3.1c": true, "ridge@28": true, "esc@12": false }
+      } ]
+    },
+    {
+      "kind": "oalang", "id": "zh-Hans", "name": "简体中文", "release": 2,
+      "size": 2000, "sha256": "@LANG@", "file": "/v1/p/@LANG@.oalang",
+      "english_name": "Chinese (Simplified)", "word": "Chinese",
+      "locales": ["zh-Hans", "zh-CN", "zh-SG", "zh-MY", "zh"],
+      "fallbacks": ["en"], "needs": "modern-fonts", "coverage": 1.0
+    },
+    {
+      "kind": "oamod", "id": "future-mod", "name": "Future",
+      "version": "1", "revision": 1, "release": 1, "size": 10,
+      "sha256": "@FUTURE@", "file": "/v1/p/@FUTURE@.oamod",
+      "requires": { "engine": ">= 9.0.0" }
+    }
+  ]
+}
+)JSON";
+    json = replace_token(json, "@PUBLIC@", signing::public_key_text(key).view());
+    json = replace_token(json, "@SIM@", sim);
+    json = replace_token(json, "@RIDGE@", ridge);
+    json = replace_token(json, "@MAP@", map);
+    json = replace_token(json, "@LANG@", lang);
+    json = replace_token(json, "@FUTURE@", future);
+
+    const auto out = read_ok(json);
+    OA_CHECK(out.problems.empty());
+    OA_CHECK(out.registry == "coreprime");
+    OA_CHECK(out.sequence == 418);
+    OA_CHECK(out.generated_text == "2026-11-02T04:10:00Z");
+    OA_CHECK(out.expires_text == "2026-12-02T04:10:00Z");
+    OA_CHECK(out.generated == catalogue::parse_utc_time(out.generated_text));
+    OA_CHECK(out.expires == catalogue::parse_utc_time(out.expires_text));
+    OA_CHECK(out.expires > out.generated);
+    const auto downloads = url::parse_http_url("http://downloads.coreprime.net/api/v1/downloads");
+    OA_CHECK(downloads.has_value());
+    if (downloads)
+        OA_CHECK(out.downloads == url::url_text(*downloads));
+    OA_CHECK(out.keys.size() == 1);
+    if (!out.keys.empty()) {
+        OA_CHECK(out.keys[0].id == "release-2026");
+        OA_CHECK(out.keys[0].key == key);
+    }
+    const auto mirror = url::parse_http_url("http://mirror.example.net/v1/catalogue.json");
+    OA_CHECK(mirror.has_value() && out.mirrors.size() == 1 && out.mirrors[0] == *mirror);
+    OA_CHECK(out.packages.size() == 4);
+    if (out.packages.size() != 4)
+        return;
+
+    const catalogue::Package& mod = out.packages[0];
+    OA_CHECK(mod.kind == catalogue::Kind::oamod);
+    OA_CHECK(std::string(catalogue::kind_name(mod.kind)) == "oamod");
+    OA_CHECK(mod.id == "ridge");
+    OA_CHECK(mod.name == "Ridge");
+    OA_CHECK(mod.version == "4.8");
+    OA_CHECK(mod.revision == 4);
+    OA_CHECK(mod.release == 28);
+    OA_CHECK(mod.publisher == "OA team");
+    OA_CHECK(mod.author == "OA team");
+    OA_CHECK(mod.summary == "A balance mod");
+    OA_CHECK(mod.notes == "What this release changes");
+    OA_CHECK(mod.homepage == "https://example.com/ridge");
+    OA_CHECK(oamod::homepage_valid(mod.homepage));
+    OA_CHECK(mod.tags.size() == 1 && mod.tags[0] == "balance");
+    OA_CHECK(mod.badge == "/v1/i/badge.png");
+    OA_CHECK(mod.requires_engine_text == ">= 0.8.0, < 0.9.0");
+    OA_CHECK(mod.requires_engine.has_value());
+    if (mod.requires_engine) {
+        OA_CHECK(oamod::engine_range_met(*mod.requires_engine, oamod::EngineVersion{0, 8, 0}));
+        OA_CHECK(!oamod::engine_range_met(*mod.requires_engine, oamod::EngineVersion{0, 9, 0}));
+        OA_CHECK(!oamod::engine_range_met(*mod.requires_engine, oamod::EngineVersion{0, 7, 9}));
+    }
+    OA_CHECK(mod.requires_base == "ta-3.1c");
+    OA_CHECK(
+        mod.sim_hash ==
+        sha::digest_of(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>("sim-rules"), 9))
+    );
+    OA_CHECK(mod.hacks_sim == 8);
+    OA_CHECK(mod.hacks_view == 4);
+    OA_CHECK(mod.hack_ids.size() == 2);
+    if (mod.hack_ids.size() == 2) {
+        OA_CHECK(mod.hack_ids[0] == "build-speed");
+        OA_CHECK(mod.hack_ids[1] == "unit-limit");
+    }
+    OA_CHECK(mod.size == 43011223);
+    OA_CHECK(
+        mod.sha256 ==
+        sha::digest_of(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>("ridge-bytes"), 11)
+        )
+    );
+    OA_CHECK(mod.file == "/v1/p/" + ridge + ".oamod");
+
+    const catalogue::Package& maps = out.packages[1];
+    OA_CHECK(maps.kind == catalogue::Kind::oamap);
+    OA_CHECK(maps.id == "archipelago");
+    OA_CHECK(maps.name == "Archipelago");
+    OA_CHECK(maps.version.empty());
+    OA_CHECK(maps.revision == 0);
+    OA_CHECK(maps.release == 3);
+    OA_CHECK(maps.maps.size() == 1);
+    if (!maps.maps.empty()) {
+        const catalogue::MapEntry& entry = maps.maps[0];
+        OA_CHECK(entry.map == "isle_of_ashes@archipelago");
+        OA_CHECK(entry.stem == "isle_of_ashes");
+        OA_CHECK(entry.name == "Isle of Ashes");
+        OA_CHECK(entry.players == 4);
+        OA_CHECK(entry.width == 16);
+        OA_CHECK(entry.height == 16);
+        OA_CHECK(entry.preview == "/v1/i/preview.png");
+        OA_CHECK(entry.compatible.size() == 3);
+        if (entry.compatible.size() == 3) {
+            OA_CHECK(entry.compatible[0].first == "ta-3.1c" && entry.compatible[0].second);
+            OA_CHECK(entry.compatible[1].first == "ridge@28" && entry.compatible[1].second);
+            OA_CHECK(entry.compatible[2].first == "esc@12" && !entry.compatible[2].second);
+        }
+    }
+
+    const catalogue::Package& language = out.packages[2];
+    OA_CHECK(language.kind == catalogue::Kind::oalang);
+    OA_CHECK(language.id == "zh-Hans");
+    OA_CHECK(language.name == "简体中文");
+    OA_CHECK(language.english_name == "Chinese (Simplified)");
+    OA_CHECK(language.word == "Chinese");
+    OA_CHECK(language.locales.size() == 5);
+    if (language.locales.size() == 5) {
+        OA_CHECK(language.locales[0] == "zh-Hans");
+        OA_CHECK(language.locales[1] == "zh-CN");
+        OA_CHECK(language.locales[2] == "zh-SG");
+        OA_CHECK(language.locales[3] == "zh-MY");
+        OA_CHECK(language.locales[4] == "zh");
+    }
+    OA_CHECK(language.fallbacks.size() == 1 && language.fallbacks[0] == "en");
+    OA_CHECK(language.needs == "modern-fonts");
+    OA_CHECK(language.coverage == 1.0);
+    OA_CHECK(
+        language.sha256 ==
+        sha::digest_of(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>("zh-hans-bytes"), 13)
+        )
+    );
+
+    const catalogue::Package& unmet = out.packages[3];
+    OA_CHECK(unmet.id == "future-mod");
+    OA_CHECK(unmet.requires_engine_text == ">= 9.0.0");
+    OA_CHECK(unmet.requires_engine.has_value());
+    if (unmet.requires_engine) {
+        OA_CHECK(!oamod::engine_range_met(*unmet.requires_engine, oamod::EngineVersion{0, 8, 0}));
+        OA_CHECK(oamod::engine_range_met(*unmet.requires_engine, oamod::EngineVersion{9, 0, 0}));
+    }
+}
+
+void test_skipped_entries() {
+    const std::string hash = hex_of("package");
+    skips_one(bare("oamod", "pro@ta"), "pro@ta");
+    skips_one(bare("oamod", "Ridge"), "not lower-case kebab-case");
+    skips_one(entry_with("oamod", "ridge", "ABCD", "/v1/p/abcd.oamod"), "sha256");
+    const std::string upper = [&hash] {
+        std::string text = hash;
+        for (char& value : text) {
+            if (value >= 'a' && value <= 'f')
+                value = static_cast<char>(value - 'a' + 'A');
+        }
+        return text;
+    }();
+    OA_CHECK(upper != hash);
+    skips_one(entry_with("oamod", "ridge", upper, "/v1/p/" + hash + ".oamod"), "sha256");
+    skips_one(
+        entry_with("oamod", "ridge", hash, "/v1/p/" + hash + ".oalang"), "file not named by sha256"
+    );
+    skips_one(
+        entry_with("oamod", "ridge", hash, "../" + hash + ".oamod"), "file is not a reference"
+    );
+
+    const std::string high = std::string("\xc2\xa0", 2);
+    const std::vector<std::string> forbidden = {
+        "http://host/a.oamod",
+        "//host/a.oamod",
+        "/v1/./a.oamod",
+        "/v1/../a.oamod",
+        "/v1//a.oamod",
+        "/v1/a.oamod/",
+        "v1\\a.oamod",
+        "/v1/%2e/a.oamod",
+        "/v1/a.oamod?x=1",
+        "/v1/a.oamod#frag",
+        "/v1/a file.oamod",
+        std::string(1, '\x01'),
+        std::string(1, '\x7f'),
+        high,
+        std::string(513, 'a'),
+        "",
+    };
+    for (const std::string& reference : forbidden) {
+        OA_CHECK(!catalogue::valid_reference(reference));
+        skips_one(
+            entry_with("oamod", "ridge", hash, json_escape(reference)), "file is not a reference"
+        );
+    }
+    OA_CHECK(catalogue::valid_reference("/v1/p/abc.oamod"));
+    OA_CHECK(catalogue::valid_reference("p/abc.oamod"));
+    OA_CHECK(catalogue::valid_reference("abc.oamod"));
+    OA_CHECK(catalogue::valid_reference(std::string(512, 'a')));
+    const auto relative =
+        read_ok(catalogue_of(entry_with("oamod", "ridge", hash, "p/" + hash + ".oamod")));
+    OA_CHECK(relative.packages.size() == 1);
+
+    skips_one(bare("oamap", "archipelago", "", false), "map pack names no map");
+    skips_one(
+        bare(
+            "oamap",
+            "archipelago",
+            "\"maps\":[{\"map\":\"isle@other\",\"name\":\"Isle\",\"players\":2,\"size\":\"16x16\"}"
+            "]",
+            false
+        ),
+        "map names another package"
+    );
+    skips_one("{\"kind\":\"widget\",\"id\":\"ridge\"}", "unknown kind");
+    skips_one(bare("oamod", "ridge", "\"homepage\":\"notaurl\""), "homepage");
+    OA_CHECK(!oamod::homepage_valid("notaurl"));
+    skips_one(bare("oamod", "ridge", "\"tags\":[\"Balance\"]"), "tag");
+    OA_CHECK(!oamod::tag_valid("Balance"));
+    skips_one(bare("oamod", "ridge", "\"hacks\":{\"ids\":[\"Unit\"]}"), "hack id");
+
+    const auto duplicate = read_ok(catalogue_of(
+        bare("oalang", "zh-Hans") + "," + bare("oamod", "zh-hans") + "," + bare("oamod", "keeper")
+    ));
+    OA_CHECK(duplicate.packages.size() == 1);
+    if (!duplicate.packages.empty())
+        OA_CHECK(duplicate.packages[0].id == "keeper");
+    OA_CHECK(duplicate.problems.size() == 2);
+    if (duplicate.problems.size() == 2) {
+        OA_CHECK(duplicate.problems[0].find("same key") != std::string::npos);
+        OA_CHECK(duplicate.problems[0].find("packages[0]") != std::string::npos);
+        OA_CHECK(duplicate.problems[1].find("packages[1]") != std::string::npos);
+        OA_CHECK(duplicate.problems[0].find("zh-hans") != std::string::npos);
+    }
+
+    std::string range_error;
+    OA_CHECK(!oamod::parse_engine_range(">= 0.8", &range_error));
+    const auto range = read_ok(catalogue_of(
+        bare("oamod", "ridge", "\"requires\":{\"engine\":\">= 0.8\"}") + "," +
+        bare("oamod", "keeper")
+    ));
+    OA_CHECK(range.packages.size() == 1);
+    if (!range.packages.empty())
+        OA_CHECK(range.packages[0].id == "keeper");
+    OA_CHECK(range.problems.size() == 1);
+    if (!range.problems.empty()) {
+        OA_CHECK(range.problems[0].find("requires.engine") != std::string::npos);
+        OA_CHECK(range.problems[0].find(range_error) != std::string::npos);
+    }
+}
+
+void test_language_key_and_fields() {
+    OA_CHECK(catalogue::valid_package_key(catalogue::Kind::oamod, "ridge"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oamod, "Ridge"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oamod, "pro@ta"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oamod, "-ridge"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oamod, "a--b"));
+    OA_CHECK(catalogue::valid_package_key(catalogue::Kind::oalang, "zh-Hans"));
+    OA_CHECK(catalogue::valid_package_key(catalogue::Kind::oalang, "zh"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oalang, "e"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oalang, "zh-"));
+    OA_CHECK(!catalogue::valid_package_key(catalogue::Kind::oalang, "123"));
+
+    const auto language = read_ok(catalogue_of(bare("oalang", "zh-Hans")));
+    OA_CHECK(language.packages.size() == 1);
+    if (!language.packages.empty()) {
+        OA_CHECK(language.packages[0].id == "zh-Hans");
+        OA_CHECK(language.packages[0].version.empty());
+        OA_CHECK(language.packages[0].revision == 0);
+    }
+
+    const std::string hash = hex_of("no-version");
+    const std::string missing_version =
+        "{\"kind\":\"oamod\",\"id\":\"ridge\",\"name\":\"Name\",\"release\":1,"
+        "\"size\":4,\"sha256\":\"" +
+        hash + "\",\"file\":\"/v1/p/" + hash + ".oamod\",\"revision\":1}";
+    skips_one(missing_version, "version");
+
+    const auto ignored = read_ok(catalogue_of(bare(
+        "oamod", "ridge", "\"coverage\":2,\"maps\":[],\"english_name\":\"\",\"locales\":[\"NO\"]"
+    )));
+    OA_CHECK(ignored.packages.size() == 1);
+    if (!ignored.packages.empty()) {
+        OA_CHECK(!ignored.packages[0].coverage);
+        OA_CHECK(ignored.packages[0].maps.empty());
+        OA_CHECK(ignored.packages[0].english_name.empty());
+    }
+    const auto language_maps = read_ok(catalogue_of(bare("oalang", "zh", "\"maps\":\"nope\"")));
+    OA_CHECK(language_maps.packages.size() == 1);
+}
+
+void test_coverage_and_bounds() {
+    const auto good = read_ok(catalogue_of(
+        bare("oalang", "aa", "\"coverage\":0.5") + "," + bare("oalang", "ab", "\"coverage\":1") +
+        "," + bare("oalang", "ac", "\"coverage\":1.0") + "," +
+        bare("oalang", "ad", "\"coverage\":1e0") + "," +
+        bare("oalang", "ae", "\"coverage\":10e-1") + "," + bare("oalang", "af", "\"coverage\":0")
+    ));
+    OA_CHECK(good.packages.size() == 6);
+    OA_CHECK(good.problems.empty());
+    if (good.packages.size() == 6) {
+        OA_CHECK(good.packages[0].coverage == 0.5);
+        OA_CHECK(good.packages[1].coverage == 1.0);
+        OA_CHECK(good.packages[2].coverage == 1.0);
+        OA_CHECK(good.packages[3].coverage == 1.0);
+        OA_CHECK(good.packages[4].coverage == 1.0);
+        OA_CHECK(good.packages[5].coverage == 0.0);
+    }
+    skips_one(bare("oalang", "ag", "\"coverage\":2"), "coverage");
+    skips_one(bare("oalang", "ah", "\"coverage\":1.5"), "coverage");
+    skips_one(bare("oalang", "ai", "\"coverage\":-1"), "coverage");
+
+    auto sized = [](std::string_view id,
+                    std::string_view release,
+                    std::string_view size,
+                    std::string_view revision) {
+        const std::string hash = hex_of(id);
+        return std::string("{\"kind\":\"oamod\",\"id\":\"") + std::string(id) +
+               "\",\"name\":\"Name\",\"version\":\"1\",\"revision\":" + std::string(revision) +
+               ",\"release\":" + std::string(release) + ",\"size\":" + std::string(size) +
+               ",\"sha256\":\"" + hash + "\",\"file\":\"/v1/p/" + hash + ".oamod\"}";
+    };
+    const auto biggest =
+        read_ok(catalogue_of(sized("biggest", "2147483647", "4294967296", "65535")));
+    OA_CHECK(biggest.packages.size() == 1);
+    if (!biggest.packages.empty()) {
+        OA_CHECK(biggest.packages[0].release == 2147483647);
+        OA_CHECK(biggest.packages[0].size == uint64_t{1} << 32);
+        OA_CHECK(biggest.packages[0].revision == 65535);
+    }
+    skips_one(sized("over-size", "1", "4294967297", "1"), "size");
+    skips_one(sized("zero-size", "1", "0", "1"), "size");
+    skips_one(sized("over-release", "2147483648", "1", "1"), "release");
+    skips_one(sized("zero-release", "0", "1", "1"), "release");
+    skips_one(sized("over-revision", "1", "1", "65536"), "revision");
+
+    const auto summary = read_ok(
+        catalogue_of(bare("oamod", "ridge", "\"summary\":\"" + std::string(200, 's') + "\""))
+    );
+    OA_CHECK(summary.packages.size() == 1);
+    if (!summary.packages.empty())
+        OA_CHECK(summary.packages[0].summary.size() == 200);
+    skips_one(bare("oamod", "ridge", "\"summary\":\"" + std::string(201, 's') + "\""), "summary");
+    const auto notes = read_ok(
+        catalogue_of(bare("oamod", "ridge", "\"notes\":\"" + std::string(2000, 'n') + "\""))
+    );
+    OA_CHECK(notes.packages.size() == 1);
+    skips_one(bare("oamod", "ridge", "\"notes\":\"" + std::string(2001, 'n') + "\""), "notes");
+
+    const auto wide = read_ok(catalogue_of(bare(
+        "oamap",
+        "islands",
+        "\"maps\":[{\"map\":\"stem@islands\",\"name\":\"Stem\",\"players\":2,\"size\":\"256x256\"}"
+        "]",
+        false
+    )));
+    OA_CHECK(wide.packages.size() == 1);
+    if (!wide.packages.empty() && !wide.packages[0].maps.empty()) {
+        OA_CHECK(wide.packages[0].maps[0].width == 256);
+        OA_CHECK(wide.packages[0].maps[0].height == 256);
+    }
+    skips_one(
+        bare(
+            "oamap",
+            "islands",
+            "\"maps\":[{\"map\":\"stem@islands\",\"name\":\"Stem\",\"players\":2,\"size\":\"01x1\"}"
+            "]",
+            false
+        ),
+        "map size"
+    );
+    skips_one(
+        bare(
+            "oamap",
+            "islands",
+            "\"maps\":[{\"map\":\"stem@islands\",\"name\":\"Stem\",\"players\":2,\"size\":\"0x1\"}"
+            "]",
+            false
+        ),
+        "map size"
+    );
+    skips_one(
+        bare(
+            "oamap",
+            "islands",
+            "\"maps\":[{\"map\":\"stem@islands\",\"name\":\"Stem\",\"players\":2,\"size\":\"1x\"}]",
+            false
+        ),
+        "map size"
+    );
+    skips_one(
+        bare(
+            "oamap",
+            "islands",
+            "\"maps\":[{\"map\":\"stem@islands\",\"name\":\"Stem\",\"players\":2,\"size\":"
+            "\"257x1\"}]",
+            false
+        ),
+        "map size"
+    );
+
+    std::string many_bad;
+    for (int index = 0; index < 101; ++index) {
+        if (index)
+            many_bad += ',';
+        many_bad += "{\"kind\":\"nope\"}";
+    }
+    many_bad += ',';
+    many_bad += bare("oamod", "keeper");
+    const auto capped = read_ok(catalogue_of(many_bad));
+    OA_CHECK(capped.problems.size() == catalogue::max_problems);
+    OA_CHECK(capped.packages.size() == 1);
+    if (!capped.packages.empty())
+        OA_CHECK(capped.packages[0].id == "keeper");
+}
+
+void test_structure() {
+    refuse("not json", "not JSON");
+    refuse(
+        "{\"catalogue\":2,\"registry\":\"coreprime\",\"sequence\":1,"
+        "\"generated\":\"2026-11-02T04:10:00Z\",\"expires\":\"2026-12-02T04:10:00Z\",\"packages\":["
+        "]}",
+        "catalogue"
+    );
+    refuse(
+        "{\"catalogue\":1,\"registry\":\"coreprime\","
+        "\"generated\":\"2026-11-02T04:10:00Z\",\"expires\":\"2026-12-02T04:10:00Z\",\"packages\":["
+        "]}",
+        "sequence"
+    );
+    refuse(
+        "{\"catalogue\":1,\"registry\":\"coreprime\",\"sequence\":1,"
+        "\"generated\":\"2026-12-02T04:10:00Z\",\"expires\":\"2026-11-02T04:10:00Z\",\"packages\":["
+        "]}",
+        "expires"
+    );
+    refuse(
+        "{\"catalogue\":1,\"registry\":\"coreprime\",\"sequence\":1,"
+        "\"generated\":\"2026-11-02T04:10:00Z\",\"expires\":\"2026-11-02T04:10:00Z\",\"packages\":["
+        "]}",
+        "expires"
+    );
+    refuse(
+        "{\"catalogue\":1,\"catalogue\":1,\"registry\":\"coreprime\",\"sequence\":1,"
+        "\"generated\":\"2026-11-02T04:10:00Z\",\"expires\":\"2026-12-02T04:10:00Z\",\"packages\":["
+        "]}",
+        "named twice"
+    );
+    refuse(catalogue_of("{\"kind\":\"oamod\",\"kind\":\"oamod\"}"), "named twice");
+    catalogue::Catalogue untouched;
+    untouched.registry = "untouched";
+    OA_CHECK(!catalogue::read_catalogue(bytes_of("not json"), untouched, nullptr));
+    OA_CHECK(untouched.registry == "untouched");
+
+    std::string too_many;
+    for (int index = 0; index < 20001; ++index) {
+        if (index)
+            too_many += ',';
+        too_many += "{}";
+    }
+    refuse(catalogue_of(too_many), "20000");
+    std::string at_limit;
+    for (int index = 0; index < 20000; ++index) {
+        if (index)
+            at_limit += ',';
+        at_limit += "{}";
+    }
+    const auto full = read_ok(catalogue_of(at_limit));
+    OA_CHECK(full.packages.empty());
+    OA_CHECK(full.problems.size() == catalogue::max_problems);
+
+    const auto queried =
+        read_ok(catalogue_of("", "\"downloads\":\"http://downloads.example.net/api?x=1\""));
+    const auto parsed = url::parse_http_url("http://downloads.example.net/api?x=1");
+    OA_CHECK(parsed.has_value());
+    if (parsed)
+        OA_CHECK(queried.downloads == url::url_text(*parsed));
+    refuse(catalogue_of("", "\"downloads\":\"https://downloads.example.net/api\""), "downloads");
+    refuse(
+        catalogue_of("", "\"mirrors\":[\"http://mirror.example.net/v1/catalogue.json?x=1\"]"),
+        "mirrors"
+    );
+
+    const auto fraction = read_ok(
+        "{\"catalogue\":1,\"registry\":\"coreprime\",\"sequence\":1,"
+        "\"generated\":\"2000-02-29T00:00:00.5Z\","
+        "\"expires\":\"2000-03-01T00:00:00Z\",\"packages\":[]}"
+    );
+    OA_CHECK(fraction.generated_text == "2000-02-29T00:00:00.5Z");
+    OA_CHECK(fraction.generated == 951782400);
+
+    std::string keys = "\"keys\":[";
+    for (int index = 0; index < 8; ++index) {
+        if (index)
+            keys += ',';
+        const signing::PublicKey key = key_from_seed(static_cast<uint8_t>(index + 1));
+        keys += "{\"id\":\"k" + std::to_string(index) + "\",\"public\":\"" +
+                std::string(signing::public_key_text(key).view()) + "\"}";
+    }
+    keys += "]";
+    const auto eight = read_ok(catalogue_of("", keys));
+    OA_CHECK(eight.keys.size() == 8);
+    keys.insert(
+        keys.size() - 1,
+        ",{\"id\":\"k8\",\"public\":\"" +
+            std::string(signing::public_key_text(key_from_seed(9)).view()) + "\"}"
+    );
+    refuse(catalogue_of("", keys), "more than 8");
+
+    const signing::PublicKey first = key_from_seed(1);
+    const signing::PublicKey second = key_from_seed(2);
+    const std::string first_text(signing::public_key_text(first).view());
+    const std::string second_text(signing::public_key_text(second).view());
+    refuse(
+        catalogue_of(
+            "",
+            "\"keys\":[{\"id\":\"same\",\"public\":\"" + first_text +
+                "\"},{\"id\":\"same\",\"public\":\"" + second_text + "\"}]"
+        ),
+        "repeats an id"
+    );
+    refuse(
+        catalogue_of(
+            "",
+            "\"keys\":[{\"id\":\"one\",\"public\":\"" + first_text +
+                "\"},{\"id\":\"two\",\"public\":\"" + first_text + "\"}]"
+        ),
+        "repeats a public key"
+    );
+}
+
+void test_utc_time() {
+    // 2000-01-01T00:00:00Z is 10957 days after 1970-01-01: 30 years of 365
+    // days and 7 leap days (1972, 1976, 1980, 1984, 1988, 1992, 1996).
+    // 10957 * 86400 = 946684800. 2000-02-29 is 59 days later (31 in January
+    // and 28 in February): 59 * 86400 = 5097600, so 951782400. A fraction
+    // is the same second.
+    OA_CHECK(catalogue::parse_utc_time("1970-01-01T00:00:00Z") == 0);
+    OA_CHECK(catalogue::parse_utc_time("1970-01-01T23:59:59Z") == 86399);
+    OA_CHECK(catalogue::parse_utc_time("2000-02-29T00:00:00Z") == 951782400);
+    OA_CHECK(catalogue::parse_utc_time("2000-02-29T00:00:00.5Z") == 951782400);
+    OA_CHECK(!catalogue::parse_utc_time("1900-02-29T00:00:00Z"));
+    OA_CHECK(catalogue::parse_utc_time("1900-02-28T00:00:00Z").has_value());
+    OA_CHECK(!catalogue::parse_utc_time("2000-02-29T00:00:00z"));
+    OA_CHECK(!catalogue::parse_utc_time("2000-02-29T24:00:00Z"));
+    OA_CHECK(!catalogue::parse_utc_time("2000-02-29T00:00:60Z"));
+    OA_CHECK(!catalogue::parse_utc_time("2000-02-29T00:00:00.Z"));
+    OA_CHECK(!catalogue::parse_utc_time(""));
+}
+
+} // namespace
+
+int main() {
+    test_sample();
+    test_skipped_entries();
+    test_language_key_and_fields();
+    test_coverage_and_bounds();
+    test_structure();
+    test_utc_time();
+    return oa::test::check_exit_status();
+}
