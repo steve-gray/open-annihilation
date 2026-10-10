@@ -681,6 +681,10 @@ void add_rows(DisplayList& list, const PlacedRows& placed, const RowsState& stat
         entry.group = state.group;
         entry.checked = view.kind == RowKind::toggle && view.on;
         entry.text = control_text(view);
+        if (view.kind == RowKind::buttons)
+            entry.parts = view.button_ids;
+        else if (view.kind == RowKind::levels || view.kind == RowKind::choice)
+            entry.parts = view.choice_ids;
         list.controls.push_back(std::move(entry));
         if (view.enabled)
             list.tab_order.push_back(control);

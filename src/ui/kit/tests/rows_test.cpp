@@ -997,6 +997,97 @@ void the_display_list_names_and_orders_every_control() {
     OA_CHECK(kit::hit(list, {200, 540}) == kit::no_control);
 }
 
+/// Returns a detail level's id: its enumerator's name.
+std::string detail_id(const Sample&, int32_t at) {
+    constexpr std::array<std::string_view, 3> ids{"low", "medium", "high"};
+    return at >= 0 && at < 3 ? std::string(ids[static_cast<std::size_t>(at)]) : std::string();
+}
+
+/// The zoom's items' ids, beside kZoomCaptions.
+constexpr std::array<std::string_view, 3> kZoomIds{"near", "far", "farthest"};
+
+/// Choices and levels carry their ids: an index field's beside its captions,
+/// a stepper's from its function. A view keeps them, each row's control
+/// gives them, or its buttons' words, as its parts' words, and automation
+/// names the parts by them, or by their places where a spec gives none.
+void choices_and_levels_name_their_parts_by_their_ids() {
+    kit::Stepper<Sample> detail = kDetail;
+    detail.id = detail_id;
+    const std::array<kit::RowSpec<Sample>, 4> specs{
+        kit::choice("zoom", "Zoom", &Sample::zoom, kZoomCaptions, kZoomIds),
+        kit::levels("detail", "Detail", detail, 34),
+        kit::levels("anti-aliasing", "Anti-aliasing", kAntiAliasing, 30),
+        kit::buttons<Sample>(
+            "your-files",
+            "Your files",
+            {"SAVES", "SCREENSHOTS", "MODS"},
+            {"saves", "screenshots", "mods"},
+            {kOpenSaves, kOpenScreenshots, kOpenMods}
+        ),
+    };
+    Sample sample;
+    sample.zoom = 1;
+    // The ids are words, unique within their row.
+    for (const kit::RowSpec<Sample>& spec : specs) {
+        OA_CHECK(kit::row_word(spec.id));
+        std::vector<std::string> seen;
+        for (int32_t at = 0; at < kit::row_count(spec, sample); ++at) {
+            const std::string id = kit::row_choice_id(spec, sample, at);
+            if (id.empty())
+                continue;
+            OA_CHECK(kit::row_word(id));
+            OA_CHECK(std::find(seen.begin(), seen.end(), id) == seen.end());
+            seen.push_back(id);
+        }
+    }
+    OA_CHECK(kit::row_choice_id(specs[0], sample, 2) == "farthest");
+    OA_CHECK(kit::row_choice_id(specs[0], sample, 3).empty());
+    OA_CHECK(kit::row_choice_id(specs[1], sample, 0) == "low");
+    OA_CHECK(kit::row_choice_id(specs[2], sample, 0).empty());
+
+    const std::vector<kit::RowView> views = views_of(specs, sample);
+    OA_CHECK((views[0].choice_ids == std::vector<std::string>{"near", "far", "farthest"}));
+    OA_CHECK((views[1].choice_ids == std::vector<std::string>{"low", "medium", "high"}));
+    OA_CHECK(views[2].choice_ids.size() == 5 && views[2].choice_ids[0].empty());
+    OA_CHECK(views[3].choice_ids.empty());
+
+    kit::DisplayList list;
+    kit::RowsState state;
+    state.name_prefix = "settings";
+    state.open_menu = 13;
+    kit::add_rows(list, kit::place_rows(views, dialog_column(false)), state);
+    OA_CHECK(list.controls.size() == 4);
+    if (list.controls.size() != 4)
+        return;
+    OA_CHECK((list.controls[0].parts == std::vector<std::string>{"near", "far", "farthest"}));
+    OA_CHECK((list.controls[1].parts == std::vector<std::string>{"low", "medium", "high"}));
+    OA_CHECK((list.controls[3].parts == std::vector<std::string>{"saves", "screenshots", "mods"}));
+
+    std::vector<std::string> names;
+    for (const kit::AutomationEntry& entry : kit::automation_parts(list, {}))
+        names.push_back(entry.name);
+    // The drop-down shows no menu of its own here, so it lists no items.
+    OA_CHECK(
+        (names == std::vector<std::string>{
+                      "settings.zoom",
+                      "settings.detail",
+                      "settings.detail.low",
+                      "settings.detail.medium",
+                      "settings.detail.high",
+                      "settings.anti-aliasing",
+                      "settings.anti-aliasing.1",
+                      "settings.anti-aliasing.2",
+                      "settings.anti-aliasing.3",
+                      "settings.anti-aliasing.4",
+                      "settings.anti-aliasing.5",
+                      "settings.your-files",
+                      "settings.your-files.saves",
+                      "settings.your-files.screenshots",
+                      "settings.your-files.mods",
+                  })
+    );
+}
+
 /// Locked rows, the text row and a disabled button take no focus: a locked
 /// row lists no control and draws its fade and its lock; a disabled button
 /// is listed, drawn disabled, and left out of Tab.
@@ -1430,6 +1521,7 @@ int main() {
     a_label_and_hint_follow_the_model();
     rows_of_several_models_lay_out_and_answer_together();
     the_display_list_names_and_orders_every_control();
+    choices_and_levels_name_their_parts_by_their_ids();
     locked_rows_and_disabled_buttons_take_no_focus();
     a_switch_steps_flips_and_takes_either_half();
     a_drop_down_steps_opens_and_takes_a_choice();
