@@ -51,7 +51,7 @@ travel with the game, the same on every platform
 SHA-256, builds FreeType as a static library into
 `local/deps/freetype-install-<release>` and puts the fonts in
 `local/deps/text-fonts`: DejaVu Sans Bold, DejaVu Sans,
-`NotoSansCJKsc-Bold.otf`, `NotoSansCJKsc-Bold-Endonyms.otf` and Noto Emoji.
+`NotoSansCJKsc-Bold-Endonyms.otf` and Noto Emoji.
 A configuration without them stops and says so
 (`cmake/OaTextFonts.cmake`). Neither is vendored in the tree. The macOS and
 Windows dependency bootstraps build the same FreeType for their targets.

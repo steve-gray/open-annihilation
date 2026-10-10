@@ -273,7 +273,7 @@ Steam Deck package is the Linux x86_64 package with one folder more,
 
 | File | What it holds |
 |---|---|
-| `open-annihilation-vX.Y.Z-steam-deck.zip` | the folder `open-annihilation-vX.Y.Z-steam-deck`, holding the Linux x86_64 package's files (`open-annihilation`, `oa-intro`, `oa-tool`, `LICENSE`, `ATTRIBUTIONS.md`, `licenses/`, `fonts/` and `languages/`) and the `steam-deck` folder |
+| `open-annihilation-vX.Y.Z-steam-deck.zip` | the folder `open-annihilation-vX.Y.Z-steam-deck`, holding the Linux x86_64 package's files (`open-annihilation`, `oa-intro`, `oa-tool`, `LICENSE`, `ATTRIBUTIONS.md`, `licenses/` and `fonts/`) and the `steam-deck` folder |
 
 The `steam-deck` folder holds the Steam Input templates and the library
 artwork that the Steam Deck guide
