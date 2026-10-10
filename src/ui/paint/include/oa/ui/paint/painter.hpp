@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Painting for the touch controls' layer: RGBA rectangles, rounded panels,
+// Anti-aliased painting into an RGBA canvas: rectangles, rounded panels,
 // circles, the radial menu's wedges, the controls' icon marks, their text
 // and the 3.1c pictures the pad's build ring shows, blended with straight
 // alpha into a buffer of the layer's own, every shape's edge smoothed by how
-// much of each pixel the shape covers (docs/touch-controls.md).
+// much of each pixel the shape covers. The touch controls, the Game files
+// screen and the folder chooser draw with it, and the gamepad's glyphs are
+// painted with it (docs/touch-controls.md).
 #pragma once
 
 #include "oa/platform/text_font.hpp"
@@ -17,7 +19,7 @@
 #include <string_view>
 #include <vector>
 
-namespace oa::app::touch_paint {
+namespace oa::ui::paint {
 
 /// A colour with straight (not premultiplied) alpha.
 struct Rgba {
@@ -433,4 +435,4 @@ line_metrics(oa::platform::text_font::FontStack& fonts, int pixel_size, bool bol
 /// @return the box the line covers on the canvas
 Box paint_line(Painter& painter, const TextLine& line, int pen_x, int baseline_y, Rgba colour);
 
-} // namespace oa::app::touch_paint
+} // namespace oa::ui::paint

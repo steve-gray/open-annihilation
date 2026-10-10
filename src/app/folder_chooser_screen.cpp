@@ -37,6 +37,7 @@ namespace oa::app {
 
 namespace {
 
+namespace paint = oa::ui::paint;
 namespace chooser = oa::ui::folder_chooser;
 namespace view = oa::ui::game_files;
 namespace installs = oa::platform::game_installs;
@@ -1090,7 +1091,7 @@ class ChooserScreen {
             return;
         lay_out_now();
         if (canvas_.width != viewport_.width || canvas_.height != viewport_.height)
-            canvas_ = touch_paint::make_canvas(viewport_.width, viewport_.height);
+            canvas_ = paint::make_canvas(viewport_.width, viewport_.height);
         paint_game_files(
             canvas_, layout_.paint, fonts_.get(), viewport_.px_per_point, game_files_icon()
         );
@@ -1146,7 +1147,7 @@ class ChooserScreen {
     chooser::UiState ui_{};                         ///< what the chooser keeps between frames
     chooser::Layout layout_{};                      ///< the layout last made
     view::Viewport viewport_{};                     ///< the window's canvas
-    touch_paint::Canvas canvas_{};                  ///< the frame last painted
+    paint::Canvas canvas_{};                        ///< the frame last painted
     SDL_Texture* texture_{};                        ///< the frame's texture
     int texture_width_{};                           ///< its width
     int texture_height_{};                          ///< its height

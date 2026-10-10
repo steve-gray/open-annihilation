@@ -1848,8 +1848,8 @@ saves, recordings and network games are unaffected.
   does, as in 3.1c; the event keeps the keypad's scancode.
 - `runtime_touch_hud.cpp` draws the controls into a layer of their own,
   composed over the CPU frame (`compose_touch_layer`) and presented in every
-  tier (`present_touch_layer`), with the primitives of `touch_paint.*`
-  (`oa-app-touch-paint`, tested by `app-touch-paint`).
+  tier (`present_touch_layer`), with the primitives of `oa-ui-paint`
+  (`src/ui/paint`, tested by `ui-paint`).
 - `runtime_phone_hud.cpp` lays out the match for the window
   (`make_window_match_layout`): on a phone the battlefield fills the canvas
   and the 3.1c HUD's minimap, resources, drawer cells, MORE sheet gadgets
@@ -1939,7 +1939,7 @@ leaves the game without gamepads.
   ([testing.md](../../docs/development/testing.md#gamepad-controls)); while
   it runs, the dispatcher opens only SDL's virtual pads, its stand-ins
   (`PadState::virtual_pads_only`).
-- `pad_glyphs.*` (in `oa-app-touch-paint`) paint the button glyphs of the
+- `oa-ui-paint` (`src/ui/paint`) paints the button glyphs of the
   Steam Deck, Xbox, PlayStation and Nintendo styles with the touch layer's
   painter: the project's own shapes and letters.
 

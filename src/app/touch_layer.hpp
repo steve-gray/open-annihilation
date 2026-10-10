@@ -13,7 +13,7 @@
 #include "oa/app/scaled_world.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/touch_hud.hpp"
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -25,6 +25,12 @@
 #include <vector>
 
 namespace oa::app {
+
+// Named once, whichever app header that draws with the painter is included first.
+#ifndef OA_APP_UI_PAINT
+#define OA_APP_UI_PAINT
+namespace paint = oa::ui::paint;
+#endif
 
 /// The touch layer's drawing state: its buffer, texture, fonts and what it last drew.
 struct TouchLayer {
@@ -45,9 +51,9 @@ struct TouchLayer {
     };
 
     /// The layer: layer_width × layer_height pixels, before the display gamma.
-    touch_paint::Canvas canvas{};
+    paint::Canvas canvas{};
     /// The part of the layer that is not clear, in layer pixels; empty when nothing shows.
-    touch_paint::Box bounds{};
+    paint::Box bounds{};
     /// What the canvas holds; nothing before the first draw.
     std::optional<Look> drawn{};
     /// The frame the canvas was drawn from.
