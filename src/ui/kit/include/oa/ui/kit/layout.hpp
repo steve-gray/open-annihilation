@@ -347,7 +347,7 @@ enum class Role : uint8_t {
     bevel,       ///< a raised edge
     rule,        ///< a hairline
     text,        ///< a text
-    picture,     ///< a picture: the canvas's icon
+    picture,     ///< a picture: the item's PictureLook's, else the canvas's icon
     mark,        ///< a one-bit mark; its picture and colour are the item's MarkLook
     button,      ///< a button
     toggle,      ///< an Off/On switch

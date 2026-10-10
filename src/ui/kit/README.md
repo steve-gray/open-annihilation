@@ -18,7 +18,8 @@ until then.
   editing: `insert_text` for typed text and `edit_text` for Backspace,
   Delete, Left, Right, Home and End.
 - `looks.hpp`: how a control looks. A look owns its texts. A text field's
-  state, `TextField`, is its text and its caret.
+  state, `TextField`, is its text and its caret. A picture item draws its
+  `PictureLook`'s picture, such as a mod's badge, or else the canvas's icon.
 - `components.hpp`: the controls, drawn on a crisp-backend canvas. One
   button, five looks. `paint` draws a display list.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
