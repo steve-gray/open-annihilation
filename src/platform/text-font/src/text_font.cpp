@@ -37,15 +37,17 @@ constexpr int glyph_key_face_shift = 2;
 constexpr uint64_t glyph_key_face_mask = 0x3F;
 
 /// The fonts each weight looks a character up in, in order.
-constexpr std::array<Face, 4> bold_chain{
+constexpr std::array<Face, 5> bold_chain{
     Face::dejavu_sans_bold,
     Face::dejavu_sans,
     Face::noto_sans_cjk,
+    Face::endonyms,
     Face::noto_emoji,
 };
-constexpr std::array<Face, 3> regular_chain{
+constexpr std::array<Face, 4> regular_chain{
     Face::dejavu_sans,
     Face::noto_sans_cjk,
+    Face::endonyms,
     Face::noto_emoji,
 };
 
@@ -215,9 +217,9 @@ struct FontStack::Fonts {
 
     /// Gives the pixel size a face is drawn at in a style.
     ///
-    /// DejaVu and letters pack faces take the style's size. Noto Sans CJK
-    /// and ideographs pack faces take the related size and no less than the
-    /// style's least size. Noto Emoji takes the related size.
+    /// DejaVu and letters pack faces take the style's size. Noto Sans CJK,
+    /// the endonym face and ideographs pack faces take the related size and
+    /// no less than the style's least size. Noto Emoji takes the related size.
     int32_t face_pixel_size(Face which, const Style& style) const noexcept {
         const auto index = static_cast<std::size_t>(which);
         const bool letters = which == Face::dejavu_sans_bold || which == Face::dejavu_sans ||
@@ -250,6 +252,7 @@ struct FontStack::Fonts {
             if (pack_roles[index] == FaceRole::ideographs)
                 push_open(pack_face(index));
         push_open(Face::noto_sans_cjk);
+        push_open(Face::endonyms);
         push_open(Face::noto_emoji);
         return found;
     }
@@ -531,6 +534,21 @@ std::optional<Face> FontStack::face_for(char32_t character, Weight weight) const
     if (is_invisible(character))
         return std::nullopt;
     return fonts_->lookup(character, weight).first;
+}
+
+bool FontStack::draws(std::string_view text, Weight weight) const {
+    const auto characters = decode_utf8(text);
+    if (!characters)
+        return false;
+    for (char32_t character : *characters) {
+        if (is_invisible(character))
+            continue;
+        // Glyph index 0 is the face's missing-glyph box: the chain has no
+        // face that holds the character.
+        if (fonts_->lookup(character, weight).second == 0)
+            return false;
+    }
+    return true;
 }
 
 namespace {

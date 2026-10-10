@@ -85,33 +85,6 @@ void read_player(ServiceState& state) {
     }
 }
 
-/// Queues one registry when the rules say so. The caller holds the mutex.
-///
-/// @param state the service
-/// @param index the registry
-/// @param reason why the refresh was asked for
-/// @param now the clock, seconds since 1970
-/// @return true when a refresh was queued
-bool queue_refresh(ServiceState& state, std::size_t index, RefreshReason reason, int64_t now) {
-    RegistryRecord& record = state.registries[index];
-    if (record.refreshing)
-        return false;
-    if (!can_fetch(record, state.options.developer_mode))
-        return false;
-    if (reason == RefreshReason::start && !state.options.automatic)
-        return false;
-    if (!refresh_due(reason, state.options.check, now, record.checked, record.last_attempt))
-        return false;
-    record.refreshing = true;
-    record.last_attempt = now;
-    WorkItem item;
-    item.kind = WorkItem::Kind::refresh;
-    item.index = index;
-    state.queue.push_back(std::move(item));
-    state.wake.notify_one();
-    return true;
-}
-
 /// Logs a worker that could not be started. The caller does not hold the mutex.
 ///
 /// @param state the service
@@ -198,11 +171,36 @@ RegistryView view_of(const RegistryRecord& record) {
     return view;
 }
 
+bool queue_refresh(ServiceState& state, std::size_t index, RefreshReason reason, int64_t now) {
+    if (index >= state.registries.size())
+        return false;
+    RegistryRecord& record = state.registries[index];
+    if (record.retired || record.refreshing)
+        return false;
+    if (!can_fetch(record, state.options.developer_mode))
+        return false;
+    if (reason == RefreshReason::start && !state.options.automatic)
+        return false;
+    if (!refresh_due(reason, state.options.check, now, record.checked, record.last_attempt))
+        return false;
+    record.refreshing = true;
+    record.last_attempt = now;
+    WorkItem item;
+    item.kind = WorkItem::Kind::refresh;
+    item.index = index;
+    state.queue.push_back(std::move(item));
+    state.wake.notify_one();
+    return true;
+}
+
 void publish(ServiceState& state) {
     std::vector<RegistryView> views;
     views.reserve(state.registries.size());
-    for (const RegistryRecord& record : state.registries)
+    for (const RegistryRecord& record : state.registries) {
+        if (record.retired)
+            continue;
         views.push_back(view_of(record));
+    }
     Snapshot snapshot = make_snapshot(std::move(views), state.registries_file_error);
     snapshot.generation = state.generation + 1;
     auto shared = std::make_shared<const Snapshot>(std::move(snapshot));
@@ -274,10 +272,6 @@ reference_urls(const RegistryView& view, std::string_view reference) {
     return resolved;
 }
 
-struct Service::Impl : ServiceState {
-    using ServiceState::ServiceState;
-};
-
 Service::Service(ServiceOptions options) : impl_(std::make_unique<Impl>(std::move(options))) {
 }
 
@@ -344,6 +338,8 @@ void Service::refresh(RefreshReason reason, std::string_view registry) {
             return;
         const int64_t now = now_seconds(*impl_);
         for (std::size_t index = 0; index < impl_->registries.size(); ++index) {
+            if (impl_->registries[index].retired)
+                continue;
             if (!registry.empty() && impl_->registries[index].registry.descriptor.id != registry)
                 continue;
             if (queue_refresh(*impl_, index, reason, now))
@@ -372,6 +368,8 @@ void Service::set_developer_mode(bool on) {
         const int64_t now = now_seconds(*impl_);
         for (std::size_t index = 0; index < impl_->registries.size(); ++index) {
             RegistryRecord& record = impl_->registries[index];
+            if (record.retired)
+                continue;
             const bool became_fetchable = on && !can_fetch(record, was) && can_fetch(record, on);
             record.status = status_of(record, on);
             if (became_fetchable && !record.catalogue && !record.refreshing) {

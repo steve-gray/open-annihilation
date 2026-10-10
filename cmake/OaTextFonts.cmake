@@ -16,13 +16,17 @@
 # lists, which oa_copy_text_fonts() copies beside a program, into the folder
 # oa::platform::text_font::bundled_font_directory() finds at run time. The list
 # is the module's face_files (oa/platform/text_font.hpp) and the bootstrap's
-# FONT_FILES; the three change together.
+# FONT_FILES; the three name the same files. face_files follows the Face
+# values, with the endonym face last. This list places that face beside the
+# CJK face.
 #
-# The stack opens without Noto Sans CJK (its face is optional). The build
-# still ships that face until it moves into the language pack.
+# The stack opens without Noto Sans CJK (its face is optional). The endonym
+# face is required. The build still ships the CJK face until it moves into
+# the language pack.
 include_guard(GLOBAL)
 
-set(OA_TEXT_FONT_FILES DejaVuSans-Bold.ttf DejaVuSans.ttf NotoSansCJKsc-Bold.otf NotoEmoji.ttf)
+set(OA_TEXT_FONT_FILES DejaVuSans-Bold.ttf DejaVuSans.ttf NotoSansCJKsc-Bold.otf
+  NotoSansCJKsc-Bold-Endonyms.otf NotoEmoji.ttf)
 get_filename_component(oa_text_fonts_default "${CMAKE_CURRENT_LIST_DIR}/../local/deps/text-fonts" ABSOLUTE)
 set(OA_TEXT_FONTS_DIR "${oa_text_fonts_default}" CACHE PATH
   "Folder holding the fonts tools/bootstrap_text_fonts.py makes, which the build copies beside the game")

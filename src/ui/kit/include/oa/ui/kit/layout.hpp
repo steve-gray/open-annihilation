@@ -360,6 +360,12 @@ enum class Role : uint8_t {
     focus_ring,  ///< the keyboard focus outline
     oa_button,   ///< the OA button
     oa_mark,     ///< the OA mark alone
+    header,      ///< the window's header; its words are the item's HeaderLook
+    footer_band, ///< the footer's rule and band; the item's FooterBandLook places them
+    nav,         ///< a nav list; the item's NavLook is what is drawn
+    heading,     ///< a section heading; the words are the item's HeadingLook
+    row_frame,   ///< a row's rule, label and hints; the item's RowFrame
+    locked_fade, ///< a locked row's fade; the rectangle is the item's
 };
 
 /// How a control looks, for the item that draws it.

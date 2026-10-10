@@ -2330,7 +2330,7 @@ in place, and how what a stop leaves is settled). The runtime's part:
   (`request_soft_restart`); `main()` makes the change between runs, once
   the runtime and its archives are gone, and the next run tells it. Every
   run starts with `recover_package_installs`, which runs `recover_changes`
-  for each kind's root folder (today the Mods folder), before the mod
+  for each kind's root folder (Mods for a mod, Maps for a map pack), before the mod
   folder is resolved, so that a stop mid-change never drops the Mod
   setting. A file of no known kind is told NOT INSTALLED and is not read.
 - **ROLL BACK** on the Mods page (`Runtime::roll_back_mod_folder`): a folder
@@ -2350,6 +2350,33 @@ in place, and how what a stop leaves is settled). The runtime's part:
 
 `native-mod-install` (`--check-mod-install`, `runtime_mod_install_check.cpp`)
 drives every prompt over five runs.
+
+### Map packs (.oamap)
+
+A map pack is a zip archive whose manifest is `oamap.yaml`. It installs into
+`Maps/<id>` in the player's own folder, with the same staging, lock,
+`.backup` and recovery a mod has (`src/app/package-install` says the checks
+and the questions). A file the player opens is asked on the settled main
+menu. A pack from a catalogue installs on any screen except while a match
+loads or runs, and shows no prompt: a question waits for that menu, and a
+refusal is reported to the screen that asked. A file the player opens, and
+a package of another kind, still wait for the menu. Nothing starts while a
+match loads or runs.
+
+Before the pack is put in place it is checked: the manifest, that the pack
+holds the files it lists and nothing else, that those files sit in the
+folders a map pack may hold, that each preview is a PNG of at most 2 MiB
+and 1024 pixels on a side, that this build meets `requires.engine`, and that
+every map fits the base game, which is the game folder with no mod. A clash
+with the mod being played does not refuse the install.
+
+The runtime keeps one index of the installed packs (`MapPacks`,
+`src/app/map_packs.cpp`) over that Maps folder, made when the packs are
+first needed and refreshed after each install. It lists each pack's maps
+from the manifest. A manifest is read once, and again only when the pack's
+key changes. The key is the SHA-256 in the pack's origin record, or the
+SHA-256 of its `oamap.yaml` when it has no record. A terrain's size is the
+size of the map's TNT file. The index does not open a map.
 
 ### Developer Mode
 
