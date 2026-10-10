@@ -5,6 +5,7 @@
 #include "oa/app/runtime.hpp"
 
 #include "oa/app/content/service.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/platform/preferences.hpp"
 
@@ -13,7 +14,9 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <ostream>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -73,6 +76,7 @@ void Runtime::start_content() {
     options.builtin_folder = builtin_registries_folder();
     options.developer_mode = developer_mode();
     options.automatic = !options_.headless_check && !options_.unattended;
+    options.check = content::read_check_for_updates(preference_values_);
     options.log = content_log;
     const bool developer = options.developer_mode;
     content_.reset(new ContentState(std::move(options), developer));
@@ -93,6 +97,17 @@ content::Service& Runtime::content_service() {
     if (!content_)
         start_content();
     return content_->service;
+}
+
+std::optional<std::string> Runtime::content_install_id(std::string_view registry) {
+    bool changed = false;
+    std::optional<std::string> id =
+        content::ensure_install_id(preference_values_, registry, changed);
+    if (changed) {
+        preferences_dirty_ = true;
+        flush_preferences();
+    }
+    return id;
 }
 
 } // namespace oa::app
