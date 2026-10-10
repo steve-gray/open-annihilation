@@ -1165,26 +1165,26 @@ void keep_running_while_inactive(Runtime& runtime, bool hold);
 enum class ModernTextFace : uint8_t {
     sans_bold, ///< Latin, Greek, Cyrillic and symbols, bold
     sans,      ///< the same scripts with more characters, regular
-    cjk,       ///< Chinese, Japanese and Korean
-    emoji,     ///< emoji, drawn in one colour like any character
     endonyms,  ///< languages' own names and the notice before a pack is installed
+    emoji,     ///< emoji, drawn in one colour like any character
 };
 
 /// How many fonts the modern text stack holds.
-inline constexpr int modern_text_face_count = 5;
+inline constexpr int modern_text_face_count = 4;
 
 /// The pixel size a modern line is drawn at.
 ///
-/// pixel_size is the sans faces' pixels per em. The CJK and emoji faces take
-/// their own sizes from it. least_cjk_pixel_size holds the CJK face to a
-/// least size, or 0 to leave it at the size derived from pixel_size.
+/// pixel_size is the sans faces' pixels per em. The endonym and emoji faces
+/// take their own sizes from it. least_cjk_pixel_size holds an
+/// ideograph-sized face to a least size, or 0 to leave it at the size
+/// derived from pixel_size.
 struct ModernTextSize {
     /// pixels per em of the sans faces
     int32_t pixel_size{14};
     /// bold looks in the bold sans face first; regular looks in the regular
     /// sans face first
     bool bold{true};
-    /// the least pixels per em of the CJK face; 0 leaves the derived size
+    /// the least pixels per em of an ideograph-sized face; 0 leaves the derived size
     int32_t least_cjk_pixel_size{};
 };
 
@@ -1199,8 +1199,8 @@ struct ModernFaceMetrics {
 /// The modern faces a line looks in, and the rows of that line.
 ///
 /// count faces are filled, in fallback order. Entries at and after count are
-/// zero. A bold line looks in all five faces; a regular line looks in the
-/// regular sans face, then the CJK face, then the endonym face, then emoji.
+/// zero. A bold line looks in all four faces; a regular line looks in the
+/// regular sans face, then the endonym face, then emoji.
 /// ascent and descent are the rows of the line the game draws, which fit
 /// every face of the chain.
 struct ModernTextChain {
@@ -1304,9 +1304,9 @@ modern_text_pixels(std::string_view text, const ModernTextSize& size);
 ///
 /// The face is bold. Its pixel size is the message log's size at that text
 /// size and scale, and no smaller than the least the modern fonts are drawn
-/// at. While a Chinese, Japanese or Korean language is shown, the CJK face
-/// is held to 12 px. The size is the sans faces'; the CJK and emoji faces
-/// take their own sizes from it.
+/// at. While a Chinese, Japanese or Korean language is shown, an
+/// ideograph-sized face is held to 12 px. The size is the sans faces'; the
+/// endonym and emoji faces take their own sizes from it.
 ///
 /// It is not a hook: the engine does not call it, and no extension fills it.
 ///

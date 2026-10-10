@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Language packs read from their folders (oa/data/languages/language_pack.hpp):
-// the engine's own, in the languages folder beside the game's other files;
+// a packager's, in the languages folder beside the game's other files;
 // the player's, in Languages in their own folder; and a mod's, in its
 // languages folder. Each pack is a folder named by its tag, holding
-// language.yaml and its tables.
+// language.yaml and its tables. The engine ships no packs.
 
 #pragma once
 
@@ -24,8 +24,8 @@
 
 namespace oa::app {
 
-/// The folder beside the game's other files that holds the engine's
-/// interface catalogue files and its language packs.
+/// The folder beside the game's other files that holds interface catalogue
+/// files and a packager's language packs. The engine ships no packs.
 inline constexpr std::string_view engine_languages_folder = "languages";
 
 /// The folder of the player's own folder that holds their language packs.

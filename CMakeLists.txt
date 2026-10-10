@@ -44,8 +44,6 @@ endif()
 # FreeType and the fonts text outside the game's own fonts is drawn with,
 # from tools/bootstrap_text_fonts.py (cmake/OaTextFonts.cmake).
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaTextFonts.cmake")
-# The engine's language packs, copied beside the fonts (cmake/OaLanguages.cmake).
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaLanguages.cmake")
 
 # OA_GAME_DIR, the installed game the game-data tests and native checks read,
 # and the helpers that register those tests (cmake/OaGameData.cmake).
@@ -1878,8 +1876,8 @@ if(OA_BUILD_PLATFORM)
       # skirmish's in-game menu, from Simplified Chinese to English, German
       # and back: after each change, the settings closed with OK, the screen
       # under them shows what it shows opened again in the language, and
-      # back in Chinese what it showed as the run started in it. Needs the
-      # engine's Simplified Chinese pack beside the game.
+      # back in Chinese what it showed as the run started in it. The test
+      # fixture pack installs first.
       set(oa_language_switch_check_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-switch")
       file(MAKE_DIRECTORY "${oa_language_switch_check_dir}")
       file(WRITE "${oa_language_switch_check_dir}/language-switch.conf"
@@ -2145,6 +2143,19 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-touch-controls-phone PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_touch_phone_check_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The Simplified Chinese test fixture, in each check's player folder,
+      # before the checks that show that language. The face is never copied
+      # beside the game.
+      add_test(NAME language-fixture-pack COMMAND ${CMAKE_COMMAND}
+        -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests/fixture-packs/zh-Hans
+        -DFONT=${OA_TEXT_FONT_TESTS_DIR}/NotoSansCJKsc-Bold-Fixture.otf
+        "-DDESTINATIONS=${oa_language_switch_check_dir}/Open Annihilation;${oa_pointer_check_dir}/Open Annihilation;${oa_touch_check_dir}/Open Annihilation;${oa_touch_phone_check_dir}/Open Annihilation"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/install_fixture_pack.cmake)
+      set_tests_properties(language-fixture-pack PROPERTIES
+        FIXTURES_SETUP language-fixture-pack TIMEOUT 30)
+      set_tests_properties(native-language-switch native-pointer-interfaces
+        native-touch-controls native-touch-controls-phone
+        PROPERTIES FIXTURES_REQUIRED language-fixture-pack)
       # --check-pad-controls: the gamepad controls, driven through the event
       # path by SDL virtual pads imitating a Steam Deck and an Xbox pad, on a
       # skirmish at the Deck's screen size (docs/controllers.md).
@@ -2707,28 +2718,18 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/bootstrap_macos_deps.py --self-test)
     add_test(NAME ios-deps-bootstrap-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/platforms/ios/tools/bootstrap_ios_deps.py --self-test)
-    # tools/bootstrap_text_fonts.py's pins, the licence texts they must
-    # match and the characters the cut CJK font keeps. It downloads nothing.
+    # tools/bootstrap_text_fonts.py's pins and the licence texts they must
+    # match. It downloads nothing.
     add_test(NAME text-fonts-bootstrap-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/bootstrap_text_fonts.py --self-test)
-    # tools/language_pack_check.py on the tests' pseudo-language pack, and
-    # on the engine's Simplified Chinese pack against the game data when
-    # OA_GAME_DIR is set: each pack reads, and its coverage is told. A
-    # missing pack is skipped.
+    # tools/language_pack_check.py on the tests' pseudo-language pack: the
+    # pack reads, and its coverage is told.
     add_test(NAME language-pack-check-pseudo COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/language_pack_check.py
       ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests/pseudo-pack)
-    set(oa_language_pack_game_data "")
-    if(OA_GAME_DIR)
-      set(oa_language_pack_game_data --game-dir "${OA_GAME_DIR}" --oa-tool "$<TARGET_FILE:oa-tool>")
-    endif()
-    add_test(NAME language-pack-check COMMAND ${Python3_EXECUTABLE}
-      ${CMAKE_CURRENT_SOURCE_DIR}/tools/language_pack_check.py
-      ${CMAKE_CURRENT_SOURCE_DIR}/languages/zh-Hans ${oa_language_pack_game_data})
-    set_tests_properties(language-pack-check PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(fixed-width-rewrite-selftest format-check-selftest licensing-check-selftest
       sdl-bootstrap-selftest macos-deps-bootstrap-selftest ios-deps-bootstrap-selftest
-      text-fonts-bootstrap-selftest language-pack-check-pseudo language-pack-check
+      text-fonts-bootstrap-selftest language-pack-check-pseudo
       PROPERTIES TIMEOUT 60)
   endif()
 endif()
@@ -2887,9 +2888,6 @@ endif()
 # finds them (cmake/OaTextFonts.cmake).
 if(TARGET oa-game)
   oa_copy_text_fonts(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
-  # The engine's language packs go in its languages folder, where the game
-  # reads them beside the interface catalogue files.
-  oa_copy_language_packs(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")
 set(oa_notice_files "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/ATTRIBUTIONS.md"

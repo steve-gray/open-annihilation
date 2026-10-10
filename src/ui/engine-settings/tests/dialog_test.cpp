@@ -881,7 +881,7 @@ settings::Dialog language_dialog() {
 }
 
 void language_drop_down_names_each_language_in_itself() {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // System default first, naming the system's language in itself, then
     // English and the others in the order of their own names.
     auto dialog = language_dialog();
@@ -933,7 +933,7 @@ void language_drop_down_names_each_language_in_itself() {
 }
 
 void language_drop_down_opens_marks_and_chooses() {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     auto dialog = language_dialog();
     const auto field = geometry::open_rows(dialog).rows.rows[0].control_area;
     const auto list = geometry::choice_list(field, 6);
@@ -1268,7 +1268,7 @@ void text_size_waits_for_the_modern_fonts() {
 }
 
 void a_language_locks_the_modern_fonts_and_unicode_chat() {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // Simplified Chinese draws in the modern fonts, and its pack asks for
     // chat in UTF-8: choosing it turns the fonts on, and both switches show
     // On, locked, set by the language, until another language is chosen.
@@ -1488,7 +1488,7 @@ void screen_size_offers_the_displays_sizes() {
 }
 
 void screen_size_shows_custom_for_a_window_sized_by_hand() {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // In a window Screen size shows the window's own size until its knob
     // moves, whatever the setting (Desktop leaves a window as it is): here a
     // window the player dragged to 1300x800, which the display offers no
@@ -7964,7 +7964,7 @@ void controller_changes_only_its_entry_and_the_sections_under_it() {
 }
 
 void a_finger_takes_the_nearest_control() {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // The touch controls' reach in the dialog's pixels: 22 points, as many
     // canvas pixels a point as the screen has, over the dialog's scale.
     const auto reach_at = [](double pixels_per_point, double dialog_scale) {

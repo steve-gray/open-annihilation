@@ -359,7 +359,7 @@ struct InstalledSimplifiedChinese {
 };
 
 std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
-    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
+    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     std::vector<Picture> pictures;
     const renderer::RgbaPicture no_icon{};
     const auto game = settings::settings_locks(settings::GameState{true, false, false, false});

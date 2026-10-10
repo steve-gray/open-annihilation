@@ -5,10 +5,11 @@
 // same on every platform: one line of UTF-8 at a pixel size and weight,
 // drawn as coverage, hinted to whole pixels in one bit per pixel, or
 // anti-aliased. Each character comes from the first open font of the stack
-// that has it. The base faces are DejaVu Sans Bold, DejaVu Sans, Noto Sans
-// CJK, Noto Emoji and the endonym face, a cut of Noto Sans CJK that holds
+// that has it. The base faces are DejaVu Sans Bold, DejaVu Sans, the endonym
+// face and Noto Emoji. The endonym face is a cut of Noto Sans CJK that holds
 // the languages' own names and the notice shown before a language pack is
-// installed. A language pack may add faces while the stack is open.
+// installed. A language pack may add faces while the stack is open. The full
+// Simplified Chinese face travels with that pack.
 #pragma once
 
 #include <array>
@@ -29,13 +30,12 @@ namespace oa::platform::text_font {
 enum class Face : uint8_t {
     dejavu_sans_bold, ///< Latin, Greek, Cyrillic and symbols, bold
     dejavu_sans,      ///< the same scripts with more characters, regular
-    noto_sans_cjk,    ///< Chinese, Japanese and Korean, bold; optional to open
-    noto_emoji,       ///< emoji, drawn in one colour like any character
     endonyms,         ///< languages' own names and the notice before a pack is installed
+    noto_emoji,       ///< emoji, drawn in one colour like any character
 };
 
 /// How many base fonts the stack holds. Pack faces are counted apart.
-inline constexpr std::size_t face_count = 5;
+inline constexpr std::size_t face_count = 4;
 
 /// The most font faces a language pack may add to an open stack.
 inline constexpr std::size_t most_pack_faces = 4;
@@ -59,24 +59,20 @@ enum class FaceRole : uint8_t {
 
 /// Tells whether open requires a base face's file.
 ///
-/// Every base face is required except Noto Sans CJK, which a shipped build
-/// still provides and which open skips when the file is missing. The
-/// endonym face is required: it draws a language's own name before that
-/// language's pack is installed.
+/// Every base face is required. A missing file fails open.
 ///
 /// @param face a face
-/// @return true for a base face other than noto_sans_cjk
+/// @return true for a base face
 [[nodiscard]] constexpr bool face_required(Face face) noexcept {
-    return static_cast<std::size_t>(face) < face_count && face != Face::noto_sans_cjk;
+    return static_cast<std::size_t>(face) < face_count;
 }
 
 /// The file of each font in the fonts folder, by Face.
 inline constexpr std::array<std::string_view, face_count> face_files{
     "DejaVuSans-Bold.ttf",
     "DejaVuSans.ttf",
-    "NotoSansCJKsc-Bold.otf",
-    "NotoEmoji.ttf",
     "NotoSansCJKsc-Bold-Endonyms.otf",
+    "NotoEmoji.ttf",
 };
 
 /// The name of the folder beside the game that holds the fonts.
@@ -105,15 +101,16 @@ enum class Rendering : uint8_t {
 
 /// How a line is drawn.
 struct Style {
-    /// pixels per em of the DejaVu faces, 1..max_pixel_size; Noto Sans CJK
-    /// and Noto Emoji are drawn at related_pixel_size of it
+    /// pixels per em of the DejaVu faces, 1..max_pixel_size; the endonym
+    /// face and Noto Emoji are drawn at related_pixel_size of it
     int32_t pixel_size{14};
     Weight weight{Weight::bold};
     Rendering rendering{Rendering::mono};
     /// pixels added after each character's advance, 0..max_letter_spacing
     int32_t letter_spacing{};
-    /// the least pixels per em Noto Sans CJK is drawn at, 0..max_pixel_size:
-    /// smaller ideographs fill in; 0 leaves it at related_pixel_size
+    /// the least pixels per em an ideograph-sized face is drawn at,
+    /// 0..max_pixel_size: smaller ideographs fill in; 0 leaves it at
+    /// related_pixel_size
     int32_t least_cjk_pixel_size{};
 };
 
@@ -138,8 +135,8 @@ inline constexpr int32_t status_readout_pixel_size = 11;
 /// Pixels per em of the regular sans face beside the labels' and the chat
 /// line's font.
 inline constexpr int32_t label_pixel_size = 11;
-/// The least pixels per em of the CJK face while a Chinese, Japanese or
-/// Korean language is shown, so its strokes do not fill in.
+/// The least pixels per em of an ideograph-sized face while a Chinese,
+/// Japanese or Korean language is shown, so its strokes do not fill in.
 inline constexpr int32_t least_cjk_language_pixel_size = 12;
 
 /// One drawn line: how much of each pixel the text covers.
@@ -170,8 +167,7 @@ struct Placement {
 ///
 /// This is the base chain, without a pack's faces. Bold looks in DejaVu
 /// Sans Bold first, then DejaVu Sans for what it lacks. Regular looks in
-/// DejaVu Sans first. Both then look in Noto Sans CJK, the endonym face
-/// and Noto Emoji.
+/// DejaVu Sans first. Both then look in the endonym face and Noto Emoji.
 /// FontStack::chain gives the faces one open stack looks in, pack faces
 /// included. The span lives as long as the program.
 ///
@@ -179,8 +175,8 @@ struct Placement {
 /// @return the base faces, the first that has a character drawing it
 [[nodiscard]] std::span<const Face> fallback_chain(Weight weight) noexcept;
 
-/// Gives the pixel size Noto Sans CJK and Noto Emoji are drawn at next to the
-/// DejaVu faces at a size.
+/// Gives the pixel size the endonym face and Noto Emoji are drawn at next
+/// to the DejaVu faces at a size.
 ///
 /// Ideographs stand about as tall as DejaVu's capitals with one or two
 /// rows more, as they do at 12 px beside the 14-px log font: six sevenths
@@ -188,7 +184,7 @@ struct Placement {
 /// is smaller.
 ///
 /// @param pixel_size the DejaVu faces' pixels per em
-/// @return the CJK and emoji pixels per em
+/// @return the ideograph and emoji pixels per em
 [[nodiscard]] int32_t related_pixel_size(int32_t pixel_size) noexcept;
 
 /// Decodes UTF-8 text.
@@ -229,10 +225,8 @@ class FontStack {
 
     /// Opens the stack's base fonts.
     ///
-    /// A missing Noto Sans CJK file is skipped and that face stays closed.
-    /// Every other base face is required (face_required). A file that is
-    /// there and that FreeType cannot read, or that is not scalable, still
-    /// fails the open.
+    /// Every base face is required (face_required). A missing file, a file
+    /// FreeType cannot read, or a file that is not scalable fails the open.
     ///
     /// @param directory the folder that holds the files of face_files
     /// @return the stack; null when a required file is missing or FreeType
@@ -268,10 +262,10 @@ class FontStack {
     /// Gives the faces a weight looks a character up in, in that order.
     ///
     /// Bold: DejaVu Sans Bold, DejaVu Sans, the letters pack faces in the
-    /// order they were added, the ideographs pack faces in that order, Noto
-    /// Sans CJK when it is open, the endonym face, then Noto Emoji. Regular
-    /// is the same without DejaVu Sans Bold. A face that is not open is
-    /// left out of the chain, and lookup skips one that is closed.
+    /// order they were added, the ideographs pack faces in that order, the
+    /// endonym face, then Noto Emoji. Regular is the same without DejaVu
+    /// Sans Bold. A face that is not open is left out of the chain, and
+    /// lookup skips one that is closed.
     ///
     /// @param weight the weight of the line
     /// @return the faces
@@ -316,9 +310,9 @@ class FontStack {
     ///
     /// The rows are the greatest ascent and descent of the open base faces
     /// at the size the style draws them. A pack's faces never change them.
-    /// The endonym face is cut from Noto Sans CJK and keeps its rows, so a
-    /// stack opened without Noto Sans CJK has the same rows as one that
-    /// opened it.
+    /// The endonym face is cut from Noto Sans CJK and keeps those rows, so
+    /// a line beside the 14 px bold face has 14 above the baseline and 4
+    /// below.
     ///
     /// @param style the style; its pixel size must be 1..max_pixel_size
     /// @return the rows; empty for a size out of range
@@ -327,9 +321,9 @@ class FontStack {
     /// Gives the rows of one face at the pixel size a style draws it at.
     ///
     /// The sans faces and letters pack faces take the style's pixel size.
-    /// Noto Sans CJK, the endonym face and ideographs pack faces take
-    /// related_pixel_size of it, and no less than the style's least size.
-    /// Noto Emoji takes related_pixel_size and is set to the style's weight.
+    /// The endonym face and ideographs pack faces take related_pixel_size
+    /// of it, and no less than the style's least size. Noto Emoji takes
+    /// related_pixel_size and is set to the style's weight.
     ///
     /// @param face the face
     /// @param style the style; its pixel size must be 1..max_pixel_size
