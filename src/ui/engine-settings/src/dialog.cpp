@@ -117,6 +117,15 @@ constexpr std::array<Page, 5> kModPages{
     Page::mod_keys, Page::mod_patrol, Page::mod_guard, Page::mod_tools, Page::mod_chat
 };
 
+/// Returns a text's width at estimated_character_width a character, as the
+/// rows are placed where no font measures their words.
+///
+/// @param text the text, in UTF-8
+/// @return the width, in source pixels
+int32_t estimated_width(std::string_view text) {
+    return static_cast<int32_t>(oa::ui::kit::character_count(text)) * estimated_character_width;
+}
+
 /// Returns a section's place among Dialog::scroll.
 ///
 /// @param page the section
@@ -248,10 +257,7 @@ Rows place_rows(
     Dialog shown;
     shown.steam_input = context.steam_input;
     shown.steam_deck_panel_hz = context.steam_deck_panel_hz;
-    const TextWidth estimated = [](std::string_view text) {
-        return static_cast<int32_t>(oa::ui::kit::character_count(text)) * estimated_character_width;
-    };
-    Rows placed = place_section(shown, page, locks, section, estimated);
+    Rows placed = place_section(shown, page, locks, section, &estimated_width);
     scroll_rows(placed, scroll);
     return placed;
 }
@@ -320,10 +326,7 @@ ScrolledRows open_rows(const Dialog& dialog) {
         return open;
     }
     open.rows = place_section(
-        dialog, dialog.page, shown_locks(dialog), dialog.section_hooks, [](std::string_view text) {
-            return static_cast<int32_t>(oa::ui::kit::character_count(text)) *
-                   estimated_character_width;
-        }
+        dialog, dialog.page, shown_locks(dialog), dialog.section_hooks, &estimated_width
     );
     if (developer_page(dialog)) {
         // Developer's rows stay at its top; its list scrolls under them in a
