@@ -25,7 +25,7 @@ namespace {
 namespace languages = oa::data::languages;
 
 /// The built-in languages, in the order the game lists them.
-constexpr std::array<std::string_view, 6> kBuiltInOrder{"en", "de", "es", "fr", "it", "zh-Hans"};
+constexpr std::array<std::string_view, 5> kBuiltInOrder{"en", "de", "es", "fr", "it"};
 /// The pseudo pack's tag, and the word its manifest names.
 constexpr std::string_view kPseudoTag = "en-XA";
 constexpr std::string_view kPseudoWord = "Pseudo";
@@ -85,7 +85,7 @@ const char* needs_name(languages::TextNeeds needs) {
 /// languages allowed between them.
 ///
 /// @param live the live languages
-/// @return true when their tags are en, de, es, fr, it, zh-Hans in order
+/// @return true when their tags are en, de, es, fr, it in order
 bool built_ins_follow(std::span<const languages::Language* const> live) {
     std::size_t next = 0;
     for (const languages::Language* language : live) {

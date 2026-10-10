@@ -16,16 +16,15 @@
 # lists, which oa_copy_text_fonts() copies beside a program, into the folder
 # oa::platform::text_font::bundled_font_directory() finds at run time. The list
 # is the module's face_files (oa/platform/text_font.hpp) and the bootstrap's
-# FONT_FILES; the three name the same files. face_files follows the Face
-# values, with the endonym face last. This list places that face beside the
-# CJK face.
+# FONT_FILES; the three name the same files, in Face order. Every base face
+# is required.
 #
-# The stack opens without Noto Sans CJK (its face is optional). The endonym
-# face is required. The build still ships the CJK face until it moves into
-# the language pack.
+# OA_TEXT_FONT_TESTS_DIR holds the test fixture's face. The build never copies
+# it beside the game. A missing fixture face is reported and does not stop
+# the configuration: the checks that need it fail later and name the bootstrap.
 include_guard(GLOBAL)
 
-set(OA_TEXT_FONT_FILES DejaVuSans-Bold.ttf DejaVuSans.ttf NotoSansCJKsc-Bold.otf
+set(OA_TEXT_FONT_FILES DejaVuSans-Bold.ttf DejaVuSans.ttf
   NotoSansCJKsc-Bold-Endonyms.otf NotoEmoji.ttf)
 get_filename_component(oa_text_fonts_default "${CMAKE_CURRENT_LIST_DIR}/../local/deps/text-fonts" ABSOLUTE)
 set(OA_TEXT_FONTS_DIR "${oa_text_fonts_default}" CACHE PATH
@@ -35,6 +34,18 @@ foreach(font IN LISTS OA_TEXT_FONT_FILES)
     message(FATAL_ERROR "The text font ${font} is not in ${OA_TEXT_FONTS_DIR}. "
       "Run python3 tools/bootstrap_text_fonts.py, which fetches and builds FreeType and the fonts "
       "into local/deps, or name the folder that holds them with -DOA_TEXT_FONTS_DIR=.")
+  endif()
+endforeach()
+# The default follows OA_TEXT_FONTS_DIR, including a path given with -D, so the
+# fixture face sits in the folder beside the fonts the configuration uses.
+get_filename_component(oa_text_font_tests_default "${OA_TEXT_FONTS_DIR}/../text-fonts-tests" ABSOLUTE)
+set(OA_TEXT_FONT_TESTS_DIR "${oa_text_font_tests_default}" CACHE PATH
+  "Folder holding the test fixture's font, which the build never copies beside the game")
+set(OA_TEXT_FONT_TEST_FILES NotoSansCJKsc-Bold-Fixture.otf)
+foreach(font IN LISTS OA_TEXT_FONT_TEST_FILES)
+  if(NOT EXISTS "${OA_TEXT_FONT_TESTS_DIR}/${font}")
+    message(STATUS "The test font ${font} is not in ${OA_TEXT_FONT_TESTS_DIR}. "
+      "Run python3 tools/bootstrap_text_fonts.py, which cuts the test fixture's font.")
   endif()
 endforeach()
 
