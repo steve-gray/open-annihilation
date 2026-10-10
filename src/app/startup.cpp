@@ -47,7 +47,8 @@ constexpr std::size_t kGameFilesCheckFrames = 30;
     return value;
 }
 
-// The arguments after a long option, as OptionValues hands them out.
+// The command line from a long option on: the arguments after it, as the
+// engine's options and OptionValues read them.
 struct ArgumentCursor {
     int argc{};
     char** argv{};
@@ -687,6 +688,453 @@ namespace {
     return package_install::opens_file(path_from_utf8(argument));
 }
 
+/// An option that takes no value and turns on one member of Options.
+struct FlagOption {
+    std::string_view name;
+    bool Options::* member{};
+};
+
+/// The options that take no value and do nothing but turn on their member.
+/// The options that take a value or do more are read by the functions below.
+constexpr FlagOption kFlagOptions[] = {
+    {"--choose-game-dir", &Options::choose_game_dir},
+    {"--base-game", &Options::base_game},
+    {"--print-profile", &Options::print_profile},
+    {"--accept-unimplemented-hacks", &Options::accept_unimplemented_hacks},
+    {"--force-capable", &Options::force_capable},
+    {"--native-density", &Options::native_density},
+    {"--scroll-camera", &Options::scroll_camera},
+    {"--march", &Options::march},
+    {"--follow", &Options::follow},
+    {"--past-outcome", &Options::campaign_past_outcome},
+    {"--busy-combat", &Options::busy_combat},
+    {"--give-orders", &Options::give_orders},
+    {"--reclaim-check", &Options::reclaim_check},
+    {"--skip-intro", &Options::skip_intro},
+    {"--headless-check", &Options::headless_check},
+    {"--mute", &Options::mute},
+    {"--check-match-dialogs", &Options::check_match_dialogs},
+    {"--check-load-save", &Options::check_load_save},
+    {"--check-frontend-controls", &Options::check_frontend_controls},
+    {"--check-scroll-bars", &Options::check_scroll_bars},
+    {"--check-engine-settings", &Options::check_engine_settings},
+    {"--check-user-folder", &Options::check_user_folder},
+    {"--check-mod-switch", &Options::check_mod_switch},
+    {"--check-map-packs", &Options::check_map_packs},
+    {"--check-mod-warning", &Options::check_mod_warning},
+    {"--check-mod-install", &Options::check_mod_install},
+    {"--check-language-install", &Options::check_language_install},
+    {"--check-renderer-ladder", &Options::check_renderer_ladder},
+    {"--check-briefing-narration", &Options::check_briefing_narration},
+    {"--check-match-layers", &Options::check_match_layers},
+    {"--check-render-tiers", &Options::check_render_tiers},
+    {"--check-match-orders", &Options::check_match_orders},
+    {"--check-factory-orders", &Options::check_factory_orders},
+    {"--check-unit-speech", &Options::check_unit_speech},
+    {"--check-download-builds", &Options::check_download_builds},
+    {"--check-stockpile-builds", &Options::check_stockpile_builds},
+    {"--check-unit-page-memory", &Options::check_unit_page_memory},
+    {"--check-side-column", &Options::check_side_column},
+    {"--check-match-bars", &Options::check_match_bars},
+    {"--check-kill-board", &Options::check_kill_board},
+    {"--check-paused-save", &Options::check_paused_save},
+    {"--check-simulation-hash", &Options::check_simulation_hash},
+    {"--check-language-switch", &Options::check_language_switch},
+    {"--check-language-registry", &Options::check_language_registry},
+    {"--check-patrol-reclaim", &Options::check_patrol_reclaim},
+    {"--check-reclaim-cursor", &Options::check_reclaim_cursor},
+    {"--check-build-preview", &Options::check_build_preview},
+    {"--check-pointer-interfaces", &Options::check_pointer_interfaces},
+    {"--check-megamap-clicks", &Options::check_megamap_clicks},
+    {"--check-radar-orders", &Options::check_radar_orders},
+    {"--check-touch-controls", &Options::check_touch_controls},
+    {"--check-pad-controls", &Options::check_pad_controls},
+    {"--check-running-while-inactive", &Options::check_running_while_inactive},
+    {"--touch-controls", &Options::touch_controls},
+    {"--check-game-files", &Options::check_game_files},
+    {"--no-game-files-screen", &Options::no_game_files_screen},
+    {"--check-multiplayer-menu", &Options::check_multiplayer_menu},
+    {"--check-director-view", &Options::check_director_view},
+    {"--check-director-render", &Options::check_director_render},
+    {"--check-interpolation", &Options::check_interpolation},
+    {"--check-unit-playout", &Options::check_unit_playout},
+    {"--trace-input", &Options::trace_input},
+    {"--debug-order-lines", &Options::debug_order_lines},
+};
+
+/// Turns on the member of an option kFlagOptions lists.
+///
+/// @param argument the option
+/// @param[in,out] options the options read so far
+/// @return true when kFlagOptions lists the option
+[[nodiscard]] bool take_flag_option(std::string_view argument, Options& options) {
+    for (const auto& [name, member] : kFlagOptions)
+        if (argument == name) {
+            options.*member = true;
+            return true;
+        }
+    return false;
+}
+
+/// Returns the value after the option the cursor stands on, and moves the
+/// cursor onto it.
+///
+/// Throws std::runtime_error naming the option when no value follows or the
+/// value is empty.
+///
+/// @param[in,out] cursor the command line, standing on the option
+/// @return the value
+[[nodiscard]] std::string_view option_value(ArgumentCursor& cursor) {
+    return next_value(&cursor);
+}
+
+/// Reads an option that names a folder or file the run reads or writes, or
+/// a file to open: the game and mod folders, archives, the snapshot, the
+/// preferences, the data, the player's and the log's folders.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value when it takes one
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_folder_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--game-dir") {
+        options.game_dir = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--archive") {
+        options.archives.push_back(path_from_utf8(option_value(cursor)));
+        return true;
+    }
+    if (argument == "--mod") {
+        options.mod_file = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--mod-dir") {
+        options.mod_dir = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--snapshot") {
+        options.snapshot = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--preferences-file") {
+        options.preferences_file = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--data-dir") {
+        options.data_dir = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--user-folder") {
+        options.user_folder = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--log-dir") {
+        options.log_dir = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--open" || argument == "--install-mod") {
+        options.open_files.push_back(opened_file_path(option_value(cursor)));
+        return true;
+    }
+    return false;
+}
+
+/// Reads an option that sets how long a run lasts and how it draws: its
+/// frames, its frame rates, its window and the threads that draw.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value when it takes one
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_frame_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--frames") {
+        options.frame_limit = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--benchmark") {
+        options.benchmark_frames = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--max-fps") {
+        options.max_frames_per_second = parse_frame_rate(
+            option_value(cursor),
+            kLowestMaxFramesPerSecond,
+            true,
+            "--max-fps expects 0 for no limit, or frames a second from 30 through 1000"
+        );
+        options.max_frames_per_second_given = true;
+        return true;
+    }
+    if (argument == "--display-modes") {
+        options.display_modes = std::string(option_value(cursor));
+        if (!oa::platform::display_modes::report_from_text(options.display_modes))
+            throw std::runtime_error(
+                "--display-modes expects WIDTHxHEIGHT[@RATE][/DENSITY] modes separated "
+                "by commas, or none"
+            );
+        return true;
+    }
+    if (argument == "--frame-rate") {
+        options.frame_rate = parse_frame_rate(
+            option_value(cursor),
+            1,
+            false,
+            "--frame-rate expects frames a second from 1 through 1000"
+        );
+        return true;
+    }
+    if (argument == "--frame-log") {
+        options.frame_log = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--frame-clock") {
+        options.frame_clock_ms = parse_frame_clock(option_value(cursor));
+        return true;
+    }
+    if (argument == "--resolution") {
+        const auto text = std::string(option_value(cursor));
+        const auto separator = text.find('x');
+        if (separator == std::string::npos)
+            throw std::runtime_error("--resolution expects WIDTHxHEIGHT");
+        options.match_width = static_cast<int>(parse_count(text.substr(0, separator)));
+        options.match_height = static_cast<int>(parse_count(text.substr(separator + 1)));
+        if (options.match_width <= 0 || options.match_height <= 0)
+            throw std::runtime_error("--resolution expects a width and height above 0");
+        options.window_resolution = true;
+        return true;
+    }
+    if (argument == "--draw-threads") {
+        options.draw_threads = parse_draw_threads(option_value(cursor), argument);
+        return true;
+    }
+    return false;
+}
+
+/// Reads an option that sets up the match a run plays: its length, the
+/// campaign mission, the armies, the stage, the saved games, the zoom, the
+/// camera and the random seed.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value when it takes one
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--match-ticks") {
+        options.match_ticks = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--campaign") {
+        options.campaign = option_value(cursor);
+        return true;
+    }
+    if (argument == "--mission") {
+        options.campaign_mission = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--restart-at") {
+        options.campaign_restart_tick = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--combat") {
+        options.combat_units = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--stage") {
+        options.stage_file = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--save-after") {
+        options.save_after = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--save-file") {
+        options.save_file = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--load") {
+        options.load_file = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--zoom") {
+        const auto text = std::string(option_value(cursor));
+        char* end = nullptr;
+        options.match_zoom = std::strtof(text.c_str(), &end);
+        if (end == text.c_str() || *end != '\0' || !(options.match_zoom > 0.0F))
+            throw std::runtime_error("--zoom expects a positive number");
+        return true;
+    }
+    if (argument == "--camera") {
+        const auto text = std::string(option_value(cursor));
+        const auto separator = text.find(',');
+        if (separator == std::string::npos)
+            throw std::runtime_error("--camera expects X,Z");
+        options.camera = {
+            static_cast<int>(parse_count(text.substr(0, separator))),
+            static_cast<int>(parse_count(text.substr(separator + 1)))
+        };
+        return true;
+    }
+    if (argument == "--seed") {
+        options.seed = parse_seed(option_value(cursor));
+        return true;
+    }
+    return false;
+}
+
+/// Reads a self-check's option that takes a value, or a word after it: the
+/// navigation check and its group, the failure the renderer ladder check
+/// narrows to, and the pages and the language the unit checks show.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value when it takes one
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_check_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--check-navigation") {
+        options.check_navigation = true;
+        // A group's name may follow; any other word is read as before.
+        if (*cursor.index + 1 < cursor.argc)
+            if (const auto group = navigation_group_named(cursor.argv[*cursor.index + 1])) {
+                options.navigation_group = *group;
+                ++*cursor.index;
+            }
+        return true;
+    }
+    if (argument == "--render-fault") {
+        options.render_fault = parse_render_fault(option_value(cursor));
+        return true;
+    }
+    if (argument == "--check-unit-pages") {
+        options.check_unit_pages = option_value(cursor);
+        return true;
+    }
+    if (argument == "--check-unit-language") {
+        options.check_unit_language = option_value(cursor);
+        return true;
+    }
+    return false;
+}
+
+/// Reads one of --check-game-files's companions, which set the route the
+/// check takes through the Game files screen and what it expects there.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_game_files_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--game-files-route") {
+        options.game_files_route = parse_game_files_route(option_value(cursor));
+        return true;
+    }
+    if (argument == "--game-files-expect") {
+        options.game_files_expect = parse_game_files_expect(option_value(cursor));
+        return true;
+    }
+    if (argument == "--game-files-source") {
+        options.game_files_source = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--game-files-free-bytes") {
+        options.game_files_free_bytes =
+            parse_game_files_bytes(option_value(cursor), argument, false);
+        return true;
+    }
+    if (argument == "--game-files-copy-rate") {
+        options.game_files_copy_rate = parse_game_files_bytes(option_value(cursor), argument, true);
+        return true;
+    }
+    if (argument == "--game-files-stop-after") {
+        options.game_files_stop_after =
+            parse_game_files_bytes(option_value(cursor), argument, true);
+        return true;
+    }
+    return false;
+}
+
+/// Reads an option of the director, the traces, the video capture or the
+/// showcases.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_recording_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--generate-script") {
+        options.generate_script = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--render-script") {
+        options.render_script = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--output") {
+        options.director_output = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--chunks") {
+        options.director_chunks = parse_chunks(option_value(cursor));
+        return true;
+    }
+    if (argument == "--stills") {
+        options.director_stills = parse_stills(option_value(cursor));
+        return true;
+    }
+    if (argument == "--trace-lookups") {
+        options.trace_lookups = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--trace-digest") {
+        options.trace_digest = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--trace-units") {
+        options.trace_units = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--capture-video") {
+        options.capture_video = path_from_utf8(option_value(cursor));
+        return true;
+    }
+    if (argument == "--showcase") {
+        options.showcase = parse_showcase(option_value(cursor));
+        return true;
+    }
+    return false;
+}
+
+/// Reads one of the engine's options that turns on a member or takes a
+/// value. The hardware acceleration flags, --help, an extension's options,
+/// files to open and the game's switches are read by parse_options itself.
+///
+/// @param argument the option
+/// @param[in,out] cursor the command line, standing on the option; moved
+///        onto its value when it takes one
+/// @param[in,out] options the options read so far
+/// @return true when the option is one of these
+[[nodiscard]] bool
+take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    return take_flag_option(argument, options) || take_folder_option(argument, cursor, options) ||
+           take_frame_option(argument, cursor, options) ||
+           take_match_option(argument, cursor, options) ||
+           take_check_option(argument, cursor, options) ||
+           take_game_files_option(argument, cursor, options) ||
+           take_recording_option(argument, cursor, options);
+}
+
 } // namespace
 
 [[nodiscard]] Options parse_options(int argc, char** argv, const Extension& extension) {
@@ -714,51 +1162,12 @@ namespace {
     };
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument(argv[index]);
-        auto value = [&](std::string_view name) -> std::string_view {
-            ArgumentCursor cursor{argc, argv, &index, name};
-            return next_value(&cursor);
-        };
-        if (argument == "--game-dir")
-            result.game_dir = path_from_utf8(value(argument));
-        else if (argument == "--choose-game-dir")
-            result.choose_game_dir = true;
-        else if (argument == "--archive")
-            result.archives.push_back(path_from_utf8(value(argument)));
-        else if (argument == "--mod")
-            result.mod_file = path_from_utf8(value(argument));
-        else if (argument == "--mod-dir")
-            result.mod_dir = path_from_utf8(value(argument));
-        else if (argument == "--base-game")
-            result.base_game = true;
-        else if (argument == "--print-profile")
-            result.print_profile = true;
-        else if (argument == "--accept-unimplemented-hacks")
-            result.accept_unimplemented_hacks = true;
-        else if (argument == "--snapshot")
-            result.snapshot = path_from_utf8(value(argument));
-        else if (argument == "--preferences-file")
-            result.preferences_file = path_from_utf8(value(argument));
-        else if (argument == "--data-dir")
-            result.data_dir = path_from_utf8(value(argument));
-        else if (argument == "--user-folder")
-            result.user_folder = path_from_utf8(value(argument));
-        else if (argument == "--log-dir")
-            result.log_dir = path_from_utf8(value(argument));
-        else if (argument == "--frames")
-            result.frame_limit = parse_count(value(argument));
-        else if (argument == "--benchmark")
-            result.benchmark_frames = parse_count(value(argument));
-        else if (argument == "--match-ticks")
-            result.match_ticks = parse_count(value(argument));
-        else if (argument == "--max-fps") {
-            result.max_frames_per_second = parse_frame_rate(
-                value(argument),
-                kLowestMaxFramesPerSecond,
-                true,
-                "--max-fps expects 0 for no limit, or frames a second from 30 through 1000"
-            );
-            result.max_frames_per_second_given = true;
-        } else if (argument == "--hardware-acceleration") {
+        ArgumentCursor cursor{argc, argv, &index, argument};
+        // The engine's options come before an extension's. Each is matched
+        // by its whole name, so no two of them can take the same argument.
+        if (take_engine_option(argument, cursor, result))
+            continue;
+        if (argument == "--hardware-acceleration") {
             take_acceleration(argument, HardwareAcceleration::full);
         } else if (argument.starts_with(kAccelerationLevelFlag)) {
             const auto level = oa::ui::engine_settings::hardware_acceleration_from_text(
@@ -769,238 +1178,9 @@ namespace {
             take_acceleration(argument, *level);
         } else if (argument == "--no-hardware-acceleration") {
             take_acceleration(argument, HardwareAcceleration::off);
-        } else if (argument == "--force-capable")
-            result.force_capable = true;
-        else if (argument == "--display-modes") {
-            result.display_modes = std::string(value(argument));
-            if (!oa::platform::display_modes::report_from_text(result.display_modes))
-                throw std::runtime_error(
-                    "--display-modes expects WIDTHxHEIGHT[@RATE][/DENSITY] modes separated "
-                    "by commas, or none"
-                );
-        } else if (argument == "--native-density")
-            result.native_density = true;
-        else if (argument == "--frame-rate")
-            result.frame_rate = parse_frame_rate(
-                value(argument),
-                1,
-                false,
-                "--frame-rate expects frames a second from 1 through 1000"
-            );
-        else if (argument == "--frame-log")
-            result.frame_log = path_from_utf8(value(argument));
-        else if (argument == "--scroll-camera")
-            result.scroll_camera = true;
-        else if (argument == "--march")
-            result.march = true;
-        else if (argument == "--follow")
-            result.follow = true;
-        else if (argument == "--frame-clock")
-            result.frame_clock_ms = parse_frame_clock(value(argument));
-        else if (argument == "--campaign")
-            result.campaign = value(argument);
-        else if (argument == "--mission")
-            result.campaign_mission = parse_count(value(argument));
-        else if (argument == "--past-outcome")
-            result.campaign_past_outcome = true;
-        else if (argument == "--restart-at")
-            result.campaign_restart_tick = parse_count(value(argument));
-        else if (argument == "--combat")
-            result.combat_units = parse_count(value(argument));
-        else if (argument == "--busy-combat")
-            result.busy_combat = true;
-        else if (argument == "--stage")
-            result.stage_file = path_from_utf8(value(argument));
-        else if (argument == "--save-after")
-            result.save_after = parse_count(value(argument));
-        else if (argument == "--save-file")
-            result.save_file = path_from_utf8(value(argument));
-        else if (argument == "--load")
-            result.load_file = path_from_utf8(value(argument));
-        else if (argument == "--give-orders")
-            result.give_orders = true;
-        else if (argument == "--zoom") {
-            const auto text = std::string(value(argument));
-            char* end = nullptr;
-            result.match_zoom = std::strtof(text.c_str(), &end);
-            if (end == text.c_str() || *end != '\0' || !(result.match_zoom > 0.0F))
-                throw std::runtime_error("--zoom expects a positive number");
-        } else if (argument == "--reclaim-check")
-            result.reclaim_check = true;
-        else if (argument == "--resolution") {
-            const auto text = std::string(value(argument));
-            const auto separator = text.find('x');
-            if (separator == std::string::npos)
-                throw std::runtime_error("--resolution expects WIDTHxHEIGHT");
-            result.match_width = static_cast<int>(parse_count(text.substr(0, separator)));
-            result.match_height = static_cast<int>(parse_count(text.substr(separator + 1)));
-            if (result.match_width <= 0 || result.match_height <= 0)
-                throw std::runtime_error("--resolution expects a width and height above 0");
-            result.window_resolution = true;
-        } else if (argument == "--camera") {
-            const auto text = std::string(value(argument));
-            const auto separator = text.find(',');
-            if (separator == std::string::npos)
-                throw std::runtime_error("--camera expects X,Z");
-            result.camera = {
-                static_cast<int>(parse_count(text.substr(0, separator))),
-                static_cast<int>(parse_count(text.substr(separator + 1)))
-            };
-        } else if (argument == "--skip-intro")
-            result.skip_intro = true;
-        else if (argument == "--headless-check")
-            result.headless_check = true;
-        else if (argument == "--mute")
-            result.mute = true;
-        else if (argument == "--check-navigation") {
-            result.check_navigation = true;
-            // A group's name may follow; any other word is read as before.
-            if (index + 1 < argc)
-                if (const auto group = navigation_group_named(argv[index + 1])) {
-                    result.navigation_group = *group;
-                    ++index;
-                }
-        } else if (argument == "--check-match-dialogs")
-            result.check_match_dialogs = true;
-        else if (argument == "--check-load-save")
-            result.check_load_save = true;
-        else if (argument == "--check-frontend-controls")
-            result.check_frontend_controls = true;
-        else if (argument == "--check-scroll-bars")
-            result.check_scroll_bars = true;
-        else if (argument == "--check-engine-settings")
-            result.check_engine_settings = true;
-        else if (argument == "--check-user-folder")
-            result.check_user_folder = true;
-        else if (argument == "--check-mod-switch")
-            result.check_mod_switch = true;
-        else if (argument == "--check-map-packs")
-            result.check_map_packs = true;
-        else if (argument == "--check-mod-warning")
-            result.check_mod_warning = true;
-        else if (argument == "--check-mod-install")
-            result.check_mod_install = true;
-        else if (argument == "--check-language-install")
-            result.check_language_install = true;
-        else if (argument == "--open" || argument == "--install-mod")
-            result.open_files.push_back(opened_file_path(value(argument)));
-        else if (argument == "--check-renderer-ladder")
-            result.check_renderer_ladder = true;
-        else if (argument == "--render-fault")
-            result.render_fault = parse_render_fault(value(argument));
-        else if (argument == "--check-briefing-narration")
-            result.check_briefing_narration = true;
-        else if (argument == "--check-match-layers")
-            result.check_match_layers = true;
-        else if (argument == "--check-render-tiers")
-            result.check_render_tiers = true;
-        else if (argument == "--check-match-orders")
-            result.check_match_orders = true;
-        else if (argument == "--check-factory-orders")
-            result.check_factory_orders = true;
-        else if (argument == "--check-unit-speech")
-            result.check_unit_speech = true;
-        else if (argument == "--check-download-builds")
-            result.check_download_builds = true;
-        else if (argument == "--check-stockpile-builds")
-            result.check_stockpile_builds = true;
-        else if (argument == "--check-unit-page-memory")
-            result.check_unit_page_memory = true;
-        else if (argument == "--check-side-column")
-            result.check_side_column = true;
-        else if (argument == "--check-match-bars")
-            result.check_match_bars = true;
-        else if (argument == "--check-unit-pages")
-            result.check_unit_pages = value(argument);
-        else if (argument == "--check-kill-board")
-            result.check_kill_board = true;
-        else if (argument == "--check-paused-save")
-            result.check_paused_save = true;
-        else if (argument == "--check-simulation-hash")
-            result.check_simulation_hash = true;
-        else if (argument == "--check-unit-language")
-            result.check_unit_language = value(argument);
-        else if (argument == "--check-language-switch")
-            result.check_language_switch = true;
-        else if (argument == "--check-language-registry")
-            result.check_language_registry = true;
-        else if (argument == "--check-patrol-reclaim")
-            result.check_patrol_reclaim = true;
-        else if (argument == "--check-reclaim-cursor")
-            result.check_reclaim_cursor = true;
-        else if (argument == "--check-build-preview")
-            result.check_build_preview = true;
-        else if (argument == "--check-pointer-interfaces")
-            result.check_pointer_interfaces = true;
-        else if (argument == "--check-megamap-clicks")
-            result.check_megamap_clicks = true;
-        else if (argument == "--check-radar-orders")
-            result.check_radar_orders = true;
-        else if (argument == "--check-touch-controls")
-            result.check_touch_controls = true;
-        else if (argument == "--check-pad-controls")
-            result.check_pad_controls = true;
-        else if (argument == "--check-running-while-inactive")
-            result.check_running_while_inactive = true;
-        else if (argument == "--touch-controls")
-            result.touch_controls = true;
-        else if (argument == "--check-game-files")
-            result.check_game_files = true;
-        else if (argument == "--no-game-files-screen")
-            result.no_game_files_screen = true;
-        else if (argument == "--game-files-route")
-            result.game_files_route = parse_game_files_route(value(argument));
-        else if (argument == "--game-files-expect")
-            result.game_files_expect = parse_game_files_expect(value(argument));
-        else if (argument == "--game-files-source")
-            result.game_files_source = path_from_utf8(value(argument));
-        else if (argument == "--game-files-free-bytes")
-            result.game_files_free_bytes = parse_game_files_bytes(value(argument), argument, false);
-        else if (argument == "--game-files-copy-rate")
-            result.game_files_copy_rate = parse_game_files_bytes(value(argument), argument, true);
-        else if (argument == "--game-files-stop-after")
-            result.game_files_stop_after = parse_game_files_bytes(value(argument), argument, true);
-        else if (argument == "--check-multiplayer-menu")
-            result.check_multiplayer_menu = true;
-        else if (argument == "--check-director-view")
-            result.check_director_view = true;
-        else if (argument == "--check-director-render")
-            result.check_director_render = true;
-        else if (argument == "--check-interpolation")
-            result.check_interpolation = true;
-        else if (argument == "--check-unit-playout")
-            result.check_unit_playout = true;
-        else if (argument == "--generate-script")
-            result.generate_script = path_from_utf8(value(argument));
-        else if (argument == "--render-script")
-            result.render_script = path_from_utf8(value(argument));
-        else if (argument == "--output")
-            result.director_output = path_from_utf8(value(argument));
-        else if (argument == "--chunks")
-            result.director_chunks = parse_chunks(value(argument));
-        else if (argument == "--stills")
-            result.director_stills = parse_stills(value(argument));
-        else if (argument == "--trace-input")
-            result.trace_input = true;
-        else if (argument == "--trace-lookups")
-            result.trace_lookups = path_from_utf8(value(argument));
-        else if (argument == "--debug-order-lines")
-            result.debug_order_lines = true;
-        else if (argument == "--trace-digest")
-            result.trace_digest = path_from_utf8(value(argument));
-        else if (argument == "--trace-units")
-            result.trace_units = path_from_utf8(value(argument));
-        else if (argument == "--seed")
-            result.seed = parse_seed(value(argument));
-        else if (argument == "--draw-threads")
-            result.draw_threads = parse_draw_threads(value(argument), argument);
-        else if (argument == "--capture-video")
-            result.capture_video = path_from_utf8(value(argument));
-        else if (argument == "--showcase")
-            result.showcase = parse_showcase(value(argument));
-        // A bare -h stays the help flag, so the game's "-h NAME" (name as
-        // the next argument) must be written -hNAME here.
-        else if (argument == "--help" || argument == "-h") {
+        } else if (argument == "--help" || argument == "-h") {
+            // A bare -h stays the help flag, so the game's "-h NAME" (name as
+            // the next argument) must be written -hNAME here.
             std::cout
                 << "usage: open-annihilation [--game-dir PATH | --choose-game-dir] "
                    "[--archive PATH]... "
@@ -1018,7 +1198,7 @@ namespace {
                    "[--check-download-builds] [--check-stockpile-builds] "
                    "[--check-unit-page-memory] [--check-side-column] [--check-match-bars] "
                    "[--check-unit-pages whole|scaled:TYPE,...] "
-                   "[--check-kill-board] [--check-simulation-hash] "
+                   "[--check-kill-board] [--check-paused-save] [--check-simulation-hash] "
                    "[--check-unit-language TAG] "
                    "[--check-language-switch] "
                    "[--check-language-registry] "
@@ -1078,7 +1258,6 @@ namespace {
                 << extension_text(extension, ExtensionText::usage_note, "");
             std::exit(0);
         } else if (argument.starts_with("--")) {
-            ArgumentCursor cursor{argc, argv, &index, argument};
             const OptionValues values{&cursor, next_value};
             uint32_t effects = 0;
             if (!call_hook_or_raise<&Extension::take_option>(
