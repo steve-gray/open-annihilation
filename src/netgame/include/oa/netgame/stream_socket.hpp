@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// TCP streams on this machine's loopback address, through which a program
-// on the same machine reaches the game: a listener and the connections it
-// accepts, all non-blocking, read and written without waiting. They are
+// TCP streams: a listener on this machine's loopback address, the
+// connections it accepts, and an outbound connection to any IPv4 address.
+// All are non-blocking, and read and written without waiting. They are
 // served by socket_host.cpp, the one source that calls the system's socket
-// functions, with the same sockets as network play's: Winsock 2 on Windows
-// from Windows XP on, and the system's sockets elsewhere.
+// functions, with the same sockets as network play's: Winsock 1.1 on
+// Windows 95, Winsock 2 on Windows from Windows XP on, and the system's
+// sockets elsewhere.
 #pragma once
 
 #include "oa/netgame/socket_host.hpp"
@@ -78,5 +79,65 @@ void stream_finish(intptr_t stream) noexcept;
 ///
 /// @param[in,out] stream the socket; invalid_socket afterwards
 void stream_close(intptr_t* stream) noexcept;
+
+/// Starts a non-blocking TCP connection to an IPv4 address and returns at once.
+///
+/// The socket is prepared as one stream_accept returns: non-blocking, never
+/// ending the program when the other end has gone, and sending what it is
+/// given at once. The connection may still be opening when this returns;
+/// stream_wait_open waits for it.
+///
+/// @param to the IPv4 address and port, the port in host order
+/// @param[out] error why it failed, ending in a zero byte; unchanged when a connection was started
+/// @param error_size the bytes `error` holds
+/// @return the connection, which may still be opening, or invalid_socket when
+///         the system refused at once, including 0.0.0.0, 255.255.255.255 and port 0
+[[nodiscard]] intptr_t
+stream_connect(const Address& to, char* error, std::size_t error_size) noexcept;
+
+/// How far a connection stream_connect started has got.
+enum class StreamOpen : uint8_t {
+    open,    ///< writable, and the system reports no error
+    opening, ///< the time ran out while the connection was still opening
+    failed,  ///< an error, a refusal or an invalid socket
+};
+
+/// Waits up to a time limit for a connection stream_connect started to open.
+///
+/// @param stream the connection
+/// @param wait_ms how long to wait, in milliseconds; 0 only looks
+/// @return open once the connection is writable and the system reports no
+///         error; failed on an error, a refusal or an invalid socket; opening
+///         when the time ran out
+[[nodiscard]] StreamOpen stream_wait_open(intptr_t stream, uint32_t wait_ms) noexcept;
+
+/// One stream stream_wait watches, and what it found.
+///
+/// `stream`, `read` and `write` are what was asked. `readable`, `writable`
+/// and `failed` are what was found.
+struct StreamWaitEntry {
+    intptr_t stream{invalid_socket};
+    bool read{};     ///< wait for a connection, bytes or the other end's end
+    bool write{};    ///< wait until bytes can be written
+    bool readable{}; ///< a connection, bytes or the other end's end is ready
+    bool writable{}; ///< bytes can be written
+    bool failed{};   ///< the stream failed, or it is not a socket
+};
+
+/// The most streams one stream_wait watches.
+inline constexpr std::size_t stream_wait_most = 16;
+
+/// Waits until one stream is ready or the time runs out.
+///
+/// A listener is readable when a connection waits to be accepted. A stream
+/// is readable when bytes or the other end's end have arrived.
+///
+/// @param[in,out] entries the streams and what to wait for on each; the found flags are written
+/// @param count entries at `entries`, from 1 to stream_wait_most
+/// @param wait_ms how long to wait, in milliseconds; 0 only looks
+/// @return the entries with something found; 0 when the time ran out; -1 when
+///         `count` is 0 or above stream_wait_most, or the wait itself failed
+[[nodiscard]] int
+stream_wait(StreamWaitEntry* entries, std::size_t count, uint32_t wait_ms) noexcept;
 
 } // namespace oa::netgame::sock
