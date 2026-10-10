@@ -34,4 +34,11 @@ if(BUILD_TESTING)
   add_executable(oa-hpi-layering-test tests/layering_test.cpp)
   target_link_libraries(oa-hpi-layering-test PRIVATE oa-formats-hpi oa-options)
   add_test(NAME hpi-layering COMMAND oa-hpi-layering-test)
+  # One folder or zip beneath the loose files and the archives, mounted and
+  # unmounted while other threads read.
+  add_executable(oa-hpi-pack-layer-test tests/pack_layer_test.cpp)
+  target_link_libraries(oa-hpi-pack-layer-test PRIVATE oa-formats-hpi oa-formats-zip oa-base-threads
+    oa-options)
+  add_test(NAME hpi-pack-layer COMMAND oa-hpi-pack-layer-test)
+  set_tests_properties(hpi-pack-layer PROPERTIES TIMEOUT 60)
 endif()
