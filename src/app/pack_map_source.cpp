@@ -71,7 +71,32 @@ oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime) {
         return mounted;
     };
     source.release = [](void* context) { static_cast<Runtime*>(context)->release_pack_map(); };
+    source.base_count = &Runtime::bound_base_count;
+    source.base_at = &Runtime::bound_base_at;
     return source;
+}
+
+int32_t Runtime::bound_base_count(void* context) {
+    const auto& maps = static_cast<const Runtime*>(context)->base_map_summaries_;
+    if (maps.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+        return std::numeric_limits<int32_t>::max();
+    return static_cast<int32_t>(maps.size());
+}
+
+bool Runtime::bound_base_at(
+    void* context, int32_t index, oa::ui::frontend_multiplayer::LobbyPackMap* out
+) {
+    if (out == nullptr || index < 0)
+        return false;
+    const auto& maps = static_cast<const Runtime*>(context)->base_map_summaries_;
+    if (static_cast<std::size_t>(index) >= maps.size())
+        return false;
+    const Runtime::BaseMapSummary& map = maps[static_cast<std::size_t>(index)];
+    out->name = map.name.c_str();
+    out->description = map.description.c_str();
+    out->size = map.size.c_str();
+    out->memory_mb = map.memory_mb;
+    return true;
 }
 
 } // namespace oa::app

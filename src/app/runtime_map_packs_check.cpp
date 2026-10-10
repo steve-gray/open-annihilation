@@ -467,6 +467,26 @@ void Runtime::check_map_packs() {
         screen_ == Screen::map_selection && row_of(isle) < bound_map_names_.size(),
         "the map picker does not list the pack map"
     );
+
+    // Highlighting a base map reads its terrain once: the match parses it,
+    // and the preview takes the minimap from that parse.
+    struct TntLookups {
+        std::string path;
+        int count = 0;
+    } watched{"maps/" + first_map_name_ + ".tnt", 0};
+
+    assets_.observe_lookups({&watched, [](void* context, std::string_view path) {
+                                 auto* lookups = static_cast<TntLookups*>(context);
+                                 if (path == lookups->path)
+                                     ++lookups->count;
+                             }});
+    preview_map_index(row_of(first_map_name_));
+    assets_.observe_lookups({});
+    require(
+        watched.count == 1 && row_of(first_map_name_) < bound_map_names_.size() && map_picture_ &&
+            !map_picture_->rgb.empty(),
+        "highlighting a base map does not read its terrain once"
+    );
     preview_map_index(row_of(isle));
     require(
         isle_mounted() && shows_title(kIslesPack.title) && map_picture_ &&

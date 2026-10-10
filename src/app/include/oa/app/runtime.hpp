@@ -66,6 +66,8 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/renderer_records.hpp"
 #include "oa/ui/frontend_renderer/scroll_bars.hpp"
 #include "oa/present/world_renderer/world_radar.hpp"
@@ -145,6 +147,7 @@ class FontStack;
 
 namespace oa::ui::frontend_multiplayer {
 struct LobbyMapSource;
+struct LobbyPackMap;
 } // namespace oa::ui::frontend_multiplayer
 
 namespace oa::app {
@@ -1933,9 +1936,9 @@ class Runtime final : public menu::Host,
     /// Returns the battle room's source of installed pack maps
     /// (pack_map_source in pack_map_source.hpp).
     ///
-    /// The names point into the installed packs, which live as long as the
-    /// runtime does. Choosing a map mounts its files; releasing them
-    /// unmounts that layer.
+    /// The names point into the installed packs and the base-map summaries,
+    /// which live as long as the runtime does. Choosing a map mounts its
+    /// files; releasing them unmounts that layer.
     ///
     /// @param runtime the running app
     /// @return the source the multiplayer screens bind
@@ -4119,6 +4122,50 @@ class Runtime final : public menu::Host,
     /// @param registry the registry id
     /// @return the ID, or nothing when it is off or the generator cannot be read
     [[nodiscard]] std::optional<std::string> content_install_id(std::string_view registry);
+
+    /// Queues one catalogue package for download.
+    ///
+    /// The target comes from the current snapshot. A registry whose install
+    /// ID is required has one made or read first, and the download is refused
+    /// when that ID is off. Nothing is fetched on this thread.
+    ///
+    /// @param registry the registry id
+    /// @param key the package key
+    /// @param reason why the player asked
+    /// @param[out] why why it was not queued; may be null
+    /// @return the queue item, or nothing when it was refused
+    [[nodiscard]] std::optional<uint64_t> queue_download(
+        std::string_view registry,
+        std::string_view key,
+        oa::app::content::DownloadReason reason,
+        std::string* why
+    );
+
+    /// Returns the download queue, starting the content service on first use.
+    ///
+    /// @return the queue
+    [[nodiscard]] oa::app::content::Downloads& content_downloads();
+
+    /// Stops downloads for a match, before the match loads anything.
+    void pause_content_for_match();
+
+    /// Reads every registry's install ID again and tells the queue.
+    ///
+    /// Settings › Downloads calls this after it resets an ID or turns one on
+    /// or off. No ID is made here.
+    void content_install_ids_changed();
+
+    /// Returns the folder that holds downloaded packages.
+    ///
+    /// @return the downloads folder; empty when the game has no data folder
+    [[nodiscard]] std::filesystem::path content_downloads_folder() const;
+
+    /// Removes downloaded packages no queued item is using.
+    ///
+    /// This is the player's EMPTY in Settings › Downloads.
+    ///
+    /// @return what was removed, and how many files were left in use
+    oa::app::content::EmptyResult empty_content_downloads();
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
@@ -12711,10 +12758,32 @@ class Runtime final : public menu::Host,
     /// @return the object
     init::MapListHandle construct(init::MapListHandle handle, int32_t selector_value) override;
 
+    /// Records one base map the start scan listed: its title, description, size,
+    /// the most start positions of a network schema, and the memory its terrain needs.
+    ///
+    /// @param name the map's name
+    /// @param ota the map's parsed document; null records the name alone
+    void remember_base_map(const char* name, const oa::formats::tdf::Document* ota);
+
+    /// How many base maps the start scan kept, for the battle room's list.
+    ///
+    /// @param context the running app
+    /// @return the count
+    static int32_t bound_base_count(void* context);
+
+    /// Writes one base map the start scan kept into the battle room's list.
+    ///
+    /// @param context the running app
+    /// @param index the map's place, from 0
+    /// @param[out] out the map; left unchanged when `index` is out of range
+    /// @return true when `out` was written
+    static bool
+    bound_base_at(void* context, int32_t index, oa::ui::frontend_multiplayer::LobbyPackMap* out);
+
     /// Lists the maps the skirmish and multiplayer map pickers offer: every map with a multiplayer
     /// schema, in find order; the first one is the default selection. The installed pack maps
     /// follow, in the order the installed packs list them, without opening any of their files;
-    /// the default selection is always a base map.
+    /// the default selection is always a base map. The same scan records each base map's summary.
     ///
     /// Game data with no such map, such as the Total Annihilation demo (1997), leaves the
     /// default selection empty, and the list empty unless pack maps are installed.
@@ -13496,6 +13565,18 @@ class Runtime final : public menu::Host,
     fs::path preference_path_;
     std::string first_map_name_;
     std::vector<std::string> eligible_map_names_;
+
+    /// One base map gathered while the eligible maps are listed.
+    struct BaseMapSummary {
+        std::string name;
+        std::string title;       ///< the map's mission name
+        std::string description; ///< the map's mission description
+        std::string size;        ///< the map's width and height, as its file states it
+        int32_t players{};       ///< the most start positions of a network schema
+        int32_t memory_mb{};     ///< memory the map's terrain needs, in MB
+    };
+
+    std::vector<BaseMapSummary> base_map_summaries_;
     std::optional<oa::formats::ota::MapMetadata> selected_map_metadata_;
     // The selected map's OTA, whose GlobalHeader the session and scenario read.
     std::optional<oa::formats::tdf::OwnedDocument> selected_ota_document_;

@@ -110,14 +110,27 @@ std::string ota(const char* schema_types) {
     return text + "}\n";
 }
 
-struct Cursor {
+struct Watch {
     std::vector<uint32_t> animations;
+    std::vector<std::string> eligible;
+    std::vector<std::string> missions;
 };
 
-MapScanHost scan_host(Cursor& cursor) {
-    return {&cursor, [](void* context, uint32_t animation) {
-                static_cast<Cursor*>(context)->animations.push_back(animation);
-            }};
+MapScanHost scan_host(Watch& watch) {
+    return {
+        &watch,
+        [](void* context, uint32_t animation) {
+            static_cast<Watch*>(context)->animations.push_back(animation);
+        },
+        [](void* context, const char* name, const oa::formats::tdf::Document* ota) {
+            auto* watched = static_cast<Watch*>(context);
+            watched->eligible.emplace_back(name != nullptr ? name : "");
+            const auto* header =
+                ota != nullptr ? oa::formats::tdf::find_child(ota->root, "GlobalHeader") : nullptr;
+            const char* mission = oa::formats::tdf::find_value(header, "missionname");
+            watched->missions.emplace_back(mission != nullptr ? mission : "");
+        }
+    };
 }
 
 std::vector<std::string> unpack(const char* names, int32_t count) {
@@ -140,7 +153,7 @@ void list_tests() {
     const auto files = services(memory);
 
     MapList list{};
-    Cursor cursor;
+    Watch cursor;
     char* names = nullptr;
     const auto count =
         map_build_multiplayer_list(list, files, scan_host(cursor), &names, false, false);
@@ -153,6 +166,11 @@ void list_tests() {
     expect(list.bytes == 19 && names[18] == '\0', "packed block closes with a NUL");
     expect(list.complete == 1, "full scan marks the list complete");
     expect(cursor.animations == std::vector<uint32_t>{20, 19}, "busy cursor around the scan");
+    expect(
+        cursor.eligible == std::vector<std::string>{"Alpha", "Gamma Prime"} &&
+            cursor.missions == std::vector<std::string>{"Test", "Test"},
+        "eligible is called once per listed map, with its document"
+    );
     std::free(names);
 
     // Later calls copy the cached list without scanning again.
@@ -171,6 +189,7 @@ void list_tests() {
         map_build_multiplayer_list(list, files, scan_host(cursor), nullptr, false, false) == 2,
         "count only"
     );
+    expect(cursor.eligible.size() == 2, "a cached list does not call eligible again");
 
     CampaignFile* context = new CampaignFile;
     campaign_file_init(context);
@@ -183,7 +202,7 @@ void list_tests() {
 
     // A first-only scan stops at the first eligible map and, when taken,
     // hands its block over so the next call scans again.
-    Cursor quiet;
+    Watch quiet;
     names = nullptr;
     expect(
         map_build_multiplayer_list(list, files, scan_host(quiet), &names, true, true) == 1,
@@ -191,6 +210,9 @@ void list_tests() {
     );
     expect(
         quiet.animations == std::vector<uint32_t>{20, 19}, "first-only scan shows the busy cursor"
+    );
+    expect(
+        quiet.eligible == std::vector<std::string>{"Alpha"}, "a first-only scan calls eligible once"
     );
     expect(list.names == nullptr && list.complete == 0, "partial list handed over");
     expect(names != nullptr && std::string(names) == "Alpha", "first eligible map");
@@ -205,11 +227,17 @@ void list_tests() {
     // capitalisation; it is still one map.
     memory.listed_again = {"Alpha.ota", "GAMMA.OTA"};
     names = nullptr;
-    const auto again = map_build_multiplayer_list(list, files, MapScanHost{}, &names, false, false);
+    Watch again_watch;
+    const auto again =
+        map_build_multiplayer_list(list, files, scan_host(again_watch), &names, false, false);
     expect(
         again == 2 && names != nullptr &&
             unpack(names, again) == std::vector<std::string>{"Alpha", "Gamma Prime"},
         "a map listed by two archives is listed once"
+    );
+    expect(
+        again_watch.eligible == std::vector<std::string>{"Alpha", "Gamma Prime"},
+        "a map listed by two archives is reported once"
     );
     std::free(names);
     map_clear_list_cache(list, nullptr);
@@ -247,7 +275,9 @@ void long_and_suffixed_name_tests() {
 
     MapList list{};
     char* names = nullptr;
-    const auto count = map_build_multiplayer_list(list, files, MapScanHost{}, &names, false, false);
+    Watch watch;
+    const auto count =
+        map_build_multiplayer_list(list, files, scan_host(watch), &names, false, false);
     const auto listed = unpack(names, count);
     expect(
         count == 2 && listed.size() == 2, "the 127-byte name is listed and the 128-byte name is not"
@@ -256,6 +286,7 @@ void long_and_suffixed_name_tests() {
     expect(
         listed.size() == 2 && listed[1] == isle, "isle_of_ashes@archipelago is listed untranslated"
     );
+    expect(watch.eligible == listed, "eligible is called for each listed name and no other");
     std::free(names);
     map_clear_list_cache(list, nullptr);
 }
