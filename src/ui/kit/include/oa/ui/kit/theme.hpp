@@ -298,6 +298,44 @@ struct Metrics {
     int32_t hover_card_padding{};
     /// How far a hover card's arrow reaches out of its edge.
     int32_t hover_card_arrow{};
+    /// The rows between a settings row's rule and its label line, and under
+    /// its last part. Developer's own rows keep half of it.
+    int32_t row_padding{};
+    /// The columns kept clear between a row's label and the control or lock
+    /// beside it, and between a lock and the control it stands beside.
+    int32_t label_gap{};
+    /// The rows between a row's label line and its first hint line.
+    int32_t hint_gap{};
+    /// The rows added between two lines of a hint while the words are drawn
+    /// in the modern fonts, whose ideographs stand as tall as a hint line.
+    int32_t tall_hint_line_gap{};
+    /// The most lines a hint takes.
+    int32_t most_hint_lines{};
+    /// The most lines a notice under a row's label takes.
+    int32_t most_notice_lines{};
+    /// The rows between a row's last hint line and its slider, drop-down
+    /// field or text field.
+    int32_t slider_gap{};
+    /// A slider line's height: the track with its knob and stops, and the value.
+    int32_t slider_line_height{};
+    /// The width of a slider's value, right of its track.
+    int32_t slider_value_width{};
+    /// The columns between a slider's track and its value.
+    int32_t slider_value_gap{};
+    /// A lock's width: the padlock and its text, on a row's label line.
+    int32_t lock_width{};
+    /// A drop-down's field's width, and a row's text field's.
+    int32_t choice_width{};
+    /// A wide drop-down's field's width: room for the longest choice a
+    /// settings row offers, in the regular font with the field's inset and arrow.
+    int32_t wide_choice_width{};
+    /// A row's own button's width, on its label line: MANAGE…'s.
+    int32_t button_row_width{};
+    /// The widths of a row of buttons on its label line, left to right: Your
+    /// files' SAVES, SCREENSHOTS and MODS.
+    std::array<int32_t, 3> folder_button_widths{};
+    /// The columns between two buttons of a row.
+    int32_t folder_button_gap{};
 };
 
 /// Compact metrics: the settings dialog's sizes at 0.7.3, exactly, and the
@@ -372,6 +410,22 @@ inline constexpr Metrics compact_metrics{
     .card_inset = 4,
     .hover_card_padding = 6,
     .hover_card_arrow = 5,
+    .row_padding = 8,
+    .label_gap = 8,
+    .hint_gap = 2,
+    .tall_hint_line_gap = 3,
+    .most_hint_lines = 2,
+    .most_notice_lines = 4,
+    .slider_gap = 4,
+    .slider_line_height = 14,
+    .slider_value_width = 110,
+    .slider_value_gap = 10,
+    .lock_width = 148,
+    .choice_width = 200,
+    .wide_choice_width = 248,
+    .button_row_width = 76,
+    .folder_button_widths = {46, 82, 44},
+    .folder_button_gap = 4,
 };
 
 } // namespace oa::ui::kit
