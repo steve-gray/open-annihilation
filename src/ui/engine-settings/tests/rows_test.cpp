@@ -157,35 +157,32 @@ settings::Dialog engine_dialog() {
     return dialog;
 }
 
-/// Returns what a setting's row is, as the dialog's predicates tell it.
+/// Returns a model of a dialog's chosen settings, the dialog's only read.
+///
+/// @param dialog the dialog
+/// @return the model
+geometry::SettingsModel model_of(const settings::Dialog& dialog) {
+    return geometry::reading(dialog.chosen, dialog);
+}
+
+/// Returns what a setting's row is: its row spec's kind.
 ///
 /// @param setting the setting
 /// @return its kind
 RowKind row_kind(Setting setting) {
-    if (geometry::is_slider(setting))
-        return RowKind::slider;
-    if (geometry::is_strip(setting))
-        return RowKind::levels;
-    if (geometry::is_choice(setting))
-        return RowKind::choice;
-    if (geometry::is_button(setting))
-        return RowKind::value_and_button;
-    if (geometry::is_buttons(setting))
-        return RowKind::buttons;
-    if (geometry::is_text(setting))
-        return RowKind::text;
-    return RowKind::toggle;
+    return geometry::kind_of(setting);
 }
 
-/// Returns the lines a setting's hint takes.
+/// Returns the lines a setting's hint takes, as its row spec gives them.
 ///
 /// @param setting the setting
 /// @param deck with the Steam Input notice and a Steam Deck's 90 Hz screen
 /// @return the lines
 std::size_t row_lines(Setting setting, bool deck) {
-    return geometry::hint_line_count(
-        setting, deck ? geometry::RowContext{true, 90} : geometry::RowContext{}
-    );
+    settings::Dialog dialog = engine_dialog();
+    dialog.steam_input = deck;
+    dialog.steam_deck_panel_hz = deck ? 90 : 0;
+    return kit::view_of(geometry::row_spec(setting), model_of(dialog), {}).hints.size();
 }
 
 /// Returns the stops, levels or choices a setting's row offers.
@@ -194,13 +191,7 @@ std::size_t row_lines(Setting setting, bool deck) {
 /// @param setting the setting
 /// @return the count; 0 for a row that offers none
 int32_t row_values(const settings::Dialog& dialog, Setting setting) {
-    if (geometry::is_slider(setting))
-        return geometry::stops_of(dialog.chosen, setting);
-    if (geometry::is_strip(setting))
-        return static_cast<int32_t>(geometry::strip_of(setting).levels);
-    if (geometry::is_choice(setting))
-        return static_cast<int32_t>(geometry::choice_count(dialog, setting));
-    return 0;
+    return kit::row_count(geometry::row_spec(setting), model_of(dialog));
 }
 
 /// Returns a strip's level width or a drop-down's field width.
@@ -208,11 +199,10 @@ int32_t row_values(const settings::Dialog& dialog, Setting setting) {
 /// @param setting the setting
 /// @return the width; 0 for any other row
 int32_t row_width(Setting setting) {
-    if (geometry::is_strip(setting))
-        return geometry::strip_of(setting).level_width;
-    if (geometry::is_choice(setting))
-        return geometry::choice_field_width(setting);
-    return 0;
+    const auto& spec = geometry::row_spec(setting);
+    if (spec.kind != RowKind::levels && spec.kind != RowKind::choice)
+        return 0;
+    return spec.control_width;
 }
 
 /// Returns the levels a strip lets a player choose.
@@ -220,9 +210,10 @@ int32_t row_width(Setting setting) {
 /// @param setting the setting
 /// @return the levels; 0 for any other row
 int32_t row_offered(Setting setting) {
-    if (!geometry::is_strip(setting))
+    const auto& spec = geometry::row_spec(setting);
+    if (spec.kind != RowKind::levels)
         return 0;
-    return static_cast<int32_t>(geometry::offered_levels(geometry::strip_of(setting)));
+    return kit::row_offered(spec, model_of(engine_dialog()));
 }
 
 /// Returns whether a setting's hint lines are its status.
@@ -230,10 +221,11 @@ int32_t row_offered(Setting setting) {
 /// @param setting the setting
 /// @return true when they are
 bool row_status(Setting setting) {
-    return geometry::hint_is_status(setting);
+    return geometry::row_spec(setting).hint_is_status;
 }
 
-/// Returns a setting's lock among the dialog's locks.
+/// Returns a setting's lock among the dialog's locks: the field of the
+/// locks its row reads.
 ///
 /// @param locks the dialog's locks
 /// @param setting the setting
@@ -247,7 +239,7 @@ Lock row_lock(const Locks& locks, Setting setting) {
 /// @param setting the setting
 /// @return the label, in English
 std::string_view row_label(Setting setting) {
-    return geometry::label_of(setting);
+    return geometry::row_spec(setting).label;
 }
 
 void every_setting_has_its_row() {

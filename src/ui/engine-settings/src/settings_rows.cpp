@@ -39,6 +39,187 @@ using Hint = std::array<std::string_view, 2>;
 /// The number of settings: Setting's enumerators.
 constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::hud_scaling) + 1;
 
+// ---------------------------------------------------------------------------
+// The sections' rows.
+
+/// Mods' one row: the list of the mods the game can play.
+constexpr std::array<Setting, 1> kModsRows{Setting::mod};
+/// Controls' rows: the zoom's limits right under the switch for the wheel,
+/// and how far past the map's edges the view goes under them.
+constexpr std::array<Setting, 6> kControlsRows{
+    Setting::wheel_zoom,
+    Setting::max_zoom_out,
+    Setting::max_zoom_in,
+    Setting::view_past_map_edge,
+    Setting::escape_opens_menu,
+    Setting::switch_alt,
+};
+/// Common Tweaks' rows: the player's own folder first.
+constexpr std::array<Setting, 3> kCommonTweaksRows{
+    Setting::user_folder,
+    Setting::unit_limit,
+    Setting::path_search,
+};
+/// Graphics' rows: how units look zoomed out, the zoom they look so from
+/// right under the way, then the window's frame and the HUD's scaling.
+constexpr std::array<Setting, 12> kGraphicsRows{
+    Setting::max_frame_rate,
+    Setting::anti_aliasing,
+    Setting::screen_size,
+    Setting::hardware_acceleration,
+    Setting::vertical_sync,
+    Setting::menu_scaling,
+    Setting::native_density,
+    Setting::explosion_flash,
+    Setting::zoomed_out_units,
+    Setting::zoomed_out_after,
+    Setting::window_frame,
+    Setting::hud_scaling,
+};
+/// Language's rows: the language first, and the text size right
+/// under the switch it needs.
+constexpr std::array<Setting, 7> kLanguageRows{
+    Setting::language,
+    Setting::modern_fonts,
+    Setting::text_size,
+    Setting::text_outline,
+    Setting::text_shadow,
+    Setting::text_background,
+    Setting::unicode_chat,
+};
+/// Touch's rows: how a finger's drag and hold work, then the latches, the
+/// haptics, the side the controls stand on and their size.
+constexpr std::array<Setting, 6> kTouchRows{
+    Setting::touch_drag,
+    Setting::touch_hold_delay,
+    Setting::touch_latches,
+    Setting::touch_haptics,
+    Setting::touch_left_handed,
+    Setting::touch_control_size,
+};
+/// Controller's rows: the scheme, the right trackpad's pointer, the right
+/// stick and the gyro, what the pad feels and shows, the mirror, then the
+/// rows it shares with Touch.
+constexpr std::array<Setting, 15> kControllerRows{
+    Setting::pad_scheme,
+    Setting::pad_right_trackpad,
+    Setting::pad_pointer_speed,
+    Setting::pad_acceleration,
+    Setting::pad_glide,
+    Setting::pad_right_stick,
+    Setting::pad_magnetism,
+    Setting::pad_gyro,
+    Setting::pad_gyro_speed,
+    Setting::pad_haptics,
+    Setting::pad_prompts,
+    Setting::pad_left_handed,
+    Setting::touch_control_size,
+    Setting::touch_hold_delay,
+    Setting::touch_latches,
+};
+/// Controller's rows under the Steam Input notice, while the gamepad
+/// reaches the game through Steam Input.
+constexpr std::array<Setting, kControllerRows.size() + 1> kSteamInputControllerRows = [] {
+    std::array<Setting, kControllerRows.size() + 1> rows{};
+    rows[0] = Setting::pad_steam_input_notice;
+    for (std::size_t index = 0; index < kControllerRows.size(); ++index)
+        rows[index + 1] = kControllerRows[index];
+    return rows;
+}();
+/// Game files' rows: what is installed with its MANAGE… button, the
+/// backups switch, and where the files are.
+constexpr std::array<Setting, 3> kGameFilesRows{
+    Setting::game_files_summary,
+    Setting::game_files_backed_up,
+    Setting::game_files_location,
+};
+/// Developer's rows, over its list.
+constexpr std::array<Setting, developer_row_count> kDeveloperRows{
+    Setting::developer_mode,
+    Setting::frame_stats,
+};
+/// The mod's keys.
+constexpr std::array<Setting, 3> kModKeysRows{
+    Setting::snap_override_key,
+    Setting::autoclick_key,
+    Setting::rotate_build_key,
+};
+/// Patrolling builders.
+constexpr std::array<Setting, 3> kModPatrolRows{
+    Setting::patrol_hold,
+    Setting::patrol_maneuver,
+    Setting::patrol_roam,
+};
+/// Guarding builders.
+constexpr std::array<Setting, 3> kModGuardRows{
+    Setting::guard_hold,
+    Setting::guard_maneuver,
+    Setting::guard_roam,
+};
+/// The build tools and the mex snap.
+constexpr std::array<Setting, 3> kModToolsRows{
+    Setting::optimize_dt_rows,
+    Setting::full_rings,
+    Setting::mex_snap_radius,
+};
+/// The wreck snap, the chat and the resource bar.
+constexpr std::array<Setting, 3> kModChatRows{
+    Setting::wreck_snap_radius,
+    Setting::chat_backdrop,
+    Setting::panel_background,
+};
+
+/// What each section shows, in Page's order.
+constexpr std::array<std::span<const Setting>, page_count> kPageRows{
+    kModsRows,
+    kControlsRows,
+    kCommonTweaksRows,
+    kLanguageRows,
+    kGraphicsRows,
+    kTouchRows,
+    kControllerRows,
+    kDeveloperRows,
+    kGameFilesRows,
+    kModKeysRows,
+    kModPatrolRows,
+    kModGuardRows,
+    kModToolsRows,
+    kModChatRows,
+};
+/// Each section's name, as its list entry shows it, in Page's order.
+constexpr std::array<std::string_view, page_count> kPageNames{
+    "Mods",
+    "Controls",
+    "Common Tweaks",
+    "Language",
+    "Graphics",
+    "Touch",
+    "Controller",
+    "Developer",
+    "Game files",
+    "Keys",
+    "Patrolling",
+    "Guarding",
+    "Build tools",
+    "Snap & chat",
+};
+/// Each section's heading, in capitals, in Page's order.
+constexpr std::array<std::string_view, page_count> kPageHeadings{
+    "MODS",
+    "CONTROLS",
+    "COMMON TWEAKS",
+    "LANGUAGE",
+    "GRAPHICS",
+    "TOUCH",
+    "CONTROLLER",
+    "DEVELOPER",
+    "GAME FILES",
+    "MOD KEYS",
+    "PATROLLING BUILDERS",
+    "GUARDING BUILDERS",
+    "BUILD TOOLS",
+    "SNAP & CHAT",
+};
 /// Each section's name in kebab case, Page's enumerator with '_' as '-',
 /// in Page's order.
 constexpr std::array<std::string_view, page_count> kPageWords{
@@ -58,7 +239,8 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "mod-chat",
 };
 static_assert(
-    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count, "every section has its word"
+    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
+    "every section has its rows, its name, its heading and its word"
 );
 
 // ---------------------------------------------------------------------------
@@ -295,7 +477,7 @@ template <
     Choice EngineSettings::* Field,
     const std::array<std::string_view, Count>& Captions,
     std::size_t Offered = Count>
-struct Strip {
+struct LevelStrip {
     /// Returns its levels.
     static int32_t count(const SettingsModel&) { return static_cast<int32_t>(Count); }
 
@@ -752,6 +934,191 @@ std::string language_caption(const SettingsModel& model, int32_t index) {
         return std::string(shown_text("System default")) + " (" +
                std::string(system_language(model).endonym) + ")";
     return std::string(offered_languages()[static_cast<std::size_t>(index - 1)]->endonym);
+}
+
+// Hardware acceleration's status.
+
+/// The texts of Hardware acceleration's status, two lines for each state;
+/// an empty second line is the reach line, which says what the graphics
+/// card does on this machine.
+struct StatusText {
+    AccelerationState state{}; ///< the state
+    std::string_view first;    ///< what runs, or why not
+    std::string_view second;   ///< what draws the view or what to do; empty for the reach
+};
+
+/// The second line of a state the processor draws in.
+constexpr std::string_view kProcessorDraws = "The processor draws and scales the view.";
+/// The first line of the Off states.
+constexpr std::string_view kOff = "Off: the processor draws and scales the view.";
+/// The second line of a state that setting it to Off and back, or Restore
+/// defaults, may lift.
+constexpr std::string_view kRetry = "Set it to Off and back, or restore defaults.";
+/// The second line of a state at a start that passed over a failed driver.
+constexpr std::string_view kDriverSkipped = "A failed graphics driver is skipped.";
+/// The first line of a machine under 2 GiB.
+constexpr std::string_view kNeedsMemory = "Not in use: it needs at least 2 GB of memory.";
+
+/// The second line of a state in which Full was asked for and Basic is in
+/// use, that setting it to Off and back, or Restore defaults, may lift.
+constexpr std::string_view kRetryFull = "Set it to Off and back, or restore defaults.";
+/// The first line of Full in use.
+constexpr std::string_view kFullInUse = "Full in use: the graphics card draws the view.";
+
+/// Every state's status, in AccelerationState's order.
+constexpr std::array<StatusText, 25> kStatusTexts{{
+    {AccelerationState::off_driver_skipped, kOff, kDriverSkipped},
+    {AccelerationState::needs_memory_driver_skipped, kNeedsMemory, kDriverSkipped},
+    {AccelerationState::needs_memory, kNeedsMemory, kProcessorDraws},
+    {AccelerationState::off_by_setting, kOff, "Basic lets the graphics card scale it evenly."},
+    {AccelerationState::off_by_command_line, kOff, "For this run only. The setting is kept."},
+    {AccelerationState::environment_driver,
+     "Not in use: the environment names a driver.",
+     kProcessorDraws},
+    {AccelerationState::too_little_memory,
+     "Not in use: there is too little memory.",
+     kProcessorDraws},
+    {AccelerationState::waiting_for_game_end,
+     "Off for this game: in a shared game, Basic",
+     "takes effect from the next game."},
+    {AccelerationState::engine_error, "Not in use: an error stopped it for this run.", kRetry},
+    {AccelerationState::driver_failed, "Not in use: the graphics driver failed.", kRetry},
+    {AccelerationState::game_stopped, "Not in use: the game stopped while using it.", kRetry},
+    {AccelerationState::no_usable_card,
+     "Not in use: no usable graphics card was found.",
+     kProcessorDraws},
+    {AccelerationState::lacks_feature,
+     "Not in use: the graphics card lacks a feature.",
+     kProcessorDraws},
+    {AccelerationState::cannot_save,
+     "Not in use: the game cannot save its files.",
+     kProcessorDraws},
+    {AccelerationState::next_start,
+     "Takes effect from the next start.",
+     "The processor draws and scales the view until then."},
+    {AccelerationState::full_cannot_save, "Basic in use: the game cannot save its files.", {}},
+    {AccelerationState::full_too_little_memory,
+     "Basic in use: there is too little memory for Full.",
+     {}},
+    {AccelerationState::full_stopped, "Basic in use: Full stopped for this run.", kRetryFull},
+    {AccelerationState::full_failed_before,
+     "Basic in use: Full failed before on this driver.",
+     kRetryFull},
+    {AccelerationState::full_lacks_feature,
+     "Basic in use: the card lacks a feature Full needs.",
+     {}},
+    {AccelerationState::full_waiting_for_game_end,
+     "Basic for this game: in a shared game, Full",
+     "takes effect from the next game."},
+    {AccelerationState::in_use_on_another_driver,
+     "Basic in use, on another driver: one failed.",
+     {}},
+    {AccelerationState::in_use_no_smoothing,
+     "Basic in use; no smoothing when zoomed out here.",
+     {}},
+    {AccelerationState::full_in_use, kFullInUse, {}},
+    {AccelerationState::in_use, "Basic in use.", {}},
+}};
+
+/// Tells whether kStatusTexts holds every state once, in AccelerationState's order.
+///
+/// @return true when each entry's state is its index
+constexpr bool status_texts_in_order() noexcept {
+    for (std::size_t index = 0; index < kStatusTexts.size(); ++index)
+        if (static_cast<std::size_t>(kStatusTexts[index].state) != index)
+            return false;
+    return kStatusTexts.size() == static_cast<std::size_t>(AccelerationState::in_use) + 1;
+}
+
+static_assert(status_texts_in_order(), "every state of Hardware acceleration has its status");
+
+/// The first line of AccelerationState::waiting_for_game_end for Full in a
+/// shared game; kStatusTexts holds Basic's.
+constexpr std::string_view kWaitingForFull = "Off for this game: in a shared game, Full";
+/// The first line of AccelerationState::waiting_for_game_end for Basic in a replay.
+constexpr std::string_view kWaitingInReplay = "Off for this game: in a replay, Basic";
+/// The first line of AccelerationState::waiting_for_game_end for Full in a replay.
+constexpr std::string_view kWaitingForFullInReplay = "Off for this game: in a replay, Full";
+/// The first line of AccelerationState::full_waiting_for_game_end in a
+/// replay; kStatusTexts holds a shared game's.
+constexpr std::string_view kBasicWaitingForFullInReplay = "Basic for this game: in a replay, Full";
+/// The second line of Full in use, by its anti-aliasing: none, and 2, 4, 8
+/// and 16 samples across.
+constexpr std::string_view kFullReach = "Smoothed at every zoom.";
+constexpr std::string_view kFullReachTwice = "Smoothed at every zoom; 2x2 samples a pixel.";
+constexpr std::string_view kFullReachFourfold = "Smoothed at every zoom; 4x4 samples a pixel.";
+constexpr std::string_view kFullReachEightfold = "Smoothed at every zoom; 8x8 samples a pixel.";
+constexpr std::string_view kFullReachSixteenfold = "Smoothed at every zoom; 16x16 samples a pixel.";
+/// The anti-aliasing the lines above name.
+constexpr uint8_t kSupersampleTwice = 2;
+constexpr uint8_t kSupersampleFourfold = 4;
+constexpr uint8_t kSupersampleEightfold = 8;
+constexpr uint8_t kSupersampleSixteenfold = 16;
+
+/// Returns the first line of AccelerationState::waiting_for_game_end: the
+/// match it waits for, and the level that takes effect after it.
+///
+/// @param acceleration the status
+/// @return the line; Basic's for a status that asks for no more
+std::string_view waiting_line(const AccelerationStatus& acceleration) noexcept {
+    if (acceleration.state == AccelerationState::full_waiting_for_game_end)
+        return acceleration.replay ? kBasicWaitingForFullInReplay
+                                   : kStatusTexts[static_cast<std::size_t>(
+                                                      AccelerationState::full_waiting_for_game_end
+                                                  )]
+                                         .first;
+    const bool full = acceleration.asked == HardwareAcceleration::full;
+    if (acceleration.replay)
+        return full ? kWaitingForFullInReplay : kWaitingInReplay;
+    return full ? kWaitingForFull
+                : kStatusTexts[static_cast<std::size_t>(AccelerationState::waiting_for_game_end)]
+                      .first;
+}
+
+/// Tells whether a state is Full in use, whose second line names its
+/// anti-aliasing rather than the reach.
+///
+/// @param state the state
+/// @return true for Full in use
+bool full_in_use(AccelerationState state) noexcept {
+    return state == AccelerationState::full_in_use;
+}
+
+/// Returns the second line of Full in use: smoothed at every zoom, with its
+/// anti-aliasing where there is any.
+///
+/// @param supersample the samples a pixel across; 1 for no anti-aliasing
+/// @return the line
+std::string_view full_line(uint8_t supersample) noexcept {
+    if (supersample >= kSupersampleSixteenfold)
+        return kFullReachSixteenfold;
+    if (supersample >= kSupersampleEightfold)
+        return kFullReachEightfold;
+    if (supersample >= kSupersampleFourfold)
+        return kFullReachFourfold;
+    if (supersample >= kSupersampleTwice)
+        return kFullReachTwice;
+    return kFullReach;
+}
+
+/// Returns the reach line: what the graphics card does on this machine.
+///
+/// @param reach the reach
+/// @return the line
+std::string_view reach_line(AccelerationReach reach) noexcept {
+    switch (reach) {
+    case AccelerationReach::menus:
+        return "It scales the menus and the interface evenly.";
+    case AccelerationReach::zoomed_in:
+        return "It scales the interface and zoomed-in view evenly.";
+    case AccelerationReach::zoomed_out:
+        return "It scales evenly and smooths the zoomed-out view.";
+    case AccelerationReach::nearest_zoomed_out:
+        return "It smooths the zoomed-out view.";
+    case AccelerationReach::nearest_none:
+        return "Here the view is drawn as when it is off.";
+    }
+    return {};
 }
 
 // The hints that change with the settings or the dialog. Each returns its
@@ -1275,7 +1642,7 @@ constexpr Spec hardware_acceleration_row() noexcept {
     Spec spec = kit::levels(
         "hardware-acceleration",
         "Hardware acceleration",
-        Strip<
+        LevelStrip<
             HardwareAcceleration,
             3,
             hardware_acceleration_levels,
@@ -1371,7 +1738,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                       &max_zoom_in_hint, &lines<2>)},
     {.setting = S::view_past_map_edge,
      .spec = changing(kit::levels("view-past-map-edge", "View past the map's edge",
-                                  Strip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions>::stepper(),
+                                  LevelStrip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions>::stepper(),
                                   view_past_map_edge_level_width),
                       &view_past_map_edge_hint, &lines<2>)},
     {.setting = S::escape_opens_menu,
@@ -1394,7 +1761,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::max_frame_rate>},
     {.setting = S::anti_aliasing,
      .spec = changing(kit::levels("anti-aliasing", "Enhanced anti-aliasing",
-                                  Strip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions>::stepper(),
+                                  LevelStrip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions>::stepper(),
                                   level_width),
                       &anti_aliasing_hint, &lines<2>)},
     {.setting = S::screen_size,
@@ -1443,7 +1810,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::text_size>},
     {.setting = S::touch_drag,
      .spec = changing(kit::levels("touch-drag", "One-finger drag",
-                                  Strip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions>::stepper(),
+                                  LevelStrip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions>::stepper(),
                                   touch_drag_level_width),
                       &touch_drag_hint, &lines<2>)},
     {.setting = S::touch_hold_delay,
@@ -1452,7 +1819,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::touch_hold_ms>},
     {.setting = S::touch_latches,
      .spec = changing(kit::levels("touch-latches", "QUEUE and ADD",
-                                  Strip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions>::stepper(),
+                                  LevelStrip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions>::stepper(),
                                   touch_latches_level_width),
                       &touch_latches_hint, &lines<2>)},
     {.setting = S::touch_haptics,
@@ -1463,17 +1830,17 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                                   {"The minimap and the thumb controls on the", "right, the orders on the left."})},
     {.setting = S::touch_control_size,
      .spec = kit::levels("touch-control-size", "Control size",
-                         Strip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions>::stepper(),
+                         LevelStrip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions>::stepper(),
                          control_size_level_width,
                          {"The size of the touch controls; the game's own", "screens keep theirs."})},
     {.setting = S::pad_scheme,
      .spec = changing(kit::levels("pad-scheme", "Scheme",
-                                  Strip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions>::stepper(),
+                                  LevelStrip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions>::stepper(),
                                   scheme_level_width),
                       &pad_scheme_hint, &lines<2>)},
     {.setting = S::pad_right_trackpad,
      .spec = changing(kit::levels("pad-right-trackpad", "Right trackpad",
-                                  Strip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions>::stepper(),
+                                  LevelStrip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions>::stepper(),
                                   right_trackpad_level_width),
                       &pad_right_trackpad_hint, &lines<1>)},
     {.setting = S::pad_pointer_speed,
@@ -1482,7 +1849,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::pad_pointer_speed>},
     {.setting = S::pad_acceleration,
      .spec = kit::levels("pad-acceleration", "Pointer acceleration",
-                         Strip<pad_controls::Acceleration, 3, kAccelerationChoices, &E::pad_acceleration, kPadAccelerationCaptions>::stepper(),
+                         LevelStrip<pad_controls::Acceleration, 3, kAccelerationChoices, &E::pad_acceleration, kPadAccelerationCaptions>::stepper(),
                          pad_acceleration_level_width,
                          {"A quick slide moves the pointer further.", {}})},
     {.setting = S::pad_glide,
@@ -1490,7 +1857,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                           {"The pointer keeps moving after a quick flick.", {}})},
     {.setting = S::pad_right_stick,
      .spec = changing(kit::levels("pad-right-stick", "Right stick",
-                                  Strip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions>::stepper(),
+                                  LevelStrip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions>::stepper(),
                                   right_stick_level_width),
                       &pad_right_stick_hint, &lines<2>)},
     {.setting = S::pad_magnetism,
@@ -1507,7 +1874,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::pad_gyro_speed>},
     {.setting = S::pad_haptics,
      .spec = kit::levels("pad-haptics", "Haptics",
-                         Strip<pad_controls::Haptics, 3, kHapticsChoices, &E::pad_haptics, kPadHapticsCaptions>::stepper(),
+                         LevelStrip<pad_controls::Haptics, 3, kHapticsChoices, &E::pad_haptics, kPadHapticsCaptions>::stepper(),
                          pad_haptics_level_width,
                          {"Small ticks and bumps felt through the controller.", {}})},
     {.setting = S::pad_prompts,
@@ -1589,7 +1956,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .path_hint = true},
     {.setting = S::menu_scaling,
      .spec = changing(kit::levels("menu-scaling", "Menu scaling",
-                                  Strip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions>::stepper(),
+                                  LevelStrip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions>::stepper(),
                                   menu_scaling_level_width),
                       &menu_scaling_hint, &lines<2>)},
     {.setting = S::native_density,
@@ -1598,12 +1965,12 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .lock = &Locks::native_density},
     {.setting = S::explosion_flash,
      .spec = changing(kit::levels("explosion-flash", "Explosion flash",
-                                  Strip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions>::stepper(),
+                                  LevelStrip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions>::stepper(),
                                   explosion_flash_level_width),
                       &explosion_flash_hint, &lines<2>)},
     {.setting = S::zoomed_out_units,
      .spec = changing(kit::levels("zoomed-out-units", "Zoomed out units",
-                                  Strip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, offered_zoomed_out_units>::stepper(),
+                                  LevelStrip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, offered_zoomed_out_units>::stepper(),
                                   zoomed_out_units_level_width),
                       &zoomed_out_units_hint, &lines<2>),
      .copy = &copy_field<&E::zoomed_out_units>},
@@ -1615,7 +1982,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .lock = &Locks::zoomed_out_after},
     {.setting = S::window_frame,
      .spec = changing(kit::levels("window-frame", "Window frame",
-                                  Strip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions>::stepper(),
+                                  LevelStrip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions>::stepper(),
                                   window_frame_level_width),
                       &window_frame_hint, &lines<2>)},
     {.setting = S::hud_scaling,
@@ -1743,6 +2110,78 @@ const SettingRow& entry(Setting setting) noexcept {
     return kRows[std::min(static_cast<std::size_t>(setting), kRows.size() - 1)];
 }
 
+/// Returns a dialog that offers loose settings what a dialog offers its
+/// rows: the unit limit slider's highest stop, the Screen size slider's
+/// stops, Hardware acceleration's status and what it shows beyond each
+/// setting's rows.
+///
+/// @param highest_offered_unit the unit limit slider's highest stop
+/// @param offered_sizes the Screen size slider's stops
+/// @param acceleration Hardware acceleration's status
+/// @param context the Steam Input notice and a Steam Deck's rate
+/// @return the dialog
+Dialog offering(
+    uint16_t highest_offered_unit = highest_unit_limit,
+    std::span<const ScreenSize> offered_sizes = screen_sizes,
+    const AccelerationStatus& acceleration = {},
+    const RowContext& context = {}
+) {
+    Dialog dialog;
+    dialog.highest_offered_unit = highest_offered_unit;
+    dialog.offered_screen_sizes.assign(offered_sizes.begin(), offered_sizes.end());
+    dialog.acceleration = acceleration;
+    dialog.steam_input = context.steam_input;
+    dialog.steam_deck_panel_hz = context.steam_deck_panel_hz;
+    return dialog;
+}
+
+/// The settings of the widest sliders: each snap radius up to the most any
+/// mod allows.
+EngineSettings widest_settings() noexcept {
+    EngineSettings settings{};
+    settings.mod_options.mex_snap_most = most_snap_radius;
+    settings.mod_options.wreck_snap_most = most_snap_radius;
+    return settings;
+}
+
+/// Returns a stop or an item given as an unsigned number, held to what a
+/// row's index can be.
+///
+/// @param index the stop or item
+/// @return the index
+int32_t index_of(std::size_t index) noexcept {
+    return static_cast<int32_t>(std::min<std::size_t>(index, INT32_MAX));
+}
+
+/// Returns a line of a row's hint as its row gives it: in English, or, for
+/// a host's texts, as the host gave them; and whether it is a notice.
+///
+/// @param model the row's model
+/// @param setting the row's setting
+/// @param line the line, from 0
+/// @return the line; empty past the last
+HintLine hint_of(const SettingsModel& model, Setting setting, std::size_t line) {
+    const Spec& spec = entry(setting).spec;
+    std::string text;
+    if (spec.hint_text != nullptr)
+        text = spec.hint_text(model, line);
+    else if (line < spec.hint.size())
+        text = std::string(spec.hint[line]);
+    return {std::move(text), spec.hint_notice != nullptr && spec.hint_notice(model, line)};
+}
+
+/// Returns a slider's value as its row shows it.
+///
+/// @param model the row's model
+/// @param setting the row's setting
+/// @return the text; empty for a row that is no slider
+std::string slider_text(const SettingsModel& model, Setting setting) {
+    const Spec& spec = entry(setting).spec;
+    if (spec.kind != kit::RowKind::slider)
+        return {};
+    return kit::row_caption(spec, model, kit::row_index(spec, model));
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -1758,6 +2197,11 @@ kit::RowKind kind_of(Setting setting) noexcept {
 
 std::string_view setting_name(Setting setting) noexcept {
     return kSettingNames[std::min(static_cast<std::size_t>(setting), kSettingNames.size() - 1)];
+}
+
+Lock lock_of(const Locks& locks, Setting setting) noexcept {
+    const SettingRow& row = entry(setting);
+    return row.lock != nullptr ? locks.*row.lock : Lock::none;
 }
 
 Lock section_lock(const Locks& locks, Setting setting, const SectionHooks* section) {
@@ -1806,6 +2250,213 @@ std::string_view page_word(Page page) noexcept {
     return kPageWords[std::min(static_cast<std::size_t>(page), kPageWords.size() - 1)];
 }
 
+std::string_view status_line(const AccelerationStatus& acceleration, std::size_t line) noexcept {
+    const auto index = static_cast<std::size_t>(acceleration.state);
+    if (index >= kStatusTexts.size())
+        return {};
+    const StatusText& text = kStatusTexts[index];
+    if (line == 0)
+        return acceleration.state == AccelerationState::waiting_for_game_end ||
+                       acceleration.state == AccelerationState::full_waiting_for_game_end
+                   ? waiting_line(acceleration)
+                   : text.first;
+    if (line == 1) {
+        if (full_in_use(acceleration.state))
+            return full_line(acceleration.supersample);
+        return text.second.empty() ? reach_line(acceleration.reach) : text.second;
+    }
+    return {};
+}
+
+std::string_view page_name(Page page) noexcept {
+    return kPageNames[std::min(static_cast<std::size_t>(page), kPageNames.size() - 1)];
+}
+
+std::string_view page_heading(Page page) noexcept {
+    return kPageHeadings[std::min(static_cast<std::size_t>(page), kPageHeadings.size() - 1)];
+}
+
+std::span<const Setting>
+section_settings(Page page, const SectionHooks* section, const RowContext& context) {
+    if (section == nullptr || section->settings == nullptr)
+        return page == Page::controller && context.steam_input
+                   ? std::span<const Setting>(kSteamInputControllerRows)
+                   : page_settings(page);
+    return section->settings(section->context, page);
+}
+
+std::span<const oa::data::languages::Language* const> offered_languages() {
+    static std::vector<const oa::data::languages::Language*> offered;
+    static uint64_t built_at = 0;
+    static bool built = false;
+    const uint64_t generation = languages::registry_generation();
+    if (!built || built_at != generation) {
+        offered.clear();
+        for (const languages::Language* language : languages::known_languages())
+            if (languages::playable(*language))
+                offered.push_back(language);
+        built_at = generation;
+        built = true;
+    }
+    return {offered.data(), offered.size()};
+}
+
+// ---------------------------------------------------------------------------
+// The geometry functions that read a row: each reads the table.
+
+Slider slider_of(
+    Setting setting, uint16_t highest_offered_unit, std::span<const ScreenSize> offered_sizes
+) noexcept {
+    const auto& spec = row_spec(setting);
+    if (spec.kind != kit::RowKind::slider)
+        return Slider{2};
+    const Dialog offers = offering(highest_offered_unit, offered_sizes);
+    const EngineSettings widest = widest_settings();
+    return Slider{kit::row_count(spec, reading(widest, offers))};
+}
+
+int32_t stops_of(
+    const EngineSettings& settings,
+    Setting setting,
+    uint16_t highest_offered_unit,
+    std::span<const ScreenSize> offered_sizes
+) noexcept {
+    const Dialog offers = offering(highest_offered_unit, offered_sizes);
+    return kit::row_count(row_spec(setting), reading(settings, offers));
+}
+
+int32_t stop_of(
+    const EngineSettings& settings,
+    Setting setting,
+    uint16_t highest_offered_unit,
+    std::span<const ScreenSize> offered_sizes
+) noexcept {
+    const Dialog offers = offering(highest_offered_unit, offered_sizes);
+    return kit::row_index(row_spec(setting), reading(settings, offers));
+}
+
+void set_stop(
+    EngineSettings& settings,
+    Setting setting,
+    int32_t stop,
+    uint16_t highest_offered_unit,
+    std::span<const ScreenSize> offered_sizes
+) noexcept {
+    const Dialog offers = offering(highest_offered_unit, offered_sizes);
+    SettingsModel model{&settings, &offers};
+    kit::set_row_index(row_spec(setting), model, stop);
+}
+
+Strip strip_of(Setting setting) noexcept {
+    const auto& spec = row_spec(setting);
+    if (spec.kind != kit::RowKind::levels)
+        return Strip{};
+    const Dialog offers = offering();
+    const EngineSettings settings{};
+    const SettingsModel model = reading(settings, offers);
+    const auto levels = static_cast<std::size_t>(kit::row_count(spec, model));
+    const auto offered = static_cast<std::size_t>(kit::row_offered(spec, model));
+    return Strip{levels, spec.control_width, offered == levels ? 0 : offered};
+}
+
+std::size_t strip_level(const EngineSettings& settings, Setting setting) noexcept {
+    const Dialog offers = offering();
+    return static_cast<std::size_t>(kit::row_index(row_spec(setting), reading(settings, offers)));
+}
+
+void set_strip_level(EngineSettings& settings, Setting setting, std::size_t level) noexcept {
+    const Dialog offers = offering();
+    SettingsModel model{&settings, &offers};
+    kit::set_row_index(row_spec(setting), model, index_of(level));
+}
+
+std::string strip_caption(Setting setting, std::size_t level) {
+    const auto& spec = row_spec(setting);
+    if (spec.kind != kit::RowKind::levels)
+        return {};
+    const Dialog offers = offering();
+    const EngineSettings settings{};
+    return kit::row_caption(spec, reading(settings, offers), index_of(level));
+}
+
+std::size_t choice_count(const Dialog& dialog, Setting setting) {
+    const auto& spec = row_spec(setting);
+    if (spec.kind != kit::RowKind::choice)
+        return 0;
+    return static_cast<std::size_t>(kit::row_count(spec, reading(dialog.chosen, dialog)));
+}
+
+std::string choice_text(const Dialog& dialog, Setting setting, std::size_t index) {
+    return kit::row_caption(row_spec(setting), reading(dialog.chosen, dialog), index_of(index));
+}
+
+std::size_t choice_index(const Dialog& dialog, Setting setting) {
+    return static_cast<std::size_t>(
+        kit::row_index(row_spec(setting), reading(dialog.chosen, dialog))
+    );
+}
+
+void set_choice(Dialog& dialog, Setting setting, std::size_t index) {
+    SettingsModel model{&dialog.chosen, &dialog};
+    kit::set_row_index(row_spec(setting), model, index_of(index));
+}
+
+bool switch_on(const EngineSettings& settings, Setting setting) noexcept {
+    const Dialog offers = offering();
+    return kit::row_on(row_spec(setting), reading(settings, offers));
+}
+
+void set_switch(EngineSettings& settings, Setting setting, bool on) noexcept {
+    const Dialog offers = offering();
+    SettingsModel model{&settings, &offers};
+    kit::set_row_on(row_spec(setting), model, on);
+}
+
+bool hint_is_status(Setting setting) noexcept {
+    return row_spec(setting).hint_is_status;
+}
+
+std::string_view label_of(Setting setting) noexcept {
+    return row_spec(setting).label;
+}
+
+std::string hint_line(
+    Setting setting,
+    const EngineSettings& settings,
+    const AccelerationStatus& acceleration,
+    std::size_t line
+) {
+    const Dialog offers = offering(highest_unit_limit, screen_sizes, acceleration);
+    return hint_of(reading(settings, offers), setting, line).text;
+}
+
+std::size_t hint_line_count(Setting setting) noexcept {
+    return hint_line_count(setting, RowContext{});
+}
+
+std::size_t hint_line_count(Setting setting, const RowContext& context) noexcept {
+    const Dialog offers = offering(highest_unit_limit, screen_sizes, {}, context);
+    const EngineSettings settings{};
+    return kit::view_of(row_spec(setting), reading(settings, offers), {}).hints.size();
+}
+
+HintLine row_hint(const Dialog& dialog, Setting setting, std::size_t line) {
+    return hint_of(reading(dialog.chosen, dialog), setting, line);
+}
+
+std::string value_text(Setting setting, const EngineSettings& settings) {
+    const Dialog offers = offering();
+    return slider_text(reading(settings, offers), setting);
+}
+
+std::string value_text(Setting setting, const Dialog& dialog) {
+    return slider_text(reading(dialog.chosen, dialog), setting);
+}
+
 } // namespace geometry
+
+std::span<const Setting> page_settings(Page page) noexcept {
+    return geometry::kPageRows[std::min(static_cast<std::size_t>(page), page_count - 1)];
+}
 
 } // namespace oa::ui::engine_settings

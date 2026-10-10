@@ -37,6 +37,9 @@ reading(const EngineSettings& settings, const Dialog& dialog) noexcept {
     return {const_cast<EngineSettings*>(&settings), &dialog};
 }
 
+/// What a setting's row is: the kit's row kinds, which kind_of gives.
+using RowKind = oa::ui::kit::RowKind;
+
 /// What MANAGE…, Game files' button, asks for: the Game files screen.
 inline constexpr oa::ui::kit::ActionId manage_game_files_action = 0;
 /// What Your files' first button asks for; each next button's is one more,
