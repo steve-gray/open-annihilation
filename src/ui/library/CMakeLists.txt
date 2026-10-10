@@ -12,3 +12,20 @@ target_compile_features(oa-ui-library PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 PRIVATE oa-data-mod-profile
   oa-options)
 
+if(BUILD_TESTING)
+  # Entries and their states, blocking, registries, tabs, filters, tags, the
+  # order, selection, buttons, facts, status lines, notes, queue lines and
+  # every text.
+  add_executable(oa-ui-library-test tests/library_test.cpp)
+  target_link_libraries(oa-ui-library-test PRIVATE oa-ui-library oa-data-mod-profile oa-test-support
+    oa-options)
+  add_test(NAME ui-library COMMAND oa-ui-library-test)
+  set_tests_properties(ui-library PROPERTIES TIMEOUT 30)
+
+  # The search: what ranks first, several words, a missing word, folding,
+  # tag prefixes, the cap and ties.
+  add_executable(oa-ui-library-search-test tests/search_test.cpp)
+  target_link_libraries(oa-ui-library-search-test PRIVATE oa-ui-library oa-test-support oa-options)
+  add_test(NAME ui-library-search COMMAND oa-ui-library-search-test)
+  set_tests_properties(ui-library-search PROPERTIES TIMEOUT 30)
+endif()
