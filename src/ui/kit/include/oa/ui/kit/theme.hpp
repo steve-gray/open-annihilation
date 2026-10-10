@@ -80,6 +80,10 @@ inline constexpr Colour button_text{0xc9, 0xcd, 0xbf};
 inline constexpr Colour lock{0xe0, 0xb0, 0x4f};
 /// The colour the screen under the dialog is darkened with.
 inline constexpr Colour backdrop{5, 6, 4};
+/// Problems: a chip that says something is wrong. The Game files screen's red.
+inline constexpr Colour danger{0xe0, 0x6c, 0x5c};
+/// Online: a chip that says a thing is on the network.
+inline constexpr Colour online{0x6e, 0xa8, 0xd6};
 
 } // namespace colour
 
@@ -151,8 +155,11 @@ inline constexpr uint32_t menu_backdrop_opacity = 159;
 inline constexpr uint32_t ingame_backdrop_opacity = 128;
 /// How far a locked row is faded into the panel, in 256ths.
 inline constexpr uint32_t locked_fade = 115;
+/// How far the accent tints a selected list row's face, in 256ths.
+inline constexpr uint32_t selected_tint = 15;
 
-/// The Compact metrics, in points: the settings dialog's sizes at 0.7.3.
+/// The Compact metrics, in points: the settings dialog's, its notices' and its
+/// prompts' sizes at 0.7.3, and the sizes of the controls it does not have.
 struct Metrics {
     /// The raised edge's width.
     int32_t edge{};
@@ -234,9 +241,119 @@ struct Metrics {
     int32_t button_square_denominator{};
     /// The least columns between the large OA mark and its square's outline.
     int32_t large_mark_margin{};
+    /// A list row's height in its full form: a badge, a title and a line.
+    int32_t list_row_height{};
+    /// The largest side of a list row's badge.
+    int32_t list_row_badge{};
+    /// A list row's height in its short form: the Mods row's.
+    int32_t short_list_row_height{};
+    /// The columns between a list row's edges and its badge, text and chip.
+    int32_t list_row_inset{};
+    /// The rows from the top of a list row's text to its title's line.
+    int32_t list_row_title_top{};
+    /// The rows from the top of a list row's text to its first line under the title.
+    int32_t list_row_line_top{};
+    /// The columns between a row's title and its byline, and before its aside and its chip.
+    int32_t list_row_gap{};
+    /// A hairline's thickness: a blank badge's dashes.
+    int32_t hairline{};
+    /// A blank badge's dashes' length.
+    int32_t badge_dash{};
+    /// The space between a blank badge's dashes.
+    int32_t badge_dash_gap{};
+    /// A chip's height.
+    int32_t chip_height{};
+    /// The columns between a chip's edges and its text.
+    int32_t chip_padding{};
+    /// The columns between two chips side by side.
+    int32_t chip_gap{};
+    /// A strip of tabs' height.
+    int32_t tab_height{};
+    /// The columns between a tab's edges and its caption and count.
+    int32_t tab_padding{};
+    /// Extra columns after each glyph of a tab's caption.
+    int32_t tab_tracking{};
+    /// The rows of the accent rule under the selected tab.
+    int32_t tab_rule{};
+    /// A tab's count's height.
+    int32_t tab_count_height{};
+    /// The columns between a tab's count's edges and its digits.
+    int32_t tab_count_padding{};
+    /// The columns between a tab's caption and its count.
+    int32_t tab_count_gap{};
+    /// A text field's height.
+    int32_t field_height{};
+    /// The columns between a text field's edges and its text, and around its magnifier.
+    int32_t field_inset{};
+    /// The magnifier's side, before a search field's text.
+    int32_t magnifier_side{};
+    /// The text caret's width.
+    int32_t caret_width{};
+    /// The narrowest a card may be and still add a column.
+    int32_t card_least_width{};
+    /// The points between two cards.
+    int32_t card_gap{};
+    /// The points between a card's edges and its preview and text, and its preview's edges and its chips.
+    int32_t card_inset{};
+    /// The points between a hover card's edges and its lines, and between its columns.
+    int32_t hover_card_padding{};
+    /// How far a hover card's arrow reaches out of its edge.
+    int32_t hover_card_arrow{};
+    /// A notice's or a question's first row of text: under the header, its
+    /// rule and ten rows more.
+    int32_t text_top{};
+    /// The rows between two paragraphs of a notice or a question.
+    int32_t paragraph_gap{};
+    /// The rows between a notice's last line of text and the footer's rule.
+    int32_t text_bottom_gap{};
+    /// The width of a notice's button that opens its folder.
+    int32_t open_width{};
+    /// The columns a question button's caption keeps clear on its two sides together.
+    int32_t prompt_button_padding{};
+    /// A progress bar's height.
+    int32_t progress_bar_height{};
+    /// The rows between a settings row's rule and its label line, and under
+    /// its last part. Developer's own rows keep half of it.
+    int32_t row_padding{};
+    /// The columns kept clear between a row's label and the control or lock
+    /// beside it, and between a lock and the control it stands beside.
+    int32_t label_gap{};
+    /// The rows between a row's label line and its first hint line.
+    int32_t hint_gap{};
+    /// The rows added between two lines of a hint while the words are drawn
+    /// in the modern fonts, whose ideographs stand as tall as a hint line.
+    int32_t tall_hint_line_gap{};
+    /// The most lines a hint takes.
+    int32_t most_hint_lines{};
+    /// The most lines a notice under a row's label takes.
+    int32_t most_notice_lines{};
+    /// The rows between a row's last hint line and its slider, drop-down
+    /// field or text field.
+    int32_t slider_gap{};
+    /// A slider line's height: the track with its knob and stops, and the value.
+    int32_t slider_line_height{};
+    /// The width of a slider's value, right of its track.
+    int32_t slider_value_width{};
+    /// The columns between a slider's track and its value.
+    int32_t slider_value_gap{};
+    /// A lock's width: the padlock and its text, on a row's label line.
+    int32_t lock_width{};
+    /// A drop-down's field's width, and a row's text field's.
+    int32_t choice_width{};
+    /// A wide drop-down's field's width: room for the longest choice a
+    /// settings row offers, in the regular font with the field's inset and arrow.
+    int32_t wide_choice_width{};
+    /// A row's own button's width, on its label line: MANAGE…'s.
+    int32_t button_row_width{};
+    /// The widths of a row of buttons on its label line, left to right: Your
+    /// files' SAVES, SCREENSHOTS and MODS.
+    std::array<int32_t, 3> folder_button_widths{};
+    /// The columns between two buttons of a row.
+    int32_t folder_button_gap{};
 };
 
-/// Compact metrics: the settings dialog's sizes at 0.7.3, exactly.
+/// Compact metrics: the settings dialog's sizes at 0.7.3, exactly, and the
+/// sizes of the controls it does not have.
 inline constexpr Metrics compact_metrics{
     .edge = 1,
     .header_height = 26,
@@ -278,6 +395,57 @@ inline constexpr Metrics compact_metrics{
     .button_square_numerator = 20,
     .button_square_denominator = 32,
     .large_mark_margin = 2,
+    .list_row_height = 36,
+    .list_row_badge = 28,
+    .short_list_row_height = 28,
+    .list_row_inset = 4,
+    .list_row_title_top = 1,
+    .list_row_line_top = 15,
+    .list_row_gap = 6,
+    .hairline = 1,
+    .badge_dash = 2,
+    .badge_dash_gap = 1,
+    .chip_height = 12,
+    .chip_padding = 4,
+    .chip_gap = 4,
+    .tab_height = 18,
+    .tab_padding = 10,
+    .tab_tracking = 1,
+    .tab_rule = 2,
+    .tab_count_height = 12,
+    .tab_count_padding = 3,
+    .tab_count_gap = 4,
+    .field_height = 16,
+    .field_inset = 4,
+    .magnifier_side = 7,
+    .caret_width = 1,
+    .card_least_width = 120,
+    .card_gap = 6,
+    .card_inset = 4,
+    .hover_card_padding = 6,
+    .hover_card_arrow = 5,
+    .text_top = 38,
+    .paragraph_gap = 6,
+    .text_bottom_gap = 10,
+    .open_width = 96,
+    .prompt_button_padding = 16,
+    .progress_bar_height = 8,
+    .row_padding = 8,
+    .label_gap = 8,
+    .hint_gap = 2,
+    .tall_hint_line_gap = 3,
+    .most_hint_lines = 2,
+    .most_notice_lines = 4,
+    .slider_gap = 4,
+    .slider_line_height = 14,
+    .slider_value_width = 110,
+    .slider_value_gap = 10,
+    .lock_width = 148,
+    .choice_width = 200,
+    .wide_choice_width = 248,
+    .button_row_width = 76,
+    .folder_button_widths = {46, 82, 44},
+    .folder_button_gap = 4,
 };
 
 } // namespace oa::ui::kit

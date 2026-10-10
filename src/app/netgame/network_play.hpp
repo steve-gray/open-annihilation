@@ -11,8 +11,8 @@
 // (netgame-runtime-surface, tools/runtime-surface-baseline.json).
 #pragma once
 
+#include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
-#include "oa/netgame/presence_block.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::app {
 
@@ -104,12 +105,21 @@ class NetworkPlay {
     /// setup block. Run every frame.
     void follow_unicode_chat();
 
-    /// Passes this machine's presence to the battle room: revision 1, this
-    /// build's version, and the flags for Developer Mode, rules that differ
-    /// from 3.1c, and view hacks. Bits past those stay clear. Run every
-    /// frame. The facts are read while the multiplayer screens are showing,
-    /// and on the first call. The battle room is told only when the presence
-    /// differs from the one already bound.
+    /// Passes this machine's presence record to the battle room
+    /// (multiplayer_bind_presence_record), which sends it to the OA players
+    /// of other machines. Run every frame.
+    ///
+    /// The facts (presence_facts) are read while the multiplayer screens
+    /// show, and on the first call. The record carries this build's version,
+    /// the platform and architecture, the mod and where it was published, the
+    /// sim hash, the game and view hacks with their counts, and Developer
+    /// Mode with its overrides; the host's map pack is the battle room's to
+    /// add. It is written within presence_record_max_bytes less
+    /// presence_map_pack_field_max_bytes, so that the host's pack always
+    /// fits beside it, unless its fixed fields alone need more. A fact that
+    /// breaks the record's rules is left out, with one line on the error
+    /// stream the first time. The battle room is told only when the record's
+    /// bytes change. No setup block carries any of it.
     void follow_presence();
 
     /// Runs one frame of the network match; nothing without an active match.
@@ -486,10 +496,13 @@ class NetworkPlay {
     const oa::data::mod_profile::ModProfile* bound_profile_ = nullptr;
     oa::base::sha256::Digest bound_sim_hash_{};
     uint8_t bound_lobby_buttons_ = 0;
-    // The presence bound to the battle room (follow_presence), and whether
-    // its facts have been read once.
-    oa::netgame::PresenceBlock bound_presence_{};
+    // The presence record bound to the battle room (follow_presence), the
+    // facts it was written from, whether they have been read once, and the
+    // problems with them already reported (one bit each).
+    std::vector<uint8_t> bound_presence_record_;
+    PresenceFacts presence_facts_{};
     bool presence_taken_ = false;
+    uint32_t presence_reported_ = 0;
 };
 
 } // namespace oa::app

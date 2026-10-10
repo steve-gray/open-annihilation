@@ -3,68 +3,39 @@
 
 // A prompt of Open Annihilation's own: a notice (notice.hpp) that asks a
 // question with one to three buttons of its own captions, and can show a
-// progress bar under its text. It shares the notice's look and text
-// placement; its text is given finished, in the language shown, and drawn
-// as given.
+// progress bar under its text. The prompt is the OA UI kit's question
+// (kit::Question in oa/ui/kit/components_more.hpp) under its old names: it
+// shares the notice's look and text placement, and its text is given
+// finished, in the language shown, and drawn as given.
 #pragma once
 
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/kit/components_more.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace oa::ui::engine_settings {
 
 /// The most buttons a prompt has.
-inline constexpr std::size_t most_prompt_buttons = 3;
+inline constexpr std::size_t most_prompt_buttons = oa::ui::kit::most_question_buttons;
 /// A full progress bar (Prompt::progress).
-inline constexpr int32_t prompt_progress_whole = 1000;
+inline constexpr int32_t prompt_progress_whole = oa::ui::kit::question_progress_whole;
 /// The control prompt_layout gives the progress bar's part.
 inline constexpr int32_t prompt_bar_control = 100;
 
-/// One of a prompt's buttons.
-struct PromptButton {
-    std::string caption{}; ///< drawn as given, in the language shown
-    /// Drawn as OK is, in the accent colour: the answer the prompt leads to.
-    bool accent{};
-};
+/// One of a prompt's buttons: the kit's question button.
+using PromptButton = oa::ui::kit::QuestionButton;
 
-/// One prompt.
-struct Prompt {
-    std::string title{};                       ///< the header's title, as given
-    std::vector<NoticeParagraph> paragraphs{}; ///< its text, top to bottom, as given
-    std::vector<PromptButton> buttons{};       ///< 1 to most_prompt_buttons, left to right
-    int32_t cancel_button{};                   ///< the button Escape and N answer
-    int32_t primary_button{};                  ///< the button Y answers
-    /// Why something it asked for failed, drawn in amber under the text;
-    /// empty for none.
-    std::string failure{};
-    /// A bar under the text, 0 to prompt_progress_whole filled; -1 for none.
-    int32_t progress{-1};
-    int32_t hovered{no_control}; ///< the button under the pointer
-    int32_t pressed{no_control}; ///< the button a held press is on
-    /// The button the keys mark, which Enter and Space answer, ringed in green.
-    int32_t marked{};
-    /// The columns a finger's held press was moved by to reach the button it
-    /// took (prompt_finger_down); its moves and its release are moved as far.
-    int32_t finger_shift_x{};
-    int32_t finger_shift_y{}; ///< the rows, as finger_shift_x
-};
+/// One prompt: the kit's question.
+using Prompt = oa::ui::kit::Question;
 
-/// What an event on a prompt asks of the host.
-enum class PromptAction : uint8_t {
-    none,     ///< nothing
-    redraw,   ///< only its look changed: a hover, a press or the mark
-    answered, ///< a button was pressed: PromptAnswer::button says which
-};
+/// What an event on a prompt asks of the host: the kit's.
+using PromptAction = oa::ui::kit::QuestionAction;
 
-/// What an event on a prompt did.
-struct PromptAnswer {
-    PromptAction action{PromptAction::none};
-    int32_t button{-1}; ///< the button answered, from 0; -1 when none was
-};
+/// What an event on a prompt did: the kit's.
+using PromptAnswer = oa::ui::kit::QuestionAnswer;
 
 /// Returns a prompt's height: its header, its text and progress bar wrapped
 /// in the fonts (at estimated_character_width a character without them)
@@ -144,7 +115,8 @@ prompt_finger_down(Prompt& prompt, int32_t x, int32_t y, int32_t height, int32_t
 /// @return the answer, a redraw, or nothing for a key it does not take
 [[nodiscard]] PromptAnswer prompt_key(Prompt& prompt, DialogKey key);
 
-/// Draws a prompt in a notice's look: its header with the Open Annihilation
+/// Draws a prompt through the kit (kit::draw_question), in a notice's look:
+/// its header with the Open Annihilation
 /// icon (or the OA mark) and its title, its text, the failure in amber, the
 /// progress bar, and its buttons right-aligned in the footer, an accent one
 /// as OK looks and the others as Cancel, the marked one ringed in green.

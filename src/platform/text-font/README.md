@@ -12,30 +12,27 @@ outline, shadow and background of
 ## The fonts
 
 `FontStack::open` opens the base fonts from one folder, `face_files` in
-[text_font.hpp](include/oa/platform/text_font.hpp). Noto Sans CJK is
-optional to open: a missing file is skipped and that face stays closed.
-Every other base face is required. A file that is there and that FreeType
-cannot read, or that is not scalable, still fails the open. A shipped
-build still provides the CJK face. Each character comes from the first
-open font of the stack's chain that has it:
+[text_font.hpp](include/oa/platform/text_font.hpp). Every base face is
+required: a missing file fails the open. A file that FreeType cannot
+read, or that is not scalable, fails it too. Each character comes from
+the first open font of the stack's chain that has it:
 
 | Face | File | Draws |
 |---|---|---|
 | `dejavu_sans_bold` | `DejaVuSans-Bold.ttf` | Latin, Greek, Cyrillic and symbols in the bold weight; skipped in the regular weight |
 | `dejavu_sans` | `DejaVuSans.ttf` | the same scripts in the regular weight, and what the bold face lacks |
-| `noto_sans_cjk` | `NotoSansCJKsc-Bold.otf` | Chinese, Japanese kana and kanji, Korean Hangul, CJK punctuation and full-width forms; optional to open |
-| `endonyms` | `NotoSansCJKsc-Bold-Endonyms.otf` | the languages' own names and the notice shown before a language pack is installed; sized as Noto Sans CJK is, and required |
+| `endonyms` | `NotoSansCJKsc-Bold-Endonyms.otf` | the languages' own names and the notice shown before a language pack is installed; required |
 | `noto_emoji` | `NotoEmoji.ttf` | emoji, in one colour like any character; its weight axis follows the line's weight |
 
-A language pack may add up to `most_pack_faces` (4) faces while the stack
-is open (`add_face`). An `ideographs` face is drawn as Noto Sans CJK is,
-at the related size and no less than the style's least size. A `letters`
+The full Simplified Chinese face travels with that language's pack, not
+with the game. A language pack may add up to `most_pack_faces` (4) faces
+while the stack is open (`add_face`). An `ideographs` face is drawn at
+the related size and no less than the style's least size. A `letters`
 face is drawn at the sans faces' size. Bold looks in DejaVu Sans Bold,
 DejaVu Sans, the letters pack faces in the order they were added, the
-ideographs pack faces in that order, Noto Sans CJK when it is open, the
-endonym face, then Noto Emoji. Regular is the same without DejaVu Sans
-Bold. `FontStack::chain`
-gives that chain; `fallback_chain` stays the base faces only.
+ideographs pack faces in that order, the endonym face, then Noto Emoji.
+Regular is the same without DejaVu Sans Bold. `FontStack::chain` gives
+that chain; `fallback_chain` stays the base faces only.
 
 A character no open font has draws the chain's first open font's
 missing-glyph box. Control characters, variation selectors, zero-width
@@ -44,13 +41,11 @@ spaces and joiners, and the byte-order mark draw nothing and take no room
 
 `tools/bootstrap_text_fonts.py` fetches the fonts and FreeType, pinned by
 SHA-256, into `local/deps`, and cuts Noto Sans CJK SC Bold down to the
-characters of the common Chinese, Japanese and Korean character sets, the
-Table of General Standard Chinese Characters among them (its help lists
-them), and cuts the same face again to the languages' own names and the
-notice in `tools/text-fonts/endonyms.txt`. The build copies the fonts into
-the `fonts` folder beside
-the game (`cmake/OaTextFonts.cmake`), which `bundled_font_directory` finds at
-run time: the bundle's `Contents/Resources/fonts` on macOS, the fonts folder
+languages' own names and the notice in `tools/text-fonts/endonyms.txt`.
+The full face comes with the Simplified Chinese language pack. The build
+copies the four fonts into the `fonts` folder beside the game
+(`cmake/OaTextFonts.cmake`), which `bundled_font_directory` finds at run
+time: the bundle's `Contents/Resources/fonts` on macOS, the fonts folder
 beside the executable elsewhere. Their licences are in the repository's
 `licenses/` folder and travel beside the game with the others
 ([ATTRIBUTIONS.md](../../../ATTRIBUTIONS.md)).
@@ -88,20 +83,18 @@ beside the executable elsewhere. Their licences are in the repository's
   as a scalable font.
 - `FontStack::face_metrics` gives one face's pixel size and rows at the size
   a style draws it at, and is empty when the face is not open. The sans
-  faces and letters pack faces take the style's pixel size. Noto Sans CJK,
-  the endonym face and ideographs pack faces take `related_pixel_size` of
-  it, and no less than the style's least size. Noto Emoji takes
-  `related_pixel_size`.
+  faces and letters pack faces take the style's pixel size. The endonym
+  face and ideographs pack faces take `related_pixel_size` of it, and no
+  less than the style's least size. Noto Emoji takes `related_pixel_size`.
   `FontStack::metrics` is the greatest ascent and descent of the open base
   faces only. A pack's faces never change the line's rows. The endonym face
-  keeps the CJK face's rows, so a stack opened without Noto Sans CJK is
-  still 14 above the baseline and 4 below at 14 px bold.
-- `related_pixel_size` gives the size Noto Sans CJK, the endonym face,
-  ideographs pack faces and Noto Emoji are drawn at beside the DejaVu
-  faces: 12 px beside 14 px,
-  so ideographs stand a row or two taller than DejaVu's capitals, as the
-  game's outlined capitals do. `Style::least_cjk_pixel_size` holds Noto
-  Sans CJK, the endonym face and ideographs pack faces to a least size.
+  keeps the rows a CJK face has, so the line is 14 above the baseline and
+  4 below at 14 px bold.
+- `related_pixel_size` gives the size the endonym face, ideographs pack
+  faces and Noto Emoji are drawn at beside the DejaVu faces: 12 px beside
+  14 px, so ideographs stand a row or two taller than DejaVu's capitals,
+  as the game's outlined capitals do. `Style::least_cjk_pixel_size` holds
+  the endonym face and ideographs pack faces to a least size.
   The line's rows grow
   to hold a base face, not a pack face: the application draws ideographs at
   `least_cjk_language_pixel_size` (12 px) at the least while a Chinese,
@@ -116,7 +109,7 @@ beside the message log's `hattfont12` (capitals 10 rows, x-height 8,
 2-pixel stems), and DejaVu Sans at 11 px beside `CONSOLE.FNT`, the chat
 line's and the labels' font (x-height 6, 1-pixel strokes). At 14 px the
 bold sans face has 13 rows above the baseline and 4 below; the line is 14
-and 4, which is the CJK face at 12 px. The application
+and 4, which is the endonym face at 12 px. The application
 draws them at the player's Text size, from half to three times those
 sizes and never under 7 px, mono at every size.
 
@@ -148,15 +141,13 @@ and spaced lines and the glyph store (`draws_mono_and_antialiased`), a store
 that stays within its bound and forgets the glyph used longest ago
 (`keeps_the_glyphs_used_last`),
 and ideographs held to a least size while Latin letters keep theirs
-(`holds_ideographs_to_a_least_size`), a stack opened without the CJK face,
-whose 14-px bold rows stay 14 and 4 because the endonym face keeps them
-(`opens_without_the_cjk_face`), the endonym face matching the CJK face's
-rows from 7 px to 48 px (`endonyms_keep_the_cjk_rows`) and drawing
-简体中文 with no CJK file (`endonyms_draw_without_the_cjk_face`), pack
-faces joining the chain, matching the full stack's drawing of an ideograph
-and refusing a fifth face or a file that is not a font
-(`pack_faces_join_the_chain`), a removed pack face leaving none of its
-glyphs for the face that reuses its index
+(`holds_ideographs_to_a_least_size`), the endonym face matching an
+ideographs pack face's rows from 7 px to 48 px, 14 and 4 at 14 px bold
+(`endonyms_keep_the_cjk_rows`), and drawing 简体中文
+(`endonyms_draw_without_the_cjk_face`), pack faces joining the chain,
+matching the endonym face's drawing of an ideograph and refusing a fifth
+face or a file that is not a font (`pack_faces_join_the_chain`), a removed
+pack face leaving none of its glyphs for the face that reuses its index
 (`removed_faces_leave_no_glyphs`), and `face_file_opens` accepting each
 bundled file and refusing a text file and a missing path.
 `platform-text-font-pixels`
@@ -167,8 +158,8 @@ skips with another FreeType. `--show TEXT` prints a line as it is drawn.
 ## Limitations
 
 - No shaping, kerning or bidirectional text, and no colour emoji.
-- The cut CJK font holds about 15,300 characters; rarer ones draw the
-  missing-glyph box unless the bootstrap ships the whole face
-  (`--full-cjk`).
-- The CJK font is the Simplified Chinese face, so Japanese and Traditional
-  Chinese text takes its forms of the characters the languages share.
+- Ideographs other than the languages' own names draw from a pack's face.
+  Without that face they draw the missing-glyph box.
+- A pack's ideograph face is the Simplified Chinese face, so Japanese and
+  Traditional Chinese text takes its forms of the characters the languages
+  share.

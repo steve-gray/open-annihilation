@@ -14,7 +14,7 @@
 #include "oa/core/game_state.h"
 #include "oa/core/types.h"
 #include "oa/core/unit_def.h"
-#include "oa/netgame/presence_block.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/netgame/recorder_session.hpp"
 #include "oa/netgame/wire_rules.hpp"
 #include "oa/ui/frontend_multiplayer/launch_block.hpp"
@@ -118,17 +118,12 @@ struct PlayerSetupInfo {
     uint8_t version_major{};
     uint8_t version_minor{};
     uint32_t map_hash{};
-    uint8_t engine_signature[2]{}; // 'O', 'A' when OA sent the block
-    uint8_t presence_revision{};   // presence revision, 0 for none; 3.1c never reads it
-    uint8_t oa_version_major{};    // OA version major; 3.1c never reads it
-    uint8_t oa_version_minor{};    // OA version minor; 3.1c never reads it
-    uint8_t
-        oa_version_patch{};   // OA version patch, 255 for a development build; 3.1c never reads it
-    uint8_t presence_flags{}; // presence flags; 3.1c never reads it
-    uint8_t recorder_protocol{};         // the sender's recorder version, 0 for none
-    uint8_t chat_signature[2]{};         // 'U', '8' when chat_flags holds the sender's chat
-    uint8_t chat_flags{};                // netgame::chat_flag_utf8, read after chat_signature
-    uint8_t reserved_after_chat_flags{}; // copied with the block; never read
+    uint8_t engine_signature[2]{};            // 'O', 'A' when OA sent the block
+    uint8_t reserved_after_signature[0x05]{}; // copied with the block; never read
+    uint8_t recorder_protocol{};              // the sender's recorder version, 0 for none
+    uint8_t chat_signature[2]{};              // 'U', '8' when chat_flags holds the sender's chat
+    uint8_t chat_flags{};                     // netgame::chat_flag_utf8, read after chat_signature
+    uint8_t reserved_after_chat_flags{};      // copied with the block; never read
 };
 
 #pragma pack(pop)
@@ -155,11 +150,7 @@ OA_ASSERT_OFFSET(PlayerSetupInfo, version_major, 0xa7);
 OA_ASSERT_OFFSET(PlayerSetupInfo, version_minor, 0xa8);
 OA_ASSERT_OFFSET(PlayerSetupInfo, map_hash, 0xa9);
 OA_ASSERT_OFFSET(PlayerSetupInfo, engine_signature, 0xad);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_revision, 0xaf);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_major, 0xb0);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_minor, 0xb1);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_patch, 0xb2);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_flags, 0xb3);
+OA_ASSERT_OFFSET(PlayerSetupInfo, reserved_after_signature, 0xaf);
 OA_ASSERT_OFFSET(PlayerSetupInfo, recorder_protocol, 0xb4);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_signature, 0xb5);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_flags, 0xb7);
@@ -285,6 +276,28 @@ struct LobbyMaps {
     const data::campaign::CampaignFile* (*map_context)(void* context){};
     // Bytes of a map file at an offset; false when fewer are there.
     bool (*read_map)(void* context, const char* path, uint32_t offset, void* out, uint32_t size){};
+    /// Why the named map was refused the last time it was chosen.
+    ///
+    /// Null, or a null or empty result, means the map was not refused. Set
+    /// this by member name after the positional binding: later members are
+    /// appended here, and a positional list would assign them.
+    ///
+    /// @param context LobbyMaps.context
+    /// @param name the map's name
+    /// @return the reason, valid until the next choice; null when there is none
+    const char* (*refusal)(void* context, const char* name){};
+    /// The context pack is called with; the map packs' own, apart from context.
+    void* pack_context{};
+    /// On the host: the map pack of the selected map, which this machine's
+    /// presence record names. The battle room asks it once each time the
+    /// selected map's name changes and once after each binding
+    /// (multiplayer_bind_map_pack), never every frame, and keeps the answer
+    /// between. False back, or null, for a map of no pack.
+    ///
+    /// @param context pack_context
+    /// @param[out] out the selected map's pack
+    /// @return true when the selected map comes from a pack
+    bool (*pack)(void* context, netgame::PresenceMapPack* out){};
 };
 
 /// Returns the memory, in MB, a map needs by the size of its terrain file.
@@ -327,6 +340,58 @@ inline constexpr uint8_t autopause = 0x02;  ///< AUTOPAUSE says ".autopause"
 inline constexpr uint8_t randomteam = 0x04; ///< RANDOMTEAM says "+randomteam"
 inline constexpr uint8_t crcreport = 0x08;  ///< CRCREPORT says ".crcreport"
 } // namespace lobby_button
+
+/// The battle room's presence records (oa/netgame/presence.hpp): the one
+/// this machine sends and the one each OA player of another machine sent.
+///
+/// This machine's record goes to every human player of another machine
+/// whose own setup block carries the 'OA' signature (netgame::presence_peer),
+/// OA 0.7 machines included, which ignore it; never to a computer player,
+/// a machine without the signature or everyone at once. It goes alone in
+/// its frame, once each time it changes and once to each such player who
+/// arrives later. The setup blocks carry no presence. Each slot's entries
+/// stay with its player when the battle room moves players between slots.
+struct PresenceRecords {
+    /// This machine's record as the app binds it, without a map pack
+    /// (multiplayer_bind_presence_record); source_size bytes of it are set.
+    uint8_t source[netgame::presence_record_max_bytes]{};
+    uint16_t source_size{}; ///< 0 until a record is bound
+    /// The record this machine sends: the source and, on the host, the map
+    /// pack of its selected map (presence_refresh); local_size bytes are set.
+    uint8_t local[netgame::presence_record_max_bytes]{};
+    uint16_t local_size{}; ///< 0 while no record is bound: nothing is sent
+    /// Counts the changes of local, from 1; 0 while it never held a record.
+    uint32_t local_generation{};
+    /// The record each slot's player sent; peer_size[slot] bytes are set.
+    uint8_t peer[kSlotCount][netgame::presence_record_max_bytes]{};
+    uint16_t peer_size[kSlotCount]{}; ///< 0 for no record
+    uint32_t peer_id[kSlotCount]{};   ///< the player the stored record came from
+    /// The player whose own setup block each slot holds: set as its 0x20 is
+    /// applied, cleared as a player is seated in the slot or leaves it. Until
+    /// then the slot's block may still hold an earlier player's bytes, so
+    /// presence_peer reads it only for this player.
+    uint32_t block_player[kSlotCount]{};
+    /// The generation of local last sent to each slot's player.
+    uint32_t sent_generation[kSlotCount]{};
+    uint32_t sent_to[kSlotCount]{}; ///< the player it was sent to; 0 for none
+    /// On the host: the selected map's name when LobbyMaps::pack was last
+    /// asked, cut to fit.
+    char pack_map[sizeof(PlayerSetupInfo::map_name)]{};
+    /// The answer: the value of the map-pack field (tag 0x40), pack_size
+    /// bytes of it set; 0 for a map of no pack.
+    uint8_t pack[netgame::presence_map_pack_field_max_bytes]{};
+    uint16_t pack_size{}; ///< 0 for no pack
+    /// A map-pack binding has come since pack was last asked: the next
+    /// presence_refresh asks it again.
+    bool pack_rebound{};
+    /// The sim hash of 3.1c's own rules: the plain baseline's, the profile
+    /// a game without a mod resolves to (base_game_profile_text in
+    /// oa/data/mod_profile/overrides.hpp), as this machine's presence
+    /// record carries it when it plays 3.1c. lobby_reset sets it; nothing
+    /// while the baseline does not resolve. Under a 3.1c host the rules dot
+    /// compares a player's record with it (lobby_rules_differ_from_host).
+    std::optional<netgame::PresenceDigest> plain_sim_hash{};
+};
 
 struct Lobby {
     Game* game{};
@@ -381,9 +446,9 @@ struct Lobby {
     /// the form it reads (lobby_say). Not one of the game's rules: players
     /// with it on and off play together.
     bool unicode_chat{};
-    /// What this machine says of itself in the setup block's bytes 0xAF-0xB3.
-    /// Revision 0 writes nothing, until a presence is bound.
-    netgame::PresenceBlock presence{};
+    /// The presence record this machine sends to the OA players of other
+    /// machines, and the ones they sent (PresenceRecords).
+    PresenceRecords presence_records{};
 };
 
 // ---------------------------------------------------------------------------
@@ -489,7 +554,10 @@ struct StartedOptions {
 /// Prepares an empty lobby: every slot open and cleared, infos bound, no colours or teams, local slot 0.
 ///
 /// No player is stalled, and a game with no player timeout gets
-/// kDefaultPlayerTimeoutSeconds.
+/// kDefaultPlayerTimeoutSeconds. The presence records other players sent
+/// and what was sent to them are forgotten; this machine's own record stays.
+/// The plain baseline's sim hash is set (PresenceRecords::plain_sim_hash),
+/// resolved the first time a lobby is reset and kept for the run.
 ///
 /// @param[out] lobby Lobby to reset; it is bound to game.
 /// @param[in,out] game Game block whose player records and chat ring are cleared.
@@ -617,21 +685,6 @@ bool recorder_chat_line(Lobby& lobby, int32_t sender_slot, const char* text) noe
 /// @param slot The player's slot.
 void recorder_note_block(Lobby& lobby, int32_t slot) noexcept;
 
-/// Reads the presence a battle-room slot carries.
-///
-/// A slot this machine plays (a local player or a computer player) answers
-/// with Lobby::presence when that revision is 1 or more. Any other occupied
-/// slot answers with the presence read from its block, which is nothing
-/// unless the block says Open Annihilation sent it and names a revision of
-/// 1 or more. An empty slot, and a slot number outside the battle room,
-/// answers with nothing.
-///
-/// @param lobby Lobby state.
-/// @param slot The slot; outside 0..9 answers with nothing.
-/// @return The presence, or nothing.
-[[nodiscard]] std::optional<netgame::PresenceBlock>
-lobby_slot_presence(Lobby& lobby, int32_t slot) noexcept;
-
 /// Reads a recorder record another machine sent to the battle room: the host's options and warp-done.
 ///
 /// The host's speed lock among its options is taken only under WireRules::speed_lock.
@@ -718,7 +771,7 @@ void lobby_cycle_team(Lobby& lobby, Panel& panel, int32_t slot) noexcept;
 /// Swaps two player records, opens the first, and renumbers every slot's index.
 ///
 /// The game renumbers eleven records; the eleventh lies past the table and
-/// is not touched here.
+/// is not touched here. The slots' presence entries are swapped with them.
 ///
 /// @param[in,out] lobby Lobby state.
 /// @param first Slot that ends up open, holding the second's old record.
@@ -856,7 +909,10 @@ enum class LobbyFront : uint8_t {
 /// sync and the periodic block, then flushes what the frame queued.
 ///
 /// Once the incoming records are applied, the stall scan
-/// (lobby_check_timeouts) sets Lobby::stalled_player, whatever is in front.
+/// (lobby_check_timeouts) sets Lobby::stalled_player, whatever is in front,
+/// and this machine's presence record is composed again (presence_refresh)
+/// and sent to each OA player who has not had it as it is now
+/// (presence_send_due).
 ///
 /// About every two seconds, for each seated local or computer player in slot
 /// order and from that player: what is queued is flushed, a ping (0x02) goes
@@ -1077,7 +1133,9 @@ void lobby_publish_session(Lobby& lobby) noexcept;
 /// slot's own reset (Player and info defaults) follows the lobby
 /// rules. Players already in a joined session arrive the same way. A
 /// player seated from another machine takes back the prebuilt bases the
-/// host offered, which the host's recorder announces.
+/// host offered, which the host's recorder announces. The slot's presence
+/// entries are cleared: the player gets this machine's record once its own
+/// setup block says it is an OA player.
 ///
 /// @param[in,out] lobby Lobby state.
 /// @param player_id Session player id.
@@ -1111,7 +1169,11 @@ void lobby_add_computer(Lobby& lobby, int32_t slot) noexcept;
 /// any other record, of whatever type, stamps its seated sender's
 /// Player.last_update_time, which the stall scan reads. A received
 /// 0x1b naming a seated player rejects it as lobby_reject does, passing it
-/// on once.
+/// on once. A player's setup block (0x20) sends it this machine's presence
+/// record when it is due (presence_send_due). A presence record (0xf0) from
+/// a seated remote player whose length word is the event's size is kept as
+/// that player's (lobby_presence_record); any other is ignored. A departed
+/// player's record is forgotten.
 ///
 /// @param[in,out] lobby Lobby state.
 /// @param event Event from LobbyNet::receive.
@@ -1124,6 +1186,102 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept;
 /// @param player_id Session player id.
 /// @return The slot, or -1.
 [[nodiscard]] int32_t slot_for_player_id(Lobby& lobby, uint32_t player_id) noexcept;
+
+// ---------------------------------------------------------------------------
+// Presence records (Lobby::presence_records)
+
+/// Returns the presence record of the player in a slot.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9.
+/// @return For a slot this machine plays, its own or a computer player's, the record this machine
+///         sends; for a remote slot in use, the record the player seated there now sent; else empty.
+[[nodiscard]] std::span<const uint8_t> lobby_presence_record(Lobby& lobby, int32_t slot) noexcept;
+
+/// Composes the record this machine sends (PresenceRecords::local).
+///
+/// The record is the bound source and, when this machine hosts and
+/// LobbyMaps::pack names a pack for the selected map, a map-pack field
+/// (tag 0x40). The pack is asked only when the selected map's name differs
+/// from the one it was last asked for, or once a binding has come since,
+/// and its answer is kept between. A descriptor URL over 255 bytes, a name
+/// over 64 bytes or a version over 32 bytes is sent empty; a pack that still
+/// does not fit beside the source is left out. When the record differs from
+/// the one held, it is taken and the generation counts on. An empty source
+/// leaves the record empty.
+///
+/// @param[in,out] lobby Lobby state.
+void presence_refresh(Lobby& lobby) noexcept;
+
+/// Sends this machine's record to each OA player who has not had it as it is now.
+///
+/// A player gets it when its remote slot is in use, its own setup block has
+/// arrived with state 1 (a human: watchers too, never a computer player) and
+/// carries the 'OA' signature (netgame::presence_peer), and the generation
+/// and player last sent to the slot are not the record's and this player.
+/// Each record goes from the local player to that player alone, in a frame
+/// of its own: what is queued goes out first, then the record. Nothing is
+/// sent while the record is empty or outside a live session.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param only_slot The one slot to look at; -1 looks at every slot.
+void presence_send_due(Lobby& lobby, int32_t only_slot = -1) noexcept;
+
+// ---------------------------------------------------------------------------
+// The OA badge and the rules dot: what a battle room row shows in its CD<slot>
+// rectangle.
+
+/// What a battle room row shows in its CD<slot> rectangle.
+enum class RowBadge : uint8_t {
+    none,              ///< nothing
+    disc,              ///< the CD icon: a player on 3.1c who has the game disc
+    open_annihilation, ///< the OA badge: a player on OA
+};
+
+/// What a battle room row shows in its CD<slot> rectangle, and whether its badge carries the dot.
+struct RowBadgeState {
+    RowBadge badge{};    ///< what the rectangle shows
+    bool rules_differ{}; ///< the OA badge carries the dot (lobby_rules_differ_from_host)
+};
+
+/// Returns what a battle room row shows in its CD<slot> rectangle, and whether its badge carries the dot.
+///
+/// A row shows something only while it shows a player (an active slot or a
+/// watcher) who is present: this machine's own player, or a remote player
+/// whose block says it is playing. Such a player has the OA badge when it is
+/// this machine's own player, which is always OA's, or its setup block
+/// carries the 'OA' signature; else the CD icon when its block says it has
+/// the game disc (status::has_disc); else nothing. OA asks for no disc, so
+/// an OA player never shows the CD icon, though its block reports one for a
+/// 3.1c host's count before START. The dot is lobby_rules_differ_from_host.
+/// Reads only the presence records' sim hashes and allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9; any other shows nothing.
+/// @return The row's badge and its dot.
+[[nodiscard]] RowBadgeState lobby_row_badge(Lobby& lobby, int32_t slot) noexcept;
+
+/// Tells whether a row's player plays by rules other than the host's, as the dot on its OA badge says.
+///
+/// Decided from the presence records alone (lobby_presence_record): a setup
+/// block carries no presence and is never read for rules. Never for the
+/// host's own row, a row without the OA badge, or when no host slot is found
+/// (lobby_host_slot). Otherwise:
+/// 1. when the row's record and the host's each carry a sim hash, the rules
+///    differ exactly when the two hashes do;
+/// 2. else, when the host is a 3.1c machine (not this machine, and its block
+///    without the 'OA' signature), the host plays 3.1c's own rules, and the
+///    row's differ when its record carries a sim hash other than the plain
+///    baseline's (PresenceRecords::plain_sim_hash);
+/// 3. else no record tells, and they do not differ.
+///
+/// Reads the records' sim hashes only (netgame::presence_sim_hash) and
+/// allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9; any other gives false.
+/// @return True when the row's OA badge carries the dot.
+[[nodiscard]] bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept;
 
 // ---------------------------------------------------------------------------
 // Machine groups: the players one machine seats share Player.machine_group

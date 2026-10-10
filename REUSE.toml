@@ -59,13 +59,11 @@ path = [
 SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
 SPDX-License-Identifier = "GPL-3.0-only"
 
-# The whole files of the language packs, which the game shows as they are
-# and so cannot hold a comment: briefings and the like in the game data's
-# language folders, under each pack's files/ folder.
+# The whole files of the language-pack tests, which the game shows as they
+# are and so cannot hold a comment: briefings and the like under each pack's
+# files/ folder, and the warm-up lists.
 [[annotations]]
 path = [
-    "languages/*/files/**",
-    "languages/*/warmup.txt",
     "src/data/languages/tests/pseudo-pack/files/**",
     "src/data/languages/tests/**/warmup.txt",
 ]

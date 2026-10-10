@@ -8,6 +8,7 @@
 // pause, speed and leave. --net-loopback-check hosts and joins in one
 // process over 127.0.0.1, runs the in-game team panels over the session
 // and compares both worlds after a settled run.
+#include "oa/app/pack_map_source.hpp"
 #include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
@@ -25,7 +26,7 @@
 #include "oa/netgame/match/match_binding.hpp"
 #include "oa/netgame/match/net_match.hpp"
 #include "oa/netgame/match/session_lobby.hpp"
-#include "oa/netgame/presence_block.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/netgame/unicode_chat.hpp"
 #include "oa/app/netgame/extension_api.hpp"
@@ -60,8 +61,11 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -511,7 +515,7 @@ void mark_agreed_units(void* context, UnitDef* headers, uint32_t count) {
 #error "OA_ENGINE_VERSION names the engine's version for the recorder's report line"
 #endif
 #ifndef OA_ENGINE_VERSION_LABEL
-#error "OA_ENGINE_VERSION_LABEL names a development build for the setup block's presence"
+#error "OA_ENGINE_VERSION_LABEL names the engine's version label, empty for a release build"
 #endif
 
 /// The line this machine's recorder answers .report with: the program and its version.
@@ -519,6 +523,179 @@ constexpr const char* kProgramLine = "Open Annihilation " OA_ENGINE_VERSION;
 /// The engine's version as the engine shows it, which the battle room's
 /// line names.
 constexpr const char* kEngineVersionText = "v" OA_ENGINE_VERSION;
+
+/// Returns the engine's version as a presence record names it: the version,
+/// and a development build's label after a '-' ("0.8.0-dev").
+///
+/// @return the version text
+std::string presence_engine_text() {
+    std::string version = OA_ENGINE_VERSION;
+    constexpr std::string_view label = OA_ENGINE_VERSION_LABEL;
+    if (!label.empty())
+        version.append("-").append(label);
+    return version;
+}
+
+/// The facts a presence record left out, each reported once (one bit each).
+namespace presence_problem {
+inline constexpr uint32_t engine = 0x001;       ///< the version text breaks its rule
+inline constexpr uint32_t platform = 0x002;     ///< the platform's name breaks its rule
+inline constexpr uint32_t architecture = 0x004; ///< the architecture's name breaks its rule
+inline constexpr uint32_t mod = 0x008;          ///< the mod's id, name or revision breaks its rule
+inline constexpr uint32_t mod_version = 0x010;  ///< the mod's version breaks its rule
+inline constexpr uint32_t mod_origin = 0x020;   ///< the mod's origin breaks its rule
+inline constexpr uint32_t game_hack = 0x040;    ///< a game hack's id breaks its rule
+inline constexpr uint32_t view_hack = 0x080;    ///< a view hack's id breaks its rule
+inline constexpr uint32_t override_id = 0x100;  ///< an override's hack id breaks its rule
+inline constexpr uint32_t no_reserve = 0x200;   ///< the record leaves no room for a map pack
+} // namespace presence_problem
+
+/// Tells whether every field of a record keeps the record's rules.
+///
+/// @param record the record
+/// @return true when it encodes, or is refused only for its size
+bool presence_keeps_rules(const oa::netgame::PresenceRecord& record) {
+    uint8_t bytes[oa::netgame::presence_record_max_bytes];
+    std::size_t written = 0;
+    return oa::netgame::encode_presence(record, bytes, sizeof bytes, &written) !=
+           oa::netgame::WireError::bad_argument;
+}
+
+/// Writes this machine's presence record from its facts, without a map pack.
+///
+/// A fact that breaks the record's rules is left out: a platform or
+/// architecture name, or a mod's version, is sent empty; an engine, a mod,
+/// an origin, a hack or an override is left out. Each kind is reported on
+/// the error stream the first time.
+///
+/// @param facts what this machine is playing
+/// @param[in,out] reported the presence_problem bits already reported
+/// @return the record; empty only when nothing could be written
+std::vector<uint8_t> write_presence_record(const PresenceFacts& facts, uint32_t& reported) {
+    namespace ng = oa::netgame;
+    const auto report = [&](uint32_t problem, const char* what) {
+        if ((reported & problem) != 0)
+            return;
+        reported |= problem;
+        std::cerr << "multiplayer: the presence record leaves out " << what << '\n';
+    };
+    ng::PresenceRecord record;
+    ng::PresenceRecord probe;
+
+    ng::PresenceEngine engine{presence_engine_text(), facts.platform, facts.architecture};
+    probe.engine = ng::PresenceEngine{engine.version, engine.platform, ""};
+    if (!presence_keeps_rules(probe)) {
+        report(presence_problem::platform, "the platform's name");
+        engine.platform.clear();
+    }
+    probe.engine = ng::PresenceEngine{engine.version, "", engine.architecture};
+    if (!presence_keeps_rules(probe)) {
+        report(presence_problem::architecture, "the architecture's name");
+        engine.architecture.clear();
+    }
+    probe = {};
+    probe.engine = engine;
+    if (presence_keeps_rules(probe))
+        record.engine = std::move(engine);
+    else
+        report(presence_problem::engine, "the engine's version");
+
+    if (facts.mod) {
+        const auto& mod = *facts.mod;
+        probe = {};
+        if (mod.packaging_revision >= 0 &&
+            mod.packaging_revision <= std::numeric_limits<uint16_t>::max()) {
+            probe.mod = ng::PresenceMod{
+                mod.id, mod.name, mod.version, static_cast<uint16_t>(mod.packaging_revision)
+            };
+            if (!presence_keeps_rules(probe)) {
+                probe.mod->version.clear();
+                if (presence_keeps_rules(probe))
+                    report(presence_problem::mod_version, "the mod's version");
+            }
+        }
+        if (probe.mod && presence_keeps_rules(probe))
+            record.mod = std::move(probe.mod);
+        else
+            report(presence_problem::mod, "the mod: its id, name or packaging revision");
+    }
+    // The origin is the mod's, so it goes only with the mod. A descriptor
+    // URL over 255 bytes is sent empty, as for a registry not in effect.
+    constexpr std::size_t url_most_bytes = 255;
+    if (record.mod && facts.mod_origin) {
+        const auto& origin = *facts.mod_origin;
+        probe = {};
+        if (origin.catalogue_release >= 1 &&
+            origin.catalogue_release <= std::numeric_limits<uint32_t>::max()) {
+            probe.mod_origin = ng::PresenceOrigin{
+                origin.registry,
+                origin.descriptor_url.size() > url_most_bytes ? std::string{}
+                                                              : origin.descriptor_url,
+                static_cast<uint32_t>(origin.catalogue_release),
+                origin.sha256
+            };
+            if (!presence_keeps_rules(probe))
+                probe.mod_origin->descriptor_url.clear();
+        }
+        if (probe.mod_origin && presence_keeps_rules(probe))
+            record.mod_origin = std::move(probe.mod_origin);
+        else
+            report(presence_problem::mod_origin, "where the mod was published");
+    }
+    record.sim_hash = facts.sim_hash;
+
+    const auto hacks =
+        [&](const std::vector<std::string>& ids, uint32_t problem, const char* what) {
+            ng::PresenceHacks list;
+            list.total = static_cast<uint16_t>(
+                std::min<std::size_t>(ids.size(), std::numeric_limits<uint16_t>::max())
+            );
+            for (const auto& id : ids) {
+                probe = {};
+                probe.game_hacks = ng::PresenceHacks{1, {id}};
+                if (presence_keeps_rules(probe))
+                    list.ids.push_back(id);
+                else
+                    report(problem, what);
+            }
+            return list;
+        };
+    record.game_hacks = hacks(facts.game_hacks, presence_problem::game_hack, "a game hack's id");
+    record.view_hacks = hacks(facts.view_hacks, presence_problem::view_hack, "a view hack's id");
+
+    ng::PresenceDeveloper developer;
+    developer.on = facts.developer_mode;
+    developer.total = static_cast<uint16_t>(
+        std::min<std::size_t>(facts.overrides.size(), std::numeric_limits<uint16_t>::max())
+    );
+    for (const auto& override : facts.overrides) {
+        probe = {};
+        probe.developer = ng::PresenceDeveloper{false, 1, {{override.hack, override.on}}};
+        if (presence_keeps_rules(probe))
+            developer.overrides.push_back(ng::PresenceOverride{override.hack, override.on});
+        else
+            report(presence_problem::override_id, "an override's hack id");
+    }
+    record.developer = std::move(developer);
+
+    // The host's map pack always fits beside the record, unless the
+    // record's fixed fields alone need more.
+    constexpr std::size_t reserved_capacity =
+        ng::presence_record_max_bytes - ng::presence_map_pack_field_max_bytes;
+    uint8_t bytes[ng::presence_record_max_bytes];
+    std::size_t written = 0;
+    auto error = ng::encode_presence(record, bytes, reserved_capacity, &written);
+    if (error == ng::WireError::buffer_too_small) {
+        report(
+            presence_problem::no_reserve,
+            "the room for the host's map pack, which may then not fit beside it"
+        );
+        error = ng::encode_presence(record, bytes, sizeof bytes, &written);
+    }
+    if (error != ng::WireError::ok)
+        return {};
+    return std::vector<uint8_t>(bytes, bytes + written);
+}
 
 /// The network rules of a runtime's profile.
 ///
@@ -1732,6 +1909,7 @@ void NetworkPlay::net_bind_multiplayer() {
     bind_profile_rules();
     if (net_->connected)
         mp::multiplayer_bind_net(nm::session_lobby_net(&net_->connection));
+    mp::multiplayer_bind_map_source(oa::app::pack_map_source(runtime_));
     if (net_options().check_host_not_found)
         mp::multiplayer_bind_clock({nullptr, [](void*) { return host_not_found_clock_ms(); }});
     mp::multiplayer_bind_player_timeout(net_launch_switches().net_timeout_seconds);
@@ -1796,20 +1974,19 @@ void NetworkPlay::follow_unicode_chat() {
 void NetworkPlay::follow_presence() {
     if (presence_taken_ && !mp::multiplayer_showing())
         return;
+    const bool first = !presence_taken_;
     presence_taken_ = true;
-    const auto facts = presence_facts(runtime_);
-    auto block = oa::netgame::presence_version(OA_ENGINE_VERSION, OA_ENGINE_VERSION_LABEL);
-    if (facts.developer_mode)
-        block.flags =
-            static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::developer_mode);
-    if (facts.rules_differ_from_base)
-        block.flags = static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::rules_differ);
-    if (!facts.view_hacks.empty())
-        block.flags = static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::view_hacks);
-    if (block == bound_presence_)
+    auto facts = presence_facts(runtime_);
+    if (!first && facts == presence_facts_)
         return;
-    mp::multiplayer_bind_presence(block);
-    bound_presence_ = block;
+    presence_facts_ = std::move(facts);
+    auto record = write_presence_record(presence_facts_, presence_reported_);
+    if (!first && record == bound_presence_record_)
+        return;
+    bound_presence_record_ = std::move(record);
+    mp::multiplayer_bind_presence_record(
+        bound_presence_record_.data(), bound_presence_record_.size()
+    );
 }
 
 // Per frame: the load barrier while loading; in the match a pause set
@@ -2135,9 +2312,15 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         mp::lobby_reset(*side->lobby, *side->game);
         side->lobby->net = side->net;
         side->lobby->wire_rules = runtime_wire_rules(side->play->runtime_);
-        side->play->follow_presence();
-        side->lobby->presence = side->play->bound_presence_;
         side->lobby->unicode_chat = side->play->unicode_chat();
+        // Each machine's presence record, as its battle room would hold it.
+        side->play->follow_presence();
+        const auto& presence = side->play->bound_presence_record_;
+        auto& records = side->lobby->presence_records;
+        records.source_size =
+            static_cast<uint16_t>(std::min(presence.size(), sizeof records.source));
+        std::copy_n(presence.begin(), records.source_size, records.source);
+        mp::presence_refresh(*side->lobby);
         side->lobby->local_version_major = side->lobby->wire_rules.version_major;
         side->lobby->local_version_minor = side->lobby->wire_rules.version_minor;
         nm::net_connection_set_rules(&side->play->net_->connection, side->lobby->wire_rules);
@@ -2245,6 +2428,33 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         },
         "player info did not arrive"
     );
+    // Each machine sent the other its presence record, alone in its frame,
+    // as the other's block arrived with the 'OA' signature, and keeps the
+    // one the other sent.
+    const auto presence_of = [](LoopbackSide& side, uint32_t player_id) {
+        return mp::lobby_presence_record(
+            *side.lobby, mp::slot_for_player_id(*side.lobby, player_id)
+        );
+    };
+    wait_until(
+        [&] {
+            drain(host);
+            drain(client);
+            return !presence_of(host, client_id).empty() && !presence_of(client, host_id).empty();
+        },
+        "a presence record did not arrive"
+    );
+    const auto presence_engine = presence_engine_text();
+    for (const auto record : {presence_of(host, client_id), presence_of(client, host_id)}) {
+        oa::netgame::PresenceRecord decoded;
+        require(
+            oa::netgame::decode_presence(record.data(), record.size(), &decoded) ==
+                    oa::netgame::WireError::ok &&
+                decoded.engine && decoded.engine->version == presence_engine,
+            "a presence record did not name this build's engine"
+        );
+    }
+    std::cout << "net loopback check: presence records exchanged\n";
     // The host seats a computer player in the first open slot, as a click on
     // a closed slot does: a player of the host's session, playing Core. It
     // joins the host's team, unless the joiner only watches: then it plays
@@ -2425,22 +2635,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     };
     const auto probes_before_build = joiner_received(oa::netgame::RecordType::probe);
     std::vector<uint8_t> build_progress;
-    // The match copies each kept block and sends that copy on. The battle
-    // room's send stamps a record, which does not write the block it keeps,
-    // and this check never enters the battle room, so the local and computer
-    // blocks are marked here, after seating and before each launch.
-    const auto mark_kept_presence = [](mp::Lobby& lobby) {
-        for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
-            const auto& player = mp::slot_player(lobby, slot);
-            if (player.in_use == 0)
-                continue;
-            if (player.status != mp::kSlotLocal && player.status != mp::kSlotComputer)
-                continue;
-            if (auto* info = mp::slot_info(lobby, slot))
-                oa::netgame::mark_presence(reinterpret_cast<uint8_t*>(info), lobby.presence);
-        }
-    };
-    mark_kept_presence(*host.lobby);
     NetHost::launch(*this, *host.lobby);
     require(net_->active && net_->loading, "host launch");
     wait_until(
@@ -2461,7 +2655,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             !build_progress.empty() && build_progress.front() < nm::load_progress_complete,
         "the host's build sent no probe or load progress to the joiner"
     );
-    mark_kept_presence(*client.lobby);
     NetHost::launch(joiner_play, *client.lobby);
     require(joiner_play.net_->active && joiner_play.net_->loading, "client launch");
     // The load barrier and the match entry run through the per-frame path.
@@ -2516,14 +2709,43 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             "a machine did not start the network game at the normal speed"
         );
     }
+    const auto& host_world = runtime_.match_->state();
+    const auto& client_world = joiner.match_->state();
+    // The setup blocks each machine holds of the other machine's players, a
+    // computer player's among them, came from that machine and carry the
+    // five bytes after the engine signature as zero, as 0.7 sent them:
+    // presence travels only in the presence record. Counted are the remote
+    // blocks seen, and those whose five bytes are all zero.
+    int32_t remote_blocks = 0;
+    int32_t blocks_without_presence = 0;
+    for (const auto* world : {&host_world, &client_world})
+        for (const auto& player : world->game.players) {
+            if (player.in_use == 0 || player.status != OA_PLAYER_STATUS_MIRRORED)
+                continue;
+            const auto* info = world_player_info(world, &player);
+            if (info == nullptr)
+                continue;
+            ++remote_blocks;
+            if (std::all_of(
+                    std::begin(info->reserved_after_signature),
+                    std::end(info->reserved_after_signature),
+                    [](uint8_t at) { return at == 0; }
+                ))
+                ++blocks_without_presence;
+        }
+    std::cout << "net loopback check: setup blocks carry no presence bytes: "
+              << blocks_without_presence << " / " << remote_blocks << '\n';
+    require(remote_blocks > 0, "no remote setup block reached either machine");
+    require(
+        blocks_without_presence == remote_blocks,
+        "a remote setup block carried bytes after the engine signature"
+    );
     if (computer) {
         NetHost::computer_match(*this, joiner_play, ticks, computer_id, watching);
         return 0;
     }
     const auto host_commander = NetHost::local_commander(*this);
     require(host_commander != 0, "host commander");
-    const auto& host_world = runtime_.match_->state();
-    const auto& client_world = joiner.match_->state();
     const auto commander_z = host_world.units[host_commander].position.z;
     const auto speed_before = runtime_.preferences_.current_game_speed;
     // The host commander's pose at each host tick; the client's copy is
@@ -2562,34 +2784,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     require(
         unicode_chat() || (utf8_blocks(host_world) == 0 && utf8_blocks(client_world) == 0),
         "a setup block said UTF-8 chat with Unicode chat off"
-    );
-    // Each machine's in-match block of the other player carries this build's
-    // presence. The host's world holds the joiner's block, and the joiner's
-    // world holds the host's.
-    const auto expected = oa::netgame::presence_version(OA_ENGINE_VERSION, OA_ENGINE_VERSION_LABEL);
-    const auto presence_blocks = [&](const World& world, uint32_t player_id) {
-        int32_t count = 0;
-        for (const auto& player : world.game.players) {
-            if (player.in_use == 0 || player.player_id != player_id)
-                continue;
-            const auto* info = world_player_info(&world, &player);
-            if (info == nullptr)
-                continue;
-            const auto carried = oa::netgame::read_presence(reinterpret_cast<const uint8_t*>(info));
-            if (carried && carried->revision == expected.revision &&
-                carried->major == expected.major && carried->minor == expected.minor &&
-                carried->patch == expected.patch)
-                ++count;
-        }
-        return count;
-    };
-    const auto host_presence = presence_blocks(host_world, client_id);
-    const auto joiner_presence = presence_blocks(client_world, host_id);
-    std::cout << "net loopback check: presence in the remote setup blocks " << host_presence
-              << " / " << joiner_presence << '\n';
-    require(
-        host_presence == 1 && joiner_presence == 1,
-        "a remote setup block did not carry this build's presence"
     );
     std::vector<UnitPose> host_poses;
     uint32_t copy_compared = 0;

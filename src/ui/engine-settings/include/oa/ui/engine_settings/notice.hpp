@@ -4,67 +4,42 @@
 // A notice of Open Annihilation's own: a box in the settings dialog's look
 // that tells the player something once, with a folder's path, a button that
 // opens the folder and OK. The main menu shows it over itself, darkened as
-// under the settings dialog; what a press, a release or a key does to it, and
-// how it is drawn in the game's own fonts, are here.
+// under the settings dialog. The notice is the OA UI kit's (kit::Notice in
+// oa/ui/kit/components_more.hpp) under its old names: what a press, a
+// release or a key does to it, and how it is drawn in the game's own fonts,
+// are the kit's, and its words are looked up in the language shown.
 #pragma once
 
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/components_more.hpp"
 
 #include <cstdint>
-#include <string>
-#include <string_view>
 #include <vector>
 
 namespace oa::ui::engine_settings {
 
 /// The notice's width, in source pixels.
-inline constexpr int32_t notice_width = 400;
+inline constexpr int32_t notice_width = oa::ui::kit::notice_width;
 /// The notice's least height, in source pixels; it grows with its text.
-inline constexpr int32_t least_notice_height = 150;
+inline constexpr int32_t least_notice_height = oa::ui::kit::least_notice_height;
 /// The notice's greatest height, in source pixels: what the game's 640 by 480
 /// picture holds with a margin; text below it is cut.
-inline constexpr int32_t greatest_notice_height = 440;
+inline constexpr int32_t greatest_notice_height = oa::ui::kit::greatest_notice_height;
 
 /// OK, which closes the notice.
-inline constexpr int32_t notice_ok_control = 0;
+inline constexpr int32_t notice_ok_control = oa::ui::kit::notice_ok;
 /// The button that opens the notice's folder.
-inline constexpr int32_t notice_open_control = 1;
+inline constexpr int32_t notice_open_control = oa::ui::kit::notice_open;
 
-/// A paragraph of a notice's text.
-struct NoticeParagraph {
-    std::string text; ///< UTF-8; wrapped between words, or for a path at its separators
-    /// A folder's path: drawn in the regular font and broken after a
-    /// separator, a component too long for a line within it; any other
-    /// paragraph is drawn in the small font, broken between words.
-    bool path{};
-};
+/// A paragraph of a notice's text: the kit's.
+using NoticeParagraph = oa::ui::kit::Paragraph;
 
-/// One notice.
-struct Notice {
-    std::string title;                       ///< the header's title, in capitals
-    std::vector<NoticeParagraph> paragraphs; ///< its text, top to bottom
-    std::string open_caption;                ///< the caption of the button that opens the folder
-    /// Why the folder could not be opened, drawn in amber under the text;
-    /// empty for none.
-    std::string failure;
-    int32_t hovered{no_control}; ///< the button under the pointer
-    int32_t pressed{no_control}; ///< the button a held press is on
-    /// The button the keys mark and Space presses, ringed in green: OK at
-    /// first.
-    int32_t marked{notice_ok_control};
-    /// The columns a finger's held press was moved by to reach the button it
-    /// took (notice_finger_down): its moves and its release are moved as far.
-    int32_t finger_shift_x{};
-    int32_t finger_shift_y{}; ///< the rows a finger's held press was moved by, as finger_shift_x
-};
+/// One notice: the kit's. Its title, its text and its open button's caption
+/// are given in English and shown looked up in the language shown.
+using Notice = oa::ui::kit::Notice;
 
-/// What an event on the notice asks of the host.
-enum class NoticeAction : uint8_t {
-    none,        ///< nothing
-    redraw,      ///< only its look changed: a hover, a press or the mark
-    open_folder, ///< open the notice's folder in the file manager; the notice stays
-    closed,      ///< OK, Enter or Escape: the notice is done with
-};
+/// What an event on the notice asks of the host: the kit's.
+using NoticeAction = oa::ui::kit::NoticeAction;
 
 /// Returns the notice's height: its header, its text wrapped in the fonts
 /// (at estimated_character_width a character without them) and its footer,
@@ -141,11 +116,12 @@ notice_finger_down(Notice& notice, int32_t x, int32_t y, int32_t height, int32_t
 /// @return what the key asks of the host
 [[nodiscard]] NoticeAction notice_key(Notice& notice, DialogKey key);
 
-/// Draws the notice: a raised panel in the settings dialog's colours, a
-/// header with the Open Annihilation icon (or the OA mark) and the title,
-/// the text in white with the paths in the regular font, the failure in
-/// amber, and the open button and OK as Cancel and OK look, the marked one
-/// ringed in green.
+/// Draws the notice through the kit (kit::draw_notice), its title, text and
+/// captions looked up in the language shown: a raised panel in the settings
+/// dialog's colours, a header with the Open Annihilation icon (or the OA
+/// mark) and the title, the text in white with the paths in the regular
+/// font, the failure in amber, and the open button and OK as Cancel and OK
+/// look, the marked one ringed in green.
 ///
 /// @param[in,out] target the surface
 /// @param placement where the notice's top left corner lands, and its scale

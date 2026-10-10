@@ -122,18 +122,15 @@ void chain_at_the_message_log_size() {
     OA_CHECK(chain->count == oa::app::modern_text_face_count);
     OA_CHECK(chain->faces[0].face == oa::app::ModernTextFace::sans_bold);
     OA_CHECK(chain->faces[1].face == oa::app::ModernTextFace::sans);
-    OA_CHECK(chain->faces[2].face == oa::app::ModernTextFace::cjk);
-    OA_CHECK(chain->faces[3].face == oa::app::ModernTextFace::endonyms);
-    OA_CHECK(chain->faces[4].face == oa::app::ModernTextFace::emoji);
+    OA_CHECK(chain->faces[2].face == oa::app::ModernTextFace::endonyms);
+    OA_CHECK(chain->faces[3].face == oa::app::ModernTextFace::emoji);
     OA_CHECK(chain->faces[0].pixel_size == 14 && chain->faces[1].pixel_size == 14);
     OA_CHECK(chain->faces[2].pixel_size == 12 && chain->faces[3].pixel_size == 12);
-    OA_CHECK(chain->faces[4].pixel_size == 12);
-    // Rows as the fonts report them at this size. The line is the CJK face's,
-    // and the endonym face keeps those rows.
+    // Rows as the fonts report them at this size. The line is the endonym
+    // face's, which keeps the rows of the face it was cut from.
     OA_CHECK(chain->faces[0].ascent == 13 && chain->faces[0].descent == 4);
     OA_CHECK(chain->faces[2].ascent == 14 && chain->faces[2].descent == 4);
-    OA_CHECK(chain->faces[3].ascent == 14 && chain->faces[3].descent == 4);
-    OA_CHECK(chain->faces[4].ascent == 12 && chain->faces[4].descent == 3);
+    OA_CHECK(chain->faces[3].ascent == 12 && chain->faces[3].descent == 3);
     OA_CHECK(chain->ascent == 14 && chain->descent == 4);
     chain_rows_are_its_faces(*chain);
 
@@ -142,16 +139,14 @@ void chain_at_the_message_log_size() {
     const auto plain = oa::app::modern_text_chain(regular);
     OA_CHECK(plain.has_value());
     if (plain) {
-        OA_CHECK(plain->count == 4);
+        OA_CHECK(plain->count == 3);
         OA_CHECK(plain->faces[0].face == oa::app::ModernTextFace::sans);
-        OA_CHECK(plain->faces[1].face == oa::app::ModernTextFace::cjk);
-        OA_CHECK(plain->faces[2].face == oa::app::ModernTextFace::endonyms);
-        OA_CHECK(plain->faces[3].face == oa::app::ModernTextFace::emoji);
-        OA_CHECK(plain->faces[4].pixel_size == 0 && plain->faces[4].ascent == 0);
+        OA_CHECK(plain->faces[1].face == oa::app::ModernTextFace::endonyms);
+        OA_CHECK(plain->faces[2].face == oa::app::ModernTextFace::emoji);
+        OA_CHECK(plain->faces[3].pixel_size == 0 && plain->faces[3].ascent == 0);
         OA_CHECK(plain->faces[0].pixel_size == 14);
         OA_CHECK(plain->faces[0].ascent == 13 && plain->faces[0].descent == 4);
         OA_CHECK(plain->faces[1].pixel_size == 12 && plain->faces[2].pixel_size == 12);
-        OA_CHECK(plain->faces[3].pixel_size == 12);
         OA_CHECK(plain->ascent == 14 && plain->descent == 4);
         chain_rows_are_its_faces(*plain);
     }
@@ -163,7 +158,7 @@ void chain_at_the_message_log_size() {
         const oa::app::ModernFaceMetrics* sans =
             chain_face(*held, oa::app::ModernTextFace::sans_bold);
         const oa::app::ModernFaceMetrics* ideograph =
-            chain_face(*held, oa::app::ModernTextFace::cjk);
+            chain_face(*held, oa::app::ModernTextFace::endonyms);
         const oa::app::ModernFaceMetrics* emoji = chain_face(*held, oa::app::ModernTextFace::emoji);
         OA_CHECK(sans && sans->pixel_size == 11 && sans->ascent == 11 && sans->descent == 3);
         OA_CHECK(ideograph && ideograph->pixel_size == 12);
@@ -181,7 +176,7 @@ void chain_at_the_message_log_size() {
     OA_CHECK(!oa::app::modern_text_chain(none));
 }
 
-/// A mixed line comes from the bold sans, the CJK face and emoji, in that order.
+/// A mixed line comes from the bold sans, the endonym face and emoji, in that order.
 void layout_follows_the_chain() {
     const oa::app::ModernTextSize log = oa::app::message_log_text_size(100, 1, false);
     const auto placed = oa::app::modern_text_layout("A\xE4\xB8\xAD\xF0\x9F\x9A\x80", log);
@@ -191,7 +186,7 @@ void layout_follows_the_chain() {
         OA_CHECK((*placed)[0].face == oa::app::ModernTextFace::sans_bold);
         OA_CHECK((*placed)[0].pen == 0 && (*placed)[0].advance > 0);
         OA_CHECK((*placed)[1].character == 0x4E2D);
-        OA_CHECK((*placed)[1].face == oa::app::ModernTextFace::cjk);
+        OA_CHECK((*placed)[1].face == oa::app::ModernTextFace::endonyms);
         OA_CHECK((*placed)[1].pen == (*placed)[0].advance);
         OA_CHECK((*placed)[2].character == 0x1F680);
         OA_CHECK((*placed)[2].face == oa::app::ModernTextFace::emoji);

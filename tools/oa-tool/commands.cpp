@@ -10,6 +10,66 @@
 namespace oa::tool {
 namespace {
 
+const Command catalogue_commands[] = {
+    {
+        "keygen",
+        "--id ID --out FILE [--passphrase-file FILE]",
+        "Make a sealed publisher key.",
+        "Makes a new Ed25519 key, seals its seed with a passphrase and writes the key file. "
+        "--id is the key id a catalogue signature names. The file is created only when that "
+        "name is new, and on macOS and Linux its mode is 0600. The passphrase is read from "
+        "the terminal with echo off, twice, and has to be at least 12 bytes. --passphrase-file "
+        "reads the file's first line instead, and does not ask twice. Prints the key id, the "
+        "public key as ed25519: and its base64, and the key's fingerprint.",
+        0,
+        any_count,
+        run_catalogue_keygen,
+        {},
+    },
+    {
+        "public",
+        "KEY_FILE",
+        "Print a sealed key's public half.",
+        "Reads KEY_FILE and prints the key id, the public key and its fingerprint. The "
+        "passphrase is not used, and the seed is not opened.",
+        1,
+        1,
+        run_catalogue_public,
+        {},
+    },
+    {
+        "sign",
+        "--key KEY_FILE CATALOGUE [--out SIG] [--passphrase-file FILE]",
+        "Sign a catalogue with a sealed key.",
+        "Reads CATALOGUE, opens KEY_FILE with the passphrase and writes a detached signature. "
+        "Without --out the signature is CATALOGUE with .sig added to the name. The signature "
+        "is one line: ed25519, the key's id and the signature of the catalogue's exact bytes. "
+        "A catalogue this build would refuse is refused before the key is opened. The written "
+        "pair is checked, with the catalogue's own registry and this key, before the command "
+        "reports success. Prints the signature file and the key id.",
+        0,
+        any_count,
+        run_catalogue_sign,
+        {},
+    },
+    {
+        "verify",
+        "CATALOGUE [--sig SIG] (--descriptor FILE | --registry ID --key ed25519:<base64> [--key "
+        "...])",
+        "Check a catalogue's signature.",
+        "Checks CATALOGUE against its signature. Without --sig the signature is CATALOGUE with "
+        ".sig added to the name. Pass --descriptor FILE to use that registry's id and keys, or "
+        "--registry ID and at least one --key. Each --key is ed25519: and the key in base64, "
+        "and is read as the key the signature names; the first one is the key that is trusted. "
+        "Prints the signing key and the verdict, and exits 0 when the catalogue can be used. "
+        "A refused catalogue prints the verdict and exits 1.",
+        0,
+        any_count,
+        run_catalogue_verify,
+        {},
+    },
+};
+
 const Command command_table[] = {
     {
         "list",
@@ -112,6 +172,18 @@ const Command command_table[] = {
         any_count,
         run_check,
         {},
+    },
+    {
+        "catalogue",
+        "COMMAND",
+        "Make a publisher key and sign or check a catalogue.",
+        "Makes a sealed publisher key, prints its public half, and signs or checks a catalogue. "
+        "The key's seed is encrypted with a passphrase. A signature is the one line a catalogue "
+        "check reads, and the check is the one the game uses.",
+        0,
+        0,
+        nullptr,
+        catalogue_commands,
     },
 };
 
