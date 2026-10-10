@@ -269,6 +269,18 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
     return true;
 }
 
+LanguageEntry entry_of(const PackManifest& manifest) {
+    LanguageEntry entry;
+    entry.tag = manifest.tag;
+    entry.endonym = manifest.name;
+    entry.english_name = manifest.english_name;
+    entry.word = manifest.word;
+    entry.locales = manifest.locales;
+    entry.fallbacks = manifest.fallbacks;
+    entry.needs = manifest.needs;
+    return entry;
+}
+
 std::string_view pack_table_file(PackTable table) noexcept {
     switch (table) {
     case PackTable::translate:

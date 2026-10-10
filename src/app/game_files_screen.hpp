@@ -63,6 +63,7 @@ struct GameFilesScreenRequest {
     ModChoice mod{};                            ///< the check's mod choice
     std::string version{};                      ///< "v" + the engine's version
     std::optional<fs::path> preferences_file{}; ///< where the backup and language settings live
+    std::optional<fs::path> user_folder{};      ///< --user-folder; empty leaves the player's folder
     bool players_own_profile{};                 ///< the preferences are the player's own
     GameFilesScreenCheckHooks check{};          ///< the check's per-pass hooks; empty for players
 };
@@ -91,7 +92,8 @@ struct GameFilesLanguageRequest {
     oa::platform::text_font::FontStack* fonts{}; ///< the bundled fonts the dialog's text uses
     std::string version{};                       ///< the dialog header's version text
     std::optional<fs::path> preferences_file{};  ///< --preferences-file; empty: the player's own
-    GameFilesDialogHooks hooks{};                ///< the screen's side
+    std::optional<fs::path> user_folder{}; ///< --user-folder; empty leaves the player's folder
+    GameFilesDialogHooks hooks{};          ///< the screen's side
 };
 
 /// Shows the settings dialog limited to Language over the Game files screen, drawn
@@ -106,11 +108,16 @@ struct GameFilesLanguageRequest {
 bool run_game_files_language_dialog(const GameFilesLanguageRequest& request);
 
 /// Puts in effect, for the interface's words, the language the preferences file chooses, with
-/// the interface catalogue read from the languages folder beside the game. The Game files
-/// screen runs before the Runtime, which chooses the language again once it starts.
+/// the interface catalogue read from the languages folder beside the game and the player's
+/// Languages folder. The Game files screen runs before the Runtime, which chooses the language
+/// again once it starts.
 ///
 /// @param preferences_file --preferences-file; empty: the player's own file
-void install_game_files_language(const std::optional<fs::path>& preferences_file);
+/// @param user_folder_option --user-folder; empty leaves the player's folder to the preferences
+void install_game_files_language(
+    const std::optional<fs::path>& preferences_file,
+    const std::optional<fs::path>& user_folder_option
+);
 
 /// Returns the header's version text: "v" and the engine's version.
 ///

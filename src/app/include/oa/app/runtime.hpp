@@ -10397,6 +10397,13 @@ class Runtime final : public menu::Host,
     /// differed.
     void check_language_switch();
 
+    /// Lists every live language and the one the run shows, and checks that
+    /// English is first, the built-in languages follow in their order, the
+    /// pseudo language is installed with the word Pseudo, and the run shows
+    /// it, as the preferences file chooses. Throws std::runtime_error
+    /// naming what differed.
+    void check_language_registry();
+
     /// Checks the commander's build pages against the side column on windows of several sizes.
     ///
     /// On each window from 640x480 to 5120x2880 a skirmish starts, the commander

@@ -1596,6 +1596,7 @@ bool run_game_files_manage_check(
         ModChoice{options.mod_dir, options.mod_file, options.accept_unimplemented_hacks, nullptr};
     request.version = game_files_version_text();
     request.preferences_file = options.preferences_file;
+    request.user_folder = options.user_folder;
     request.players_own_profile = !options.preferences_file.has_value();
     request.check = game_files_check_hooks(options);
     const GameFilesEnd end = run_game_files_screen(request);

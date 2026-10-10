@@ -71,6 +71,18 @@ void other_paths_are_not_answered() {
     OA_CHECK(!answered("camps/-Pseudo/brief.txt"));
 }
 
+/// The pseudo pack's manifest is the registry entry of an installed language.
+void the_pseudo_pack_adds_its_language() {
+    std::vector<std::unique_ptr<LoadedLanguagePack>> packs;
+    oa::app::read_language_packs(packs_folder, packs, nullptr);
+    const auto entries = oa::app::installed_entries({&packs});
+    OA_CHECK(entries.size() == 1);
+    if (entries.empty())
+        return;
+    OA_CHECK(entries.front().tag == "en-XA");
+    OA_CHECK(entries.front().word == "Pseudo");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -82,5 +94,6 @@ int main(int argc, char** argv) {
     packs_folder = argv[1];
     own_briefing_is_read();
     other_paths_are_not_answered();
+    the_pseudo_pack_adds_its_language();
     return oa::test::check_exit_status();
 }

@@ -31,10 +31,40 @@ std::string_view tag_of(const languages::Language* language) {
     return language != nullptr ? language->tag : std::string_view{"none"};
 }
 
+/// Drops installed and available languages, so a case reads none another left.
+void clear_pack_languages() {
+    languages::set_pack_languages({}, {});
+}
+
+/// Makes an entry with the fields the registry keeps.
+///
+/// @param tag its tag
+/// @param endonym its name in itself
+/// @param english_name its name in English
+/// @param word the word the game data knows it by
+/// @param needs what drawing its text needs
+/// @return the entry
+languages::LanguageEntry make_entry(
+    std::string_view tag,
+    std::string_view endonym,
+    std::string_view english_name,
+    std::string_view word,
+    languages::TextNeeds needs = languages::TextNeeds::game_fonts
+) {
+    languages::LanguageEntry entry;
+    entry.tag = tag;
+    entry.endonym = endonym;
+    entry.english_name = english_name;
+    entry.word = word;
+    entry.needs = needs;
+    return entry;
+}
+
 /// The registry holds English, German, Spanish, French, Italian and
 /// Simplified Chinese, English first and the others in the order of their
 /// own names, each with its name in itself and the game data's word for it.
-void registry_lists_the_six_languages_in_menu_order() {
+void registry_lists_the_built_in_languages_in_menu_order() {
+    clear_pack_languages();
     const auto known = languages::known_languages();
     OA_CHECK(known.size() == 6);
     const std::array<std::string_view, 6> tags{"en", "de", "es", "fr", "it", "zh-Hans"};
@@ -52,24 +82,27 @@ void registry_lists_the_six_languages_in_menu_order() {
         "English", "German", "Spanish", "French", "Italian", "Chinese"
     };
     for (std::size_t index = 0; index < known.size() && index < tags.size(); ++index) {
-        OA_CHECK(known[index].tag == tags[index]);
-        OA_CHECK(known[index].endonym == endonyms[index]);
-        OA_CHECK(known[index].game_name == words[index]);
+        OA_CHECK(known[index]->tag == tags[index]);
+        OA_CHECK(known[index]->endonym == endonyms[index]);
+        OA_CHECK(known[index]->game_name == words[index]);
+        OA_CHECK(known[index]->source == languages::Source::built_in);
         OA_CHECK(
-            known[index].needs == (known[index].tag == "zh-Hans"
-                                       ? languages::TextNeeds::modern_fonts
-                                       : languages::TextNeeds::game_fonts)
+            known[index]->needs == (known[index]->tag == "zh-Hans"
+                                        ? languages::TextNeeds::modern_fonts
+                                        : languages::TextNeeds::game_fonts)
         );
-        OA_CHECK(languages::drawable(known[index]));
+        OA_CHECK(languages::drawable(*known[index]));
+        OA_CHECK(languages::playable(*known[index]));
     }
-    OA_CHECK(&languages::english() == &known[0]);
+    OA_CHECK(&languages::english() == known[0]);
     OA_CHECK(languages::english().english_name == "English");
     // After English, the endonyms are in order.
     for (std::size_t index = 2; index < known.size(); ++index)
-        OA_CHECK(known[index - 1].endonym < known[index].endonym);
+        OA_CHECK(known[index - 1]->endonym < known[index]->endonym);
 }
 
 void only_the_needs_this_build_meets_are_drawable() {
+    clear_pack_languages();
     languages::Language language{};
     language.needs = languages::TextNeeds::game_fonts;
     OA_CHECK(languages::drawable(language));
@@ -85,6 +118,7 @@ void only_the_needs_this_build_meets_are_drawable() {
 // Simplified Chinese turns Unicode chat on whether or not its pack is
 // there; a language of the code page only when a pack of it asks.
 void languages_in_utf8_turn_unicode_chat_on() {
+    clear_pack_languages();
     const auto* chinese = languages::find_by_tag("zh-Hans");
     const auto* german = languages::find_by_tag("de");
     OA_CHECK(chinese != nullptr && german != nullptr);
@@ -98,6 +132,7 @@ void languages_in_utf8_turn_unicode_chat_on() {
 }
 
 void tags_and_game_words_are_found_without_regard_to_case() {
+    clear_pack_languages();
     OA_CHECK(tag_of(languages::find_by_tag("de")) == "de");
     OA_CHECK(tag_of(languages::find_by_tag("DE")) == "de");
     OA_CHECK(tag_of(languages::find_by_tag("Fr")) == "fr");
@@ -119,13 +154,14 @@ void tags_and_game_words_are_found_without_regard_to_case() {
 
 /// Every chain ends in English, which is its own whole chain.
 void fallback_chains_end_in_english() {
+    clear_pack_languages();
     const auto english_chain = languages::fallback_chain(languages::english());
     OA_CHECK(english_chain.count == 1);
     OA_CHECK(english_chain.view()[0] == &languages::english());
-    for (const languages::Language& language : languages::known_languages()) {
-        const auto chain = languages::fallback_chain(language);
+    for (const languages::Language* language : languages::known_languages()) {
+        const auto chain = languages::fallback_chain(*language);
         OA_CHECK(chain.count >= 1);
-        OA_CHECK(chain.view().front() == &language);
+        OA_CHECK(chain.view().front() == language);
         OA_CHECK(chain.view().back() == &languages::english());
     }
     const auto french = languages::fallback_chain(*languages::find_by_tag("fr"));
@@ -144,6 +180,7 @@ void fallback_chains_end_in_english() {
 
 /// The operating system's locales are written as BCP-47 tags.
 void locales_are_normalised() {
+    clear_pack_languages();
     OA_CHECK(languages::normalised_locale("de_DE.UTF-8@euro") == "de-DE");
     OA_CHECK(languages::normalised_locale("fr_CA") == "fr-CA");
     OA_CHECK(languages::normalised_locale("en-GB") == "en-GB");
@@ -161,6 +198,7 @@ void locales_are_normalised() {
 /// A locale chooses the language whose locale is its whole tag or its
 /// leading subtags.
 void locales_choose_languages_by_their_leading_subtags() {
+    clear_pack_languages();
     OA_CHECK(tag_of(languages::match_locale("de")) == "de");
     OA_CHECK(tag_of(languages::match_locale("de-AT")) == "de");
     OA_CHECK(tag_of(languages::match_locale("de_CH.UTF-8")) == "de");
@@ -187,6 +225,7 @@ void locales_choose_languages_by_their_leading_subtags() {
 /// The first preferred locale that chooses a known language wins; none
 /// leaves English.
 void preferred_locales_choose_the_first_known_language() {
+    clear_pack_languages();
     const auto pick = [](std::vector<std::string> locales) {
         return languages::preferred_language(locales).tag;
     };
@@ -201,6 +240,7 @@ void preferred_locales_choose_the_first_known_language() {
 
 /// The settings' choice: a known tag, else the operating system's language.
 void settings_choice_names_a_language_or_the_system_one() {
+    clear_pack_languages();
     const languages::Language& german = *languages::find_by_tag("de");
     const languages::Language& italian = *languages::find_by_tag("it");
     OA_CHECK(&languages::chosen_language(languages::system_choice, german) == &german);
@@ -226,6 +266,7 @@ constexpr std::string_view kCatalogue = "[Mouse wheel zoom]\n"
 
 /// Texts are looked up by their English, in the language's chain.
 void catalogue_translates_by_english_text() {
+    clear_pack_languages();
     languages::InterfaceText catalogue;
     std::string error;
     OA_CHECK(catalogue.add(kCatalogue, &error));
@@ -253,6 +294,7 @@ void catalogue_translates_by_english_text() {
 
 /// A file that does not parse, or is too large, adds nothing.
 void malformed_catalogues_add_nothing() {
+    clear_pack_languages();
     languages::InterfaceText catalogue;
     std::string error;
     OA_CHECK(!catalogue.add("[Mouse wheel zoom]\n{\nfr=Zoom\n}\n", &error));
@@ -274,6 +316,7 @@ void malformed_catalogues_add_nothing() {
 /// The installed catalogue and language answer interface_text; without a
 /// catalogue every word is English.
 void installed_language_answers_interface_text() {
+    clear_pack_languages();
     OA_CHECK(&languages::interface_language() == &languages::english());
     OA_CHECK(languages::interface_text("Mouse wheel zoom") == "Mouse wheel zoom");
     languages::InterfaceText catalogue;
@@ -315,6 +358,7 @@ oa::UnitDef unit_type(const char* unit_name, const char* name, const char* descr
 /// The words a language's text is looked up by: its chain's, English's
 /// only for English itself, or the command line's word alone.
 void data_words_follow_the_chain() {
+    clear_pack_languages();
     OA_CHECK(
         languages::data_words(languages::english(), "") == std::vector<std::string>({"English"})
     );
@@ -331,6 +375,7 @@ void data_words_follow_the_chain() {
 /// A unit's name and description in a language come from its file's keys,
 /// found without regard to case, and fall back to its own.
 void unit_texts_fall_back_to_the_types_own() {
+    clear_pack_languages();
     languages::UnitTexts texts;
     texts.add("ARMCOM", "French", "Commandeur", "Commandant");
     texts.add("armcom", "german", nullptr, "Kommandant");
@@ -371,6 +416,7 @@ void unit_texts_fall_back_to_the_types_own() {
 /// The installed table and words answer the interface's lookups; without
 /// a table every type shows its own name and description.
 void installed_unit_texts_answer_the_interface() {
+    clear_pack_languages();
     const oa::UnitDef commander = unit_type("ARMCOM", "Commander", "Commander");
     OA_CHECK(languages::unit_display_name(commander) == "Commander");
     languages::UnitTexts texts;
@@ -385,10 +431,278 @@ void installed_unit_texts_answer_the_interface() {
     OA_CHECK(languages::unit_display_description(commander) == "Commander");
 }
 
+/// Installed languages sit among the built-ins by their names' bytes, and
+/// an available language comes after every one of those.
+void packs_add_languages_in_menu_order() {
+    clear_pack_languages();
+    // "Nederlands" and "Português" fall between Italiano and 简体中文.
+    // "Japanese" would fall earlier, and still comes last because it is
+    // only available.
+    const languages::LanguageEntry dutch = make_entry("nl", "Nederlands", "Dutch", "Dutch");
+    const languages::LanguageEntry portuguese = make_entry(
+        "pt-BR",
+        "Portugu\xC3\xAA"
+        "s",
+        "Portuguese",
+        "Portuguese"
+    );
+    const languages::LanguageEntry japanese =
+        make_entry("ja", "Japanese", "Japanese", "Japanese", languages::TextNeeds::more_font_faces);
+    const std::array<languages::LanguageEntry, 2> installed{dutch, portuguese};
+    const std::array<languages::LanguageEntry, 1> available{japanese};
+    languages::set_pack_languages(installed, available);
+
+    const auto known = languages::known_languages();
+    const std::array<std::string_view, 9> tags{
+        "en", "de", "es", "fr", "it", "nl", "pt-BR", "zh-Hans", "ja"
+    };
+    OA_CHECK(known.size() == tags.size());
+    for (std::size_t index = 0; index < known.size() && index < tags.size(); ++index)
+        OA_CHECK(known[index]->tag == tags[index]);
+    OA_CHECK(known[5]->source == languages::Source::installed);
+    OA_CHECK(known[6]->source == languages::Source::installed);
+    OA_CHECK(languages::playable(*known[5]));
+    OA_CHECK(languages::playable(*known[6]));
+    OA_CHECK(known[8]->source == languages::Source::available);
+    OA_CHECK(!languages::playable(*known[8]));
+    OA_CHECK(!languages::drawable(*known[8]));
+}
+
+/// Each rule for keeping a pack entry: what is dropped, what is filled,
+/// which of two tags wins, and when an entry keeps its place.
+void pack_entries_are_kept_by_rule() {
+    clear_pack_languages();
+    const languages::Language* german = languages::find_by_tag("de");
+    OA_CHECK(german != nullptr);
+    const auto generation = languages::registry_generation();
+
+    languages::LanguageEntry underscore;
+    underscore.tag = "pt_BR";
+    underscore.word = "Portuguese";
+    languages::LanguageEntry empty_tag;
+    empty_tag.word = "Missing";
+    languages::LanguageEntry c_locale;
+    c_locale.tag = "C";
+    c_locale.word = "C";
+    languages::LanguageEntry no_word;
+    no_word.tag = "sv";
+    languages::LanguageEntry built_in = make_entry("de", "Germanic", "Germanic", "Deutsch");
+    built_in.needs = languages::TextNeeds::modern_fonts;
+    languages::LanguageEntry built_in_case =
+        make_entry("DE", "Germanic", "Germanic", "Deutsch", languages::TextNeeds::modern_fonts);
+    // An empty name in itself becomes the English name. An empty English
+    // name becomes the tag. Locales are normalised, and ones that are not
+    // locales are dropped. Fallbacks are kept as written.
+    languages::LanguageEntry dutch = make_entry("nl", "", "Dutch", "Dutch");
+    dutch.locales = {"nl_NL.UTF-8", "C", "not a locale"};
+    dutch.fallbacks = {"pt_BR", "en"};
+    languages::LanguageEntry dutch_again = make_entry("NL", "Holland", "Holland", "Holland");
+    languages::LanguageEntry bare = make_entry("pt-BR", "", "", "Portuguese");
+    bare.locales = {"pt_BR.UTF-8", "C", "not a locale", "pt"};
+
+    const std::array<languages::LanguageEntry, 8> installed{
+        underscore, empty_tag, c_locale, no_word, built_in, built_in_case, dutch, dutch_again
+    };
+    const std::array<languages::LanguageEntry, 1> available{bare};
+    languages::set_pack_languages(installed, available);
+
+    OA_CHECK(languages::find_by_tag("de") == german);
+    OA_CHECK(german->endonym == "Deutsch");
+    OA_CHECK(german->game_name == "German");
+    OA_CHECK(german->needs == languages::TextNeeds::game_fonts);
+    OA_CHECK(german->source == languages::Source::built_in);
+    // "pt_BR" is not a tag the registry keeps. The lookup still finds
+    // "pt-BR", because '_' is read as '-'.
+    OA_CHECK(tag_of(languages::find_by_tag("pt_BR")) == "pt-BR");
+    OA_CHECK(languages::find_by_tag("sv") == nullptr);
+    OA_CHECK(languages::find_by_tag("C") == nullptr);
+
+    const languages::Language* kept_dutch = languages::find_by_tag("nl");
+    OA_CHECK(kept_dutch != nullptr);
+    if (kept_dutch != nullptr) {
+        OA_CHECK(kept_dutch->tag == "nl");
+        OA_CHECK(kept_dutch->endonym == "Dutch");
+        OA_CHECK(kept_dutch->english_name == "Dutch");
+        OA_CHECK(kept_dutch->game_name == "Dutch");
+        OA_CHECK(kept_dutch->source == languages::Source::installed);
+        OA_CHECK(kept_dutch->locales.size() == 1);
+        OA_CHECK(kept_dutch->locales.size() == 1 && kept_dutch->locales[0] == "nl-NL");
+        OA_CHECK(kept_dutch->fallbacks.size() == 2);
+        OA_CHECK(kept_dutch->fallbacks.size() == 2 && kept_dutch->fallbacks[0] == "pt_BR");
+        OA_CHECK(kept_dutch->fallbacks.size() == 2 && kept_dutch->fallbacks[1] == "en");
+    }
+    const languages::Language* portuguese = languages::find_by_tag("pt-BR");
+    OA_CHECK(portuguese != nullptr);
+    if (portuguese != nullptr) {
+        OA_CHECK(portuguese->endonym == "pt-BR");
+        OA_CHECK(portuguese->english_name == "pt-BR");
+        OA_CHECK(portuguese->source == languages::Source::available);
+        OA_CHECK(portuguese->locales.size() == 2);
+        OA_CHECK(portuguese->locales.size() == 2 && portuguese->locales[0] == "pt-BR");
+        OA_CHECK(portuguese->locales.size() == 2 && portuguese->locales[1] == "pt");
+    }
+    OA_CHECK(languages::registry_generation() != generation);
+
+    // The same entries again keep their places, and the generation stays.
+    const auto settled = languages::registry_generation();
+    languages::set_pack_languages(installed, available);
+    OA_CHECK(languages::find_by_tag("nl") == kept_dutch);
+    OA_CHECK(languages::find_by_tag("pt-BR") == portuguese);
+    OA_CHECK(languages::registry_generation() == settled);
+
+    // An installed entry wins over an available one with the same tag.
+    const languages::LanguageEntry installed_dutch =
+        make_entry("nl", "Nederlands", "Dutch", "Dutch");
+    languages::LanguageEntry available_dutch =
+        make_entry("nl", "Available", "Available", "Available");
+    languages::set_pack_languages(
+        std::array<languages::LanguageEntry, 1>{installed_dutch},
+        std::array<languages::LanguageEntry, 1>{available_dutch}
+    );
+    const languages::Language* shown_dutch = languages::find_by_tag("nl");
+    OA_CHECK(shown_dutch != nullptr && shown_dutch != kept_dutch);
+    if (shown_dutch != nullptr) {
+        OA_CHECK(shown_dutch->source == languages::Source::installed);
+        OA_CHECK(shown_dutch->endonym == "Nederlands");
+        OA_CHECK(shown_dutch->game_name == "Dutch");
+    }
+    OA_CHECK(kept_dutch->endonym == "Dutch");
+
+    // The same endonym is ordered by tag.
+    const languages::LanguageEntry flemish =
+        make_entry("nl-BE", "Nederlands", "Flemish", "Flemish");
+    languages::set_pack_languages(
+        std::array<languages::LanguageEntry, 2>{installed_dutch, flemish}, {}
+    );
+    std::size_t dutch_at = 0;
+    std::size_t flemish_at = 0;
+    const auto known = languages::known_languages();
+    for (std::size_t index = 0; index < known.size(); ++index) {
+        if (known[index]->tag == "nl")
+            dutch_at = index;
+        if (known[index]->tag == "nl-BE")
+            flemish_at = index;
+    }
+    OA_CHECK(dutch_at != 0 && flemish_at != 0 && dutch_at < flemish_at);
+
+    // No compiled offered language suppresses an available entry, because
+    // that table is empty. Installing the same tag removes the available one.
+    const languages::LanguageEntry waiting = make_entry("ja", "Japanese", "Japanese", "Japanese");
+    languages::set_pack_languages({}, std::array<languages::LanguageEntry, 1>{waiting});
+    const languages::Language* available_japanese = languages::find_by_tag("ja");
+    OA_CHECK(available_japanese != nullptr);
+    if (available_japanese != nullptr)
+        OA_CHECK(available_japanese->source == languages::Source::available);
+    const languages::LanguageEntry installed_japanese =
+        make_entry("ja", "\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E", "Japanese", "Japanese");
+    languages::set_pack_languages(
+        std::array<languages::LanguageEntry, 1>{installed_japanese},
+        std::array<languages::LanguageEntry, 1>{waiting}
+    );
+    const languages::Language* shown_japanese = languages::find_by_tag("ja");
+    OA_CHECK(shown_japanese != nullptr && shown_japanese != available_japanese);
+    if (shown_japanese != nullptr)
+        OA_CHECK(shown_japanese->source == languages::Source::installed);
+    for (const languages::Language* language : languages::known_languages())
+        OA_CHECK(!(language->tag == "ja" && language->source == languages::Source::available));
+    OA_CHECK(available_japanese != nullptr && available_japanese->endonym == "Japanese");
+
+    clear_pack_languages();
+    OA_CHECK(languages::find_by_tag("nl") == nullptr);
+    OA_CHECK(languages::find_by_tag("ja") == nullptr);
+    OA_CHECK(languages::known_languages().size() == 6);
+}
+
+/// An available language can be listed and matched, and it is never the
+/// language the game shows.
+void available_languages_are_never_shown() {
+    clear_pack_languages();
+    languages::LanguageEntry portuguese = make_entry(
+        "pt-BR",
+        "Portugu\xC3\xAA"
+        "s",
+        "Portuguese",
+        "Portuguese",
+        languages::TextNeeds::modern_fonts
+    );
+    portuguese.locales = {"pt-BR"};
+    languages::set_pack_languages({}, std::array<languages::LanguageEntry, 1>{portuguese});
+    const languages::Language* available = languages::find_by_tag("pt-BR");
+    OA_CHECK(available != nullptr);
+    if (available == nullptr)
+        return;
+    OA_CHECK(available->source == languages::Source::available);
+    OA_CHECK(available->needs == languages::TextNeeds::modern_fonts);
+    OA_CHECK(languages::drawable(*available));
+    OA_CHECK(!languages::playable(*available));
+    OA_CHECK(&languages::chosen_language("pt-BR", languages::english()) == &languages::english());
+    OA_CHECK(languages::find_by_game_name("Portuguese") == nullptr);
+    OA_CHECK(languages::find_by_game_name("portuguese") == nullptr);
+    OA_CHECK(languages::match_locale("pt-BR") == nullptr);
+    OA_CHECK(languages::match_locale("pt-BR", false) == nullptr);
+    OA_CHECK(languages::match_locale("pt-BR", true) == available);
+    const std::vector<std::string> locales{"pt_BR.UTF-8", "en"};
+    OA_CHECK(languages::wanted_language(locales) == available);
+    OA_CHECK(languages::preferred_language(locales).tag == "en");
+    OA_CHECK(&languages::preferred_language(locales) == &languages::english());
+}
+
+/// A language a later call replaces stays readable, and one that did not
+/// change keeps its place. The generation changes when the list does.
+void entries_outlive_their_replacement() {
+    clear_pack_languages();
+    const languages::LanguageEntry dutch = make_entry("nl", "Nederlands", "Dutch", "Dutch");
+    const languages::LanguageEntry portuguese = make_entry(
+        "pt-BR",
+        "Portugu\xC3\xAA"
+        "s",
+        "Portuguese",
+        "Portuguese"
+    );
+    const std::array<languages::LanguageEntry, 2> installed{dutch, portuguese};
+    languages::set_pack_languages(installed, {});
+    const languages::Language* first_dutch = languages::find_by_tag("nl");
+    const languages::Language* first_portuguese = languages::find_by_tag("pt-BR");
+    const auto generation = languages::registry_generation();
+    OA_CHECK(first_dutch != nullptr && first_portuguese != nullptr);
+    if (first_dutch == nullptr || first_portuguese == nullptr)
+        return;
+
+    languages::LanguageEntry renamed = dutch;
+    renamed.endonym = "Holland";
+    const std::array<languages::LanguageEntry, 2> replaced{renamed, portuguese};
+    languages::set_pack_languages(replaced, {});
+    OA_CHECK(first_dutch->tag == "nl");
+    OA_CHECK(first_dutch->endonym == "Nederlands");
+    OA_CHECK(languages::find_by_tag("nl") != first_dutch);
+    OA_CHECK(languages::find_by_tag("nl")->endonym == "Holland");
+    OA_CHECK(languages::find_by_tag("pt-BR") == first_portuguese);
+    OA_CHECK(
+        first_portuguese->endonym == "Portugu\xC3\xAA"
+                                     "s"
+    );
+    OA_CHECK(languages::registry_generation() != generation);
+    for (const languages::Language* language : languages::known_languages())
+        OA_CHECK(language != first_dutch);
+
+    const languages::Language* second_dutch = languages::find_by_tag("nl");
+    const auto generation_after = languages::registry_generation();
+    languages::set_pack_languages(replaced, {});
+    OA_CHECK(languages::find_by_tag("nl") == second_dutch);
+    OA_CHECK(languages::find_by_tag("pt-BR") == first_portuguese);
+    OA_CHECK(languages::registry_generation() == generation_after);
+    OA_CHECK(first_dutch->tag == "nl");
+    OA_CHECK(first_dutch->endonym == "Nederlands");
+}
+
 } // namespace
 
 int main() {
-    registry_lists_the_six_languages_in_menu_order();
+    registry_lists_the_built_in_languages_in_menu_order();
+    packs_add_languages_in_menu_order();
+    pack_entries_are_kept_by_rule();
+    available_languages_are_never_shown();
+    entries_outlive_their_replacement();
     only_the_needs_this_build_meets_are_drawable();
     languages_in_utf8_turn_unicode_chat_on();
     tags_and_game_words_are_found_without_regard_to_case();
