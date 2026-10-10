@@ -110,9 +110,9 @@ void Runtime::start_language() {
     // The loaders read every known language's unit texts, and the command
     // line's word when it names one no entry knows, as 3.1c reads it.
     state.sink_words.clear();
-    for (const languages::Language& language : languages::known_languages())
-        if (!language.game_name.empty())
-            state.sink_words.emplace_back(language.game_name);
+    for (const languages::Language* language : languages::known_languages())
+        if (!language->game_name.empty())
+            state.sink_words.emplace_back(language->game_name);
     const char* word = oa::app::command_line::launch_language(options_.launch);
     if (word != nullptr && languages::find_by_game_name(word) == nullptr)
         state.sink_words.emplace_back(word);
@@ -390,9 +390,9 @@ const oa::data::languages::PackManifest* Runtime::language_unicode_chat() const 
 
 std::vector<std::string> Runtime::unicode_chat_language_tags() const {
     std::vector<std::string> tags;
-    for (const languages::Language& known : languages::known_languages())
-        if (languages::turns_unicode_chat_on(known, false))
-            tags.emplace_back(known.tag);
+    for (const languages::Language* known : languages::known_languages())
+        if (languages::turns_unicode_chat_on(*known, false))
+            tags.emplace_back(known->tag);
     if (!language_)
         return tags;
     for (const auto* packs :

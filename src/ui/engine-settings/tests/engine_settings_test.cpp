@@ -970,8 +970,8 @@ void the_language_reads_writes_and_restores() {
         CHECK(read(other, true) == "system");
         CHECK(read(other, false) == "en");
     }
-    for (const auto& language : languages::known_languages())
-        CHECK(read(std::string(language.tag).c_str(), true) == language.tag);
+    for (const languages::Language* language : languages::known_languages())
+        CHECK(read(std::string(language->tag).c_str(), true) == language->tag);
     // A changed language is written as its tag; one left alone is not
     // written, so a tag a later version wrote stays in the file.
     const auto defaults = settings::default_settings(players_own_on_linux);

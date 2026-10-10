@@ -1249,9 +1249,9 @@ int32_t choice_field_width(Setting setting) noexcept {
 std::span<const oa::data::languages::Language* const> offered_languages() {
     static const std::vector<const oa::data::languages::Language*> offered = [] {
         std::vector<const oa::data::languages::Language*> languages;
-        for (const auto& language : oa::data::languages::known_languages())
-            if (oa::data::languages::drawable(language))
-                languages.push_back(&language);
+        for (const oa::data::languages::Language* language : oa::data::languages::known_languages())
+            if (oa::data::languages::drawable(*language))
+                languages.push_back(language);
         return languages;
     }();
     return offered;
