@@ -50,6 +50,7 @@ LICENCE = "SPDX-License-Identifier: GPL-3.0-only"
 MANIFEST_KEYS = {
     "oalang", "tag", "name", "english-name", "word", "version", "locales",
     "fallbacks", "text", "unicode", "homepage", "tags", "requires",
+    "fonts", "warmup", "packaging",
 }
 """The keys a manifest may hold."""
 
@@ -126,6 +127,115 @@ class Report:
         print(text)
 
 
+def file_name(name: object, suffixes: tuple[str, ...]) -> bool:
+    """A pack file name: 1 to 128 bytes of letters, digits, '-', '_' and '.'."""
+    if not isinstance(name, str) or not 1 <= len(name.encode("utf-8")) <= 128:
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+        return False
+    folded = name.lower()
+    return any(folded.endswith(suffix) for suffix in suffixes)
+
+
+def calendar_date(text: object) -> bool:
+    """An ISO 8601 calendar date, YYYY-MM-DD, that exists."""
+    if not isinstance(text, str) or len(text) != 10 or text[4] != "-" or text[7] != "-":
+        return False
+    if not (text[:4].isdigit() and text[5:7].isdigit() and text[8:].isdigit()):
+        return False
+    year = int(text[:4])
+    month = int(text[5:7])
+    day = int(text[8:])
+    if month < 1 or month > 12 or day < 1:
+        return False
+    month_days = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    leap = (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+    limit = 29 if month == 2 and leap else month_days[month - 1]
+    return day <= limit
+
+
+def check_fonts(pack: Path, values: dict, report: Report) -> None:
+    """Each listed font is a file under fonts/ with an otf or ttf name."""
+    if "fonts" not in values:
+        return
+    fonts = values["fonts"]
+    if not isinstance(fonts, list):
+        report.fail("language.yaml's fonts is not a sequence")
+        return
+    if len(fonts) > 4:
+        report.fail("language.yaml's fonts holds more than 4")
+    seen: set[str] = set()
+    for item in fonts:
+        if not isinstance(item, dict):
+            report.fail("language.yaml's fonts is not of its kind")
+            continue
+        for key in item:
+            if key not in ("file", "role"):
+                report.fail(f"language.yaml's fonts has no key {key}")
+        name = item.get("file")
+        if not file_name(name, (".otf", ".ttf")):
+            report.fail("language.yaml's fonts file is not a font file")
+        elif name in seen:
+            report.fail(f"language.yaml's fonts names {name} twice")
+        else:
+            seen.add(name)
+            if not (pack / "fonts" / name).is_file():
+                report.fail(f"fonts/{name} is not a file")
+        if item.get("role") not in ("ideographs", "letters"):
+            report.fail("language.yaml's fonts role must be ideographs or letters")
+
+
+def check_warmup(pack: Path, values: dict, report: Report) -> None:
+    """The warm-up file exists, is UTF-8 and is at most 4,096 bytes."""
+    if "warmup" not in values:
+        return
+    name = values["warmup"]
+    if not file_name(name, (".txt",)):
+        report.fail("language.yaml's warmup is not a text file")
+        return
+    path = pack / name
+    if not path.is_file():
+        report.fail(f"{name} is missing")
+        return
+    raw = path.read_bytes()
+    if len(raw) > 4096:
+        report.fail(f"{name} is larger than 4096 bytes")
+        return
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        report.fail(f"{name} is not UTF-8")
+
+
+def check_packaging(values: dict, report: Report) -> None:
+    """revision, date and packager, by the packaging rules."""
+    if "packaging" not in values:
+        return
+    block = values["packaging"]
+    if not isinstance(block, dict):
+        report.fail("language.yaml's packaging is not a mapping")
+        return
+    for key in block:
+        if key not in ("revision", "date", "packager"):
+            report.fail(f"language.yaml's packaging has no key {key}")
+    for key in ("revision", "date", "packager"):
+        if key not in block:
+            report.fail(f"language.yaml's packaging names no {key}")
+    revision = block.get("revision")
+    if (
+        isinstance(revision, bool)
+        or not isinstance(revision, int)
+        or revision < 1
+        or revision > 65535
+    ):
+        report.fail("language.yaml's packaging revision must be an integer from 1 to 65535")
+    if not calendar_date(block.get("date")):
+        report.fail("language.yaml's packaging date must be an ISO 8601 date, YYYY-MM-DD")
+    packager = block.get("packager")
+    if not isinstance(packager, str) or not 1 <= len(packager.encode("utf-8")) <= 128:
+        report.fail("language.yaml's packaging packager must be a string of 1 to 128 bytes")
+
+
 def check_manifest(pack: Path, report: Report) -> dict:
     """Read the manifest as the game does and return its values."""
     path = pack / "language.yaml"
@@ -160,6 +270,9 @@ def check_manifest(pack: Path, report: Report) -> dict:
                 report.fail("language.yaml's requires takes engine only")
     for problem in oamod_yaml.package_key_problems(values, requires if isinstance(requires, dict) else None):
         report.fail(f"language.yaml {problem}")
+    check_fonts(pack, values, report)
+    check_warmup(pack, values, report)
+    check_packaging(values, report)
     return values
 
 

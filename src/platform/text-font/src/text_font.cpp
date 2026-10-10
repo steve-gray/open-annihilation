@@ -30,6 +30,12 @@ namespace {
 /// The design weight of Noto Emoji's weight axis for each Weight.
 constexpr std::array<FT_Fixed, 2> emoji_weights{400 * 65536, 700 * 65536};
 
+/// A glyph key's face index: bits 2..7, so a base face and a pack face at
+/// the same glyph index stay apart, and a removed pack face's glyphs can be
+/// dropped by that index.
+constexpr int glyph_key_face_shift = 2;
+constexpr uint64_t glyph_key_face_mask = 0x3F;
+
 /// The fonts each weight looks a character up in, in order.
 constexpr std::array<Face, 4> bold_chain{
     Face::dejavu_sans_bold,
@@ -78,6 +84,45 @@ std::FILE* open_file(const std::filesystem::path& path) {
 #endif
 }
 
+/// Opens a file already opened as a scalable face. FreeType closes the
+/// stream when the face cannot be made; this closes it when the file is
+/// empty. On failure face is null and stream is cleared.
+bool open_scalable_face(FT_Library library, FT_StreamRec& stream, FT_Face& face, std::FILE* file) {
+    face = nullptr;
+    stream = FT_StreamRec{};
+    stream.descriptor.pointer = file;
+    stream.read = &read_file;
+    stream.close = &close_file;
+    if (std::fseek(file, 0, SEEK_END) != 0) {
+        close_file(&stream);
+        stream = FT_StreamRec{};
+        return false;
+    }
+    const long size = std::ftell(file);
+    if (size <= 0) {
+        close_file(&stream);
+        stream = FT_StreamRec{};
+        return false;
+    }
+    stream.size = static_cast<unsigned long>(size);
+    FT_Open_Args arguments{};
+    arguments.flags = FT_OPEN_STREAM;
+    arguments.stream = &stream;
+    // FreeType closes the stream itself when the face cannot be made.
+    if (FT_Open_Face(library, &arguments, 0, &face) != 0) {
+        face = nullptr;
+        stream = FT_StreamRec{};
+        return false;
+    }
+    if (FT_IS_SCALABLE(face) == 0) {
+        FT_Done_Face(face);
+        face = nullptr;
+        stream = FT_StreamRec{};
+        return false;
+    }
+    return true;
+}
+
 /// FreeType's memory, from the C library.
 void* allocate(FT_Memory, long size) {
     return std::malloc(static_cast<std::size_t>(size));
@@ -117,12 +162,19 @@ struct Laid {
 
 /// The library, the open fonts and the glyphs drawn from them.
 struct FontStack::Fonts {
+    /// Base faces, then up to most_pack_faces pack faces.
+    static constexpr std::size_t slot_count = face_count + most_pack_faces;
+
     FT_MemoryRec_ memory{};
     FT_Library library{};
-    std::array<FT_StreamRec, face_count> streams{};
-    std::array<FT_Face, face_count> faces{};
+    std::array<FT_StreamRec, slot_count> streams{};
+    std::array<FT_Face, slot_count> faces{};
     /// the pixel size each face was last set to, 0 for none
-    std::array<int32_t, face_count> sizes{};
+    std::array<int32_t, slot_count> sizes{};
+    /// how each pack face is drawn, in the order it was added
+    std::array<FaceRole, most_pack_faces> pack_roles{};
+    /// pack faces open, at most most_pack_faces
+    std::size_t pack_count{};
     /// the weight Noto Emoji's axis was last set to
     std::optional<Weight> emoji_weight{};
     std::unordered_map<uint64_t, KeptGlyph> glyphs{};
@@ -143,15 +195,63 @@ struct FontStack::Fonts {
             FT_Done_Library(library);
     }
 
+    /// Opens a file as a scalable face in a slot. The file is closed on failure.
+    bool open_slot(std::size_t index, std::FILE* file) {
+        return open_scalable_face(library, streams[index], faces[index], file);
+    }
+
     /// Sets a face to a pixel size, unless it has it.
     bool set_size(Face which, int32_t pixel_size) {
         const auto index = static_cast<std::size_t>(which);
+        if (index >= slot_count || faces[index] == nullptr)
+            return false;
         if (sizes[index] == pixel_size)
             return true;
         if (FT_Set_Pixel_Sizes(faces[index], 0, static_cast<FT_UInt>(pixel_size)) != 0)
             return false;
         sizes[index] = pixel_size;
         return true;
+    }
+
+    /// Gives the pixel size a face is drawn at in a style.
+    ///
+    /// DejaVu and letters pack faces take the style's size. Noto Sans CJK
+    /// and ideographs pack faces take the related size and no less than the
+    /// style's least size. Noto Emoji takes the related size.
+    int32_t face_pixel_size(Face which, const Style& style) const noexcept {
+        const auto index = static_cast<std::size_t>(which);
+        const bool letters = which == Face::dejavu_sans_bold || which == Face::dejavu_sans ||
+                             (index >= face_count && index < face_count + pack_count &&
+                              pack_roles[index - face_count] == FaceRole::letters);
+        if (letters)
+            return style.pixel_size;
+        const int32_t related = related_pixel_size(style.pixel_size);
+        if (which == Face::noto_emoji)
+            return related;
+        return std::max(related, style.least_cjk_pixel_size);
+    }
+
+    /// The faces a weight looks a character up in. Closed faces are left out.
+    std::vector<Face> chain(Weight weight) const {
+        std::vector<Face> found;
+        found.reserve(face_count + pack_count);
+        const auto push_open = [&](Face which) {
+            const auto index = static_cast<std::size_t>(which);
+            if (index < slot_count && faces[index] != nullptr)
+                found.push_back(which);
+        };
+        if (weight == Weight::bold)
+            push_open(Face::dejavu_sans_bold);
+        push_open(Face::dejavu_sans);
+        for (std::size_t index = 0; index < pack_count; ++index)
+            if (pack_roles[index] == FaceRole::letters)
+                push_open(pack_face(index));
+        for (std::size_t index = 0; index < pack_count; ++index)
+            if (pack_roles[index] == FaceRole::ideographs)
+                push_open(pack_face(index));
+        push_open(Face::noto_sans_cjk);
+        push_open(Face::noto_emoji);
+        return found;
     }
 
     /// Sets Noto Emoji's weight axis, unless it has the weight; a font
@@ -185,7 +285,7 @@ struct FontStack::Fonts {
     const Glyph* glyph(Face which, FT_UInt index, int32_t pixel_size, const Style& style) {
         const bool emoji = which == Face::noto_emoji;
         const uint64_t key = (uint64_t{index} << 24) | (static_cast<uint64_t>(pixel_size) << 8) |
-                             (static_cast<uint64_t>(which) << 2) |
+                             (static_cast<uint64_t>(which) << glyph_key_face_shift) |
                              (static_cast<uint64_t>(style.rendering) << 1) |
                              (emoji ? static_cast<uint64_t>(style.weight) : 0U);
         if (const auto found = glyphs.find(key); found != glyphs.end()) {
@@ -244,17 +344,21 @@ struct FontStack::Fonts {
     }
 
     /// Finds the face and glyph that draw a character, the chain's first
-    /// face's missing-glyph box when no face has it.
+    /// open face's missing-glyph box when no face has it. A closed face is
+    /// skipped.
     std::pair<Face, FT_UInt> lookup(char32_t character, Weight weight) const {
-        const auto find = [&](const auto& chain) {
-            for (Face which : chain)
-                if (const FT_UInt index =
-                        FT_Get_Char_Index(faces[static_cast<std::size_t>(which)], character);
-                    index != 0)
-                    return std::pair{which, index};
-            return std::pair{chain.front(), FT_UInt{0}};
-        };
-        return weight == Weight::bold ? find(bold_chain) : find(regular_chain);
+        const std::vector<Face> found = chain(weight);
+        for (Face which : found) {
+            FT_Face face = faces[static_cast<std::size_t>(which)];
+            if (face == nullptr)
+                continue;
+            if (const FT_UInt index = FT_Get_Char_Index(face, character); index != 0)
+                return {which, index};
+        }
+        for (Face which : found)
+            if (faces[static_cast<std::size_t>(which)] != nullptr)
+                return {which, FT_UInt{0}};
+        return {Face::dejavu_sans_bold, FT_UInt{0}};
     }
 };
 
@@ -335,28 +439,92 @@ std::unique_ptr<FontStack> FontStack::open(const std::filesystem::path& director
         return nullptr;
     FT_Add_Default_Modules(fonts->library);
     for (std::size_t index = 0; index < face_count; ++index) {
+        const auto which = static_cast<Face>(index);
         std::FILE* file = open_file(directory / std::filesystem::path(face_files[index]));
-        if (file == nullptr)
-            return nullptr;
-        FT_StreamRec& stream = fonts->streams[index];
-        stream.descriptor.pointer = file;
-        stream.read = &read_file;
-        stream.close = &close_file;
-        if (std::fseek(file, 0, SEEK_END) != 0 || std::ftell(file) <= 0) {
-            close_file(&stream);
-            return nullptr;
+        if (file == nullptr) {
+            // Noto Sans CJK may be absent. Every other base face is required.
+            if (face_required(which))
+                return nullptr;
+            continue;
         }
-        stream.size = static_cast<unsigned long>(std::ftell(file));
-        FT_Open_Args arguments{};
-        arguments.flags = FT_OPEN_STREAM;
-        arguments.stream = &stream;
-        // FreeType closes the stream itself when the face cannot be made.
-        if (FT_Open_Face(fonts->library, &arguments, 0, &fonts->faces[index]) != 0)
-            return nullptr;
-        if (!FT_IS_SCALABLE(fonts->faces[index]))
+        if (!fonts->open_slot(index, file))
             return nullptr;
     }
     return std::unique_ptr<FontStack>(new FontStack(std::move(fonts)));
+}
+
+bool FontStack::add_face(const std::filesystem::path& file, FaceRole role) {
+    if (fonts_->pack_count >= most_pack_faces)
+        return false;
+    std::FILE* opened = open_file(file);
+    if (opened == nullptr)
+        return false;
+    const std::size_t index = face_count + fonts_->pack_count;
+    if (!fonts_->open_slot(index, opened))
+        return false;
+    fonts_->pack_roles[fonts_->pack_count] = role;
+    ++fonts_->pack_count;
+    return true;
+}
+
+void FontStack::remove_pack_faces() noexcept {
+    for (auto kept = fonts_->glyphs.begin(); kept != fonts_->glyphs.end();) {
+        const uint64_t face_bits = (kept->first >> glyph_key_face_shift) & glyph_key_face_mask;
+        if (face_bits >= face_count) {
+            fonts_->order.erase(kept->second.place);
+            kept = fonts_->glyphs.erase(kept);
+        } else {
+            ++kept;
+        }
+    }
+    for (std::size_t index = 0; index < fonts_->pack_count; ++index) {
+        const std::size_t slot = face_count + index;
+        if (fonts_->faces[slot] != nullptr) {
+            FT_Done_Face(fonts_->faces[slot]);
+            fonts_->faces[slot] = nullptr;
+        }
+        fonts_->streams[slot] = FT_StreamRec{};
+        fonts_->sizes[slot] = 0;
+    }
+    fonts_->pack_count = 0;
+}
+
+std::size_t FontStack::pack_face_count() const noexcept {
+    return fonts_->pack_count;
+}
+
+bool FontStack::has_face(Face face) const noexcept {
+    const auto index = static_cast<std::size_t>(face);
+    if (index >= face_count + fonts_->pack_count)
+        return false;
+    return fonts_->faces[index] != nullptr;
+}
+
+std::vector<Face> FontStack::chain(Weight weight) const {
+    return fonts_->chain(weight);
+}
+
+bool FontStack::face_file_opens(const std::filesystem::path& file) {
+    std::FILE* opened = open_file(file);
+    if (opened == nullptr)
+        return false;
+    FT_MemoryRec_ memory{};
+    memory.alloc = &allocate;
+    memory.free = &release;
+    memory.realloc = &reallocate;
+    FT_Library library = nullptr;
+    if (FT_New_Library(&memory, &library) != 0) {
+        std::fclose(opened);
+        return false;
+    }
+    FT_Add_Default_Modules(library);
+    FT_StreamRec stream{};
+    FT_Face face = nullptr;
+    const bool scalable = open_scalable_face(library, stream, face, opened);
+    if (face != nullptr)
+        FT_Done_Face(face);
+    FT_Done_Library(library);
+    return scalable;
 }
 
 std::optional<Face> FontStack::face_for(char32_t character, Weight weight) const {
@@ -374,27 +542,23 @@ bool in_range(const Style& style) noexcept {
            style.least_cjk_pixel_size >= 0 && style.least_cjk_pixel_size <= max_pixel_size;
 }
 
-/// Gives the pixel size a face is drawn at in a style.
-int32_t face_pixel_size(Face which, const Style& style) noexcept {
-    if (which == Face::dejavu_sans_bold || which == Face::dejavu_sans)
-        return style.pixel_size;
-    const int32_t related = related_pixel_size(style.pixel_size);
-    return which == Face::noto_sans_cjk ? std::max(related, style.least_cjk_pixel_size) : related;
-}
-
 } // namespace
 
 std::optional<LineMetrics> FontStack::metrics(const Style& style) {
     if (!in_range(style))
         return std::nullopt;
     LineMetrics line;
+    // Pack faces never change the line's rows. A closed base face, such as
+    // Noto Sans CJK when its file was missing, is left out.
     for (std::size_t index = 0; index < face_count; ++index) {
         const auto which = static_cast<Face>(index);
+        if (fonts_->faces[index] == nullptr)
+            continue;
         if (which == Face::dejavu_sans_bold && style.weight == Weight::regular)
             continue;
         if (which == Face::noto_emoji)
             fonts_->set_emoji_weight(style.weight);
-        if (!fonts_->set_size(which, face_pixel_size(which, style)))
+        if (!fonts_->set_size(which, fonts_->face_pixel_size(which, style)))
             return std::nullopt;
         const FT_Size_Metrics& size = fonts_->faces[index]->size->metrics;
         line.ascent = std::max(line.ascent, static_cast<int32_t>((size.ascender + 63) >> 6));
@@ -404,13 +568,13 @@ std::optional<LineMetrics> FontStack::metrics(const Style& style) {
 }
 
 std::optional<FaceMetrics> FontStack::face_metrics(Face face, const Style& style) {
-    if (!in_range(style))
+    if (!in_range(style) || !has_face(face))
         return std::nullopt;
     // The emoji face's scaled rows follow its weight, so the weight is set
     // before the size, as metrics does.
     if (face == Face::noto_emoji)
         fonts_->set_emoji_weight(style.weight);
-    const int32_t pixels = face_pixel_size(face, style);
+    const int32_t pixels = fonts_->face_pixel_size(face, style);
     if (!fonts_->set_size(face, pixels))
         return std::nullopt;
     const FT_Size_Metrics& size = fonts_->faces[static_cast<std::size_t>(face)]->size->metrics;
@@ -434,7 +598,8 @@ std::optional<std::vector<Placement>> FontStack::layout(std::string_view text, c
         if (is_invisible(character))
             continue;
         const auto [which, index] = fonts_->lookup(character, style.weight);
-        const Glyph* drawn = fonts_->glyph(which, index, face_pixel_size(which, style), style);
+        const Glyph* drawn =
+            fonts_->glyph(which, index, fonts_->face_pixel_size(which, style), style);
         if (drawn == nullptr)
             return std::nullopt;
         // A mark that does not move the pen gets no spacing either.
@@ -460,7 +625,8 @@ std::optional<Coverage> FontStack::draw(std::string_view text, const Style& styl
     int32_t below = line->descent;
     for (const Placement& placement : *placements) {
         const auto [which, index] = fonts_->lookup(placement.character, style.weight);
-        const Glyph* drawn = fonts_->glyph(which, index, face_pixel_size(which, style), style);
+        const Glyph* drawn =
+            fonts_->glyph(which, index, fonts_->face_pixel_size(which, style), style);
         if (drawn == nullptr)
             return std::nullopt;
         laid.push_back({placement, drawn});

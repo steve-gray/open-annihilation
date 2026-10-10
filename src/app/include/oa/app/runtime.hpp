@@ -135,6 +135,10 @@ namespace oa::media::director {
 struct EngineView;
 } // namespace oa::media::director
 
+namespace oa::platform::text_font {
+class FontStack;
+} // namespace oa::platform::text_font
+
 namespace oa::app {
 
 struct PresenceFacts;
@@ -620,13 +624,37 @@ class Runtime final : public menu::Host,
     /// @return the folders; empty when no pack holds the language
     [[nodiscard]] std::vector<std::filesystem::path> language_pack_folders() const;
 
+    /// Returns the generation of the language's font faces and warm-up text.
+    ///
+    /// It changes when the faces or the warm-up of the language shown change.
+    ///
+    /// @return the generation; 0 before start_language
+    [[nodiscard]] uint64_t language_fonts_generation() const noexcept;
+
+    /// Returns the warm-up text of the language shown.
+    ///
+    /// It is the first pack of the language, in lookup order, that has one.
+    ///
+    /// @return the text; empty when no pack has one, valid until the
+    ///     language changes
+    [[nodiscard]] std::string_view language_warmup() const;
+
+    /// Puts the language shown's font faces on an open stack.
+    ///
+    /// The stack's pack faces are removed, then each font of the language is
+    /// added with its role. A face that does not open is logged and skipped.
+    ///
+    /// @param stack the open stack
+    void use_language_fonts(oa::platform::text_font::FontStack& stack) const;
+
     /// Readies the modern fonts for the language shown now, as the first
     /// line drawn after the language changes does by itself: forgets the
     /// lines drawn before, draws ideographs at 12 px at the least while a
-    /// Chinese, Japanese or Korean language is shown, and then draws its
-    /// most common characters into the glyph store at the text size, so
-    /// that the first screen in it draws few new glyphs. Call it where the
-    /// language is chosen, or while a loading screen shows.
+    /// Chinese, Japanese or Korean language is shown, adds the language
+    /// packs' font faces, and lays out the pack's warm-up text into the
+    /// glyph store at the text size, so that the first screen in it draws
+    /// few new glyphs. Call it where the language is chosen, or while a
+    /// loading screen shows.
     void warm_game_text();
 
     /// Returns how game text is drawn now: the Language settings,

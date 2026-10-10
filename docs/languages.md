@@ -105,6 +105,8 @@ zh-Hans/
   interface.tdf   the engine's own words, as the interface catalogue reads them
   pictures.tdf    captions drawn over the player's own pictures
   files/          whole files in the game data's language folders
+  fonts/          font files the manifest's fonts key names
+  warmup.txt      characters drawn ahead, when the manifest names it
 ```
 
 Only the manifest is required. It is strict YAML, read as mod profiles are:
@@ -123,6 +125,10 @@ unicode: true
 homepage: "https://example.org/languages"
 tags: [translation]
 requires: {engine: ">= 0.8.0"}
+fonts:
+  - {file: NotoSansCJKsc-Bold.otf, role: ideographs}
+warmup: warmup.txt
+packaging: {revision: 1, date: 2026-10-10, packager: Ridge}
 ```
 
 `tag` names the language, `word` the word the game data knows it by
@@ -140,6 +146,22 @@ installed, and reading a pack that is already installed does not, so an
 installed pack stays available when this Open Annihilation is older than
 the pack asks for. Quote the requirement: a value that starts with `>`
 is refused unless it is quoted.
+
+`fonts`, `warmup` and `packaging` are optional, and a pack that names none
+of them still reads. `fonts` names at most four files in the pack's
+`fonts/` folder. Each entry has a `file`, a name ending in `.otf` or
+`.ttf` with no path in it, and a `role`. `ideographs` is drawn as Noto
+Sans CJK is, at the least size while a Chinese, Japanese or Korean
+language is shown. `letters` is drawn at the sans faces' size. The faces
+are added while the font stack is open and never change a line's rows.
+`warmup` names a UTF-8 text file in the pack's folder, of at most 4,096
+bytes. When the language is shown, that text is laid out in each face, so
+the first screen draws few new glyphs. The engine's Simplified Chinese
+pack's `warmup.txt` holds the characters its screens use most; that pack
+lists no `fonts`, and those characters come from the CJK face the build
+ships. `packaging` records a release of the pack, as a mod's does: a
+`revision` from 1 to 65535, the `date` it was made (`YYYY-MM-DD`) and the
+`packager`, 1 to 128 bytes.
 
 The tables are UTF-8 TDF files, each starting with its licence in `//`
 comments. TDF has no escapes, so a value never holds `;`: write the
@@ -224,8 +246,8 @@ Bold, cut to about 15,300 characters: GB 2312, the 8,105 characters of the
 Table of General Standard Chinese Characters, the common characters of
 Big5, JIS X 0208 and KS X 1001's Hangul, and the CJK punctuation and
 full-width forms. While such a language is shown, ideographs are drawn at
-12 px at the least, whatever the Text size, and the most common 360 hanzi
-are drawn ahead when the language is chosen. Lines break at spaces and
+12 px at the least, whatever the Text size, and the pack's warm-up text
+is drawn ahead when the language is chosen. Lines break at spaces and
 between any two of those characters, never starting a row with a closing
 mark, comma or full stop, and never ending one with an opening mark; a
 Latin word or a number stays whole. Mission briefings in those languages
