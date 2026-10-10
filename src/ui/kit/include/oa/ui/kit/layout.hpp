@@ -366,6 +366,13 @@ enum class Role : uint8_t {
     heading,     ///< a section heading; the words are the item's HeadingLook
     row_frame,   ///< a row's rule, label and hints; the item's RowFrame
     locked_fade, ///< a locked row's fade; the rectangle is the item's
+    list_row,    ///< a list row; the item's ListRowLook is what is drawn
+    chip,        ///< a chip; the item's ChipLook
+    field,       ///< a text field or a search field; the item's SearchLook
+    tabs,        ///< a strip of tabs; the item's TabsLook, the rectangle the strip
+    card,        ///< a card of a grid; the item's CardLook
+    hover_card, ///< a hover card; the item's HoverCardLook, the rectangle the card without its arrow
+    link,       ///< a link; the item's LinkLook
 };
 
 /// How a control looks, for the item that draws it.
