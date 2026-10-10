@@ -25,6 +25,7 @@ in this repository or in the release packages.
 | [Noto Emoji](#noto-emoji) | 3.002, monochrome | SIL Open Font License 1.1 | font file | font file | font file |
 | [stb_vorbis](#stb_vorbis) | 1.22, changed | public domain or MIT | static | static | static |
 | [dr_mp3 and dr_flac](#dr_mp3-and-dr_flac) | 0.7.3 and 0.13.3, with later fixes | public domain or MIT No Attribution | static | static | static |
+| [Monocypher](#monocypher) | 4.0.2 | BSD-2-Clause | static | static | static |
 | [mingw-w64 runtime and winpthreads](#mingw-w64-runtime-and-winpthreads) | 15.0.0 | ZPL 2.1, MIT, BSD | | static | |
 | [LLVM runtime libraries](#llvm-runtime-libraries) (libc++, libc++abi, libunwind, compiler-rt) | 23.1.2 | Apache 2.0 with LLVM Exceptions | | static | |
 
@@ -41,6 +42,9 @@ repository with CMake links these components as follows:
 - stb_vorbis, dr_mp3 and dr_flac, which decode the music, are kept in
   [`third_party/`](third_party/) and compiled into every build. The movies
   and the rest of the sound are decoded by the engine's own code.
+- Monocypher 4.0.2, which checks a catalogue's signature, is kept in
+  [`third_party/monocypher/`](third_party/monocypher/) and compiled into
+  every build.
 - When CMake is pointed at the SDL that `tools/bootstrap_sdl.py` installs,
   as `run.sh` and the README do, SDL 3.4.16 with the changes described
   under [SDL](#sdl) is linked statically. Otherwise the build takes
@@ -154,6 +158,46 @@ domain, or, at your choice, licensed under the MIT No Attribution licence
 (Copyright 2020 David Reid); both texts are in
 [`licenses/dr_libs-LICENSE.txt`](licenses/dr_libs-LICENSE.txt). dr_mp3 is
 based on minimp3, which is in the public domain (CC0).
+
+## Monocypher
+
+Monocypher 4.0.2, from
+<https://monocypher.org/download/monocypher-4.0.2.tar.gz> (SHA-256
+`38d07179738c0c90677dba3ceb7a7b8496bcfea758ba1a53e803fed30ae0879c`),
+checks a catalogue's signature. It is compiled into the game unchanged
+from [`third_party/monocypher/`](third_party/monocypher/). The release
+offers BSD-2-Clause or CC0-1.0; this project uses BSD-2-Clause. The
+licence text is in
+[`licenses/monocypher-LICENSE.txt`](licenses/monocypher-LICENSE.txt).
+
+> Copyright (c) 2017-2023, Loup Vaillant
+> Copyright (c) 2017-2019, Michael Savage
+> Copyright (c) 2017-2023, Fabio Scotoni
+> All rights reserved.
+>
+> Redistribution and use in source and binary forms, with or without
+> modification, are permitted provided that the following conditions are
+> met:
+>
+> 1. Redistributions of source code must retain the above copyright
+>    notice, this list of conditions and the following disclaimer.
+>
+> 2. Redistributions in binary form must reproduce the above copyright
+>    notice, this list of conditions and the following disclaimer in the
+>    documentation and/or other materials provided with the
+>    distribution.
+>
+> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+> "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+> LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+> A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+> HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+> SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+> LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+> DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+> THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+> (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+> OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## zlib
 

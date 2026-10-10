@@ -16,11 +16,13 @@
 // listed and hold nothing.
 //
 // The streamed reader (oa/formats/zip/stream.hpp) reads an archive from a
-// file a piece at a time, the 64-bit extension included.
+// file a piece at a time, the 64-bit extension included. The streaming
+// writer (oa/formats/zip/writer.hpp) stores or deflates an archive of any
+// size through a positioned write hook.
 //
-// The writer stores its entries uncompressed, with a fixed time (1980-01-01
-// 00:00) and fixed attributes, so the same entries always give the same
-// bytes on every platform.
+// The in-memory writer stores its entries uncompressed, with a fixed time
+// (1980-01-01 00:00) and fixed attributes, so the same entries always give
+// the same bytes on every platform.
 #pragma once
 
 #include <cstddef>
@@ -67,6 +69,8 @@ enum class ZipStatus : uint8_t {
     bad_zip64_record,    ///< the 64-bit extension's records are missing or disagree
     overlapping_entries, ///< an entry's data runs into another entry's or the directory
     bad_name_encoding,   ///< a name marked UTF-8 that is not
+    entry_open,          ///< a call out of order
+    wrong_size,          ///< an entry ended with other than its declared bytes
 };
 
 /// What went wrong, where, and in which entry.

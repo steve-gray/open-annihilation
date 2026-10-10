@@ -1,12 +1,14 @@
 # Zip archives
 
-This module reads and writes zip archives in memory, and reads them as a
-stream from a file. A director bundle (`.oamovie`) is a zip archive of one
-`.oascript` and the recording it names: the application opens a bundle with
-the in-memory reader and makes one with the writer. A mod package
-(`.oamod`) is a zip archive of a mod's folder, of any size: the application
-unpacks it with the streamed reader. The module opens no files itself; the
-caller hands it the archive's bytes, or a hook that reads them.
+This module reads and writes zip archives in memory, reads them as a stream
+from a file, and writes them as a stream through a positioned hook. A
+director bundle (`.oamovie`) is a zip archive of one `.oascript` and the
+recording it names: the application opens a bundle with the in-memory
+reader and makes one with the in-memory writer. A mod package (`.oamod`), a
+language pack (`.oalang`) or a map pack (`.oamap`) is a zip archive of any
+size: the application unpacks it with the streamed reader and a tool makes
+it with the streaming writer. The module opens no files itself; the caller
+hands it the archive's bytes, or a hook that reads or writes them.
 
 ## Entry points
 
@@ -30,9 +32,19 @@ caller hands it the archive's bytes, or a hook that reads them.
   and CRC-32 at its end.
 - `read_stream_entry` reads a small entry whole into memory.
 
+`oa/formats/zip/writer.hpp`, the same namespace:
+
+- `StreamWriter` writes an archive through an `OutputHooks` write hook.
+  `begin_entry` starts one stored or deflated entry of a declared size,
+  `write` takes its bytes, `end_entry` completes its local header,
+  `add_folder` writes a folder and `finish` writes the central directory
+  and the end record. `bytes_written` is the archive's size so far.
+- `WriterOptions` chooses the deflate level (9 by default) and `Zip64`:
+  `when_needed` or `always`.
+
 Every function returns its errors as values (`ZipError`: a status, the byte
 offset of the record at fault and the entry's name) and leaves its output
-empty on failure.
+empty on failure. A streaming call that fails leaves the archive unfinished.
 
 ## What the reader takes
 
@@ -122,6 +134,40 @@ directory and an end record with no comment. The same entries always give
 the same bytes on every platform. The writer applies the reader's limits and
 name rule, and refuses a directory entry with data.
 
+## What the streaming writer makes
+
+The same fixed fields as the in-memory writer: version 2.0 needed and made
+by (4.5 when the entry uses the 64-bit extension), 00:00 on 1980-01-01, no
+extra field but the 64-bit one, no comment, no data descriptor and zero
+external attributes. The UTF-8 flag is set only for a name with a byte
+outside 7-bit ASCII. Local headers and data come first, in the order the
+entries were begun, then the central directory and an end record with no
+comment. Each local header is written with a zero CRC-32 and zero sizes,
+then those fields are written back in place when the entry ends, so every
+unzipper reads them from the header.
+
+An entry's local header carries the 64-bit extra field (the size, then the
+stored size) when `Zip64::always` is set, when its declared size is at
+least `0xF0000000`, or when the entry starts at or past `0xFFFFFFFF`. The
+central record then carries the sentinel in each 32-bit size and offset and
+the 64-bit values beside them. The end of the archive gains the 64-bit end
+record and its locator when `Zip64::always` is set, when the entry count
+reaches `0xFFFF`, or when the directory's offset or size reaches
+`0xFFFFFFFF`.
+
+A deflated entry uses zlib's raw deflate:
+`deflateInit2(level 9, Z_DEFLATED, -15, memLevel 8, Z_DEFAULT_STRATEGY)`,
+unless `WriterOptions::deflate_level` says another level. The same zlib
+gives the same bytes; another deflate implementation may not. The tests pin
+exact bytes only for stored entries.
+
+Names follow `name_is_safe`, must be at most `max_name_bytes` and
+well-formed UTF-8, and no two may be equal with ASCII case ignored. A folder
+is an entry whose name ends in '/' and whose size is zero. The writer
+refuses a call made out of order and an entry that ends with other than its
+declared number of bytes. After the write hook fails, or an entry ends at
+the wrong size, every later call fails.
+
 ## Tests
 
 `formats-zip` (`tests/zip_test.cpp`): write and read round trips; the
@@ -145,10 +191,23 @@ in which no allocation exceeds 1 MiB. `oa/test/raw_zip.hpp` (in
 `tests/support/include`) builds the archives field by field, as the mod
 packages' tests do too.
 
+`formats-zip-writer` (`tests/writer_test.cpp`): stored and deflated entries,
+empty files, folders and a name outside ASCII, read back with both readers;
+the exact bytes of a fixed stored archive, pinned by SHA-256; two writes of
+the same deflated entries byte for byte; `Zip64::always` on small entries;
+one stored entry of 4 GiB + 16 zero bytes and a small entry after it, through
+a sparse hook, read back past 4 GiB; every refusal; and 1,000 entries under
+a fixed seed. The test also writes `writer-sample.zip` (a few deflated text
+entries, a folder and a name outside ASCII) into its working directory.
+
 ## Limitations
 
 The in-memory reader keeps the whole archive and each entry in memory, which
 the limits bound to 1 GiB each, and refuses the 64-bit extension. Neither
 reader reads archives with data before the first entry (self-extracting
 archives) or split archives, and both ignore the extended time and
-attribute fields, since neither a bundle nor a mod package needs them.
+attribute fields, since neither a bundle nor a mod package needs them. The
+streaming writer needs a positioned output: it writes back into each local
+header, so it cannot write a pipe. It does not encrypt, and it writes no
+comment, extended time or Unix attributes. Reproducible deflate bytes depend
+on zlib, as the section above says.
