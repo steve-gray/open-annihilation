@@ -253,6 +253,11 @@ struct MissionMoveGoal {
     std::string type_name; // the unit type it names; empty for any type
 };
 
+namespace package_install {
+struct PackageKind;
+struct PackageOptions;
+} // namespace package_install
+
 class Runtime final : public menu::Host,
                       public entry::SinglePlayerHost,
                       public frontend::Host,
@@ -3925,6 +3930,40 @@ class Runtime final : public menu::Host,
     /// folders a change dropped, a step a frame. A run nobody watches leaves
     /// the packages waiting, unless --check-mod-install asks for them.
     void tell_mod_installs();
+
+    /// Tells whether a folder is what the game plays now, which a kind
+    /// decides: a change to it waits for the run to end. A mod folder is the
+    /// one layered over the game folder.
+    ///
+    /// @param kind the package's kind
+    /// @param folder the folder the change acts on
+    /// @return true when the game plays it
+    [[nodiscard]] bool
+    package_target_in_use(const package_install::PackageKind& kind, const fs::path& folder) const;
+
+    /// Tells whether PLAY NOW is offered after a package of this kind is
+    /// installed: the player can switch the game to what it put in place.
+    /// A mod package offers it when the Mod setting is the player's to change.
+    ///
+    /// @param kind the package's kind
+    /// @return true when PLAY NOW is offered
+    [[nodiscard]] bool package_offers_play(const package_install::PackageKind& kind) const;
+
+    /// Takes in what a change of this kind put in place. A mod change lists
+    /// the Mods folder again.
+    ///
+    /// @param kind the package's kind
+    /// @param folder the folder the change put in place
+    void package_changed(const package_install::PackageKind& kind, const fs::path& folder);
+
+    /// Returns what a kind's hooks need from this run. A mod package gets
+    /// the unimplemented-hack setting, the preferences and the game folder;
+    /// every other kind gets the defaults, and its context stays null.
+    ///
+    /// @param kind the package's kind
+    /// @return the options
+    [[nodiscard]] package_install::PackageOptions
+    package_options(const package_install::PackageKind& kind) const;
 
     /// Takes the mod packages a second start handed over (handoff.hpp) into
     /// the inbox, and brings the window forward when it took any.

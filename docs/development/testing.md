@@ -110,10 +110,13 @@ ends; the third finds it put in place, told, and rolls it back; the fourth
 finds that put in place and leaves the folder as a stop after a replace's
 first rename would; the fifth finds the mod played all the same, put back
 before its folder was resolved. With `--snapshot` it writes the installed notice and
-the Another Version question beside the snapshot. The unit tests of the
-installer are `app-mod-install-package`, `app-mod-install-plan`,
-`app-mod-install-change` and `app-mod-install-handoff`, of the streamed zip
-reader `formats-zip-stream`, and of the prompt `ui-engine-settings-prompt`.
+the Another Version question beside the snapshot. The installer is
+`src/app/package-install`. Its four unit tests keep the names
+`app-mod-install-package`, `app-mod-install-plan`, `app-mod-install-change`
+and `app-mod-install-handoff` (the executables are
+`oa-app-package-install-*-test`); `app-package-install-kinds` tests the
+kind table. The streamed zip reader is `formats-zip-stream`, and the prompt
+is `ui-engine-settings-prompt`.
 `native-mod-warning` (`--check-mod-warning`) writes made-up profiles into
 that folder's `Mods`: one whose second side's interface art and font are
 missing, one whose unit files are missing, one whose commander's file the

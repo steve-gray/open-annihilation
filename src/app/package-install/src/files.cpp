@@ -8,7 +8,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/base/threads.hpp"
 
 #include <algorithm>
@@ -31,7 +31,7 @@
 #include <unistd.h>
 #endif
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -261,17 +261,18 @@ FileLock::~FileLock() {
 #endif
 }
 
-ModsHold hold_mods_folder(const fs::path& mods) {
+RootHold hold_root(const PackageKind& kind, const fs::path& root) {
     // Every hold this process takes on one folder shares one lock.
+    detail::note_kind(kind);
     static base::threads::Mutex guard;
     static std::map<fs::path, std::weak_ptr<const FileLock>> held;
     std::error_code error;
-    const fs::path absolute = fs::absolute(mods, error).lexically_normal();
-    const fs::path key = error ? mods.lexically_normal() : absolute;
+    const fs::path absolute = fs::absolute(root, error).lexically_normal();
+    const fs::path key = error ? root.lexically_normal() : absolute;
     const base::threads::LockGuard locked(guard);
     if (auto shared = held[key].lock())
         return shared;
-    std::shared_ptr<const FileLock> taken = FileLock::take(key / std::string(lock_file_name));
+    std::shared_ptr<const FileLock> taken = FileLock::take(key / folder_names(kind).lock);
     if (!taken)
         return nullptr;
     held[key] = taken;
@@ -366,4 +367,4 @@ bool NewFile::finish() noexcept {
 #endif
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

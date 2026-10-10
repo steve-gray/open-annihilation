@@ -9,13 +9,13 @@
 // running copy takes the requests at its main menu.
 #pragma once
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 
 #include <filesystem>
 #include <memory>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 /// The instance lock's file, in the game's data folder.
 inline constexpr std::string_view instance_lock_name = "open-annihilation.lock";
@@ -50,4 +50,4 @@ inline constexpr std::string_view request_extension = ".request";
 [[nodiscard]] std::vector<std::filesystem::path>
 take_handed_files(const std::filesystem::path& folder);
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

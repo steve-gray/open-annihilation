@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The names a package may unpack on every system, the folder-safe form of a
-// version, and the installer's text helpers.
+// The names a package may unpack on every system, and the installer's text helpers.
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,14 +13,12 @@
 #include <string>
 #include <string_view>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace {
 
 /// The longest part of a path most file systems keep, in bytes.
 constexpr std::size_t longest_part_bytes = 255;
-/// The longest folder-safe version, in bytes.
-constexpr std::size_t longest_version_part = 32;
 /// The characters Windows refuses in a name.
 constexpr std::string_view refused_characters = "<>:\"|?*\\";
 /// The names Windows keeps for devices, lowered, without the numbered ones.
@@ -126,7 +123,7 @@ std::filesystem::path path_of(std::string_view text) {
 }
 
 void log_line(std::string_view line) {
-    std::cerr << "open-annihilation: mod install: " << line << '\n';
+    std::cerr << "open-annihilation: package install: " << line << '\n';
 }
 
 } // namespace detail
@@ -164,38 +161,4 @@ std::string portable_name_problem(std::string_view relative_name) {
     }
 }
 
-std::string version_folder_part(std::string_view version) {
-    std::string part;
-    for (const char character : version) {
-        char kept = '-';
-        if (character >= 'A' && character <= 'Z')
-            kept = static_cast<char>(character - 'A' + 'a');
-        else if (
-            (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
-            character == '.' || character == '_'
-        )
-            kept = character;
-        if (kept == '-' && !part.empty() && part.back() == '-')
-            continue;
-        part += kept;
-    }
-    const auto trim = [](std::string& text) {
-        while (!text.empty() && (text.front() == '.' || text.front() == '-'))
-            text.erase(text.begin());
-        while (!text.empty() && (text.back() == '.' || text.back() == '-'))
-            text.pop_back();
-    };
-    trim(part);
-    if (part.size() > longest_version_part) {
-        part.resize(longest_version_part);
-        trim(part);
-    }
-    return part.empty() ? std::string("version") : part;
-}
-
-bool names_mod_package(const std::filesystem::path& file) {
-    const std::string name = detail::folded(detail::utf8_of(file.filename()));
-    return name.size() > package_extension.size() && name.ends_with(package_extension);
-}
-
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

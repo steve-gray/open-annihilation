@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install/inbox.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/base/threads.hpp"
 
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include <system_error>
 #include <utility>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -56,7 +56,7 @@ fs::path compared(const fs::path& file) {
 
 } // namespace
 
-void post_mod_file(const fs::path& file) {
+void post_package_file(const fs::path& file) {
     const fs::path form = compared(file);
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
@@ -66,7 +66,7 @@ void post_mod_file(const fs::path& file) {
     state.files.push_back(form);
 }
 
-std::optional<fs::path> take_mod_file() {
+std::optional<fs::path> take_package_file() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     if (state.files.empty())
@@ -77,7 +77,7 @@ std::optional<fs::path> take_mod_file() {
     return file;
 }
 
-void return_mod_file(const fs::path& file) {
+void return_package_file(const fs::path& file) {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     const fs::path form = compared(file);
@@ -86,13 +86,13 @@ void return_mod_file(const fs::path& file) {
         state.files.push_front(form);
 }
 
-void finish_mod_file() {
+void finish_package_file() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     state.current.reset();
 }
 
-bool mod_files_waiting() {
+bool package_files_waiting() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     return !state.files.empty();
@@ -123,13 +123,18 @@ void finish_pending_change(const ChangeOptions& options) {
     ChangeOptions checked = options;
     checked.expected = pending->replaced;
     ChangeOutcome outcome{};
-    outcome.result = commit_change(pending->mods, pending->target, pending->change, checked);
+    if (pending->kind == nullptr) {
+        pending->hold.reset();
+        return;
+    }
+    outcome.result =
+        commit_change(*pending->kind, pending->root, pending->target, pending->change, checked);
     detail::log_line(
         pending->target + (outcome.result.changed ? ": changed before the run" : ": not changed")
     );
     // The hold goes once the change is in place; then the folder is settled.
     pending->hold.reset();
-    const Recovery recovery = recover_changes(pending->mods, options);
+    const Recovery recovery = recover_changes(*pending->kind, pending->root, options);
     std::vector<fs::path> discards = outcome.result.discards;
     discards.insert(discards.end(), recovery.discards.begin(), recovery.discards.end());
     outcome.change = std::move(*pending);
@@ -175,4 +180,4 @@ std::optional<fs::path> handoff_folder() {
     return state.handoff;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

@@ -8,7 +8,8 @@
 // folders it makes; and each refusal once. The portable name rule and the
 // folder-safe version.
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/scratch_directory.hpp"
 #include "oa/test/raw_zip.hpp"
@@ -23,7 +24,7 @@
 namespace {
 
 namespace fs = std::filesystem;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 namespace raw = oa::test::raw_zip;
 using install::Refusal;
 
@@ -144,7 +145,7 @@ void test_finder_package(const Scratch& scratch) {
     OA_CHECK(package.folders == std::vector<std::string>{"units"});
     OA_CHECK(package.unpacked_bytes == profile_text("example-mod").size() + 10);
     OA_CHECK(!package.backup_left_out);
-    const auto incoming = install::incoming_of(*package.profile);
+    const auto incoming = install::oamod::incoming_of(*package.profile);
     OA_CHECK(incoming.id == "example-mod" && incoming.name == "Example Mod");
     OA_CHECK(incoming.version == "1.0" && incoming.revision == 1);
 }
@@ -198,18 +199,18 @@ void test_refusals(const Scratch& scratch) {
             scratch,
             {raw::stored_text("a/oamod.yaml", profile_text("example-mod")),
              raw::stored_text("b/x.txt", "x")}
-        ) == Refusal::no_profile
+        ) == Refusal::no_manifest
     );
-    OA_CHECK(refusal_of(scratch, {raw::stored_text("x.txt", "x")}) == Refusal::no_profile);
+    OA_CHECK(refusal_of(scratch, {raw::stored_text("x.txt", "x")}) == Refusal::no_manifest);
     // A profile larger than the reader takes.
     OA_CHECK(
         refusal_of(scratch, {raw::stored_text("oamod.yaml", std::string(300 * 1024, '#'))}) ==
-        Refusal::profile_too_large
+        Refusal::manifest_too_large
     );
     // A profile that does not resolve keeps its diagnostics.
     const auto broken =
         open_files(scratch, {raw::stored_text("oamod.yaml", "oamod: 1\nname: Broken\n")});
-    OA_CHECK(broken.problem.refusal == Refusal::profile_errors);
+    OA_CHECK(broken.problem.refusal == Refusal::manifest_errors);
     OA_CHECK(!broken.problem.lines.empty());
     if (!broken.problem.lines.empty())
         OA_CHECK(broken.problem.lines.front().find("oamod.yaml") != std::string::npos);
@@ -290,14 +291,14 @@ void test_names() {
     OA_CHECK(!install::portable_name_problem("tab\there").empty());
     OA_CHECK(!install::portable_name_problem("bad\xff").empty());
     OA_CHECK(!install::portable_name_problem(std::string(256, 'n')).empty());
-    OA_CHECK(install::version_folder_part("10.2") == "10.2");
-    OA_CHECK(install::version_folder_part("2.1 Beta") == "2.1-beta");
-    OA_CHECK(install::version_folder_part("  v3 / final!! ") == "v3-final");
-    OA_CHECK(install::version_folder_part("...") == "version");
-    OA_CHECK(install::version_folder_part(std::string(40, '9')) == std::string(32, '9'));
-    OA_CHECK(install::names_mod_package("Example-1.0.OAMOD"));
-    OA_CHECK(!install::names_mod_package("example.zip"));
-    OA_CHECK(!install::names_mod_package(".oamod"));
+    OA_CHECK(install::oamod::version_folder_part("10.2") == "10.2");
+    OA_CHECK(install::oamod::version_folder_part("2.1 Beta") == "2.1-beta");
+    OA_CHECK(install::oamod::version_folder_part("  v3 / final!! ") == "v3-final");
+    OA_CHECK(install::oamod::version_folder_part("...") == "version");
+    OA_CHECK(install::oamod::version_folder_part(std::string(40, '9')) == std::string(32, '9'));
+    OA_CHECK(install::kind_for_file("Example-1.0.OAMOD") != nullptr);
+    OA_CHECK(install::kind_for_file("example.zip") == nullptr);
+    OA_CHECK(install::kind_for_file(".oamod") == nullptr);
 }
 
 } // namespace

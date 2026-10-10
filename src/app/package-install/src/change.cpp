@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
 
@@ -19,7 +19,7 @@
 #include <system_error>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -83,25 +83,26 @@ std::error_code move(const ChangeOptions& options, const fs::path& from, const f
 
 /// Returns a folder's name for a role of a target's change.
 ///
-/// @param mods the Mods folder
+/// @param root the root folder
 /// @param prefix the role's prefix
 /// @param target the target
 /// @return the folder
-fs::path role_folder(const fs::path& mods, std::string_view prefix, std::string_view target) {
-    return mods / detail::path_of(std::string(prefix) + std::string(target));
+fs::path role_folder(const fs::path& root, std::string_view prefix, std::string_view target) {
+    return root / detail::path_of(std::string(prefix) + std::string(target));
 }
 
 /// Returns the first discard folder name free for a target.
 ///
-/// @param mods the Mods folder
+/// @param root the root folder
+/// @param discard the kind's discard prefix
 /// @param target the target
 /// @return the folder, which does not exist
-fs::path free_discard(const fs::path& mods, std::string_view target) {
+fs::path free_discard(const fs::path& root, std::string_view discard, std::string_view target) {
     for (uint32_t number = 1;; ++number) {
-        const fs::path folder = mods / detail::path_of(
-                                           std::string(discard_prefix) + std::string(target) + "-" +
-                                           std::to_string(number)
-                                       );
+        const fs::path folder =
+            root / detail::path_of(
+                       std::string(discard) + std::string(target) + "-" + std::to_string(number)
+                   );
         if (!present(folder))
             return folder;
     }
@@ -110,14 +111,16 @@ fs::path free_discard(const fs::path& mods, std::string_view target) {
 /// Moves a folder aside to be deleted.
 ///
 /// @param options the hooks and the waits
-/// @param mods the Mods folder
+/// @param root the root folder
+/// @param discard_prefix the kind's discard prefix
 /// @param target the target it belonged to
 /// @param folder the folder
 /// @param[in,out] discards receives the discard folder
 /// @param[in,out] lines receives what failed
 void discard(
     const ChangeOptions& options,
-    const fs::path& mods,
+    const fs::path& root,
+    std::string_view discard_prefix,
     std::string_view target,
     const fs::path& folder,
     std::vector<fs::path>& discards,
@@ -125,7 +128,7 @@ void discard(
 ) {
     if (!present(folder))
         return;
-    const fs::path to = free_discard(mods, target);
+    const fs::path to = free_discard(root, discard_prefix, target);
     if (const std::error_code error = move(options, folder, to); error)
         lines.push_back(
             "cannot move " + detail::utf8_of(folder) + " aside to be deleted: " + error.message()
@@ -136,17 +139,17 @@ void discard(
 
 /// Renames a folder no step could settle to a visible name after its
 /// target, <target>-left-over or -left-over-2 and so on, so that it never
-/// blocks a later change and shows on the Mods page.
+/// blocks a later change and shows in the root folder.
 ///
 /// @param options the hooks and the waits
-/// @param mods the Mods folder
+/// @param root the root folder
 /// @param target the target
 /// @param folder the folder
 /// @param[in,out] lines receives what was done
 /// @return where the folder is now
 fs::path keep_visible(
     const ChangeOptions& options,
-    const fs::path& mods,
+    const fs::path& root,
     std::string_view target,
     const fs::path& folder,
     std::vector<std::string>& lines
@@ -155,7 +158,7 @@ fs::path keep_visible(
         std::string name = std::string(target) + std::string(left_over_suffix);
         if (number > 1)
             name += "-" + std::to_string(number);
-        const fs::path to = mods / detail::path_of(name);
+        const fs::path to = root / detail::path_of(name);
         if (present(to))
             continue;
         if (const std::error_code error = move(options, folder, to); error) {
@@ -194,23 +197,29 @@ ChangeResult failed(Refusal refusal, std::string detail) {
 } // namespace
 
 ChangeResult commit_change(
-    const fs::path& mods, std::string_view target, Change change, const ChangeOptions& options
+    const PackageKind& kind,
+    const fs::path& root,
+    std::string_view target,
+    Change change,
+    const ChangeOptions& options
 ) {
     try {
-        const ModsHold hold = hold_mods_folder(mods);
+        detail::note_kind(kind);
+        const FolderNames names = folder_names(kind);
+        const RootHold hold = hold_root(kind, root);
         if (!hold)
-            return failed(Refusal::busy, "another copy of the game holds the Mods folder");
-        const fs::path folder = mods / detail::path_of(target);
-        const fs::path staged = role_folder(mods, staging_prefix, target);
-        const fs::path old = role_folder(mods, old_prefix, target);
-        const fs::path replaced = role_folder(mods, replaced_prefix, target);
-        const fs::path restore = role_folder(mods, restore_prefix, target);
+            return failed(Refusal::busy, "another copy of the game holds the root folder");
+        const fs::path folder = root / detail::path_of(target);
+        const fs::path staged = role_folder(root, names.staging, target);
+        const fs::path old = role_folder(root, names.old, target);
+        const fs::path replaced = role_folder(root, names.replaced, target);
+        const fs::path restore = role_folder(root, names.restore, target);
         const fs::path kept = folder / std::string(backup_folder_name);
         std::vector<std::string> lines;
         ChangeResult result{};
         const auto fail = [&](Refusal refusal, std::string detail) {
             if (change != Change::roll_back)
-                discard(options, mods, target, staged, result.discards, lines);
+                discard(options, root, names.discard, target, staged, result.discards, lines);
             result.refusal = refusal;
             result.detail = std::move(detail);
             for (const auto& line : lines)
@@ -220,7 +229,8 @@ ChangeResult commit_change(
         };
         // The folder must hold what the plan found, and no earlier change's
         // folder may stand in the way.
-        if (options.expected && !same_mod(read_installed_mod(folder), *options.expected))
+        if (options.expected && (kind.read_installed == nullptr ||
+                                 !same_package(kind.read_installed(folder), *options.expected)))
             return fail(Refusal::changed, "the folder changed since the install was planned");
         for (const fs::path& role : {old, replaced, restore})
             if (present(role))
@@ -231,7 +241,7 @@ ChangeResult commit_change(
         // What the version leaving the target becomes when a step after the
         // new files are in place fails: a visible folder the player is told of.
         const auto left_over = [&](const fs::path& leaving) {
-            result.left_over = keep_visible(options, mods, target, leaving, lines);
+            result.left_over = keep_visible(options, root, target, leaving, lines);
         };
         std::error_code error;
         switch (change) {
@@ -258,7 +268,7 @@ ChangeResult commit_change(
             result.changed = true;
             // One version back: the old version's own kept version goes.
             if (const auto older = backup_in(old)) {
-                const fs::path to = free_discard(mods, target);
+                const fs::path to = free_discard(root, names.discard, target);
                 if ((error = move(options, *older, to))) {
                     lines.push_back("cannot drop the earlier kept version: " + error.message());
                     left_over(old);
@@ -296,7 +306,7 @@ ChangeResult commit_change(
                 }
             }
             result.backup_kept = present(kept);
-            discard(options, mods, target, replaced, result.discards, lines);
+            discard(options, root, names.discard, target, replaced, result.discards, lines);
             break;
         case Change::roll_back: {
             const auto backup = backup_in(folder);
@@ -344,24 +354,27 @@ ChangeResult commit_change(
         }
         // The renames reach storage before the player is told of them.
         detail::sync_folder(folder);
-        detail::flush_to_storage(mods);
+        detail::flush_to_storage(root);
         return result;
     } catch (const std::exception& failure) {
         return failed(Refusal::not_placed, failure.what());
     }
 }
 
-Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
+Recovery
+recover_changes(const PackageKind& kind, const fs::path& root, const ChangeOptions& options) {
     Recovery recovery{};
     try {
+        detail::note_kind(kind);
+        const FolderNames names = folder_names(kind);
         std::error_code error;
-        if (!fs::is_directory(mods, error))
+        if (!fs::is_directory(root, error))
             return recovery;
-        const ModsHold hold = hold_mods_folder(mods);
+        const RootHold hold = hold_root(kind, root);
         if (!hold) {
             recovery.skipped = true;
             recovery.lines.push_back(
-                "another copy of the game holds " + detail::utf8_of(mods) + "; nothing is settled"
+                "another copy of the game holds " + detail::utf8_of(root) + "; nothing is settled"
             );
             return recovery;
         }
@@ -376,14 +389,14 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
 
         std::map<std::string, Left> targets;
         std::vector<fs::path> discards;
-        for (fs::directory_iterator entry{mods, error}, end; !error && entry != end;
+        for (fs::directory_iterator entry{root, error}, end; !error && entry != end;
              entry.increment(error)) {
             const std::string name = detail::utf8_of(entry->path().filename());
-            if (!name.starts_with(reserved_prefix))
+            if (!name.starts_with(names.reserved))
                 continue;
             // A discard folder is deleted whatever it is: a link or
             // junction is removed, never entered (Discarder).
-            if (name.starts_with(discard_prefix)) {
+            if (name.starts_with(names.discard)) {
                 discards.push_back(entry->path());
                 continue;
             }
@@ -393,20 +406,20 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
             const auto rest = [&](std::string_view prefix) {
                 return std::string(std::string_view(name).substr(prefix.size()));
             };
-            if (name.starts_with(staging_prefix))
-                targets[rest(staging_prefix)].staged = true;
-            else if (name.starts_with(old_prefix))
-                targets[rest(old_prefix)].old = true;
-            else if (name.starts_with(replaced_prefix))
-                targets[rest(replaced_prefix)].replaced = true;
-            else if (name.starts_with(restore_prefix))
-                targets[rest(restore_prefix)].restore = true;
+            if (name.starts_with(names.staging))
+                targets[rest(names.staging)].staged = true;
+            else if (name.starts_with(names.old))
+                targets[rest(names.old)].old = true;
+            else if (name.starts_with(names.replaced))
+                targets[rest(names.replaced)].replaced = true;
+            else if (name.starts_with(names.restore))
+                targets[rest(names.restore)].restore = true;
         }
         const auto note = [&](const std::string& line) { recovery.lines.push_back(line); };
         for (const auto& [target, left] : targets) {
             if (target.empty())
                 continue;
-            const fs::path folder = mods / detail::path_of(target);
+            const fs::path folder = root / detail::path_of(target);
             const fs::path kept = folder / std::string(backup_folder_name);
             const auto step = [&](const fs::path& from, const fs::path& to) {
                 if (const std::error_code failed_move = move(options, from, to); failed_move) {
@@ -420,7 +433,7 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
                 return true;
             };
             const auto to_discard = [&](const fs::path& from) {
-                const fs::path to = free_discard(mods, target);
+                const fs::path to = free_discard(root, names.discard, target);
                 if (step(from, to))
                     discards.push_back(to);
             };
@@ -428,13 +441,13 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
                 // A reinstall: before its new files were in place, the
                 // version replaced goes back; after, it goes, its kept
                 // version moved over first.
-                const fs::path replaced = role_folder(mods, replaced_prefix, target);
+                const fs::path replaced = role_folder(root, names.replaced, target);
                 if (!present(folder)) {
                     step(replaced, folder);
                 } else {
                     const auto older = backup_in(replaced);
                     if (older && !backup_in(folder) && !step(*older, kept))
-                        keep_visible(options, mods, target, replaced, recovery.lines);
+                        keep_visible(options, root, target, replaced, recovery.lines);
                     else
                         to_discard(replaced);
                 }
@@ -443,7 +456,7 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
                 // A replace or a roll back: before the new files were in
                 // place, the version installed goes back; after, it becomes
                 // the kept version, its own kept version dropped.
-                const fs::path old = role_folder(mods, old_prefix, target);
+                const fs::path old = role_folder(root, names.old, target);
                 if (!present(folder)) {
                     step(old, folder);
                 } else {
@@ -451,26 +464,26 @@ Recovery recover_changes(const fs::path& mods, const ChangeOptions& options) {
                         to_discard(*older);
                     if (!backup_in(folder)) {
                         if (!step(old, kept))
-                            keep_visible(options, mods, target, old, recovery.lines);
+                            keep_visible(options, root, target, old, recovery.lines);
                     } else {
-                        keep_visible(options, mods, target, old, recovery.lines);
+                        keep_visible(options, root, target, old, recovery.lines);
                     }
                 }
             }
             if (left.restore) {
                 // A roll back: the kept version goes back to being kept.
-                const fs::path restore = role_folder(mods, restore_prefix, target);
+                const fs::path restore = role_folder(root, names.restore, target);
                 if (present(folder) && !backup_in(folder)) {
                     if (!step(restore, kept))
-                        keep_visible(options, mods, target, restore, recovery.lines);
+                        keep_visible(options, root, target, restore, recovery.lines);
                 } else if (!present(folder)) {
                     step(restore, folder);
                 } else {
-                    keep_visible(options, mods, target, restore, recovery.lines);
+                    keep_visible(options, root, target, restore, recovery.lines);
                 }
             }
             if (left.staged)
-                to_discard(role_folder(mods, staging_prefix, target));
+                to_discard(role_folder(root, names.staging, target));
         }
         recovery.discards = std::move(discards);
         for (const auto& line : recovery.lines)
@@ -495,8 +508,12 @@ bool Discarder::busy() const noexcept {
 bool Discarder::step() {
     if (folders_.empty())
         return false;
-    // Under the lock of the Mods folder the discard folders lie in.
-    const ModsHold hold = hold_mods_folder(folders_.front().parent_path());
+    // Under the lock of the root folder the discard folders lie in.
+    const std::string name = detail::utf8_of(folders_.front().filename());
+    const PackageKind* kind = detail::kind_of_reserved(name);
+    if (kind == nullptr)
+        return true;
+    const RootHold hold = hold_root(*kind, folders_.front().parent_path());
     if (!hold)
         return true;
     const auto started = std::chrono::steady_clock::now();
@@ -559,4 +576,4 @@ bool Discarder::step() {
     return !folders_.empty();
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

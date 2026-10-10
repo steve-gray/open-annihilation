@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Mod packages (.oamod): a zip archive of a mod's folder, installed into the
-// player's own Mods folder under the id its oamod.yaml gives. A package is
-// read and checked before anything is written (open_package); what the
-// Mods folder holds decides where it goes and what the player is asked
-// (plan_install); its files are unpacked into a staging folder inside Mods,
-// a piece at a time (Unpacking), then put in place by renames on the same
-// volume (commit_change), which keep the version an update replaced in the
-// mod's .backup folder, one version back. A crash at any point leaves
-// folders that the next start settles to the state before the change or
-// after it (recover_changes), and the folders a change drops are deleted a
-// little at a time (Discarder). No function here throws: errors are values.
+// Packages: a zip archive of one kind of package, installed into that kind's
+// folder of the player's own folder under the id its manifest gives. A
+// package is read and checked before anything is written (open_package);
+// what the kind's root folder holds decides where it goes and what the
+// player is asked (the kind's plan); its files are unpacked into a staging
+// folder inside that root, a piece at a time (Unpacking), then put in place
+// by renames on the same volume (commit_change), which keep the version an
+// update replaced in the package's .backup folder, one version back. A crash
+// at any point leaves folders that the next start settles to the state
+// before the change or after it (recover_changes), and the folders a change
+// drops are deleted a little at a time (Discarder). One table of kinds says
+// what differs: today the oamod kind, whose manifest is oamod.yaml and whose
+// root folder is Mods. No function here throws: errors are values.
 #pragma once
 
 #include "oa/data/mod_profile.hpp"
@@ -30,30 +32,21 @@
 #include <system_error>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
-/// A mod package's file extension, matched without case.
-inline constexpr std::string_view package_extension = ".oamod";
-/// The folder inside a mod's folder that keeps the version an update
-/// replaced, which the game never reads (oa::backup_folder_name).
+struct Package;
+struct Problem;
+struct InstallPlan;
+struct FolderHooks;
+struct PackageKind;
+struct KindPrompts;
+struct Incoming;
+
+/// The folder inside an installed package's folder that keeps the version an
+/// update replaced, which the game never reads (oa::backup_folder_name).
 inline constexpr std::string_view backup_folder_name = oa::backup_folder_name;
-/// What every folder an install keeps in Mods while it works starts with;
-/// the Mods page lists none of them (list_mods_in).
-inline constexpr std::string_view reserved_prefix = ".oamod-";
-/// A package's files, unpacked, before they are put in place.
-inline constexpr std::string_view staging_prefix = ".oamod-staging-";
-/// The version leaving the target, which becomes its .backup.
-inline constexpr std::string_view old_prefix = ".oamod-old-";
-/// The version a reinstall replaces, which is dropped.
-inline constexpr std::string_view replaced_prefix = ".oamod-replaced-";
-/// The kept version a roll back brings back.
-inline constexpr std::string_view restore_prefix = ".oamod-restore-";
-/// A folder to be deleted, a little at a time (Discarder).
-inline constexpr std::string_view discard_prefix = ".oamod-discard-";
-/// The file whose lock a copy of the game holds while it changes Mods.
-inline constexpr std::string_view lock_file_name = ".oamod-lock";
 /// What a folder recovery cannot settle is renamed to, after its target's
-/// name, so that it shows on the Mods page and never blocks a later change.
+/// name, so that it shows in the root folder and never blocks a later change.
 inline constexpr std::string_view left_over_suffix = "-left-over";
 /// The most a package may unpack to, in bytes.
 inline constexpr uint64_t max_install_bytes = uint64_t{4} << 30;
@@ -79,34 +72,35 @@ inline constexpr uint32_t alongside_tries = 99;
 /// Why a package was not installed.
 enum class Refusal : uint8_t {
     none,
-    unreadable,        ///< the file cannot be opened or read
-    not_zip,           ///< it is not a zip archive
-    damaged,           ///< a record or an entry's data is not as recorded
-    no_profile,        ///< no oamod.yaml at its top, or in one folder at its top
-    profile_too_large, ///< its oamod.yaml is larger than the profile reader takes
-    profile_errors,    ///< its oamod.yaml does not resolve
-    unsafe_name,       ///< a name that cannot be unpacked on every system
-    case_clash,        ///< two names that differ only in case, or one that exists already
-    link,              ///< a link or a special file
-    encrypted,         ///< an encrypted entry
-    method,            ///< an entry packed other than stored or deflated
-    too_large,         ///< it unpacks to more than max_install_bytes
-    bomb,              ///< it unpacks to far more than its own size
-    too_many_folders,  ///< it unpacks more than max_package_folders folders
-    no_space,          ///< the disk holding Mods has too little room
-    path_too_long,     ///< an unpacked path is longer than the system opens
-    reserved_id,       ///< its id names a device on Windows
-    no_free_folder,    ///< no folder name is free for it alongside the others
-    not_placed,        ///< its files could not be put in place
-    changed,           ///< the Mods folder changed while it was being installed
-    busy,              ///< another copy of the game is changing the Mods folder
+    unreadable,         ///< the file cannot be opened or read
+    not_zip,            ///< it is not a zip archive
+    damaged,            ///< a record or an entry's data is not as recorded
+    no_manifest,        ///< no manifest at its top, or in one folder at its top
+    manifest_too_large, ///< its manifest is larger than the kind takes
+    manifest_errors,    ///< its manifest does not resolve
+    unsafe_name,        ///< a name that cannot be unpacked on every system
+    case_clash,         ///< two names that differ only in case, or one that exists already
+    link,               ///< a link or a special file
+    encrypted,          ///< an encrypted entry
+    method,             ///< an entry packed other than stored or deflated
+    too_large,          ///< it unpacks to more than max_install_bytes
+    bomb,               ///< it unpacks to far more than its own size
+    too_many_folders,   ///< it unpacks more than max_package_folders folders
+    no_space,           ///< the disk holding the root folder has too little room
+    path_too_long,      ///< an unpacked path is longer than the system opens
+    reserved_id,        ///< its id names a device on Windows
+    no_free_folder,     ///< no folder name is free for it alongside the others
+    not_placed,         ///< its files could not be put in place
+    changed,            ///< the root folder changed while it was being installed
+    busy,               ///< another copy of the game is changing the root folder
+    unknown_kind,       ///< it is not a kind of package this game installs
 };
 
 /// What went wrong, for the player's text and the log.
 struct Problem {
     Refusal refusal{Refusal::none};
     std::string subject{};            ///< the entry name or id the reason names
-    std::vector<std::string> lines{}; ///< profile diagnostics, one each (profile_errors)
+    std::vector<std::string> lines{}; ///< profile diagnostics, one each (manifest_errors)
     std::string detail{};             ///< English, for the log: a system error, a zip status
     /// The size the reason names: the unpacked size (too_large, bomb) or
     /// the room needed (no_space).
@@ -124,8 +118,17 @@ struct PackagedFile {
     std::string name{};
 };
 
+/// A package as its manifest names it.
+struct Incoming {
+    std::string id{};
+    std::string name{};
+    std::string version{};
+    int64_t revision{};
+};
+
 /// A package, read and checked: what it installs and where its files come from.
 struct Package {
+    const PackageKind* kind{};    ///< the kind its extension named; null before it is known
     std::filesystem::path file{}; ///< the package
     std::string file_name{};      ///< its name, UTF-8, which the texts name
     uint64_t archive_bytes{};     ///< its size
@@ -135,23 +138,28 @@ struct Package {
     /// Every folder it unpacks, those its paths pass through included, '/'
     /// between parts, each after the folder that holds it.
     std::vector<std::string> folders{};
-    std::size_t profile_entry{}; ///< oamod.yaml's entry
+    std::size_t manifest_entry{}; ///< the manifest's entry
+    Incoming incoming{};          ///< what the manifest installs, set by the kind
+    /// The oamod kind's resolved profile; null for every other kind.
     std::shared_ptr<const oa::data::mod_profile::ModProfile> profile{};
-    std::vector<std::string> warnings{}; ///< the profile's warnings, formatted
+    std::vector<std::string> warnings{}; ///< the manifest's warnings, formatted
     uint64_t unpacked_bytes{};           ///< its files' sizes added up
     bool backup_left_out{}; ///< it held a .backup folder of its own, which is not unpacked
 };
 
-/// How a package's profile is resolved, as a load of the mod resolves it.
+/// How a package's manifest is resolved.
 struct PackageOptions {
     /// Accept hacks this build does not implement yet, with a warning each.
     bool accept_unimplemented_hacks{};
-    /// The player's preferences, whose registry section the profile's
+    /// The player's preferences, whose registry section the oamod profile's
     /// registry bindings read; null for none.
     const oa::platform::preferences::Values* preferences{};
-    /// The game folder the mod layers over, whose INI file the profile's
-    /// settings come from when the package holds none; empty for none.
+    /// The game folder the oamod kind layers over, whose INI file the
+    /// profile's settings come from when the package holds none; empty for none.
     std::filesystem::path game_folder{};
+    /// What a kind's hooks need from the app, which the runtime sets per kind
+    /// (Runtime::package_options); null for oamod.
+    void* context{};
 };
 
 /// A package read, or why not.
@@ -161,17 +169,17 @@ struct PackageResult {
 };
 
 /// Reads and checks a package, writing nothing: its directory, the names
-/// and sizes of what it unpacks, and its profile, resolved twice as a load
-/// of the mod resolves it (the second time with the settings its INI file
-/// and the registry give). The first problem found refuses it.
+/// and sizes of what it unpacks, and its manifest, which the kind reads.
+/// The first problem found refuses it. A file whose extension is no kind's
+/// is refused as unknown_kind, and nothing is read.
 ///
 /// It ignores __MACOSX folders, .DS_Store files and AppleDouble files (a
-/// last part starting "._"), and a .backup folder of its own. Its oamod.yaml
+/// last part starting "._"), and a .backup folder of its own. Its manifest
 /// lies at its top, matched without case, or in the one folder its top
 /// holds, which is stripped, as the Finder's Compress makes it.
 ///
 /// @param file the package
-/// @param options how its profile is resolved
+/// @param options how its manifest is resolved; a kind's hooks read context
 /// @return the package, or the problem
 [[nodiscard]] PackageResult
 open_package(const std::filesystem::path& file, const PackageOptions& options = {});
@@ -193,32 +201,17 @@ open_package(const std::filesystem::path& file, const PackageOptions& options = 
 /// @return true for CON, PRN, AUX, NUL, COM0 to COM9, LPT0 to LPT9, and the others
 [[nodiscard]] bool windows_device_name(std::string_view name) noexcept;
 
-/// Returns the folder-safe form of a version, for Mods/<id>-<version>: ASCII
-/// letters lowered, digits, '.', '_' and '-' kept, every other byte '-',
-/// runs of '-' made one, '.' and '-' cut from both ends, at most 32 bytes;
-/// "version" when nothing is left. "10.2" gives "10.2", "2.1 Beta" "2.1-beta".
-///
-/// @param version the profile's version
-/// @return the folder-safe form
-[[nodiscard]] std::string version_folder_part(std::string_view version);
-
-/// Tells whether a path names a .oamod file by its extension, matched without case.
-///
-/// @param file the path
-/// @return true for a .oamod file
-[[nodiscard]] bool names_mod_package(const std::filesystem::path& file);
-
-/// What a folder in Mods holds.
+/// What a folder in a kind's root holds.
 enum class FolderKind : uint8_t {
     missing, ///< nothing of that name
-    /// a file, a link or junction, a folder without an oamod.yaml, or one
-    /// whose oamod.yaml or id cannot be read
+    /// a file, a link or junction, a folder without a manifest, or one
+    /// whose manifest or id cannot be read
     other,
-    mod, ///< a folder whose oamod.yaml gives an id
+    package, ///< a folder whose manifest gives an id
 };
 
-/// A mod as a folder's oamod.yaml gives it, read without resolving it.
-struct InstalledMod {
+/// What a folder holds, as its kind reads the manifest, without the kind's full check.
+struct InstalledPackage {
     FolderKind kind{FolderKind::missing};
     std::string id{};      ///< the profile's id
     std::string name{};    ///< its name
@@ -232,7 +225,8 @@ struct InstalledMod {
 /// @param left one read
 /// @param right the other
 /// @return true when they agree
-[[nodiscard]] bool same_mod(const InstalledMod& left, const InstalledMod& right) noexcept;
+[[nodiscard]] bool
+same_package(const InstalledPackage& left, const InstalledPackage& right) noexcept;
 
 /// The bit of a Windows reparse tag that marks a name surrogate
 /// (IsReparseTagNameSurrogate): a reparse point that names another place.
@@ -259,35 +253,6 @@ inline constexpr uint32_t reparse_tag_name_surrogate = 0x20000000U;
 /// @return true for a link or junction
 [[nodiscard]] bool is_link_or_junction(const std::filesystem::path& path);
 
-/// Reads what a folder in Mods holds: its oamod.yaml's id, name, version
-/// and packaging.revision, read without resolving the profile.
-///
-/// @param folder the folder
-/// @return what it holds
-[[nodiscard]] InstalledMod read_installed_mod(const std::filesystem::path& folder);
-
-/// Reads what a mod folder's .backup holds.
-///
-/// @param folder the mod folder
-/// @return nothing when it has no .backup; else what it holds, of kind mod
-///         only when it is a folder, not a link, whose oamod.yaml gives the
-///         folder's own id
-[[nodiscard]] std::optional<InstalledMod> read_backup(const std::filesystem::path& folder);
-
-/// The mod a package installs.
-struct Incoming {
-    std::string id{};
-    std::string name{};
-    std::string version{};
-    int64_t revision{};
-};
-
-/// Returns the mod a profile installs.
-///
-/// @param profile the package's profile
-/// @return its id, name, version and revision
-[[nodiscard]] Incoming incoming_of(const oa::data::mod_profile::ModProfile& profile);
-
 /// What an install does, or asks first.
 enum class PlanKind : uint8_t {
     install,       ///< no question: unpack into `target`
@@ -301,49 +266,124 @@ enum class PlanKind : uint8_t {
 /// Where an install goes and what it asks.
 struct InstallPlan {
     PlanKind kind{PlanKind::install};
-    std::string target{};     ///< the folder in Mods that install, replace and reinstall act on
-    std::string alongside{};  ///< the folder Install alongside makes; empty when not offered
-    InstalledMod installed{}; ///< what `target` holds now
-    std::optional<InstalledMod> backup{}; ///< what target/.backup holds now
+    std::string target{};    ///< the folder in the root that install, replace and reinstall act on
+    std::string alongside{}; ///< the folder Install alongside makes; empty when not offered
+    InstalledPackage installed{};             ///< what `target` holds now
+    std::optional<InstalledPackage> backup{}; ///< what target/.backup holds now
     bool older{}; ///< ask_update: the incoming revision is below the installed one
 };
 
-/// What the folders of Mods hold, for the planner.
-struct ModsFolderHooks {
+/// What the folders of a kind's root hold, for the planner.
+struct FolderHooks {
     void* context{}; ///< passed back to each function
-    /// Returns what a folder of Mods, by its name, holds; null finds every
+    /// Returns what a folder of the root, by its name, holds; null finds every
     /// folder missing.
-    InstalledMod (*look)(void* context, std::string_view folder){};
-    /// Returns what a folder's .backup holds (read_backup); null finds none.
-    std::optional<InstalledMod> (*backup_of)(void* context, std::string_view folder){};
+    InstalledPackage (*look)(void* context, std::string_view folder){};
+    /// Returns what a folder's .backup holds; null finds none.
+    std::optional<InstalledPackage> (*backup_of)(void* context, std::string_view folder){};
+    /// Keeps the copied root path folder_hooks reads, so the hooks outlive
+    /// the path they were given. Empty when the caller sets context itself.
+    std::shared_ptr<void> owned{};
 };
 
-/// Returns the hooks that read a real Mods folder.
+/// How a kind's manifest reader fares when it asks for another file of the package.
+enum class EntryRead : uint8_t {
+    missing,    ///< no entry has that name
+    read,       ///< the bytes were read
+    unreadable, ///< the entry is there, and larger than asked or not read
+};
+
+/// What a kind's manifest reader may use besides the manifest's bytes.
+struct ManifestContext {
+    const PackageOptions* options{}; ///< never null
+    std::string source{};            ///< "<file name>/<manifest name>", for diagnostics
+    void* reader{};                  ///< passed back to read_entry
+    /// Reads a file below the package's top folder, matched without case, whole,
+    /// when it is at most most_bytes.
+    EntryRead (*read_entry)(
+        void* reader,
+        std::string_view relative_name,
+        uint64_t most_bytes,
+        std::vector<uint8_t>& bytes
+    ){};
+};
+
+/// One kind of package (design section 02).
+struct PackageKind {
+    std::string_view name{};           ///< the catalogue's kind: "oamod"
+    std::string_view extension{};      ///< ".oamod", matched without case
+    std::string_view manifest{};       ///< "oamod.yaml", matched without case
+    std::size_t manifest_most_bytes{}; ///< larger refuses as manifest_too_large
+    std::string_view root_folder{};    ///< its folder in the player's folder: "Mods"
+    std::string_view prefix{};         ///< the installer's own folders and lock there: ".oamod-"
+    /// Reads the manifest and checks the kind's own rules: fills package.incoming,
+    /// package.warnings and the kind's own fields; false with problem set to refuse.
+    bool (*read_manifest)(
+        std::span<const uint8_t> manifest,
+        const ManifestContext& context,
+        Package& package,
+        Problem& problem
+    ){};
+    InstalledPackage (*read_installed)(const std::filesystem::path& folder){};
+    std::optional<InstalledPackage> (*read_backup)(const std::filesystem::path& folder){};
+    InstallPlan (*plan)(const Incoming& incoming, const FolderHooks& hooks){};
+    /// Checks the unpacked files before they are put in place; null checks nothing.
+    bool (*check_staged)(
+        const std::filesystem::path& staging,
+        const Package& package,
+        const PackageOptions& options,
+        Problem& problem
+    ){};
+    const KindPrompts* prompts{};
+};
+
+/// Returns every kind the game installs, in table order.
 ///
-/// @param mods the Mods folder; it must outlive the hooks
+/// @return the kinds; one today, oamod
+[[nodiscard]] std::span<const PackageKind> package_kinds() noexcept;
+
+/// Returns the kind whose extension a file's name ends with, matched without case.
+///
+/// @param file the path
+/// @return the kind; null when the name is not a package of a known kind
+[[nodiscard]] const PackageKind* kind_for_file(const std::filesystem::path& file) noexcept;
+
+/// Returns the kind of a catalogue name.
+///
+/// @param name the kind's name, such as "oamod"
+/// @return the kind; null when the table holds none of that name
+[[nodiscard]] const PackageKind* find_kind(std::string_view name) noexcept;
+
+/// Returns the oamod kind.
+///
+/// @return the kind
+[[nodiscard]] const PackageKind& mod_kind() noexcept;
+
+/// The names of the installer's own entries in a kind's root folder.
+struct FolderNames {
+    std::string reserved{}; ///< the prefix itself
+    std::string staging{};  ///< files unpacked before they are put in place
+    std::string old{};      ///< the version leaving the target
+    std::string replaced{}; ///< the version a reinstall drops
+    std::string restore{};  ///< the kept version a roll back brings back
+    std::string discard{};  ///< a folder to be deleted
+    std::string lock{};     ///< the file a copy of the game holds while it changes the root
+};
+
+/// Returns the installer's own names in a kind's root folder, each built from its prefix.
+///
+/// @param kind the kind
+/// @return reserved, staging, old, replaced, restore, discard and lock
+[[nodiscard]] FolderNames folder_names(const PackageKind& kind);
+
+/// Returns the hooks that read a kind's real root folder.
+///
+/// The path is copied, so it need not outlive the hooks. The kind must.
+///
+/// @param kind the kind, whose read_installed and read_backup the hooks call
+/// @param root the kind's root folder
 /// @return the hooks
-[[nodiscard]] ModsFolderHooks mods_folder_hooks(const std::filesystem::path& mods) noexcept;
-
-/// Returns the folder names Install alongside tries for a version, in order:
-/// <id>-<version>, then <id>-<version>-2 to -alongside_tries.
-///
-/// @param incoming the mod
-/// @return the names
-[[nodiscard]] std::vector<std::string> alongside_names(const Incoming& incoming);
-
-/// Plans an install from what the folders of Mods hold. The package's file
-/// name never matters: only its id and version do. Its own id's folder
-/// that holds it at the same version is updated or reinstalled; else the
-/// first of the alongside folders that holds it at that version; else a
-/// missing folder of its id is installed into; a folder of its id at
-/// another version asks whether to replace it or install alongside; a
-/// folder of that name that holds something else is never replaced, and
-/// asks to install alongside.
-///
-/// @param incoming the mod the package installs
-/// @param hooks what each folder holds
-/// @return the plan
-[[nodiscard]] InstallPlan plan_install(const Incoming& incoming, const ModsFolderHooks& hooks);
+[[nodiscard]] FolderHooks folder_hooks(const PackageKind& kind, const std::filesystem::path& root);
 
 /// A lock on a file, held for the life of the object, which another process,
 /// or another FileLock in this one, cannot take while it is held. The file
@@ -374,18 +414,19 @@ class FileLock {
 #endif
 };
 
-/// A hold on a Mods folder's lock (lock_file_name), shared by every hold
-/// this process takes on the same folder: changes and recovery in one
-/// process never wait for each other, and another copy of the game cannot
-/// change the folder while any is held.
-using ModsHold = std::shared_ptr<const FileLock>;
+/// A hold on a root folder's lock, shared by every hold this process takes
+/// on the same folder: changes and recovery in one process never wait for
+/// each other, and another copy of the game cannot change the folder while
+/// any is held.
+using RootHold = std::shared_ptr<const FileLock>;
 
-/// Takes a hold on a Mods folder's lock, making the folder's lock file when
+/// Takes a hold on a kind's root folder's lock, making the lock file when
 /// it is missing.
 ///
-/// @param mods the Mods folder, which must exist
+/// @param kind the kind, whose lock name the file takes
+/// @param root the root folder, which must exist
 /// @return the hold; null while another copy of the game holds the lock
-[[nodiscard]] ModsHold hold_mods_folder(const std::filesystem::path& mods);
+[[nodiscard]] RootHold hold_root(const PackageKind& kind, const std::filesystem::path& root);
 
 /// Stand-ins for the unpacking's reads of the file system.
 struct UnpackHooks {
@@ -398,12 +439,12 @@ struct UnpackHooks {
     void (*before_file)(void* context, const std::filesystem::path& file){};
 };
 
-/// A package's files unpacked into a staging folder inside Mods, a piece at
-/// a time: its folders made, then each file made anew (never over another),
-/// written, flushed and synced, its size and CRC-32 checked, then every
-/// folder synced and, on macOS, the drive's cache written to its storage. A
-/// failure turns the staging folder into a discard folder; nothing else in
-/// Mods changes.
+/// A package's files unpacked into a staging folder inside its kind's root,
+/// a piece at a time: its folders made, then each file made anew (never over
+/// another), written, flushed and synced, its size and CRC-32 checked, then
+/// every folder synced and, on macOS, the drive's cache written to its
+/// storage. A failure turns the staging folder into a discard folder;
+/// nothing else in the root changes.
 class Unpacking {
   public:
 
@@ -416,24 +457,24 @@ class Unpacking {
     Unpacking(const Unpacking&) = delete;
     Unpacking& operator=(const Unpacking&) = delete;
 
-    /// Starts: makes Mods, takes its lock, checks that the target still
+    /// Starts: makes the root, takes its lock, checks that the target still
     /// holds what the plan found, that the disk has room for the files and
     /// free_space_margin and that no unpacked path is too long, then makes
     /// the staging folder afresh (an old one becomes a discard folder) and
-    /// opens the package.
+    /// opens the package. The kind is package.kind.
     ///
     /// @param package the package
-    /// @param mods the Mods folder
-    /// @param target the folder in Mods the files are for
+    /// @param root the kind's root folder
+    /// @param target the folder in the root the files are for
     /// @param expected what the target held when the plan was made
     /// @param[out] problem why it cannot start
     /// @param hooks stand-ins for the file system's reads
     /// @return true when the unpacking started
     [[nodiscard]] bool start(
         const Package& package,
-        const std::filesystem::path& mods,
+        const std::filesystem::path& root,
         std::string_view target,
-        const InstalledMod& expected,
+        const InstalledPackage& expected,
         Problem& problem,
         const UnpackHooks& hooks = {}
     );
@@ -465,11 +506,11 @@ class Unpacking {
     /// @return its path; empty before start
     [[nodiscard]] std::filesystem::path staging() const;
 
-    /// Hands over the hold on the Mods folder's lock, for the change that
+    /// Hands over the hold on the root folder's lock, for the change that
     /// follows the unpacking.
     ///
     /// @return the hold; null when none is held
-    [[nodiscard]] ModsHold take_hold() noexcept;
+    [[nodiscard]] RootHold take_hold() noexcept;
 
     /// Returns the discard folders a failure or a cancel made, for deletion.
     ///
@@ -487,7 +528,7 @@ class Unpacking {
     std::unique_ptr<State> state_;
 };
 
-/// A change to a folder of Mods.
+/// A change to a folder of a kind's root.
 enum class Change : uint8_t {
     install,   ///< the staged files become the target, which is missing
     replace,   ///< the staged files replace the target, which becomes its .backup
@@ -521,7 +562,7 @@ struct ChangeOptions {
     /// The most a rename waits in all, in milliseconds.
     uint32_t most_wait_ms{10'000};
     /// What the target must still hold; nothing checks nothing.
-    std::optional<InstalledMod> expected{};
+    std::optional<InstalledPackage> expected{};
 };
 
 /// What a change did.
@@ -557,15 +598,18 @@ void rename_exclusively(
 /// once more, and what it could not settle is renamed to a visible
 /// <target>-left-over folder. Roll back refuses a .backup that is a link
 /// or junction. Once the files are in place, the folders the renames
-/// changed are synced, as the staging folder's files were.
+/// changed are synced, as the staging folder's files were. The kind's own
+/// folder names (folder_names) name the staging folder and the others.
 ///
-/// @param mods the Mods folder
-/// @param target the folder in Mods
+/// @param kind the kind
+/// @param root the kind's root folder
+/// @param target the folder in the root
 /// @param change what to do
 /// @param options the hooks, the waits and what the target must hold
 /// @return what it did
 [[nodiscard]] ChangeResult commit_change(
-    const std::filesystem::path& mods,
+    const PackageKind& kind,
+    const std::filesystem::path& root,
     std::string_view target,
     Change change,
     const ChangeOptions& options = {}
@@ -578,30 +622,34 @@ struct Recovery {
     bool skipped{}; ///< another copy of the game held the folder's lock: nothing was done
 };
 
-/// Settles every change a stop left in a Mods folder to the state before it
-/// or after it, by the folders it left, and lists the folders to delete. A
-/// folder it cannot settle is renamed to a visible <target>-left-over
-/// folder. Nothing is done while another copy of the game holds the lock.
+/// Settles every change a stop left in a kind's root folder to the state
+/// before it or after it, by the folders it left, and lists the folders to
+/// delete. A folder it cannot settle is renamed to a visible
+/// <target>-left-over folder. Nothing is done while another copy of the game
+/// holds the lock.
 ///
-/// @param mods the Mods folder
+/// @param kind the kind, whose folder names the change left
+/// @param root the kind's root folder
 /// @param options the hooks and the waits
 /// @return what it did
-[[nodiscard]] Recovery
-recover_changes(const std::filesystem::path& mods, const ChangeOptions& options = {});
+[[nodiscard]] Recovery recover_changes(
+    const PackageKind& kind, const std::filesystem::path& root, const ChangeOptions& options = {}
+);
 
 /// Deletes discard folders a little at a time: each step removes at most
-/// 64 entries, or works 4 ms. Links and junctions, a discard folder that is
-/// one included, are removed, never entered; read-only files are made
-/// writable first. An entry that cannot be removed is left, and logged once.
+/// 64 entries, or works 4 ms, under the lock of the kind whose prefix the
+/// first folder's name starts with. Links and junctions, a discard folder
+/// that is one included, are removed, never entered; read-only files are
+/// made writable first. An entry that cannot be removed is left, and logged once.
 class Discarder {
   public:
 
     /// Adds folders to delete.
     ///
-    /// @param folders their paths, inside one Mods folder
+    /// @param folders their paths, inside one root folder
     void add(std::span<const std::filesystem::path> folders);
 
-    /// Deletes a little more, under the Mods folder's lock.
+    /// Deletes a little more, under the root folder's lock.
     ///
     /// @return true while anything is left to delete
     bool step();
@@ -661,4 +709,4 @@ class NewFile {
 #endif
 };
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install
