@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 # The engine as it is built on this system: the game, the tool beside it, the
-# four fonts cmake/OaTextFonts.cmake copies next to them, and a desktop entry.
+# five fonts cmake/OaTextFonts.cmake copies next to them, and a desktop entry.
 #
 # This is the flake's "default" output. It builds the tree it is in, rather
 # than a release fetched from elsewhere, which is the one thing about it a
@@ -10,11 +10,15 @@
 #
 { pkgs, src, version }:
 let
-  # The four fonts, three of which come from projects that publish them.
+  # The five fonts, three of which come from projects that publish them.
   # NotoSansCJKsc-Bold.otf is published nowhere, being the Simplified Chinese
   # face (index 2) of Noto Sans CJK's Bold collection; upstream's
   # tools/bootstrap_text_fonts.py extracts it with fonttools, and the cut it
   # then makes is only a size saving, so the whole face travels instead.
+  # NotoSansCJKsc-Bold-Endonyms.otf is that face cut to the languages' own
+  # names and the language notice (tools/text-fonts/endonyms.txt). Nix's
+  # fontTools need not match the pinned one, so this cut's bytes may differ
+  # from the pin, which this build does not check.
   textFonts = pkgs.stdenvNoCC.mkDerivation {
     pname = "open-annihilation-text-fonts";
     version = "2.004";
@@ -41,6 +45,11 @@ let
           recalcTimestamp=False,
       ).save(sys.argv[1] + "/NotoSansCJKsc-Bold.otf")
       PY
+      python3 ${src}/tools/bootstrap_text_fonts.py --cut-endonym-face \
+        ${pkgs.noto-fonts-cjk-sans-static}/share/fonts/opentype/noto-cjk/NotoSansCJK-Bold.ttc \
+        ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans-Bold.ttf \
+        ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf \
+        $out/NotoSansCJKsc-Bold-Endonyms.otf
 
       runHook postInstall
     '';

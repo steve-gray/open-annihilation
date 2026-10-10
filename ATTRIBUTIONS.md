@@ -21,7 +21,7 @@ in this repository or in the release packages.
 | [zlib](#zlib) | 1.3.1 | zlib | static | static | static |
 | [FreeType](#freetype) | 2.14.3 | FreeType License | static | static | static |
 | [DejaVu fonts](#dejavu-fonts) | 2.37, DejaVu Sans and DejaVu Sans Bold | Bitstream Vera and Arev licences; DejaVu changes public domain | font files | font files | font files |
-| [Noto Sans CJK](#noto-sans-cjk) | 2.004, SC Bold, cut to the common characters | SIL Open Font License 1.1 | font file | font file | font file |
+| [Noto Sans CJK](#noto-sans-cjk) | 2.004, SC Bold, two cuts | SIL Open Font License 1.1 | font files | font files | font files |
 | [Noto Emoji](#noto-emoji) | 3.002, monochrome | SIL Open Font License 1.1 | font file | font file | font file |
 | [stb_vorbis](#stb_vorbis) | 1.22, changed | public domain or MIT | static | static | static |
 | [dr_mp3 and dr_flac](#dr_mp3-and-dr_flac) | 0.7.3 and 0.13.3, with later fixes | public domain or MIT No Attribution | static | static | static |
@@ -254,14 +254,17 @@ conditions and disclaimer, is in
 Noto Sans CJK SC Bold 2.004, from the `NotoSansCJK-Bold.ttc` collection of
 <https://github.com/notofonts/noto-cjk> at the release tag `Sans2.004`
 (SHA-256 `faa5f3656a78b2e2d450d27fe8382c778bc2b6bb5ea29c986664a6a435056ceb`),
-draws Chinese, Japanese and Korean. The packages hold the Simplified Chinese
-face of the collection, cut down by `tools/bootstrap_text_fonts.py` to the
-characters of GB 2312, of the Table of General Standard Chinese Characters,
-of Big5's symbols and common hanzi, of JIS X 0208 and of KS X 1001 without
-its hanja, with the CJK punctuation, kana, bopomofo, Hangul jamo and
-full-width forms, and without its layout tables; nothing else in it is
-changed. The bootstrap reads which characters the table holds from the
-Unihan archive of Unicode 16.0 at build time; no package holds the
+draws Chinese, Japanese and Korean. The packages hold two cuts of the
+Simplified Chinese face of the collection, both made by
+`tools/bootstrap_text_fonts.py`. One is the common characters: GB 2312, the
+Table of General Standard Chinese Characters, Big5's symbols and common
+hanzi, JIS X 0208 and KS X 1001 without its hanja, with the CJK
+punctuation, kana, bopomofo, Hangul jamo and full-width forms, and without
+its layout tables; nothing else in it is changed. The other,
+`NotoSansCJKsc-Bold-Endonyms.otf`, holds the languages' own names and the
+language notice, the lines of `tools/text-fonts/endonyms.txt` that the sans
+faces do not draw. The bootstrap reads which characters the table holds
+from the Unihan archive of Unicode 16.0 at build time; no package holds the
 archive or anything from it. © 2014-2021 Adobe (http://www.adobe.com/). It is
 licensed under the SIL Open Font License, Version 1.1; the text is in
 [`licenses/NotoSansCJK-OFL.txt`](licenses/NotoSansCJK-OFL.txt).
