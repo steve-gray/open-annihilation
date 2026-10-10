@@ -11,6 +11,7 @@
 #include "oa/netgame/http/client.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -18,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace oa::app::content {
@@ -175,6 +177,30 @@ using WorkerJob = std::function<void(WorkerTools&)>;
 /// Called on the worker after a refresh that found a usable catalogue.
 using RefreshListener = std::function<void(const RegistryView& view, WorkerTools& tools)>;
 
+/// The outcome of checking a registry or a mirror before it is trusted.
+///
+/// `registry_check` returns nothing while the check is still running, and
+/// the same shape for an address, a descriptor file and a mirror. A refused
+/// check still carries the descriptor and the address once a descriptor was
+/// read. A file has no `url`.
+struct RegistryCheck {
+    uint64_t request = 0; ///< the id the check call returned
+    /// none when the registry or the mirror may be added
+    data::registry::Refusal refusal = data::registry::Refusal::none;
+    /// The catalogue's verdict, or why the fetch failed. Empty when neither applies.
+    std::string detail;
+    /// The descriptor that was read. Empty only when no descriptor was read.
+    std::optional<data::registry::Descriptor> descriptor;
+    std::string url;     ///< the address that was checked; empty for a file
+    std::string address; ///< the host a player is shown, and the port when it is not 80
+    std::vector<std::string> fingerprints; ///< the keys, as a player compares them
+    std::size_t packages = 0;              ///< packages in a catalogue that verified
+    /// How many packages of each kind the catalogue holds. Kinds with none are left out.
+    std::vector<std::pair<data::catalogue::Kind, std::size_t>> kinds;
+    /// The catalogue. Set only when it verified with the keys being trusted.
+    std::shared_ptr<const data::catalogue::Catalogue> catalogue;
+};
+
 /// Holds the registries, the cache and the worker that refreshes them.
 ///
 /// Every method may be called from the main thread. None waits on the
@@ -269,6 +295,96 @@ class Service {
     ///
     /// @return the generation
     [[nodiscard]] uint64_t generation() const noexcept;
+
+    /// Checks a registry at an address, on the worker.
+    ///
+    /// The descriptor is fetched and read, every rule for a new registry is
+    /// applied, and the catalogue is fetched and checked with that
+    /// descriptor's own keys. Nothing is written. An https address is refused
+    /// without a fetch. The result is read with registry_check.
+    ///
+    /// @param url the address of the descriptor
+    /// @return the request id
+    uint64_t check_registry_url(std::string url);
+
+    /// Checks a registry from the bytes of a descriptor file, on the worker.
+    ///
+    /// The same checks as check_registry_url. The result's url is empty,
+    /// because a file has no address. Nothing is written.
+    ///
+    /// @param bytes the descriptor's bytes
+    /// @return the request id
+    uint64_t check_registry_file(std::vector<uint8_t> bytes);
+
+    /// Returns a finished check, or nothing while it is still running.
+    ///
+    /// Answers check_registry_url, check_registry_file and check_mirror.
+    /// An unknown request is nothing as well.
+    ///
+    /// @param request the id a check call returned
+    /// @return the outcome, or nothing when that check has not finished
+    [[nodiscard]] std::optional<RegistryCheck> registry_check(uint64_t request) const;
+
+    /// Adds a registry a check has accepted.
+    ///
+    /// The rules are applied again, the registry is stored with the service
+    /// clock's date, and the checked catalogue is written into the cache.
+    /// A check that failed, or a request already used, is refused. Nothing
+    /// is written while Registries.yaml could not be read.
+    ///
+    /// @param request the id check_registry_url or check_registry_file returned
+    /// @param[out] why why it was refused; may be null
+    /// @return none when the registry was added
+    [[nodiscard]] data::registry::Refusal add_checked_registry(uint64_t request, std::string* why);
+
+    /// Removes an added registry and deletes only that registry's cache folder.
+    ///
+    /// A registry that ships with the game is refused: it can be turned off,
+    /// not removed, and its cache is left in place. Nothing is written while
+    /// Registries.yaml could not be read.
+    ///
+    /// @param id the registry's id
+    /// @param[out] why why it was refused; may be null
+    /// @return none when it was removed
+    [[nodiscard]] data::registry::Refusal remove_registry(std::string_view id, std::string* why);
+
+    /// Turns a registry on or off and stores that choice.
+    ///
+    /// A registry that ships with the game goes in or out of the disabled
+    /// list. An added registry's own flag is set. Turning one on queues a
+    /// refresh of that registry. Nothing is written while Registries.yaml
+    /// could not be read.
+    ///
+    /// @param id the registry's id
+    /// @param on true to turn it on, false to turn it off
+    /// @param[out] why why it was refused; may be null
+    /// @return none when the flag was set
+    [[nodiscard]] data::registry::Refusal
+    set_registry_enabled(std::string_view id, bool on, std::string* why);
+
+    /// Checks a mirror for one registry, on the worker.
+    ///
+    /// The mirror is refused for a registry that ships with the game. Otherwise
+    /// its catalogue and signature are fetched and checked with the keys
+    /// already trusted for that registry, and with that registry's current
+    /// sequence. The result is read with registry_check: `url` and `address`
+    /// are the mirror's, and `descriptor` is the registry's own.
+    ///
+    /// @param id the registry's id
+    /// @param url the mirror's address
+    /// @return the request id
+    uint64_t check_mirror(std::string_view id, std::string url);
+
+    /// Adds a mirror a check has accepted.
+    ///
+    /// The rules are applied again. A mirror is never added to a registry
+    /// that ships with the game, and never without its catalogue having
+    /// verified. Nothing is written while Registries.yaml could not be read.
+    ///
+    /// @param request the id check_mirror returned
+    /// @param[out] why why it was refused; may be null
+    /// @return none when the mirror was added
+    [[nodiscard]] data::registry::Refusal add_checked_mirror(uint64_t request, std::string* why);
 
   private:
 
