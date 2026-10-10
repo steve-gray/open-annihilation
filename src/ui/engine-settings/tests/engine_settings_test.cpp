@@ -19,6 +19,8 @@
 
 #include "oa/ui/engine_settings.hpp"
 
+#include "oa/data/languages.hpp"
+
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -970,8 +972,8 @@ void the_language_reads_writes_and_restores() {
         CHECK(read(other, true) == "system");
         CHECK(read(other, false) == "en");
     }
-    for (const auto& language : languages::known_languages())
-        CHECK(read(std::string(language.tag).c_str(), true) == language.tag);
+    for (const languages::Language* language : languages::known_languages())
+        CHECK(read(std::string(language->tag).c_str(), true) == language->tag);
     // A changed language is written as its tag; one left alone is not
     // written, so a tag a later version wrote stays in the file.
     const auto defaults = settings::default_settings(players_own_on_linux);
@@ -1001,6 +1003,24 @@ void the_language_reads_writes_and_restores() {
     CHECK(settings::settings_locks(state).language == settings::Lock::command_line);
     // The language changes nothing the text style draws.
     CHECK(settings::text_style(chosen) == settings::text_style(defaults));
+}
+
+/// A language that is not installed yet is kept when this build can draw
+/// it, and a shorter tag is still the system's language.
+void an_available_language_is_kept_until_its_pack_is_installed() {
+    namespace languages = oa::data::languages;
+    languages::set_pack_languages({}, {});
+    languages::LanguageEntry portuguese;
+    portuguese.tag = "pt-BR";
+    portuguese.endonym = "Portugu\xC3\xAA"
+                         "s";
+    portuguese.english_name = "Portuguese";
+    portuguese.word = "Portuguese";
+    portuguese.needs = languages::TextNeeds::game_fonts;
+    languages::set_pack_languages({}, std::array<languages::LanguageEntry, 1>{portuguese});
+    CHECK(settings::stored_language(one_key(settings::key::language, "pt-BR"), true) == "pt-BR");
+    CHECK(settings::stored_language(one_key(settings::key::language, "pt"), true) == "system");
+    languages::set_pack_languages({}, {});
 }
 
 void a_preferences_file_with_crlf_line_ends_reads_its_settings() {
@@ -2253,6 +2273,7 @@ int main() {
     the_text_switches_round_trip_and_restore();
     the_text_size_reads_writes_and_restores_in_its_range();
     the_language_reads_writes_and_restores();
+    an_available_language_is_kept_until_its_pack_is_installed();
     a_preferences_file_with_crlf_line_ends_reads_its_settings();
     developer_mode_and_its_overrides_are_kept_under_the_profiles_id();
     the_touch_settings_default_alike_everywhere();

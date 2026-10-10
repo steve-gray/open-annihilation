@@ -16,12 +16,15 @@ the setting changes:
    data knows it by, as 3.1c reads it. The setting then shows "Set on the
    command line" for the run.
 2. **The setting.** Language, the first control of the Language section of
-   the OA settings, offers System default and each language the game knows,
-   named in itself: English, Deutsch, Español, Français, Italiano, 简体中文.
-   It is kept as `open-annihilation.language`: `system`, or the language's
-   BCP-47 tag (`de`).
+   the OA settings, offers System default and each language the game can
+   show, named in itself. With no language pack installed those are
+   English, Deutsch, Español, Français, Italiano and 简体中文, in that
+   order. An installed pack adds its language among them, by its own name.
+   A language that is not installed is not offered. It is kept as
+   `open-annihilation.language`: `system`, or the language's BCP-47 tag
+   (`de`).
 3. **The operating system.** System default takes the first of the user's
-   preferred languages, in their order, that the game knows: the preferred
+   preferred languages, in their order, that the game can show: the preferred
    languages on macOS, the user's interface languages on Windows (the
    user's locale on Windows XP), and `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` or
    `LANG` on Linux. A region does not matter: `de-AT` and `de-CH` choose
@@ -123,12 +126,16 @@ requires: {engine: ">= 0.8.0"}
 ```
 
 `tag` names the language, `word` the word the game data knows it by
-(`ChineseName`, `Chinese=…;`, `camps/briefs-Chinese`). In this version a
-pack is used for a language the game knows; `unicode: true` turns Enable
-Unicode Multiplayer Chat on while the language is shown
-([Settings](settings.md#language)). A language whose text needs the
-modern fonts turns it on too, with or without its pack, since its text
-is UTF-8. The installer checks `requires.engine` when a pack is
+(`ChineseName`, `Chinese=…;`, `camps/briefs-Chinese`). A pack whose tag
+the game does not already show adds that language to Settings › Language,
+named in itself, beside the languages the game ships. A pack for a
+language the game already shows adds its text and leaves that language's
+name, word and drawing needs as they are. A language a pack exists for,
+but which is not installed, is not offered until its pack is installed.
+`unicode: true` turns Enable Unicode Multiplayer Chat on while the
+language is shown ([Settings](settings.md#language)). A language whose
+text needs the modern fonts turns it on too, with or without its pack,
+since its text is UTF-8. The installer checks `requires.engine` when a pack is
 installed, and reading a pack that is already installed does not, so an
 installed pack stays available when this Open Annihilation is older than
 the pack asks for. Quote the requirement: a value that starts with `>`
@@ -234,7 +241,8 @@ any script.
 A mod's `translate.tdf` takes the place of the game's, as 3.1c reads the
 first copy the archives hold, and its units' language keys are read like
 the game's. A mod may carry language packs in its own `languages/<tag>/`
-folders, which come before the game data. A mod profile's `strings`
+folders, which come before the game data. A mod's pack adds text only and
+does not add a language to the setting. A mod profile's `strings`
 replace English texts; they are not shown yet.
 
 ## Unicode multiplayer chat
@@ -332,14 +340,21 @@ the build pages' NEXT, on the build ring and in the phone's drawer, by
 
 ## Adding a language
 
-A language is one entry in `src/data/languages/src/registry.inc`: its tag,
-its name in itself, its name in English, the word the game data knows it
-by, the system locales that choose it, the languages it falls back to and
-what drawing it needs. Nothing else changes in the code: the setting
-offers it, the operating system's locale chooses it, and every lookup
-above reads it, from game data that holds its text under that word, from
-language packs for its tag, and from catalogue files that hold the
-engine's words under its tag.
+A language is usually a language pack. Put the pack in the player's
+`Languages` folder, or in the `languages` folder beside the game, and
+Settings › Language offers it, named in itself, once the game starts. The
+operating system's locale can choose it, and every lookup above reads it,
+from game data that holds its text under its word, from the pack, and
+from catalogue files that hold the engine's words under its tag.
+
+A registry entry, one line of `src/data/languages/src/registry.inc`, is
+needed only for a language 3.1c's data holds, so the game knows it without
+a pack: its tag, its name in itself, its name in English, the word the
+game data knows it by, the system locales that choose it, the languages
+it falls back to and what drawing it needs.
+
+A language the engine knows a pack exists for, but which is not installed,
+is not offered until that pack is installed.
 
 A language whose letters are all in the game's 8-bit code page
 (Windows-1252), as Portuguese's or Dutch's are, needs nothing more. Others

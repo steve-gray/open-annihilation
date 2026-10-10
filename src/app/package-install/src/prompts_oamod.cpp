@@ -77,11 +77,24 @@ std::string version_label(std::string_view version, int64_t revision, bool with_
 }
 
 PackagePrompt installing_prompt(
-    const Incoming& incoming, uint64_t done_bytes, uint64_t total_bytes, bool placing
+    const Incoming& incoming,
+    uint64_t done_bytes,
+    uint64_t total_bytes,
+    InstallingPhase phase,
+    std::string_view file_name
 ) {
     PackagePrompt made{};
     made.prompt.title = tr("INSTALLING MOD");
-    if (placing) {
+    if (phase == InstallingPhase::checking) {
+        made.prompt.paragraphs.push_back(
+            text_of(fill("Checking {file}...", {{"file", std::string(file_name)}}))
+        );
+        made.prompt.paragraphs.push_back(text_of(fill(
+            "{done} of {total}",
+            {{"done", oa::ui::game_files::size_text(done_bytes)},
+             {"total", oa::ui::game_files::size_text(total_bytes)}}
+        )));
+    } else if (phase == InstallingPhase::placing) {
         made.prompt.paragraphs.push_back(text_of(fill("Putting the files in place...", {})));
     } else {
         made.prompt.paragraphs.push_back(text_of(fill(
@@ -95,7 +108,7 @@ PackagePrompt installing_prompt(
         )));
     }
     made.prompt.progress =
-        total_bytes == 0 || placing
+        total_bytes == 0 || phase == InstallingPhase::placing
             ? settings::prompt_progress_whole
             : static_cast<int32_t>(
                   done_bytes * static_cast<uint64_t>(settings::prompt_progress_whole) / total_bytes

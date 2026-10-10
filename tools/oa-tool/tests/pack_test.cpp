@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -384,12 +385,14 @@ std::string refusal(const std::vector<oa::tool::detail::Item>& items) {
     return {};
 }
 
-/// The case rule and the folder limit, with no volume underneath them.
+/// The case rule, a character Windows refuses, and the folder limit, with no
+/// volume underneath them.
 void test_name_rules() {
     OA_CHECK(
         refusal({named("readme.txt", false), named("units/arm.txt", false), named("notes", true)})
             .empty()
     );
+    OA_CHECK(contains(refusal({named("has:colon.txt", false)}), "Windows refuses"));
     OA_CHECK(contains(
         refusal({named("units/A.txt", false), named("units/a.txt", false)}),
         "differ only in case: units/a.txt"
@@ -433,10 +436,12 @@ void test_refusals(const fs::path& scratch) {
     );
     OA_CHECK(contains(refuse(scratch, bad, "bad.oamod").err, "kebab-case"));
 
+#ifndef _WIN32
     const fs::path colon = scratch / "colon";
     write_text(colon / "oamod.yaml", mod_text);
     write_text(colon / "has:colon.txt", "nope\n");
     OA_CHECK(contains(refuse(scratch, colon, "colon.oamod").err, "Windows refuses"));
+#endif
 
     const fs::path cases = scratch / "case-plain";
     fs::create_directories(cases);
@@ -475,7 +480,8 @@ void test_refusals(const fs::path& scratch) {
 
     const Captured forced = run({"pack", "--force", mod.string(), "--out", out.string()});
     OA_CHECK(forced.status == oa::tool::exit_done);
-    OA_CHECK(std::string(read_bytes(out).begin(), read_bytes(out).end()) != "original-bytes");
+    const std::vector<uint8_t> packed = read_bytes(out);
+    OA_CHECK(std::string(packed.begin(), packed.end()) != "original-bytes");
 }
 
 void test_usage(const fs::path& scratch) {
@@ -519,11 +525,19 @@ int main(int argc, char** argv) {
         return 2;
     }
     const Scratch scratch;
-    test_mod(scratch.path);
-    test_language(scratch.path, fs::path(argv[1]));
-    test_name_rules();
-    test_refusals(scratch.path);
-    test_usage(scratch.path);
-    test_help();
+    const auto run = [](const char* name, auto&& function) {
+        try {
+            function();
+        } catch (const std::exception& error) {
+            std::fprintf(stderr, "%s: %s\n", name, error.what());
+            ++oa::test::failed_checks();
+        }
+    };
+    run("test_mod", [&] { test_mod(scratch.path); });
+    run("test_language", [&] { test_language(scratch.path, fs::path(argv[1])); });
+    run("test_name_rules", [] { test_name_rules(); });
+    run("test_refusals", [&] { test_refusals(scratch.path); });
+    run("test_usage", [&] { test_usage(scratch.path); });
+    run("test_help", [] { test_help(); });
     return oa::test::check_exit_status();
 }

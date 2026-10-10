@@ -107,6 +107,16 @@ struct PackManifest {
 [[nodiscard]] bool
 read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::string* error = nullptr);
 
+/// Returns the registry entry a pack's manifest describes.
+///
+/// The tag, the name in itself, the English name, the word, the locales,
+/// the fallbacks and what drawing the text needs are copied as the manifest
+/// gives them. set_pack_languages applies the registry's own rules.
+///
+/// @param manifest the pack's manifest
+/// @return the entry
+[[nodiscard]] LanguageEntry entry_of(const PackManifest& manifest);
+
 /// The tables of a pack other than its manifest and interface.tdf.
 enum class PackTable : uint8_t {
     translate, ///< translate.tdf: the game's own texts, by their English

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -154,15 +155,61 @@ void read_language_packs(
         std::string interface_text;
         std::string failure;
         auto pack = read_pack(folder, interface_text, failure);
-        if (pack != nullptr && catalogue != nullptr && !interface_text.empty() &&
-            !catalogue->add(interface_text, &failure))
-            pack.reset();
+        // A catalogue that is not there still has to refuse a file it would
+        // not read, so a bad interface.tdf leaves the pack out either way.
+        if (pack != nullptr && !interface_text.empty()) {
+            languages::InterfaceText scratch;
+            languages::InterfaceText* target = catalogue != nullptr ? catalogue : &scratch;
+            if (!target->add(interface_text, &failure))
+                pack.reset();
+        }
         if (pack == nullptr) {
             std::cerr << "open-annihilation: the language pack " << path_to_utf8(folder)
                       << " was not read: " << failure << '\n';
             continue;
         }
         packs.push_back(std::move(pack));
+    }
+}
+
+std::vector<languages::LanguageEntry> installed_entries(
+    std::initializer_list<const std::vector<std::unique_ptr<LoadedLanguagePack>>*> packs
+) {
+    std::vector<languages::LanguageEntry> entries;
+    for (const auto* group : packs) {
+        if (group == nullptr)
+            continue;
+        for (const auto& loaded : *group)
+            if (loaded != nullptr)
+                entries.push_back(languages::entry_of(loaded->pack.manifest()));
+    }
+    return entries;
+}
+
+void add_pack_interface_texts(
+    const std::vector<std::unique_ptr<LoadedLanguagePack>>& packs,
+    languages::InterfaceText& catalogue
+) {
+    for (const auto& loaded : packs) {
+        if (loaded == nullptr)
+            continue;
+        std::string failure;
+        const auto text = read_bounded(
+            loaded->folder / path_from_utf8(languages::pack_interface_file),
+            languages::most_catalogue_bytes,
+            failure
+        );
+        if (!text) {
+            if (!failure.empty())
+                std::cerr << "open-annihilation: the language pack " << path_to_utf8(loaded->folder)
+                          << " interface was not read: " << failure << '\n';
+            continue;
+        }
+        if (text->empty())
+            continue;
+        if (!catalogue.add(*text, &failure))
+            std::cerr << "open-annihilation: the language pack " << path_to_utf8(loaded->folder)
+                      << " interface was not read: " << failure << '\n';
     }
 }
 

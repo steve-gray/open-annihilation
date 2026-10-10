@@ -11,13 +11,11 @@
 // (oa/data/languages/interface_text.hpp). Nothing here reaches the
 // simulation, a saved game or what a shared game sends.
 //
-// Adding a language is adding its entry to src/registry.inc. Where the game
-// data holds the language's text under 3.1c's keys (Translate.tdf's
-// "<Language> = ..." entries, a unit file's <Language>Name and
-// <Language>Description, the <directory>-<Language> folders), nothing else
-// changes: the settings offer it, the operating system's locale chooses it
-// and every lookup reads it. A language whose letters the game cannot draw
-// yet waits, unoffered, until the drawing it needs (TextNeeds) is built.
+// Adding a language is usually a language pack: its manifest becomes an
+// entry when the pack is installed (set_pack_languages). A language 3.1c's
+// data holds is an entry of src/registry.inc, so the game knows it without
+// a pack. A language whose letters the game cannot draw yet waits,
+// unoffered, until the drawing it needs (TextNeeds) is built.
 #pragma once
 
 #include <array>
@@ -26,6 +24,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::data::languages {
 
@@ -53,6 +52,18 @@ enum class TextNeeds : uint8_t {
     text_shaping,
 };
 
+/// Where a language's entry comes from.
+enum class Source : uint8_t {
+    /// Compiled into the game: English and the languages 3.1c's data holds.
+    built_in,
+    /// An installed language pack, in the player's Languages folder or the
+    /// languages folder beside the game.
+    installed,
+    /// A language a pack exists for that is not installed. It can be listed
+    /// and matched, and it is never the language the game shows.
+    available,
+};
+
 /// One language the game knows.
 struct Language {
     /// Its BCP-47 tag, as the settings keep it: "en", "fr", "zh-Hans".
@@ -77,6 +88,20 @@ struct Language {
     std::span<const std::string_view> fallbacks{};
     /// What drawing its text needs.
     TextNeeds needs{TextNeeds::game_fonts};
+    /// Where the entry comes from. It is last so a compiled entry's
+    /// initialiser lists the fields it always had.
+    Source source{Source::built_in};
+};
+
+/// The fields a pack, or a catalogue, gives one registry entry.
+struct LanguageEntry {
+    std::string tag{};     ///< its BCP-47 tag, as normalised_locale leaves it
+    std::string endonym{}; ///< its name in itself; empty becomes the English name, else the tag
+    std::string english_name{};             ///< its name in English; empty becomes the tag
+    std::string word{};                     ///< the word the game data knows it by
+    std::vector<std::string> locales{};     ///< the operating system's locales that choose it
+    std::vector<std::string> fallbacks{};   ///< the tags its text falls back to before English
+    TextNeeds needs{TextNeeds::game_fonts}; ///< what drawing its text needs
 };
 
 /// The word the settings keep for the operating system's choice of language.
@@ -103,11 +128,17 @@ struct FallbackChain {
     }
 };
 
-/// Returns every language the game knows: English first, then the others
-/// in the order of their own names, as the settings list them.
+/// Returns every live language: English first, then the built-in and
+/// installed languages in the order of their names' UTF-8 bytes, ties
+/// broken by tag, then the available languages in that order.
+///
+/// An entry stays readable for the whole run, including one a later
+/// set_pack_languages has replaced and left off this list. The list itself
+/// is valid until that next call. The registry is changed and read on the
+/// thread that draws the interface only.
 ///
 /// @return the languages; never empty
-[[nodiscard]] std::span<const Language> known_languages() noexcept;
+[[nodiscard]] std::span<const Language* const> known_languages() noexcept;
 
 /// Returns English, the game data's own language.
 ///
@@ -121,6 +152,14 @@ struct FallbackChain {
 ///     other needs are not built yet
 [[nodiscard]] bool drawable(const Language& language) noexcept;
 
+/// Tells whether a language can be the one the game shows: its source is
+/// not available, and this build draws it.
+///
+/// @param language the language
+/// @return true when the setting, the operating system's locale or 3.1c's
+///     command-line word may choose it
+[[nodiscard]] bool playable(const Language& language) noexcept;
+
 /// Tells whether a language turns Unicode multiplayer chat on while it is
 /// shown: its text is held in UTF-8 (TextNeeds::modern_fonts), so that a
 /// line typed in it reaches each machine in the form that machine reads,
@@ -131,19 +170,20 @@ struct FallbackChain {
 /// @return true when it turns it on
 [[nodiscard]] bool turns_unicode_chat_on(const Language& language, bool pack_asks) noexcept;
 
-/// Finds a known language by its tag, matched without regard to the case of
-/// its letters, '_' read as '-'.
+/// Finds any live language by its tag, a built-in, installed or available
+/// one, matched without regard to the case of its letters, '_' read as '-'.
+/// A language a later set_pack_languages replaced is not found.
 ///
 /// @param tag a BCP-47 tag
-/// @return the language; null for a tag no entry has
+/// @return the language; null for a tag no live entry has
 [[nodiscard]] const Language* find_by_tag(std::string_view tag) noexcept;
 
-/// Finds a known language by the word 3.1c's command line and game data
+/// Finds a playable language by the word 3.1c's command line and game data
 /// name it by ("german", "english"), or its English name, matched without
-/// regard to the case of its letters.
+/// regard to the case of its letters. An available language is not found.
 ///
 /// @param name the word
-/// @return the language; null for a word no entry has
+/// @return the language; null for a word no playable entry has
 [[nodiscard]] const Language* find_by_game_name(std::string_view name) noexcept;
 
 /// Returns the chain a language's text is looked up in: the language, the
@@ -161,28 +201,72 @@ struct FallbackChain {
 ///     most_locale_bytes or text that is not a locale
 [[nodiscard]] std::string normalised_locale(std::string_view locale);
 
-/// Finds the known language a locale chooses: the entry with the longest
-/// of its locales that is the locale's whole tag or its leading subtags.
-/// Only drawable languages are chosen. A locale of a language the game does
+/// Replaces the installed and available languages with the entries given.
+/// The built-in languages stay. An entry equal in every field to a live one
+/// keeps that entry; any other is added, and the live entry it replaces
+/// leaves the list and stays readable until the game exits. The list is
+/// then ordered again, and registry_generation changes when it differs.
+///
+/// A tag that is empty, or not the text normalised_locale leaves, is
+/// dropped, as is an entry with no word. An empty name in itself becomes
+/// the English name, or the tag when that is empty too; an empty English
+/// name becomes the tag. Each locale is normalised, and one that does not
+/// normalise is dropped. An entry whose tag is a built-in language's is
+/// dropped, and the first of two entries with one tag wins. An installed
+/// entry wins over an available one with the same tag, and a language
+/// compiled in kOfferedLanguages wins over an available entry passed for
+/// its tag.
+///
+/// The registry is changed and read on the thread that draws the interface
+/// only.
+///
+/// @param installed the packs installed on this machine, player's then engine's
+/// @param available languages a catalogue offers that are not installed
+void set_pack_languages(
+    std::span<const LanguageEntry> installed, std::span<const LanguageEntry> available
+);
+
+/// Returns a number that changes whenever known_languages() changes.
+///
+/// @return the generation, starting at one once the registry has been read
+[[nodiscard]] uint64_t registry_generation() noexcept;
+
+/// Finds the language a locale chooses: the entry with the longest of its
+/// locales that is the locale's whole tag or its leading subtags. Only a
+/// playable language is chosen, unless `with_available` is set, when an
+/// available language is chosen too. A locale of a language the game does
 /// not offer yet, as Traditional Chinese's "zh-TW" and "zh-Hant-HK", chooses
 /// none when its match is longer than any entry's, so it never falls to a
 /// shorter one such as "zh".
 ///
 /// @param locale a locale, in any form normalised_locale reads
+/// @param with_available true to match an available language too
 /// @return the language; null when none is chosen
-[[nodiscard]] const Language* match_locale(std::string_view locale);
+[[nodiscard]] const Language* match_locale(std::string_view locale, bool with_available = false);
+
+/// Finds the language the preferred locales ask for among the playable
+/// languages and the available ones: the first locale, in the order given,
+/// that matches one. Unlike preferred_language, an available language
+/// counts, and no locale matching leaves null rather than English.
+///
+/// @param locales the preferred locales, most preferred first
+/// @return the language; null when none matches
+[[nodiscard]] const Language* wanted_language(std::span<const std::string> locales);
 
 /// Finds the language the operating system's preferred locales choose: the
-/// first locale, in the order given, that chooses a known language.
+/// first locale, in the order given, that chooses a playable language. An
+/// available language is not chosen.
 ///
 /// @param locales the preferred locales, most preferred first
 /// @return the language; English when none chooses one
 [[nodiscard]] const Language& preferred_language(std::span<const std::string> locales);
 
-/// Returns the language a settings choice names.
+/// Returns the language a settings choice names. Only a playable language
+/// is chosen: an available tag reads as the system's, so a language that
+/// is not installed yet is never shown.
 ///
 /// @param choice system_choice, or a tag; anything else, a tag of a
-///     language not drawable included, reads as system_choice
+///     language that is not playable included, reads as system_choice
 /// @param system the language the operating system chooses
 /// @return the language
 [[nodiscard]] const Language&

@@ -106,15 +106,40 @@ Runtime::LanguageState& Runtime::language_state() {
 
 void Runtime::start_language() {
     auto& state = language_state();
+    // The packs first, and not their interface texts yet: the catalogue's
+    // own files come before any pack. A pack whose interface.tdf does not
+    // read is still left out.
+    if (const char* base = SDL_GetBasePath(); base != nullptr)
+        read_language_packs(
+            path_from_utf8(base) / path_from_utf8(kCatalogueFolder), state.engine_packs, nullptr
+        );
+    if (!user_folder().empty())
+        read_language_packs(
+            user_folder() / path_from_utf8(player_languages_folder), state.player_packs, nullptr
+        );
+    if (plays_mod())
+        read_language_packs(
+            played_mod_folder() / path_from_utf8(languages::mod_languages_folder),
+            state.mod_packs,
+            nullptr
+        );
+    // A mod's packs add text and no language. The player's pack wins over
+    // the engine's when both hold one tag.
+    languages::set_pack_languages(
+        installed_entries({&state.player_packs, &state.engine_packs}), {}
+    );
     state.system = &languages::preferred_language(oa::platform::locale::preferred_locales());
-    // The loaders read every known language's unit texts, and the command
-    // line's word when it names one no entry knows, as 3.1c reads it.
+    // The loaders read every live language's unit texts, one that is not
+    // installed included, and the command line's word when it names one no
+    // playable entry knows and the list does not already hold, as 3.1c
+    // reads it.
     state.sink_words.clear();
-    for (const languages::Language& language : languages::known_languages())
-        if (!language.game_name.empty())
-            state.sink_words.emplace_back(language.game_name);
+    for (const languages::Language* language : languages::known_languages())
+        if (!language->game_name.empty())
+            state.sink_words.emplace_back(language->game_name);
     const char* word = oa::app::command_line::launch_language(options_.launch);
-    if (word != nullptr && languages::find_by_game_name(word) == nullptr)
+    if (word != nullptr && languages::find_by_game_name(word) == nullptr &&
+        std::find(state.sink_words.begin(), state.sink_words.end(), word) == state.sink_words.end())
         state.sink_words.emplace_back(word);
     state.sink_word_pointers.clear();
     for (const std::string& sink_word : state.sink_words)
@@ -178,27 +203,11 @@ void Runtime::start_language() {
     };
     languages::set_translation_hooks(hooks);
     read_interface_catalogue();
-    // The language packs: the engine's, then the player's, then the mod's,
-    // so that each one's words in the interface catalogue replace those
-    // before it.
-    if (const char* base = SDL_GetBasePath(); base != nullptr)
-        read_language_packs(
-            path_from_utf8(base) / path_from_utf8(kCatalogueFolder),
-            state.engine_packs,
-            &state.catalogue
-        );
-    if (!user_folder().empty())
-        read_language_packs(
-            user_folder() / path_from_utf8(player_languages_folder),
-            state.player_packs,
-            &state.catalogue
-        );
-    if (plays_mod())
-        read_language_packs(
-            played_mod_folder() / path_from_utf8(languages::mod_languages_folder),
-            state.mod_packs,
-            &state.catalogue
-        );
+    // The files beside the game, then the engine's packs, the player's and
+    // the mod's, so that each one's words replace those before it.
+    add_pack_interface_texts(state.engine_packs, state.catalogue);
+    add_pack_interface_texts(state.player_packs, state.catalogue);
+    add_pack_interface_texts(state.mod_packs, state.catalogue);
     state.choice = oa::ui::engine_settings::stored_language(
         preference_values_, !options_.preferences_file.has_value()
     );
@@ -274,7 +283,7 @@ void Runtime::apply_language() {
     const char* word = oa::app::command_line::launch_language(options_.launch);
     const languages::Language* named =
         word != nullptr ? languages::find_by_game_name(word) : nullptr;
-    // The registry's words are string literals, so each word ends in a NUL.
+    // A language's word ends in a NUL and stays for the whole run.
     if (named != nullptr) {
         // 3.1c's command line names a known language: it decides the run's.
         state.shown = named;
@@ -390,9 +399,9 @@ const oa::data::languages::PackManifest* Runtime::language_unicode_chat() const 
 
 std::vector<std::string> Runtime::unicode_chat_language_tags() const {
     std::vector<std::string> tags;
-    for (const languages::Language& known : languages::known_languages())
-        if (languages::turns_unicode_chat_on(known, false))
-            tags.emplace_back(known.tag);
+    for (const languages::Language* known : languages::known_languages())
+        if (languages::playable(*known) && languages::turns_unicode_chat_on(*known, false))
+            tags.emplace_back(known->tag);
     if (!language_)
         return tags;
     for (const auto* packs :

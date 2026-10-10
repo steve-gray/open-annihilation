@@ -96,16 +96,21 @@ namespace oa::app::package_install::oamod {
 [[nodiscard]] std::string
 version_label(std::string_view version, int64_t revision, bool with_revision);
 
-/// Returns the prompt shown while a package unpacks (INSTALLING MOD), with
-/// its progress, or while its files are put in place.
+/// Returns the prompt shown while a package is checked or unpacks (INSTALLING
+/// MOD), with its progress, or while its files are put in place.
 ///
 /// @param incoming the mod
-/// @param done_bytes the bytes unpacked so far
-/// @param total_bytes the bytes it unpacks to
-/// @param placing its files are being put in place
+/// @param done_bytes the bytes hashed or unpacked so far
+/// @param total_bytes the package file's size, or the bytes it unpacks to
+/// @param phase what the prompt says
+/// @param file_name the package's name, which the checking phase names
 /// @return the prompt: CANCEL
 [[nodiscard]] PackagePrompt installing_prompt(
-    const Incoming& incoming, uint64_t done_bytes, uint64_t total_bytes, bool placing
+    const Incoming& incoming,
+    uint64_t done_bytes,
+    uint64_t total_bytes,
+    InstallingPhase phase,
+    std::string_view file_name
 );
 
 /// Returns the question a plan asks: UPDATE MOD, ANOTHER VERSION, ALREADY

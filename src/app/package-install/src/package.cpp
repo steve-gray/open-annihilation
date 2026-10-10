@@ -345,6 +345,7 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
         package.manifest_entry = *manifest;
         NameTree names{};
         bool backup_left_out = false;
+        bool origin_left_out = false;
         for (const std::size_t index : kept) {
             const zip::StreamEntry& entry = entries[index];
             const std::string relative = entry.name.substr(package.root.size());
@@ -353,6 +354,12 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
             // A .backup of the package's own is ours to keep, never unpacked.
             if (detail::folded(first_part(relative)) == backup_folder_name) {
                 backup_left_out = true;
+                continue;
+            }
+            // A .oa-origin.yaml at the package's top is ours to write, never unpacked.
+            if (relative.find('/') == std::string::npos &&
+                detail::folded(relative) == detail::folded(origin_file_name)) {
+                origin_left_out = true;
                 continue;
             }
             if (entry.symbolic_link || entry.special_file)
@@ -372,6 +379,7 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
                 package.unpacked_bytes += entry.bytes;
         }
         package.backup_left_out = backup_left_out;
+        package.origin_left_out = origin_left_out;
         if (package.unpacked_bytes > max_install_bytes) {
             Problem problem = problem_of(Refusal::too_large);
             problem.size_bytes = package.unpacked_bytes;
