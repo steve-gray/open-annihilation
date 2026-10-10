@@ -5,7 +5,9 @@
 // then the others in the order of their own names, which is the order the
 // settings list them in.
 //
-// Adding a language is adding its locales and its entry here:
+// Adding a language is usually a language pack: its manifest becomes an
+// entry while the pack is installed. This table is for a language 3.1c's
+// data holds, so the game knows it without a pack. An entry here lists:
 //
 // - tag: its BCP-47 tag, which the settings keep;
 // - endonym: its name in itself, in UTF-8 written as escaped bytes;
@@ -65,9 +67,23 @@ constexpr std::array<Language, 6> kLanguages{{
     {"en", "English", "English", "English", kEnglishLocales, {}, TextNeeds::game_fonts},
     {"de", "Deutsch", "German", "German", kGermanLocales, {}, TextNeeds::game_fonts},
     // Español
-    {"es", "Espa\xC3\xB1" "ol", "Spanish", "Spanish", kSpanishLocales, {}, TextNeeds::game_fonts},
+    {"es",
+     "Espa\xC3\xB1"
+     "ol",
+     "Spanish",
+     "Spanish",
+     kSpanishLocales,
+     {},
+     TextNeeds::game_fonts},
     // Français
-    {"fr", "Fran\xC3\xA7" "ais", "French", "French", kFrenchLocales, {}, TextNeeds::game_fonts},
+    {"fr",
+     "Fran\xC3\xA7"
+     "ais",
+     "French",
+     "French",
+     kFrenchLocales,
+     {},
+     TextNeeds::game_fonts},
     {"it", "Italiano", "Italian", "Italian", kItalianLocales, {}, TextNeeds::game_fonts},
     // 简体中文
     {"zh-Hans",
@@ -78,3 +94,12 @@ constexpr std::array<Language, 6> kLanguages{{
      {},
      TextNeeds::modern_fonts},
 }};
+
+/// Languages the engine knows a pack exists for, offered before any
+/// catalogue is read. Each entry is written with Source::available, since
+/// the default would mark it built in. The table is empty until Simplified
+/// Chinese moves here from the compiled languages. An installed pack for
+/// one of these tags takes its place among the languages the game shows;
+/// the entry here stays, and an available entry passed for the same tag is
+/// dropped in its favour.
+constexpr std::array<Language, 0> kOfferedLanguages{};

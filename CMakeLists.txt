@@ -943,7 +943,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_pad.cpp src/app/runtime_pad_actions.cpp src/app/runtime_pad_pointer.cpp
   src/app/runtime_pad_haptics.cpp src/app/runtime_text_input.cpp
   src/app/folder_chooser_screen.cpp src/app/runtime_found_install.cpp
-  src/app/simulation_hash.cpp)
+  src/app/simulation_hash.cpp
+  src/app/presence_facts.cpp)
 # The self-checks: the --check-* options with which the game drives itself
 # through its screens and orders and reports a verdict, for the native
 # checks. OA_SELF_CHECKS=OFF leaves them out, as the release packages do.
@@ -958,6 +959,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_inactive_loop_check.cpp src/app/runtime_factory_check.cpp
   src/app/runtime_unit_speech_check.cpp src/app/runtime_build_page_check.cpp
   src/app/runtime_language_check.cpp src/app/runtime_language_switch_check.cpp
+  src/app/runtime_language_registry_check.cpp
   src/app/runtime_side_column_check.cpp src/app/runtime_match_bars_check.cpp
   src/app/runtime_unit_pages_check.cpp src/app/runtime_frontend_controls_check.cpp
   src/app/runtime_briefing_narration_check.cpp src/app/runtime_build_site_check.cpp
@@ -1022,7 +1024,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-language-packs-test src/app/language_packs_test.cpp
     src/app/language_packs.cpp)
   target_link_libraries(oa-app-language-packs-test PRIVATE oa-app-headers oa-data-languages
-    oa-formats-oamod oa-formats-tdf oa-test-support oa-options)
+    oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
 endif()
@@ -1825,6 +1827,27 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-language-switch PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_language_switch_check_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The language registry with the pseudo pack installed in the player's
+      # Languages folder, beside the preferences file: each live language is
+      # named, English first and the built-ins in their order, the pack as
+      # installed with the word Pseudo, and the run shows it. The pack is
+      # copied into the check's own folder, never into the game data.
+      set(oa_language_registry_check_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-registry")
+      file(MAKE_DIRECTORY "${oa_language_registry_check_dir}")
+      file(WRITE "${oa_language_registry_check_dir}/language-registry.conf"
+        "open-annihilation-preferences 1\n\"open-annihilation.language\" \"en-XA\"\n")
+      add_test(NAME language-registry-pack COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests/pseudo-pack"
+        "${oa_language_registry_check_dir}/Open Annihilation/Languages/en-XA")
+      set_tests_properties(language-registry-pack PROPERTIES FIXTURES_SETUP language-registry-pack)
+      add_test(NAME native-language-registry COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-language-registry
+        --preferences-file "${oa_language_registry_check_dir}/language-registry.conf")
+      set_tests_properties(native-language-registry PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_language_registry_check_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED language-registry-pack)
       # The commander's build pages on windows from 640x480 to 5120x2880,
       # walked with NEXT through SDL input on dummy devices: each fits the
       # side column, the same build buttons are reachable on every window and

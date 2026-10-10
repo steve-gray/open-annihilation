@@ -30,6 +30,7 @@
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/base/sha256.hpp"
 #include "oa/formats/zip.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
@@ -70,6 +71,16 @@ constexpr int kSnapshotWidth = 1280;
 constexpr int kSnapshotHeight = 720;
 /// Where the pointer rests while nothing is clicked: off every button.
 constexpr oa::ui::display_layout::Point kRestingPointer{4, 240};
+
+/// Returns the SHA-256 of a file.
+///
+/// @param file the file
+/// @return its digest
+oa::base::sha256::Digest file_hash(const fs::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    const std::vector<uint8_t> bytes{std::istreambuf_iterator<char>{in}, {}};
+    return oa::base::sha256::digest_of(bytes);
+}
 
 /// Throws when a step of the check fails.
 ///
@@ -388,6 +399,16 @@ void Runtime::check_mod_install() {
             "macOS's own files were unpacked"
         );
         require(!reserved_left(mods), "the install left a folder of its own");
+        {
+            const auto record = install::read_origin(folder);
+            require(
+                record && record->kind == install::OriginKind::file &&
+                    record->sha256 == file_hash(finder) && record->installed == "2000-01-01" &&
+                    record->registry.empty() && record->catalogue_id.empty() &&
+                    record->release == 0,
+                "the installed folder has no file origin"
+            );
+        }
         snapshot("installed");
         click(install::Answer::open_folder);
         const auto& opened = user_folder_state().opened;
@@ -442,6 +463,13 @@ void Runtime::check_mod_install() {
             !fs::exists(kept / std::string(install::backup_folder_name)) && !reserved_left(mods),
             "the first revision is still kept"
         );
+        {
+            const auto record = install::read_origin(kept);
+            require(
+                record && record->sha256 == file_hash(packages / "example-mod-1.0-r2.oamod"),
+                "the kept version's origin is not the second revision"
+            );
+        }
 
         // The same revision again: reinstalled, a file added since dropped.
         {
@@ -531,6 +559,16 @@ void Runtime::check_mod_install() {
             revision_in(folder) == 2 && revision_in(kept) == 3,
             "ROLL BACK did not swap the versions"
         );
+        {
+            const auto now = install::read_origin(folder);
+            const auto kept_record = install::read_origin(kept);
+            require(
+                now && kept_record &&
+                    now->sha256 == file_hash(packages / "example-mod-1.0-r2.oamod") &&
+                    kept_record->sha256 == file_hash(packages / "example-mod-1.0-r3.oamod"),
+                "ROLL BACK did not swap the origin records"
+            );
+        }
         auto* dialog = engine_settings_dialog();
         require(
             dialog != nullptr && dialog->folder_notice.empty(),

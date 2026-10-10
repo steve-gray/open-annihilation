@@ -6,10 +6,12 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/formats/oamod.hpp"
 #include "oa/formats/tdf.hpp"
+#include "oa/platform/text_font.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -109,6 +111,30 @@ read_pack(const fs::path& folder, std::string& interface_text, std::string& fail
         failure = std::string(languages::pack_interface_file) + ": " + interface_failure;
         return nullptr;
     }
+    for (const languages::PackFont& font : loaded->pack.manifest().fonts) {
+        const fs::path file =
+            folder / path_from_utf8(languages::pack_fonts_folder) / path_from_utf8(font.file);
+        std::error_code missing;
+        if (!fs::is_regular_file(file, missing)) {
+            failure = "its font " + font.file + " is not a file";
+            return nullptr;
+        }
+    }
+    if (!loaded->pack.manifest().warmup.empty()) {
+        const fs::path file = folder / path_from_utf8(loaded->pack.manifest().warmup);
+        std::string warmup_failure;
+        const auto text = read_bounded(file, languages::most_warmup_bytes, warmup_failure);
+        if (!text) {
+            failure = warmup_failure.empty() ? "its warm-up file is missing"
+                                             : "its warm-up file " + warmup_failure;
+            return nullptr;
+        }
+        if (!oa::platform::text_font::decode_utf8(*text)) {
+            failure = "its warm-up file is not UTF-8";
+            return nullptr;
+        }
+        loaded->warmup = *text;
+    }
     return loaded;
 }
 
@@ -154,9 +180,14 @@ void read_language_packs(
         std::string interface_text;
         std::string failure;
         auto pack = read_pack(folder, interface_text, failure);
-        if (pack != nullptr && catalogue != nullptr && !interface_text.empty() &&
-            !catalogue->add(interface_text, &failure))
-            pack.reset();
+        // A catalogue that is not there still has to refuse a file it would
+        // not read, so a bad interface.tdf leaves the pack out either way.
+        if (pack != nullptr && !interface_text.empty()) {
+            languages::InterfaceText scratch;
+            languages::InterfaceText* target = catalogue != nullptr ? catalogue : &scratch;
+            if (!target->add(interface_text, &failure))
+                pack.reset();
+        }
         if (pack == nullptr) {
             std::cerr << "open-annihilation: the language pack " << path_to_utf8(folder)
                       << " was not read: " << failure << '\n';
@@ -166,11 +197,68 @@ void read_language_packs(
     }
 }
 
+std::vector<languages::LanguageEntry> installed_entries(
+    std::initializer_list<const std::vector<std::unique_ptr<LoadedLanguagePack>>*> packs
+) {
+    std::vector<languages::LanguageEntry> entries;
+    for (const auto* group : packs) {
+        if (group == nullptr)
+            continue;
+        for (const auto& loaded : *group)
+            if (loaded != nullptr)
+                entries.push_back(languages::entry_of(loaded->pack.manifest()));
+    }
+    return entries;
+}
+
+void add_pack_interface_texts(
+    const std::vector<std::unique_ptr<LoadedLanguagePack>>& packs,
+    languages::InterfaceText& catalogue
+) {
+    for (const auto& loaded : packs) {
+        if (loaded == nullptr)
+            continue;
+        std::string failure;
+        const auto text = read_bounded(
+            loaded->folder / path_from_utf8(languages::pack_interface_file),
+            languages::most_catalogue_bytes,
+            failure
+        );
+        if (!text) {
+            if (!failure.empty())
+                std::cerr << "open-annihilation: the language pack " << path_to_utf8(loaded->folder)
+                          << " interface was not read: " << failure << '\n';
+            continue;
+        }
+        if (text->empty())
+            continue;
+        if (!catalogue.add(*text, &failure))
+            std::cerr << "open-annihilation: the language pack " << path_to_utf8(loaded->folder)
+                      << " interface was not read: " << failure << '\n';
+    }
+}
+
 std::optional<std::string> read_pack_file(const fs::path& file, std::string& failure) {
     auto bytes = read_bounded(file, oa::formats::tdf::max_input_bytes, failure);
     if (!bytes && failure.empty())
         failure = "it is not there";
     return bytes;
+}
+
+std::vector<PackFontFile> pack_fonts(const LoadedLanguagePack& pack) {
+    std::vector<PackFontFile> fonts;
+    const languages::PackManifest& manifest = pack.pack.manifest();
+    fonts.reserve(manifest.fonts.size());
+    for (const languages::PackFont& font : manifest.fonts) {
+        PackFontFile listed;
+        listed.file =
+            pack.folder / path_from_utf8(languages::pack_fonts_folder) / path_from_utf8(font.file);
+        listed.role = font.role == languages::PackFontRole::letters
+                          ? oa::platform::text_font::FaceRole::letters
+                          : oa::platform::text_font::FaceRole::ideographs;
+        fonts.push_back(std::move(listed));
+    }
+    return fonts;
 }
 
 fs::path language_pack_file(const LoadedLanguagePack& pack, std::string_view path) {

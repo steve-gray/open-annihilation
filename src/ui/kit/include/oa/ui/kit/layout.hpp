@@ -9,6 +9,7 @@
 #pragma once
 
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/looks.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -20,10 +21,6 @@
 #include <vector>
 
 namespace oa::ui::kit {
-
-/// A rectangle in points. One point is one pixel of the 640 by 480 picture.
-/// The same rectangle the settings geometry uses, so it passes straight through.
-using Rect = oa::ui::frontend_renderer::SourceRect;
 
 /// A place in a layout, in points.
 struct Point {
@@ -342,16 +339,27 @@ using ControlId = int32_t;
 /// No control.
 inline constexpr ControlId no_control = -1;
 
-/// What an item of a display list is. Later components add roles after mark.
+/// What an item of a display list is. Later components append roles.
 enum class Role : uint8_t {
-    fill,    ///< a flat rectangle
-    blend,   ///< a rectangle blended by the item's opacity
-    outline, ///< a one-pixel outline
-    bevel,   ///< a raised edge
-    rule,    ///< a hairline
-    text,    ///< a text
-    picture, ///< a picture
-    mark,    ///< a one-bit mark
+    fill,        ///< a flat rectangle
+    blend,       ///< a rectangle blended by the item's opacity
+    outline,     ///< a one-pixel outline
+    bevel,       ///< a raised edge
+    rule,        ///< a hairline
+    text,        ///< a text
+    picture,     ///< a picture: the canvas's icon
+    mark,        ///< a one-bit mark; its picture and colour are the item's MarkLook
+    button,      ///< a button
+    toggle,      ///< an Off/On switch
+    levels,      ///< a strip of levels
+    slider,      ///< a slider
+    choice,      ///< a drop-down's field
+    choice_menu, ///< a drop-down's open menu
+    lock,        ///< a padlock and its text
+    scroll_bar,  ///< a scroll bar
+    focus_ring,  ///< the keyboard focus outline
+    oa_button,   ///< the OA button
+    oa_mark,     ///< the OA mark alone
 };
 
 /// How a control looks, for the item that draws it.
@@ -379,26 +387,60 @@ struct Item {
     uint32_t opacity{};            ///< a blend's share of a pixel, in 256ths; 256 is opaque
     ControlId control{no_control}; ///< the control this draws, or none
     State state{};                 ///< how that control looks
+    /// How a component is drawn. Empty for a generic role. A component's look
+    /// owns its texts, so the list outlives the words it was built from.
+    Look look{};
+};
+
+/// What a control is. A screen maps these when it lists controls to automation.
+enum class ControlKind : uint8_t {
+    button,     ///< a button
+    toggle,     ///< a switch
+    choice,     ///< a drop-down
+    slider,     ///< a slider
+    levels,     ///< a strip of levels
+    buttons,    ///< a row of buttons
+    list,       ///< a list
+    list_item,  ///< a row of a list
+    text_field, ///< a field the player types in
+    scroll_bar, ///< a scroll bar
+    tab,        ///< a tab
+    link,       ///< a link
+    area,       ///< a place that takes a press and is not one of the others
 };
 
 /// A control a press can reach. The rectangle is where it lies, scrolled out
 /// of view or not. What a press reaches is the rectangle clipped, when a clip
-/// is set.
+/// is set. Its name is how automation finds it.
 struct Control {
     ControlId id{no_control}; ///< its number
     Rect rect{};              ///< where it lies, in points
     Rect clip{};              ///< the part a press can reach; empty means the whole rectangle
     bool enabled{true};       ///< false while a press does not reach it
+    /// Its automation name: words of a-z, 0-9 and hyphens, joined by dots, at
+    /// most 100 bytes, and unique on the screen. The automation endpoint adds
+    /// its own prefix; the name here has none.
+    std::string name{};
+    ControlKind kind{};   ///< what it is
+    bool focusable{true}; ///< the arrows and Tab can stop on it
+    /// Left and Right act on it, as a switch or a slider takes them, instead
+    /// of moving the focus.
+    bool steps{};
+    int32_t group{-1};  ///< its scroll area's number; -1 when it is in none
+    bool checked{};     ///< a switch that is on, or a chosen row, for automation
+    std::string text{}; ///< its caption or its value, for automation
 };
 
 /// What a screen drew, and where its controls are.
 ///
 /// Items are in drawing order. Controls are in the order a point is tested,
 /// and the two lists are not one list: drawing never reads a control, and a
-/// hit never reads an item.
+/// hit never reads an item. Tab follows tab_order.
 struct DisplayList {
     std::vector<Item> items{};       ///< what is drawn, first to last
     std::vector<Control> controls{}; ///< what can be pressed, first tested first
+    /// The declared order Tab follows. Only these controls take the focus.
+    std::vector<ControlId> tab_order{};
 };
 
 /// Returns the first enabled control a point lies in.

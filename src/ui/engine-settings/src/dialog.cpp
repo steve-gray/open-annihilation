@@ -17,6 +17,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -1247,14 +1248,19 @@ int32_t choice_field_width(Setting setting) noexcept {
 }
 
 std::span<const oa::data::languages::Language* const> offered_languages() {
-    static const std::vector<const oa::data::languages::Language*> offered = [] {
-        std::vector<const oa::data::languages::Language*> languages;
-        for (const auto& language : oa::data::languages::known_languages())
-            if (oa::data::languages::drawable(language))
-                languages.push_back(&language);
-        return languages;
-    }();
-    return offered;
+    static std::vector<const oa::data::languages::Language*> offered;
+    static uint64_t built_at = 0;
+    static bool built = false;
+    const uint64_t generation = oa::data::languages::registry_generation();
+    if (!built || built_at != generation) {
+        offered.clear();
+        for (const oa::data::languages::Language* language : oa::data::languages::known_languages())
+            if (oa::data::languages::playable(*language))
+                offered.push_back(language);
+        built_at = generation;
+        built = true;
+    }
+    return {offered.data(), offered.size()};
 }
 
 std::size_t choice_count(const Dialog& dialog, Setting setting) {
@@ -1378,25 +1384,6 @@ void set_choice(Dialog& dialog, Setting setting, std::size_t index) {
     if (oa::data::languages::chosen_language(settings.language, system).needs ==
         oa::data::languages::TextNeeds::modern_fonts)
         settings.modern_fonts = true;
-}
-
-int32_t shown_choices(std::size_t choices) noexcept {
-    return static_cast<int32_t>(std::min<std::size_t>(choices, most_shown_choices));
-}
-
-SourceRect choice_list(const SourceRect& field, std::size_t choices) noexcept {
-    const int32_t height = shown_choices(choices) * choice_item_height + 2;
-    int32_t top = field.y + field.height;
-    // A list that would reach below the footer's line opens over its field.
-    if (top + height > footer_rule_row)
-        top = std::max(field.y - height, body_top);
-    return {field.x, top, field.width, height};
-}
-
-SourceRect choice_item(const SourceRect& list, int32_t shown) noexcept {
-    return {
-        list.x + 1, list.y + 1 + shown * choice_item_height, list.width - 2, choice_item_height
-    };
 }
 
 std::string_view shown_text(std::string_view english) {
@@ -1774,31 +1761,6 @@ SourceRect footer_button(int32_t control) noexcept {
     if (control == cancel_control)
         return cancel_button;
     return ok_button;
-}
-
-int32_t knob_column(const SourceRect& track, int32_t stop, int32_t stops) noexcept {
-    const int32_t first = track.x + knob_width / 2;
-    const int32_t travel = track.width - knob_width;
-    if (stops < 2)
-        return first;
-    return first +
-           (travel * std::clamp(stop, int32_t{0}, stops - 1) + (stops - 1) / 2) / (stops - 1);
-}
-
-int32_t stop_at(const SourceRect& track, int32_t column, int32_t stops) noexcept {
-    const int32_t first = track.x + knob_width / 2;
-    const int32_t travel = track.width - knob_width;
-    if (stops < 2 || travel <= 0)
-        return 0;
-    const int32_t along = std::clamp(column - first, int32_t{0}, travel);
-    return (along * (stops - 1) + travel / 2) / travel;
-}
-
-std::size_t level_at(const SourceRect& area, const Strip& strip, int32_t column) noexcept {
-    if (strip.levels == 0 || strip.level_width <= 0)
-        return 0;
-    const int32_t along = std::max(column - area.x - 1, int32_t{0}) / strip.level_width;
-    return std::min(static_cast<std::size_t>(along), strip.levels - 1);
 }
 
 std::size_t level_index(AntiAliasing level) noexcept {

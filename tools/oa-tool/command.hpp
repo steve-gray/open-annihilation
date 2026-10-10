@@ -108,10 +108,12 @@ class Failure : public std::runtime_error {
 
 // The package command, defined in pack.cpp.
 
-/// Packs a folder as a .oamod or a .oalang.
+/// Packs a folder as a .oamod, a .oalang or a .oamap.
 ///
 /// One positional argument is the folder. `--out FILE` names the package,
-/// and `--force` replaces a file that already exists. Options may be written
+/// and `--force` replaces a file that already exists. `--game-dir DIR` is
+/// the game's data; map packs need the game's palette for previews, and
+/// giving it for another kind is a usage error. Options may be written
 /// before or after the folder. The manifest is written first and every other
 /// file follows in byte order of its path.
 ///
@@ -120,6 +122,23 @@ class Failure : public std::runtime_error {
 /// @return exit_done, or exit_usage when the arguments are not the command's
 /// @throws Failure when the folder cannot be packed
 [[nodiscard]] int run_pack(std::span<const std::string> arguments, Output& output);
+
+// The check command, defined in check.cpp.
+
+/// Checks a package and reports the facts a catalogue lists.
+///
+/// One positional argument is the package file. `--game-dir DIR` is the game
+/// folder an install would read settings from. `--accept-unimplemented-hacks`
+/// accepts a hack this build does not carry out yet. `--json` prints one JSON
+/// object; otherwise each fact is a `key: value` line. Options may be written
+/// before or after the file.
+///
+/// @param arguments the package and any options
+/// @param[in,out] output receives the report, and a usage line when the
+///        arguments are not the command's
+/// @return exit_done when the package would be installed, exit_failed when it
+///         would be refused, or exit_usage when the arguments are not the command's
+[[nodiscard]] int run_check(std::span<const std::string> arguments, Output& output);
 
 /// Returns the tool's commands, in the order help lists them.
 ///

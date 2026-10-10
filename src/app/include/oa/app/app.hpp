@@ -458,6 +458,10 @@ struct Options {
     // and back, and checks each screen under them shows it as it shows
     // opened again in it.
     bool check_language_switch = false;
+    // Lists every language the game knows and the one the run shows, and
+    // checks English comes first, the built-in languages follow in their
+    // order, and the pseudo pack is installed and shown.
+    bool check_language_registry = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;

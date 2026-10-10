@@ -8,6 +8,7 @@
 // icon, or the green OA mark when the host has no icon to give.
 
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 #include "oa/data/mod_profile/overrides.hpp"
@@ -36,113 +37,47 @@ namespace {
 using renderer::Rgb;
 using renderer::SourceRect;
 
-/// The columns between a control and its keyboard focus outline.
-constexpr int32_t kFocusInset = layout::focus_inset;
-
-/// Returns a rectangle grown on every side.
-///
-/// @param rect the rectangle
-/// @param by the columns and rows added on each side
-/// @return the grown rectangle
-SourceRect grown(const SourceRect& rect, int32_t by) noexcept {
-    return {rect.x - by, rect.y - by, rect.width + 2 * by, rect.height + 2 * by};
+/// A canvas on the dialog's surface, for the kit's crisp controls.
+kit::Canvas drawn(
+    renderer::Surface& target,
+    const renderer::Placement& placement,
+    const DialogFonts& fonts,
+    const renderer::RgbaPicture& icon = {}
+) {
+    return {&target, placement, &fonts, icon};
 }
 
-/// The OA mark's letters, 4 by 7 each with a column between: for the
-/// header and the in-game button.
-constexpr int32_t kSmallMarkWidth = 9;
-/// The small mark's height.
-constexpr int32_t kSmallMarkHeight = 7;
-/// The small mark, row by row.
-constexpr std::array<uint8_t, kSmallMarkWidth * kSmallMarkHeight> kSmallMarkBits{
-    0, 1, 1, 0, 0, 0, 1, 1, 0, //
-    1, 0, 0, 1, 0, 1, 0, 0, 1, //
-    1, 0, 0, 1, 0, 1, 0, 0, 1, //
-    1, 0, 0, 1, 0, 1, 1, 1, 1, //
-    1, 0, 0, 1, 0, 1, 0, 0, 1, //
-    1, 0, 0, 1, 0, 1, 0, 0, 1, //
-    0, 1, 1, 0, 0, 1, 0, 0, 1, //
-};
-/// The OA mark's letters, 5 by 9 each with two columns between: for the
-/// main menu's button.
-constexpr int32_t kLargeMarkWidth = 12;
-/// The large mark's height.
-constexpr int32_t kLargeMarkHeight = 9;
-/// The large mark, row by row.
-constexpr std::array<uint8_t, kLargeMarkWidth * kLargeMarkHeight> kLargeMarkBits{
-    0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, //
-    0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, //
-};
-/// The padlock, row by row.
-constexpr std::array<uint8_t, layout::padlock_width * layout::padlock_height> kPadlockBits{
-    0, 1, 1, 1, 0, //
-    1, 0, 0, 0, 1, //
-    1, 0, 0, 0, 1, //
-    1, 1, 1, 1, 1, //
-    1, 1, 0, 1, 1, //
-    1, 1, 0, 1, 1, //
-    1, 1, 1, 1, 1, //
-};
+/// The placement clipped to a rectangle, as the kit clips a canvas.
+renderer::Placement clipped_view(const renderer::Placement& placement, const SourceRect& rect) {
+    return kit::clipped({nullptr, placement, nullptr, {}}, rect).placement;
+}
 
-/// The columns and rows between the OA button's sides and its icon: the
-/// bevel, one for the outline under the pointer, and one clear.
-constexpr int32_t kButtonIconInset = 3;
-/// How far a held OA button's icon moves right and down, as if pressed in.
-constexpr int32_t kButtonIconPress = 1;
+/// An Off/On switch's look, its captions already looked up.
+kit::SwitchLook switch_look(bool on, bool hovered, bool locked) {
+    return {
+        on,
+        hovered,
+        locked,
+        std::string(layout::shown_text(layout::off_text)),
+        std::string(layout::shown_text(layout::on_text)),
+    };
+}
 
-/// The OA button's outlined square, as a share of its side: 20 of 32.
-constexpr int32_t kButtonSquareNumerator = 20;
-/// The OA button's outlined square's share's denominator.
-constexpr int32_t kButtonSquareDenominator = 32;
-/// The least columns between the large mark and its square's outline.
-constexpr int32_t kLargeMarkMargin = 2;
-
-/// A closed area's or hack's arrow, pointing right, row by row.
-constexpr std::array<uint8_t, layout::arrow_side * layout::arrow_side> kClosedArrowBits{
-    0, 1, 0, 0, 0, //
-    0, 1, 1, 0, 0, //
-    0, 1, 1, 1, 0, //
-    0, 1, 1, 0, 0, //
-    0, 1, 0, 0, 0, //
-};
-/// An open area's or hack's arrow, pointing down, row by row.
-constexpr std::array<uint8_t, layout::arrow_side * layout::arrow_side> kOpenArrowBits{
-    0, 0, 0, 0, 0, //
-    1, 1, 1, 1, 1, //
-    0, 1, 1, 1, 0, //
-    0, 0, 1, 0, 0, //
-    0, 0, 0, 0, 0, //
-};
-
-/// The small OA mark.
-constexpr renderer::Mark kSmallMark{kSmallMarkWidth, kSmallMarkHeight, kSmallMarkBits};
-/// A closed area's or hack's arrow.
-constexpr renderer::Mark kClosedArrow{layout::arrow_side, layout::arrow_side, kClosedArrowBits};
-/// An open area's or hack's arrow.
-constexpr renderer::Mark kOpenArrow{layout::arrow_side, layout::arrow_side, kOpenArrowBits};
-/// The large OA mark.
-constexpr renderer::Mark kLargeMark{kLargeMarkWidth, kLargeMarkHeight, kLargeMarkBits};
-/// The padlock.
-constexpr renderer::Mark kPadlock{layout::padlock_width, layout::padlock_height, kPadlockBits};
-/// A drop-down's arrow, pointing down, row by row.
-constexpr std::array<uint8_t, layout::choice_arrow_width * layout::choice_arrow_height>
-    kChoiceArrowBits{
-        1, 1, 1, 1, 1, 1, 1, //
-        0, 1, 1, 1, 1, 1, 0, //
-        0, 0, 1, 1, 1, 0, 0, //
-        0, 0, 0, 1, 0, 0, 0, //
-};
-/// A drop-down's arrow.
-constexpr renderer::Mark kChoiceArrow{
-    layout::choice_arrow_width, layout::choice_arrow_height, kChoiceArrowBits
-};
+/// A level strip's look, its captions already looked up. offered is the
+/// count a player may choose, never the strip's zero sentinel.
+kit::LevelsLook strip_look(Setting setting, std::size_t level, bool hovered, bool locked) {
+    const layout::Strip strip = layout::strip_of(setting);
+    kit::LevelsLook look;
+    look.level_width = strip.level_width;
+    look.chosen = level;
+    look.offered = layout::offered_levels(strip);
+    look.hovered = hovered;
+    look.locked = locked;
+    look.captions.reserve(strip.levels);
+    for (std::size_t index = 0; index < strip.levels; ++index)
+        look.captions.emplace_back(layout::shown_text(layout::strip_caption(setting, index)));
+    return look;
+}
 
 /// Draws the header: the icon, the title, the shared game's note and the version.
 ///
@@ -172,25 +107,7 @@ void draw_header(
         kit::rgb(kit::colour::rule)
     );
     const SourceRect mark = layout::header_mark;
-    if (renderer::picture_drawable(icon)) {
-        renderer::draw_picture(target, placement, mark, icon);
-    } else {
-        const SourceRect square{
-            mark.x + (mark.width - layout::header_mark_square) / 2,
-            mark.y + (mark.height - layout::header_mark_square) / 2,
-            layout::header_mark_square,
-            layout::header_mark_square,
-        };
-        renderer::draw_outline(target, placement, square, kit::rgb(kit::colour::accent));
-        renderer::draw_mark(
-            target,
-            placement,
-            kSmallMark,
-            square.x + (square.width - kSmallMarkWidth) / 2,
-            square.y + (square.height - kSmallMarkHeight + 1) / 2,
-            kit::rgb(kit::colour::accent)
-        );
-    }
+    kit::draw_header_mark(drawn(target, placement, fonts, icon), mark);
     const int32_t title_left = mark.x + mark.width + layout::header_gap;
     const SourceRect title{
         title_left, layout::header_top, layout::title_width, layout::header_height
@@ -351,248 +268,8 @@ void draw_list(
             text
         );
         if (dialog.focused == control)
-            renderer::draw_outline(target, placement, item, kit::rgb(kit::colour::accent));
+            kit::draw_focus_ring(drawn(target, placement, fonts), item, false);
     }
-}
-
-/// Draws an Off/On switch.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the switch
-/// @param on the switch is On
-/// @param hovered the pointer is over it
-/// @param locked the switch cannot be changed now: On shows without the accent
-/// @param fonts the fonts
-void draw_switch(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    bool on,
-    bool hovered,
-    bool locked,
-    const DialogFonts& fonts
-) {
-    renderer::fill_source_rect(target, placement, area, kit::rgb(kit::colour::well));
-    renderer::draw_outline(
-        target,
-        placement,
-        area,
-        hovered ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-    );
-    const int32_t half = (area.width - 2) / 2;
-    const SourceRect off{area.x + 1, area.y + 1, half, area.height - 2};
-    const SourceRect on_half{area.x + 1 + half, area.y + 1, half, area.height - 2};
-    if (on)
-        renderer::fill_source_rect(
-            target,
-            placement,
-            on_half,
-            locked ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::accent)
-        );
-    else
-        renderer::fill_source_rect(target, placement, off, kit::rgb(kit::colour::off_selected));
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(layout::off_text),
-        off,
-        kit::Align::centre,
-        on ? kit::rgb(kit::colour::switch_idle) : kit::rgb(kit::colour::text)
-    );
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(layout::on_text),
-        on_half,
-        kit::Align::centre,
-        on ? kit::rgb(kit::colour::on_accent) : kit::rgb(kit::colour::switch_idle)
-    );
-}
-
-/// Draws a strip of levels, such as Enhanced anti-aliasing's or Hardware
-/// acceleration's. The levels the strip shows but does not offer are faded
-/// into the panel, as a locked row is.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the strip
-/// @param setting the strip's setting
-/// @param level the index of the level chosen
-/// @param hovered the pointer is over it
-/// @param locked the strip cannot be changed now: the level chosen shows
-///     without the accent
-/// @param fonts the fonts
-void draw_levels(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    Setting setting,
-    std::size_t level,
-    bool hovered,
-    bool locked,
-    const DialogFonts& fonts
-) {
-    renderer::fill_source_rect(target, placement, area, kit::rgb(kit::colour::well));
-    renderer::draw_outline(
-        target,
-        placement,
-        area,
-        hovered ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-    );
-    const layout::Strip strip = layout::strip_of(setting);
-    for (std::size_t index = 0; index < strip.levels; ++index) {
-        const SourceRect segment{
-            area.x + 1 + static_cast<int32_t>(index) * strip.level_width,
-            area.y + 1,
-            strip.level_width,
-            area.height - 2,
-        };
-        const bool selected = index == level;
-        if (selected)
-            renderer::fill_source_rect(
-                target,
-                placement,
-                segment,
-                locked ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::accent)
-            );
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::small,
-            layout::shown_text(layout::strip_caption(setting, index)),
-            segment,
-            kit::Align::centre,
-            selected ? kit::rgb(kit::colour::on_accent) : kit::rgb(kit::colour::button_text)
-        );
-        if (index >= layout::offered_levels(strip))
-            renderer::blend_source_rect(
-                target, placement, segment, kit::rgb(kit::colour::panel), kit::locked_fade
-            );
-    }
-}
-
-/// Draws a slider: its track filled up to the knob, its stops and its knob.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the slider's track area
-/// @param stop the stop the knob is on
-/// @param stops the slider's stops
-/// @param locked the slider cannot be moved now
-/// @param hovered the pointer is over it, or holds it
-void draw_slider(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    int32_t stop,
-    int32_t stops,
-    bool locked,
-    bool hovered
-) {
-    const SourceRect track{area.x, area.y + layout::track_offset, area.width, layout::track_height};
-    renderer::fill_source_rect(target, placement, track, kit::rgb(kit::colour::well));
-    renderer::draw_outline(target, placement, track, kit::rgb(kit::colour::control_border));
-    const int32_t knob = layout::knob_column(area, stop, stops);
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {track.x + 1, track.y + 1, knob - track.x - 1, track.height - 2},
-        locked ? kit::rgb(kit::colour::control_border) : kit::rgb(kit::colour::accent)
-    );
-    const int32_t travel = area.width - layout::knob_width;
-    if (stops > 1 && travel / (stops - 1) >= layout::least_stop_spacing) {
-        for (int32_t index = 0; index < stops; ++index) {
-            renderer::fill_source_rect(
-                target,
-                placement,
-                {layout::knob_column(area, index, stops),
-                 area.y + layout::stop_offset,
-                 1,
-                 layout::stop_height},
-                kit::rgb(kit::colour::control_border)
-            );
-        }
-    }
-    const SourceRect knob_rect{
-        knob - layout::knob_width / 2, area.y, layout::knob_width, layout::knob_height
-    };
-    Rgb face = kit::rgb(kit::colour::accent);
-    if (locked)
-        face = kit::rgb(kit::colour::control_hover);
-    else if (hovered)
-        face = kit::rgb(kit::colour::accent_light);
-    renderer::fill_source_rect(target, placement, knob_rect, face);
-    renderer::draw_outline(target, placement, knob_rect, kit::rgb(kit::colour::on_accent));
-}
-
-/// Draws a button that asks the host to act, as OK is drawn: the accent's
-/// face, lighter under the pointer and darker while held, with its caption
-/// in the small font.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the button
-/// @param caption its caption
-/// @param hovered the pointer is over it
-/// @param held a press on it is held
-/// @param fonts the fonts
-void draw_action_button(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    std::string_view caption,
-    bool hovered,
-    bool held,
-    const DialogFonts& fonts
-) {
-    Rgb face = kit::rgb(kit::colour::accent);
-    if (held)
-        face = kit::rgb(kit::colour::accent_held);
-    else if (hovered)
-        face = kit::rgb(kit::colour::accent_light);
-    renderer::fill_source_rect(target, placement, area, face);
-    renderer::draw_outline(target, placement, area, kit::rgb(kit::colour::accent_light));
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(caption),
-        area,
-        kit::Align::centre,
-        kit::rgb(kit::colour::on_accent)
-    );
-}
-
-/// Returns a placement that draws only inside a rectangle, and inside the
-/// placement's own clip when it has one.
-///
-/// @param placement the placement
-/// @param rect the rectangle, in source pixels
-/// @return the placement, clipped
-renderer::Placement clipped_to(const renderer::Placement& placement, const SourceRect& rect) {
-    renderer::Placement clipped = placement;
-    const SourceRect& outer = placement.clip;
-    if (outer.width <= 0 || outer.height <= 0) {
-        clipped.clip = rect;
-        return clipped;
-    }
-    const int32_t left = std::max(rect.x, outer.x);
-    const int32_t top = std::max(rect.y, outer.y);
-    const int32_t right = std::min(rect.x + rect.width, outer.x + outer.width);
-    const int32_t bottom = std::min(rect.y + rect.height, outer.y + outer.height);
-    clipped.clip = {left, top, std::max(right - left, 0), std::max(bottom - top, 0)};
-    // Where the rectangles do not meet nothing is drawn: an empty clip would
-    // clip to the surface alone, and a scale of 0 draws nothing.
-    if (clipped.clip.width == 0 || clipped.clip.height == 0)
-        clipped.scale = 0;
-    return clipped;
 }
 
 /// Returns how wide a text is in the regular font, as the dialog draws it.
@@ -605,64 +282,8 @@ std::function<int32_t(std::string_view)> regular_width(const DialogFonts& fonts)
     };
 }
 
-/// Draws a drop-down's field: a well like a switch's with the choice at
-/// its left and the arrow at its right.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the field
-/// @param text the choice, in UTF-8
-/// @param hovered the pointer is over it, or holds it
-/// @param open its list is open
-/// @param fonts the fonts
-void draw_choice(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    std::string_view text,
-    bool hovered,
-    bool open,
-    const DialogFonts& fonts
-) {
-    renderer::fill_source_rect(target, placement, area, kit::rgb(kit::colour::well));
-    Rgb border = kit::rgb(kit::colour::control_border);
-    if (open)
-        border = kit::rgb(kit::colour::accent);
-    else if (hovered)
-        border = kit::rgb(kit::colour::control_hover);
-    renderer::draw_outline(target, placement, area, border);
-    const SourceRect text_box{
-        area.x + layout::choice_text_inset,
-        area.y,
-        area.width - layout::choice_text_inset - layout::choice_arrow_room,
-        area.height,
-    };
-    // A choice wider than its room is cut at the room's edge.
-    kit::draw_boxed_text(
-        target,
-        clipped_to(placement, text_box),
-        fonts,
-        kit::FontRole::regular,
-        layout::shown_text(text),
-        text_box,
-        kit::Align::left,
-        kit::rgb(kit::colour::text)
-    );
-    renderer::draw_mark(
-        target,
-        placement,
-        kChoiceArrow,
-        area.x + area.width - layout::choice_arrow_room +
-            (layout::choice_arrow_room - layout::choice_arrow_width) / 2,
-        area.y + (area.height - layout::choice_arrow_height) / 2,
-        open ? kit::rgb(kit::colour::accent) : kit::rgb(kit::colour::button_text)
-    );
-}
-
-/// Draws an open drop-down list over the dialog: its items, the chosen one
-/// marked as the section list marks its open section, the item the pointer
-/// or the keys mark lit, and a thumb at its right edge when it holds more
-/// items than it shows.
+/// Draws an open drop-down's menu over the dialog. The items are already
+/// looked up.
 ///
 /// @param[in,out] target the surface
 /// @param placement where the dialog lands
@@ -670,7 +291,7 @@ void draw_choice(
 /// @param field the drop-down's field
 /// @param setting the drop-down's setting
 /// @param fonts the fonts
-void draw_choice_list(
+void paint_open_menu(
     renderer::Surface& target,
     const renderer::Placement& placement,
     const Dialog& dialog,
@@ -679,52 +300,19 @@ void draw_choice_list(
     const DialogFonts& fonts
 ) {
     const std::size_t choices = layout::choice_count(dialog, setting);
-    const SourceRect list = layout::choice_list(field, choices);
+    const SourceRect menu = layout::choice_list(field, choices);
     const int32_t shown = layout::shown_choices(choices);
-    const auto chosen = static_cast<int32_t>(layout::choice_index(dialog, setting));
-    renderer::fill_source_rect(target, placement, list, kit::rgb(kit::colour::list));
-    renderer::draw_outline(target, placement, list, kit::rgb(kit::colour::control_hover));
+    kit::ChoiceMenuLook look;
+    look.first = dialog.list_first;
+    look.total = static_cast<int32_t>(choices);
+    look.chosen = static_cast<int32_t>(layout::choice_index(dialog, setting));
+    look.marked = dialog.list_marked;
+    look.focus_shown = dialog.focused != no_control;
     for (int32_t place = 0; place < shown; ++place) {
         const int32_t item = dialog.list_first + place;
         if (item >= static_cast<int32_t>(choices))
             break;
-        const SourceRect box = layout::choice_item(list, place);
-        Rgb text = kit::rgb(kit::colour::list_text);
-        if (item == chosen) {
-            renderer::fill_source_rect(
-                target, placement, box, kit::rgb(kit::colour::list_selected)
-            );
-            renderer::fill_source_rect(
-                target,
-                placement,
-                {box.x + layout::list_marker_offset,
-                 box.y + (box.height - layout::list_marker_height) / 2,
-                 layout::list_marker_width,
-                 layout::list_marker_height},
-                kit::rgb(kit::colour::accent)
-            );
-            text = kit::rgb(kit::colour::text);
-        }
-        if (item == dialog.list_marked) {
-            if (item != chosen)
-                renderer::fill_source_rect(target, placement, box, kit::rgb(kit::colour::hover));
-            text = kit::rgb(kit::colour::text);
-            // The keyboard focus shows round the marked item once a key has
-            // shown it.
-            if (dialog.focused != no_control)
-                renderer::draw_outline(target, placement, box, kit::rgb(kit::colour::accent));
-        }
-        const SourceRect caption{
-            box.x + layout::choice_item_text_inset,
-            box.y,
-            box.width - layout::choice_item_text_inset - layout::list_text_margin,
-            box.height,
-        };
-        kit::draw_boxed_text(
-            target,
-            clipped_to(placement, caption),
-            fonts,
-            kit::FontRole::regular,
+        look.shown.emplace_back(
             layout::shown_text(
                 layout::shown_choice_text(
                     dialog,
@@ -733,95 +321,10 @@ void draw_choice_list(
                     layout::choice_item_text_room,
                     regular_width(fonts)
                 )
-            ),
-            caption,
-            kit::Align::left,
-            text
+            )
         );
     }
-    if (static_cast<int32_t>(choices) > shown) {
-        const int32_t travel = list.height - 2;
-        const int32_t height = std::max(travel * shown / static_cast<int32_t>(choices), 4);
-        const int32_t top = list.y + 1 +
-                            (travel - height) * dialog.list_first /
-                                std::max(static_cast<int32_t>(choices) - shown, 1);
-        renderer::fill_source_rect(
-            target,
-            placement,
-            {list.x + list.width - 3, top, 2, height},
-            kit::rgb(kit::colour::control_hover)
-        );
-    }
-}
-
-/// Draws the padlock and a lock's text, ending at the lock area's right.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param area the lock area
-/// @param lock the lock
-/// @param fonts the fonts
-void draw_lock(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& area,
-    Lock lock,
-    const DialogFonts& fonts
-) {
-    const std::string_view text = layout::shown_text(layout::lock_text(lock));
-    const int32_t text_width = kit::text_width(fonts, kit::FontRole::small, text);
-    const int32_t left =
-        area.x + area.width - text_width - layout::padlock_gap - layout::padlock_width;
-    renderer::draw_mark(
-        target,
-        placement,
-        kPadlock,
-        left,
-        area.y + (area.height - layout::padlock_height) / 2,
-        kit::rgb(kit::colour::lock)
-    );
-    const SourceRect text_area{
-        left + layout::padlock_width + layout::padlock_gap, area.y, text_width, area.height
-    };
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(text),
-        text_area,
-        kit::Align::left,
-        kit::rgb(kit::colour::lock)
-    );
-}
-
-/// Draws the open section's scroll bar: a well like a switch's, its thumb
-/// in its inner columns, both lighter under the pointer or while held.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
-/// @param dialog the dialog
-/// @param open the open section's rows
-void draw_scroll_bar(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const Dialog& dialog,
-    const layout::ScrolledRows& open
-) {
-    const bool hot = dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control;
-    renderer::fill_source_rect(target, placement, open.area.well, kit::rgb(kit::colour::well));
-    renderer::draw_outline(
-        target,
-        placement,
-        open.area.well,
-        hot ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-    );
-    renderer::fill_source_rect(
-        target,
-        placement,
-        layout::scroll_thumb(open.area, open.scroll, open.limit, open.content_height),
-        hot ? kit::rgb(kit::colour::switch_idle) : kit::rgb(kit::colour::control_hover)
-    );
+    kit::draw_choice_menu(drawn(target, placement, fonts), menu, look);
 }
 
 /// Draws one row of Developer's list: an area's or a hack's header, a line
@@ -866,13 +369,11 @@ void draw_list_row(
         );
     switch (row.kind) {
     case layout::ListRowKind::area:
-        renderer::draw_mark(
-            target,
-            in_view,
-            row.open ? kOpenArrow : kClosedArrow,
-            row.arrow.x,
-            row.arrow.y,
-            hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::hint)
+        kit::draw_mark(
+            drawn(target, in_view, fonts),
+            row.open ? kit::Mark::arrow_open : kit::Mark::arrow_closed,
+            {row.arrow.x, row.arrow.y},
+            hovered ? kit::colour::text : kit::colour::hint
         );
         kit::draw_boxed_text(
             target,
@@ -896,13 +397,11 @@ void draw_list_row(
         );
         break;
     case layout::ListRowKind::hack:
-        renderer::draw_mark(
-            target,
-            in_view,
-            row.open ? kOpenArrow : kClosedArrow,
-            row.arrow.x,
-            row.arrow.y,
-            hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::hint)
+        kit::draw_mark(
+            drawn(target, in_view, fonts),
+            row.open ? kit::Mark::arrow_open : kit::Mark::arrow_closed,
+            {row.arrow.x, row.arrow.y},
+            hovered ? kit::colour::text : kit::colour::hint
         );
         kit::draw_boxed_text(
             target,
@@ -914,7 +413,11 @@ void draw_list_row(
             kit::Align::left,
             row.on ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::hint)
         );
-        draw_switch(target, in_view, row.toggle, row.on, hovered && !row.locked, row.locked, fonts);
+        kit::draw_switch(
+            drawn(target, in_view, fonts),
+            row.toggle,
+            switch_look(row.on, hovered && !row.locked, row.locked)
+        );
         break;
     case layout::ListRowKind::id:
         kit::draw_boxed_text(
@@ -975,7 +478,11 @@ void draw_list_row(
             kit::Align::left,
             kit::rgb(kit::colour::text)
         );
-        draw_switch(target, in_view, row.control_area, row.on, hovered, row.locked, fonts);
+        kit::draw_switch(
+            drawn(target, in_view, fonts),
+            row.control_area,
+            switch_look(row.on, hovered, row.locked)
+        );
         break;
     case layout::ListRowKind::slider:
         kit::draw_boxed_text(
@@ -998,7 +505,11 @@ void draw_list_row(
             kit::Align::right,
             kit::rgb(kit::colour::text)
         );
-        draw_slider(target, in_view, row.control_area, row.stop, row.stops, row.locked, hovered);
+        kit::draw_slider(
+            drawn(target, in_view, fonts),
+            row.control_area,
+            {row.stop, row.stops, row.locked, hovered}
+        );
         break;
     }
     // A control that takes no change, while Developer Mode is off, fades
@@ -1015,12 +526,7 @@ void draw_list_row(
         );
     if (!focused)
         return;
-    if (header)
-        renderer::draw_outline(target, in_view, row.control_area, kit::rgb(kit::colour::accent));
-    else
-        renderer::draw_outline(
-            target, in_view, grown(row.control_area, kFocusInset), kit::rgb(kit::colour::accent)
-        );
+    kit::draw_focus_ring(drawn(target, in_view, fonts), row.control_area, !header);
 }
 
 /// Draws what lies under Developer's rows: its list clipped to the list's
@@ -1050,7 +556,7 @@ void draw_developer(
     const auto hot = [&](int32_t control) {
         return dialog.hovered == control || dialog.pressed == control;
     };
-    const renderer::Placement in_view = clipped_to(placement, layout::developer_view_clip);
+    const renderer::Placement in_view = clipped_view(placement, layout::developer_view_clip);
     for (std::size_t index = 0; index < open.list.rows.size(); ++index)
         draw_list_row(target, in_view, dialog, open.list.rows[index], index == 0, fonts);
     // Scrolled from its top, the view's first row keeps a line.
@@ -1061,8 +567,16 @@ void draw_developer(
             {layout::content_left, layout::developer_view.y, layout::content_width, 1},
             kit::rgb(kit::colour::rule)
         );
-    if (open.limit > 0)
-        draw_scroll_bar(target, placement, dialog, open);
+    if (open.limit > 0) {
+        const bool bar_hot =
+            dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control;
+        kit::draw_scroll_bar(
+            drawn(target, placement, fonts),
+            open.area.well,
+            layout::scroll_thumb(open.area, open.scroll, open.limit, open.content_height),
+            bar_hot
+        );
+    }
 
     rule(layout::developer_footer_rule);
     kit::draw_boxed_text(
@@ -1079,97 +593,29 @@ void draw_developer(
         kit::Align::left,
         kit::rgb(kit::colour::text)
     );
-    draw_switch(
-        target,
-        placement,
+    kit::draw_switch(
+        drawn(target, placement, fonts),
         layout::active_only_switch,
-        dialog.developer.active_only,
-        hot(active_only_control),
-        false,
-        fonts
+        switch_look(dialog.developer.active_only, hot(active_only_control), false)
     );
     if (dialog.focused == active_only_control)
-        renderer::draw_outline(
-            target,
-            placement,
-            grown(layout::active_only_switch, kFocusInset),
-            kit::rgb(kit::colour::accent)
-        );
+        kit::draw_focus_ring(drawn(target, placement, fonts), layout::active_only_switch, true);
     // Restore profile values takes a press only while Developer Mode is on.
+    // It lights while the pointer is over it or a press on it is held.
     const SourceRect button = layout::restore_profile_button;
     const bool enabled = dialog.chosen.developer_mode;
-    const bool button_hot = enabled && hot(restore_profile_control);
-    if (button_hot)
-        renderer::fill_source_rect(target, placement, button, kit::rgb(kit::colour::hover));
-    renderer::draw_outline(
-        target,
-        placement,
+    const bool over = hot(restore_profile_control);
+    kit::draw_button(
+        drawn(target, placement, fonts),
         button,
-        button_hot ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-    );
-    Rgb caption = kit::rgb(kit::colour::switch_idle);
-    if (enabled)
-        caption = button_hot ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text);
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(layout::restore_profile_text),
-        button,
-        kit::Align::centre,
-        caption
+        {std::string(layout::shown_text(layout::restore_profile_text)),
+         kit::ButtonStyle::plain,
+         enabled && over,
+         enabled && dialog.pressed == restore_profile_control,
+         enabled}
     );
     if (enabled && dialog.focused == restore_profile_control)
-        renderer::draw_outline(
-            target, placement, grown(button, kFocusInset), kit::rgb(kit::colour::accent)
-        );
-}
-
-/// Draws Your files' buttons as Cancel looks: the button under the pointer
-/// lit, and held while a press on it is held.
-///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands, clipped to the view
-/// @param row the row
-/// @param dialog the dialog
-/// @param fonts the fonts
-void draw_folder_buttons(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const layout::Row& row,
-    const Dialog& dialog,
-    const DialogFonts& fonts
-) {
-    const bool over_row = dialog.hovered == row.control;
-    for (std::size_t index = 0; index < folder_button_count; ++index) {
-        const SourceRect button = layout::folder_button(row.control_area, index);
-        const bool hovered = over_row && dialog.folder_hovered == index;
-        const bool held = hovered && dialog.pressed == row.control;
-        if (held || hovered)
-            renderer::fill_source_rect(
-                target,
-                placement,
-                button,
-                held ? kit::rgb(kit::colour::band) : kit::rgb(kit::colour::hover)
-            );
-        renderer::draw_outline(
-            target,
-            placement,
-            button,
-            hovered ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-        );
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::small,
-            layout::shown_text(layout::folder_button_text(index)),
-            button,
-            kit::Align::centre,
-            hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
-        );
-    }
+        kit::draw_focus_ring(drawn(target, placement, fonts), button, true);
 }
 
 /// Draws a mod's badge: its picture, the OA mark for No Mod, or a blank
@@ -1189,13 +635,15 @@ void draw_badge(
 ) {
     if (no_mod) {
         renderer::draw_outline(target, placement, rect, kit::rgb(kit::colour::accent));
-        renderer::draw_mark(
-            target,
-            placement,
-            kSmallMark,
-            rect.x + (rect.width - kSmallMarkWidth) / 2,
-            rect.y + (rect.height - kSmallMarkHeight + 1) / 2,
-            kit::rgb(kit::colour::accent)
+        // The small OA mark is 9 by 7. It is centred in the badge, one row
+        // down when the spare rows are odd, as the header's square centres it.
+        constexpr int32_t mark_width = 9;
+        constexpr int32_t mark_height = 7;
+        kit::draw_mark(
+            {&target, placement, nullptr, {}},
+            kit::Mark::oa_small,
+            {rect.x + (rect.width - mark_width) / 2, rect.y + (rect.height - mark_height + 1) / 2},
+            kit::colour::accent
         );
         return;
     }
@@ -1262,13 +710,13 @@ void draw_mods(
         return dialog_text_width(fonts, DialogFont::small, text);
     };
     if (locked) {
-        renderer::draw_mark(
-            target,
-            placement,
-            kPadlock,
-            layout::mods_lock_line.x,
-            layout::mods_lock_text.y + (layout::mods_lock_text.height - layout::padlock_height) / 2,
-            kit::rgb(kit::colour::lock)
+        kit::draw_mark(
+            drawn(target, placement, fonts),
+            kit::Mark::padlock,
+            {layout::mods_lock_line.x,
+             layout::mods_lock_text.y +
+                 (layout::mods_lock_text.height - layout::padlock_height) / 2},
+            kit::colour::lock
         );
         kit::WrapRules rules;
         rules.shorten_word = [&](std::string_view word) {
@@ -1299,7 +747,7 @@ void draw_mods(
         }
     }
     const SourceRect& view = open.area.view;
-    const renderer::Placement in_view = clipped_to(
+    const renderer::Placement in_view = clipped_view(
         placement,
         {view.x - layout::focus_inset, view.y, view.width + 2 * layout::focus_inset, view.height}
     );
@@ -1397,88 +845,60 @@ void draw_mods(
         );
         if (roll_back) {
             const int32_t control = layout::roll_back_control(open.rows, index);
-            const bool lit = !locked && (dialog.hovered == control || dialog.pressed == control);
-            renderer::fill_source_rect(
-                target,
-                in_view,
+            const bool over = !locked && (dialog.hovered == control || dialog.pressed == control);
+            const bool held = !locked && dialog.pressed == control;
+            kit::draw_button(
+                drawn(target, in_view, fonts),
                 roll_back_box,
-                lit ? (dialog.pressed == control ? kit::rgb(kit::colour::band)
-                                                 : kit::rgb(kit::colour::hover))
-                    : kit::rgb(kit::colour::list)
-            );
-            renderer::draw_outline(
-                target,
-                in_view,
-                roll_back_box,
-                lit ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-            );
-            kit::draw_boxed_text(
-                target,
-                in_view,
-                fonts,
-                kit::FontRole::small,
-                layout::shown_text(layout::roll_back_text),
-                roll_back_box,
-                kit::Align::centre,
-                lit ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
+                {std::string(layout::shown_text(layout::roll_back_text)),
+                 kit::ButtonStyle::inset,
+                 over,
+                 held,
+                 true}
             );
             if (locked)
                 renderer::blend_source_rect(
                     target, in_view, roll_back_box, kit::rgb(kit::colour::panel), kit::locked_fade
                 );
             if (dialog.focused == control && !locked)
-                renderer::draw_outline(
-                    target,
-                    in_view,
-                    grown(roll_back_box, kFocusInset),
-                    kit::rgb(kit::colour::accent)
-                );
+                kit::draw_focus_ring(drawn(target, in_view, fonts), roll_back_box, true);
         }
         if (locked && !playing)
             renderer::blend_source_rect(
                 target, in_view, box, kit::rgb(kit::colour::panel), kit::locked_fade
             );
         if (dialog.focused == row.control && !locked)
-            renderer::draw_outline(
-                target, in_view, grown(box, kFocusInset), kit::rgb(kit::colour::accent)
-            );
+            kit::draw_focus_ring(drawn(target, in_view, fonts), box, true);
     }
-    if (open.limit > 0)
-        draw_scroll_bar(target, placement, dialog, open);
+    if (open.limit > 0) {
+        const bool bar_hot =
+            dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control;
+        kit::draw_scroll_bar(
+            drawn(target, placement, fonts),
+            open.area.well,
+            layout::scroll_thumb(open.area, open.scroll, open.limit, open.content_height),
+            bar_hot
+        );
+    }
     const int32_t control = layout::mods_folder_control(open.rows);
     const SourceRect& button = layout::mods_folder_button;
-    const bool hovered = !locked && (dialog.hovered == control || dialog.pressed == control);
-    if (hovered)
-        renderer::fill_source_rect(
-            target,
-            placement,
-            button,
-            dialog.pressed == control ? kit::rgb(kit::colour::band) : kit::rgb(kit::colour::hover)
-        );
-    renderer::draw_outline(
-        target,
-        placement,
+    const bool over = !locked && (dialog.hovered == control || dialog.pressed == control);
+    const bool held = !locked && dialog.pressed == control;
+    kit::draw_button(
+        drawn(target, placement, fonts),
         button,
-        hovered ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-    );
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(layout::shown_text(layout::open_mods_folder_text)),
-        button,
-        kit::Align::centre,
-        hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
+        {std::string(layout::shown_text(layout::shown_text(layout::open_mods_folder_text))),
+         kit::ButtonStyle::quiet,
+         over,
+         held,
+         true}
     );
     if (locked)
         renderer::blend_source_rect(
             target, placement, button, kit::rgb(kit::colour::panel), kit::locked_fade
         );
     if (dialog.focused == control && !locked)
-        renderer::draw_outline(
-            target, placement, grown(button, kFocusInset), kit::rgb(kit::colour::accent)
-        );
+        kit::draw_focus_ring(drawn(target, placement, fonts), button, true);
     kit::draw_boxed_text(
         target,
         placement,
@@ -1538,7 +958,7 @@ void draw_section(
     const layout::Rows& rows = open.rows;
     // A row the view cuts shows the part inside it, its text and its focus
     // outline included.
-    const renderer::Placement in_view = clipped_to(placement, layout::view_clip);
+    const renderer::Placement in_view = clipped_view(placement, layout::view_clip);
     for (const layout::Row& row : rows.rows) {
         const bool locked = row.lock != Lock::none;
         const bool hovered =
@@ -1569,7 +989,7 @@ void draw_section(
             kit::draw_boxed_text(
                 target,
                 host_text
-                    ? clipped_to(in_view, {box.x, layout::view.y, box.width, layout::view.height})
+                    ? clipped_view(in_view, {box.x, layout::view.y, box.width, layout::view.height})
                     : in_view,
                 fonts,
                 kit::FontRole::small,
@@ -1591,48 +1011,61 @@ void draw_section(
         }
         // Where the files are shows text alone: it has no control to draw.
         if (layout::is_button(row.setting)) {
-            draw_action_button(
-                target,
-                in_view,
+            kit::draw_button(
+                drawn(target, in_view, fonts),
                 row.control_area,
-                layout::manage_text,
-                hovered,
-                dialog.pressed == row.control && dialog.hovered == row.control,
-                fonts
+                {std::string(layout::shown_text(layout::manage_text)),
+                 kit::ButtonStyle::accent,
+                 hovered,
+                 dialog.pressed == row.control && dialog.hovered == row.control,
+                 true}
             );
         } else if (layout::is_buttons(row.setting)) {
-            draw_folder_buttons(target, in_view, row, dialog, fonts);
+            const bool over_row = dialog.hovered == row.control;
+            for (std::size_t index = 0; index < folder_button_count; ++index) {
+                const SourceRect button = layout::folder_button(row.control_area, index);
+                const bool button_hovered = over_row && dialog.folder_hovered == index;
+                const bool button_held = button_hovered && dialog.pressed == row.control;
+                kit::draw_button(
+                    drawn(target, in_view, fonts),
+                    button,
+                    {std::string(layout::shown_text(layout::folder_button_text(index))),
+                     kit::ButtonStyle::quiet,
+                     button_hovered,
+                     button_held,
+                     true}
+                );
+            }
         } else if (layout::is_strip(row.setting)) {
             if (row.control_area.width > 0)
-                draw_levels(
-                    target,
-                    in_view,
+                kit::draw_levels(
+                    drawn(target, in_view, fonts),
                     row.control_area,
-                    row.setting,
-                    layout::strip_level(dialog.chosen, row.setting),
-                    hovered,
-                    locked,
-                    fonts
+                    strip_look(
+                        row.setting,
+                        layout::strip_level(dialog.chosen, row.setting),
+                        hovered,
+                        locked
+                    )
                 );
         } else if (layout::is_slider(row.setting)) {
-            draw_slider(
-                target,
-                in_view,
+            kit::draw_slider(
+                drawn(target, in_view, fonts),
                 row.control_area,
-                layout::stop_of(
-                    layout::slider_settings(dialog),
-                    row.setting,
-                    dialog.highest_offered_unit,
-                    dialog.offered_screen_sizes
-                ),
-                layout::stops_of(
-                    dialog.chosen,
-                    row.setting,
-                    dialog.highest_offered_unit,
-                    dialog.offered_screen_sizes
-                ),
-                locked,
-                hovered
+                {layout::stop_of(
+                     layout::slider_settings(dialog),
+                     row.setting,
+                     dialog.highest_offered_unit,
+                     dialog.offered_screen_sizes
+                 ),
+                 layout::stops_of(
+                     dialog.chosen,
+                     row.setting,
+                     dialog.highest_offered_unit,
+                     dialog.offered_screen_sizes
+                 ),
+                 locked,
+                 hovered}
             );
             kit::draw_boxed_text(
                 target,
@@ -1645,26 +1078,29 @@ void draw_section(
                 kit::rgb(kit::colour::text)
             );
         } else if (layout::is_choice(row.setting)) {
-            draw_choice(
-                target,
-                in_view,
+            kit::draw_choice(
+                drawn(target, in_view, fonts),
                 row.control_area,
-                layout::field_text(
-                    dialog, row, layout::choice_field_text_room, regular_width(fonts)
-                ),
-                hovered,
-                dialog.open_list == row.control,
-                fonts
+                {std::string(
+                     layout::shown_text(
+                         layout::field_text(
+                             dialog, row, layout::choice_field_text_room, regular_width(fonts)
+                         )
+                     )
+                 ),
+                 hovered,
+                 dialog.open_list == row.control}
             );
         } else if (row.control_area.width > 0) {
-            draw_switch(
-                target,
-                in_view,
+            kit::draw_switch(
+                drawn(target, in_view, fonts),
                 row.control_area,
-                layout::switch_on(dialog.chosen, row.setting) || row.lock == Lock::set_by_language,
-                hovered,
-                locked,
-                fonts
+                switch_look(
+                    layout::switch_on(dialog.chosen, row.setting) ||
+                        row.lock == Lock::set_by_language,
+                    hovered,
+                    locked
+                )
             );
         }
         if (locked) {
@@ -1681,7 +1117,12 @@ void draw_section(
                 kit::rgb(kit::colour::panel),
                 kit::locked_fade
             );
-            draw_lock(target, in_view, row.lock_area, row.lock, fonts);
+            const std::string once(layout::shown_text(layout::lock_text(row.lock)));
+            kit::draw_lock(
+                drawn(target, in_view, fonts),
+                row.lock_area,
+                {std::string(layout::shown_text(once))}
+            );
         }
         // Your files rings the button the keys mark.
         const SourceRect focus_area =
@@ -1691,9 +1132,7 @@ void draw_section(
                   )
                 : row.control_area;
         if (dialog.focused == row.control && !locked)
-            renderer::draw_outline(
-                target, in_view, grown(focus_area, kFocusInset), kit::rgb(kit::colour::accent)
-            );
+            kit::draw_focus_ring(drawn(target, in_view, fonts), focus_area, true);
     }
     renderer::fill_source_rect(
         target,
@@ -1717,7 +1156,14 @@ void draw_section(
             {layout::content_left, layout::view.y, layout::content_width, 1},
             kit::rgb(kit::colour::rule)
         );
-    draw_scroll_bar(target, placement, dialog, open);
+    const bool bar_hot =
+        dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control;
+    kit::draw_scroll_bar(
+        drawn(target, placement, fonts),
+        open.area.well,
+        layout::scroll_thumb(open.area, open.scroll, open.limit, open.content_height),
+        bar_hot
+    );
 }
 
 /// Draws the footer: Restore defaults, Cancel and OK.
@@ -1754,78 +1200,18 @@ void draw_footer(
         const SourceRect button = layout::footer_button(control);
         const bool held = dialog.pressed == control && dialog.hovered == control;
         const bool hovered = dialog.hovered == control;
-        if (control == ok_control) {
-            Rgb face = kit::rgb(kit::colour::accent);
-            if (held)
-                face = kit::rgb(kit::colour::accent_held);
-            else if (hovered)
-                face = kit::rgb(kit::colour::accent_light);
-            renderer::fill_source_rect(target, placement, button, face);
-            renderer::draw_outline(target, placement, button, kit::rgb(kit::colour::accent_light));
-            kit::draw_boxed_text(
-                target,
-                placement,
-                fonts,
-                kit::FontRole::small,
-                layout::shown_text(caption),
-                button,
-                kit::Align::centre,
-                kit::rgb(kit::colour::on_accent)
-            );
-        } else {
-            if (held || hovered)
-                renderer::fill_source_rect(target, placement, button, kit::rgb(kit::colour::hover));
-            renderer::draw_outline(
-                target,
-                placement,
-                button,
-                hovered ? kit::rgb(kit::colour::control_hover)
-                        : kit::rgb(kit::colour::control_border)
-            );
-            kit::draw_boxed_text(
-                target,
-                placement,
-                fonts,
-                kit::FontRole::small,
-                layout::shown_text(caption),
-                button,
-                kit::Align::centre,
-                hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
-            );
-        }
+        kit::draw_button(
+            drawn(target, placement, fonts),
+            button,
+            {std::string(layout::shown_text(caption)),
+             control == ok_control ? kit::ButtonStyle::accent : kit::ButtonStyle::plain,
+             hovered,
+             held,
+             true}
+        );
         if (dialog.focused == control)
-            renderer::draw_outline(
-                target, placement, grown(button, kFocusInset), kit::rgb(kit::colour::accent)
-            );
+            kit::draw_focus_ring(drawn(target, placement, fonts), button, true);
     }
-}
-
-/// Draws the OA mark in a square whose top left corner is source pixel
-/// (0, 0): letters in an outlined square of 20/32 of its side, in its
-/// middle, the large letters where they fit with room round them.
-///
-/// @param[in,out] target the surface
-/// @param placement where the square lands, and its scale
-/// @param side the square's side, in source pixels
-/// @param accent the outline's and the letters' colour
-void draw_mark_square(
-    renderer::Surface& target, const renderer::Placement& placement, int32_t side, Rgb accent
-) {
-    const int32_t square_side = side * kButtonSquareNumerator / kButtonSquareDenominator;
-    const int32_t square_offset = (side - square_side) / 2;
-    renderer::draw_outline(
-        target, placement, {square_offset, square_offset, square_side, square_side}, accent
-    );
-    const renderer::Mark& mark =
-        square_side - 2 >= kLargeMarkWidth + 2 * kLargeMarkMargin ? kLargeMark : kSmallMark;
-    renderer::draw_mark(
-        target,
-        placement,
-        mark,
-        square_offset + (square_side - mark.width) / 2,
-        square_offset + (square_side - mark.height + 1) / 2,
-        accent
-    );
 }
 
 /// Draws the question a folder without an oamod.yaml raises, over the
@@ -1939,49 +1325,17 @@ void draw_question(
             yes ? layout::question_yes_rect(dialog) : layout::question_no_rect(dialog);
         const bool held = dialog.pressed == control && dialog.hovered == control;
         const bool hovered = dialog.hovered == control;
-        if (yes) {
-            Rgb face = kit::rgb(kit::colour::accent);
-            if (held)
-                face = kit::rgb(kit::colour::accent_held);
-            else if (hovered)
-                face = kit::rgb(kit::colour::accent_light);
-            renderer::fill_source_rect(target, placement, button, face);
-            renderer::draw_outline(target, placement, button, kit::rgb(kit::colour::accent_light));
-            kit::draw_boxed_text(
-                target,
-                placement,
-                fonts,
-                kit::FontRole::small,
-                layout::shown_text(caption),
-                button,
-                kit::Align::centre,
-                kit::rgb(kit::colour::on_accent)
-            );
-        } else {
-            if (held || hovered)
-                renderer::fill_source_rect(target, placement, button, kit::rgb(kit::colour::hover));
-            renderer::draw_outline(
-                target,
-                placement,
-                button,
-                hovered ? kit::rgb(kit::colour::control_hover)
-                        : kit::rgb(kit::colour::control_border)
-            );
-            kit::draw_boxed_text(
-                target,
-                placement,
-                fonts,
-                kit::FontRole::small,
-                layout::shown_text(caption),
-                button,
-                kit::Align::centre,
-                hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
-            );
-        }
+        kit::draw_button(
+            drawn(target, placement, fonts),
+            button,
+            {std::string(layout::shown_text(caption)),
+             yes ? kit::ButtonStyle::accent : kit::ButtonStyle::plain,
+             hovered,
+             held,
+             true}
+        );
         if (yes != dialog.question_marks_no)
-            renderer::draw_outline(
-                target, placement, grown(button, kFocusInset), kit::rgb(kit::colour::accent)
-            );
+            kit::draw_focus_ring(drawn(target, placement, fonts), button, true);
     }
 }
 
@@ -2021,7 +1375,7 @@ void draw_dialog(
         for (const layout::Row& row : open.rows.rows)
             if (row.control == dialog.open_list && layout::is_choice(row.setting) &&
                 row.lock == Lock::none)
-                draw_choice_list(target, placement, dialog, row.control_area, row.setting, fonts);
+                paint_open_menu(target, placement, dialog, row.control_area, row.setting, fonts);
     }
     // The question lies over all of it.
     if (dialog.switch_question != no_question)
@@ -2073,25 +1427,7 @@ void draw_notice_box(
         {place::edge, place::header_rule_row, inner, 1},
         kit::rgb(kit::colour::rule)
     );
-    if (renderer::picture_drawable(icon)) {
-        renderer::draw_picture(target, placement, place::icon, icon);
-    } else {
-        const SourceRect square{
-            place::icon.x + (place::icon.width - layout::header_mark_square) / 2,
-            place::icon.y + (place::icon.height - layout::header_mark_square) / 2,
-            layout::header_mark_square,
-            layout::header_mark_square,
-        };
-        renderer::draw_outline(target, placement, square, kit::rgb(kit::colour::accent));
-        renderer::draw_mark(
-            target,
-            placement,
-            kSmallMark,
-            square.x + (square.width - kSmallMarkWidth) / 2,
-            square.y + (square.height - kSmallMarkHeight + 1) / 2,
-            kit::rgb(kit::colour::accent)
-        );
-    }
+    kit::draw_header_mark(drawn(target, placement, fonts, icon), place::icon);
     kit::draw_boxed_text(
         target,
         placement,
@@ -2125,75 +1461,6 @@ void draw_notice_box(
         {place::edge, footer_rule + 1, inner, place::footer_height},
         kit::rgb(kit::colour::band)
     );
-}
-
-/// Draws a button of a notice or a prompt: an accent one as OK looks, the
-/// others as Cancel, ringed in green when marked.
-///
-/// @param[in,out] target the surface
-/// @param placement where the box's top left corner lands
-/// @param button the button's place
-/// @param caption its caption
-/// @param accent drawn as OK is
-/// @param hovered the pointer is over it
-/// @param held a press on it is held
-/// @param marked the keys mark it
-/// @param fonts the fonts
-/// @param look_up look the caption up in the interface catalogue
-void draw_notice_button(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const SourceRect& button,
-    std::string_view caption,
-    bool accent,
-    bool hovered,
-    bool held,
-    bool marked,
-    const DialogFonts& fonts,
-    bool look_up
-) {
-    if (accent) {
-        Rgb face = kit::rgb(kit::colour::accent);
-        if (held)
-            face = kit::rgb(kit::colour::accent_held);
-        else if (hovered)
-            face = kit::rgb(kit::colour::accent_light);
-        renderer::fill_source_rect(target, placement, button, face);
-        renderer::draw_outline(target, placement, button, kit::rgb(kit::colour::accent_light));
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::small,
-            (look_up ? layout::shown_text(caption) : caption),
-            button,
-            kit::Align::centre,
-            kit::rgb(kit::colour::on_accent)
-        );
-    } else {
-        if (held || hovered)
-            renderer::fill_source_rect(target, placement, button, kit::rgb(kit::colour::hover));
-        renderer::draw_outline(
-            target,
-            placement,
-            button,
-            hovered ? kit::rgb(kit::colour::control_hover) : kit::rgb(kit::colour::control_border)
-        );
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::small,
-            (look_up ? layout::shown_text(caption) : caption),
-            button,
-            kit::Align::centre,
-            hovered ? kit::rgb(kit::colour::text) : kit::rgb(kit::colour::button_text)
-        );
-    }
-    if (marked)
-        renderer::draw_outline(
-            target, placement, grown(button, kFocusInset), kit::rgb(kit::colour::accent)
-        );
 }
 
 } // namespace
@@ -2230,18 +1497,20 @@ void draw_notice(
     }};
     for (const auto& [control, caption] : buttons) {
         const bool ok = control == notice_ok_control;
-        draw_notice_button(
-            target,
-            placement,
-            ok ? placed.ok_button : placed.open_button,
-            caption,
-            ok,
-            notice.hovered == control,
-            notice.pressed == control && notice.hovered == control,
-            notice.marked == control,
-            fonts,
-            true
+        const SourceRect button = ok ? placed.ok_button : placed.open_button;
+        const bool hovered = notice.hovered == control;
+        const bool held = notice.pressed == control && notice.hovered == control;
+        kit::draw_button(
+            drawn(target, placement, fonts),
+            button,
+            {std::string(layout::shown_text(caption)),
+             ok ? kit::ButtonStyle::accent : kit::ButtonStyle::plain,
+             hovered,
+             held,
+             true}
         );
+        if (notice.marked == control)
+            kit::draw_focus_ring(drawn(target, placement, fonts), button, true);
     }
     renderer::draw_bevel(
         target,
@@ -2297,18 +1566,19 @@ void draw_prompt(
     }
     for (std::size_t index = 0; index < placed.buttons.size(); ++index) {
         const auto control = static_cast<int32_t>(index);
-        draw_notice_button(
-            target,
-            placement,
+        const bool hovered = prompt.hovered == control;
+        const bool held = prompt.pressed == control && prompt.hovered == control;
+        kit::draw_button(
+            drawn(target, placement, fonts),
             placed.buttons[index],
-            prompt.buttons[index].caption,
-            prompt.buttons[index].accent,
-            prompt.hovered == control,
-            prompt.pressed == control && prompt.hovered == control,
-            prompt.marked == control,
-            fonts,
-            false
+            {std::string(prompt.buttons[index].caption),
+             prompt.buttons[index].accent ? kit::ButtonStyle::accent : kit::ButtonStyle::plain,
+             hovered,
+             held,
+             true}
         );
+        if (prompt.marked == control)
+            kit::draw_focus_ring(drawn(target, placement, fonts), placed.buttons[index], true);
     }
     renderer::draw_bevel(
         target,
@@ -2324,53 +1594,11 @@ void draw_oa_button(
     const renderer::Placement& placement,
     int32_t side,
     ButtonLook look,
-    const DialogFonts&,
+    const DialogFonts& fonts,
     const renderer::RgbaPicture& icon
 ) {
-    const SourceRect whole{0, 0, side, side};
-    Rgb face = kit::rgb(kit::colour::panel);
-    if (look == ButtonLook::hovered)
-        face = kit::rgb(kit::colour::hover);
-    else if (look == ButtonLook::pressed)
-        face = kit::rgb(kit::colour::band);
-    renderer::fill_source_rect(target, placement, whole, face);
-    if (look == ButtonLook::pressed)
-        renderer::draw_bevel(
-            target,
-            placement,
-            whole,
-            kit::rgb(kit::colour::edge_dark),
-            kit::rgb(kit::colour::edge_light)
-        );
-    else
-        renderer::draw_bevel(
-            target,
-            placement,
-            whole,
-            kit::rgb(kit::colour::edge_light),
-            kit::rgb(kit::colour::edge_dark)
-        );
-    if (renderer::picture_drawable(icon)) {
-        if (look == ButtonLook::hovered)
-            renderer::draw_outline(
-                target, placement, grown(whole, -1), kit::rgb(kit::colour::accent)
-            );
-        const int32_t pressed_in = look == ButtonLook::pressed ? kButtonIconPress : 0;
-        const int32_t icon_side = side - 2 * kButtonIconInset;
-        renderer::draw_picture(
-            target,
-            placement,
-            {kButtonIconInset + pressed_in, kButtonIconInset + pressed_in, icon_side, icon_side},
-            icon
-        );
-        return;
-    }
-    draw_mark_square(
-        target,
-        placement,
-        side,
-        look == ButtonLook::idle ? kit::rgb(kit::colour::accent)
-                                 : kit::rgb(kit::colour::accent_light)
+    kit::draw_oa_button(
+        {&target, placement, &fonts, icon}, side, static_cast<kit::OaButtonState>(look)
     );
 }
 
@@ -2380,13 +1608,7 @@ void draw_oa_mark(
     int32_t side,
     const renderer::RgbaPicture& icon
 ) {
-    if (side <= 0)
-        return;
-    if (renderer::picture_drawable(icon)) {
-        renderer::draw_picture(target, placement, {0, 0, side, side}, icon);
-        return;
-    }
-    draw_mark_square(target, placement, side, kit::rgb(kit::colour::accent));
+    kit::draw_oa_mark({&target, placement, nullptr, icon}, side);
 }
 
 } // namespace oa::ui::engine_settings

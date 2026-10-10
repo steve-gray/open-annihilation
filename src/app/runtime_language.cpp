@@ -22,11 +22,13 @@
 #include "oa/data/defs/locale.hpp"
 #include "oa/data/languages/translation.hpp"
 #include "oa/platform/locale.hpp"
+#include "oa/platform/text_font.hpp"
 #include "oa/ui/engine_settings.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -106,15 +108,40 @@ Runtime::LanguageState& Runtime::language_state() {
 
 void Runtime::start_language() {
     auto& state = language_state();
+    // The packs first, and not their interface texts yet: the catalogue's
+    // own files come before any pack. A pack whose interface.tdf does not
+    // read is still left out.
+    if (const char* base = SDL_GetBasePath(); base != nullptr)
+        read_language_packs(
+            path_from_utf8(base) / path_from_utf8(kCatalogueFolder), state.engine_packs, nullptr
+        );
+    if (!user_folder().empty())
+        read_language_packs(
+            user_folder() / path_from_utf8(player_languages_folder), state.player_packs, nullptr
+        );
+    if (plays_mod())
+        read_language_packs(
+            played_mod_folder() / path_from_utf8(languages::mod_languages_folder),
+            state.mod_packs,
+            nullptr
+        );
+    // A mod's packs add text and no language. The player's pack wins over
+    // the engine's when both hold one tag.
+    languages::set_pack_languages(
+        installed_entries({&state.player_packs, &state.engine_packs}), {}
+    );
     state.system = &languages::preferred_language(oa::platform::locale::preferred_locales());
-    // The loaders read every known language's unit texts, and the command
-    // line's word when it names one no entry knows, as 3.1c reads it.
+    // The loaders read every live language's unit texts, one that is not
+    // installed included, and the command line's word when it names one no
+    // playable entry knows and the list does not already hold, as 3.1c
+    // reads it.
     state.sink_words.clear();
-    for (const languages::Language& language : languages::known_languages())
-        if (!language.game_name.empty())
-            state.sink_words.emplace_back(language.game_name);
+    for (const languages::Language* language : languages::known_languages())
+        if (!language->game_name.empty())
+            state.sink_words.emplace_back(language->game_name);
     const char* word = oa::app::command_line::launch_language(options_.launch);
-    if (word != nullptr && languages::find_by_game_name(word) == nullptr)
+    if (word != nullptr && languages::find_by_game_name(word) == nullptr &&
+        std::find(state.sink_words.begin(), state.sink_words.end(), word) == state.sink_words.end())
         state.sink_words.emplace_back(word);
     state.sink_word_pointers.clear();
     for (const std::string& sink_word : state.sink_words)
@@ -178,27 +205,11 @@ void Runtime::start_language() {
     };
     languages::set_translation_hooks(hooks);
     read_interface_catalogue();
-    // The language packs: the engine's, then the player's, then the mod's,
-    // so that each one's words in the interface catalogue replace those
-    // before it.
-    if (const char* base = SDL_GetBasePath(); base != nullptr)
-        read_language_packs(
-            path_from_utf8(base) / path_from_utf8(kCatalogueFolder),
-            state.engine_packs,
-            &state.catalogue
-        );
-    if (!user_folder().empty())
-        read_language_packs(
-            user_folder() / path_from_utf8(player_languages_folder),
-            state.player_packs,
-            &state.catalogue
-        );
-    if (plays_mod())
-        read_language_packs(
-            played_mod_folder() / path_from_utf8(languages::mod_languages_folder),
-            state.mod_packs,
-            &state.catalogue
-        );
+    // The files beside the game, then the engine's packs, the player's and
+    // the mod's, so that each one's words replace those before it.
+    add_pack_interface_texts(state.engine_packs, state.catalogue);
+    add_pack_interface_texts(state.player_packs, state.catalogue);
+    add_pack_interface_texts(state.mod_packs, state.catalogue);
     state.choice = oa::ui::engine_settings::stored_language(
         preference_values_, !options_.preferences_file.has_value()
     );
@@ -239,8 +250,8 @@ void Runtime::set_language_choice(std::string_view choice) {
         return;
     state.choice = std::string(choice);
     apply_language();
-    // The modern fonts draw the new language's commonest characters ahead
-    // of its first screen.
+    // The modern fonts lay out the new language's warm-up text ahead of
+    // its first screen.
     warm_game_text();
     show_language_change();
 }
@@ -274,7 +285,7 @@ void Runtime::apply_language() {
     const char* word = oa::app::command_line::launch_language(options_.launch);
     const languages::Language* named =
         word != nullptr ? languages::find_by_game_name(word) : nullptr;
-    // The registry's words are string literals, so each word ends in a NUL.
+    // A language's word ends in a NUL and stays for the whole run.
     if (named != nullptr) {
         // 3.1c's command line names a known language: it decides the run's.
         state.shown = named;
@@ -342,6 +353,66 @@ void Runtime::apply_language() {
     languages::set_unit_texts(&state.unit_texts, state.words);
     languages::set_unit_pack_layers(state.layers);
     languages::set_interface_language(&state.catalogue, *state.shown);
+    // Fonts of the packs of the words, in lookup order, and the first
+    // warm-up. A path is taken once. Past most_pack_faces, the rest are
+    // named in one line and left out.
+    const auto loaded_of =
+        [&state](const languages::LanguagePack* pack) -> const LoadedLanguagePack* {
+        for (const auto* group : {&state.mod_packs, &state.player_packs, &state.engine_packs})
+            for (const auto& loaded : *group)
+                if (loaded != nullptr && &loaded->pack == pack)
+                    return loaded.get();
+        return nullptr;
+    };
+    std::vector<PackFontFile> fonts;
+    std::string warmup;
+    std::vector<std::string> left_out;
+    const auto consider = [&](const languages::LanguagePack* pack) {
+        const LoadedLanguagePack* loaded = loaded_of(pack);
+        if (loaded == nullptr)
+            return;
+        if (warmup.empty() && !loaded->warmup.empty())
+            warmup = loaded->warmup;
+        for (const PackFontFile& font : pack_fonts(*loaded)) {
+            const bool held =
+                std::any_of(fonts.begin(), fonts.end(), [&font](const PackFontFile& have) {
+                    return have.file == font.file;
+                });
+            if (held)
+                continue;
+            if (fonts.size() >= oa::platform::text_font::most_pack_faces) {
+                left_out.push_back(path_to_utf8(font.file));
+                continue;
+            }
+            fonts.push_back(font);
+        }
+    };
+    for (const languages::PackLayer& layer : state.layers) {
+        for (const languages::LanguagePack* pack : layer.before_data)
+            consider(pack);
+        for (const languages::LanguagePack* pack : layer.after_data)
+            consider(pack);
+    }
+    if (!left_out.empty()) {
+        std::cerr << "open-annihilation: language fonts left out:";
+        for (const std::string& path : left_out)
+            std::cerr << ' ' << path;
+        std::cerr << '\n';
+    }
+    const bool fonts_changed = fonts.size() != state.fonts.size() ||
+                               !std::equal(
+                                   fonts.begin(),
+                                   fonts.end(),
+                                   state.fonts.begin(),
+                                   [](const PackFontFile& left, const PackFontFile& right) {
+                                       return left.file == right.file && left.role == right.role;
+                                   }
+                               );
+    if (fonts_changed || warmup != state.warmup) {
+        state.fonts = std::move(fonts);
+        state.warmup = std::move(warmup);
+        ++state.fonts_generation;
+    }
 }
 
 const char* Runtime::game_translation(const char* text) const {
@@ -370,6 +441,25 @@ const oa::data::languages::PictureCaptions& Runtime::language_pictures() const {
     return language_ ? language_->pictures : none;
 }
 
+uint64_t Runtime::language_fonts_generation() const noexcept {
+    return language_ ? language_->fonts_generation : 0;
+}
+
+std::string_view Runtime::language_warmup() const {
+    return language_ ? std::string_view(language_->warmup) : std::string_view{};
+}
+
+void Runtime::use_language_fonts(oa::platform::text_font::FontStack& stack) const {
+    stack.remove_pack_faces();
+    if (language_ == nullptr)
+        return;
+    for (const PackFontFile& font : language_->fonts) {
+        if (!stack.add_face(font.file, font.role))
+            std::cerr << "open-annihilation: the language font " << path_to_utf8(font.file)
+                      << " did not open\n";
+    }
+}
+
 std::vector<std::filesystem::path> Runtime::language_pack_folders() const {
     std::vector<fs::path> folders;
     if (!language_)
@@ -390,9 +480,9 @@ const oa::data::languages::PackManifest* Runtime::language_unicode_chat() const 
 
 std::vector<std::string> Runtime::unicode_chat_language_tags() const {
     std::vector<std::string> tags;
-    for (const languages::Language& known : languages::known_languages())
-        if (languages::turns_unicode_chat_on(known, false))
-            tags.emplace_back(known.tag);
+    for (const languages::Language* known : languages::known_languages())
+        if (languages::playable(*known) && languages::turns_unicode_chat_on(*known, false))
+            tags.emplace_back(known->tag);
     if (!language_)
         return tags;
     for (const auto* packs :

@@ -19,6 +19,8 @@
 //       pictures.tdf    captions drawn over the player's own pictures
 //       files/          whole files in the game data's language folders,
 //                       as files/camps/briefs-<word>/<briefing>.txt
+//       fonts/          font files the manifest's fonts key names
+//       warmup.txt      characters drawn ahead, when the manifest names it
 //
 // The application reads the files and hands their bytes here; nothing here
 // opens a file. For a language L the game tries, in order: a mod's pack for
@@ -39,6 +41,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -66,6 +69,34 @@ inline constexpr std::string_view mod_languages_folder = "languages";
 /// The most bytes of a pack's table read: a larger table is refused.
 inline constexpr std::size_t most_pack_table_bytes = most_catalogue_bytes;
 
+/// The folder of a pack that holds the font files its manifest names.
+inline constexpr std::string_view pack_fonts_folder = "fonts";
+
+/// The most font files a pack's manifest may name.
+inline constexpr std::size_t most_pack_fonts = 4;
+
+/// The most bytes of a pack's warm-up text: the font stack's max_text_bytes.
+inline constexpr std::size_t most_warmup_bytes = 4096;
+
+/// What a pack's font is drawn as.
+enum class PackFontRole : uint8_t {
+    ideographs, ///< drawn as Noto Sans CJK is, at the least size for its script
+    letters,    ///< drawn at the sans faces' size
+};
+
+/// One font file a pack's manifest names, in the pack's fonts folder.
+struct PackFont {
+    std::string file;    ///< the file name, as "NotoSansCJKsc-Bold.otf"
+    PackFontRole role{}; ///< how the face is drawn
+};
+
+/// Who numbered a pack and when, as a release of it (oamod.yaml's packaging).
+struct PackPackaging {
+    int64_t revision{};   ///< the pack's revision, 1 to 65535
+    std::string date;     ///< the day it was made, YYYY-MM-DD
+    std::string packager; ///< who made it, 1 to 128 bytes
+};
+
 /// A pack's manifest, language.yaml: which language the pack holds text in.
 struct PackManifest {
     int64_t format{};                       ///< oalang: the pack format, pack_format_version
@@ -87,6 +118,14 @@ struct PackManifest {
     /// The engine requirement as written; empty when the manifest has none.
     /// Reading the pack does not refuse one this build does not meet.
     std::string requires_engine{};
+    /// Font files in the pack's fonts folder, in the order written; empty
+    /// when the manifest names none.
+    std::vector<PackFont> fonts{};
+    /// The warm-up file's name in the pack's folder; empty when the manifest
+    /// names none.
+    std::string warmup{};
+    /// The pack's revision, when the manifest gives one.
+    std::optional<PackPackaging> packaging{};
 };
 
 /// Reads a pack's manifest, in the strict YAML of mod profiles
@@ -94,11 +133,16 @@ struct PackManifest {
 ///
 /// oalang, tag and word are required, and oalang must be
 /// pack_format_version; name, english-name, version, locales, fallbacks,
-/// text (needs: game-fonts or modern-fonts), unicode, homepage, tags and
-/// requires (an engine requirement only) are optional. homepage, tags and
-/// requires.engine follow the shared package-key rules. An engine
-/// requirement this build does not meet is still read. Keys it does not
-/// know are refused, so that a misspelt one is noticed.
+/// text (needs: game-fonts or modern-fonts), unicode, homepage, tags,
+/// requires (an engine requirement only), fonts, warmup and packaging are
+/// optional. homepage, tags and requires.engine follow the shared
+/// package-key rules. An engine requirement this build does not meet is
+/// still read. fonts names at most most_pack_fonts files in the pack's
+/// fonts folder, each with a role of ideographs or letters. warmup names a
+/// text file in the pack's folder. packaging gives a revision from 1 to
+/// 65535, an ISO 8601 date and a packager of 1 to 128 bytes. A manifest
+/// without fonts, warmup and packaging still reads. Keys it does not know
+/// are refused, so that a misspelt one is noticed.
 ///
 /// @param bytes the manifest's bytes
 /// @param[out] manifest the manifest; left unchanged on failure
@@ -106,6 +150,16 @@ struct PackManifest {
 /// @return true when the manifest was read
 [[nodiscard]] bool
 read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::string* error = nullptr);
+
+/// Returns the registry entry a pack's manifest describes.
+///
+/// The tag, the name in itself, the English name, the word, the locales,
+/// the fallbacks and what drawing the text needs are copied as the manifest
+/// gives them. set_pack_languages applies the registry's own rules.
+///
+/// @param manifest the pack's manifest
+/// @return the entry
+[[nodiscard]] LanguageEntry entry_of(const PackManifest& manifest);
 
 /// The tables of a pack other than its manifest and interface.tdf.
 enum class PackTable : uint8_t {

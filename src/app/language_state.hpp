@@ -17,6 +17,7 @@
 #include "oa/data/languages/unit_texts.hpp"
 #include "oa/data/defs/locale.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,16 +33,18 @@ struct Runtime::LanguageState {
     /// The language the game shows its text in.
     const oa::data::languages::Language* shown{&oa::data::languages::english()};
     /// The word the game data's lookups use: 3.1c's command-line word as
-    /// typed when no known language has it, else the shown language's
-    /// game_name. It points into the registry or the command line, which
-    /// live as long as the game runs, so a copy of it never dangles.
+    /// typed when no playable language has it, else the shown language's
+    /// game_name. Either stays for the whole run, so a copy of it never
+    /// dangles.
     const char* data_word{"English"};
     /// The words a unit's name and description are looked up by, in order
     /// (oa::data::languages::data_words).
     std::vector<std::string> words;
-    /// The words the unit loaders read each unit's texts in: every known
-    /// language's, and the command line's word when no known language has
-    /// it. They are set once, so that the loaders' pointers to them hold.
+    /// The words the unit loaders read each unit's texts in: every live
+    /// language's, one that is not installed included, and the command
+    /// line's word when no playable language has it and the list does not
+    /// already hold it. They are set once, so that the loaders' pointers
+    /// to them hold.
     std::vector<std::string> sink_words;
     /// sink_words as the loaders take them.
     std::vector<const char*> sink_word_pointers;
@@ -87,6 +90,15 @@ struct Runtime::LanguageState {
     std::vector<std::unique_ptr<LoadedLanguagePack>> engine_packs;
     /// The packs each of words is looked up in, set with the language.
     std::vector<oa::data::languages::PackLayer> layers;
+    /// The font files of the language shown, in the order a stack adds
+    /// them: each word's packs before the game data, then those after it,
+    /// each pack's fonts in manifest order, a path once, and at most
+    /// oa::platform::text_font::most_pack_faces.
+    std::vector<PackFontFile> fonts;
+    /// The warm-up text of the first of those packs that has one.
+    std::string warmup;
+    /// Bumped when fonts or warmup change, so the modern fonts follow them.
+    uint64_t fonts_generation{};
     /// The captions drawn over pictures in the language shown.
     oa::data::languages::PictureCaptions pictures;
     /// The manifest of the first pack of the language shown that asks for

@@ -321,7 +321,7 @@ class ChooserScreen {
     /// Opens the fonts, the gamepads already there, the list and the first frame.
     void start() {
         render_state_.use_window_pixels();
-        install_game_files_language(options_.preferences_file);
+        install_game_files_language(options_.preferences_file, options_.user_folder);
         try {
             fonts_ = text_font::FontStack::open(text_font::bundled_font_directory());
         } catch (const std::exception& error) {
@@ -331,6 +331,8 @@ class ChooserScreen {
         if (!fonts_)
             std::cerr << "open-annihilation: the folder chooser shows no text: the bundled fonts "
                          "are missing\n";
+        else
+            use_game_files_language_fonts(*fonts_);
         int count = 0;
         if (SDL_JoystickID* ids = SDL_GetGamepads(&count); ids != nullptr) {
             for (int index = 0; index < count; ++index)

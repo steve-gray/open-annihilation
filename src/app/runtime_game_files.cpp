@@ -174,6 +174,7 @@ void Runtime::open_game_files_manage() {
     request.mod.preferences = &preference_values_;
     request.version = kVersionText;
     request.preferences_file = options_.preferences_file;
+    request.user_folder = options_.user_folder;
     request.players_own_profile = !options_.preferences_file.has_value();
     int width_before = 0;
     int height_before = 0;

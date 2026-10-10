@@ -48,6 +48,15 @@ using install::Refusal;
 /// The target folder of the tests.
 constexpr std::string_view target = "example-mod";
 
+/// A file origin with the date the checks record.
+///
+/// @return the origin
+install::Origin file_origin() {
+    install::Origin origin{};
+    origin.installed = "2000-01-01";
+    return origin;
+}
+
 /// A profile of the test mod at a version and revision.
 ///
 /// @param revision its packaging revision
@@ -221,7 +230,9 @@ Installed install_package(
     const install::InstalledPackage expected =
         alongside ? install::InstalledPackage{} : done.plan.installed;
     install::Unpacking unpacking;
-    if (!unpacking.start(*opened.package, mods, folder, expected, done.problem, hooks)) {
+    if (!unpacking.start(
+            *opened.package, mods, folder, expected, file_origin(), done.problem, hooks
+        )) {
         discard_all(unpacking.discards());
         return done;
     }
@@ -661,7 +672,9 @@ void test_unpacking_checks(const Scratch& scratch) {
         );
         install::Unpacking unpacking;
         install::Problem problem{};
-        OA_CHECK(unpacking.start(*opened.package, mods, plan.target, plan.installed, problem));
+        OA_CHECK(unpacking.start(
+            *opened.package, mods, plan.target, plan.installed, file_origin(), problem
+        ));
         while (unpacking.step(1 << 20, problem) == oa::formats::zip::StreamStep::more) {
         }
         fs::remove_all(mods / std::string(target));
@@ -730,19 +743,25 @@ void test_step_budget(const Scratch& scratch) {
     install::UnpackHooks hooks{};
     hooks.context = &made;
     hooks.before_file = [](void* context, const fs::path&) { ++*static_cast<int*>(context); };
-    OA_CHECK(unpacking.start(*opened.package, mods, target, {}, problem, hooks));
+    OA_CHECK(unpacking.start(*opened.package, mods, target, {}, file_origin(), problem, hooks));
     const uint64_t budget = 8 * install::unpack_entry_cost;
     int steps = 0;
     auto step = oa::formats::zip::StreamStep::more;
     while (step == oa::formats::zip::StreamStep::more) {
+        const bool hashing = unpacking.checking();
+        const uint64_t hashed = unpacking.checked_bytes();
         made = 0;
         step = unpacking.step(budget, problem);
+        if (hashing)
+            OA_CHECK(unpacking.checked_bytes() - hashed <= budget);
         OA_CHECK(static_cast<uint64_t>(made) <= budget / install::unpack_entry_cost);
         ++steps;
     }
     OA_CHECK(step == oa::formats::zip::StreamStep::done);
-    // The folders, the files and the folders' syncs, eight a step at most.
-    OA_CHECK(steps >= (21 + 201 + 22) / 8);
+    OA_CHECK(unpacking.checked_bytes() == unpacking.archive_bytes());
+    // The folders, the files, the origin record and the folders' syncs,
+    // eight a step at most.
+    OA_CHECK(steps >= (21 + 201 + 1 + 22) / 8);
     unpacking.cancel();
     discard_all(unpacking.discards());
 }

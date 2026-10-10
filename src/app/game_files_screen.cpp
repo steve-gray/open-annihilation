@@ -515,7 +515,11 @@ void GameFilesScreen::State::start() {
         request_.preferences_file.value_or(oa::platform::preferences::default_file())
     );
     if (request_.entry == GameFilesEntry::first_run)
-        install_game_files_language(request_.preferences_file);
+        install_game_files_language(request_.preferences_file, request_.user_folder);
+    else
+        read_game_files_language_packs(request_.user_folder, request_.preferences_file);
+    if (fonts != nullptr)
+        use_game_files_language_fonts(*fonts);
     model.version = request_.version;
     model.management = request_.entry == GameFilesEntry::manage;
     const uint32_t capabilities =
@@ -2130,6 +2134,7 @@ void GameFilesScreen::State::open_language() {
     dialog.fonts = fonts;
     dialog.version = request_.version;
     dialog.preferences_file = request_.preferences_file;
+    dialog.user_folder = request_.user_folder;
     dialog.hooks.context = this;
     dialog.hooks.present = [](void* context, const paint::Canvas& frame) {
         auto& state = *static_cast<State*>(context);

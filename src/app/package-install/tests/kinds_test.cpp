@@ -206,6 +206,15 @@ package_of(const fs::path& file, const install::PackageKind& kind, std::string_v
     return package;
 }
 
+/// A file origin with a date, so the unpacking can write its record.
+///
+/// @return the origin
+install::Origin file_origin() {
+    install::Origin origin{};
+    origin.installed = "2000-01-01";
+    return origin;
+}
+
 /// Unpacks a package and puts the change in place.
 ///
 /// @param package the package
@@ -223,7 +232,7 @@ bool commit_unpacked(
 ) {
     install::Problem problem{};
     install::Unpacking unpacking;
-    if (!unpacking.start(package, root, target, expected, problem))
+    if (!unpacking.start(package, root, target, expected, file_origin(), problem))
         return false;
     auto step = zip::StreamStep::more;
     while (step == zip::StreamStep::more)
@@ -317,7 +326,7 @@ void test_made_up_kind(const fs::path& scratch) {
 
     install::Problem problem{};
     install::Unpacking unpacking;
-    OA_CHECK(unpacking.start(installed, root, "demo", {}, problem));
+    OA_CHECK(unpacking.start(installed, root, "demo", {}, file_origin(), problem));
     auto step = zip::StreamStep::more;
     while (step == zip::StreamStep::more)
         step = unpacking.step(uint64_t{1} << 20, problem);
@@ -372,7 +381,7 @@ void test_made_up_kind(const fs::path& scratch) {
     const install::Package blocked = package_of(scratch / "second.oatest", kind, "demo\n");
     install::Unpacking refused;
     const install::InstalledPackage now = read_test_installed(root / "other");
-    OA_CHECK(refused.start(blocked, root, "other", now, problem));
+    OA_CHECK(refused.start(blocked, root, "other", now, file_origin(), problem));
     step = zip::StreamStep::more;
     while (step == zip::StreamStep::more)
         step = refused.step(uint64_t{1} << 20, problem);

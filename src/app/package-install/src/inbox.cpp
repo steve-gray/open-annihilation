@@ -7,10 +7,12 @@
 #include "files.hpp"
 
 #include "oa/app/package_install/inbox.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/platform/file_types.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <deque>
 #include <exception>
 #include <string>
@@ -24,12 +26,20 @@ namespace fs = std::filesystem;
 
 namespace {
 
+/// The origin a post recorded, until its outcome is reported.
+struct OriginNote {
+    fs::path file{};
+    Origin origin{};
+};
+
 /// What the process keeps between runs.
 struct Kept {
     base::threads::Mutex lock{};
-    std::deque<fs::path> files{};      ///< packages waiting, oldest first
-    std::deque<fs::path> registries{}; ///< .oareg files waiting, oldest first
-    std::optional<fs::path> current{}; ///< the package being installed
+    std::deque<OpenedPackage> files{};      ///< packages waiting, oldest first
+    std::deque<fs::path> registries{};      ///< .oareg files waiting, oldest first
+    std::optional<OpenedPackage> current{}; ///< the package being installed
+    std::vector<OriginNote> notes{};        ///< the origin of a posted path, until reported
+    std::deque<PackageOutcome> outcomes{};  ///< catalogue outcomes, oldest first, at most 256
     std::optional<PendingChange> pending{};
     std::optional<ChangeOutcome> outcome{};
     std::vector<fs::path> discards{};
@@ -44,18 +54,21 @@ Kept& kept() {
     return state;
 }
 
-/// Returns the form a path is compared in: weakly canonical, else absolute
-/// and normal.
+/// Returns the form a path is compared in. The path is made absolute first,
+/// then canonical as far as it exists, then lexically normal, so two
+/// spellings of one path match.
 ///
 /// @param file the path
 /// @return its form
 fs::path compared(const fs::path& file) {
     std::error_code error;
-    fs::path form = fs::weakly_canonical(file, error);
+    fs::path form = fs::absolute(file, error);
+    if (error)
+        form = file;
+    fs::path canonical = fs::weakly_canonical(form, error);
     if (!error)
-        return form;
-    form = fs::absolute(file, error);
-    return (error ? file : form).lexically_normal();
+        form = std::move(canonical);
+    return form.lexically_normal();
 }
 
 /// Returns a file's extension without its dot, with ASCII letters lowered.
@@ -78,36 +91,101 @@ bool extension_is(const fs::path& file, std::string_view extension) {
     return extension_of(file) == detail::folded(extension);
 }
 
+/// Returns the origin recorded for a path, when one is.
+///
+/// @param state the process's kept state
+/// @param form the path, as compared gives it
+/// @return the note; null when the path has none
+OriginNote* note_of(Kept& state, const fs::path& form) {
+    for (OriginNote& note : state.notes) {
+        if (note.file == form)
+            return &note;
+    }
+    return nullptr;
+}
+
+/// Returns the origin a path keeps: the first one posted, recording `origin`
+/// when the path has none yet.
+///
+/// @param[in,out] state the process's kept state
+/// @param form the path, as compared gives it
+/// @param origin the origin of this post
+/// @return the origin the queue keeps
+Origin kept_origin(Kept& state, const fs::path& form, const Origin& origin) {
+    if (OriginNote* note = note_of(state, form))
+        return note->origin;
+    state.notes.push_back(OriginNote{form, origin});
+    return origin;
+}
+
+/// Tells whether a package of this path is queued.
+///
+/// @param state the process's kept state
+/// @param form the path, as compared gives it
+/// @return true when it is
+bool queued(const Kept& state, const fs::path& form) {
+    return std::find_if(state.files.begin(), state.files.end(), [&](const OpenedPackage& opened) {
+               return opened.file == form;
+           }) != state.files.end();
+}
+
 } // namespace
 
-void post_package_file(const fs::path& file) {
+void post_package_file(const fs::path& file, const Origin& origin) {
     const fs::path form = compared(file);
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
-    if ((state.current && *state.current == form) ||
-        std::find(state.files.begin(), state.files.end(), form) != state.files.end())
+    const Origin kept = kept_origin(state, form, origin);
+    if ((state.current && state.current->file == form) || queued(state, form))
         return;
-    state.files.push_back(form);
+    state.files.push_back(OpenedPackage{form, kept});
 }
 
-std::optional<fs::path> take_package_file() {
+std::optional<OpenedPackage> take_package_file() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     if (state.files.empty())
         return std::nullopt;
-    fs::path file = std::move(state.files.front());
+    OpenedPackage opened = std::move(state.files.front());
     state.files.pop_front();
-    state.current = file;
-    return file;
+    state.current = opened;
+    return opened;
 }
 
-void return_package_file(const fs::path& file) {
+void return_package_file(const OpenedPackage& package) {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
-    const fs::path form = compared(file);
+    const fs::path form = compared(package.file);
     state.current.reset();
-    if (std::find(state.files.begin(), state.files.end(), form) == state.files.end())
-        state.files.push_front(form);
+    if (queued(state, form))
+        return;
+    state.files.push_front(OpenedPackage{form, kept_origin(state, form, package.origin)});
+}
+
+void report_package_outcome(PackageOutcome outcome) {
+    const fs::path form = compared(outcome.file);
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    const OriginNote* note = note_of(state, form);
+    if (note == nullptr)
+        return;
+    const Origin origin = note->origin;
+    const auto index = static_cast<std::size_t>(note - state.notes.data());
+    state.notes.erase(state.notes.begin() + static_cast<std::ptrdiff_t>(index));
+    if (origin.kind != OriginKind::catalogue)
+        return;
+    outcome.file = form;
+    if (state.outcomes.size() >= 256)
+        state.outcomes.pop_front();
+    state.outcomes.push_back(std::move(outcome));
+}
+
+std::vector<PackageOutcome> take_package_outcomes() {
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    std::vector<PackageOutcome> taken(state.outcomes.begin(), state.outcomes.end());
+    state.outcomes.clear();
+    return taken;
 }
 
 void finish_package_file() {
@@ -207,6 +285,25 @@ void finish_pending_change(const ChangeOptions& options) {
     std::vector<fs::path> discards = outcome.result.discards;
     discards.insert(discards.end(), recovery.discards.begin(), recovery.discards.end());
     outcome.change = std::move(*pending);
+    // A roll back names no package file, and is not an outcome. The report
+    // takes its own lock, so it is made before this function takes the lock
+    // again.
+    if (!outcome.change.file.empty()) {
+        PackageOutcome reported{};
+        reported.file = outcome.change.file;
+        if (outcome.result.changed) {
+            reported.result = OutcomeResult::installed;
+        } else {
+            reported.result = OutcomeResult::failed;
+            if (outcome.change.kind != nullptr) {
+                Problem problem{};
+                problem.refusal = outcome.result.refusal;
+                problem.detail = outcome.result.detail;
+                reported.reason = refusal_text(*outcome.change.kind, problem);
+            }
+        }
+        report_package_outcome(std::move(reported));
+    }
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     state.outcome = std::move(outcome);
