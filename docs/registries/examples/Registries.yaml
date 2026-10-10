@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+# SPDX-License-Identifier: GPL-3.0-only
+
+registries:
+  - id: "example-maps"
+    name: "Example Maps"
+    url: "http://maps.example.org/oa/registry.yaml"
+    homepage: "https://example.org/"
+    catalogue: "http://maps.example.org/oa/v1/catalogue.json"
+    mirrors:
+      - "http://mirror.example.org/oa/v1/catalogue.json"
+    trusted-keys:
+      - id: "rfc8032-test-1"
+        public: "ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+    downloads:
+      mode: "direct"
+      install-id: "none"
+    added: "2026-11-03"
+    enabled: true
+disabled:
+  - "sample"

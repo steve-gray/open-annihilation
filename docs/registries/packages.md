@@ -1,0 +1,113 @@
+# Packages
+
+A registry serves three kinds of package. Each is a zip archive. OA installs
+a mod into `Mods/<id>`, a map pack into `Maps/<id>`, and a language pack into
+`Languages/<tag>`, using the id or tag inside the manifest, whatever the
+file is called.
+
+| Kind | Manifest | Standard |
+|---|---|---|
+| `oamod` | `oamod.yaml`, at most 256 KiB | [OAMOD standard](../mods/oamod-standard.md) |
+| `oamap` | `oamap.yaml`, at most 256 KiB | [OAMAP standard](../maps/oamap-standard.md) |
+| `oalang` | `language.yaml`, at most 256 KiB | [Languages](../languages.md) |
+
+The catalogue entry for a package is [catalogue.md](catalogue.md). The file
+the catalogue names is the zip.
+
+A registry MUST NOT serve the original game's data. OA does not check a
+package for it.
+
+## Addressing
+
+A registry SHOULD place each package at `/v1/p/<sha256>.<kind>` and each
+picture at `/v1/i/<sha256>.png`, on the host that serves the catalogue.
+`<sha256>` is 64 lower-case hex digits, the SHA-256 of the package file or
+of the picture.
+
+OA requires the catalogue's `file` to be a reference whose last segment is
+`<sha256>.<kind>`. A relative reference with that last segment is also
+accepted. A picture in the catalogue only has to be a reference ending
+`.png`. OA does not check that a picture's file name is a hash. It does
+check that the package file's last segment is the digest.
+
+The reference is resolved against whichever host served the catalogue, so a
+mirror that serves the same tree serves the same paths.
+
+## What the archive may hold
+
+OA reads the zip before it writes anything. It refuses an archive that is
+not a zip, a damaged record, an encrypted entry, or an entry packed any way
+other than stored or deflated. It refuses a name that is not safe on every
+system, two names that differ only in case, a link or a special file, and an
+id that names a reserved device.
+
+The unpacked size MUST NOT exceed 4 GiB. OA keeps 64 MiB free on the disk
+that holds the install folder, beyond the package's files. Once the unpacked
+size is above 64 MiB, it MUST NOT be more than 200 times the size of the
+archive. The archive MUST NOT unpack more than 16,384 folders, counting
+folders its paths pass through. Each unpacked path keeps 16 characters spare
+below the longest path the system opens.
+
+A map preview inside a pack MUST be a PNG of at most 2 MiB and at most 1024
+pixels on a side. A mod whose `requires.engine` this build does not meet is
+refused. A map that does not fit the base game is refused. A language pack
+is refused when a font it lists is missing or unreadable, its warm-up text
+is missing, too large or not UTF-8, or its table does not parse.
+
+Before a package is offered for use, OA has checked those limits, the hacks
+the catalogue names, and, for a map, whether it fits.
+
+## The origin record
+
+When OA installs a package it writes `.oa-origin.yaml` at the top of the
+installed folder. The record is at most 4096 bytes, UTF-8, with LF line
+endings. The keys, in order, are `oa-origin` (`1`), `origin` (`file` or
+`catalogue`), then `registry`, `catalogue-id` and `release` for a catalogue
+origin, then `sha256` and `installed`.
+
+`registry` is a registry id. `catalogue-id` is the package key and MUST NOT
+contain `@`. `release` is a whole number from 1 to 2147483647. `sha256` is
+64 lower-case hex digits of the package file. `installed` is a real UTC day,
+`YYYY-MM-DD`. A folder with no record was installed by an earlier version or
+made by hand; that is not an error.
+
+## `oa-tool pack` and `oa-tool check`
+
+`oa-tool pack FOLDER` writes a `.oamod`, a `.oalang` or a `.oamap`. The
+folder's top holds one manifest, `oamod.yaml`, `language.yaml` or
+`oamap.yaml`. The manifest is written first, then every other file in byte
+order of its path, with fixed times. A file whose extension, without regard
+to case, is `png`, `jpg`, `jpeg`, `gif`, `ogg`, `mp3`, `zip`, `gz`, `bz2`,
+`xz`, `7z`, `oamod`, `oalang` or `oamap`, and an empty file, is stored.
+Every other file is deflated. The same files give the same bytes on any
+machine with the same zlib.
+
+`--out FILE` names the package. Without it, the name comes from the manifest
+and is written in the current folder. `--force` replaces an existing file.
+A folder the installer would refuse is not packed. A map pack needs
+`--game-dir DIR` for the game's palette, which previews use. `--game-dir`
+on a mod or a language pack is a usage error.
+
+`oa-tool check FILE` runs the same checks an install runs before it writes,
+and reports whether that install would accept the file. `--json` prints one
+JSON object. The keys, in order, are `check`, `ok`, `problems`, `warnings`,
+`file`, `kind`, `id`, `name`, `version`, `revision`, `size`, `sha256`,
+`unpacked_size`, `files`, then the kind's own facts:
+
+- a mod: `summary`, `homepage`, `tags`, `author`, `requires`, `sim_hash`,
+  `full_hash`, `hacks`, `packaging`;
+- a language pack: `language` in place of those;
+- a map pack: `summary`, `author`, `homepage`, `tags`, `requires`,
+  `packaging`, then `maps`.
+
+A key the package does not have is left out. `revision` is null when a
+language pack has no packaging revision. A map pack needs `--game-dir`, the
+game folder. Each `--mod FOLDER[=KEY]` is one more target after the base
+game `ta-3.1c`. `maps` lists each map. `compatible` holds `ta-3.1c` and then
+each mod, and `failures` holds the targets that do not fit.
+`--accept-unimplemented-hacks` accepts a hack this build does not carry out
+yet. The command exits 0 when the package would be installed, and 1 when it
+would be refused or a map does not fit `ta-3.1c`.
+
+The `hacks` object `check --json` prints is the object a catalogue entry
+holds: `sim`, `view` and `ids`.

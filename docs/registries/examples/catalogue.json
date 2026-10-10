@@ -1,0 +1,89 @@
+{
+  "catalogue": 1,
+  "registry": "example-maps",
+  "sequence": 1,
+  "generated": "2026-11-02T04:10:00Z",
+  "expires": "2026-12-02T04:10:00Z",
+  "downloads": "http://maps.example.org/oa/downloads",
+  "keys": [
+    {
+      "id": "rfc8032-test-1",
+      "public": "ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+    }
+  ],
+  "mirrors": [
+    "http://mirror.example.org/oa/v1/catalogue.json"
+  ],
+  "packages": [
+    {
+      "kind": "oamod",
+      "id": "example-mod",
+      "name": "Example Mod",
+      "version": "1.0",
+      "revision": 1,
+      "release": 3,
+      "size": 1200,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "file": "/v1/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.oamod",
+      "summary": "A made-up mod used by the specification.",
+      "tags": [
+        "example"
+      ],
+      "requires": {
+        "engine": ">= 0.8.0",
+        "base": "ta-3.1c"
+      },
+      "sim_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "hacks": {
+        "sim": 0,
+        "view": 1,
+        "ids": [
+          "example-view"
+        ]
+      },
+      "badge": "/v1/i/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png"
+    },
+    {
+      "kind": "oamap",
+      "id": "example-maps",
+      "name": "Example Maps",
+      "release": 2,
+      "size": 2400,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "file": "/v1/p/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.oamap",
+      "summary": "A made-up map pack used by the specification.",
+      "maps": [
+        {
+          "map": "ash-island@example-maps",
+          "name": "Ash Island",
+          "players": 4,
+          "size": "16x16",
+          "preview": "/v1/i/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png",
+          "compatible": {
+            "ta-3.1c": true
+          }
+        }
+      ]
+    },
+    {
+      "kind": "oalang",
+      "id": "xx-Test",
+      "name": "Test",
+      "english_name": "Test",
+      "word": "Test",
+      "locales": [
+        "xx",
+        "xx-Test"
+      ],
+      "fallbacks": [
+        "en"
+      ],
+      "needs": "game-fonts",
+      "coverage": 1,
+      "release": 1,
+      "size": 800,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "file": "/v1/p/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.oalang"
+    }
+  ]
+}
