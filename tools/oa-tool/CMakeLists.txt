@@ -4,7 +4,7 @@
 # oa-tool's commands. The executable stays in the root CMakeLists.txt, where
 # the Windows DLL copy and the packaged notices attach to it.
 add_library(oa-tool-commands STATIC commands.cpp arguments.cpp files.cpp archive_commands.cpp
-  pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp)
+  pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp registry.cpp)
 add_library(oa::tool::commands ALIAS oa-tool-commands)
 target_include_directories(oa-tool-commands PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(oa-tool-commands SYSTEM PRIVATE
@@ -14,7 +14,7 @@ target_link_libraries(oa-tool-commands
   PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-languages
     oa-data-map-pack oa-data-map-fit oa-formats-oamod oa-formats-json oa-formats-ota oa-formats-tnt
     oa-formats-zip oa-base-sha256 oa-base-text oa-platform-shims oa-base-signing oa-data-catalogue
-    oa-data-registry oa-platform-random
+    oa-data-registry oa-platform-random oa-app-content oa-netgame-http oa-formats-url
   PUBLIC oa-formats-hpi oa-formats-png oa-ui-decoded)
 
 if(BUILD_TESTING)
@@ -67,4 +67,19 @@ if(BUILD_TESTING)
   target_link_libraries(oa-tool-catalogue-test PRIVATE oa-tool-commands oa-test-support oa-options)
   add_test(NAME tools-oa-tool-catalogue COMMAND oa-tool-catalogue-test)
   set_tests_properties(tools-oa-tool-catalogue PROPERTIES TIMEOUT 120)
+
+  # registry: one real keygen, then an empty registry and mirrors of it against
+  # the HTTP fixture. The fixture listens on 127.0.0.1 only.
+  add_executable(oa-tool-registry-test tests/registry_test.cpp)
+  target_link_libraries(oa-tool-registry-test PRIVATE oa-tool-commands oa-netgame-http-fixture
+    oa-app-content oa-data-catalogue oa-data-registry oa-base-sha256 oa-base-signing
+    oa-formats-json oa-test-support oa-options)
+  add_test(NAME tools-oa-tool-registry COMMAND oa-tool-registry-test)
+  set_tests_properties(tools-oa-tool-registry PROPERTIES TIMEOUT 120)
+  if(WIN32)
+    add_custom_command(TARGET oa-tool-registry-test POST_BUILD
+      COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:oa-tool-registry-test>"
+        "-DDEST=$<TARGET_FILE_DIR:oa-tool-registry-test>"
+        -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")
+  endif()
 endif()

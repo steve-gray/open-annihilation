@@ -5,8 +5,8 @@ writes what a script asks for. Mod authors and translators run it by hand.
 The checks under `tools/` run `list` and `extract` and match their output.
 `pack` writes a mod or language package. `check` runs the installer's own
 checks on a package and reports the facts a catalogue lists. `catalogue`
-makes a publisher key and signs or checks a catalogue. Registries are
-further commands on the same table.
+makes a publisher key and signs or checks a catalogue. `registry` makes an
+empty signed registry and copies one into a folder.
 
 ## How to run it
 
@@ -50,6 +50,8 @@ same. `--` ends options. A command takes its options through
 | `catalogue public KEY_FILE` | Prints the same three lines. The passphrase is not used. |
 | `catalogue sign --key KEY_FILE CATALOGUE [--out SIG] [--passphrase-file FILE]` | Signs CATALOGUE's exact bytes and writes CATALOGUE.sig, or SIG. The line is the one a catalogue check reads: `ed25519`, the key id and the signature. A catalogue this build would refuse is refused before the key is opened. The written pair is checked before the command reports success. Prints `signed <file> with <id>`. |
 | `catalogue verify CATALOGUE [--sig SIG] (--descriptor FILE \| --registry ID --key ed25519:KEY [--key ...])` | Checks CATALOGUE against its signature, with the descriptor's id and keys, or with ID and the given keys. Each `--key` is read as the key the signature names, and the first is the one that is trusted. Prints `good signature by <id>` and the verdict, and exits 0 when the catalogue can be used. A refused catalogue prints the verdict and exits 1. |
+| `registry init FOLDER --id ID --name NAME --base-url URL --key KEY_FILE [--passphrase-file FILE] [--homepage URL]` | Makes a direct registry in FOLDER: `registry.yaml`, an empty catalogue signed for 30 days, its signature, and `v1/p/` and `v1/i/`. FOLDER must be missing or empty. `--base-url` is the http address the registry is served at, with no trailing slash. Prints the descriptor's path and the key's fingerprint. |
+| `registry mirror URL FOLDER [--key ed25519:<base64>]` | Copies the registry at URL into FOLDER, laid out as on the host that served it. The signature is checked, a sequence lower than the one FOLDER holds stops the copy, and each package and picture is checked by SHA-256. A `.part` is resumed with a Range request. A tokens registry is copied through its download API. The catalogue and its signature are written last, byte for byte. |
 
 ## Entry points
 
@@ -66,8 +68,10 @@ same. `--` ends options. A command takes its options through
 
 A run reads the archives, loose files and images named on its command line
 and writes the output file a command names. It keeps nothing after it exits.
-Commands print only through the `Output` they are given, so a test can
-capture every line.
+`registry mirror` writes the folder it is given. When that registry asks for
+an install id, the id is made for the run and kept only in memory: it is not
+written and not printed. Commands print only through the `Output` they are
+given, so a test can capture every line.
 
 ## Invariants
 
@@ -88,6 +92,12 @@ capture every line.
   macOS and Linux the file's mode is 0600. The passphrase is not printed.
 - Help lists commands in the table's order, and a group's subcommands under
   the group.
+- `registry init` writes a descriptor the registry reader accepts and a
+  catalogue the catalogue check accepts, and reports success only after that
+  check's verdict is accepted.
+- `registry mirror` copies the catalogue and its signature byte for byte,
+  after the packages and pictures are in place. The sequence check is the
+  catalogue check's own. A file is kept only after its SHA-256 matches.
 - A repeating option keeps every value, in the order given. An option that
   does not repeat, and every flag, is refused the second time.
 
@@ -138,6 +148,12 @@ catalogue, another key, another registry and a signature that names
 another key are refused. A short passphrase, an existing key file and a
 catalogue the check would refuse fail before the key is opened.
 
+`tools-oa-tool-registry` (`oa-tool-registry-test`) makes one publisher key,
+then an empty registry, and mirrors registries served by the test HTTP
+fixture on 127.0.0.1. It covers a resumed download, a file that fails its
+SHA-256 check, a signature and a sequence the catalogue check refuses, and a
+tokens registry whose key requests carry reason `mirror`.
+
 ## Limitations
 
 The archive commands take no options. `pack` takes `--out`, `--force` and,
@@ -149,5 +165,9 @@ key file. On macOS and Linux that file's mode is 0600. The signature
 `catalogue sign` writes is the one line a catalogue check reads. A
 passphrase comes from the terminal, with echo off, or from
 `--passphrase-file`. One key is stored in one file, and this command does
-not rotate it. Registries are further commands, not part of this table yet.
-The macOS package does not ship `oa-tool`.
+not rotate it. `registry init` makes a direct registry and signs its empty
+catalogue for 30 days. `registry mirror` copies the origin's files and does
+not sign anything, and it posts no install result. A mirror folder is a copy
+of the registry. It is served as a direct registry: the files and signatures
+stand on their own, and the origin's key API stays the origin's policy. The
+macOS package does not ship `oa-tool`.

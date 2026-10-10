@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The download API's bodies and readers, with no network.
-#include "download_api.hpp"
+#include "oa/app/content/download_api.hpp"
 
 #include "oa/base/sha256.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
@@ -291,6 +291,7 @@ void test_results_and_names() {
     OA_CHECK(content::reason_text(content::DownloadReason::update) == "update");
     OA_CHECK(content::reason_text(content::DownloadReason::repair) == "repair");
     OA_CHECK(content::reason_text(content::DownloadReason::offered_in_lobby) == "offered-in-lobby");
+    OA_CHECK(content::reason_text(content::DownloadReason::mirror) == "mirror");
 
 #if defined(_WIN32)
     OA_CHECK(content::platform_name() == "windows");
