@@ -74,7 +74,8 @@ set(oa_app_netgame_sources
 
 # The recorder's report line names the engine's version.
 set_property(SOURCE runtime_net.cpp APPEND
-  PROPERTY COMPILE_DEFINITIONS "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
+  PROPERTY COMPILE_DEFINITIONS "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\""
+    "OA_ENGINE_VERSION_LABEL=\"${OA_VERSION_LABEL}\"")
 
 if(TARGET oa-game)
   # multiplayer_menu_check.cpp, a self-check, drives the game through the
