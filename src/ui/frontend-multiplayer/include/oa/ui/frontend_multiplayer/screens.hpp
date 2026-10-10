@@ -356,6 +356,28 @@ struct PanelOffset {
 /// @return the offset its controls' positions take on the canvas
 [[nodiscard]] PanelOffset multiplayer_panel_offset() noexcept;
 
+/// Where the battle room draws one OA badge.
+struct PresenceBadgeSpot {
+    int32_t slot{}; ///< the row's player slot, 0..9
+    /// The badge's rectangle on the 640x480 frame: the row's CD<slot>
+    /// rectangle and the screen's offset, in pixels.
+    int32_t x{}, y{}, width{}, height{};
+    bool rules_differ{}; ///< the badge carries the dot (lobby_rules_differ_from_host)
+};
+
+/// Lists the OA badges the battle room draws now, in slot order.
+///
+/// A row shows the badge when lobby_row_badge says open_annihilation and the
+/// battle room's GUI has its CD<slot> control. The rectangles are in the
+/// 640x480 frame the battle room is drawn in, before the menu frame scales
+/// it.
+///
+/// @param[out] out receives the badges; null receives none
+/// @param capacity how many badges out holds
+/// @return how many badges were written: 0 when the battle room is not shown
+///         or a dialog covers it, or its GUI has no CD<slot> control
+int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) noexcept;
+
 /// Returns the gadget records of the current base screen as its loader left them.
 [[nodiscard]] const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept;
 
