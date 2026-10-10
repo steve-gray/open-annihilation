@@ -3,8 +3,11 @@
 
 // Provisional: this header changes whenever OA's screens need it to, until the kit is declared stable (src/ui/kit/README.md).
 
-// The OA UI kit's colours and Compact metrics. One point is one pixel of the
-// 640 by 480 picture. Regular and Large metrics are not here yet.
+// The OA UI kit's colours and the metrics of its three size classes,
+// Compact, Regular and Large. One point is one pixel of the 640 by 480
+// picture. Compact's are 0.7.3's; Regular and Large give the settings dialog,
+// its notices and its prompts more room, and the scroll lists show more rows
+// in it, while text, rows and controls keep Compact's sizes.
 #pragma once
 
 #include <array>
@@ -158,8 +161,12 @@ inline constexpr uint32_t locked_fade = 115;
 /// How far the accent tints a selected list row's face, in 256ths.
 inline constexpr uint32_t selected_tint = 15;
 
-/// The Compact metrics, in points: the settings dialog's, its notices' and its
-/// prompts' sizes at 0.7.3, and the sizes of the controls it does not have.
+/// A size class's metrics, in points: the settings dialog's, its notices' and
+/// its prompts' sizes, and the sizes of the controls it does not have.
+/// compact_metrics holds 0.7.3's; regular_metrics and large_metrics differ
+/// from them only in the dialog's and the notices' sizes, the padding, the
+/// nav list's width and the hint's characters a line (oa/ui/kit/layout.hpp's
+/// metrics_of picks a class's).
 struct Metrics {
     /// The raised edge's width.
     int32_t edge{};
@@ -350,6 +357,26 @@ struct Metrics {
     std::array<int32_t, 3> folder_button_widths{};
     /// The columns between two buttons of a row.
     int32_t folder_button_gap{};
+    /// The settings dialog's width.
+    int32_t dialog_width{};
+    /// The settings dialog's height.
+    int32_t dialog_height{};
+    /// The settings dialog's nav list's width, from its left edge: the
+    /// content column starts right of it.
+    int32_t nav_width{};
+    /// The most characters a line of a host's text under a settings row
+    /// holds, broken between words: what fits the content column's width in
+    /// the small font.
+    int32_t hint_line_characters{};
+    /// A notice's or a question's width.
+    int32_t notice_width{};
+    /// A notice's or a question's least height; it grows with its text.
+    int32_t least_notice_height{};
+    /// A notice's or a question's greatest height: what the class's least
+    /// window holds with a margin. Text below it is cut.
+    int32_t greatest_notice_height{};
+    /// Tells whether two sets of metrics hold the same sizes.
+    friend constexpr bool operator==(const Metrics&, const Metrics&) = default;
 };
 
 /// Compact metrics: the settings dialog's sizes at 0.7.3, exactly, and the
@@ -446,6 +473,46 @@ inline constexpr Metrics compact_metrics{
     .button_row_width = 76,
     .folder_button_widths = {46, 82, 44},
     .folder_button_gap = 4,
+    .dialog_width = 480,
+    .dialog_height = 324,
+    .nav_width = 144,
+    .hint_line_characters = 50,
+    .notice_width = 400,
+    .least_notice_height = 150,
+    .greatest_notice_height = 440,
 };
+
+/// Regular metrics: Compact's, with a settings dialog of 720 by 486 points,
+/// 16 points of padding, a nav list 176 points wide, 82 characters to a
+/// host's line under a row, and notices and prompts 520 points wide and at
+/// most 500 tall. Rows, text and controls keep Compact's sizes, so the
+/// dialog shows more of them.
+inline constexpr Metrics regular_metrics = [] {
+    Metrics sized = compact_metrics;
+    sized.dialog_width = 720;
+    sized.dialog_height = 486;
+    sized.padding = 16;
+    sized.nav_width = 176;
+    sized.hint_line_characters = 82;
+    sized.notice_width = 520;
+    sized.greatest_notice_height = 500;
+    return sized;
+}();
+
+/// Large metrics: Compact's, with a settings dialog of 960 by 600 points,
+/// 20 points of padding, a nav list 208 points wide, 114 characters to a
+/// host's line under a row, and notices and prompts 600 points wide and at
+/// most 640 tall. Rows, text and controls keep Compact's sizes.
+inline constexpr Metrics large_metrics = [] {
+    Metrics sized = compact_metrics;
+    sized.dialog_width = 960;
+    sized.dialog_height = 600;
+    sized.padding = 20;
+    sized.nav_width = 208;
+    sized.hint_line_characters = 114;
+    sized.notice_width = 600;
+    sized.greatest_notice_height = 640;
+    return sized;
+}();
 
 } // namespace oa::ui::kit
