@@ -15,6 +15,12 @@ namespace oa::data::campaign {
 inline constexpr uint32_t kMapScanBusyCursor = 20;
 inline constexpr uint32_t kMapScanIdleCursor = 19;
 
+/// Size of the setup block's map name field, including its terminating NUL.
+///
+/// A listed name that does not fit is left out. Cutting it short would make
+/// every machine look for a map that does not exist.
+inline constexpr std::size_t kMapNameFieldBytes = 0x80;
+
 // The packed eligible-map list and its bookkeeping.
 struct MapList {
     char* names{};      // NUL-separated names followed by a closing NUL
@@ -35,7 +41,8 @@ struct MapScanHost {
 ///
 /// The first call scans Maps/*.ota and caches the maps' localised names; every call then
 /// hands the list to `out`. A map that several archives hold is listed once, as the copy
-/// it is read from.
+/// it is read from. A name that does not fit the setup block's map name field, with its
+/// terminating NUL, is left out.
 ///
 /// @param[in,out] list cached list and bookkeeping
 /// @param files file services

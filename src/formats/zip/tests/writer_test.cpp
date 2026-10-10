@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -653,11 +654,16 @@ void test_sample_file() {
     std::vector<uint8_t> archive{};
     CHECK(write_items(items, {}, error, archive));
     CHECK(expect_stream(items, {&archive, read_vector}, archive.size(), {}));
-    std::FILE* file = std::fopen("writer-sample.zip", "wb");
-    CHECK(file != nullptr);
-    if (file != nullptr) {
-        CHECK(std::fwrite(archive.data(), 1, archive.size(), file) == archive.size());
-        CHECK(std::fclose(file) == 0);
+    std::ofstream file("writer-sample.zip", std::ios::binary);
+    CHECK(file.is_open());
+    if (file.is_open()) {
+        file.write(
+            reinterpret_cast<const char*>(archive.data()),
+            static_cast<std::streamsize>(archive.size())
+        );
+        CHECK(file.good());
+        file.close();
+        CHECK(!file.fail());
     }
 }
 

@@ -27,9 +27,53 @@ void copy_bounded(char* out, std::size_t capacity, const char* text) noexcept {
 namespace {
 
 constexpr uint32_t kHashCacheGrowth = 16;
+constexpr uint64_t kFnvOffset = 0xcbf29ce484222325ull;
+constexpr uint64_t kFnvPrime = 0x100000001b3ull;
+constexpr uint32_t kSourceTextBytes = 4096;
 
 bool path_equal(const char* left, const char* right) noexcept {
     return oa::formats::tdf::compare_nocase(left, right) == 0;
+}
+
+// 64-bit FNV-1a of the bytes naming where a file comes from.
+uint64_t fnv1a(const char* text, uint32_t length) noexcept {
+    uint64_t hash = kFnvOffset;
+    for (uint32_t index = 0; index < length; ++index) {
+        hash ^= static_cast<uint8_t>(text[index]);
+        hash *= kFnvPrime;
+    }
+    return hash;
+}
+
+// The cache key for where the TNT comes from: 0 when the hook is null or
+// answers -1, so memory files without one stay keyed by path alone.
+uint64_t source_key(const CampaignFiles& files, const char* path) {
+    if (files.source == nullptr)
+        return 0;
+    char stack_text[kSourceTextBytes];
+    char* text = stack_text;
+    uint32_t capacity = kSourceTextBytes;
+    int32_t length = files.source(files.context, path, text, capacity);
+    if (length < 0)
+        return 0;
+    char* owned = nullptr;
+    if (static_cast<uint32_t>(length) >= capacity) {
+        capacity = static_cast<uint32_t>(length) + 1;
+        owned = static_cast<char*>(std::malloc(capacity));
+        if (owned == nullptr)
+            return fnv1a(stack_text, kSourceTextBytes - 1);
+        text = owned;
+        length = files.source(files.context, path, text, capacity);
+        if (length < 0) {
+            std::free(owned);
+            return 0;
+        }
+    }
+    const auto count =
+        static_cast<uint32_t>(length) < capacity ? static_cast<uint32_t>(length) : capacity - 1;
+    const uint64_t key = fnv1a(text, count);
+    std::free(owned);
+    return key;
 }
 
 // Reads the whole TNT; the hash covers slices at header-given offsets.
@@ -99,7 +143,7 @@ bool terrain_hash(const uint8_t* bytes, uint32_t size, uint32_t* hash) noexcept 
     return true;
 }
 
-bool remember_hash(MapHashCache& cache, const char* path, uint32_t hash) noexcept {
+bool remember_hash(MapHashCache& cache, const char* path, uint64_t key, uint32_t hash) noexcept {
     if (cache.count == cache.capacity) {
         const auto capacity = cache.capacity + kHashCacheGrowth;
         auto* grown = static_cast<MapHashEntry*>(
@@ -112,6 +156,7 @@ bool remember_hash(MapHashCache& cache, const char* path, uint32_t hash) noexcep
     }
     auto& entry = cache.entries[cache.count++];
     copy_bounded(entry.path, sizeof(entry.path), path);
+    entry.source_key = key;
     entry.hash = hash;
     return true;
 }
@@ -123,8 +168,9 @@ uint32_t map_compute_content_hash(
 ) {
     if (map_context.content_hash == 0) {
         const char* path = map_context.paths[static_cast<uint32_t>(CampaignPath::mission)];
+        const uint64_t key = source_key(files, path);
         for (uint32_t i = 0; i < cache.count; ++i)
-            if (path_equal(cache.entries[i].path, path)) {
+            if (path_equal(cache.entries[i].path, path) && cache.entries[i].source_key == key) {
                 map_context.content_hash = cache.entries[i].hash;
                 return map_context.header_hash ^ map_context.content_hash;
             }
@@ -138,7 +184,7 @@ uint32_t map_compute_content_hash(
         if (!hashed)
             return 0;
         map_context.content_hash = hash;
-        remember_hash(cache, path, map_context.content_hash);
+        remember_hash(cache, path, key, map_context.content_hash);
     }
     return map_context.header_hash ^ map_context.content_hash;
 }

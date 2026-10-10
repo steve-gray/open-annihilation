@@ -145,16 +145,22 @@ std::string fold(std::string path) {
 struct MemoryFiles {
     std::map<std::string, std::string> files;
     std::map<std::string, std::string> translations;
+    // Text naming where the files come from; null answers -1.
+    const char* source_name = nullptr;
+    // Times the TNT was sized or read, so a cache hit can be told from a recompute.
+    int opens = 0;
 };
 
 int32_t memory_size(void* context, const char* path) {
     auto* files = static_cast<MemoryFiles*>(context);
+    ++files->opens;
     const auto found = files->files.find(fold(path));
     return found == files->files.end() ? -1 : static_cast<int32_t>(found->second.size());
 }
 
 int32_t memory_read(void* context, const char* path, char* buffer, uint32_t capacity) {
     auto* files = static_cast<MemoryFiles*>(context);
+    ++files->opens;
     const auto found = files->files.find(fold(path));
     if (found == files->files.end())
         return -1;
@@ -181,6 +187,19 @@ void memory_list(
             name[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(name[0])));
             visit(visit_context, name.c_str());
         }
+}
+
+int32_t memory_source(void* context, const char*, char* out, uint32_t capacity) {
+    const auto* text = static_cast<MemoryFiles*>(context)->source_name;
+    if (text == nullptr || out == nullptr || capacity == 0)
+        return -1;
+    uint32_t full = 0;
+    while (text[full] != '\0')
+        ++full;
+    const uint32_t written = full < capacity ? full : capacity - 1;
+    std::memcpy(out, text, written);
+    out[written] = '\0';
+    return static_cast<int32_t>(full);
 }
 
 const char* memory_translate(void* context, const char* text) {
@@ -298,6 +317,51 @@ void content_hash_tests() {
     expect(cache.entries == nullptr && cache.count == 0, "cache freed");
 }
 
+void bind_terrain(CampaignFile& file, const char* path) {
+    std::memcpy(
+        file.paths[static_cast<uint32_t>(CampaignPath::mission)], path, std::strlen(path) + 1
+    );
+}
+
+// Two releases of one pack map share a TNT path and differ in the provider's
+// serial. The second is hashed again; asking for the first again, after the
+// file is gone, answers from the cache.
+void provider_keyed_hash_tests() {
+    MemoryFiles memory;
+    memory.files["maps/isle@isles.tnt"] = terrain(0x2000);
+    memory.source_name = "pack:isles#1";
+    auto files = services(memory);
+    files.source = memory_source;
+    MapHashCache cache{};
+
+    SelectedMap first;
+    bind_terrain(*first.file, "maps/isle@isles.tnt");
+    const auto first_hash = map_compute_content_hash(*first.file, files, cache);
+    expect(first_hash != 0 && cache.count == 1, "the first release is hashed");
+
+    auto revised = terrain(0x2000);
+    revised[0x50] = 'S';
+    memory.files["maps/isle@isles.tnt"] = revised;
+    memory.source_name = "pack:isles#2";
+    SelectedMap second;
+    bind_terrain(*second.file, "maps/isle@isles.tnt");
+    const auto second_hash = map_compute_content_hash(*second.file, files, cache);
+    expect(second_hash != 0 && second_hash != first_hash, "a new serial is hashed again");
+    expect(cache.count == 2, "each release keeps its own entry");
+
+    memory.source_name = "pack:isles#1";
+    memory.files.erase("maps/isle@isles.tnt");
+    const int opens = memory.opens;
+    SelectedMap again;
+    bind_terrain(*again.file, "maps/isle@isles.tnt");
+    expect(
+        map_compute_content_hash(*again.file, files, cache) == first_hash,
+        "the first release answers from the cache"
+    );
+    expect(memory.opens == opens, "the cached release is not read again");
+    map_destroy_hash_cache(cache);
+}
+
 // Coast To Coast of the installed game, read through its store as the game
 // reads it.
 void installed_map_tests(const oa::AssetStore& assets) {
@@ -320,6 +384,7 @@ int main(int argc, char** argv) {
     } else {
         unit_checksum_tests();
         content_hash_tests();
+        provider_keyed_hash_tests();
     }
     if (failures != 0) {
         std::cerr << failures << " failure(s)\n";

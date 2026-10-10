@@ -273,11 +273,14 @@ class NetworkPlay {
 
     /// Selects a map by the name lobbies and recordings use (runtime_netgame.cpp).
     ///
-    /// The name is first tried as a map file stem; otherwise the installed
-    /// maps/*.ota files are searched for that OTA mission name, ignoring case.
+    /// The name is first tried as a map file stem. A name with a package
+    /// suffix then matches only that way, so it is not paired with another
+    /// map's title. Any other name is searched for among the installed maps
+    /// as an OTA mission name, ignoring case.
     ///
     /// @param name Map file stem or OTA mission name.
-    /// @return Whether a map was selected; false for an empty name.
+    /// @return Whether a map was selected; false for an empty name or a
+    ///         suffixed name that is not installed.
     bool select_map_named(std::string_view name);
 
     /// Draws a network load's player bars and ready count over the loading screen.
