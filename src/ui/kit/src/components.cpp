@@ -6,6 +6,8 @@
 
 #include "oa/ui/kit/components.hpp"
 
+#include "oa/ui/kit/chrome.hpp"
+
 #include "oa/ui/frontend_renderer/artless.hpp"
 
 #include <algorithm>
@@ -309,6 +311,29 @@ void paint_item(const Canvas& canvas, const Item& item) {
         break;
     case Role::oa_mark:
         draw_oa_mark(placed_at(drawn, {item.rect.x, item.rect.y}), item.rect.width);
+        break;
+    case Role::header:
+        if (const auto* look = std::get_if<HeaderLook>(&item.look))
+            draw_header(drawn, *look);
+        break;
+    case Role::footer_band:
+        if (const auto* look = std::get_if<FooterBandLook>(&item.look))
+            draw_footer_band(drawn, look->width, look->rule_row);
+        break;
+    case Role::nav:
+        if (const auto* look = std::get_if<NavLook>(&item.look))
+            draw_nav(drawn, *look);
+        break;
+    case Role::heading:
+        if (const auto* look = std::get_if<HeadingLook>(&item.look))
+            draw_heading(drawn, item.rect, look->text);
+        break;
+    case Role::row_frame:
+        if (const auto* look = std::get_if<RowFrame>(&item.look))
+            draw_row_frame(drawn, *look);
+        break;
+    case Role::locked_fade:
+        draw_locked_fade(drawn, item.rect);
         break;
     }
 }

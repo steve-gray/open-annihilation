@@ -8,6 +8,7 @@
 // icon, or the green OA mark when the host has no icon to give.
 
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -24,6 +25,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace oa::ui::engine_settings {
@@ -34,7 +36,6 @@ namespace kit = oa::ui::kit;
 
 namespace {
 
-using renderer::Rgb;
 using renderer::SourceRect;
 
 /// A canvas on the dialog's surface, for the kit's crisp controls.
@@ -79,197 +80,49 @@ kit::LevelsLook strip_look(Setting setting, std::size_t level, bool hovered, boo
     return look;
 }
 
-/// Draws the header: the icon, the title, the shared game's note and the version.
+/// The header the dialog shows: its title, the second word, the version and,
+/// while a shared game keeps running, the note.
 ///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
 /// @param dialog the dialog
-/// @param fonts the fonts
-/// @param icon the Open Annihilation icon; empty draws the OA mark
-void draw_header(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const Dialog& dialog,
-    const DialogFonts& fonts,
-    const renderer::RgbaPicture& icon
-) {
-    const int32_t inner = dialog_width - 2 * layout::edge;
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::edge, layout::header_top, inner, layout::header_height},
-        kit::rgb(kit::colour::band)
-    );
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::edge, layout::header_rule_row, inner, 1},
-        kit::rgb(kit::colour::rule)
-    );
-    const SourceRect mark = layout::header_mark;
-    kit::draw_header_mark(drawn(target, placement, fonts, icon), mark);
-    const int32_t title_left = mark.x + mark.width + layout::header_gap;
-    const SourceRect title{
-        title_left, layout::header_top, layout::title_width, layout::header_height
-    };
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::regular,
-        layout::shown_text(layout::title_text),
-        title,
-        kit::Align::left,
-        kit::rgb(kit::colour::text),
-        layout::heading_tracking
-    );
-    // The modern fonts draw the title wider than the game's font: the suffix follows it.
-    const bool modern_only = !std::any_of(
-        fonts.regular.font.glyphs.begin(), fonts.regular.font.glyphs.end(), [](const auto& glyph) {
-            return glyph.has_value();
-        }
-    );
-    const int32_t title_right = modern_only
-                                    ? std::max(
-                                          title.x + title.width,
-                                          title.x + kit::modern_tracked_width(
-                                                        fonts,
-                                                        kit::FontRole::regular,
-                                                        layout::shown_text(layout::title_text),
-                                                        layout::heading_tracking,
-                                                        placement.scale
-                                                    )
-                                      )
-                                    : title.x + title.width;
-    const SourceRect suffix{
-        title_right + layout::header_gap,
-        layout::header_top,
-        layout::title_suffix_width,
-        layout::header_height,
-    };
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::regular,
-        layout::shown_text(layout::title_suffix_text),
-        suffix,
-        kit::Align::left,
-        kit::rgb(kit::colour::hint),
-        layout::heading_tracking
-    );
-    const SourceRect version{
-        layout::content_right - layout::version_width,
-        layout::header_top,
-        layout::version_width,
-        layout::header_height,
-    };
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(dialog.version),
-        version,
-        kit::Align::right,
-        kit::rgb(kit::colour::quiet)
-    );
-    if (dialog.locks.shared_game) {
-        const int32_t version_left = version.x + version.width -
-                                     kit::text_width(fonts, kit::FontRole::small, dialog.version);
-        const int32_t shared_left = suffix.x + suffix.width + layout::header_gap;
-        const SourceRect shared{
-            shared_left,
-            layout::header_top,
-            version_left - layout::version_gap - shared_left,
-            layout::header_height,
-        };
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::small,
-            layout::shown_text(layout::shared_game_text),
-            shared,
-            kit::Align::right,
-            kit::rgb(kit::colour::lock)
-        );
-    }
+/// @return the header's look
+kit::HeaderLook dialog_header(const Dialog& dialog) {
+    kit::HeaderLook header;
+    header.width = dialog_width;
+    header.title = std::string(layout::shown_text(layout::title_text));
+    header.title_width = layout::title_width;
+    header.tracking = layout::heading_tracking;
+    header.second = std::string(layout::shown_text(layout::title_suffix_text));
+    header.second_width = layout::title_suffix_width;
+    header.version = std::string(layout::shown_text(dialog.version));
+    header.version_width = layout::version_width;
+    if (dialog.locks.shared_game)
+        header.note = std::string(layout::shown_text(layout::shared_game_text));
+    return header;
 }
 
-/// Draws the section list.
+/// The section list the dialog shows.
 ///
-/// @param[in,out] target the surface
-/// @param placement where the dialog lands
 /// @param dialog the dialog
-/// @param fonts the fonts
-void draw_list(
-    renderer::Surface& target,
-    const renderer::Placement& placement,
-    const Dialog& dialog,
-    const DialogFonts& fonts
-) {
+/// @return the list's look
+kit::NavLook dialog_nav(const Dialog& dialog) {
+    kit::NavLook nav;
     const int32_t body_height = layout::footer_rule_row - layout::body_top;
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::edge, layout::body_top, layout::list_width, body_height},
-        kit::rgb(kit::colour::list)
-    );
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::list_rule_column, layout::body_top, 1, body_height},
-        kit::rgb(kit::colour::rule)
-    );
+    nav.area = {layout::edge, layout::body_top, layout::list_width, body_height};
+    nav.rule_column = layout::list_rule_column;
     if (dialog.kind == DialogKind::engine)
-        renderer::fill_source_rect(
-            target, placement, layout::list_divider(), kit::rgb(kit::colour::rule)
-        );
+        nav.divider = layout::list_divider();
     for (const Page page :
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
-        const SourceRect item = layout::dialog_list_item(dialog, page);
         const int32_t control = page_control(page);
-        const bool selected = page == dialog.page;
-        const bool hovered = dialog.hovered == control || dialog.pressed == control;
-        Rgb text = kit::rgb(kit::colour::list_text);
-        if (selected) {
-            renderer::fill_source_rect(
-                target, placement, item, kit::rgb(kit::colour::list_selected)
-            );
-            renderer::fill_source_rect(
-                target,
-                placement,
-                {item.x + layout::list_marker_offset,
-                 item.y + (item.height - layout::list_marker_height) / 2,
-                 layout::list_marker_width,
-                 layout::list_marker_height},
-                kit::rgb(kit::colour::accent)
-            );
-            text = kit::rgb(kit::colour::text);
-        } else if (hovered) {
-            renderer::fill_source_rect(target, placement, item, kit::rgb(kit::colour::hover));
-            text = kit::rgb(kit::colour::text);
-        }
-        const SourceRect caption{
-            item.x + layout::list_text_offset,
-            item.y,
-            item.width - layout::list_text_offset - layout::list_text_margin,
-            item.height,
-        };
-        kit::draw_boxed_text(
-            target,
-            placement,
-            fonts,
-            kit::FontRole::regular,
-            layout::shown_text(layout::page_name(page)),
-            caption,
-            kit::Align::left,
-            text
-        );
-        if (dialog.focused == control)
-            kit::draw_focus_ring(drawn(target, placement, fonts), item, false);
+        kit::NavEntry entry;
+        entry.rect = layout::dialog_list_item(dialog, page);
+        entry.caption = std::string(layout::shown_text(layout::page_name(page)));
+        entry.selected = page == dialog.page;
+        entry.hovered = dialog.hovered == control || dialog.pressed == control;
+        entry.focused = dialog.focused == control;
+        nav.entries.push_back(std::move(entry));
     }
+    return nav;
 }
 
 /// Returns how wide a text is in the regular font, as the dialog draws it.
@@ -939,16 +792,10 @@ void draw_section(
     const Dialog& dialog,
     const DialogFonts& fonts
 ) {
-    kit::draw_boxed_text(
-        target,
-        placement,
-        fonts,
-        kit::FontRole::small,
-        layout::shown_text(layout::page_heading(dialog.page)),
+    kit::draw_heading(
+        drawn(target, placement, fonts),
         layout::heading,
-        kit::Align::left,
-        kit::rgb(kit::colour::quiet),
-        layout::heading_tracking
+        std::string(layout::shown_text(layout::page_heading(dialog.page)))
     );
     const layout::ScrolledRows open = layout::open_rows(dialog);
     if (layout::mods_page(dialog)) {
@@ -959,40 +806,25 @@ void draw_section(
     // A row the view cuts shows the part inside it, its text and its focus
     // outline included.
     const renderer::Placement in_view = clipped_view(placement, layout::view_clip);
+    const kit::Canvas view = drawn(target, in_view, fonts);
     for (const layout::Row& row : rows.rows) {
         const bool locked = row.lock != Lock::none;
         const bool hovered =
             !locked && (dialog.hovered == row.control || dialog.pressed == row.control);
-        renderer::fill_source_rect(
-            target,
-            in_view,
-            {layout::content_left, row.top, layout::content_width, 1},
-            kit::rgb(kit::colour::rule)
-        );
-        kit::draw_boxed_text(
-            target,
-            in_view,
-            fonts,
-            kit::FontRole::regular,
-            layout::shown_text(layout::row_label(row.setting)),
-            row.label,
-            kit::Align::left,
-            kit::rgb(kit::colour::text)
-        );
-        // The host's texts under a Game files row keep to their line's
-        // columns.
+        // The host's texts under a Game files row keep to their line's columns.
         const bool host_text = layout::is_button(row.setting) || layout::is_text(row.setting);
+        kit::RowFrame frame;
+        frame.top = row.top;
+        frame.left = layout::content_left;
+        frame.width = layout::content_width;
+        frame.label = row.label;
+        frame.label_text = std::string(layout::shown_text(layout::row_label(row.setting)));
         for (std::size_t line = 0; line < row.hint_lines; ++line) {
             // A notice is drawn as a lock's text is.
             const layout::HintLine hint = layout::row_hint(dialog, row.setting, line);
             const SourceRect& box = row.hints[line];
-            kit::draw_boxed_text(
-                target,
-                host_text
-                    ? clipped_view(in_view, {box.x, layout::view.y, box.width, layout::view.height})
-                    : in_view,
-                fonts,
-                kit::FontRole::small,
+            frame.hints.push_back(box);
+            frame.hint_texts.emplace_back(
                 layout::shown_text(
                     layout::shown_hint_text(
                         dialog,
@@ -1003,16 +835,19 @@ void draw_section(
                             return dialog_text_width(fonts, DialogFont::small, text);
                         }
                     )
-                ),
-                row.hints[line],
-                kit::Align::left,
-                hint.notice ? kit::rgb(kit::colour::lock) : kit::rgb(kit::colour::hint)
+                )
             );
+            frame.hint_notices.push_back(hint.notice);
+            if (host_text)
+                frame.hint_clips.push_back({box.x, layout::view.y, box.width, layout::view.height});
+            else
+                frame.hint_clips.emplace_back();
         }
+        kit::draw_row_frame(view, frame);
         // Where the files are shows text alone: it has no control to draw.
         if (layout::is_button(row.setting)) {
             kit::draw_button(
-                drawn(target, in_view, fonts),
+                view,
                 row.control_area,
                 {std::string(layout::shown_text(layout::manage_text)),
                  kit::ButtonStyle::accent,
@@ -1027,7 +862,7 @@ void draw_section(
                 const bool button_hovered = over_row && dialog.folder_hovered == index;
                 const bool button_held = button_hovered && dialog.pressed == row.control;
                 kit::draw_button(
-                    drawn(target, in_view, fonts),
+                    view,
                     button,
                     {std::string(layout::shown_text(layout::folder_button_text(index))),
                      kit::ButtonStyle::quiet,
@@ -1039,7 +874,7 @@ void draw_section(
         } else if (layout::is_strip(row.setting)) {
             if (row.control_area.width > 0)
                 kit::draw_levels(
-                    drawn(target, in_view, fonts),
+                    view,
                     row.control_area,
                     strip_look(
                         row.setting,
@@ -1050,7 +885,7 @@ void draw_section(
                 );
         } else if (layout::is_slider(row.setting)) {
             kit::draw_slider(
-                drawn(target, in_view, fonts),
+                view,
                 row.control_area,
                 {layout::stop_of(
                      layout::slider_settings(dialog),
@@ -1079,7 +914,7 @@ void draw_section(
             );
         } else if (layout::is_choice(row.setting)) {
             kit::draw_choice(
-                drawn(target, in_view, fonts),
+                view,
                 row.control_area,
                 {std::string(
                      layout::shown_text(
@@ -1093,7 +928,7 @@ void draw_section(
             );
         } else if (row.control_area.width > 0) {
             kit::draw_switch(
-                drawn(target, in_view, fonts),
+                view,
                 row.control_area,
                 switch_look(
                     layout::switch_on(dialog.chosen, row.setting) ||
@@ -1110,19 +945,11 @@ void draw_section(
                 row.hint_is_status
                     ? layout::row_padding + layout::label_line_height + layout::hint_gap
                     : row.height - 1;
-            renderer::blend_source_rect(
-                target,
-                in_view,
-                {layout::content_left, row.top + 1, layout::content_width, faded},
-                kit::rgb(kit::colour::panel),
-                kit::locked_fade
+            kit::draw_locked_fade(
+                view, {layout::content_left, row.top + 1, layout::content_width, faded}
             );
             const std::string once(layout::shown_text(layout::lock_text(row.lock)));
-            kit::draw_lock(
-                drawn(target, in_view, fonts),
-                row.lock_area,
-                {std::string(layout::shown_text(once))}
-            );
+            kit::draw_lock(view, row.lock_area, {std::string(layout::shown_text(once))});
         }
         // Your files rings the button the keys mark.
         const SourceRect focus_area =
@@ -1132,14 +959,9 @@ void draw_section(
                   )
                 : row.control_area;
         if (dialog.focused == row.control && !locked)
-            kit::draw_focus_ring(drawn(target, in_view, fonts), focus_area, true);
+            kit::draw_focus_ring(view, focus_area, true);
     }
-    renderer::fill_source_rect(
-        target,
-        in_view,
-        {layout::content_left, rows.bottom, layout::content_width, 1},
-        kit::rgb(kit::colour::rule)
-    );
+    kit::draw_rule(view, layout::content_left, rows.bottom, layout::content_width);
     // Developer's rows stay at its top, the line under them over its list.
     if (layout::developer_page(dialog)) {
         draw_developer(target, placement, dialog, open, fonts);
@@ -1150,12 +972,7 @@ void draw_section(
     // Scrolled from its top, the view's first row keeps a line, so that the
     // cut there is the same hairline as a row's own.
     if (open.scroll > 0)
-        renderer::fill_source_rect(
-            target,
-            in_view,
-            {layout::content_left, layout::view.y, layout::content_width, 1},
-            kit::rgb(kit::colour::rule)
-        );
+        kit::draw_rule(view, layout::content_left, layout::view.y, layout::content_width);
     const bool bar_hot =
         dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control;
     kit::draw_scroll_bar(
@@ -1166,31 +983,18 @@ void draw_section(
     );
 }
 
-/// Draws the footer: Restore defaults, Cancel and OK.
+/// Draws Restore defaults, Cancel and OK.
 ///
 /// @param[in,out] target the surface
 /// @param placement where the dialog lands
 /// @param dialog the dialog
 /// @param fonts the fonts
-void draw_footer(
+void draw_actions(
     renderer::Surface& target,
     const renderer::Placement& placement,
     const Dialog& dialog,
     const DialogFonts& fonts
 ) {
-    const int32_t inner = dialog_width - 2 * layout::edge;
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::edge, layout::footer_rule_row, inner, 1},
-        kit::rgb(kit::colour::rule)
-    );
-    renderer::fill_source_rect(
-        target,
-        placement,
-        {layout::edge, layout::footer_top, inner, layout::footer_height},
-        kit::rgb(kit::colour::band)
-    );
     const std::array<std::pair<int32_t, std::string_view>, 3> buttons{{
         {restore_control, layout::restore_text},
         {cancel_control, layout::cancel_text},
@@ -1356,19 +1160,15 @@ void draw_dialog(
     const DialogFonts& fonts,
     const renderer::RgbaPicture& icon
 ) {
-    const SourceRect whole{0, 0, dialog_width, dialog_height};
-    renderer::fill_source_rect(target, placement, whole, kit::rgb(kit::colour::panel));
-    draw_header(target, placement, dialog, fonts, icon);
-    draw_list(target, placement, dialog, fonts);
+    const kit::Canvas canvas = drawn(target, placement, fonts, icon);
+    const kit::Rect whole{0, 0, dialog_width, dialog_height};
+    kit::draw_window_face(canvas, whole);
+    kit::draw_header(canvas, dialog_header(dialog));
+    kit::draw_nav(canvas, dialog_nav(dialog));
     draw_section(target, placement, dialog, fonts);
-    draw_footer(target, placement, dialog, fonts);
-    renderer::draw_bevel(
-        target,
-        placement,
-        whole,
-        kit::rgb(kit::colour::edge_light),
-        kit::rgb(kit::colour::edge_dark)
-    );
+    kit::draw_footer_band(canvas, dialog_width, layout::footer_rule_row);
+    draw_actions(target, placement, dialog, fonts);
+    kit::draw_window_edge(canvas, whole);
     // An open drop-down list lies over everything else.
     if (dialog.open_list != no_control) {
         const layout::ScrolledRows open = layout::open_rows(dialog);
