@@ -18,6 +18,13 @@ if(BUILD_TESTING)
   add_executable(oa-platform-shims-test tests/platform_test.cpp)
   target_link_libraries(oa-platform-shims-test PRIVATE oa-platform-shims oa-test-support)
   add_test(NAME platform-shims COMMAND oa-platform-shims-test)
+  # Replacing a file by a temporary file beside it: a new file, a replaced
+  # file, a name outside ASCII, and a folder left untouched when the replace
+  # is refused.
+  add_executable(oa-platform-replace-file-test tests/replace_file_test.cpp)
+  target_link_libraries(oa-platform-replace-file-test PRIVATE oa-platform-shims oa-test-support)
+  add_test(NAME platform-replace-file COMMAND oa-platform-replace-file-test)
+  set_tests_properties(platform-replace-file PROPERTIES TIMEOUT 30)
   add_executable(oa-platform-log-files-test tests/log_files_test.cpp)
   target_link_libraries(oa-platform-log-files-test PRIVATE oa-platform-shims oa-test-support)
   add_test(NAME platform-log-files COMMAND oa-platform-log-files-test)
