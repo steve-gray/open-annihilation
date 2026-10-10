@@ -1530,10 +1530,12 @@ void test_no_install_member() {
 }
 
 void test_cancel_keeps_part() {
-    Session session("f10-cancel", (1u << 20) + 200, 0x4f);
+    // Three steps, served 128 KiB each 40 ms: the part holds a whole step for
+    // about 640 ms before the download ends, which a busy machine's polls see.
+    Session session("f10-cancel", (3u << 20) + 200, 0x4f);
     if (!session.open())
         return;
-    serve_paced(session.server, session.package, 256 * 1024, 40);
+    serve_paced(session.server, session.package, 128 * 1024, 40);
     content::Downloads downloads(session.queue_options());
     downloads.start(*session.service->snapshot());
     std::string why;
