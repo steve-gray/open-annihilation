@@ -507,7 +507,7 @@ void test_usage(const fs::path& scratch) {
 void test_help() {
     const Captured help = run({"help", "pack"});
     OA_CHECK(help.status == oa::tool::exit_done);
-    OA_CHECK(contains(help.out, "oa-tool pack FOLDER [--out FILE] [--force]\n"));
+    OA_CHECK(contains(help.out, "oa-tool pack FOLDER [--out FILE] [--force] [--game-dir DIR]\n"));
     OA_CHECK(contains(help.out, "png"));
     OA_CHECK(contains(help.out, "deflated"));
     OA_CHECK(contains(help.out, "empty file"));
