@@ -9,7 +9,8 @@ add_library(oa-ui-folder-chooser src/folder_chooser.cpp src/folder_chooser_layou
 add_library(oa::ui::folder_chooser ALIAS oa-ui-folder-chooser)
 target_include_directories(oa-ui-folder-chooser PUBLIC include)
 target_compile_features(oa-ui-folder-chooser PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-folder-chooser PUBLIC oa-ui-game-files PRIVATE oa-data-languages oa-options)
+target_link_libraries(oa-ui-folder-chooser PUBLIC oa-ui-game-files PRIVATE oa-data-languages oa-options
+  oa-ui-kit)
 
 if(BUILD_TESTING)
   # The list and the browser laid out at 1280x800 and 852x393 with its safe

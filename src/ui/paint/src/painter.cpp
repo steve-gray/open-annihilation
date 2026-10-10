@@ -903,34 +903,6 @@ std::string fit_text(
     return kept + std::string(ellipsis);
 }
 
-std::vector<std::string> wrap_text(
-    text_font::FontStack& fonts, std::string_view text, int pixel_size, bool bold, int max_width
-) {
-    std::vector<std::string> lines;
-    std::string current;
-    std::size_t at = 0;
-    while (at < text.size()) {
-        const std::size_t space = text.find(' ', at);
-        const std::size_t end = space == std::string_view::npos ? text.size() : space;
-        const std::string_view word = text.substr(at, end - at);
-        at = end == text.size() ? end : end + 1;
-        if (word.empty())
-            continue;
-        std::string joined =
-            current.empty() ? std::string(word) : current + " " + std::string(word);
-        if (text_width(fonts, joined, pixel_size, bold) <= max_width) {
-            current = std::move(joined);
-            continue;
-        }
-        if (!current.empty())
-            lines.push_back(std::move(current));
-        current = fit_text(fonts, word, pixel_size, bold, max_width);
-    }
-    if (!current.empty())
-        lines.push_back(std::move(current));
-    return lines;
-}
-
 Box paint_line(Painter& painter, const TextLine& line, int pen_x, int baseline_y, Rgba colour) {
     if (!line.drawn || line.coverage.width <= 0 || line.coverage.height <= 0)
         return {};

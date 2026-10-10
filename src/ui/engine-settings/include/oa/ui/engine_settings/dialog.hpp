@@ -16,6 +16,8 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/text.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <array>
 #include <cstddef>
@@ -39,11 +41,12 @@ inline constexpr int32_t menu_button_side = 32;
 inline constexpr int32_t ingame_button_side = 24;
 
 /// The colour the screen under the dialog is darkened with.
-inline constexpr oa::ui::frontend_renderer::Rgb backdrop_color{5, 6, 4};
+inline constexpr oa::ui::frontend_renderer::Rgb backdrop_color =
+    oa::ui::kit::rgb(oa::ui::kit::colour::backdrop);
 /// How far the main menu is darkened under the dialog, in 256ths.
-inline constexpr uint32_t menu_backdrop_opacity = 159;
+inline constexpr uint32_t menu_backdrop_opacity = oa::ui::kit::menu_backdrop_opacity;
 /// How far the in-game menu's column is darkened beside the dialog, in 256ths.
-inline constexpr uint32_t ingame_backdrop_opacity = 128;
+inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop_opacity;
 
 /// The dialog's sections, in the order its list shows them: the engine's
 /// settings, then the mod options' (ui.options-dialog), which a dialog of
@@ -732,10 +735,7 @@ struct Dialog {
 [[nodiscard]] std::size_t active_hack_count(const Dialog& dialog);
 
 /// The font a text of the dialog is drawn in.
-enum class DialogFont : uint8_t {
-    regular, ///< DialogFonts::regular
-    small,   ///< DialogFonts::small
-};
+using DialogFont = oa::ui::kit::FontRole;
 
 /// One part of the dialog as it is drawn now: a text or a control, and the
 /// rectangle it keeps to.
@@ -748,7 +748,7 @@ struct LayoutPart {
 };
 
 /// The fonts the dialog and the OA button draw their texts in.
-struct DialogFonts;
+using DialogFonts = oa::ui::kit::Fonts;
 
 /// Returns the parts the dialog draws now: the header's texts, the list's
 /// entries, the open section's heading, labels, hints, locks, controls and
@@ -765,16 +765,6 @@ struct DialogFonts;
 /// @return the parts
 [[nodiscard]] std::vector<LayoutPart>
 dialog_layout(const Dialog& dialog, const DialogFonts* fonts = nullptr);
-
-/// The fonts the dialog and the OA button draw their texts in.
-struct DialogFonts {
-    oa::ui::frontend_renderer::TextFont regular; ///< labels, values and buttons
-    oa::ui::frontend_renderer::TextFont small;   ///< the section heading, the hints and the version
-    /// The characters each font draws, for UTF-8 texts such as a language's
-    /// name in itself; the modern fonts draw the others.
-    oa::present::FontCharacters regular_characters{};
-    oa::present::FontCharacters small_characters{}; ///< the small font's
-};
 
 /// Returns a UTF-8 text's width as the dialog draws it: the characters a
 /// font draws at its glyphs' widths, and the others in the modern fonts.
@@ -923,7 +913,7 @@ void open_language_text_dialog(
 
 /// The width dialog_layout counts each character of the player's own
 /// folder's path at without the fonts, in source pixels.
-inline constexpr int32_t estimated_character_width = 7;
+inline constexpr int32_t estimated_character_width = oa::ui::kit::estimated_character_width;
 
 /// Gives the dialog Hardware acceleration's status as it is now; a host
 /// calls it each frame while the dialog is open.

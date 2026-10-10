@@ -7,8 +7,8 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 
 #include "geometry.hpp"
-#include "oa/base/text/line_break.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -22,14 +22,6 @@
 namespace oa::ui::engine_settings {
 
 namespace {
-
-/// Tells whether a byte continues a UTF-8 character rather than starting one.
-///
-/// @param byte the byte
-/// @return true for 10xxxxxx
-bool continuing_byte(char byte) noexcept {
-    return (static_cast<unsigned char>(byte) & 0xC0U) == 0x80U;
-}
 
 /// Returns a text in lower case, ASCII letters only, for ordering titles.
 ///
@@ -251,56 +243,13 @@ std::string cut_text(
     std::size_t end = text.size();
     while (end > 0) {
         --end;
-        while (end > 0 && continuing_byte(text[end]))
+        while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U)
             --end;
         std::string shown = std::string(text.substr(0, end)) + ellipsis;
         if (text_width(shown) <= width)
             return shown;
     }
     return ellipsis;
-}
-
-std::vector<std::string> wrap_text(
-    std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-) {
-    std::vector<std::string> lines;
-    if (oa::base::text::has_wide_script(text)) {
-        // Chinese, Japanese and Korean are written without spaces: a line
-        // also breaks between their characters, as the line breaker allows.
-        const auto fits = [&](std::string_view start) { return text_width(start) <= width; };
-        for (;;) {
-            while (!text.empty() && text.front() == ' ')
-                text.remove_prefix(1);
-            if (text.empty())
-                break;
-            const auto row = oa::base::text::first_row(text, fits);
-            lines.emplace_back(text.substr(0, row.bytes));
-            text.remove_prefix(row.next);
-        }
-        return lines;
-    }
-    std::string line;
-    std::size_t at = 0;
-    while (at < text.size()) {
-        const std::size_t space = text.find(' ', at);
-        const std::size_t end = space == std::string_view::npos ? text.size() : space;
-        const std::string_view word = text.substr(at, end - at);
-        at = end == text.size() ? end : end + 1;
-        if (word.empty())
-            continue;
-        const std::string longer =
-            line.empty() ? std::string(word) : line + ' ' + std::string(word);
-        if (text_width(longer) <= width) {
-            line = longer;
-            continue;
-        }
-        if (!line.empty())
-            lines.push_back(line);
-        line = cut_text(word, width, text_width);
-    }
-    if (!line.empty())
-        lines.push_back(line);
-    return lines;
 }
 
 std::vector<std::string> question_text_lines(
@@ -322,7 +271,12 @@ std::vector<std::string> question_text_lines(
                 dialog.playing_mod_folder;
         if (playing)
             asked += " " + std::string(shown_text(roll_back_reload_text));
-        std::vector<std::string> lines = wrap_text(asked, question_first_line.width, text_width);
+        oa::ui::kit::WrapRules rules;
+        rules.shorten_word = [&](std::string_view word) {
+            return cut_text(word, question_first_line.width, text_width);
+        };
+        std::vector<std::string> lines =
+            oa::ui::kit::wrap(asked, question_first_line.width, text_width, rules);
         if (lines.size() > question_lines) {
             lines.resize(question_lines);
             lines.back() = cut_text(
@@ -332,10 +286,16 @@ std::vector<std::string> question_text_lines(
         return lines;
     }
     const std::string asked = filled(switch_ask_text, {{"title", offered.title}});
-    std::vector<std::string> lines = wrap_text(asked, question_first_line.width, text_width);
+    oa::ui::kit::WrapRules rules;
+    rules.shorten_word = [&](std::string_view word) {
+        return cut_text(word, question_first_line.width, text_width);
+    };
+    std::vector<std::string> lines =
+        oa::ui::kit::wrap(asked, question_first_line.width, text_width, rules);
     std::vector<std::string> note;
     if (!offered.has_profile)
-        note = wrap_text(switch_no_profile_text, question_first_line.width, text_width);
+        note =
+            oa::ui::kit::wrap(switch_no_profile_text, question_first_line.width, text_width, rules);
     // The note keeps its lines; the question keeps at least one.
     if (note.size() > question_lines - 1)
         note.resize(question_lines - 1);

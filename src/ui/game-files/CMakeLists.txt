@@ -10,7 +10,7 @@ add_library(oa-ui-game-files src/game_files_model.cpp src/game_files_texts.cpp
 add_library(oa::ui::game_files ALIAS oa-ui-game-files)
 target_include_directories(oa-ui-game-files PUBLIC include)
 target_compile_features(oa-ui-game-files PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-game-files PUBLIC oa-ui-touch-hud oa-ui-display-layout
+target_link_libraries(oa-ui-game-files PUBLIC oa-ui-touch-hud oa-ui-display-layout oa-ui-kit
   PRIVATE oa-data-languages oa-options)
 
 if(BUILD_TESTING)

@@ -8,7 +8,7 @@
 
 #include "geometry.hpp"
 #include "notice_geometry.hpp"
-#include "oa/base/text/line_break.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -44,12 +44,12 @@ PlacedText place_text(
         }
     };
     for (const auto& paragraph : paragraphs)
-        add(paragraph.path ? wrap_path(paragraph.text, text_width, regular_width)
-                           : wrap_text(paragraph.text, text_width, small_width),
+        add(paragraph.path ? oa::ui::kit::wrap_path(paragraph.text, text_width, regular_width)
+                           : oa::ui::kit::wrap(paragraph.text, text_width, small_width),
             paragraph.path,
             false);
     if (!failure.empty())
-        add(wrap_text(failure, text_width, small_width), false, true);
+        add(oa::ui::kit::wrap(failure, text_width, small_width), false, true);
     placed.bottom = row;
     return placed;
 }
@@ -99,55 +99,6 @@ Placed place_notice(
 
 namespace {
 
-/// Returns the bytes of the UTF-8 character a text starts with.
-///
-/// @param text the text, not empty
-/// @return 1 to 4; 1 for a byte that starts no sequence
-std::size_t character_bytes(std::string_view text) noexcept {
-    std::size_t bytes = 1;
-    while (bytes < text.size() && bytes < 4 &&
-           (static_cast<unsigned char>(text[bytes]) & 0xC0U) == 0x80U)
-        ++bytes;
-    return bytes;
-}
-
-/// Breaks a text that is wider than a line between its characters.
-///
-/// @param text the text
-/// @param width the room
-/// @param text_width a text's width
-/// @param[in,out] lines receives every line but the last
-/// @return the last line, which may take more after it
-std::string break_characters(
-    std::string_view text,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width,
-    std::vector<std::string>& lines
-) {
-    std::string line;
-    for (std::size_t at = 0; at < text.size();) {
-        const std::size_t bytes = character_bytes(text.substr(at));
-        const std::string_view character = text.substr(at, bytes);
-        if (!line.empty() && text_width(line + std::string(character)) > width) {
-            lines.push_back(line);
-            line.clear();
-        }
-        line += character;
-        at += bytes;
-    }
-    return line;
-}
-
-/// Returns a text's estimated width: estimated_character_width a character,
-/// twice that for a Chinese, Japanese or Korean character, which is drawn
-/// about twice as wide.
-///
-/// @param text the text, UTF-8
-/// @return the width, in source pixels
-int32_t estimated_width(std::string_view text) {
-    return static_cast<int32_t>(oa::base::text::text_columns(text)) * estimated_character_width;
-}
-
 /// Places a notice in its fonts, or at estimated widths without them.
 ///
 /// @param notice the notice
@@ -155,7 +106,9 @@ int32_t estimated_width(std::string_view text) {
 /// @return the placed notice
 notice_geometry::Placed placed_in(const Notice& notice, const DialogFonts* fonts) {
     if (fonts == nullptr)
-        return notice_geometry::place_notice(notice, estimated_width, estimated_width);
+        return notice_geometry::place_notice(
+            notice, oa::ui::kit::estimated_width, oa::ui::kit::estimated_width
+        );
     return notice_geometry::place_notice(
         notice,
         [fonts](std::string_view text) {
@@ -224,77 +177,6 @@ NoticeAction press(int32_t control) noexcept {
 }
 
 } // namespace
-
-std::vector<std::string> wrap_text(
-    std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-) {
-    std::vector<std::string> lines;
-    if (oa::base::text::has_wide_script(text)) {
-        // Chinese, Japanese and Korean are written without spaces: a line
-        // also breaks between their characters, as the line breaker allows.
-        const auto fits = [&](std::string_view start) { return text_width(start) <= width; };
-        for (;;) {
-            while (!text.empty() && text.front() == ' ')
-                text.remove_prefix(1);
-            if (text.empty())
-                break;
-            const auto row = oa::base::text::first_row(text, fits);
-            lines.emplace_back(text.substr(0, row.bytes));
-            text.remove_prefix(row.next);
-        }
-        return lines;
-    }
-    std::string line;
-    std::size_t at = 0;
-    while (at < text.size()) {
-        if (text[at] == ' ') {
-            ++at;
-            continue;
-        }
-        const auto end = std::min(text.find(' ', at), text.size());
-        const std::string_view word = text.substr(at, end - at);
-        at = end;
-        const std::string joined =
-            line.empty() ? std::string(word) : line + " " + std::string(word);
-        if (text_width(joined) <= width) {
-            line = joined;
-            continue;
-        }
-        if (!line.empty())
-            lines.push_back(line);
-        line = text_width(word) <= width ? std::string(word)
-                                         : break_characters(word, width, text_width, lines);
-    }
-    if (!line.empty())
-        lines.push_back(line);
-    return lines;
-}
-
-std::vector<std::string> wrap_path(
-    std::string_view path, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-) {
-    std::vector<std::string> lines;
-    std::string line;
-    std::size_t at = 0;
-    while (at < path.size()) {
-        // A component and the separator after it.
-        const auto separator = path.find_first_of("/\\", at);
-        const auto end = separator == std::string_view::npos ? path.size() : separator + 1;
-        const std::string_view piece = path.substr(at, end - at);
-        at = end;
-        if (text_width(line + std::string(piece)) <= width) {
-            line += piece;
-            continue;
-        }
-        if (!line.empty())
-            lines.push_back(line);
-        line = text_width(piece) <= width ? std::string(piece)
-                                          : break_characters(piece, width, text_width, lines);
-    }
-    if (!line.empty())
-        lines.push_back(line);
-    return lines;
-}
 
 int32_t notice_height(const Notice& notice, const DialogFonts* fonts) {
     return placed_in(notice, fonts).height;

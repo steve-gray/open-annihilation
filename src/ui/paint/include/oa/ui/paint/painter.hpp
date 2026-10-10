@@ -408,23 +408,6 @@ line_metrics(oa::platform::text_font::FontStack& fonts, int pixel_size, bool bol
     int max_width
 );
 
-/// Breaks text into lines no wider than a width, at spaces; a word wider than the
-/// width is shortened with fit_text.
-///
-/// @param fonts the font stack
-/// @param text UTF-8 text
-/// @param pixel_size pixels per em
-/// @param bold whether the bold face goes first
-/// @param max_width the widest a line may be, in pixels
-/// @return the lines, in order; none for empty text
-[[nodiscard]] std::vector<std::string> wrap_text(
-    oa::platform::text_font::FontStack& fonts,
-    std::string_view text,
-    int pixel_size,
-    bool bold,
-    int max_width
-);
-
 /// Blends a drawn line with its pen at a place on its baseline.
 ///
 /// @param painter the painter

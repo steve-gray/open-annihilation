@@ -13,6 +13,8 @@
 // uploaded.
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/ui/kit/text.hpp"
+#include "oa/ui/kit/theme.hpp"
 #include "oa/ui/paint/pad_glyphs.hpp"
 #include "render_run.hpp"
 #include "oa/ui/paint/painter.hpp"
@@ -39,40 +41,105 @@ namespace pad = oa::ui::pad_controls;
 namespace paint = oa::ui::paint;
 namespace pad_glyphs = oa::ui::paint::pad_glyphs;
 namespace text_font = oa::platform::text_font;
+namespace kit = oa::ui::kit;
 using hud::Control;
 
 // ---- Style: the approved settings mock-up's colours --------------------------------------
 
 /// Panels and buttons: gunmetal at 85% opacity.
-constexpr paint::Rgba panel_colour{0x1b, 0x1e, 0x19, 217};
+constexpr paint::Rgba panel_colour{
+    kit::hud_colour::panel.r,
+    kit::hud_colour::panel.g,
+    kit::hud_colour::panel.b,
+    kit::hud_colour::panel.a
+};
 /// Sheets and the radial's ring: darker and nearly opaque, over the battlefield.
-constexpr paint::Rgba sheet_colour{0x14, 0x16, 0x12, 248};
+constexpr paint::Rgba sheet_colour{
+    kit::hud_colour::sheet.r,
+    kit::hud_colour::sheet.g,
+    kit::hud_colour::sheet.b,
+    kit::hud_colour::sheet.a
+};
 /// An empty cell of the drawer or the MORE sheet, which a 3.1c gadget covers.
-constexpr paint::Rgba cell_colour{0x24, 0x28, 0x20, 230};
+constexpr paint::Rgba cell_colour{
+    kit::hud_colour::cell.r,
+    kit::hud_colour::cell.g,
+    kit::hud_colour::cell.b,
+    kit::hud_colour::cell.a
+};
 /// A control a finger rests on: a lighter gunmetal.
-constexpr paint::Rgba pressed_colour{0x3b, 0x42, 0x35, 240};
+constexpr paint::Rgba pressed_colour{
+    kit::hud_colour::pressed.r,
+    kit::hud_colour::pressed.g,
+    kit::hud_colour::pressed.b,
+    kit::hud_colour::pressed.a
+};
 /// The hairline round panels and buttons.
-constexpr paint::Rgba edge_colour{0xff, 0xff, 0xff, 34};
+constexpr paint::Rgba edge_colour{
+    kit::hud_colour::edge.r,
+    kit::hud_colour::edge.g,
+    kit::hud_colour::edge.b,
+    kit::hud_colour::edge.a
+};
 /// Lit, latched and armed controls.
-constexpr paint::Rgba lit_colour{0x9c, 0xcc, 0x3c, 255};
+constexpr paint::Rgba lit_colour{
+    kit::hud_colour::lit.r, kit::hud_colour::lit.g, kit::hud_colour::lit.b, kit::hud_colour::lit.a
+};
 /// A lit control a finger rests on.
-constexpr paint::Rgba lit_pressed_colour{0xb8, 0xde, 0x66, 255};
+constexpr paint::Rgba lit_pressed_colour{
+    kit::hud_colour::lit_pressed.r,
+    kit::hud_colour::lit_pressed.g,
+    kit::hud_colour::lit_pressed.b,
+    kit::hud_colour::lit_pressed.a
+};
 /// Labels and icons on a lit control.
-constexpr paint::Rgba ink_colour{0x1b, 0x1e, 0x19, 255};
+constexpr paint::Rgba ink_colour{
+    kit::hud_colour::ink.r, kit::hud_colour::ink.g, kit::hud_colour::ink.b, kit::hud_colour::ink.a
+};
 /// Labels and icons.
-constexpr paint::Rgba label_colour{0xf2, 0xf4, 0xee, 255};
+constexpr paint::Rgba label_colour{
+    kit::hud_colour::label.r,
+    kit::hud_colour::label.g,
+    kit::hud_colour::label.b,
+    kit::hud_colour::label.a
+};
 /// The quieter text of the drawer's caption and page dots.
-constexpr paint::Rgba quiet_colour{0xb4, 0xb9, 0xae, 255};
+constexpr paint::Rgba quiet_colour{
+    kit::hud_colour::quiet.r,
+    kit::hud_colour::quiet.g,
+    kit::hud_colour::quiet.b,
+    kit::hud_colour::quiet.a
+};
 /// SELF-DESTRUCT · HOLD's red: its edge, and its fill as the hold fills it.
-constexpr paint::Rgba danger_colour{0xc0, 0x39, 0x2b, 255};
+constexpr paint::Rgba danger_colour{
+    kit::hud_colour::danger.r,
+    kit::hud_colour::danger.g,
+    kit::hud_colour::danger.b,
+    kit::hud_colour::danger.a
+};
 /// SELF-DESTRUCT · HOLD's panel before its hold fills it.
-constexpr paint::Rgba danger_panel_colour{0x2a, 0x15, 0x12, 235};
+constexpr paint::Rgba danger_panel_colour{
+    kit::hud_colour::danger_panel.r,
+    kit::hud_colour::danger_panel.g,
+    kit::hud_colour::danger_panel.b,
+    kit::hud_colour::danger_panel.a
+};
 /// SELF-DESTRUCT · HOLD's label before its hold fills it.
-constexpr paint::Rgba danger_label_colour{0xf0, 0x8c, 0x80, 255};
+constexpr paint::Rgba danger_label_colour{
+    kit::hud_colour::danger_label.r,
+    kit::hud_colour::danger_label.g,
+    kit::hud_colour::danger_label.b,
+    kit::hud_colour::danger_label.a
+};
 /// The lines between the radial's wedges.
-constexpr paint::Rgba wedge_gap_colour{0x08, 0x09, 0x07, 255};
+constexpr paint::Rgba wedge_gap_colour{
+    kit::hud_colour::wedge_gap.r,
+    kit::hud_colour::wedge_gap.g,
+    kit::hud_colour::wedge_gap.b,
+    kit::hud_colour::wedge_gap.a
+};
 /// Greyed items show at this opacity.
-constexpr float greyed_opacity = 0.4F;
+constexpr float greyed_opacity = kit::hud_colour::greyed_opacity;
 
 // ---- Sizes, in points ---------------------------------------------------------------------
 
@@ -1388,7 +1455,15 @@ void paint_tip(const PaintContext& context) {
     // The largest size whose lines fit the bubble's height, down to 7 pt.
     for (float size = tip_points; size >= 7.0F; size -= 1.0F) {
         const int pixel_size = font_px(context, size);
-        const auto lines = paint::wrap_text(*context.fonts, text, pixel_size, true, room);
+        const auto measure = [&](std::string_view shown) {
+            return paint::text_width(*context.fonts, shown, pixel_size, true);
+        };
+        kit::WrapRules rules;
+        rules.wide_scripts = false;
+        rules.shorten_word = [&](std::string_view word) {
+            return paint::fit_text(*context.fonts, word, pixel_size, true, room);
+        };
+        const auto lines = kit::wrap(text, room, measure, rules);
         const float line_height = static_cast<float>(pixel_size) * 1.25F;
         const float block = line_height * static_cast<float>(lines.size());
         if (block > area.height - pad && size > 7.0F)

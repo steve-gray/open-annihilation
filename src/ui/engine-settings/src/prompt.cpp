@@ -8,7 +8,7 @@
 
 #include "geometry.hpp"
 #include "notice_geometry.hpp"
-#include "oa/base/text/line_break.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -20,20 +20,6 @@
 
 namespace oa::ui::engine_settings {
 
-namespace {
-
-/// Returns a text's estimated width: estimated_character_width a character,
-/// twice that for a Chinese, Japanese or Korean character, which is drawn
-/// about twice as wide.
-///
-/// @param text the text, UTF-8
-/// @return the width, in source pixels
-int32_t estimated_width(std::string_view text) {
-    return static_cast<int32_t>(oa::base::text::text_columns(text)) * estimated_character_width;
-}
-
-} // namespace
-
 namespace notice_geometry {
 
 std::vector<SourceRect> prompt_button_rects(const Prompt& prompt, int32_t height) {
@@ -44,7 +30,7 @@ std::vector<SourceRect> prompt_button_rects(const Prompt& prompt, int32_t height
     for (std::size_t index = count; index-- > 0;) {
         const int32_t width = std::max(
             least_prompt_button_width,
-            estimated_width(prompt.buttons[index].caption) + prompt_button_padding
+            oa::ui::kit::estimated_width(prompt.buttons[index].caption) + prompt_button_padding
         );
         rects[index] = {right - width, top, width, button_height};
         right -= width + button_gap;
@@ -92,7 +78,9 @@ namespace {
 /// @return the placed prompt
 notice_geometry::PlacedPrompt placed_in(const Prompt& prompt, const DialogFonts* fonts) {
     if (fonts == nullptr)
-        return notice_geometry::place_prompt(prompt, estimated_width, estimated_width);
+        return notice_geometry::place_prompt(
+            prompt, oa::ui::kit::estimated_width, oa::ui::kit::estimated_width
+        );
     return notice_geometry::place_prompt(
         prompt,
         [fonts](std::string_view text) {

@@ -9,6 +9,7 @@
 
 #include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -21,19 +22,24 @@ namespace oa::ui::engine_settings::notice_geometry {
 using oa::ui::frontend_renderer::SourceRect;
 
 /// The width of the notice's raised edge.
-inline constexpr int32_t edge = 1;
+inline constexpr int32_t edge = oa::ui::kit::compact_metrics.edge;
 /// The header's height, under the top edge.
-inline constexpr int32_t header_height = 26;
+inline constexpr int32_t header_height = oa::ui::kit::compact_metrics.header_height;
 /// The row of the line between the header and the text.
 inline constexpr int32_t header_rule_row = edge + header_height;
 /// The space between the notice's edge and what it holds.
-inline constexpr int32_t padding = 12;
+inline constexpr int32_t padding = oa::ui::kit::compact_metrics.padding;
 /// The Open Annihilation icon, in the header's middle rows.
-inline constexpr SourceRect icon{padding, 4, 20, 20};
+inline constexpr SourceRect icon{
+    padding,
+    oa::ui::kit::compact_metrics.mark_top,
+    oa::ui::kit::compact_metrics.mark_side,
+    oa::ui::kit::compact_metrics.mark_side
+};
 /// The columns between the icon and the title.
-inline constexpr int32_t title_gap = 6;
+inline constexpr int32_t title_gap = oa::ui::kit::compact_metrics.header_gap;
 /// Extra columns after each glyph of the title.
-inline constexpr int32_t title_tracking = 1;
+inline constexpr int32_t title_tracking = oa::ui::kit::compact_metrics.heading_tracking;
 /// The text's first row.
 inline constexpr int32_t text_top = header_rule_row + 1 + 10;
 /// The text's first column.
@@ -41,23 +47,23 @@ inline constexpr int32_t text_left = padding;
 /// The text's width.
 inline constexpr int32_t text_width = notice_width - 2 * padding;
 /// A line's height in the small font.
-inline constexpr int32_t small_line_height = 12;
+inline constexpr int32_t small_line_height = oa::ui::kit::compact_metrics.small_line;
 /// A line's height in the regular font, as a path's lines are drawn.
-inline constexpr int32_t path_line_height = 16;
+inline constexpr int32_t path_line_height = oa::ui::kit::compact_metrics.regular_line;
 /// The rows between two paragraphs.
 inline constexpr int32_t paragraph_gap = 6;
 /// The rows between the last line of text and the footer's line.
 inline constexpr int32_t text_bottom_gap = 10;
 /// The footer's height, over the bottom edge.
-inline constexpr int32_t footer_height = 32;
+inline constexpr int32_t footer_height = oa::ui::kit::compact_metrics.footer_height;
 /// A button's height.
-inline constexpr int32_t button_height = 17;
+inline constexpr int32_t button_height = oa::ui::kit::compact_metrics.button_height;
 /// OK's width.
-inline constexpr int32_t ok_width = 52;
+inline constexpr int32_t ok_width = oa::ui::kit::compact_metrics.button_width;
 /// The open button's width.
 inline constexpr int32_t open_width = 96;
 /// The columns between the two buttons.
-inline constexpr int32_t button_gap = 5;
+inline constexpr int32_t button_gap = oa::ui::kit::compact_metrics.button_gap;
 /// A prompt button's least width: OK's.
 inline constexpr int32_t least_prompt_button_width = ok_width;
 /// The columns a prompt button's caption keeps clear on its two sides together.
