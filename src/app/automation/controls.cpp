@@ -143,7 +143,8 @@ void write_rect(JsonWriter& json, int32_t x, int32_t y, int32_t width, int32_t h
     json.end_array();
 }
 
-/// Writes a control's rectangle in the window's own pixels.
+/// Writes a control's rectangle in the window's own pixels: the one the
+/// host gives, else the canvas rectangle placed through the window.
 ///
 /// @param[in,out] json the JSON being written
 /// @param placement where the window shows the canvas
@@ -151,6 +152,12 @@ void write_rect(JsonWriter& json, int32_t x, int32_t y, int32_t width, int32_t h
 void write_window_rect(
     JsonWriter& json, const WindowPlacement& placement, const AutomationControl& control
 ) {
+    if (control.window_pixels) {
+        write_rect(
+            json, control.window_x, control.window_y, control.window_width, control.window_height
+        );
+        return;
+    }
     float left = 0.0F;
     float top = 0.0F;
     float right = 0.0F;
@@ -199,10 +206,12 @@ void collect_controls(const Endpoint& endpoint, std::vector<AutomationControl>& 
     } else {
         host.controls(host.context, &controls);
         // A dialog's controls come first among the screen's: they take the
-        // pointer over it.
+        // pointer over it. So do Open Annihilation's own screens' and the OA
+        // button's, which the host places in the window's pixels and lists
+        // where they belong.
         std::stable_partition(
             controls.begin(), controls.end(), [](const AutomationControl& control) {
-                return !control.dialog.empty();
+                return !control.dialog.empty() || control.window_pixels;
             }
         );
     }
