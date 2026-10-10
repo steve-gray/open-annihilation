@@ -2770,7 +2770,7 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             const auto turned = oa::ui::hud::build_menu_forward(
                 commander.flags, host_world.unit_defs[commander.type_index].gui_page_count, true
             );
-            const auto expected =
+            const auto expected_page =
                 (turned & OA_UNIT_FLAG_BUILD_MENU) != 0 ? oa::ui::hud::build_page(turned) : 0u;
             // Space selects the commander when nothing is selected, and the
             // commander is all the host's player has.
@@ -2778,7 +2778,7 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             press_host_key(SDLK_PERIOD);
             host_page_turned = commander_page(host_world);
             require(
-                host_page_before != 0 && host_page_turned == expected,
+                host_page_before != 0 && host_page_turned == expected_page,
                 "the host's next-page key did not turn its commander's build page"
             );
         }
