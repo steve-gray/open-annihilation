@@ -4169,13 +4169,10 @@ class Runtime final : public menu::Host,
     /// @return what was removed, and how many files were left in use
     oa::app::content::EmptyResult empty_content_downloads();
 
-    /// Registers the prompt of the installs over the main menu, over the
-    /// notices' overlay.
-    void register_mod_install_overlay();
-
-    /// Tells whether a prompt of the installs shows over the main menu.
+    /// Tells whether the prompt of the installs is on the OA layer
+    /// (QuestionScreen), over the main menu.
     ///
-    /// @return true while one shows
+    /// @return true while it is
     [[nodiscard]] bool mod_install_prompt_shown() const noexcept;
 
     /// Installs the packages opened in the game, one at a time, once the

@@ -708,10 +708,10 @@ void Runtime::register_screens() {
         if (!holds_overlay(built_in, screens_.overlays[index]))
             extension_overlays_.push_back(screens_.overlays[index]);
     // The main menu's OA button, and the OA layer, which hosts the settings
-    // on the main menu and in a match with the in-game menu's OA button.
+    // on the main menu and in a match with the in-game menu's OA button, and
+    // the notices and the installs' prompts over the front end.
     register_engine_settings_button();
     register_oa_layer();
-    register_mod_install_overlay();
     // Without screens of the extension's for them, the multiplayer unit
     // headers and a main-menu overlay's steps have nothing to do. The registry
     // refuses a second handler, so these fill only the steps nobody took.
