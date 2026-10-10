@@ -6,6 +6,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/formats/oamod.hpp"
 #include "oa/formats/tdf.hpp"
+#include "oa/platform/text_font.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -109,6 +110,30 @@ read_pack(const fs::path& folder, std::string& interface_text, std::string& fail
     else if (!interface_failure.empty()) {
         failure = std::string(languages::pack_interface_file) + ": " + interface_failure;
         return nullptr;
+    }
+    for (const languages::PackFont& font : loaded->pack.manifest().fonts) {
+        const fs::path file =
+            folder / path_from_utf8(languages::pack_fonts_folder) / path_from_utf8(font.file);
+        std::error_code missing;
+        if (!fs::is_regular_file(file, missing)) {
+            failure = "its font " + font.file + " is not a file";
+            return nullptr;
+        }
+    }
+    if (!loaded->pack.manifest().warmup.empty()) {
+        const fs::path file = folder / path_from_utf8(loaded->pack.manifest().warmup);
+        std::string warmup_failure;
+        const auto text = read_bounded(file, languages::most_warmup_bytes, warmup_failure);
+        if (!text) {
+            failure = warmup_failure.empty() ? "its warm-up file is missing"
+                                             : "its warm-up file " + warmup_failure;
+            return nullptr;
+        }
+        if (!oa::platform::text_font::decode_utf8(*text)) {
+            failure = "its warm-up file is not UTF-8";
+            return nullptr;
+        }
+        loaded->warmup = *text;
     }
     return loaded;
 }
@@ -218,6 +243,22 @@ std::optional<std::string> read_pack_file(const fs::path& file, std::string& fai
     if (!bytes && failure.empty())
         failure = "it is not there";
     return bytes;
+}
+
+std::vector<PackFontFile> pack_fonts(const LoadedLanguagePack& pack) {
+    std::vector<PackFontFile> fonts;
+    const languages::PackManifest& manifest = pack.pack.manifest();
+    fonts.reserve(manifest.fonts.size());
+    for (const languages::PackFont& font : manifest.fonts) {
+        PackFontFile listed;
+        listed.file =
+            pack.folder / path_from_utf8(languages::pack_fonts_folder) / path_from_utf8(font.file);
+        listed.role = font.role == languages::PackFontRole::letters
+                          ? oa::platform::text_font::FaceRole::letters
+                          : oa::platform::text_font::FaceRole::ideographs;
+        fonts.push_back(std::move(listed));
+    }
+    return fonts;
 }
 
 fs::path language_pack_file(const LoadedLanguagePack& pack, std::string_view path) {

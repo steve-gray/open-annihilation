@@ -17,6 +17,7 @@
 #include "oa/data/languages/unit_texts.hpp"
 #include "oa/data/defs/locale.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -89,6 +90,15 @@ struct Runtime::LanguageState {
     std::vector<std::unique_ptr<LoadedLanguagePack>> engine_packs;
     /// The packs each of words is looked up in, set with the language.
     std::vector<oa::data::languages::PackLayer> layers;
+    /// The font files of the language shown, in the order a stack adds
+    /// them: each word's packs before the game data, then those after it,
+    /// each pack's fonts in manifest order, a path once, and at most
+    /// oa::platform::text_font::most_pack_faces.
+    std::vector<PackFontFile> fonts;
+    /// The warm-up text of the first of those packs that has one.
+    std::string warmup;
+    /// Bumped when fonts or warmup change, so the modern fonts follow them.
+    uint64_t fonts_generation{};
     /// The captions drawn over pictures in the language shown.
     oa::data::languages::PictureCaptions pictures;
     /// The manifest of the first pack of the language shown that asks for

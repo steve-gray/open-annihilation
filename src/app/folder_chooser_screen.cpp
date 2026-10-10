@@ -331,6 +331,8 @@ class ChooserScreen {
         if (!fonts_)
             std::cerr << "open-annihilation: the folder chooser shows no text: the bundled fonts "
                          "are missing\n";
+        else
+            use_game_files_language_fonts(*fonts_);
         int count = 0;
         if (SDL_JoystickID* ids = SDL_GetGamepads(&count); ids != nullptr) {
             for (int index = 0; index < count; ++index)

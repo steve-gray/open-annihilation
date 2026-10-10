@@ -17,6 +17,9 @@
 # oa::platform::text_font::bundled_font_directory() finds at run time. The list
 # is the module's face_files (oa/platform/text_font.hpp) and the bootstrap's
 # FONT_FILES; the three change together.
+#
+# The stack opens without Noto Sans CJK (its face is optional). The build
+# still ships that face until it moves into the language pack.
 include_guard(GLOBAL)
 
 set(OA_TEXT_FONT_FILES DejaVuSans-Bold.ttf DejaVuSans.ttf NotoSansCJKsc-Bold.otf NotoEmoji.ttf)

@@ -105,6 +105,31 @@ void compact_metrics_match_the_dialog() {
     OA_CHECK(kit::compact_metrics.focus_inset == 2);
     OA_CHECK(kit::compact_metrics.small_line == 12);
     OA_CHECK(kit::compact_metrics.regular_line == 16);
+    OA_CHECK(kit::compact_metrics.switch_width == 52);
+    OA_CHECK(kit::compact_metrics.knob_width == 7);
+    OA_CHECK(kit::compact_metrics.knob_height == 12);
+    OA_CHECK(kit::compact_metrics.track_height == 4);
+    OA_CHECK(kit::compact_metrics.track_offset == 4);
+    OA_CHECK(kit::compact_metrics.stop_height == 2);
+    OA_CHECK(kit::compact_metrics.stop_offset == 12);
+    OA_CHECK(kit::compact_metrics.least_stop_spacing == 4);
+    OA_CHECK(kit::compact_metrics.choice_text_inset == 6);
+    OA_CHECK(kit::compact_metrics.choice_arrow_room == 16);
+    OA_CHECK(kit::compact_metrics.choice_arrow_width == 7);
+    OA_CHECK(kit::compact_metrics.choice_arrow_height == 4);
+    OA_CHECK(kit::compact_metrics.choice_item_height == 16);
+    OA_CHECK(kit::compact_metrics.most_shown_choices == 8);
+    OA_CHECK(kit::compact_metrics.choice_item_text_inset == 12);
+    OA_CHECK(kit::compact_metrics.padlock_width == 5);
+    OA_CHECK(kit::compact_metrics.padlock_height == 7);
+    OA_CHECK(kit::compact_metrics.padlock_gap == 3);
+    OA_CHECK(kit::compact_metrics.scroll_thumb_width == 5);
+    OA_CHECK(kit::compact_metrics.least_thumb_height == 16);
+    OA_CHECK(kit::compact_metrics.button_icon_inset == 3);
+    OA_CHECK(kit::compact_metrics.button_icon_press == 1);
+    OA_CHECK(kit::compact_metrics.button_square_numerator == 20);
+    OA_CHECK(kit::compact_metrics.button_square_denominator == 32);
+    OA_CHECK(kit::compact_metrics.large_mark_margin == 2);
 }
 
 } // namespace
