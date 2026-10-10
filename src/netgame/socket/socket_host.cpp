@@ -1150,7 +1150,7 @@ bool resolve_ipv4(const char* name, uint8_t ip[4]) noexcept {
 #endif
 }
 
-// Loopback streams (stream_socket.hpp) ------------------------------------------
+// Streams (stream_socket.hpp) ---------------------------------------------------
 
 namespace {
 
@@ -1181,6 +1181,33 @@ bool prepare_stream(intptr_t fd) {
     set_option(fd, SOL_SOCKET, SO_NOSIGPIPE, 1);
 #endif
     return true;
+}
+
+/// Tells whether an address is refused before a connection is attempted.
+///
+/// 0.0.0.0 names no machine, 255.255.255.255 is not a host, and port 0 names
+/// no server. A connection to 0.0.0.0 reaches this machine on some systems,
+/// so it is refused here rather than opened.
+///
+/// @param to the address
+/// @return true when stream_connect refuses it at once
+bool address_is_unusable(const Address& to) {
+    return to.port == 0 || dplay::address_ip_is_zero(to) ||
+           std::memcmp(to.ip, local_networks_ip, 4) == 0;
+}
+
+/// Tells whether the system's error on a connection is zero, so it has opened.
+///
+/// This is the SO_ERROR read finish_connect uses once a connection is writable.
+///
+/// @param fd the connection
+/// @return true when the connection opened
+bool connection_is_open(intptr_t fd) {
+    int error = 0;
+    socket_len len = sizeof error;
+    return getsockopt(native(fd), SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &len) ==
+               0 &&
+           error == 0;
 }
 
 } // namespace
@@ -1353,6 +1380,105 @@ void stream_finish(intptr_t stream) noexcept {
 
 void stream_close(intptr_t* stream) noexcept {
     close_socket(stream);
+}
+
+intptr_t stream_connect(const Address& to, char* error, std::size_t error_size) noexcept {
+    if (!platform_startup()) {
+        stream_error(error, error_size, "the socket subsystem failed to start");
+        return invalid_socket;
+    }
+    if (address_is_unusable(to)) {
+        stream_error(error, error_size, "the address cannot be connected to");
+        return invalid_socket;
+    }
+    // connect, the wait and SO_ERROR are all in Winsock 1.1, so a Windows 95
+    // build makes the same calls as later Windows. Nothing here needs a
+    // separate path.
+    const intptr_t fd = open_socket(SOCK_STREAM);
+    if (!socket_valid(fd) || !prepare_stream(fd)) {
+        intptr_t tmp = fd;
+        close_socket(&tmp);
+        stream_error(error, error_size, "cannot create a socket");
+        return invalid_socket;
+    }
+    set_option(fd, IPPROTO_TCP, TCP_NODELAY, 1);
+    const sockaddr_in peer = to_sockaddr(to);
+    const int connected =
+        connect(native(fd), reinterpret_cast<const sockaddr*>(&peer), sizeof peer);
+    if (connected != 0 && !would_block()) {
+        intptr_t tmp = fd;
+        close_socket(&tmp);
+        stream_error(error, error_size, "the connection was refused");
+        return invalid_socket;
+    }
+    return fd;
+}
+
+StreamOpen stream_wait_open(intptr_t stream, uint32_t wait_ms) noexcept {
+    if (!platform_startup() || !socket_valid(stream))
+        return StreamOpen::failed;
+    SocketWait wait{};
+    wait.fd = native(stream);
+    wait.wanted = socket_writable;
+    const int ready = wait_for_sockets(&wait, 1, wait_ms);
+    if (ready < 0)
+        return StreamOpen::failed;
+    if (ready == 0)
+        return StreamOpen::opening;
+    if ((wait.found & socket_invalid) != 0)
+        return StreamOpen::failed;
+    const bool writable = (wait.found & socket_writable) != 0;
+    const bool broken = (wait.found & socket_failed) != 0;
+    if (!writable && !broken)
+        return StreamOpen::opening;
+    // Writable with no system error is open. A refusal is an error here, the
+    // same read finish_connect makes, including when the wait reported only
+    // the failure.
+    if (!connection_is_open(stream) || !writable)
+        return StreamOpen::failed;
+    return StreamOpen::open;
+}
+
+int stream_wait(StreamWaitEntry* entries, std::size_t count, uint32_t wait_ms) noexcept {
+    // The public cap stays inside the wait the host already makes, and so
+    // inside FD_SETSIZE.
+    static_assert(stream_wait_most <= max_wait_entries);
+    if (!platform_startup() || entries == nullptr || count == 0 || count > stream_wait_most)
+        return -1;
+    SocketWait waits[stream_wait_most]{};
+    std::size_t index[stream_wait_most]{};
+    std::size_t waiting = 0;
+    int found_count = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        entries[i].readable = false;
+        entries[i].writable = false;
+        entries[i].failed = false;
+        if (!socket_valid(entries[i].stream)) {
+            entries[i].failed = true;
+            ++found_count;
+            continue;
+        }
+        index[waiting] = i;
+        waits[waiting].fd = native(entries[i].stream);
+        waits[waiting].wanted =
+            (entries[i].read ? socket_readable : 0u) | (entries[i].write ? socket_writable : 0u);
+        ++waiting;
+    }
+    if (waiting == 0)
+        return found_count;
+    const int ready = wait_for_sockets(waits, waiting, wait_ms);
+    if (ready < 0)
+        return -1;
+    for (std::size_t n = 0; n < waiting; ++n) {
+        StreamWaitEntry& entry = entries[index[n]];
+        const unsigned found = waits[n].found;
+        entry.readable = (found & socket_readable) != 0;
+        entry.writable = (found & socket_writable) != 0;
+        entry.failed = (found & (socket_failed | socket_invalid)) != 0;
+        if (entry.readable || entry.writable || entry.failed)
+            ++found_count;
+    }
+    return found_count;
 }
 
 } // namespace oa::netgame::sock
