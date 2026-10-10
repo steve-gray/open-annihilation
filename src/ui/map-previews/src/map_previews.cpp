@@ -170,13 +170,11 @@ bool decode_png(std::span<const uint8_t> file, int32_t side, Thumbnail* thumbnai
     int32_t dst_w = side;
     int32_t dst_h = side;
     if (src_w >= src_h)
-        dst_h = static_cast<int32_t>(
-            std::max<int64_t>(1, static_cast<int64_t>(src_h) * side / src_w)
-        );
+        dst_h =
+            static_cast<int32_t>(std::max<int64_t>(1, static_cast<int64_t>(src_h) * side / src_w));
     else
-        dst_w = static_cast<int32_t>(
-            std::max<int64_t>(1, static_cast<int64_t>(src_w) * side / src_h)
-        );
+        dst_w =
+            static_cast<int32_t>(std::max<int64_t>(1, static_cast<int64_t>(src_w) * side / src_h));
     Thumbnail decoded;
     decoded.width = dst_w;
     decoded.height = dst_h;
