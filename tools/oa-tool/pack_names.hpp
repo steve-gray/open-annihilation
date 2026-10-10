@@ -23,7 +23,7 @@ struct Item {
     std::string name;           ///< path inside the folder, '/' between parts, no trailing '/'
     std::filesystem::path path; ///< where its bytes are read; a folder has none to read
     bool folder{};
-    std::uint64_t bytes{}; ///< uncompressed size; 0 for a folder
+    uint64_t bytes{}; ///< uncompressed size; 0 for a folder
 };
 
 /// The names a package will unpack, compared without ASCII case, so two

@@ -42,7 +42,7 @@ same. `--` ends options. A command takes its options through
 | `asset-extract ROOT ENTRY OUTPUT [ARCHIVE...]` | Writes ENTRY from loose files under ROOT, or from the named archives, and prints where it was read. A loose file wins. |
 | `preview ARCHIVE PCX_ENTRY OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX image from an archive as a PPM file, or a PNG file when the path ends in `.png`, and prints its size. |
 | `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
-| `pack FOLDER [--out FILE] [--force]` | Packs FOLDER as a `.oamod` or a `.oalang`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--force` replaces an existing file. |
+| `pack FOLDER [--out FILE] [--force] [--game-dir DIR]` | Packs FOLDER as a `.oamod`, a `.oalang` or a `.oamap`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--game-dir` is the game's data; map packs need the game's palette for previews. `--force` replaces an existing file. |
 
 ## Entry points
 
@@ -102,9 +102,13 @@ language pack, checks the order and the methods, packs again after the
 files' times change, and checks the refusals. Its argument is the pseudo
 pack's folder.
 
+`tools-oa-tool-pack-map` (`oa-tool-pack-map-test`) packs two maps into a
+`.oamap`, checks the index, the preview and the refusals, and leaves
+`pack-map-source` and `pack-map-game` in its working folder.
+
 ## Limitations
 
-The archive commands take no options. `pack` takes `--out` and `--force`.
-It does not pack a map. Catalogues, checks and registries are further
+The archive commands take no options. `pack` takes `--out`, `--force` and,
+for a map pack, `--game-dir`. Catalogues, checks and registries are further
 commands, not part of this table yet. The macOS package does not ship
 `oa-tool`.
