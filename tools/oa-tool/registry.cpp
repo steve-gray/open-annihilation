@@ -25,8 +25,6 @@
 #include "oa/netgame/http/client.hpp"
 #include "oa/platform/files.hpp"
 
-#include <monocypher.h>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -107,41 +105,12 @@ std::string utf8_of(const fs::path& path) {
     return {text.begin(), text.end()};
 }
 
-std::span<const uint8_t> as_bytes(std::string_view text) {
-    return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
-}
-
 std::vector<uint8_t> bytes_of(std::string_view text) {
     return {
         reinterpret_cast<const uint8_t*>(text.data()),
         reinterpret_cast<const uint8_t*>(text.data()) + text.size()
     };
 }
-
-/// The passphrase or install id, wiped when this goes away.
-class SecretText {
-  public:
-
-    std::string text;
-
-    explicit SecretText(std::string value) : text(std::move(value)) {}
-
-    SecretText(const SecretText&) = delete;
-    SecretText& operator=(const SecretText&) = delete;
-
-    SecretText(SecretText&& other) noexcept : text(std::move(other.text)) {
-        if (!other.text.empty())
-            crypto_wipe(other.text.data(), other.text.size());
-        other.text.clear();
-    }
-
-    SecretText& operator=(SecretText&&) = delete;
-
-    ~SecretText() {
-        if (!text.empty())
-            crypto_wipe(text.data(), text.size());
-    }
-};
 
 int64_t current_time() {
     const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
@@ -1103,24 +1072,9 @@ int run_registry_init(std::span<const std::string> arguments, Output& output) {
     if (!catalogue::read_catalogue(catalogue_bytes, loaded, &catalogue_error))
         throw Failure(catalogue_error);
 
-    signing::Signature signature{};
     signing::PublicKey public_key{};
-    {
-        SecretText passphrase(read_passphrase("Passphrase: ", pass_path));
-        signing::SecretKey secret{};
-
-        struct KeyGuard {
-            signing::SecretKey& secret;
-
-            ~KeyGuard() { crypto_wipe(secret.data(), secret.size()); }
-        } guard{secret};
-
-        const signing::SealStatus status =
-            signing::unseal_key(key_bytes, as_bytes(passphrase.text), secret, public_key);
-        if (status != signing::SealStatus::ok)
-            throw Failure(std::string(signing::seal_status_text(status)));
-        signature = signing::sign(secret, catalogue_bytes);
-    }
+    const signing::Signature signature =
+        sign_with_sealed_key(key_bytes, pass_path, catalogue_bytes, public_key);
     const std::string signature_text = catalogue::signature_file_text(
         catalogue::SignatureLine{std::string(info.id.data(), info.id_size), signature}
     );
