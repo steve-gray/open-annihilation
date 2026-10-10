@@ -710,31 +710,6 @@ int32_t screen_size_index(ScreenSize size, std::span<const ScreenSize> offered_s
     return found == offered_sizes.end() ? 0 : static_cast<int32_t>(found - offered_sizes.begin());
 }
 
-/// Returns a setting's lock, a check's own section's when it gives one.
-///
-/// @param locks the dialog's locks
-/// @param setting the setting
-/// @param section a check's own section; null for the dialog's
-/// @return why it cannot be changed now
-Lock row_lock(const Locks& locks, Setting setting, const SectionHooks* section) {
-    const Lock lock = lock_of(locks, setting);
-    if (section == nullptr || section->lock == nullptr)
-        return lock;
-    return section->lock(section->context, setting, lock);
-}
-
-/// Tells whether a setting's hint lines are its status, as a check's own
-/// section has it when it says.
-///
-/// @param setting the setting
-/// @param section a check's own section; null for the dialog's
-/// @return true when its hint lines are its status
-bool row_hint_is_status(Setting setting, const SectionHooks* section) {
-    if (section == nullptr || section->hint_is_status == nullptr)
-        return hint_is_status(setting);
-    return section->hint_is_status(section->context, setting);
-}
-
 /// Returns a section's place among Dialog::scroll.
 ///
 /// @param page the section
@@ -1223,20 +1198,6 @@ std::string_view folder_button_text(std::size_t index) noexcept {
     return index < captions.size() ? captions[index] : std::string_view{};
 }
 
-std::string shown_hint_text(
-    const Dialog& dialog,
-    Setting setting,
-    std::size_t line,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-) {
-    const HintLine hint = row_hint(dialog, setting, line);
-    if (setting == Setting::user_folder && line == 0)
-        return dialog.user_folder.empty() ? std::string()
-                                          : path_tail(dialog.user_folder, width, text_width);
-    return std::string(shown_text(hint.text));
-}
-
 bool is_choice(Setting setting) noexcept {
     return setting == Setting::language || setting == Setting::pad_gyro ||
            setting == Setting::pad_prompts || setting == Setting::max_zoom_out ||
@@ -1302,29 +1263,6 @@ std::string choice_text(const Dialog& dialog, Setting setting, std::size_t index
         return std::string(shown_text("System default")) + " (" + std::string(named.endonym) + ")";
     }
     return std::string(offered_languages()[index - 1]->endonym);
-}
-
-std::string shown_choice_text(
-    const Dialog& dialog,
-    Setting setting,
-    std::size_t index,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-) {
-    static_cast<void>(width);
-    static_cast<void>(text_width);
-    return choice_text(dialog, setting, index);
-}
-
-std::string field_text(
-    const Dialog& dialog,
-    const Row& row,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-) {
-    return shown_choice_text(
-        dialog, row.setting, choice_index(dialog, row.setting), width, text_width
-    );
 }
 
 std::size_t choice_index(const Dialog& dialog, Setting setting) {
@@ -1460,6 +1398,89 @@ section_settings(Page page, const SectionHooks* section, const RowContext& conte
     return section->settings(section->context, page);
 }
 
+kit::RowView row_view(
+    const Dialog& dialog, Setting setting, Lock lock, bool status, const TextWidth& small_width
+) {
+    kit::RowView view =
+        kit::view_of(row_spec(setting), reading(dialog.chosen, dialog), &shown_text);
+    // The lock the dialog puts on the row, looked up as the dialog has
+    // always drawn it, and a switch a language sets showing On.
+    view.lock =
+        lock == Lock::none ? std::string() : std::string(shown_text(shown_text(lock_text(lock))));
+    view.hint_is_status = status;
+    if (lock == Lock::set_by_language)
+        view.on = true;
+    for (std::size_t line = 0; line < view.hints.size(); ++line) {
+        if (line == 0 && hint_is_path(setting)) {
+            const std::string path = row_hint(dialog, setting, 0).text;
+            view.hints[line] =
+                path.empty() ? std::string()
+                             : std::string(shown_text(path_tail(path, content_width, small_width)));
+            continue;
+        }
+        view.hints[line] = std::string(shown_text(view.hints[line]));
+    }
+    return view;
+}
+
+Rows place_section(
+    const Dialog& dialog,
+    Page page,
+    const Locks& locks,
+    const SectionHooks* section,
+    const TextWidth& small_width,
+    kit::PlacedRows* placed
+) {
+    const auto settings = section_settings(page, section, row_context(dialog));
+    std::vector<kit::RowView> views;
+    std::vector<Lock> row_locks;
+    std::vector<bool> statuses;
+    views.reserve(settings.size());
+    for (const Setting setting : settings) {
+        row_locks.push_back(section_lock(locks, setting, section));
+        statuses.push_back(section_hint_is_status(setting, section));
+        views.push_back(row_view(dialog, setting, row_locks.back(), statuses.back(), small_width));
+    }
+    // Developer's own rows lie closer, over its list; while the dialog's
+    // words are drawn in the modern fonts, a hint's lines lie further apart.
+    const bool own_section = section != nullptr && section->settings != nullptr;
+    kit::RowPlacement placement;
+    placement.left = content_left;
+    placement.right = content_right;
+    placement.first_top = first_row_top;
+    placement.row_padding =
+        page == Page::developer && !own_section ? developer_row_padding : row_padding;
+    placement.tall = oa::data::languages::interface_language().needs !=
+                     oa::data::languages::TextNeeds::game_fonts;
+    placement.first_control = first_row_control;
+    kit::PlacedRows kit_rows = kit::place_rows(views, placement);
+    Rows rows{};
+    rows.bottom = kit_rows.bottom;
+    rows.rows.reserve(kit_rows.rows.size());
+    for (std::size_t index = 0; index < kit_rows.rows.size(); ++index) {
+        const kit::PlacedRow& placed_row = kit_rows.rows[index];
+        Row& row = rows.rows.emplace_back();
+        row.setting = settings[index];
+        row.control = placed_row.control;
+        row.lock = row_locks[index];
+        row.hint_is_status = statuses[index];
+        row.top = placed_row.top;
+        row.height = placed_row.height;
+        row.label = placed_row.label;
+        row.lock_area = placed_row.lock_area;
+        row.hint_lines = std::min(placed_row.hints.size(), most_row_lines);
+        for (std::size_t line = 0; line < row.hint_lines; ++line)
+            row.hints[line] = placed_row.hints[line];
+        row.control_area = placed_row.control_area;
+        // Only a slider shows a value of its own beside its control.
+        if (placed_row.view.kind == kit::RowKind::slider)
+            row.value = placed_row.value;
+    }
+    if (placed != nullptr)
+        *placed = std::move(kit_rows);
+    return rows;
+}
+
 Rows place_rows(
     Page page,
     const Locks& locks,
@@ -1467,102 +1488,15 @@ Rows place_rows(
     const SectionHooks* section,
     const RowContext& context
 ) {
-    Rows placed{};
-    int32_t top = first_row_top;
-    const auto settings = section_settings(page, section, context);
-    // While the dialog's words are drawn in the modern fonts, a hint's lines
-    // lie further apart.
-    const bool tall = oa::data::languages::interface_language().needs !=
-                      oa::data::languages::TextNeeds::game_fonts;
-    // Developer's own rows lie closer, over its list.
-    const bool own_section = section != nullptr && section->settings != nullptr;
-    const int32_t row_gap =
-        page == Page::developer && !own_section ? developer_row_padding : row_padding;
-    placed.rows.reserve(settings.size());
-    for (std::size_t index = 0; index < settings.size(); ++index) {
-        Row& row = placed.rows.emplace_back();
-        row.setting = settings[index];
-        row.control = first_row_control + static_cast<int32_t>(index);
-        row.lock = row_lock(locks, row.setting, section);
-        row.hint_is_status = row_hint_is_status(row.setting, section);
-        row.top = top;
-        const int32_t label_top = top + 1 + row_gap;
-        const bool locked = row.lock != Lock::none;
-        // The lock, right-aligned on the label line; the label ends short of it.
-        const SourceRect right_lock{
-            content_right - lock_width, label_top, lock_width, label_line_height
-        };
-        int32_t label_right = content_right;
-        int32_t control_width = 0;
-        if (is_strip(row.setting)) {
-            const Strip strip = strip_of(row.setting);
-            control_width = static_cast<int32_t>(strip.levels) * strip.level_width + 2;
-        } else if (is_switch(row.setting)) {
-            control_width = switch_width;
-        } else if (is_button(row.setting)) {
-            control_width = manage_button_width;
-        } else if (is_buttons(row.setting)) {
-            control_width = folder_buttons_width;
-        }
-        if (control_width == 0 || (locked && row.hint_is_status)) {
-            // A slider's lock, or the lock of a switch or strip whose hint
-            // lines are its status, which stands where its control was.
-            if (locked) {
-                row.lock_area = right_lock;
-                label_right = row.lock_area.x - label_gap;
-            }
-        } else {
-            row.control_area = {
-                content_right - control_width, label_top, control_width, label_line_height
-            };
-            label_right = row.control_area.x - label_gap;
-            // Any other locked control keeps its place, so that its value
-            // shows, with its lock left of it. Its label keeps only the
-            // columns left of the lock: 93 beside a switch, too few beside
-            // the level strip, which no lock reaches.
-            if (locked) {
-                row.lock_area = {
-                    row.control_area.x - label_gap - lock_width,
-                    label_top,
-                    lock_width,
-                    label_line_height
-                };
-                label_right = row.lock_area.x - label_gap;
-            }
-        }
-        row.label = {content_left, label_top, label_right - content_left, label_line_height};
-        row.hint_lines = hint_line_count(row.setting, context);
-        int32_t bottom = label_top + label_line_height + hint_gap;
-        for (std::size_t line = 0; line < row.hint_lines; ++line) {
-            if (line > 0 && tall)
-                bottom += tall_hint_line_gap;
-            row.hints[line] = {content_left, bottom, content_width, hint_line_height};
-            bottom += hint_line_height;
-        }
-        if (is_slider(row.setting)) {
-            bottom += slider_gap;
-            const int32_t value_left = content_right - slider_value_width;
-            row.control_area = {
-                content_left,
-                bottom,
-                value_left - slider_value_gap - content_left,
-                slider_line_height
-            };
-            row.value = {value_left, bottom, slider_value_width, slider_line_height};
-            bottom += slider_line_height;
-        } else if (is_choice(row.setting)) {
-            // A drop-down's field stands on its own line, as a slider's track.
-            bottom += slider_gap;
-            row.control_area = {
-                content_left, bottom, choice_field_width(row.setting), choice_line_height
-            };
-            bottom += choice_line_height;
-        }
-        bottom += row_gap;
-        row.height = bottom - top;
-        top = bottom;
-    }
-    placed.bottom = top;
+    // The rows' places hang on what the dialog shows beyond each setting's
+    // rows: the Steam Input notice and a Steam Deck's rate.
+    Dialog shown;
+    shown.steam_input = context.steam_input;
+    shown.steam_deck_panel_hz = context.steam_deck_panel_hz;
+    const TextWidth estimated = [](std::string_view text) {
+        return static_cast<int32_t>(oa::ui::kit::character_count(text)) * estimated_character_width;
+    };
+    Rows placed = place_section(shown, page, locks, section, estimated);
     scroll_rows(placed, scroll);
     return placed;
 }
@@ -1630,8 +1564,12 @@ ScrolledRows open_rows(const Dialog& dialog) {
         scroll_rows(open.rows, open.scroll);
         return open;
     }
-    open.rows =
-        place_rows(dialog.page, shown_locks(dialog), 0, dialog.section_hooks, row_context(dialog));
+    open.rows = place_section(
+        dialog, dialog.page, shown_locks(dialog), dialog.section_hooks, [](std::string_view text) {
+            return static_cast<int32_t>(oa::ui::kit::character_count(text)) *
+                   estimated_character_width;
+        }
+    );
     if (developer_page(dialog)) {
         // Developer's rows stay at its top; its list scrolls under them in a
         // view of its own, with the end gap under its last row.
@@ -2608,10 +2546,6 @@ HintLine row_hint(const Dialog& dialog, Setting setting, std::size_t line) {
     return {std::string(hint_line(setting, dialog.chosen, dialog.acceleration, line))};
 }
 
-std::string_view row_label(Setting setting) noexcept {
-    return label_of(setting);
-}
-
 std::vector<std::string>
 break_lines(std::string_view text, std::size_t characters, std::size_t most_lines) {
     // The mark between a location's folders: "Open Annihilation › Total
@@ -2726,6 +2660,55 @@ std::string_view level_caption(AntiAliasing level) noexcept {
 
 namespace layout = geometry;
 
+bool layout::list_row_takes_input(const layout::ListRow& row) noexcept {
+    if (row.control == no_control)
+        return false;
+    return row.kind == layout::ListRowKind::area || row.kind == layout::ListRowKind::hack ||
+           !row.locked;
+}
+
+std::vector<bool> layout::roll_back_rows(const Dialog& dialog, const layout::ScrolledRows& open) {
+    std::vector<bool> shown(open.rows.rows.size(), false);
+    if (!layout::mods_page(dialog))
+        return shown;
+    const auto rows = mod_rows(dialog);
+    for (std::size_t index = 0; index < shown.size() && index < rows.size(); ++index)
+        shown[index] = layout::offers_roll_back(dialog, rows[index]);
+    return shown;
+}
+
+std::vector<int32_t> layout::focus_order(const Dialog& dialog, const layout::ScrolledRows& open) {
+    std::vector<int32_t> order;
+    // A row that only shows text takes no focus; a row of Mods is followed
+    // by its ROLL BACK.
+    const std::vector<bool> roll_backs = roll_back_rows(dialog, open);
+    for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
+        const layout::Row& row = open.rows.rows[index];
+        if (row.lock == Lock::none && row.control_area.width > 0)
+            order.push_back(row.control);
+        if (row.lock == Lock::none && roll_backs[index])
+            order.push_back(layout::roll_back_control(open.rows, index));
+    }
+    if (layout::developer_page(dialog)) {
+        for (const layout::ListRow& row : open.list.rows) {
+            if (list_row_takes_input(row))
+                order.push_back(row.control);
+        }
+        order.push_back(active_only_control);
+        if (developer::restore_profile_enabled(dialog))
+            order.push_back(restore_profile_control);
+    }
+    if (layout::mods_page(dialog) && dialog.locks.mod == Lock::none)
+        order.push_back(layout::mods_folder_control(open.rows));
+    order.push_back(restore_control);
+    order.push_back(cancel_control);
+    order.push_back(ok_control);
+    for (const Page page :
+         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller))
+        order.push_back(page_control(page));
+    return order;
+}
+
 namespace {
 
 /// Tells whether a point lies in a rectangle.
@@ -2758,34 +2741,6 @@ const layout::Row* row_of(const layout::Rows& rows, int32_t control) noexcept {
     if (index < 0 || static_cast<std::size_t>(index) >= rows.rows.size())
         return nullptr;
     return &rows.rows[static_cast<std::size_t>(index)];
-}
-
-/// Tells whether a row of Developer's list takes a press and the focus:
-/// every header, which opens and closes, and a parameter's control while it
-/// can change.
-///
-/// @param row the row
-/// @return true when it does
-bool list_row_takes_input(const layout::ListRow& row) noexcept {
-    if (row.control == no_control)
-        return false;
-    return row.kind == layout::ListRowKind::area || row.kind == layout::ListRowKind::hack ||
-           !row.locked;
-}
-
-/// Returns the rows of Mods that offer ROLL BACK, by their places.
-///
-/// @param dialog the dialog
-/// @param open Mods' rows
-/// @return for each placed row, whether it shows ROLL BACK
-std::vector<bool> roll_back_rows(const Dialog& dialog, const layout::ScrolledRows& open) {
-    std::vector<bool> shown(open.rows.rows.size(), false);
-    if (!layout::mods_page(dialog))
-        return shown;
-    const auto rows = mod_rows(dialog);
-    for (std::size_t index = 0; index < shown.size() && index < rows.size(); ++index)
-        shown[index] = layout::offers_roll_back(dialog, rows[index]);
-    return shown;
 }
 
 /// Returns the control under a point that a press can act on.
@@ -2846,46 +2801,6 @@ control_at(const Dialog& dialog, const layout::ScrolledRows& open, int32_t x, in
             return page_control(page);
     }
     return no_control;
-}
-
-/// Returns the controls the keyboard focus moves through, in order: the
-/// open section's rows that can be changed (on Developer, then its list's
-/// rows, Show Active Only and, while Developer Mode is on, Restore profile
-/// values), the footer's buttons left to right, then the sections' entries.
-///
-/// @param dialog the dialog
-/// @param open the open section's rows
-/// @return the controls
-std::vector<int32_t> focus_order(const Dialog& dialog, const layout::ScrolledRows& open) {
-    std::vector<int32_t> order;
-    // A row that only shows text takes no focus; a row of Mods is followed
-    // by its ROLL BACK.
-    const std::vector<bool> roll_backs = roll_back_rows(dialog, open);
-    for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
-        const layout::Row& row = open.rows.rows[index];
-        if (row.lock == Lock::none && row.control_area.width > 0)
-            order.push_back(row.control);
-        if (row.lock == Lock::none && roll_backs[index])
-            order.push_back(layout::roll_back_control(open.rows, index));
-    }
-    if (layout::developer_page(dialog)) {
-        for (const layout::ListRow& row : open.list.rows) {
-            if (list_row_takes_input(row))
-                order.push_back(row.control);
-        }
-        order.push_back(active_only_control);
-        if (developer::restore_profile_enabled(dialog))
-            order.push_back(restore_profile_control);
-    }
-    if (layout::mods_page(dialog) && dialog.locks.mod == Lock::none)
-        order.push_back(layout::mods_folder_control(open.rows));
-    order.push_back(restore_control);
-    order.push_back(cancel_control);
-    order.push_back(ok_control);
-    for (const Page page :
-         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller))
-        order.push_back(page_control(page));
-    return order;
 }
 
 /// Notes where the pointer is, so that the hover can follow the rows a
@@ -3578,7 +3493,7 @@ DialogAction restore_defaults(Dialog& dialog) {
         // locked one kept.
         const auto language = layout::section_settings(Page::language, dialog.section_hooks);
         for (const Setting setting : language)
-            if (layout::row_lock(dialog.locks, setting, dialog.section_hooks) == Lock::none)
+            if (layout::section_lock(dialog.locks, setting, dialog.section_hooks) == Lock::none)
                 copy_setting(dialog.chosen, dialog.defaults, setting);
         dialog.restored = true;
         return DialogAction::changed;
@@ -3597,7 +3512,7 @@ DialogAction restore_defaults(Dialog& dialog) {
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
         const auto settings = layout::section_settings(page, dialog.section_hooks);
         for (const Setting setting : settings) {
-            if (layout::row_lock(dialog.locks, setting, dialog.section_hooks) != Lock::none)
+            if (layout::section_lock(dialog.locks, setting, dialog.section_hooks) != Lock::none)
                 copy_setting(restored, before, setting);
         }
     }
@@ -4794,12 +4709,28 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         };
     if (layout::mods_page(dialog))
         mods_layout(dialog, open, parts, text_width, small_text_width);
-    for (const layout::Row& row : open.rows.rows) {
-        if (layout::mods_page(dialog))
-            break;
+    // Every other section's rows as they are drawn, from their row specs:
+    // Developer's stay at its top while its list scrolls.
+    oa::ui::kit::PlacedRows placed;
+    if (!layout::mods_page(dialog)) {
+        static_cast<void>(layout::place_section(
+            dialog,
+            dialog.page,
+            layout::shown_locks(dialog),
+            dialog.section_hooks,
+            small_text_width,
+            &placed
+        ));
+        oa::ui::kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
+    }
+    const layout::SettingsModel model = layout::reading(dialog.chosen, dialog);
+    for (std::size_t index = 0; index < placed.rows.size() && index < open.rows.rows.size();
+         ++index) {
+        const layout::Row& row = open.rows.rows[index];
+        const oa::ui::kit::RowView& view = placed.rows[index].view;
         // A locked row's control is drawn but takes no press.
         const int32_t control = row.lock == Lock::none ? row.control : no_control;
-        row_text(row.label, layout::row_label(row.setting), DialogFont::regular);
+        row_part(LayoutPart{row.label, view.label, DialogFont::regular, 0, no_control});
         if (row.lock != Lock::none) {
             const layout::SourceRect text_area{
                 row.lock_area.x + layout::padlock_width + layout::padlock_gap,
@@ -4818,92 +4749,87 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
             );
             row_text(text_area, layout::lock_text(row.lock), DialogFont::small);
         }
-        for (std::size_t line = 0; line < row.hint_lines; ++line) {
-            const std::string hint = layout::shown_hint_text(
-                dialog, row.setting, line, row.hints[line].width, small_text_width
-            );
-            if (!hint.empty())
-                row_text(row.hints[line], hint, DialogFont::small);
-        }
-        if (layout::is_text(row.setting))
-            continue;
-        if (layout::is_button(row.setting)) {
+        for (std::size_t line = 0; line < row.hint_lines && line < view.hints.size(); ++line)
+            if (!view.hints[line].empty())
+                row_part(
+                    LayoutPart{row.hints[line], view.hints[line], DialogFont::small, 0, no_control}
+                );
+        switch (view.kind) {
+        case oa::ui::kit::RowKind::value_and_button:
+            // MANAGE…: one button.
             row_part(
-                LayoutPart{
-                    row.control_area,
-                    std::string(layout::shown_text(layout::manage_text)),
-                    DialogFont::small,
-                    0,
-                    control,
-                }
+                LayoutPart{row.control_area, view.buttons.front(), DialogFont::small, 0, control}
             );
-        } else if (layout::is_buttons(row.setting) && row.control_area.width > 0) {
-            for (std::size_t button = 0; button < folder_button_count; ++button)
-                row_part(
-                    LayoutPart{
-                        layout::folder_button(row.control_area, button),
-                        std::string(layout::shown_text(layout::folder_button_text(button))),
-                        DialogFont::small,
-                        0,
-                        control,
-                    }
-                );
-        } else if (layout::is_strip(row.setting) && row.control_area.width > 0) {
-            const layout::Strip strip = layout::strip_of(row.setting);
-            for (std::size_t level = 0; level < strip.levels; ++level) {
-                row_part(
-                    LayoutPart{
-                        {row.control_area.x + 1 + static_cast<int32_t>(level) * strip.level_width,
-                         row.control_area.y + 1,
-                         strip.level_width,
-                         row.control_area.height - 2},
-                        std::string(layout::shown_text(layout::strip_caption(row.setting, level))),
-                        DialogFont::small,
-                        0,
-                        control,
-                    }
-                );
-            }
-        } else if (layout::is_choice(row.setting)) {
+            break;
+        case oa::ui::kit::RowKind::buttons:
+            if (row.control_area.width > 0)
+                for (std::size_t button = 0; button < view.buttons.size(); ++button)
+                    row_part(
+                        LayoutPart{
+                            layout::folder_button(row.control_area, button),
+                            view.buttons[button],
+                            DialogFont::small,
+                            0,
+                            control,
+                        }
+                    );
+            break;
+        case oa::ui::kit::RowKind::levels:
+            if (row.control_area.width > 0)
+                for (std::size_t level = 0; level < view.captions.size(); ++level)
+                    row_part(
+                        LayoutPart{
+                            {row.control_area.x + 1 +
+                                 static_cast<int32_t>(level) * view.control_width,
+                             row.control_area.y + 1,
+                             view.control_width,
+                             row.control_area.height - 2},
+                            view.captions[level],
+                            DialogFont::small,
+                            0,
+                            control,
+                        }
+                    );
+            break;
+        case oa::ui::kit::RowKind::choice:
             // The field shows the choice, in the regular font.
             row_part(
                 LayoutPart{
                     row.control_area,
-                    layout::field_text(dialog, row, layout::choice_field_text_room, text_width),
+                    oa::ui::kit::row_caption(layout::row_spec(row.setting), model, view.index),
                     DialogFont::regular,
                     0,
                     control,
                 }
             );
-        } else if (layout::is_slider(row.setting)) {
+            break;
+        case oa::ui::kit::RowKind::slider:
             row_part(LayoutPart{row.control_area, {}, DialogFont::regular, 0, control});
-            row_text(row.value, layout::value_text(row.setting, dialog), DialogFont::regular);
-        } else if (row.control_area.width > 0) {
-            const int32_t half = (row.control_area.width - 2) / 2;
-            row_part(
-                LayoutPart{
-                    {row.control_area.x + 1,
-                     row.control_area.y + 1,
-                     half,
-                     row.control_area.height - 2},
-                    std::string(layout::shown_text(layout::off_text)),
-                    DialogFont::small,
-                    0,
-                    control,
-                }
-            );
-            row_part(
-                LayoutPart{
-                    {row.control_area.x + 1 + half,
-                     row.control_area.y + 1,
-                     half,
-                     row.control_area.height - 2},
-                    std::string(layout::shown_text(layout::on_text)),
-                    DialogFont::small,
-                    0,
-                    control,
-                }
-            );
+            row_part(LayoutPart{row.value, view.value, DialogFont::regular, 0, no_control});
+            break;
+        case oa::ui::kit::RowKind::toggle:
+            if (row.control_area.width > 0) {
+                const int32_t half = (row.control_area.width - 2) / 2;
+                for (std::size_t side = 0; side < view.captions.size(); ++side)
+                    row_part(
+                        LayoutPart{
+                            {row.control_area.x + 1 + static_cast<int32_t>(side) * half,
+                             row.control_area.y + 1,
+                             half,
+                             row.control_area.height - 2},
+                            view.captions[side],
+                            DialogFont::small,
+                            0,
+                            control,
+                        }
+                    );
+            }
+            break;
+        case oa::ui::kit::RowKind::text_field:
+        case oa::ui::kit::RowKind::link:
+        case oa::ui::kit::RowKind::text:
+            // Where the files are and the Steam Input notice show text alone.
+            break;
         }
     }
     // On Developer, its list and the list's footer under its rows.
@@ -4946,13 +4872,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
             parts.push_back(
                 LayoutPart{
                     layout::choice_item(list->rect, shown),
-                    layout::shown_choice_text(
-                        dialog,
-                        list->row->setting,
-                        static_cast<std::size_t>(item),
-                        layout::choice_item_text_room,
-                        text_width
-                    ),
+                    oa::ui::kit::row_caption(layout::row_spec(list->row->setting), model, item),
                     DialogFont::regular,
                     0,
                     no_control,
