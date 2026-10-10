@@ -1166,6 +1166,17 @@ void AssetStore::mark_loose_shadows() {
             mark_loose_directory("", root);
         }
     walked_folders_.clear();
+    if (pack_layer_ == nullptr)
+        return;
+    const auto current = pack_layer_snapshot();
+    if (!current)
+        return;
+    auto updated = std::make_shared<PackLayer>(*current);
+    for (auto& entry : updated->entries)
+        entry.hidden = loose_path(entry.path).has_value();
+    const base::threads::LockGuard guard(pack_layer_->lock);
+    if (pack_layer_->layer == current)
+        pack_layer_->layer = std::move(updated);
 }
 
 void AssetStore::mark_loose_directory(
@@ -1314,6 +1325,11 @@ AssetStore::read_skipping(std::string_view resource, const std::filesystem::path
             fail_entry_read(bytes.error, mounted.path, mounted.archive.nodes()[found->node]);
         return {std::move(*bytes.value), mounted.path, true};
     }
+    if (const auto layer = pack_layer_snapshot()) {
+        const auto listed = layer->index.find(normalized_path(resource));
+        if (listed != layer->index.end())
+            return PackLayerOps::read_pack_entry(*layer, layer->entries[listed->second]);
+    }
     fail("asset not found: " + normalized_path(resource));
 }
 
@@ -1408,6 +1424,15 @@ Provider AssetStore::provider(std::string_view resource) const {
         const auto& path = mounts_[found->mount].path;
         return {ProviderKind::archive, path, "archive:" + utf8_text(path)};
     }
+    if (const auto layer = pack_layer_snapshot()) {
+        const auto listed = layer->index.find(normalized_path(resource));
+        if (listed != layer->index.end())
+            return {
+                ProviderKind::pack_layer,
+                layer->location,
+                "pack:" + layer->label + "#" + std::to_string(layer->serial)
+            };
+    }
     return {};
 }
 
@@ -1420,7 +1445,13 @@ std::optional<std::vector<uint8_t>> AssetStore::read_pack_layer(std::string_view
     note_lookup(resource);
     if (!pack_path_problem(resource).empty())
         return std::nullopt;
-    return std::nullopt;
+    const auto layer = pack_layer_snapshot();
+    if (!layer)
+        return std::nullopt;
+    const auto listed = layer->index.find(normalized_path(resource));
+    if (listed == layer->index.end())
+        return std::nullopt;
+    return PackLayerOps::read_pack_entry(*layer, layer->entries[listed->second]).bytes;
 }
 
 std::optional<std::vector<uint8_t>>
@@ -1554,6 +1585,19 @@ void AssetStore::find_in_mounts(
         if (!scope.continue_into_mounts)
             return;
     }
+    if (!scope.include_pack_layer)
+        return;
+    const auto start = scope.first_mount < 0 ? 0 : scope.first_mount;
+    if (start > static_cast<int>(mounts_.size()))
+        return;
+    if (start < static_cast<int>(mounts_.size()) && !scope.continue_into_mounts)
+        return;
+    const auto layer = pack_layer_snapshot();
+    if (!layer)
+        return;
+    PackLayerOps::append_pack_matches(
+        found, *layer, directory, spec, static_cast<int>(mounts_.size())
+    );
 }
 
 std::vector<std::string> AssetStore::scan_recursive(
@@ -1610,6 +1654,35 @@ ResourceFile* AssetStore::open(std::string_view resource) const {
         file->archive_path = &mounted.path;
         file->node = *node;
         file->size = mounted.archive.nodes()[*node].size;
+        return file;
+    }
+    if (const auto layer = pack_layer_snapshot()) {
+        const auto listed = layer->index.find(normalized_path(resource));
+        if (listed == layer->index.end())
+            return nullptr;
+        const auto& entry = layer->entries[listed->second];
+        auto* file = new ResourceFile;
+        file->pack_layer = layer;
+        if (layer->kind == PackLayerKind::zip) {
+            try {
+                file->memory = PackLayerOps::read_pack_zip(*layer, entry);
+            } catch (...) {
+                delete file;
+                throw;
+            }
+            file->pack_zip = true;
+            file->size = static_cast<uint32_t>(file->memory.size());
+            return file;
+        }
+        file->loose.open(entry.host, std::ios::binary);
+        if (!file->loose) {
+            const auto label = layer->label;
+            const auto path = entry.path;
+            delete file;
+            fail("pack layer '" + label + "' cannot read '" + path + "': cannot open the file");
+        }
+        file->loose_size = entry.size;
+        file->size = entry.size;
         return file;
     }
     return nullptr;
@@ -1877,8 +1950,11 @@ std::vector<std::string> AssetStore::list_resources(
             if (matches(key) && keys.insert(key).second)
                 result.push_back(key);
         }
-    if (!include_pack_layer)
-        return result;
+    if (include_pack_layer)
+        if (const auto layer = pack_layer_snapshot())
+            for (const auto& entry : layer->entries)
+                if (matches(entry.key) && keys.insert(entry.key).second)
+                    result.push_back(entry.key);
     return result;
 }
 
