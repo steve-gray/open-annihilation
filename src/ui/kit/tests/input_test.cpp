@@ -427,6 +427,42 @@ void a_scroll_area_is_searched_before_what_is_outside_it() {
     OA_CHECK(kit::focus_toward(list, 1, kit::Direction::up) == kit::no_control);
 }
 
+/// Controls in no scroll area are not an area of their own: from a list of
+/// entries at the left, Right reaches the row at the entry's height, not a
+/// footer button; Up from the footer reaches the row above it, not an entry
+/// off to the side; Down from the last entry reaches the footer under it.
+void controls_in_no_area_search_every_control_at_once() {
+    kit::DisplayList list;
+    const kit::Rect view{100, 0, 100, 72};
+    for (int32_t index = 0; index < 3; ++index) {
+        kit::Control entry = placed(index + 1, {0, index * 24, 80, 20});
+        list.controls.push_back(entry);
+        list.tab_order.push_back(entry.id);
+    }
+    for (int32_t index = 0; index < 4; ++index) {
+        kit::Control row = placed(index + 11, {150, index * 24 + 4, 50, 16});
+        row.clip = view;
+        row.group = 1;
+        list.controls.push_back(row);
+        list.tab_order.push_back(row.id);
+    }
+    list.controls.push_back(placed(21, {0, 90, 80, 16}));
+    list.controls.push_back(placed(22, {150, 90, 50, 16}));
+    list.tab_order.push_back(21);
+    list.tab_order.push_back(22);
+
+    OA_CHECK(kit::focus_toward(list, 2, kit::Direction::right) == 12);
+    OA_CHECK(kit::focus_toward(list, 3, kit::Direction::right) == 13);
+    // The fourth row lies under the view: the footer goes up to the third.
+    OA_CHECK(kit::focus_toward(list, 22, kit::Direction::up) == 13);
+    OA_CHECK(kit::focus_toward(list, 21, kit::Direction::up) == 3);
+    OA_CHECK(kit::focus_toward(list, 3, kit::Direction::down) == 21);
+    OA_CHECK(kit::focus_toward(list, 21, kit::Direction::right) == 22);
+    // A row still keeps to its own area first.
+    OA_CHECK(kit::focus_toward(list, 13, kit::Direction::down) == 14);
+    OA_CHECK(kit::focus_toward(list, 12, kit::Direction::left) == 2);
+}
+
 /// Right reaches a button inside a row, and a control that only overlaps the row is not beyond it.
 void right_reaches_the_button_inside_a_row() {
     kit::DisplayList overlapping;
@@ -1069,6 +1105,7 @@ int main() {
     the_beam_beats_a_nearer_diagonal();
     down_from_the_last_row_reaches_the_footer_under_it();
     a_scroll_area_is_searched_before_what_is_outside_it();
+    controls_in_no_area_search_every_control_at_once();
     right_reaches_the_button_inside_a_row();
     an_earlier_place_in_tab_order_wins_a_tie();
     keys_with_no_focus_show_an_end_of_the_order();

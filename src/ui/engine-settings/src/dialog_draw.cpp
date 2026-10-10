@@ -947,9 +947,14 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     kit::add_rows(rows, placed, state);
     for (kit::Item& added : rows.items)
         list.items.push_back(std::move(added));
-    // A press reaches a row's control where the view shows it.
+    // A row's control lies across its row, at the control's own line, so
+    // that the arrows keep to the column of rows wherever on its line each
+    // control sits. A press reaches the control itself where the view shows
+    // it: the clip is the view narrowed to the control's columns.
     for (kit::Control& added : rows.controls) {
-        added.clip = layout::view;
+        const SourceRect control = added.rect;
+        added.rect = {layout::content_left, control.y, layout::content_width, control.height};
+        added.clip = {control.x, layout::view.y, control.width, layout::view.height};
         building.rows.push_back(std::move(added));
     }
     if (layout::developer_page(dialog)) {

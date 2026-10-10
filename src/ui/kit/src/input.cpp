@@ -355,6 +355,9 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
     const Control* origin = control_of(list, from);
     if (origin == nullptr)
         return no_control;
+    // A control in no scroll area has no area of its own to search first:
+    // every control is outside it.
+    const bool in_area = origin->group >= 0;
 
     const auto search = [&](bool same_group) noexcept -> ControlId {
         bool any = false;
@@ -373,7 +376,7 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
             if (same_group) {
                 if (control->group != origin->group)
                     continue;
-            } else if (control->group == origin->group || !in_view(*control)) {
+            } else if ((in_area && control->group == origin->group) || !in_view(*control)) {
                 continue;
             }
             if (!beyond(origin->rect, control->rect, direction))
@@ -413,9 +416,11 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
         return best;
     };
 
-    const ControlId inside = search(true);
-    if (inside != no_control)
-        return inside;
+    if (in_area) {
+        const ControlId inside = search(true);
+        if (inside != no_control)
+            return inside;
+    }
     return search(false);
 }
 

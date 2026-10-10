@@ -743,6 +743,32 @@ DialogAction move_in_tab_order(Dialog& dialog, layout::ScrolledRows& open, bool 
     return DialogAction::redraw;
 }
 
+/// Moves the focus to the control an arrow points at, by where the
+/// display list's controls lie (kit::focus_toward): within the focused
+/// control's scroll area first, the open section's rows, Developer's list
+/// or Mods' list, rows it does not show included; then among the controls
+/// that show. A row it moves onto is scrolled into view (show_row). From no
+/// focus, or a focus on no control the dialog shows, Up shows the focus on
+/// the last control in the declared order and the other arrows on the
+/// first.
+///
+/// @param[in,out] dialog the dialog
+/// @param[in,out] open the open section's rows, left at the offset shown
+/// @param direction the arrow's direction
+/// @return DialogAction::redraw when the focus moved, else DialogAction::none
+DialogAction move_toward(Dialog& dialog, layout::ScrolledRows& open, kit::Direction direction) {
+    const kit::DisplayList list = layout::dialog_list(dialog, nullptr);
+    const int32_t next =
+        kit::control_of(list, dialog.focused) == nullptr
+            ? kit::next_in_tab_order(list, no_control, direction != kit::Direction::up)
+            : kit::focus_toward(list, dialog.focused, direction);
+    if (next == no_control)
+        return DialogAction::none;
+    dialog.focused = next;
+    static_cast<void>(show_row(dialog, open, dialog.focused));
+    return DialogAction::redraw;
+}
+
 /// Scrolls the open section for Page Up, Page Down, Home or End, whatever
 /// has the focus; nothing moves while a press is held.
 ///
@@ -1743,12 +1769,13 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
         return accept(dialog);
     case DialogKey::escape:
         return cancel(dialog);
-    case DialogKey::down:
     case DialogKey::tab:
-        return move_in_tab_order(dialog, open, true);
-    case DialogKey::up:
     case DialogKey::back_tab:
-        return move_in_tab_order(dialog, open, false);
+        return move_in_tab_order(dialog, open, key == DialogKey::tab);
+    case DialogKey::up:
+        return move_toward(dialog, open, kit::Direction::up);
+    case DialogKey::down:
+        return move_toward(dialog, open, kit::Direction::down);
     case DialogKey::page_up:
     case DialogKey::page_down:
     case DialogKey::home:
@@ -1766,6 +1793,16 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
     }
     if (dialog.focused == no_control)
         return move_in_tab_order(dialog, open, true);
+    if (key != DialogKey::space) {
+        // Left and Right step a control that takes steps; from any other
+        // they move the focus to the control on that side.
+        const kit::DisplayList list = layout::dialog_list(dialog, nullptr);
+        const kit::Control* focused = kit::control_of(list, dialog.focused);
+        if (focused == nullptr || !focused->steps)
+            return move_toward(
+                dialog, open, key == DialogKey::left ? kit::Direction::left : kit::Direction::right
+            );
+    }
     // A key that acts on a row brings it into view first, so that the
     // player sees what it changed.
     const DialogAction shown = show_row(dialog, open, dialog.focused);
@@ -1794,25 +1831,11 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
         dialog.folder_marked = static_cast<FolderButton>(next);
         return DialogAction::redraw;
     }
-    if (row != nullptr) {
-        // A button has no steps.
-        if (row->lock != Lock::none || kind == kit::RowKind::value_and_button)
-            return shown;
-        const EngineSettings before = dialog.chosen;
-        step(dialog, row->setting, up);
-        return changed_or_redraw(dialog, before);
-    }
-    // Left and Right move along the footer's buttons.
-    constexpr std::array<int32_t, 3> footer{restore_control, cancel_control, ok_control};
-    const auto found = std::find(footer.begin(), footer.end(), dialog.focused);
-    if (found == footer.end())
-        return DialogAction::none;
-    const auto at = static_cast<std::size_t>(found - footer.begin());
-    const std::size_t next = up ? std::min(at + 1, footer.size() - 1) : (at == 0 ? 0 : at - 1);
-    if (next == at)
-        return DialogAction::none;
-    dialog.focused = footer[next];
-    return DialogAction::redraw;
+    if (row == nullptr || row->lock != Lock::none)
+        return shown;
+    const EngineSettings before = dialog.chosen;
+    step(dialog, row->setting, up);
+    return changed_or_redraw(dialog, before);
 }
 
 DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {

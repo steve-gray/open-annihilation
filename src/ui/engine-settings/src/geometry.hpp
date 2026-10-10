@@ -1159,7 +1159,12 @@ inline constexpr int32_t first_menu_item_control = question_no_control - 1;
 /// the window's face, the header, the section list, the open section's
 /// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
 /// list and footer), the footer band and buttons, the edge, an open
-/// drop-down list and the question. Tab follows focus_order.
+/// drop-down list and the question. Tab follows focus_order. A row's
+/// control lies across the section at its control's line, so that the
+/// arrows keep to the column of rows, and a press reaches the control
+/// itself where the view shows it. The controls that take Left and Right
+/// as steps say so; the open section's rows, Developer's list and Mods'
+/// list each have a scroll group, and the entries and the footer none.
 ///
 /// @param dialog the dialog
 /// @param fonts the fonts it is drawn in; null measures texts at

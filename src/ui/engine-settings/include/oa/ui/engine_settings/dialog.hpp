@@ -1007,6 +1007,24 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 
 /// Takes a key.
 ///
+/// Enter is OK and Escape Cancel, whatever has the focus. Tab and Shift+Tab
+/// move the focus to the next and the previous control in the declared
+/// order, round from one end to the other: the open section's rows that
+/// take a change (on Developer, then its list's rows, Show Active Only and,
+/// while Developer Mode is on, Restore profile values; on Mods, each row
+/// followed by its ROLL BACK, then OPEN MODS FOLDER), the footer's buttons,
+/// then the sections' entries. Up and Down move the focus to the control
+/// above or below, by where the controls lie (oa::ui::kit::focus_toward):
+/// the open section's rows, Developer's list and Mods' list are each
+/// searched first from within, rows they do not show included. Left and
+/// Right step a focused control that takes steps: a switch, a strip, a
+/// slider or a drop-down, Your files' mark, a row of Developer's list, Show
+/// Active Only. From any other control they move the focus to the control
+/// on that side, as Up and Down do. A row's control lies across its row
+/// for the arrows. An arrow that finds no control that way leaves the focus
+/// where it is. From no focus, Up shows the focus on the last control in
+/// the declared order; Down, Left, Right, Tab and Space on the first.
+///
 /// Page Up, Page Down, Home and End scroll the open section whatever has
 /// the focus, and never move or show it. A key that moves the focus onto a
 /// row, or acts on a focused row, first scrolls the least that shows the

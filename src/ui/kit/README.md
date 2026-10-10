@@ -146,7 +146,9 @@ its hover card's timer in its own state.
 The arrows move by where controls sit. A control's own scroll area is searched
 first, including rows the area does not show. The focus leaves that area only
 when nothing in it lies that way, and a move from outside never lands on a
-row the area hides. Tab follows the declared order and wraps. Up and Down
+row the area hides. A control in no scroll area, such as a footer button or
+an entry of a section list, has no area of its own: every control that shows
+is searched at once. Tab follows the declared order and wraps. Up and Down
 never follow that order. Left and Right go to a focused text field, which
 moves its caret, as do Home, End, Backspace and Delete. Tabs and cards do not
 take Left and Right: the arrows move the focus between them. Enter goes to a
