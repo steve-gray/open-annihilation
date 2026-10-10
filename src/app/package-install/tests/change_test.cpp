@@ -19,6 +19,7 @@
 // a step makes held to its budget.
 
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/scratch_directory.hpp"
@@ -120,8 +121,8 @@ void make_mod(const fs::path& folder, int revision) {
 /// @param folder the folder
 /// @return the revision
 int64_t revision_in(const fs::path& folder) {
-    const auto held = install::read_installed_mod(folder);
-    return held.kind == install::FolderKind::mod ? held.revision : -1;
+    const auto held = install::oamod::read_installed_mod(folder);
+    return held.kind == install::FolderKind::package ? held.revision : -1;
 }
 
 /// Returns the names of the folders an install keeps in Mods while it
@@ -211,13 +212,14 @@ Installed install_package(
         done.problem = opened.problem;
         return done;
     }
-    const auto incoming = install::incoming_of(*opened.package->profile);
-    done.plan = install::plan_install(incoming, install::mods_folder_hooks(mods));
+    const auto incoming = install::oamod::incoming_of(*opened.package->profile);
+    done.plan =
+        install::oamod::plan_install(incoming, install::folder_hooks(install::mod_kind(), mods));
     const bool alongside =
         answer == Change::install && done.plan.kind != install::PlanKind::install;
     const std::string folder = alongside ? done.plan.alongside : done.plan.target;
-    const install::InstalledMod expected =
-        alongside ? install::InstalledMod{} : done.plan.installed;
+    const install::InstalledPackage expected =
+        alongside ? install::InstalledPackage{} : done.plan.installed;
     install::Unpacking unpacking;
     if (!unpacking.start(*opened.package, mods, folder, expected, done.problem, hooks)) {
         discard_all(unpacking.discards());
@@ -233,7 +235,7 @@ Installed install_package(
     OA_CHECK(unpacking.done_bytes() == unpacking.total_bytes());
     install::ChangeOptions options{};
     options.expected = expected;
-    done.result = install::commit_change(mods, folder, answer, options);
+    done.result = install::commit_change(install::mod_kind(), mods, folder, answer, options);
     discard_all(done.result.discards);
     return done;
 }
@@ -271,10 +273,10 @@ void test_installs(const Scratch& scratch) {
     OA_CHECK(revision_in(folder / ".backup") == 2 && done.result.backup_kept);
     OA_CHECK(reserved_in(mods).empty());
     // Two roll backs return to the start.
-    auto rolled = install::commit_change(mods, target, Change::roll_back);
+    auto rolled = install::commit_change(install::mod_kind(), mods, target, Change::roll_back);
     OA_CHECK(rolled.changed && rolled.backup_kept);
     OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 3);
-    rolled = install::commit_change(mods, target, Change::roll_back);
+    rolled = install::commit_change(install::mod_kind(), mods, target, Change::roll_back);
     OA_CHECK(revision_in(folder) == 3 && revision_in(folder / ".backup") == 2);
     OA_CHECK(reserved_in(mods).empty());
     // Another version installs alongside, in a folder of its own.
@@ -323,7 +325,7 @@ bool refused_at(const Scratch& scratch, Change change, int refuse) {
             }
             install::rename_exclusively(from, to, error);
         };
-    const auto result = install::commit_change(mods, target, change, options);
+    const auto result = install::commit_change(install::mod_kind(), mods, target, change, options);
     discard_all(result.discards);
     // The rename refused at or before the new files are in place changes
     // nothing; one after leaves the old version visible.
@@ -376,7 +378,7 @@ fs::path settled(
     const fs::path mods = scratch.path() / ("crash-" + std::string(name)) / "Mods";
     fs::create_directories(mods);
     build(mods);
-    const auto recovery = install::recover_changes(mods);
+    const auto recovery = install::recover_changes(install::mod_kind(), mods);
     OA_CHECK(!recovery.skipped);
     discard_all(recovery.discards);
     return mods;
@@ -551,7 +553,8 @@ void test_linked_backup(const Scratch& scratch) {
     make_mod(other, 1);
     if (!make_folder_link(outside, other / ".backup"))
         return;
-    const auto rolled = install::commit_change(mods, "other-mod", Change::roll_back);
+    const auto rolled =
+        install::commit_change(install::mod_kind(), mods, "other-mod", Change::roll_back);
     OA_CHECK(!rolled.changed && rolled.refusal == Refusal::changed);
     discard_all(rolled.discards);
     OA_CHECK(revision_in(other) == 1 && install::is_link_or_junction(other / ".backup"));
@@ -560,7 +563,7 @@ void test_linked_backup(const Scratch& scratch) {
     const fs::path discard = mods / ".oamod-discard-other-mod-1";
     if (!make_folder_link(outside, discard))
         return;
-    const auto recovery = install::recover_changes(mods);
+    const auto recovery = install::recover_changes(install::mod_kind(), mods);
     OA_CHECK(recovery.discards.size() == 1);
     discard_all(recovery.discards);
     OA_CHECK(!fs::exists(fs::symlink_status(discard)) && outside_whole());
@@ -606,7 +609,8 @@ void test_retries(const Scratch& scratch) {
             }
             install::rename_exclusively(from, to, error);
         };
-    auto result = install::commit_change(mods, target, Change::install, options);
+    auto result =
+        install::commit_change(install::mod_kind(), mods, target, Change::install, options);
     OA_CHECK(result.changed && busy.calls == 3);
     // Held for good: the waits add up to the most, then it gives up.
     make_mod(mods / (".oamod-staging-other"), 1);
@@ -616,7 +620,7 @@ void test_retries(const Scratch& scratch) {
     options.hooks.wait = [](void* context, uint32_t milliseconds) {
         static_cast<Busy*>(context)->waited += milliseconds;
     };
-    result = install::commit_change(mods, "other", Change::install, options);
+    result = install::commit_change(install::mod_kind(), mods, "other", Change::install, options);
     OA_CHECK(!result.changed && result.refusal == Refusal::not_placed);
     // The move into place and the move of the staging folder aside each
     // wait the most.
@@ -651,8 +655,9 @@ void test_unpacking_checks(const Scratch& scratch) {
     const auto opened = install::open_package(write_package(packages, 2));
     OA_CHECK(opened.package.has_value());
     if (opened.package) {
-        const auto plan = install::plan_install(
-            install::incoming_of(*opened.package->profile), install::mods_folder_hooks(mods)
+        const auto plan = install::oamod::plan_install(
+            install::oamod::incoming_of(*opened.package->profile),
+            install::folder_hooks(install::mod_kind(), mods)
         );
         install::Unpacking unpacking;
         install::Problem problem{};
@@ -662,7 +667,9 @@ void test_unpacking_checks(const Scratch& scratch) {
         fs::remove_all(mods / std::string(target));
         install::ChangeOptions options{};
         options.expected = plan.installed;
-        const auto result = install::commit_change(mods, plan.target, Change::replace, options);
+        const auto result = install::commit_change(
+            install::mod_kind(), mods, plan.target, Change::replace, options
+        );
         OA_CHECK(!result.changed && result.refusal == Refusal::changed);
         discard_all(result.discards);
         OA_CHECK(!fs::exists(mods / std::string(target)) && reserved_in(mods).empty());
@@ -749,18 +756,19 @@ void test_lock(const Scratch& scratch) {
         const auto other = install::FileLock::take(mods / ".oamod-lock");
         OA_CHECK(other != nullptr);
         OA_CHECK(install::FileLock::take(mods / ".oamod-lock") == nullptr);
-        OA_CHECK(install::hold_mods_folder(mods) == nullptr);
-        const auto recovery = install::recover_changes(mods);
+        OA_CHECK(install::hold_root(install::mod_kind(), mods) == nullptr);
+        const auto recovery = install::recover_changes(install::mod_kind(), mods);
         OA_CHECK(recovery.skipped && recovery.discards.empty());
         OA_CHECK(fs::exists(mods / (".oamod-staging-" + std::string(target))));
-        const auto result = install::commit_change(mods, target, Change::install);
+        const auto result =
+            install::commit_change(install::mod_kind(), mods, target, Change::install);
         OA_CHECK(!result.changed && result.refusal == Refusal::busy);
     }
     // Holds this process takes share one lock.
-    const auto first = install::hold_mods_folder(mods);
-    const auto second = install::hold_mods_folder(mods);
+    const auto first = install::hold_root(install::mod_kind(), mods);
+    const auto second = install::hold_root(install::mod_kind(), mods);
     OA_CHECK(first != nullptr && first == second);
-    const auto recovery = install::recover_changes(mods);
+    const auto recovery = install::recover_changes(install::mod_kind(), mods);
     OA_CHECK(!recovery.skipped && recovery.discards.size() == 1);
     discard_all(recovery.discards);
     OA_CHECK(reserved_in(mods).empty());

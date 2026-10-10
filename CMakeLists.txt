@@ -913,7 +913,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/modern_text.cpp src/app/text_input_area.cpp
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
-  src/app/runtime_mod_install.cpp src/app/mod_install_watch.cpp
+  src/app/runtime_mod_install.cpp src/app/runtime_package_kinds.cpp src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
   src/app/world_scaling.cpp src/app/far_view.cpp

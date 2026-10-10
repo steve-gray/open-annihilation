@@ -27,6 +27,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/formats/zip.hpp"
@@ -152,8 +153,8 @@ fs::path mod_package(const fs::path& folder, std::string_view version, int revis
 /// @param folder the folder
 /// @return the revision
 int64_t revision_in(const fs::path& folder) {
-    const auto held = install::read_installed_mod(folder);
-    return held.kind == install::FolderKind::mod ? held.revision : -1;
+    const auto held = install::oamod::read_installed_mod(folder);
+    return held.kind == install::FolderKind::package ? held.revision : -1;
 }
 
 /// Returns the version a folder's profile gives; empty when it holds no mod.
@@ -161,7 +162,7 @@ int64_t revision_in(const fs::path& folder) {
 /// @param folder the folder
 /// @return the version
 std::string version_in(const fs::path& folder) {
-    return install::read_installed_mod(folder).version;
+    return install::oamod::read_installed_mod(folder).version;
 }
 
 /// Tells whether the Mods folder holds a folder an install keeps while it works.
@@ -173,7 +174,8 @@ bool reserved_left(const fs::path& mods) {
     for (fs::directory_iterator entry{mods, error}, end; !error && entry != end;
          entry.increment(error)) {
         const std::string name = path_to_utf8(entry->path().filename());
-        if (name.starts_with(install::reserved_prefix) && name != install::lock_file_name)
+        const install::FolderNames names = install::folder_names(install::mod_kind());
+        if (name.starts_with(names.reserved) && name != names.lock)
             return true;
     }
     return false;
@@ -397,7 +399,7 @@ void Runtime::check_mod_install() {
         require(!state.shown, "Escape did not close the notice");
 
         // An update asked, cancelled, then replaced.
-        install::post_mod_file(mod_package(packages, "1.0", 2));
+        install::post_package_file(mod_package(packages, "1.0", 2));
         until_prompt("the second revision");
         require(
             titled("UPDATE MOD") && says("revision 1, is installed. Replace it with revision 2"),
@@ -405,7 +407,7 @@ void Runtime::check_mod_install() {
         );
         key(SDLK_ESCAPE);
         require(!state.shown && revision_in(folder) == 1, "CANCEL changed the folder");
-        install::post_mod_file(mod_package(packages, "1.0", 2));
+        install::post_package_file(mod_package(packages, "1.0", 2));
         until_prompt("the second revision again");
         key(SDLK_RETURN);
         until_prompt("the update's outcome");
@@ -417,7 +419,7 @@ void Runtime::check_mod_install() {
         key(SDLK_RETURN);
 
         // A third revision keeps one version back: the first goes.
-        install::post_mod_file(mod_package(packages, "1.0", 3));
+        install::post_package_file(mod_package(packages, "1.0", 3));
         until_prompt("the third revision");
         require(
             says("The folder kept for ROLL BACK (1.0 revision 1) is removed."),
@@ -445,7 +447,7 @@ void Runtime::check_mod_install() {
         {
             std::ofstream(folder / "added.txt") << "added";
         }
-        install::post_mod_file(mod_package(packages, "1.0", 3));
+        install::post_package_file(mod_package(packages, "1.0", 3));
         until_prompt("the same revision");
         require(titled("ALREADY INSTALLED"), "a reinstall was not asked");
         click(install::Answer::reinstall);
@@ -458,7 +460,7 @@ void Runtime::check_mod_install() {
         );
 
         // An older revision is said to be older, and declined.
-        install::post_mod_file(mod_package(packages, "1.0", 1));
+        install::post_package_file(mod_package(packages, "1.0", 1));
         until_prompt("the older revision");
         require(
             says("Revision 1 is older than the one installed."),
@@ -468,7 +470,7 @@ void Runtime::check_mod_install() {
         require(revision_in(folder) == 3, "declining changed the folder");
 
         // Another version, installed alongside.
-        install::post_mod_file(mod_package(packages, "2.0", 1));
+        install::post_package_file(mod_package(packages, "2.0", 1));
         until_prompt("another version");
         require(titled("ANOTHER VERSION"), "another version was not asked about");
         snapshot("another-version");
@@ -490,7 +492,7 @@ void Runtime::check_mod_install() {
         write_package(
             other_package, {{"oamod.yaml", profile_text(kOtherId, "Other Mod", "1.0", 1)}}
         );
-        install::post_mod_file(other_package);
+        install::post_package_file(other_package);
         until_prompt("a folder in use");
         require(titled("FOLDER IN USE"), "a folder in use was not asked about");
         key(SDLK_Y);
@@ -513,7 +515,7 @@ void Runtime::check_mod_install() {
                   "broken-package", "Broken", "1.0", 1, "hacks:\n  example.no-such-hack: true\n"
               )}}
         );
-        install::post_mod_file(broken_package);
+        install::post_package_file(broken_package);
         until_prompt("a profile that does not resolve");
         require(
             titled("MOD NOT INSTALLED") && says("Its oamod.yaml has errors:") &&
@@ -592,7 +594,7 @@ void Runtime::check_mod_install() {
         until_deleted();
 
         // PLAY NOW plays the mod: the run ends for it.
-        install::post_mod_file(mod_package(packages, "1.0", 3));
+        install::post_package_file(mod_package(packages, "1.0", 3));
         until_prompt("the last reinstall");
         click(install::Answer::reinstall);
         until_prompt("the last reinstall's outcome");
@@ -618,7 +620,7 @@ void Runtime::check_mod_install() {
             play_example() && mod_profile()->packaging.revision == 3,
             "the run does not play the third revision"
         );
-        install::post_mod_file(mod_package(packages, "1.0", 4));
+        install::post_package_file(mod_package(packages, "1.0", 4));
         until_prompt("an update of the mod played");
         require(
             says("The game reloads its data for the mod"),
@@ -630,7 +632,9 @@ void Runtime::check_mod_install() {
         require(soft_restart_requested(), "the update of the mod played did not end the run");
         require(revision_in(folder) == 3, "the mod played changed before its run ended");
         require(
-            revision_in(mods / (std::string(install::staging_prefix) + std::string(kModId))) == 4,
+            revision_in(
+                mods / (install::folder_names(install::mod_kind()).staging + std::string(kModId))
+            ) == 4,
             "the new revision is not staged whole"
         );
         require(install::pending_change_waiting(), "no change waits for the run's end");
@@ -677,7 +681,9 @@ void Runtime::check_mod_install() {
         until_deleted();
         require(!reserved_left(mods), "the roll back between runs left a folder of its own");
         // A stop just after a replace moved the folder aside.
-        fs::rename(folder, mods / (std::string(install::old_prefix) + std::string(kModId)));
+        fs::rename(
+            folder, mods / (install::folder_names(install::mod_kind()).old + std::string(kModId))
+        );
         request_soft_restart();
         std::cout << "mod install check: run 3 left the mod's folder as a stop mid-replace would\n";
         return;

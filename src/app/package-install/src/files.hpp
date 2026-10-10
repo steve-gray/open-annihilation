@@ -10,7 +10,26 @@
 #include <string_view>
 #include <system_error>
 
-namespace oa::app::package_install::detail {
+namespace oa::app::package_install {
+
+struct PackageKind;
+
+namespace detail {
+
+/// Remembers a kind whose own folders a later step may meet, such as a kind
+/// a test built. The kind's prefix is copied, so the kind itself need not
+/// outlive the note. The table's kinds need no note.
+///
+/// @param kind the kind
+void note_kind(const PackageKind& kind);
+
+/// Returns the kind whose prefix a folder name starts with, the longest
+/// prefix when more than one would. A kind noted with note_kind counts
+/// beside the table.
+///
+/// @param name the folder's name
+/// @return the kind; null when the name is not one the installer keeps
+[[nodiscard]] const PackageKind* kind_of_reserved(std::string_view name);
 
 #ifdef _WIN32
 /// Returns a path in the form that reaches past the system's 259
@@ -74,4 +93,5 @@ void flush_to_storage(const std::filesystem::path& folder) noexcept;
 /// @param line the line
 void log_line(std::string_view line);
 
-} // namespace oa::app::package_install::detail
+} // namespace detail
+} // namespace oa::app::package_install

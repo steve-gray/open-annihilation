@@ -1,16 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// A mod package read and checked before anything is written, and what a
-// folder in Mods holds.
+// A package read and checked before anything is written. What a folder holds
+// is the kind's own read.
 
 #include "files.hpp"
 #include "package_file.hpp"
 
 #include "oa/app/package_install.hpp"
-#include "oa/app/mod_profile_loader.hpp"
-#include "oa/formats/oamod.hpp"
-#include "oa/app/user_folder.hpp"
 #include "oa/platform/files.hpp"
 
 #include <algorithm>
@@ -29,8 +26,6 @@ namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 namespace zip = oa::formats::zip;
-namespace oamod = oa::formats::oamod;
-namespace mod_profile = oa::data::mod_profile;
 
 namespace detail {
 
@@ -81,8 +76,6 @@ zip::SourceHooks PackageFile::source() {
 
 namespace {
 
-/// The profile's own name in a mod folder (mod_profile_name), lowered.
-constexpr std::string_view profile_name = "oamod.yaml";
 /// The folder macOS writes its file attributes in, when it zips a folder.
 constexpr std::string_view mac_attributes_folder = "__macosx";
 /// The file the Finder keeps a folder's look in.
@@ -134,8 +127,8 @@ std::string_view first_part(std::string_view name) {
 }
 
 /// Tells whether an entry is one a system adds when it zips a folder, which
-/// no mod holds: macOS's __MACOSX folder, the Finder's .DS_Store files and
-/// AppleDouble files.
+/// a package does not hold: macOS's __MACOSX folder, the Finder's .DS_Store
+/// files and AppleDouble files.
 ///
 /// @param name the entry's name
 /// @return true when it is ignored
@@ -171,28 +164,46 @@ Problem problem_of_zip(const zip::ZipError& error) {
     }
 }
 
-/// Adds every diagnostic of a resolution, formatted, to a list.
+/// Reads one file of a package for its kind's manifest reader.
 ///
-/// @param diagnostics the diagnostics
-/// @param[out] lines receives one line each
-void add_lines(
-    const std::vector<mod_profile::Diagnostic>& diagnostics, std::vector<std::string>& lines
-) {
-    for (const auto& diagnostic : diagnostics)
-        lines.push_back(mod_profile::format_diagnostic(diagnostic));
-}
+/// @param reader the open package
+/// @param relative_name the file below the package's top, matched without case
+/// @param most_bytes the most it may hold
+/// @param[out] bytes the file, when it was read
+/// @return missing, read or unreadable
+/// The open package a manifest reader asks for another file through.
+struct ManifestReader {
+    detail::PackageFile* archive{};
+    const Package* package{};
+};
 
-/// Reads a scalar's text: a string's value, or any other plain scalar as written.
+/// Reads one file of a package for its kind's manifest reader.
 ///
-/// @param mapping the mapping
-/// @param key its key
-/// @return the text; empty when there is none
-std::string scalar_text(const oamod::Node& mapping, std::string_view key) {
-    const oamod::Node* node = oamod::find_entry(mapping, key);
-    if (node == nullptr || node->kind == oamod::NodeKind::mapping ||
-        node->kind == oamod::NodeKind::sequence || node->kind == oamod::NodeKind::null_value)
-        return {};
-    return node->text;
+/// @param reader the open package
+/// @param relative_name the file below the package's top, matched without case
+/// @param most_bytes the most it may hold
+/// @param[out] bytes the file, when it was read
+/// @return missing, read or unreadable
+EntryRead read_packaged_entry(
+    void* reader, std::string_view relative_name, uint64_t most_bytes, std::vector<uint8_t>& bytes
+) {
+    const auto& state = *static_cast<const ManifestReader*>(reader);
+    const std::string wanted = detail::folded(relative_name);
+    for (const PackagedFile& packaged : state.package->files) {
+        const zip::StreamEntry& entry = state.package->directory.entries[packaged.entry];
+        if (entry.directory || detail::folded(packaged.name) != wanted)
+            continue;
+        if (entry.bytes > most_bytes)
+            return EntryRead::unreadable;
+        zip::ZipError error{};
+        bytes.clear();
+        if (!zip::read_stream_entry(
+                state.archive->source(), state.archive->bytes, entry, most_bytes, bytes, error
+            ))
+            return EntryRead::unreadable;
+        return EntryRead::read;
+    }
+    return EntryRead::missing;
 }
 
 /// Returns a byte with its ASCII letter lowered.
@@ -282,11 +293,15 @@ class NameTree {
 } // namespace
 
 PackageResult open_package(const fs::path& file, const PackageOptions& options) {
+    const PackageKind* kind = kind_for_file(file);
+    if (kind == nullptr)
+        return refused(problem_of(Refusal::unknown_kind));
     try {
         detail::PackageFile archive;
         if (!archive.open(file))
             return refused(problem_of(Refusal::unreadable, {}, "the file cannot be opened"));
         Package package{};
+        package.kind = kind;
         package.file = file;
         package.file_name = detail::utf8_of(file.filename());
         package.archive_bytes = archive.bytes;
@@ -300,14 +315,15 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
         for (std::size_t index = 0; index < entries.size(); ++index)
             if (!ignored_entry(entries[index].name))
                 kept.push_back(index);
-        // The profile lies at the top, or in the one folder the top holds.
-        std::optional<std::size_t> profile;
+        // The manifest lies at the top, or in the one folder the top holds.
+        const std::string manifest_name = detail::folded(kind->manifest);
+        std::optional<std::size_t> manifest;
         for (const std::size_t index : kept)
-            if (!entries[index].directory && detail::folded(entries[index].name) == profile_name) {
-                profile = index;
+            if (!entries[index].directory && detail::folded(entries[index].name) == manifest_name) {
+                manifest = index;
                 break;
             }
-        if (!profile && !kept.empty()) {
+        if (!manifest && !kept.empty()) {
             const std::string_view top = first_part(entries[kept.front()].name);
             const bool one_folder = std::all_of(kept.begin(), kept.end(), [&](std::size_t index) {
                 const std::string& name = entries[index].name;
@@ -318,15 +334,15 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
                 for (const std::size_t index : kept)
                     if (!entries[index].directory &&
                         detail::folded(entries[index].name) ==
-                            detail::folded(package.root) + std::string(profile_name)) {
-                        profile = index;
+                            detail::folded(package.root) + manifest_name) {
+                        manifest = index;
                         break;
                     }
             }
         }
-        if (!profile)
-            return refused(problem_of(Refusal::no_profile));
-        package.profile_entry = *profile;
+        if (!manifest)
+            return refused(problem_of(Refusal::no_manifest));
+        package.manifest_entry = *manifest;
         NameTree names{};
         bool backup_left_out = false;
         for (const std::size_t index : kept) {
@@ -369,74 +385,34 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
             problem.limit_bytes = package.archive_bytes;
             return refused(std::move(problem));
         }
-        // The profile, read whole: one byte past the reader's limit is
-        // enough to refuse it.
+        // The manifest, read whole: one byte past the kind's limit refuses it.
         std::vector<uint8_t> text;
-        if (entries[*profile].bytes > oamod::max_input_bytes)
-            return refused(problem_of(Refusal::profile_too_large));
+        if (entries[*manifest].bytes > kind->manifest_most_bytes)
+            return refused(problem_of(Refusal::manifest_too_large));
         if (!zip::read_stream_entry(
                 archive.source(),
                 archive.bytes,
-                entries[*profile],
-                oamod::max_input_bytes,
+                entries[*manifest],
+                kind->manifest_most_bytes,
                 text,
                 error
             ))
             return refused(problem_of(
-                Refusal::damaged, entries[*profile].name, zip::zip_status_message(error.status)
+                Refusal::damaged, entries[*manifest].name, zip::zip_status_message(error.status)
             ));
-        // Resolved as a load of the mod resolves it: once for its settings
-        // file and registry root, then with the settings they hold.
-        const std::string source = package.file_name + "/" + std::string(mod_profile_name);
-        mod_profile::ResolveOptions resolve{};
-        resolve.accept_unimplemented_hacks = options.accept_unimplemented_hacks;
-        const auto first = mod_profile::resolve_profile(text, source, resolve);
-        if (!first.resolution) {
-            Problem problem = problem_of(Refusal::profile_errors);
-            add_lines(first.errors, problem.lines);
-            return refused(std::move(problem));
-        }
-        const auto& first_profile = first.resolution->profile;
-        // The INI file the profile names, from the package's top, else the
-        // game folder's.
-        std::optional<std::string> ini;
-        bool packaged_ini = false;
-        const std::string ini_name =
-            detail::folded(package.root + first_profile.identity.settings_file);
-        for (const PackagedFile& packaged : package.files) {
-            const zip::StreamEntry& entry = entries[packaged.entry];
-            if (entry.directory || detail::folded(entry.name) != ini_name)
-                continue;
-            packaged_ini = true;
-            std::vector<uint8_t> bytes;
-            if (entry.bytes <= mod_ini_most_bytes &&
-                zip::read_stream_entry(
-                    archive.source(), archive.bytes, entry, mod_ini_most_bytes, bytes, error
-                ))
-                ini = std::string(bytes.begin(), bytes.end());
-            break;
-        }
-        if (packaged_ini || options.game_folder.empty())
-            resolve.settings = mod_settings_from(
-                first_profile,
-                ini ? std::optional<std::string_view>(*ini) : std::nullopt,
-                options.preferences
+        ManifestReader reader{&archive, &package};
+        ManifestContext context{};
+        context.options = &options;
+        context.source = package.file_name + "/" + std::string(kind->manifest);
+        context.reader = &reader;
+        context.read_entry = read_packaged_entry;
+        Problem problem{};
+        if (kind->read_manifest == nullptr || !kind->read_manifest(text, context, package, problem))
+            return refused(
+                kind->read_manifest == nullptr
+                    ? problem_of(Refusal::manifest_errors, {}, "the kind reads no manifest")
+                    : std::move(problem)
             );
-        else
-            resolve.settings =
-                mod_settings_of(first_profile, {options.game_folder}, options.preferences);
-        const auto second = mod_profile::resolve_profile(text, source, resolve);
-        if (!second.resolution) {
-            Problem problem = problem_of(Refusal::profile_errors);
-            add_lines(second.errors, problem.lines);
-            return refused(std::move(problem));
-        }
-        add_lines(second.warnings, package.warnings);
-        package.profile =
-            std::make_shared<const mod_profile::ModProfile>(second.resolution->profile);
-        // Its folder must be one every system can make.
-        if (windows_device_name(package.profile->id))
-            return refused(problem_of(Refusal::reserved_id, package.profile->id));
         PackageResult result{};
         result.package = std::move(package);
         return result;
@@ -445,75 +421,9 @@ PackageResult open_package(const fs::path& file, const PackageOptions& options) 
     }
 }
 
-bool same_mod(const InstalledMod& left, const InstalledMod& right) noexcept {
+bool same_package(const InstalledPackage& left, const InstalledPackage& right) noexcept {
     return left.kind == right.kind && left.id == right.id && left.version == right.version &&
            left.revision == right.revision;
-}
-
-InstalledMod read_installed_mod(const fs::path& folder) {
-    InstalledMod installed{};
-    try {
-        std::error_code error;
-        const fs::file_status status = fs::symlink_status(folder, error);
-        if (error || !fs::exists(status))
-            return installed;
-        installed.kind = FolderKind::other;
-        if (is_link_or_junction(folder) || !fs::is_directory(status))
-            return installed;
-        std::string problem;
-        const auto profile = find_mod_profile(folder, problem);
-        if (!profile)
-            return installed;
-        std::ifstream in(*profile, std::ios::binary);
-        if (!in)
-            return installed;
-        std::vector<uint8_t> bytes;
-        for (std::istreambuf_iterator<char> at{in}, end;
-             at != end && bytes.size() <= oamod::max_input_bytes;
-             ++at)
-            bytes.push_back(static_cast<uint8_t>(*at));
-        oamod::Node root;
-        oamod::ReadError read{};
-        if (!oamod::read_document(bytes, root, read))
-            return installed;
-        installed.id = scalar_text(root, "id");
-        if (installed.id.empty())
-            return installed;
-        installed.name = scalar_text(root, "name");
-        installed.version = scalar_text(root, "version");
-        if (const oamod::Node* packaging = oamod::find_entry(root, "packaging"))
-            if (const oamod::Node* revision = oamod::find_entry(*packaging, "revision");
-                revision != nullptr && revision->kind == oamod::NodeKind::number) {
-                int64_t value = 0;
-                if (oamod::integer_value(revision->number, value))
-                    installed.revision = value;
-            }
-        installed.kind = FolderKind::mod;
-        return installed;
-    } catch (const std::exception&) {
-        return installed;
-    }
-}
-
-std::optional<InstalledMod> read_backup(const fs::path& folder) {
-    try {
-        const auto kept = entry_without_case(folder, backup_folder_name);
-        if (!kept)
-            return std::nullopt;
-        InstalledMod backup = read_installed_mod(*kept);
-        if (backup.kind == FolderKind::missing)
-            return std::nullopt;
-        const InstalledMod own = read_installed_mod(folder);
-        if (backup.kind == FolderKind::mod && (own.kind != FolderKind::mod || own.id != backup.id))
-            backup.kind = FolderKind::other;
-        return backup;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
-}
-
-Incoming incoming_of(const mod_profile::ModProfile& profile) {
-    return {profile.id, profile.name, profile.version, profile.packaging.revision};
 }
 
 } // namespace oa::app::package_install

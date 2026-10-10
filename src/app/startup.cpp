@@ -674,7 +674,7 @@ namespace {
 /// @param argument the argument
 /// @return true for a .oamod file
 [[nodiscard]] bool names_mod_package(std::string_view argument) {
-    return package_install::names_mod_package(path_from_utf8(argument));
+    return package_install::kind_for_file(path_from_utf8(argument)) != nullptr;
 }
 
 } // namespace

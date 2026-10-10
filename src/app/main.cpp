@@ -955,13 +955,13 @@ std::optional<fs::path> data_folder_of(const Options& options) {
     }
 }
 
-/// Settles what a stopped install of a mod package left in the player's
-/// Mods folder, before each run resolves the mod folder: a stop mid-change
-/// may have moved the folder of the mod the settings play. The discard
-/// folders it found are kept for the runtime to delete.
+/// Settles what a stopped install left in each kind's folder of the player's
+/// own folder, before each run resolves the mod folder: a stop mid-change
+/// may have moved the folder the settings play. The discard folders it found
+/// are kept for the runtime to delete.
 ///
 /// @param options the parsed command line
-void recover_mod_installs(const Options& options) {
+void recover_package_installs(const Options& options) {
     try {
         const fs::path preferences = preference_file(options.preferences_file);
         std::error_code error;
@@ -972,11 +972,14 @@ void recover_mod_installs(const Options& options) {
         const fs::path folder = own_user_folder(
             options.user_folder, options.preferences_file, preferences, values, note
         );
-        const auto recovery =
-            package_install::recover_changes(folder / std::string(user_mods_folder_name));
-        package_install::keep_discards(recovery.discards);
+        for (const package_install::PackageKind& kind : package_install::package_kinds()) {
+            const auto recovery =
+                package_install::recover_changes(kind, folder / std::string(kind.root_folder));
+            package_install::keep_discards(recovery.discards);
+        }
     } catch (const std::exception& error) {
-        std::cerr << "open-annihilation: package install: nothing settled: " << error.what() << '\n';
+        std::cerr << "open-annihilation: package install: nothing settled: " << error.what()
+                  << '\n';
     }
 }
 
@@ -1018,7 +1021,9 @@ bool hand_over_or_lock(const Options& options, std::unique_ptr<package_install::
     if (!data)
         return false;
     const fs::path handoff = *data / std::string(package_install::handoff_folder_name);
-    lock = package_install::take_instance_lock(*data / std::string(package_install::instance_lock_name));
+    lock = package_install::take_instance_lock(
+        *data / std::string(package_install::instance_lock_name)
+    );
     if (lock) {
         package_install::set_handoff_folder(handoff);
         return false;
@@ -1116,7 +1121,7 @@ int main(int argc, char** argv) {
         if (hand_over_or_lock(parsed, instance_lock))
             return 0;
         for (const auto& file : parsed.install_mods)
-            package_install::post_mod_file(file);
+            package_install::post_package_file(file);
         register_mod_files(parsed);
         // Where the platform brings game files in, what a stopped import or
         // a change waiting for this start left is taken up before the
@@ -1135,7 +1140,7 @@ int main(int argc, char** argv) {
         for (uint32_t restarts = 0;; ++restarts) {
             // What a stop, or the change between runs, left in the player's
             // Mods folder is settled before the mod folder is looked for.
-            recover_mod_installs(parsed);
+            recover_package_installs(parsed);
             auto options = parsed;
             options.restarts = restarts;
             options.native_density_windows = kNativeDensityWindows;

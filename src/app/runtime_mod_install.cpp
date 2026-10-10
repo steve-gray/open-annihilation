@@ -14,9 +14,12 @@
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
+#include "package_paths.hpp"
+
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/handoff.hpp"
 #include "oa/app/package_install/inbox.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/prompts.hpp"
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/runtime.hpp"
@@ -68,42 +71,6 @@ constexpr std::string_view kCloseSound = "Options";
 /// @param line the line
 void log_line(std::string_view line) {
     std::cerr << "open-annihilation: package install: " << line << '\n';
-}
-
-/// Returns a folder's path as the settings keep it: absolute, normal, UTF-8.
-///
-/// @param folder the folder
-/// @return its path
-std::string kept_path(const fs::path& folder) {
-    std::error_code error;
-    const fs::path absolute = fs::absolute(folder, error);
-    return path_to_utf8((error ? folder : absolute).lexically_normal());
-}
-
-/// Tells whether two kept paths name one folder: compared without case on
-/// the systems whose file systems fold it.
-///
-/// @param left one path
-/// @param right the other
-/// @return true when they match
-bool same_folder(std::string_view left, std::string_view right) {
-#if defined(_WIN32) || defined(__APPLE__)
-    if (left.size() != right.size())
-        return false;
-    for (std::size_t index = 0; index < left.size(); ++index) {
-        char a = left[index];
-        char b = right[index];
-        if (a >= 'A' && a <= 'Z')
-            a = static_cast<char>(a - 'A' + 'a');
-        if (b >= 'A' && b <= 'Z')
-            b = static_cast<char>(b - 'A' + 'a');
-        if (a != b)
-            return false;
-    }
-    return true;
-#else
-    return left == right;
-#endif
 }
 
 /// Waits between tries of a rename, keeping the window answering: SDL's
@@ -221,7 +188,7 @@ void Runtime::ModInstallState::prompt_tick(ScreenContext* context, void*) {
     auto& state = *runtime.mod_install_state_;
     // A question set aside by another screen waits again for the main menu.
     if (state.stage == Stage::asking) {
-        install::return_mod_file(state.file);
+        install::return_package_file(state.file);
         state.stage = Stage::idle;
         state.shown.reset();
         state.package.reset();
@@ -270,7 +237,7 @@ void Runtime::register_mod_install_overlay() {
     overlay_register(&screens_, &prompt);
 }
 
-void Runtime::ModInstallState::show(install::ModPrompt made) {
+void Runtime::ModInstallState::show(install::PackagePrompt made) {
     shown = std::move(made);
     ++prompts_shown;
 }
@@ -287,7 +254,8 @@ void Runtime::ModInstallState::release_opened_copy() {
 void Runtime::ModInstallState::finish_package() {
     release_opened_copy();
     package.reset();
-    install::finish_mod_file();
+    kind = nullptr;
+    install::finish_package_file();
 }
 
 void Runtime::take_handed_mod_files() {
@@ -297,7 +265,7 @@ void Runtime::take_handed_mod_files() {
     const auto files = install::take_handed_files(*folder);
     for (const auto& file : files) {
         log_line("handed over by another start: " + path_to_utf8(file));
-        install::post_mod_file(file);
+        install::post_package_file(file);
     }
     if (!files.empty() && sdl_.window != nullptr) {
         if ((SDL_GetWindowFlags(sdl_.window) & SDL_WINDOW_MINIMIZED) != 0)
@@ -308,11 +276,13 @@ void Runtime::take_handed_mod_files() {
 
 void Runtime::tell_mod_installs() {
     auto& state = mod_install_state();
-    const fs::path mods = user_folder_ / std::string(user_mods_folder_name);
     // An unpacking runs on under its prompt, a budget a frame, whatever
     // shows: the prompt is modal on the main menu, the only screen it
     // starts on.
-    if (state.stage == ModInstallState::Stage::unpacking && state.unpacking) {
+    if (state.stage == ModInstallState::Stage::unpacking && state.unpacking &&
+        state.kind != nullptr) {
+        const install::PackageKind& kind = *state.kind;
+        const fs::path root = user_folder_ / std::string(kind.root_folder);
         const bool watched =
             !UserFolderState::unwatched(options_.unattended) || !state.check_shows_prompts;
         if (state.placing) {
@@ -321,31 +291,37 @@ void Runtime::tell_mod_installs() {
             options.expected = state.expected;
             options.hooks.wait = wait_pumping;
             const install::ChangeResult result =
-                install::commit_change(mods, state.target, state.change, options);
+                install::commit_change(kind, root, state.target, state.change, options);
             state.discarder.add(result.discards);
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             state.stage = ModInstallState::Stage::telling;
-            const fs::path folder = mods / path_from_utf8(state.target);
+            const fs::path folder = root / path_from_utf8(state.target);
             if (!result.changed) {
                 install::Problem problem{};
                 problem.refusal = result.refusal;
                 problem.detail = result.detail;
                 log_line(state.package->file_name + ": not put in place: " + result.detail);
-                state.show(install::refused_prompt(state.package->file_name, problem, true));
+                state.show(install::refused_prompt(kind, state.package->file_name, problem, true));
             } else {
                 log_line(state.package->file_name + ": installed in " + path_to_utf8(folder));
                 state.told_folder = folder;
                 state.play_folder = folder;
-                const bool locked = !options_.mod_dir.empty() || options_.base_game;
+                const bool play_now = package_offers_play(kind);
                 state.show(
                     state.change == install::Change::install
-                        ? install::installed_prompt(state.incoming, folder, !locked)
+                        ? install::installed_prompt(kind, state.incoming, folder, play_now)
                         : install::updated_prompt(
-                              state.change, state.incoming, state.expected, folder, result, !locked
+                              kind,
+                              state.change,
+                              state.incoming,
+                              state.expected,
+                              folder,
+                              result,
+                              play_now
                           )
                 );
-                list_offered_mods();
+                package_changed(kind, folder);
             }
             state.finish_package();
             return;
@@ -361,54 +337,87 @@ void Runtime::tell_mod_installs() {
         if (step == oa::formats::zip::StreamStep::failed) {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
-            log_line(state.package->file_name + ": " + install::refusal_text(problem));
+            log_line(state.package->file_name + ": " + install::refusal_text(kind, problem));
             state.stage = ModInstallState::Stage::telling;
-            state.show(install::refused_prompt(state.package->file_name, problem, false));
+            state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
             state.finish_package();
             return;
         }
         if (step == oa::formats::zip::StreamStep::more) {
             auto made = install::installing_prompt(
-                state.incoming, state.unpacking->done_bytes(), state.unpacking->total_bytes(), false
+                kind,
+                state.incoming,
+                state.unpacking->done_bytes(),
+                state.unpacking->total_bytes(),
+                false
             );
             made.prompt.hovered = state.shown ? state.shown->prompt.hovered : settings::no_control;
             made.prompt.pressed = state.shown ? state.shown->prompt.pressed : settings::no_control;
             state.shown = std::move(made);
             return;
         }
-        // Unpacked whole. The mod played is changed once the run ends and
-        // its archives are closed; any other is put in place on the next
+        // Unpacked whole. A kind that checks the staged files does so before
+        // they are put in place or left for the run's end. The folder the
+        // game plays, when the kind checks nothing of its own, is checked as
+        // the Mods page checks a folder, then changed once the run ends and
+        // its archives are closed. Any other is put in place on the next
         // frame, once the prompt says so.
+        if (kind.check_staged != nullptr) {
+            install::Problem staged{};
+            if (!kind.check_staged(
+                    state.unpacking->staging(), *state.package, package_options(kind), staged
+                )) {
+                for (const auto& line : staged.lines)
+                    log_line(state.package->file_name + ": " + line);
+                log_line(
+                    state.package->file_name + ": " + install::refusal_text(kind, staged) +
+                    (staged.detail.empty() ? "" : " (" + staged.detail + ")")
+                );
+                state.unpacking->cancel();
+                state.discarder.add(state.unpacking->discards());
+                state.unpacking.reset();
+                state.stage = ModInstallState::Stage::telling;
+                state.show(install::refused_prompt(kind, state.package->file_name, staged, false));
+                state.finish_package();
+                return;
+            }
+        } else if (state.target_played) {
+            const auto& game_folder =
+                options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
+            const auto check = check_picked_mod_folder(
+                state.unpacking->staging(),
+                game_folder,
+                ModChoice{{}, {}, options_.accept_unimplemented_hacks, &preference_values_}
+            );
+            if (!check.refusal.empty()) {
+                for (const auto& line : check.errors)
+                    log_line(state.package->file_name + ": " + line);
+                state.unpacking->cancel();
+                state.discarder.add(state.unpacking->discards());
+                state.unpacking.reset();
+                install::Problem refused{};
+                refused.refusal = install::Refusal::manifest_errors;
+                refused.lines = check.errors;
+                state.stage = ModInstallState::Stage::telling;
+                state.show(install::refused_prompt(kind, state.package->file_name, refused, false));
+                state.finish_package();
+                return;
+            }
+        }
         if (!state.target_played) {
             state.placing = true;
             state.shown = install::installing_prompt(
-                state.incoming, state.unpacking->total_bytes(), state.unpacking->total_bytes(), true
+                kind,
+                state.incoming,
+                state.unpacking->total_bytes(),
+                state.unpacking->total_bytes(),
+                true
             );
             return;
         }
-        const auto& game_folder =
-            options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
-        const auto check = check_picked_mod_folder(
-            state.unpacking->staging(),
-            game_folder,
-            ModChoice{{}, {}, options_.accept_unimplemented_hacks, &preference_values_}
-        );
-        if (!check.refusal.empty()) {
-            for (const auto& line : check.errors)
-                log_line(state.package->file_name + ": " + line);
-            state.unpacking->cancel();
-            state.discarder.add(state.unpacking->discards());
-            state.unpacking.reset();
-            install::Problem refused{};
-            refused.refusal = install::Refusal::profile_errors;
-            refused.lines = check.errors;
-            state.stage = ModInstallState::Stage::telling;
-            state.show(install::refused_prompt(state.package->file_name, refused, false));
-            state.finish_package();
-            return;
-        }
         install::PendingChange pending{};
-        pending.mods = mods;
+        pending.kind = &kind;
+        pending.root = root;
         pending.target = state.target;
         pending.change = state.change;
         pending.incoming = state.incoming;
@@ -445,24 +454,26 @@ void Runtime::tell_mod_installs() {
         return;
     // What a change that waited for the last run did.
     if (auto outcome = install::take_change_outcome()) {
-        const fs::path folder = outcome->change.mods / path_from_utf8(outcome->change.target);
+        const install::PackageKind* kind = outcome->change.kind;
+        const fs::path folder = outcome->change.root / path_from_utf8(outcome->change.target);
         state.told_folder = folder;
         state.stage = ModInstallState::Stage::telling;
+        const std::string_view told =
+            outcome->change.file_name.empty() ? outcome->change.target : outcome->change.file_name;
+        if (kind == nullptr) {
+            log_line(std::string(told) + ": a change waited with no kind");
+            state.show(install::unknown_kind_prompt(told));
+            return;
+        }
         if (!outcome->result.changed) {
             install::Problem problem{};
             problem.refusal = outcome->result.refusal;
             problem.detail = outcome->result.detail;
-            state.show(
-                install::refused_prompt(
-                    outcome->change.file_name.empty() ? outcome->change.target
-                                                      : outcome->change.file_name,
-                    problem,
-                    true
-                )
-            );
+            state.show(install::refused_prompt(*kind, told, problem, true));
         } else {
             state.show(
                 install::updated_prompt(
+                    *kind,
                     outcome->change.change,
                     outcome->change.incoming,
                     outcome->change.replaced,
@@ -479,13 +490,22 @@ void Runtime::tell_mod_installs() {
         state.next_handoff_ms = now + kHandoffPollMs;
         take_handed_mod_files();
     }
-    const auto file = install::take_mod_file();
+    const auto file = install::take_package_file();
     if (!file)
         return;
     state.file = *file;
     state.told_folder.clear();
     state.play_folder.clear();
+    state.kind = install::kind_for_file(*file);
     log_line("opening " + path_to_utf8(*file));
+    const std::string name = path_to_utf8(file->filename());
+    if (state.kind == nullptr) {
+        log_line(name + ": it is not a kind of package this game installs");
+        state.stage = ModInstallState::Stage::telling;
+        state.show(install::unknown_kind_prompt(name));
+        install::finish_package_file();
+        return;
+    }
     // The platform may bring a file it opened into the game's own storage first.
     fs::path readable = *file;
     if (const PlatformHooks& hooks = platform_hooks(); hooks.take_opened_file != nullptr) {
@@ -497,8 +517,9 @@ void Runtime::tell_mod_installs() {
             problem.detail = why;
             log_line(path_to_utf8(*file) + ": " + why);
             state.stage = ModInstallState::Stage::telling;
-            state.show(install::refused_prompt(path_to_utf8(file->filename()), problem, false));
-            install::finish_mod_file();
+            state.show(install::refused_prompt(*state.kind, name, problem, false));
+            state.kind = nullptr;
+            install::finish_package_file();
             return;
         }
         if (!copy.empty() && copy != path_to_utf8(*file)) {
@@ -506,38 +527,45 @@ void Runtime::tell_mod_installs() {
             state.opened_copy = readable;
         }
     }
-    install::PackageOptions options{};
-    options.accept_unimplemented_hacks = options_.accept_unimplemented_hacks;
-    options.preferences = &preference_values_;
-    options.game_folder =
-        options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
-    auto opened = install::open_package(readable, options);
+    auto opened = install::open_package(readable, package_options(*state.kind));
     if (!opened.package) {
-        const std::string name = path_to_utf8(file->filename());
         log_line(
-            name + ": " + install::refusal_text(opened.problem) +
+            name + ": " +
+            (opened.problem.refusal == install::Refusal::unknown_kind
+                 ? std::string("it is not a kind of package this game installs")
+                 : install::refusal_text(*state.kind, opened.problem)) +
             (opened.problem.detail.empty() ? "" : " (" + opened.problem.detail + ")")
         );
         for (const auto& line : opened.problem.lines)
             log_line(name + ": " + line);
         state.stage = ModInstallState::Stage::telling;
-        state.show(install::refused_prompt(name, opened.problem, false));
+        state.show(
+            opened.problem.refusal == install::Refusal::unknown_kind
+                ? install::unknown_kind_prompt(name)
+                : install::refused_prompt(*state.kind, name, opened.problem, false)
+        );
         state.finish_package();
         return;
     }
     state.package = std::move(opened.package);
+    state.kind = state.package->kind;
     // The texts name the file the player opened, not the platform's copy.
-    state.package->file_name = path_to_utf8(file->filename());
+    state.package->file_name = name;
     for (const auto& warning : state.package->warnings)
         log_line(state.package->file_name + ": " + warning);
     if (state.package->backup_left_out)
         log_line(state.package->file_name + ": its own .backup folder is left out");
-    state.incoming = install::incoming_of(*state.package->profile);
-    state.plan = install::plan_install(state.incoming, install::mods_folder_hooks(mods));
-    const auto played = [this](const fs::path& folder) {
-        return options_.game_folders.size() > 1 &&
-               same_folder(kept_path(folder), kept_path(options_.game_folders.front()));
-    };
+    if (state.kind == nullptr || state.kind->plan == nullptr) {
+        log_line(name + ": it is not a kind of package this game installs");
+        state.stage = ModInstallState::Stage::telling;
+        state.show(install::unknown_kind_prompt(name));
+        state.finish_package();
+        return;
+    }
+    const install::PackageKind& kind = *state.kind;
+    const fs::path root = user_folder_ / std::string(kind.root_folder);
+    state.incoming = state.package->incoming;
+    state.plan = kind.plan(state.incoming, install::folder_hooks(kind, root));
     switch (state.plan.kind) {
     case install::PlanKind::install:
         state.target = state.plan.target;
@@ -550,7 +578,7 @@ void Runtime::tell_mod_installs() {
         install::Problem problem{};
         problem.refusal = install::Refusal::no_free_folder;
         state.stage = ModInstallState::Stage::telling;
-        state.show(install::refused_prompt(state.package->file_name, problem, false));
+        state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
         state.finish_package();
         return;
     }
@@ -558,11 +586,13 @@ void Runtime::tell_mod_installs() {
         state.stage = ModInstallState::Stage::asking;
         state.show(
             install::question_prompt(
+                kind,
                 state.plan,
                 state.incoming,
                 state.package->file_name,
-                mods,
-                !state.plan.target.empty() && played(mods / path_from_utf8(state.plan.target))
+                root,
+                !state.plan.target.empty() &&
+                    package_target_in_use(kind, root / path_from_utf8(state.plan.target))
             )
         );
         return;
@@ -571,7 +601,6 @@ void Runtime::tell_mod_installs() {
 
 void Runtime::answer_mod_install_prompt(int32_t button) {
     auto& state = mod_install_state();
-    const fs::path mods = user_folder_ / std::string(user_mods_folder_name);
     install::Answer answer = install::Answer::ok;
     if (button >= 0) {
         if (!state.shown || static_cast<std::size_t>(button) >= state.shown->answers.size())
@@ -579,21 +608,23 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         answer = state.shown->answers[static_cast<std::size_t>(button)];
     }
     const auto start_unpacking = [&] {
-        const fs::path folder = mods / path_from_utf8(state.target);
-        state.target_played =
-            options_.game_folders.size() > 1 &&
-            same_folder(kept_path(folder), kept_path(options_.game_folders.front()));
+        if (state.kind == nullptr || !state.package)
+            return;
+        const install::PackageKind& kind = *state.kind;
+        const fs::path root = user_folder_ / std::string(kind.root_folder);
+        const fs::path folder = root / path_from_utf8(state.target);
+        state.target_played = package_target_in_use(kind, folder);
         state.unpacking = std::make_unique<install::Unpacking>();
         install::Problem problem{};
-        if (!state.unpacking->start(*state.package, mods, state.target, state.expected, problem)) {
+        if (!state.unpacking->start(*state.package, root, state.target, state.expected, problem)) {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             log_line(
-                state.package->file_name + ": " + install::refusal_text(problem) +
+                state.package->file_name + ": " + install::refusal_text(kind, problem) +
                 (problem.detail.empty() ? "" : " (" + problem.detail + ")")
             );
             state.stage = ModInstallState::Stage::telling;
-            state.show(install::refused_prompt(state.package->file_name, problem, false));
+            state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
             state.finish_package();
             return;
         }
@@ -604,7 +635,9 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         state.stage = ModInstallState::Stage::unpacking;
         state.placing = false;
         state.show(
-            install::installing_prompt(state.incoming, 0, state.unpacking->total_bytes(), false)
+            install::installing_prompt(
+                kind, state.incoming, 0, state.unpacking->total_bytes(), false
+            )
         );
     };
     switch (state.stage) {
@@ -723,12 +756,13 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
     const fs::path folder = path_from_utf8(dialog.roll_back_folder);
     const fs::path mods = folder.parent_path();
     const std::string target = path_to_utf8(folder.filename());
-    const install::InstalledMod installed = install::read_installed_mod(folder);
-    const auto backup = install::read_backup(folder);
+    const install::PackageKind& kind = install::mod_kind();
+    const install::InstalledPackage installed = install::oamod::read_installed_mod(folder);
+    const auto backup = install::oamod::read_backup(folder);
     const std::string title = installed.name.empty() ? target : installed.name;
     // A refusal is told in a prompt over the dialog, whose text wraps, and
     // the dialog stays open under it.
-    const auto refuse = [&](install::ModPrompt made, std::string_view why) {
+    const auto refuse = [&](install::PackagePrompt made, std::string_view why) {
         log_line(path_to_utf8(folder) + ": not rolled back: " + std::string(why));
         auto& install_state = mod_install_state();
         if (!install_state.shown && install_state.stage == ModInstallState::Stage::idle) {
@@ -740,9 +774,9 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
         std::ignore = settings::set_folder_notice(dialog, {});
         return false;
     };
-    if (!backup || backup->kind != install::FolderKind::mod)
+    if (!backup || backup->kind != install::FolderKind::package)
         return refuse(
-            install::roll_back_failed_prompt(title), "it keeps no version that can be read"
+            install::oamod::roll_back_failed_prompt(title), "it keeps no version that can be read"
         );
     // The kept version must still be playable: an engine since may refuse it.
     const auto& game_folder =
@@ -758,19 +792,19 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
         log_line(path_to_utf8(kept) + ": " + line);
     if (!check.refusal.empty())
         return refuse(
-            install::roll_back_refused_prompt(
+            install::oamod::roll_back_refused_prompt(
                 title,
-                install::version_label(
+                install::oamod::version_label(
                     backup->version, backup->revision, backup->version == installed.version
                 ),
                 oa::data::languages::interface_text(check.refusal)
             ),
             "the version it keeps cannot be played"
         );
-    const bool played = options_.game_folders.size() > 1 &&
-                        same_folder(kept_path(folder), kept_path(options_.game_folders.front()));
+    const bool played = package_target_in_use(kind, folder);
     install::PendingChange pending{};
-    pending.mods = mods;
+    pending.kind = &kind;
+    pending.root = mods;
     pending.target = target;
     pending.change = install::Change::roll_back;
     pending.incoming = {backup->id, backup->name, backup->version, backup->revision};
@@ -798,12 +832,12 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
     options.expected = installed;
     options.hooks.wait = wait_pumping;
     const install::ChangeResult result =
-        install::commit_change(mods, target, install::Change::roll_back, options);
+        install::commit_change(kind, mods, target, install::Change::roll_back, options);
     mod_install_state().discarder.add(result.discards);
     if (!result.changed)
-        return refuse(install::roll_back_failed_prompt(title), result.detail);
+        return refuse(install::oamod::roll_back_failed_prompt(title), result.detail);
     log_line(path_to_utf8(folder) + ": rolled back to " + backup->version);
-    list_offered_mods();
+    package_changed(kind, folder);
     dialog.mod_names = state.mod_names;
     dialog.mod_folders = state.mod_folders;
     dialog.mod_details = state.mod_details;

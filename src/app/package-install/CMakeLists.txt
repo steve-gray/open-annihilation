@@ -10,7 +10,8 @@
 # change waiting for its run to end; the prompts' texts; and the hand-off
 # of a second start's packages to the copy already running. No SDL.
 add_library(oa-app-package-install src/package.cpp src/names.cpp src/plan_oamod.cpp src/change.cpp
-  src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp src/handoff.cpp)
+  src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp src/handoff.cpp
+  src/kinds.cpp src/prompts_oamod.cpp)
 add_library(oa::app::package_install ALIAS oa-app-package-install)
 target_include_directories(oa-app-package-install PUBLIC include)
 target_compile_features(oa-app-package-install PUBLIC cxx_std_20)
@@ -47,4 +48,8 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-package-install-handoff-test PRIVATE oa-app-package-install oa-test-support
     oa-options)
   add_test(NAME app-mod-install-handoff COMMAND oa-app-package-install-handoff-test)
+  add_executable(oa-app-package-install-kinds-test tests/kinds_test.cpp)
+  target_link_libraries(oa-app-package-install-kinds-test PRIVATE oa-app-package-install oa-test-support oa-options)
+  add_test(NAME app-package-install-kinds COMMAND oa-app-package-install-kinds-test)
+  set_tests_properties(app-package-install-kinds PROPERTIES TIMEOUT 30)
 endif()

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// A package's files unpacked into a staging folder inside Mods, a piece at
-// a time.
+// A package's files unpacked into a staging folder inside its kind's root, a
+// piece at a time.
 
 #include "files.hpp"
 #include "package_file.hpp"
@@ -26,11 +26,11 @@ namespace zip = oa::formats::zip;
 
 struct Unpacking::State {
     const Package* package{};
-    fs::path mods{};
+    fs::path root{};
     std::string target{};
     fs::path staging{};
     UnpackHooks hooks{};
-    ModsHold hold{};
+    RootHold hold{};
     detail::PackageFile file{};
     std::size_t next_folder{};    ///< the next of package->folders to make
     std::size_t next{};           ///< the next of package->files to unpack
@@ -97,10 +97,10 @@ void Unpacking::discard_staging() noexcept {
         if (state.staging.empty() || !fs::exists(fs::symlink_status(state.staging, error)))
             return;
         for (uint32_t number = 1;; ++number) {
-            const fs::path to = state.mods / detail::path_of(
-                                                 std::string(discard_prefix) + state.target + "-" +
-                                                 std::to_string(number)
-                                             );
+            const FolderNames names = folder_names(*state.package->kind);
+            const fs::path to =
+                state.root /
+                detail::path_of(names.discard + state.target + "-" + std::to_string(number));
             if (fs::exists(fs::symlink_status(to, error)))
                 continue;
             rename_exclusively(state.staging, to, error);
@@ -120,47 +120,56 @@ void Unpacking::discard_staging() noexcept {
 
 bool Unpacking::start(
     const Package& package,
-    const fs::path& mods,
+    const fs::path& root,
     std::string_view target,
-    const InstalledMod& expected,
+    const InstalledPackage& expected,
     Problem& problem,
     const UnpackHooks& hooks
 ) {
     problem = Problem{};
     state_.reset();
+    if (package.kind == nullptr) {
+        problem = problem_of(Refusal::unknown_kind);
+        return false;
+    }
     try {
+        detail::note_kind(*package.kind);
+        const FolderNames names = folder_names(*package.kind);
         auto state = std::make_unique<State>();
         state->package = &package;
-        state->mods = mods;
+        state->root = root;
         state->target = std::string(target);
         state->hooks = hooks;
         std::error_code error;
-        fs::create_directories(mods, error);
+        fs::create_directories(root, error);
         if (error) {
             problem = problem_of(
-                Refusal::not_placed, {}, "cannot make the Mods folder: " + error.message()
+                Refusal::not_placed, {}, "cannot make the root folder: " + error.message()
             );
             return false;
         }
-        state->hold = hold_mods_folder(mods);
+        state->hold = hold_root(*package.kind, root);
         if (!state->hold) {
             problem = problem_of(Refusal::busy);
             return false;
         }
-        const fs::path folder = mods / detail::path_of(target);
-        if (!same_mod(read_installed_mod(folder), expected)) {
+        const fs::path folder = root / detail::path_of(target);
+        const InstalledPackage held = package.kind->read_installed != nullptr
+                                          ? package.kind->read_installed(folder)
+                                          : InstalledPackage{};
+        if (!same_package(held, expected)) {
             problem = problem_of(Refusal::changed, std::string(target));
             return false;
         }
         const uint64_t needed = package.unpacked_bytes + free_space_margin;
-        const uint64_t available = free_bytes(hooks, mods);
+        const uint64_t available = free_bytes(hooks, root);
         if (available < needed) {
             problem = problem_of(Refusal::no_space);
             problem.size_bytes = needed;
             problem.limit_bytes = available;
             return false;
         }
-        state->staging = mods / detail::path_of(std::string(staging_prefix) + std::string(target));
+        state->staging = root / detail::path_of(names.staging + std::string(target));
         // The longest path a file of the package takes in staging, which is
         // longer than the target's, keeps path_room to spare.
         std::size_t longest_name = 0;
@@ -368,7 +377,7 @@ fs::path Unpacking::staging() const {
     return state_ ? state_->staging : fs::path();
 }
 
-ModsHold Unpacking::take_hold() noexcept {
+RootHold Unpacking::take_hold() noexcept {
     return state_ ? std::move(state_->hold) : nullptr;
 }
 

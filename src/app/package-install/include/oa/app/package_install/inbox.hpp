@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// What outlives each run of the game within one process: the mod packages
-// opened in the game and waiting for the main menu, the change that waits
-// for the run playing its target to end, its outcome for the next run, and
-// the discard folders the start's recovery found. Every function may be
-// called from any thread.
+// What outlives each run of the game within one process: the packages opened
+// in the game and waiting for the main menu, the change that waits for the
+// run playing its target to end, its outcome for the next run, and the
+// discard folders the start's recovery found. Every function may be called
+// from any thread.
 #pragma once
 
 #include "oa/app/package_install.hpp"
@@ -22,39 +22,40 @@ namespace oa::app::package_install {
 /// compared as std::filesystem::weakly_canonical gives them.
 ///
 /// @param file the package
-void post_mod_file(const std::filesystem::path& file);
+void post_package_file(const std::filesystem::path& file);
 
 /// Takes the next package, oldest first, and notes it as the one being
-/// installed until finish_mod_file.
+/// installed until finish_package_file.
 ///
 /// @return the package; nothing when none waits
-[[nodiscard]] std::optional<std::filesystem::path> take_mod_file();
+[[nodiscard]] std::optional<std::filesystem::path> take_package_file();
 
 /// Puts a package back at the front, as when its question was set aside.
 ///
 /// @param file the package
-void return_mod_file(const std::filesystem::path& file);
+void return_package_file(const std::filesystem::path& file);
 
-/// Notes that the package take_mod_file gave is done with.
-void finish_mod_file();
+/// Notes that the package take_package_file gave is done with.
+void finish_package_file();
 
 /// Tells whether any package waits.
 ///
 /// @return true while one does
-[[nodiscard]] bool mod_files_waiting();
+[[nodiscard]] bool package_files_waiting();
 
-/// A change whose target is the mod played: it waits for the run to end and
-/// its archives to close, then main() puts it in place before the next run.
+/// A change whose target is what the game plays: it waits for the run to end
+/// and its archives to close, then main() puts it in place before the next run.
 struct PendingChange {
-    std::filesystem::path mods{}; ///< the Mods folder
-    std::string target{};         ///< the folder in Mods
+    const PackageKind* kind{};    ///< the kind; null never
+    std::filesystem::path root{}; ///< the kind's root folder
+    std::string target{};         ///< the folder in the root
     Change change{Change::install};
-    Incoming incoming{};     ///< what it installs; for a roll back, the kept version
-    InstalledMod replaced{}; ///< what the target holds now, which it must still hold
-    std::string file_name{}; ///< the package's name; empty for a roll back
-    /// The hold on the Mods folder's lock the unpacking took, kept until the
+    Incoming incoming{};         ///< what it installs; for a roll back, the kept version
+    InstalledPackage replaced{}; ///< what the target holds now, which it must still hold
+    std::string file_name{};     ///< the package's name; empty for a roll back
+    /// The hold on the root folder's lock the unpacking took, kept until the
     /// change is in place; null for a roll back, which takes its own.
-    ModsHold hold{};
+    RootHold hold{};
 };
 
 /// Sets the change that waits for the run to end, replacing any.
@@ -74,7 +75,7 @@ struct ChangeOutcome {
 };
 
 /// Puts the waiting change in place, if any, keeps its outcome for the next
-/// run, releases the hold on the Mods folder, then settles the folder again
+/// run, releases the hold on the root folder, then settles the folder again
 /// (recover_changes) and keeps the discard folders found.
 ///
 /// @param options the hooks and the waits

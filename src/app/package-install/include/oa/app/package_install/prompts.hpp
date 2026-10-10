@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// What the player is shown and asked while a mod package installs: each
-// prompt's title, text and buttons, and what each button answers. Every
-// text is an English template looked up in the interface catalogue
-// (oa/data/languages/interface_text.hpp) and then filled with its values,
-// which are never looked up: mod names, versions, file names, paths and
-// sizes. The captions shared with the settings' own dialogs are the same
-// English words, so one catalogue entry serves both.
+// What the player is shown and asked while a package installs: each prompt's
+// title, text and buttons, and what each button answers. A kind supplies the
+// words (KindPrompts). Every text is an English template looked up in the
+// interface catalogue (oa/data/languages/interface_text.hpp) and then filled
+// with its values, which are never looked up: names, versions, file names,
+// paths and sizes. The captions shared with the settings' own dialogs are
+// the same English words, so one catalogue entry serves both.
 #pragma once
 
 #include "oa/app/package_install.hpp"
@@ -33,115 +33,131 @@ enum class Answer : uint8_t {
 };
 
 /// A prompt and what its buttons answer.
-struct ModPrompt {
+struct PackagePrompt {
     oa::ui::engine_settings::Prompt prompt{};
     std::vector<Answer> answers{}; ///< one for each button, left to right
 };
 
-/// Returns a version as a prompt names it: "{version}", or "{version}
-/// revision {n}" where the versions it is shown beside are the same.
-///
-/// @param version the version
-/// @param revision the revision; 0 names an unknown one
-/// @param with_revision the revision is named
-/// @return the label
-[[nodiscard]] std::string
-version_label(std::string_view version, int64_t revision, bool with_revision);
+/// The words one kind shows. Null asks nothing of that kind.
+struct KindPrompts {
+    PackagePrompt (*installing)(
+        const Incoming& incoming, uint64_t done_bytes, uint64_t total_bytes, bool placing
+    ){};
+    PackagePrompt (*question)(
+        const InstallPlan& plan,
+        const Incoming& incoming,
+        std::string_view file_name,
+        const std::filesystem::path& root,
+        bool played
+    ){};
+    PackagePrompt (*installed)(
+        const Incoming& incoming, const std::filesystem::path& folder, bool play_now
+    ){};
+    PackagePrompt (*updated)(
+        Change change,
+        const Incoming& now,
+        const InstalledPackage& before,
+        const std::filesystem::path& folder,
+        const ChangeResult& result,
+        bool play_now
+    ){};
+    std::string (*refusal_text)(const Problem& problem){};
+    PackagePrompt (*refused)(
+        std::string_view file_name, const Problem& problem, bool change_failed
+    ){};
+};
 
-/// Returns the prompt shown while a package unpacks (INSTALLING MOD), with
-/// its progress, or while its files are put in place.
+/// Returns the prompt shown while a package unpacks, from the kind's words.
 ///
-/// @param incoming the mod
+/// @param kind the kind
+/// @param incoming what it installs
 /// @param done_bytes the bytes unpacked so far
 /// @param total_bytes the bytes it unpacks to
 /// @param placing its files are being put in place
-/// @return the prompt: CANCEL
-[[nodiscard]] ModPrompt installing_prompt(
-    const Incoming& incoming, uint64_t done_bytes, uint64_t total_bytes, bool placing
+/// @return the prompt; empty when the kind has none
+[[nodiscard]] PackagePrompt installing_prompt(
+    const PackageKind& kind,
+    const Incoming& incoming,
+    uint64_t done_bytes,
+    uint64_t total_bytes,
+    bool placing
 );
 
-/// Returns the question a plan asks: UPDATE MOD, ANOTHER VERSION, ALREADY
-/// INSTALLED or FOLDER IN USE. Where the answer removes something that
-/// cannot be brought back (a .backup that exists, or the files a reinstall
-/// replaces), CANCEL is marked first.
+/// Returns the question a plan asks, from the kind's words.
 ///
+/// @param kind the kind
 /// @param plan the plan, one of the ask kinds
-/// @param incoming the mod
+/// @param incoming what it installs
 /// @param file_name the package's name
-/// @param mods the Mods folder, whose alongside folder the text shows
-/// @param played the target is the mod the game plays now
-/// @return the prompt
-[[nodiscard]] ModPrompt question_prompt(
+/// @param root the kind's root folder
+/// @param played the target is what the game plays now
+/// @return the prompt; empty when the kind has none
+[[nodiscard]] PackagePrompt question_prompt(
+    const PackageKind& kind,
     const InstallPlan& plan,
     const Incoming& incoming,
     std::string_view file_name,
-    const std::filesystem::path& mods,
+    const std::filesystem::path& root,
     bool played
 );
 
-/// Returns the prompt that says a mod was installed in a folder of its own
-/// (MOD INSTALLED).
+/// Returns the prompt that says a package was installed in a folder of its own.
 ///
-/// @param incoming the mod
+/// @param kind the kind
+/// @param incoming what it installs
 /// @param folder its folder
-/// @param play_now PLAY NOW is offered; else the text says where to choose it
-/// @return the prompt: OPEN FOLDER, PLAY NOW when offered, OK
-[[nodiscard]] ModPrompt
-installed_prompt(const Incoming& incoming, const std::filesystem::path& folder, bool play_now);
+/// @param play_now PLAY NOW is offered
+/// @return the prompt; empty when the kind has none
+[[nodiscard]] PackagePrompt installed_prompt(
+    const PackageKind& kind,
+    const Incoming& incoming,
+    const std::filesystem::path& folder,
+    bool play_now
+);
 
-/// Returns the prompt that says a mod's folder was updated, installed
-/// again or rolled back (MOD UPDATED).
+/// Returns the prompt that says a package's folder was updated, installed
+/// again or rolled back.
 ///
+/// @param kind the kind
 /// @param change what was done
 /// @param now what the folder holds now
 /// @param before what it held before
 /// @param folder the folder
-/// @param result what the change did: whether the earlier version was kept,
-///        and where it is when it could not be
+/// @param result what the change did
 /// @param play_now PLAY NOW is offered
-/// @return the prompt: OPEN FOLDER, PLAY NOW when offered, OK
-[[nodiscard]] ModPrompt updated_prompt(
+/// @return the prompt; empty when the kind has none
+[[nodiscard]] PackagePrompt updated_prompt(
+    const PackageKind& kind,
     Change change,
     const Incoming& now,
-    const InstalledMod& before,
+    const InstalledPackage& before,
     const std::filesystem::path& folder,
     const ChangeResult& result,
     bool play_now
 );
 
-/// Returns the sentence that says why a package was not installed.
+/// Returns the sentence that says why a package was not installed, from the kind's words.
 ///
+/// @param kind the kind
 /// @param problem the problem
-/// @return the sentence
-[[nodiscard]] std::string refusal_text(const Problem& problem);
+/// @return the sentence; empty when the kind has none
+[[nodiscard]] std::string refusal_text(const PackageKind& kind, const Problem& problem);
 
-/// Returns the prompt that says a package was not installed (MOD NOT
-/// INSTALLED): the reason, at most three of its profile's diagnostics, and
-/// whether a change failed.
+/// Returns the prompt that says a package was not installed, from the kind's words.
 ///
+/// @param kind the kind
 /// @param file_name the package's name
 /// @param problem why
 /// @param change_failed a change was tried and undone
-/// @return the prompt: OK
-[[nodiscard]] ModPrompt
-refused_prompt(std::string_view file_name, const Problem& problem, bool change_failed);
+/// @return the prompt; empty when the kind has none
+[[nodiscard]] PackagePrompt refused_prompt(
+    const PackageKind& kind, std::string_view file_name, const Problem& problem, bool change_failed
+);
 
-/// Returns the prompt, shown over the settings dialog, that says the Mods
-/// page's ROLL BACK changed nothing (MOD NOT ROLLED BACK).
+/// Returns the prompt that says a file is not a kind of package the game installs.
 ///
-/// @param title the mod's name
-/// @return the prompt: OK
-[[nodiscard]] ModPrompt roll_back_failed_prompt(std::string_view title);
-
-/// Returns the prompt, shown over the settings dialog, that says the kept
-/// version cannot be played, so it was not rolled back to (MOD NOT ROLLED
-/// BACK).
-///
-/// @param title the mod's name
-/// @param to the kept version's label
-/// @param reason why it cannot be played, a sentence in the language shown
-/// @return the prompt: OK
-[[nodiscard]] ModPrompt
-roll_back_refused_prompt(std::string_view title, std::string_view to, std::string_view reason);
+/// @param file_name the file's name
+/// @return the prompt: NOT INSTALLED, one OK button
+[[nodiscard]] PackagePrompt unknown_kind_prompt(std::string_view file_name);
 
 } // namespace oa::app::package_install

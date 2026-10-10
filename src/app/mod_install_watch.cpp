@@ -32,8 +32,8 @@ void take_drop(const SDL_Event& event) {
         return;
     try {
         const fs::path file = path_from_utf8(event.drop.data);
-        if (package_install::names_mod_package(file)) {
-            package_install::post_mod_file(file);
+        if (package_install::kind_for_file(file) != nullptr) {
+            package_install::post_package_file(file);
             return;
         }
         std::cerr << "open-annihilation: a file opened in the game is no mod package and is left: "
