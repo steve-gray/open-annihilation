@@ -107,6 +107,9 @@ void pseudo_pack_reads_whole() {
     OA_CHECK(manifest.fallbacks.empty());
     OA_CHECK(manifest.needs == languages::TextNeeds::modern_fonts);
     OA_CHECK(manifest.unicode);
+    OA_CHECK(manifest.homepage == "https://example.org/pseudo");
+    OA_CHECK(manifest.tags == std::vector<std::string>{"test"});
+    OA_CHECK(manifest.requires_engine == ">= 0.0.1");
     // A caption and a message, keyed by their English; an empty value adds
     // nothing.
     OA_CHECK(pack.translations().size() == 2);
@@ -154,6 +157,57 @@ void manifests_are_refused_by_rule() {
         languages::read_manifest(bytes_of("oalang: 1\ntag: zh-Hans\nword: Chinese\n"), manifest)
     );
     OA_CHECK(manifest.needs == languages::TextNeeds::game_fonts && !manifest.unicode);
+}
+
+/// homepage, tags and requires.engine are read; a broken one is refused,
+/// and an unmet engine requirement is kept.
+void package_keys_are_read_and_checked() {
+    languages::PackManifest manifest;
+    std::string error;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of(
+                "oalang: 1\n"
+                "tag: zh-Hans\n"
+                "word: Chinese\n"
+                "homepage: \"https://example.org/lang\"\n"
+                "tags: [translation]\n"
+                "requires: {engine: \">= 0.0.1\"}\n"
+            ),
+            manifest,
+            &error
+        )
+    );
+    OA_CHECK(error.empty());
+    OA_CHECK(manifest.homepage == "https://example.org/lang");
+    OA_CHECK(manifest.tags == std::vector<std::string>{"translation"});
+    OA_CHECK(manifest.requires_engine == ">= 0.0.1");
+
+    const auto refused = [](std::string_view text) {
+        languages::PackManifest kept;
+        kept.tag = "kept";
+        std::string failure;
+        const bool read = languages::read_manifest(bytes_of(text), kept, &failure);
+        OA_CHECK(kept.tag == "kept");
+        return !read && !failure.empty();
+    };
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nhomepage: \"javascript:no\"\n"));
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\ntags: [Not-Kebab]\n"));
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\ntags: []\n"));
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {engine: \">= 1.2\"}\n"));
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {base: ta-3.1c}\n"));
+
+    languages::PackManifest unmet;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of(
+                "oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {engine: \">= 9999.0.0\"}\n"
+            ),
+            unmet,
+            &error
+        )
+    );
+    OA_CHECK(unmet.requires_engine == ">= 9999.0.0");
 }
 
 /// The game's own texts: a mod's pack first, then the game data in the
@@ -314,6 +368,7 @@ int main(int argc, char** argv) {
     pack_folder = argv[1];
     pseudo_pack_reads_whole();
     manifests_are_refused_by_rule();
+    package_keys_are_read_and_checked();
     game_texts_are_looked_up_through_the_layers();
     unit_texts_are_looked_up_through_the_layers();
     unit_texts_check_the_english_they_translate();

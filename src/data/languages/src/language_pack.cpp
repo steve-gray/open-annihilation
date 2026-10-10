@@ -4,11 +4,13 @@
 #include "oa/data/languages/language_pack.hpp"
 
 #include "oa/formats/oamod.hpp"
+#include "oa/formats/oamod/package_keys.hpp"
 #include "oa/formats/tdf.hpp"
 
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::data::languages {
 
@@ -207,6 +209,21 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
             } else if (key == "unicode") {
                 ok = entry.kind == oamod::NodeKind::boolean;
                 read.unicode = ok && entry.boolean;
+            } else if (key == "homepage" || key == "tags") {
+                ok = true;
+            } else if (key == "requires") {
+                if (entry.kind != oamod::NodeKind::mapping) {
+                    failure = "the manifest's requires is not a mapping";
+                    break;
+                }
+                for (const oamod::Node& child : entry.children) {
+                    if (child.key.kind != oamod::KeyKind::string || child.key.text != "engine") {
+                        failure = "the manifest's requires takes engine only";
+                        break;
+                    }
+                }
+                if (!failure.empty())
+                    break;
             } else {
                 failure = "the manifest has no key " + key;
                 break;
@@ -227,6 +244,21 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
             failure = "the manifest names no word";
         else if (failure.empty() && normalised_locale(read.tag) != read.tag)
             failure = "the manifest's tag " + read.tag + " is not a tag";
+        else if (failure.empty()) {
+            oamod::PackageKeys keys;
+            std::vector<oamod::KeyProblem> problems;
+            const oamod::Node* requires_block = oamod::find_entry(root, "requires");
+            if (requires_block != nullptr && requires_block->kind != oamod::NodeKind::mapping)
+                requires_block = nullptr;
+            oamod::read_package_keys(root, requires_block, keys, problems);
+            if (!problems.empty())
+                failure = problems.front().path + ": " + problems.front().message;
+            else {
+                read.homepage = std::move(keys.homepage);
+                read.tags = std::move(keys.tags);
+                read.requires_engine = std::move(keys.requires_engine);
+            }
+        }
     }
     if (!failure.empty()) {
         if (error != nullptr)
