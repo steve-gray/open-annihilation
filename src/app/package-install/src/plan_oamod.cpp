@@ -6,13 +6,13 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -133,4 +133,4 @@ InstallPlan plan_install(const Incoming& incoming, const ModsFolderHooks& hooks)
     return plan;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

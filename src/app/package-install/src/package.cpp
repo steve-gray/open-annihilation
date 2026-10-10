@@ -7,7 +7,7 @@
 #include "files.hpp"
 #include "package_file.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/app/mod_profile_loader.hpp"
 #include "oa/formats/oamod.hpp"
 #include "oa/app/user_folder.hpp"
@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 namespace zip = oa::formats::zip;
@@ -516,4 +516,4 @@ Incoming incoming_of(const mod_profile::ModProfile& profile) {
     return {profile.id, profile.name, profile.version, profile.packaging.revision};
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

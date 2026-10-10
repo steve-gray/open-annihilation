@@ -6,8 +6,8 @@
 // first mark and sentences, each fitting the prompt's height with its
 // longest texts and a long path.
 
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/prompts.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/test/check.hpp"
 
 #include <map>
@@ -19,7 +19,7 @@
 namespace {
 
 namespace fs = std::filesystem;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 using install::FolderKind;
 using install::InstalledMod;
 using install::PlanKind;

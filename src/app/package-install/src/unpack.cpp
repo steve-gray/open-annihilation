@@ -8,7 +8,7 @@
 #include "package_file.hpp"
 
 #include "oa/app/game_directory.hpp"
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/platform/files.hpp"
 
 #include <algorithm>
@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 namespace zip = oa::formats::zip;
@@ -377,4 +377,4 @@ const std::vector<fs::path>& Unpacking::discards() const noexcept {
     return state_ ? state_->discards : none;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

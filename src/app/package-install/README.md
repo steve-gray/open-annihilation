@@ -9,7 +9,7 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
 
 ## Entry points
 
-`oa/app/mod_install.hpp`, namespace `oa::app::mod_install`:
+`oa/app/package_install.hpp`, namespace `oa::app::package_install`:
 
 - `open_package` reads a package and checks it before anything is written:
   its directory through the streamed zip reader
@@ -31,17 +31,17 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
 - `read_installed_mod` and `read_backup` read what a folder and its
   `.backup` hold, for the plan and the Mods page's ROLL BACK.
 
-`oa/app/mod_install/inbox.hpp` keeps what outlives each run of the game in
+`oa/app/package_install/inbox.hpp` keeps what outlives each run of the game in
 one process: the packages waiting for the main menu (`post_mod_file`,
 `take_mod_file`), the change that waits for the run playing its target to
 end (`set_pending_change`, `finish_pending_change`) and its outcome, and the
 discard folders the start's recovery found.
 
-`oa/app/mod_install/prompts.hpp` builds every prompt the install shows
+`oa/app/package_install/prompts.hpp` builds every prompt the install shows
 (`oa::ui::engine_settings::Prompt`): its text through the interface
 catalogue, its buttons and what each answers.
 
-`oa/app/mod_install/handoff.hpp` has the instance lock and the hand-off
+`oa/app/package_install/handoff.hpp` has the instance lock and the hand-off
 folder a second start writes its packages into for the copy already
 running.
 

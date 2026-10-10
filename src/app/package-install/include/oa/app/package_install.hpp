@@ -30,7 +30,7 @@
 #include <system_error>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 /// A mod package's file extension, matched without case.
 inline constexpr std::string_view package_extension = ".oamod";
@@ -661,4 +661,4 @@ class NewFile {
 #endif
 };
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

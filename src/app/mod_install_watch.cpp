@@ -7,8 +7,8 @@
 #include "mod_install_watch.hpp"
 
 #include "oa/app/game_directory.hpp"
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/inbox.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/inbox.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -32,8 +32,8 @@ void take_drop(const SDL_Event& event) {
         return;
     try {
         const fs::path file = path_from_utf8(event.drop.data);
-        if (mod_install::names_mod_package(file)) {
-            mod_install::post_mod_file(file);
+        if (package_install::names_mod_package(file)) {
+            package_install::post_mod_file(file);
             return;
         }
         std::cerr << "open-annihilation: a file opened in the game is no mod package and is left: "

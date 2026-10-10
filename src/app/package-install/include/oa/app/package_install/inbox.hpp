@@ -8,14 +8,14 @@
 // called from any thread.
 #pragma once
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 /// Queues a package to be installed once the main menu shows. A path already
 /// queued, or the one being installed now, is not queued again: paths are
@@ -106,4 +106,4 @@ void set_handoff_folder(const std::filesystem::path& folder);
 /// @return the folder; nothing when the process holds no instance lock
 [[nodiscard]] std::optional<std::filesystem::path> handoff_folder();
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

@@ -2286,13 +2286,13 @@ client, loads under any.
 ### Mod packages (.oamod)
 
 A mod package is a zip archive of a mod's folder, which the game installs
-into the player's own Mods folder (`src/app/mod-install`,
-`oa-app-mod-install`, says how a package is read, planned, unpacked and put
+into the player's own Mods folder (`src/app/package-install`,
+`oa-app-package-install`, says how a package is read, planned, unpacked and put
 in place, and how what a stop leaves is settled). The runtime's part:
 
 - **Opening a package.** `--install-mod FILE`, repeated, and any bare
   argument ending in `.oamod`, any case, queue packages in the
-  process-wide inbox (`oa/app/mod_install/inbox.hpp`); macOS's `-psn_`
+  process-wide inbox (`oa/app/package_install/inbox.hpp`); macOS's `-psn_`
   argument is skipped. A file the system opens in the game, or one dropped
   on the window, arrives as SDL's drop event: a watch on SDL's events
   (`mod_install_watch.cpp`), started right after each start of SDL's video
@@ -2303,7 +2303,7 @@ in place, and how what a stop leaves is settled). The runtime's part:
   `release_opened_file` once the install is done with it. On Windows and
   Linux a second start that carries only packages, while another copy holds
   the instance lock, hands them over through the hand-off folder
-  (`oa/app/mod_install/handoff.hpp`) and ends; the running copy looks there
+  (`oa/app/package_install/handoff.hpp`) and ends; the running copy looks there
   once a second, in the background too, and brings its window forward.
 - **At the main menu** (`runtime_mod_install.cpp`,
   `Runtime::tell_mod_installs`): once the menu has settled for two frames,

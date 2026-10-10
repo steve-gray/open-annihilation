@@ -11,7 +11,7 @@
 #include <cstdio>
 #include <filesystem>
 
-namespace oa::app::mod_install::detail {
+namespace oa::app::package_install::detail {
 
 /// A package file opened for reading, its size known.
 struct PackageFile {
@@ -38,4 +38,4 @@ struct PackageFile {
     [[nodiscard]] oa::formats::zip::SourceHooks source();
 };
 
-} // namespace oa::app::mod_install::detail
+} // namespace oa::app::package_install::detail

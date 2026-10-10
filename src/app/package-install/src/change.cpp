@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
 
@@ -19,7 +19,7 @@
 #include <system_error>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -559,4 +559,4 @@ bool Discarder::step() {
     return !folders_.empty();
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

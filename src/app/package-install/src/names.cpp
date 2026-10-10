@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,7 +14,7 @@
 #include <string>
 #include <string_view>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace {
 
@@ -126,7 +126,7 @@ std::filesystem::path path_of(std::string_view text) {
 }
 
 void log_line(std::string_view line) {
-    std::cerr << "open-annihilation: mod install: " << line << '\n';
+    std::cerr << "open-annihilation: package install: " << line << '\n';
 }
 
 } // namespace detail
@@ -198,4 +198,4 @@ bool names_mod_package(const std::filesystem::path& file) {
     return name.size() > package_extension.size() && name.ends_with(package_extension);
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

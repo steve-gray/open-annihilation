@@ -10,7 +10,7 @@
 // English words, so one catalogue entry serves both.
 #pragma once
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 
 #include <cstdint>
@@ -19,7 +19,7 @@
 #include <string_view>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 /// What a prompt's button answers.
 enum class Answer : uint8_t {
@@ -144,4 +144,4 @@ refused_prompt(std::string_view file_name, const Problem& problem, bool change_f
 [[nodiscard]] ModPrompt
 roll_back_refused_prompt(std::string_view title, std::string_view to, std::string_view reason);
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

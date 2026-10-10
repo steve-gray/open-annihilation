@@ -6,7 +6,7 @@
 #include "oa/app/extension.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/hook_call.hpp"
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/platform/display_modes.hpp"
 #include "oa/platform/job_pool.hpp"
 #include "oa/platform/system.hpp"
@@ -674,7 +674,7 @@ namespace {
 /// @param argument the argument
 /// @return true for a .oamod file
 [[nodiscard]] bool names_mod_package(std::string_view argument) {
-    return mod_install::names_mod_package(path_from_utf8(argument));
+    return package_install::names_mod_package(path_from_utf8(argument));
 }
 
 } // namespace

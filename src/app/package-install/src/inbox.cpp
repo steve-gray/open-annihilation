@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install/inbox.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/base/threads.hpp"
 
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include <system_error>
 #include <utility>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -175,4 +175,4 @@ std::optional<fs::path> handoff_folder() {
     return state.handoff;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install/prompts.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/game_files.hpp"
 
@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
@@ -554,4 +554,4 @@ roll_back_refused_prompt(std::string_view title, std::string_view to, std::strin
     return made;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

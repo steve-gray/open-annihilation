@@ -7,8 +7,8 @@
 // runtime_mod_install.cpp drives and draws as an overlay.
 #pragma once
 
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/prompts.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/app/runtime.hpp"
 
 #include <cstdint>
@@ -30,21 +30,21 @@ struct Runtime::ModInstallState {
     Stage stage{Stage::idle};
     /// The prompt over the main menu and what its buttons answer; empty
     /// while none shows.
-    std::optional<mod_install::ModPrompt> shown;
+    std::optional<package_install::ModPrompt> shown;
     /// The package taken from the inbox, as it was opened.
     std::filesystem::path file;
     /// The copy the platform made of it, which it releases once the install
     /// is done with it; empty when the game reads the file where it is.
     std::filesystem::path opened_copy;
     /// The package, read and checked.
-    std::optional<mod_install::Package> package;
-    mod_install::Incoming incoming{}; ///< the mod it installs
-    mod_install::InstallPlan plan{};  ///< where it goes and what it asks
+    std::optional<package_install::Package> package;
+    package_install::Incoming incoming{}; ///< the mod it installs
+    package_install::InstallPlan plan{};  ///< where it goes and what it asks
     /// The unpacking while it runs, and until its change is put in place.
-    std::unique_ptr<mod_install::Unpacking> unpacking;
+    std::unique_ptr<package_install::Unpacking> unpacking;
     std::string target;                   ///< the folder in Mods the change acts on
-    mod_install::Change change{};         ///< the change the answer picked
-    mod_install::InstalledMod expected{}; ///< what the target held when it was planned
+    package_install::Change change{};         ///< the change the answer picked
+    package_install::InstalledMod expected{}; ///< what the target held when it was planned
     bool target_played{};                 ///< the target is the mod the game plays
     /// The unpacking is done and the prompt says the files are being put in
     /// place: the change is made on the next frame, after that is drawn.
@@ -52,7 +52,7 @@ struct Runtime::ModInstallState {
     std::filesystem::path told_folder; ///< the folder OPEN FOLDER shows
     std::filesystem::path play_folder; ///< the folder PLAY NOW plays
     /// The folders to delete, a step each main menu frame.
-    mod_install::Discarder discarder;
+    package_install::Discarder discarder;
     /// Frames in a row the main menu has shown as itself.
     uint32_t settled_frames{};
     /// The key whose press closed the prompt, until it is released; 0 for none.
@@ -67,7 +67,7 @@ struct Runtime::ModInstallState {
     /// Shows a prompt over the main menu.
     ///
     /// @param made the prompt
-    void show(mod_install::ModPrompt made);
+    void show(package_install::ModPrompt made);
 
     /// Gives the copy the platform made of the package back to it to remove.
     void release_opened_copy();

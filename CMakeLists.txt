@@ -146,7 +146,7 @@ add_subdirectory(src/base/game-loop)
 add_subdirectory(src/platform/preferences)
 add_subdirectory(src/app/command-line)
 add_subdirectory(src/app/card)
-add_subdirectory(src/app/mod-install)
+add_subdirectory(src/app/package-install)
 add_subdirectory(src/data/mission-types)
 add_subdirectory(src/data/limits)
 add_subdirectory(src/data/languages)
@@ -281,7 +281,7 @@ add_library(oa::app::game_options ALIAS oa-app-game-options)
 target_link_libraries(oa-app-game-options PUBLIC oa-app-headers)
 target_link_libraries(oa-app-game-options PUBLIC oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario
   oa-ui-screen-registry oa-app-command-line oa-platform-preferences oa-app-mod-profile
-  PRIVATE oa-app-mod-install oa-platform-job-pool oa-platform-display-modes oa-options)
+  PRIVATE oa-app-package-install oa-platform-job-pool oa-platform-display-modes oa-options)
 # oa-game's game folder: --game-dir, the remembered folder, a folder found
 # where Steam, Heroic or Lutris put it, or the folder dialog's choice, the
 # installation checks, and the installer of the Total Annihilation demo
@@ -990,7 +990,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-platform-display-modes oa-platform-display-modes-sdl
   oa-app-full-terrain oa-app-full-supersampling oa-app-full-fog oa-app-card-executor
   oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-ui-paint
-  oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-mod-install
+  oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-ui-frontend-multiplayer)
 # The table that combines the extensions' tables of oa-game

@@ -10,7 +10,7 @@
 #include <string_view>
 #include <system_error>
 
-namespace oa::app::mod_install::detail {
+namespace oa::app::package_install::detail {
 
 #ifdef _WIN32
 /// Returns a path in the form that reaches past the system's 259
@@ -69,9 +69,9 @@ void flush_to_storage(const std::filesystem::path& folder) noexcept;
 [[nodiscard]] std::filesystem::path path_of(std::string_view text);
 
 /// Writes a line to standard error, which the log keeps, after
-/// "open-annihilation: mod install: ".
+/// "open-annihilation: package install: ".
 ///
 /// @param line the line
 void log_line(std::string_view line);
 
-} // namespace oa::app::mod_install::detail
+} // namespace oa::app::package_install::detail

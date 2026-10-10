@@ -14,10 +14,10 @@
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/handoff.hpp"
-#include "oa/app/mod_install/inbox.hpp"
-#include "oa/app/mod_install/prompts.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/handoff.hpp"
+#include "oa/app/package_install/inbox.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
@@ -44,7 +44,7 @@ namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
 namespace artless = oa::ui::frontend_renderer;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 
 namespace {
 
@@ -67,7 +67,7 @@ constexpr std::string_view kCloseSound = "Options";
 ///
 /// @param line the line
 void log_line(std::string_view line) {
-    std::cerr << "open-annihilation: mod install: " << line << '\n';
+    std::cerr << "open-annihilation: package install: " << line << '\n';
 }
 
 /// Returns a folder's path as the settings keep it: absolute, normal, UTF-8.

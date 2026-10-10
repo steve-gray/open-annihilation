@@ -6,7 +6,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install/handoff.hpp"
+#include "oa/app/package_install/handoff.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -27,7 +27,7 @@
 #include <unistd.h>
 #endif
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -143,4 +143,4 @@ std::vector<fs::path> take_handed_files(const fs::path& folder) {
     return taken;
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

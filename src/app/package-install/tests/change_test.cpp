@@ -18,7 +18,7 @@
 // another copy holds; the room and path checks; and the files and folders
 // a step makes held to its budget.
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/scratch_directory.hpp"
@@ -39,7 +39,7 @@
 namespace {
 
 namespace fs = std::filesystem;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 namespace raw = oa::test::raw_zip;
 using install::Change;
 using install::Refusal;

@@ -8,7 +8,7 @@
 
 #include "files.hpp"
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/base/threads.hpp"
 
 #include <algorithm>
@@ -31,7 +31,7 @@
 #include <unistd.h>
 #endif
 
-namespace oa::app::mod_install {
+namespace oa::app::package_install {
 
 namespace fs = std::filesystem;
 
@@ -366,4 +366,4 @@ bool NewFile::finish() noexcept {
 #endif
 }
 
-} // namespace oa::app::mod_install
+} // namespace oa::app::package_install

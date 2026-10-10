@@ -25,8 +25,8 @@
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/inbox.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/formats/zip.hpp"
@@ -51,7 +51,7 @@
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 
 namespace {
 

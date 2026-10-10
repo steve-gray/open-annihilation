@@ -9,7 +9,7 @@
 #include "oa/app/asset_files.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/hook_call.hpp"
-#include "oa/app/mod_install/inbox.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "match_clock.hpp"
 #include "graphics_report.hpp"
 #include "render_host.hpp"
@@ -561,7 +561,7 @@ int Runtime::run() {
                                      )) {
             // While this copy takes a second start's mod packages, it looks
             // for them once a second even in the background.
-            if (mod_install::handoff_folder()) {
+            if (package_install::handoff_folder()) {
                 if (SDL_WaitEventTimeout(&event, kHandoffWaitMs))
                     dispatch_event(event, running);
                 take_handed_mod_files();

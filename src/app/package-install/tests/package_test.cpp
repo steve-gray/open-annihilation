@@ -8,7 +8,7 @@
 // folders it makes; and each refusal once. The portable name rule and the
 // folder-safe version.
 
-#include "oa/app/mod_install.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/scratch_directory.hpp"
 #include "oa/test/raw_zip.hpp"
@@ -23,7 +23,7 @@
 namespace {
 
 namespace fs = std::filesystem;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 namespace raw = oa::test::raw_zip;
 using install::Refusal;
 

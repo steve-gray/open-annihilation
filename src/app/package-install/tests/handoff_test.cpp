@@ -6,7 +6,7 @@
 // requests a second start writes are taken back in order, each deleted,
 // and a request whose package is gone dropped.
 
-#include "oa/app/mod_install/handoff.hpp"
+#include "oa/app/package_install/handoff.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/scratch_directory.hpp"
 
@@ -18,7 +18,7 @@
 namespace {
 
 namespace fs = std::filesystem;
-namespace install = oa::app::mod_install;
+namespace install = oa::app::package_install;
 
 } // namespace
 
