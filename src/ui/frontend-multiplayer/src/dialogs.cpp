@@ -126,6 +126,54 @@ const char* lobby_translated(const Lobby& lobby, const char* text) noexcept {
     return translation != nullptr ? translation : text;
 }
 
+namespace {
+
+/// The sentence a refused pack map shows under its name.
+///
+/// The interface text is "Doesn't fit this game: {reason}", translated, with
+/// the reason in place of `{reason}`.
+///
+/// @param lobby the battle room
+/// @param reason why the map was refused
+/// @return the sentence
+std::string unfit_sentence(const Lobby& lobby, const char* reason) {
+    const char* translated = lobby_translated(lobby, "Doesn't fit this game: {reason}");
+    std::string sentence = translated != nullptr ? translated : "";
+    const auto at = sentence.find("{reason}");
+    if (at != std::string::npos)
+        sentence.replace(at, std::strlen("{reason}"), reason != nullptr ? reason : "");
+    return sentence;
+}
+
+/// The name of the map row the selection dialog highlights.
+///
+/// @param select the dialog's list
+/// @param panel the dialog
+/// @return the name; null when no row is highlighted
+const char* highlighted_map(const MapSelect& select, const Panel& panel) noexcept {
+    const auto* list = panel_control(panel, "MAPNAMES");
+    const auto row = list != nullptr ? list->list_selection : -1;
+    if (row < 0 || static_cast<std::size_t>(row) >= select.names.size())
+        return nullptr;
+    return select.names[static_cast<std::size_t>(row)].c_str();
+}
+
+/// Why the highlighted map was refused, or null when it was not.
+///
+/// @param lobby the battle room
+/// @param name the highlighted map; null when none is
+/// @return the reason; null or empty when the map was not refused
+const char* highlighted_refusal(const Lobby& lobby, const char* name) noexcept {
+    if (name == nullptr || lobby.maps.refusal == nullptr)
+        return nullptr;
+    const char* reason = lobby.maps.refusal(lobby.maps.context, name);
+    if (reason == nullptr || reason[0] == '\0')
+        return nullptr;
+    return reason;
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------
 // YESORNO
 
@@ -467,12 +515,23 @@ bool mapselect_open(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
 }
 
 void mapselect_preview(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
-    const auto* list = panel_control(panel, "MAPNAMES");
-    const auto row = list != nullptr ? list->list_selection : -1;
-    const bool chosen =
-        row >= 0 && static_cast<std::size_t>(row) < select.names.size() &&
-        lobby.maps.select != nullptr &&
-        lobby.maps.select(lobby.maps.context, select.names[static_cast<std::size_t>(row)].c_str());
+    const char* name = highlighted_map(select, panel);
+    const bool chosen = name != nullptr && lobby.maps.select != nullptr &&
+                        lobby.maps.select(lobby.maps.context, name);
+    if (!chosen) {
+        if (const char* reason = highlighted_refusal(lobby, name)) {
+            panel_set_text(panel, "MAPNAME", name);
+            panel_set_text(panel, "DESCRIPTION", unfit_sentence(lobby, reason));
+            panel_set_text(panel, "SIZE", "");
+            panel_set_active(panel, "MAPPIC", false);
+            if (auto* picture = panel_control(panel, "MAPPIC")) {
+                picture->picture.clear();
+                picture->picture_width = picture->picture_height = 0;
+            }
+            panel.dirty = true;
+            return;
+        }
+    }
     panel_set_active(panel, "MAPPIC", chosen);
     if (chosen)
         map_summary_update(lobby, panel);
@@ -485,7 +544,12 @@ bool mapselect_handle_event(Lobby& lobby, MapSelect& select, Panel& panel) noexc
         const bool commit = panel_selected_is(panel, "LOAD");
         panel.selected = kNoControl;
         play(lobby, "Multi");
+        const char* name = highlighted_map(select, panel);
         mapselect_preview(lobby, select, panel);
+        if (const char* reason = highlighted_refusal(lobby, name)) {
+            message(lobby, reason);
+            return false;
+        }
         auto& mine = local_info(lobby);
         std::snprintf(
             mine.map_name, sizeof(mine.map_name), "%s", lobby.maps.name(lobby.maps.context)
