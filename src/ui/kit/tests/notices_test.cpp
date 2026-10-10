@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The kit's notice and question: where six notices and six questions place
-// their parts, their display lists' names, kinds and Tab order, where a
-// finger's press lands, every key (the editing keys among them), paint
-// against a direct draw, and the progress bar's fill.
+// their parts, their display lists' names, kinds and Tab order, their words
+// and their text's control, which no press reaches, where a finger's press
+// lands, every key (the editing keys among them), paint against a direct
+// draw, and the progress bar's fill.
 //
 // The placements and the finger's landings below are literal values,
 // computed once with the settings dialog's own notice and prompt placement
@@ -538,17 +539,60 @@ void check_control(
     OA_CHECK(control.text == text);
 }
 
+/// Checks a list's text control: its number, name and kind, that no press
+/// reaches it, that it lies over every line of the text, and its text.
+///
+/// @param list the list
+/// @param index the control's place among the list's controls
+/// @param name its name
+/// @param text its text, one line each
+void check_body(
+    const kit::DisplayList& list, std::size_t index, std::string_view name, std::string_view text
+) {
+    OA_CHECK(index < list.controls.size());
+    if (index >= list.controls.size())
+        return;
+    const kit::Control& body = list.controls[index];
+    OA_CHECK(body.id == kit::notice_body);
+    OA_CHECK(body.name == name);
+    OA_CHECK(body.kind == kit::ControlKind::area);
+    OA_CHECK(!body.enabled && !body.focusable && !body.steps);
+    OA_CHECK(body.text == text);
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::text)
+            OA_CHECK(kit::wholly_in(item.rect, body.rect));
+    for (const kit::ControlId stop : list.tab_order)
+        OA_CHECK(stop != kit::notice_body);
+}
+
 void lists_name_their_buttons() {
-    // A notice: OK tested first, the open button second, Tab left to right.
+    // A notice: OK tested first, the open button second, Tab left to right,
+    // and its text last.
     const kit::DisplayList notice = kit::notice_list(moved_notice(), nullptr);
-    OA_CHECK(notice.controls.size() == 2);
+    OA_CHECK(notice.controls.size() == 3);
     check_control(notice, 0, kit::notice_ok, "notice.ok", "OK");
     check_control(notice, 1, kit::notice_open, "notice.open", "OPEN FOLDER");
+    check_body(
+        notice,
+        2,
+        "notice.body",
+        "SAVED GAMES MOVED\n3 saved games moved to:\n"
+        "/home/player/Documents/Open Annihilation/Saves\n"
+        "Screenshots, films and mods now go in the same Open Annihilation folder."
+    );
     OA_CHECK((notice.tab_order == std::vector<kit::ControlId>{kit::notice_open, kit::notice_ok}));
     OA_CHECK(kit::name_problem(notice).empty());
-    if (notice.controls.size() == 2) {
+    if (notice.controls.size() == 3) {
         OA_CHECK(same_rect(notice.controls[0].rect, {336, 124, 52, 17}));
         OA_CHECK(same_rect(notice.controls[1].rect, {235, 124, 96, 17}));
+    }
+    // A failure is the text's last line.
+    const kit::DisplayList failed = kit::notice_list(long_notice(), nullptr);
+    OA_CHECK(failed.controls.size() == 3);
+    if (failed.controls.size() == 3) {
+        const std::string& text = failed.controls[2].text;
+        const std::string_view last = "\nThe folder could not be opened.";
+        OA_CHECK(text.size() > last.size() && text.substr(text.size() - last.size()) == last);
     }
 
     // A question whose buttons have ids, and one whose buttons have none.
@@ -557,10 +601,13 @@ void lists_name_their_buttons() {
     named.buttons[1].id = "alongside";
     named.buttons[2].id = "replace";
     const kit::DisplayList with_ids = kit::question_list(named, nullptr);
-    OA_CHECK(with_ids.controls.size() == 3);
+    OA_CHECK(with_ids.controls.size() == 4);
     check_control(with_ids, 0, 0, "prompt.cancel", "CANCEL");
     check_control(with_ids, 1, 1, "prompt.alongside", "INSTALL ALONGSIDE");
     check_control(with_ids, 2, 2, "prompt.replace", "REPLACE");
+    const std::string question_text = "UPDATE MOD\nExample Mod 1.0, revision 1, is installed.\n"
+                                      "/Users/someone/Documents/Open Annihilation/Mods/example-mod";
+    check_body(with_ids, 3, "prompt.body", question_text);
     OA_CHECK((with_ids.tab_order == std::vector<kit::ControlId>{0, 1, 2}));
     OA_CHECK(kit::name_problem(with_ids).empty());
 
@@ -569,6 +616,7 @@ void lists_name_their_buttons() {
     check_control(without, 0, 0, "prompt.button-1", "CANCEL");
     check_control(without, 1, 1, "prompt.button-2", "INSTALL ALONGSIDE");
     check_control(without, 2, 2, "prompt.button-3", "REPLACE");
+    check_body(without, 3, "prompt.body", question_text);
     OA_CHECK((without.tab_order == std::vector<kit::ControlId>{0, 1, 2}));
     OA_CHECK(kit::name_problem(without).empty());
 
@@ -578,11 +626,82 @@ void lists_name_their_buttons() {
     four.buttons[0].id = "Later!";
     four.buttons[1].id = "cancel";
     const kit::DisplayList mixed = kit::question_list(four, nullptr);
-    OA_CHECK(mixed.controls.size() == 3);
+    OA_CHECK(mixed.controls.size() == 4);
     check_control(mixed, 0, 0, "prompt.button-1", "LATER");
     check_control(mixed, 1, 1, "prompt.cancel", "CANCEL");
     check_control(mixed, 2, 2, "prompt.button-3", "A VERY LONG CAPTION FOR A BUTTON");
     OA_CHECK(kit::name_problem(mixed).empty());
+}
+
+void a_word_of_their_own_names_them() {
+    // The missing-language question gives its own word, which starts every
+    // name, its buttons' with ids and without.
+    kit::Question asked = question_of({"LATER", "DOWNLOAD"});
+    asked.word = "language-notice";
+    asked.buttons[1].id = "download";
+    OA_CHECK(kit::question_word_of(asked) == "language-notice");
+    const kit::DisplayList question = kit::question_list(asked, nullptr);
+    OA_CHECK(question.controls.size() == 3);
+    check_control(question, 0, 0, "language-notice.button-1", "LATER");
+    check_control(question, 1, 1, "language-notice.download", "DOWNLOAD");
+    if (question.controls.size() == 3)
+        OA_CHECK(question.controls[2].name == "language-notice.body");
+    OA_CHECK(kit::name_problem(question).empty());
+
+    kit::Notice told = short_notice();
+    told.word = "language-notice";
+    OA_CHECK(kit::notice_word_of(told) == "language-notice");
+    const kit::DisplayList notice = kit::notice_list(told, nullptr);
+    check_control(notice, 0, kit::notice_ok, "language-notice.ok", "OK");
+    check_control(notice, 1, kit::notice_open, "language-notice.open", "Open folder");
+    check_body(notice, 2, "language-notice.body", "SAVED\nThe game was saved.");
+
+    // A word that is not one word of a-z, 0-9 and hyphens gives way to the
+    // kind's own.
+    told.word = "Language Notice";
+    OA_CHECK(kit::notice_word_of(told) == kit::notice_word);
+    OA_CHECK(kit::notice_list(told, nullptr).controls[0].name == "notice.ok");
+    asked.word = "";
+    OA_CHECK(kit::question_word_of(asked) == kit::question_word);
+    OA_CHECK(kit::question_list(asked, nullptr).controls[1].name == "prompt.download");
+}
+
+/// Returns a list without its text control.
+///
+/// @param list the list
+/// @return the list, its controls but notice_body
+kit::DisplayList without_body(kit::DisplayList list) {
+    std::erase_if(list.controls, [](const kit::Control& control) {
+        return control.id == kit::notice_body;
+    });
+    return list;
+}
+
+void the_text_control_takes_no_press() {
+    // At every point of the box and round it, a press and a finger find what
+    // they found without the text's control.
+    const std::vector<kit::DisplayList> lists{
+        kit::notice_list(short_notice(), nullptr),
+        kit::notice_list(moved_notice(), nullptr),
+        kit::question_list(question_of({"CANCEL", "INSTALL ALONGSIDE", "REPLACE"}), nullptr),
+        kit::question_list(progress_question(), nullptr),
+    };
+    for (const kit::DisplayList& list : lists) {
+        const kit::DisplayList bare = without_body(list);
+        OA_CHECK(bare.controls.size() + 1 == list.controls.size());
+        for (int32_t y = -10; y < 200; y += 3)
+            for (int32_t x = -10; x < kit::notice_width + 10; x += 3) {
+                OA_CHECK(kit::hit(list, {x, y}) == kit::hit(bare, {x, y}));
+                for (const int32_t within : {6, 22}) {
+                    const kit::Reached reached = kit::reach(list, {x, y}, within);
+                    const kit::Reached bare_reached = kit::reach(bare, {x, y}, within);
+                    OA_CHECK(reached.control == bare_reached.control);
+                    OA_CHECK(
+                        reached.at.x == bare_reached.at.x && reached.at.y == bare_reached.at.y
+                    );
+                }
+            }
+    }
 }
 
 void lists_draw_in_order() {
@@ -1125,6 +1244,8 @@ int main() {
     notices_place_as_before();
     questions_place_as_before();
     lists_name_their_buttons();
+    a_word_of_their_own_names_them();
+    the_text_control_takes_no_press();
     lists_draw_in_order();
     a_finger_lands_as_before();
     the_pointer_presses_buttons();

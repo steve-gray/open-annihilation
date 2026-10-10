@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace oa::ui::engine_settings::geometry {
@@ -107,6 +108,25 @@ inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
 /// @param to the model it is copied into
 /// @param from the model it is copied from
 void copy_row(Setting setting, const SettingsModel& to, const SettingsModel& from);
+
+/// Returns a text in name form: lower case, every character outside a to z,
+/// 0 to 9 and hyphens a hyphen, a character of several bytes one hyphen,
+/// and a dot kept or made a hyphen.
+///
+/// @param text the text, UTF-8
+/// @param keep_dots dots stay, as between a hack's words
+/// @return the word or words
+[[nodiscard]] std::string word_form(std::string_view text, bool keep_dots);
+
+/// Returns the word a row names one of its items or levels by to automation.
+///
+/// @param spec the row's spec
+/// @param model the model
+/// @param at the item or level, from 0
+/// @return its id (kit::row_choice_id) in name form, else its place from 1
+[[nodiscard]] std::string choice_word(
+    const oa::ui::kit::RowSpec<SettingsModel>& spec, const SettingsModel& model, int32_t at
+);
 
 /// Returns a section's name in kebab case, as its entry's control is named:
 /// common-tweaks for Page::common_tweaks.

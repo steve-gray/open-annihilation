@@ -7,10 +7,12 @@
 // strip's level width or a drop-down's field width, the levels a strip lets
 // a player choose, whether its hint lines are its status, its lock while a
 // game is in progress, and the field of the dialog's locks that locks it.
-// Then the dialog's display list, on every section of every kind of dialog,
-// at its top and its scroll end, unlocked and under a game's locks: every
-// control named once, every control the dialog's layout lists there, and
-// Tab in the dialog's focus order.
+// Every row's id and every item's or level's id, each one word, the latter
+// the word the preferences keep it as. Then the dialog's display list, on
+// every section of every kind of dialog, at its top and its scroll end,
+// unlocked and under a game's locks: every control named once, every
+// control the dialog's layout lists there, and Tab in the dialog's focus
+// order.
 
 #include "geometry.hpp"
 
@@ -459,7 +461,7 @@ void developer_names_every_hack_and_parameter() {
 
 void an_open_list_and_a_question_name_their_controls() {
     // An open drop-down's items are controls of their own while it is open,
-    // counted from 1.
+    // each named by the word the preferences keep it as.
     const TwoMods mods;
     settings::Dialog dialog =
         engine_dialog_of(mods, {}, settings::Page::language, true, true, true);
@@ -469,7 +471,7 @@ void an_open_list_and_a_question_name_their_controls() {
     check_list(dialog, "language, its list open");
     const kit::DisplayList open = geometry::dialog_list(dialog, nullptr);
     OA_CHECK(
-        kit::control_named(open, "settings.language.item-1") == geometry::menu_item_control(0)
+        kit::control_named(open, "settings.language.system") == geometry::menu_item_control(0)
     );
     OA_CHECK(
         kit::hit(open, {open.controls.front().rect.x + 1, open.controls.front().rect.y + 1}) ==
@@ -490,13 +492,17 @@ void an_open_list_and_a_question_name_their_controls() {
 
 void mods_name_each_folder_once() {
     // Two folders of the same last component, a third of the same words in
-    // other characters, and a folder named as No Mod's word.
+    // other characters, and a folder named as No Mod's word; a mod with a
+    // profile is named by its id, whatever its folder is called.
     TwoMods mods;
-    mods.names = {"Ridge", "Ridge again", "Ridge, too", "Plain"};
-    mods.folders = {"/mods/ridge", "/other/ridge/", "/more/Ridge", "/mods/no mod"};
-    mods.details.assign(4, {});
+    mods.names = {"Ridge", "Ridge again", "Ridge, too", "Plain", "Glacier Front"};
+    mods.folders = {
+        "/mods/ridge", "/other/ridge/", "/more/Ridge", "/mods/no mod", "/mods/Glacier Front 1.2"
+    };
+    mods.details.assign(5, {});
     mods.details[2].roll_back_from = "2.0";
     mods.details[2].roll_back_to = "1.0";
+    mods.details[4].profile_id = "glacier-front";
     settings::Dialog dialog = engine_dialog_of(mods, {}, settings::Page::mods, true, true, true);
     check_list(dialog, "mods of one word");
     const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
@@ -507,8 +513,120 @@ void mods_name_each_folder_once() {
           "settings.mod.ridge-3.switch",
           "settings.mod.ridge-3.roll-back",
           "settings.mod.no-mod-2.switch",
+          "settings.mod.glacier-front.switch",
           "settings.open-mods-folder"})
         OA_CHECK(kit::control_named(list, name) != settings::no_control);
+}
+
+/// A level or a drop-down's setting and the key the preferences keep it under.
+struct StoredChoice {
+    Setting setting{};    ///< the setting
+    std::string_view key; ///< its preferences key
+};
+
+/// Every strip's and drop-down's setting, with its key.
+constexpr std::array<StoredChoice, 21> kStoredChoices{{
+    {Setting::max_zoom_out, settings::key::max_zoom_out},
+    {Setting::max_zoom_in, settings::key::max_zoom_in},
+    {Setting::view_past_map_edge, settings::key::view_past_map_edge},
+    {Setting::anti_aliasing, settings::key::anti_aliasing},
+    {Setting::hardware_acceleration, settings::key::hardware_acceleration},
+    {Setting::language, settings::key::language},
+    {Setting::touch_drag, settings::key::touch_drag},
+    {Setting::touch_latches, settings::key::touch_latches},
+    {Setting::touch_control_size, settings::key::touch_control_size},
+    {Setting::pad_scheme, settings::key::pad_scheme},
+    {Setting::pad_right_trackpad, settings::key::pad_right_trackpad},
+    {Setting::pad_acceleration, settings::key::pad_acceleration},
+    {Setting::pad_right_stick, settings::key::pad_right_stick},
+    {Setting::pad_gyro, settings::key::pad_gyro},
+    {Setting::pad_haptics, settings::key::pad_haptics},
+    {Setting::pad_prompts, settings::key::pad_prompts},
+    {Setting::menu_scaling, settings::key::menu_scaling},
+    {Setting::explosion_flash, settings::key::explosion_flash},
+    {Setting::zoomed_out_units, settings::key::zoomed_out_units},
+    {Setting::zoomed_out_after, settings::key::zoomed_out_after},
+    {Setting::window_frame, settings::key::window_frame},
+}};
+
+void every_row_and_choice_has_an_id_of_one_word() {
+    // Each section's rows are named by words, none twice in a section.
+    for (std::size_t index = 0; index < settings::page_count; ++index) {
+        std::set<std::string_view> seen;
+        for (const Setting setting : settings::page_settings(static_cast<settings::Page>(index))) {
+            const std::string_view id = geometry::setting_name(setting);
+            OA_CHECK(kit::row_word(id) && id == geometry::row_spec(setting).id);
+            OA_CHECK(seen.insert(id).second);
+        }
+    }
+    // Every item of a drop-down and every level of a strip has an id, a word
+    // none other of its row has: the word the preferences keep it as.
+    const settings::Dialog dialog = engine_dialog();
+    std::size_t rows = 0;
+    for (std::size_t index = 0; index < kExpected.size(); ++index) {
+        const auto setting = static_cast<Setting>(index);
+        const auto& spec = geometry::row_spec(setting);
+        if (spec.kind != RowKind::choice && spec.kind != RowKind::levels)
+            continue;
+        ++rows;
+        const StoredChoice* stored = nullptr;
+        for (const StoredChoice& choice : kStoredChoices)
+            if (choice.setting == setting)
+                stored = &choice;
+        OA_CHECK(stored != nullptr);
+        std::set<std::string> ids;
+        const geometry::SettingsModel model = model_of(dialog);
+        for (int32_t at = 0; at < kit::row_count(spec, model); ++at) {
+            const std::string id = kit::row_choice_id(spec, model, at);
+            OA_CHECK(kit::row_word(id) && geometry::choice_word(spec, model, at) == id);
+            OA_CHECK(ids.insert(id).second);
+            // What the preferences keep once the row is set there, in name form.
+            settings::EngineSettings chosen = dialog.chosen;
+            geometry::SettingsModel choosing{&chosen, &dialog};
+            kit::set_row_index(spec, choosing, at);
+            if (kit::row_index(spec, geometry::reading(chosen, dialog)) != at)
+                continue; // a level not offered, which no preference keeps
+            settings::EngineSettings opened = chosen;
+            geometry::SettingsModel opening{&opened, &dialog};
+            kit::set_row_index(spec, opening, at == 0 ? 1 : 0);
+            oa::platform::preferences::Values values;
+            settings::write_settings(values, opened, chosen, dialog.defaults, false);
+            const auto written = values.find(std::string(stored != nullptr ? stored->key : ""));
+            OA_CHECK(written != values.end());
+            if (written != values.end())
+                OA_CHECK(geometry::word_form(written->second, false) == id);
+        }
+    }
+    OA_CHECK(rows == kStoredChoices.size());
+    // A few, written out.
+    const geometry::SettingsModel model = model_of(dialog);
+    const auto ids_of = [&model](Setting setting) {
+        std::vector<std::string> ids;
+        const auto& spec = geometry::row_spec(setting);
+        for (int32_t at = 0; at < kit::row_count(spec, model); ++at)
+            ids.push_back(kit::row_choice_id(spec, model, at));
+        return ids;
+    };
+    OA_CHECK(
+        ids_of(Setting::max_zoom_out) ==
+        (std::vector<std::string>{"automatic", "whole-map", "1-32", "1-16", "1-8", "1-4", "1-2"})
+    );
+    OA_CHECK(
+        ids_of(Setting::menu_scaling) ==
+        (std::vector<std::string>{"sharp", "whole-steps", "unfiltered"})
+    );
+    OA_CHECK(
+        ids_of(Setting::anti_aliasing) == (std::vector<std::string>{"1", "2", "4", "8", "16"})
+    );
+    OA_CHECK(
+        ids_of(Setting::zoomed_out_units) == (std::vector<std::string>{"rendered", "dots", "icons"})
+    );
+    OA_CHECK(!ids_of(Setting::language).empty() && ids_of(Setting::language)[0] == "system");
+    // A tag's capitals and a value's slash become name form.
+    OA_CHECK(geometry::word_form("zh-Hans", false) == "zh-hans");
+    OA_CHECK(geometry::word_form("1/32", false) == "1-32");
+    OA_CHECK(geometry::word_form("ai.no-cheat", true) == "ai.no-cheat");
+    OA_CHECK(geometry::word_form("ai.no-cheat", false) == "ai-no-cheat");
 }
 
 /// Returns a dialog's Tab order as its display list has it.
@@ -561,6 +679,7 @@ void tab_follows_the_dialogs_focus_order() {
 int main() {
     every_setting_has_its_row();
     each_row_reads_its_own_lock();
+    every_row_and_choice_has_an_id_of_one_word();
     every_section_names_its_controls_and_keeps_their_order();
     developer_names_every_hack_and_parameter();
     an_open_list_and_a_question_name_their_controls();

@@ -52,31 +52,6 @@ std::string named(std::string_view words) {
     return std::string(kNamePrefix) + "." + std::string(words);
 }
 
-/// Returns a text in name form: lower case, every character outside a to z,
-/// 0 to 9 and hyphens a hyphen, and a dot kept or made a hyphen.
-///
-/// @param text the text, UTF-8
-/// @param keep_dots dots stay, as between a hack's words
-/// @return the word or words
-std::string word_form(std::string_view text, bool keep_dots) {
-    std::string word;
-    for (std::size_t at = 0; at < text.size();) {
-        const auto byte = static_cast<unsigned char>(text[at]);
-        const std::size_t bytes = std::max<std::size_t>(kit::character_bytes(text.substr(at)), 1);
-        at += bytes;
-        if (byte >= 'A' && byte <= 'Z')
-            word += static_cast<char>(byte - 'A' + 'a');
-        else if (
-            (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '-' ||
-            (keep_dots && byte == '.')
-        )
-            word += static_cast<char>(byte);
-        else
-            word += '-';
-    }
-    return word;
-}
-
 /// The pieces of the list the dialog's parts go into: the items in the
 /// order they are drawn, and the controls grouped by the order a press
 /// tries them.
@@ -374,8 +349,9 @@ void add_badge(
 }
 
 /// Returns the words Mods' rows are named by, in their order: no-mod for No
-/// Mod, else the folder's last component in name form, a second of the
-/// same word with -2 after it and a third with -3.
+/// Mod, else the mod's profile id in name form, or for a folder without one
+/// the folder's last component, a second of the same word with -2 after it
+/// and a third with -3.
 ///
 /// @param dialog the dialog
 /// @param rows Mods' rows
@@ -385,13 +361,22 @@ std::vector<std::string> mod_words(const Dialog& dialog, const std::vector<ModRo
     words.reserve(rows.size());
     for (const ModRow& row : rows) {
         std::string word = "no-mod";
-        if (row.offered >= 0 && static_cast<std::size_t>(row.offered) < dialog.mod_folders.size()) {
-            std::string_view folder = dialog.mod_folders[static_cast<std::size_t>(row.offered)];
+        const auto offered = static_cast<std::size_t>(row.offered);
+        if (row.offered >= 0 && offered < dialog.mod_folders.size()) {
+            const std::string_view id =
+                offered < dialog.mod_details.size()
+                    ? std::string_view(dialog.mod_details[offered].profile_id)
+                    : std::string_view();
+            std::string_view folder = dialog.mod_folders[offered];
             while (!folder.empty() && (folder.back() == '/' || folder.back() == '\\'))
                 folder.remove_suffix(1);
             const auto last = folder.find_last_of("/\\");
-            word =
-                word_form(last == std::string_view::npos ? folder : folder.substr(last + 1), false);
+            word = layout::word_form(
+                !id.empty()                      ? id
+                : last == std::string_view::npos ? folder
+                                                 : folder.substr(last + 1),
+                false
+            );
             if (word.empty())
                 word = "mod";
         }
@@ -663,20 +648,20 @@ std::string list_row_name(const layout::ListRow& row) {
     if (row.kind == layout::ListRowKind::area) {
         const auto areas = developer_areas();
         const std::string_view area = row.area < areas.size() ? areas[row.area].name : "area";
-        return named("hack-area." + word_form(area, true));
+        return named("hack-area." + layout::word_form(area, true));
     }
     const auto hacks = oa::data::mod_profile::standard_hacks();
     if (row.hack >= hacks.size())
         return named("hack");
     const registry::Entry& entry = *hacks[row.hack];
-    std::string name = named("hack." + word_form(entry.id, true));
+    std::string name = named("hack." + layout::word_form(entry.id, true));
     if (row.kind == layout::ListRowKind::hack)
         return name;
     const auto parameters = registry::parameters_of(entry);
     if (row.parameter < 0 || static_cast<std::size_t>(row.parameter) >= parameters.size())
         return name;
     const registry::Parameter& parameter = parameters[static_cast<std::size_t>(row.parameter)];
-    name += "." + word_form(parameter.name, false);
+    name += "." + layout::word_form(parameter.name, false);
     if (row.item == layout::list_length)
         return name + ".length";
     if (row.item == layout::whole_parameter)
@@ -686,7 +671,7 @@ std::string list_row_name(const layout::ListRow& row) {
         const auto words = registry::enum_values_of(parameter.value);
         const auto at = static_cast<std::size_t>(row.item);
         return name + "." +
-               (at < words.size() ? word_form(words[at], false) : std::to_string(at + 1));
+               (at < words.size() ? layout::word_form(words[at], false) : std::to_string(at + 1));
     }
     return name + "." + std::to_string(row.item + 1);
 }
@@ -1073,8 +1058,8 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
                 layout::menu_item_control(choice),
                 layout::choice_item(menu, place),
                 named(
-                    std::string(layout::setting_name(row.setting)) + ".item-" +
-                    std::to_string(choice + 1)
+                    std::string(layout::setting_name(row.setting)) + "." +
+                    layout::choice_word(spec, model, choice)
                 ),
                 kit::ControlKind::list_item
             );

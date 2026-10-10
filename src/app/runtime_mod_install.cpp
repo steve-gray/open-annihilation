@@ -38,6 +38,7 @@
 #include <SDL3/SDL.h>
 
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -87,6 +88,31 @@ void wait_pumping(void*, uint32_t milliseconds) {
     }
 }
 
+/// Returns the word a prompt's button is named by to automation: what it
+/// answers, its enumerator's name with '_' as '-'.
+///
+/// @param answer what the button answers
+/// @return the word
+std::string_view answer_word(install::Answer answer) noexcept {
+    switch (answer) {
+    case install::Answer::cancel:
+        return "cancel";
+    case install::Answer::ok:
+        return "ok";
+    case install::Answer::replace:
+        return "replace";
+    case install::Answer::alongside:
+        return "alongside";
+    case install::Answer::reinstall:
+        return "reinstall";
+    case install::Answer::open_folder:
+        return "open-folder";
+    case install::Answer::play_now:
+        return "play-now";
+    }
+    return {};
+}
+
 } // namespace
 
 void Runtime::destroy_mod_install_state(ModInstallState* state) noexcept {
@@ -113,6 +139,10 @@ bool Runtime::mod_install_prompt_shown() const noexcept {
 
 void Runtime::ModInstallState::show(Runtime& runtime, install::PackagePrompt made, bool at_once) {
     ++prompts_shown;
+    // Each button is named to automation by what it answers.
+    for (std::size_t place = 0; place < made.prompt.buttons.size() && place < made.answers.size();
+         ++place)
+        made.prompt.buttons[place].id = std::string(answer_word(made.answers[place]));
     answers = std::move(made.answers);
     if (prompt != nullptr) {
         prompt->question() = std::move(made.prompt);
