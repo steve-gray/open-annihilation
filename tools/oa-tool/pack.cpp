@@ -10,6 +10,7 @@
 
 #include "arguments.hpp"
 #include "command.hpp"
+#include "pack_names.hpp"
 
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
@@ -26,7 +27,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <limits>
-#include <map>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -61,13 +61,7 @@ enum class Omit : uint8_t {
     tree,  ///< this entry and everything under it are left out
 };
 
-/// One file or empty folder the package will hold.
-struct Item {
-    std::string name; ///< path inside the folder, '/' between parts, no trailing '/'
-    fs::path path;    ///< where its bytes are read; a folder has none to read
-    bool folder{};
-    uint64_t bytes{}; ///< uncompressed size; 0 for a folder
-};
+using Item = detail::Item;
 
 /// A file opened for a positioned read or write.
 struct FilePos {
@@ -252,56 +246,6 @@ std::string relative_of(const fs::path& folder, const fs::path& path) {
         throw Failure("the folder holds a path outside it");
     return text;
 }
-
-/// The names a package will unpack, compared without ASCII case, so two
-/// that differ only in case, or a file and a folder of one name, are refused.
-/// Each folder a path passes through is counted once.
-class CaseTree {
-  public:
-
-    /// Adds a path and every folder above it.
-    ///
-    /// @param path the path, '/' between parts, without a trailing '/'
-    /// @param folder it is a folder
-    /// @return false when a part clashes with one added before
-    bool add(std::string_view path, bool folder) {
-        std::size_t start = 0;
-        while (true) {
-            const std::size_t end = std::min(path.find('/', start), path.size());
-            const bool last = end == path.size();
-            const bool part_folder = !last || folder;
-            const std::string_view prefix = path.substr(0, end);
-            const auto [slot, added] = placed_.try_emplace(folded(prefix));
-            if (added) {
-                slot->second.exact.assign(prefix);
-                slot->second.folder = part_folder;
-                if (part_folder)
-                    ++folders_;
-            } else if (slot->second.exact != prefix || slot->second.folder != part_folder) {
-                return false;
-            }
-            if (last)
-                return true;
-            start = end + 1;
-        }
-    }
-
-    /// Returns how many folders have been added.
-    ///
-    /// @return the count
-    [[nodiscard]] std::size_t folders() const noexcept { return folders_; }
-
-  private:
-
-    /// One part, in the spelling first added.
-    struct Placed {
-        std::string exact{};
-        bool folder{};
-    };
-
-    std::map<std::string, Placed, std::less<>> placed_{};
-    std::size_t folders_{};
-};
 
 /// Tells whether a file's extension is one that is stored, without case.
 ///
@@ -537,30 +481,6 @@ std::vector<Item> collect(const fs::path& folder) {
     return kept;
 }
 
-/// Refuses a name the installer would refuse, a case clash, too many folders
-/// or too many bytes.
-///
-/// @param items the items, in the order they will be written
-void check_names(const std::vector<Item>& items) {
-    CaseTree cases;
-    uint64_t bytes = 0;
-    for (const Item& item : items) {
-        const std::string name = entry_name(item);
-        if (const std::string problem = install::portable_name_problem(name); !problem.empty())
-            throw Failure("the folder holds a name it cannot pack: " + item.name + ": " + problem);
-        if (!cases.add(item.name, item.folder))
-            throw Failure("the folder holds two names that differ only in case: " + item.name);
-        if (cases.folders() > install::max_package_folders)
-            throw Failure("the folder holds more folders than a package may");
-        if (!item.folder) {
-            if (item.bytes > install::max_install_bytes ||
-                bytes > install::max_install_bytes - item.bytes)
-                throw Failure("the folder's files take more bytes than a package may");
-            bytes += item.bytes;
-        }
-    }
-}
-
 /// Renames part onto output. On Windows a file that exists is removed first,
 /// because a rename there does not replace one.
 ///
@@ -770,7 +690,7 @@ int pack_folder(const fs::path& folder, const std::string& out_path, bool force,
             return left_manifest;
         return bytes_before(entry_name(left), entry_name(right));
     });
-    check_names(items);
+    detail::check_names(items);
 
     const Item* manifest_item = nullptr;
     std::size_t file_count = 0;
@@ -896,6 +816,52 @@ int run_pack(std::span<const std::string> arguments, Output& output) {
         parsed->flags.contains("force"),
         output
     );
+}
+
+bool detail::CaseTree::add(std::string_view path, bool folder) {
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t end = std::min(path.find('/', start), path.size());
+        const bool last = end == path.size();
+        const bool part_folder = !last || folder;
+        const std::string_view prefix = path.substr(0, end);
+        const auto [slot, added] = placed_.try_emplace(folded(prefix));
+        if (added) {
+            slot->second.exact.assign(prefix);
+            slot->second.folder = part_folder;
+            if (part_folder)
+                ++folders_;
+        } else if (slot->second.exact != prefix || slot->second.folder != part_folder) {
+            return false;
+        }
+        if (last)
+            return true;
+        start = end + 1;
+    }
+}
+
+std::size_t detail::CaseTree::folders() const noexcept {
+    return folders_;
+}
+
+void detail::check_names(const std::vector<Item>& items) {
+    CaseTree cases;
+    uint64_t bytes = 0;
+    for (const Item& item : items) {
+        const std::string name = entry_name(item);
+        if (const std::string problem = install::portable_name_problem(name); !problem.empty())
+            throw Failure("the folder holds a name it cannot pack: " + item.name + ": " + problem);
+        if (!cases.add(item.name, item.folder))
+            throw Failure("the folder holds two names that differ only in case: " + item.name);
+        if (cases.folders() > install::max_package_folders)
+            throw Failure("the folder holds more folders than a package may");
+        if (!item.folder) {
+            if (item.bytes > install::max_install_bytes ||
+                bytes > install::max_install_bytes - item.bytes)
+                throw Failure("the folder's files take more bytes than a package may");
+            bytes += item.bytes;
+        }
+    }
 }
 
 } // namespace oa::tool

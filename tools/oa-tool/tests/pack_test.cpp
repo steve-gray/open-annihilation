@@ -9,6 +9,7 @@
 // with nothing written.
 
 #include "command.hpp"
+#include "pack_names.hpp"
 
 #include "oa/app/package_install.hpp"
 #include "oa/base/sha256.hpp"
@@ -21,7 +22,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -96,22 +96,6 @@ std::vector<uint8_t> read_bytes(const fs::path& path) {
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
-/// Quotes a path for a shell command.
-///
-/// @param path the path
-/// @return the quoted path
-std::string shell_quote(const fs::path& path) {
-    std::string quoted = "'";
-    for (const char character : path.string()) {
-        if (character == '\'')
-            quoted += "'\\''";
-        else
-            quoted += character;
-    }
-    quoted += "'";
-    return quoted;
-}
-
 /// Tells whether a folder can hold two names that differ only in case.
 ///
 /// @param folder the folder
@@ -129,55 +113,6 @@ bool holds_distinct_case(const fs::path& folder) {
     fs::remove(lower, error);
     return text == "U";
 }
-
-/// A folder that can hold two names differing only in case. On a
-/// case-insensitive volume on macOS it is a small case-sensitive image.
-struct CaseFolder {
-    fs::path path;
-    fs::path image;
-    fs::path mount;
-    bool mounted = false;
-
-    /// Uses folder when it already can, or mounts an image under scratch.
-    ///
-    /// @param scratch where an image may be written
-    explicit CaseFolder(const fs::path& scratch) : path(scratch / "case-plain") {
-        fs::create_directories(path);
-        if (holds_distinct_case(path))
-            return;
-        std::error_code error;
-        fs::remove_all(path, error);
-#if defined(__APPLE__)
-        image = scratch / "case.dmg";
-        mount = scratch / "case-mount";
-        fs::create_directories(mount);
-        const std::string create = "hdiutil create -size 8m -fs 'Case-sensitive APFS' "
-                                   "-volname oapack -quiet -o " +
-                                   shell_quote(image);
-        const std::string attach =
-            "hdiutil attach " + shell_quote(image) + " -nobrowse -mountpoint " + shell_quote(mount);
-        if (std::system(create.c_str()) != 0 || std::system(attach.c_str()) != 0) {
-            std::fprintf(stderr, "a case-sensitive folder could not be mounted\n");
-            OA_CHECK(false);
-            path.clear();
-            return;
-        }
-        mounted = true;
-        path = mount / "tree";
-        fs::create_directories(path);
-#else
-        path.clear();
-#endif
-    }
-
-    ~CaseFolder() {
-        if (mounted)
-            std::system(("hdiutil detach -force -quiet " + shell_quote(mount)).c_str());
-    }
-
-    CaseFolder(const CaseFolder&) = delete;
-    CaseFolder& operator=(const CaseFolder&) = delete;
-};
 
 /// Restores the process's current folder.
 struct WorkingFolder {
@@ -423,6 +358,55 @@ Captured refuse(const fs::path& scratch, const fs::path& folder, std::string_vie
     return result;
 }
 
+/// One file or folder named for check_names. A folder carries no bytes.
+///
+/// @param name the path inside the folder
+/// @param folder it is a folder
+/// @return the item
+oa::tool::detail::Item named(std::string name, bool folder) {
+    oa::tool::detail::Item item;
+    item.name = std::move(name);
+    item.folder = folder;
+    item.bytes = folder ? 0 : 1;
+    return item;
+}
+
+/// Returns the refusal check_names raises, or an empty string when it accepts.
+///
+/// @param items the names
+/// @return the message
+std::string refusal(const std::vector<oa::tool::detail::Item>& items) {
+    try {
+        oa::tool::detail::check_names(items);
+    } catch (const oa::tool::Failure& failure) {
+        return failure.what();
+    }
+    return {};
+}
+
+/// The case rule and the folder limit, with no volume underneath them.
+void test_name_rules() {
+    OA_CHECK(
+        refusal({named("readme.txt", false), named("units/arm.txt", false), named("notes", true)})
+            .empty()
+    );
+    OA_CHECK(contains(
+        refusal({named("units/A.txt", false), named("units/a.txt", false)}),
+        "differ only in case: units/a.txt"
+    ));
+    OA_CHECK(contains(
+        refusal({named("Maps/x.ota", false), named("maps/y.ota", false)}),
+        "differ only in case: maps/y.ota"
+    ));
+    OA_CHECK(contains(refusal({named("a", false), named("A", true)}), "differ only in case: A"));
+
+    std::vector<oa::tool::detail::Item> folders;
+    folders.reserve(install::max_package_folders + 1);
+    for (std::size_t index = 0; index <= install::max_package_folders; ++index)
+        folders.push_back(named("f" + std::to_string(index), true));
+    OA_CHECK(contains(refusal(folders), "more folders than a package may"));
+}
+
 void test_refusals(const fs::path& scratch) {
     const fs::path empty = scratch / "empty";
     fs::create_directories(empty);
@@ -454,12 +438,18 @@ void test_refusals(const fs::path& scratch) {
     write_text(colon / "has:colon.txt", "nope\n");
     OA_CHECK(contains(refuse(scratch, colon, "colon.oamod").err, "Windows refuses"));
 
-    const CaseFolder cases(scratch);
-    if (!cases.path.empty()) {
-        write_text(cases.path / "oamod.yaml", mod_text);
-        write_text(cases.path / "A.txt", "A\n");
-        write_text(cases.path / "a.txt", "a\n");
-        OA_CHECK(contains(refuse(scratch, cases.path, "case.oamod").err, "differ only in case"));
+    const fs::path cases = scratch / "case-plain";
+    fs::create_directories(cases);
+    if (holds_distinct_case(cases)) {
+        write_text(cases / "oamod.yaml", mod_text);
+        write_text(cases / "A.txt", "A\n");
+        write_text(cases / "a.txt", "a\n");
+        OA_CHECK(contains(refuse(scratch, cases, "case.oamod").err, "differ only in case"));
+    } else {
+        std::printf(
+            "skipping the filesystem case check: this volume does not hold two names "
+            "that differ only in case\n"
+        );
     }
 
 #ifndef _WIN32
@@ -531,6 +521,7 @@ int main(int argc, char** argv) {
     const Scratch scratch;
     test_mod(scratch.path);
     test_language(scratch.path, fs::path(argv[1]));
+    test_name_rules();
     test_refusals(scratch.path);
     test_usage(scratch.path);
     test_help();
