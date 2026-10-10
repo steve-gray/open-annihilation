@@ -84,6 +84,8 @@ in
       # bundled_font_directory() reads the fonts from the executable's folder
       # (src/platform/text-font/src/font_directory.cpp).
       install -Dm644 -t $out/bin/fonts ${textFonts}/*.ttf ${textFonts}/*.otf
+      # The registries the game ships with, read from the executable's folder.
+      install -Dm644 -t $out/bin/registries ${src}/registries/*.yaml
 
       runHook postInstall
     '';

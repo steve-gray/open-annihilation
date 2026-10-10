@@ -701,11 +701,12 @@ void language_and_text_shows_a_language_five_switches_and_a_size() {
     CHECK(rows[6] == Setting::unicode_chat);
     for (const Setting setting : rows)
         CHECK(
-            setting == Setting::language ? geometry::is_choice(setting)
+            setting == Setting::language ? geometry::kind_of(setting) == geometry::RowKind::choice
             : setting == Setting::text_size
-                ? geometry::is_slider(setting)
-                : geometry::is_switch(setting) && !geometry::is_slider(setting) &&
-                      !geometry::is_choice(setting)
+                ? geometry::kind_of(setting) == geometry::RowKind::slider
+                : geometry::kind_of(setting) == geometry::RowKind::toggle &&
+                      geometry::kind_of(setting) != geometry::RowKind::slider &&
+                      geometry::kind_of(setting) != geometry::RowKind::choice
         );
     // Its entry comes after Common Tweaks and before Graphics, over the line
     // above Developer.
@@ -2838,7 +2839,7 @@ void every_switch_reads_and_sets_through_one_table() {
         const auto setting = static_cast<Setting>(value);
         const settings::EngineSettings before{};
         settings::EngineSettings state = before;
-        if (!geometry::is_switch(setting)) {
+        if (geometry::kind_of(setting) != geometry::RowKind::toggle) {
             // A slider or the level strip is no switch, and set_switch leaves it.
             geometry::set_switch(state, setting, true);
             CHECK(state == before);
@@ -2862,9 +2863,9 @@ void every_switch_reads_and_sets_through_one_table() {
     settings::EngineSettings both{};
     geometry::set_switch(both, Setting::hardware_acceleration, true);
     CHECK(both.hardware_acceleration == HardwareAcceleration::off);
-    CHECK(geometry::is_strip(Setting::hardware_acceleration));
-    CHECK(geometry::is_strip(Setting::anti_aliasing));
-    CHECK(!geometry::is_strip(Setting::vertical_sync));
+    CHECK(geometry::kind_of(Setting::hardware_acceleration) == geometry::RowKind::levels);
+    CHECK(geometry::kind_of(Setting::anti_aliasing) == geometry::RowKind::levels);
+    CHECK(geometry::kind_of(Setting::vertical_sync) != geometry::RowKind::levels);
     CHECK(geometry::strip_of(Setting::hardware_acceleration).levels == 3);
     CHECK(
         geometry::strip_of(Setting::hardware_acceleration).level_width ==
@@ -4822,7 +4823,8 @@ void your_files_shows_the_folder_and_opens_its_folders() {
     const geometry::Row row = open.rows.rows[0];
     CHECK(row.setting == Setting::user_folder);
     CHECK(row.lock == Lock::none);
-    CHECK(geometry::is_buttons(Setting::user_folder) && !geometry::is_switch(Setting::user_folder));
+    CHECK(geometry::kind_of(Setting::user_folder) == geometry::RowKind::buttons);
+    CHECK(geometry::kind_of(Setting::user_folder) != geometry::RowKind::toggle);
     // Its three buttons stand on its label line at the right, apart.
     CHECK(row.control_area.width == geometry::folder_buttons_width);
     CHECK(row.control_area.x + row.control_area.width == geometry::content_right);
@@ -6506,11 +6508,11 @@ void game_files_shows_what_is_installed_the_backups_and_the_folder() {
     CHECK(rows.size() == 3 && rows[0] == Setting::game_files_summary);
     CHECK(rows.size() == 3 && rows[1] == Setting::game_files_backed_up);
     CHECK(rows.size() == 3 && rows[2] == Setting::game_files_location);
-    CHECK(geometry::is_button(Setting::game_files_summary));
-    CHECK(geometry::is_text(Setting::game_files_location));
-    CHECK(geometry::is_switch(Setting::game_files_backed_up));
-    CHECK(!geometry::is_switch(Setting::game_files_summary));
-    CHECK(!geometry::is_switch(Setting::game_files_location));
+    CHECK(geometry::kind_of(Setting::game_files_summary) == geometry::RowKind::value_and_button);
+    CHECK(geometry::kind_of(Setting::game_files_location) == geometry::RowKind::text);
+    CHECK(geometry::kind_of(Setting::game_files_backed_up) == geometry::RowKind::toggle);
+    CHECK(geometry::kind_of(Setting::game_files_summary) != geometry::RowKind::toggle);
+    CHECK(geometry::kind_of(Setting::game_files_location) != geometry::RowKind::toggle);
 
     // MANAGE… stands at the label line's right; the switch where every
     // switch stands; where the files are has no control. Every row fits the
@@ -6921,11 +6923,12 @@ void touch_shows_its_rows_and_their_values() {
         Setting::touch_control_size,
     };
     CHECK(std::equal(rows.begin(), rows.end(), kTouchRows.begin(), kTouchRows.end()));
-    CHECK(geometry::is_strip(Setting::touch_drag) && geometry::is_strip(Setting::touch_latches));
-    CHECK(geometry::is_slider(Setting::touch_hold_delay));
-    CHECK(geometry::is_switch(Setting::touch_haptics));
-    CHECK(geometry::is_switch(Setting::touch_left_handed));
-    CHECK(geometry::is_strip(Setting::touch_control_size));
+    CHECK(geometry::kind_of(Setting::touch_drag) == geometry::RowKind::levels);
+    CHECK(geometry::kind_of(Setting::touch_latches) == geometry::RowKind::levels);
+    CHECK(geometry::kind_of(Setting::touch_hold_delay) == geometry::RowKind::slider);
+    CHECK(geometry::kind_of(Setting::touch_haptics) == geometry::RowKind::toggle);
+    CHECK(geometry::kind_of(Setting::touch_left_handed) == geometry::RowKind::toggle);
+    CHECK(geometry::kind_of(Setting::touch_control_size) == geometry::RowKind::levels);
 
     settings::Dialog dialog = opened_with_touch(Page::touch);
     // Every part inside the dialog and apart, at every offset; no game lock
@@ -7083,9 +7086,9 @@ void touch_shows_its_rows_and_their_values() {
 constexpr int32_t menu_scaling_in_view = 257;
 
 void menu_scaling_and_native_density_show_and_change() {
-    CHECK(geometry::is_strip(Setting::menu_scaling));
+    CHECK(geometry::kind_of(Setting::menu_scaling) == geometry::RowKind::levels);
     CHECK(geometry::strip_of(Setting::menu_scaling).levels == 3);
-    CHECK(geometry::is_switch(Setting::native_density));
+    CHECK(geometry::kind_of(Setting::native_density) == geometry::RowKind::toggle);
     CHECK(geometry::strip_caption(Setting::menu_scaling, 0) == "Sharp");
     CHECK(geometry::strip_caption(Setting::menu_scaling, 1) == "Whole steps");
     CHECK(geometry::strip_caption(Setting::menu_scaling, 2) == "Unfiltered");
@@ -7174,7 +7177,7 @@ void menu_scaling_and_native_density_show_and_change() {
 }
 
 void explosion_flash_shows_and_changes() {
-    CHECK(geometry::is_strip(Setting::explosion_flash));
+    CHECK(geometry::kind_of(Setting::explosion_flash) == geometry::RowKind::levels);
     CHECK(geometry::strip_of(Setting::explosion_flash).levels == 3);
     CHECK(geometry::strip_caption(Setting::explosion_flash, 0) == "Off");
     CHECK(geometry::strip_caption(Setting::explosion_flash, 1) == "Reduced");
@@ -7236,14 +7239,14 @@ void explosion_flash_shows_and_changes() {
 }
 
 void zoomed_out_units_show_and_change() {
-    CHECK(geometry::is_strip(Setting::zoomed_out_units));
+    CHECK(geometry::kind_of(Setting::zoomed_out_units) == geometry::RowKind::levels);
     const auto strip = geometry::strip_of(Setting::zoomed_out_units);
     CHECK(strip.levels == 3 && geometry::offered_levels(strip) == 2);
     CHECK(geometry::offered_levels(geometry::strip_of(Setting::explosion_flash)) == 3);
     CHECK(geometry::strip_caption(Setting::zoomed_out_units, 0) == "Rendered");
     CHECK(geometry::strip_caption(Setting::zoomed_out_units, 1) == "Dots");
     CHECK(geometry::strip_caption(Setting::zoomed_out_units, 2) == "Icons");
-    CHECK(geometry::is_choice(Setting::zoomed_out_after));
+    CHECK(geometry::kind_of(Setting::zoomed_out_after) == geometry::RowKind::choice);
     CHECK(settings::EngineSettings{}.zoomed_out_units == settings::ZoomedOutUnits::rendered);
     CHECK(settings::EngineSettings{}.zoomed_out_after == settings::ZoomedOutAfter::one_sixth);
 
@@ -7331,7 +7334,7 @@ void zoomed_out_units_show_and_change() {
 }
 
 void window_frame_shows_and_changes() {
-    CHECK(geometry::is_strip(Setting::window_frame));
+    CHECK(geometry::kind_of(Setting::window_frame) == geometry::RowKind::levels);
     CHECK(geometry::strip_of(Setting::window_frame).levels == 2);
     CHECK(geometry::strip_caption(Setting::window_frame, 0) == "Hidden in play");
     CHECK(geometry::strip_caption(Setting::window_frame, 1) == "Always shown");
@@ -7560,16 +7563,16 @@ void controller_shows_its_rows_and_their_values() {
           Setting::pad_acceleration,
           Setting::pad_right_stick,
           Setting::pad_haptics})
-        CHECK(geometry::is_strip(strip));
+        CHECK(geometry::kind_of(strip) == geometry::RowKind::levels);
     for (const Setting slider : {Setting::pad_pointer_speed, Setting::pad_gyro_speed})
-        CHECK(geometry::is_slider(slider));
+        CHECK(geometry::kind_of(slider) == geometry::RowKind::slider);
     for (const Setting choice : {Setting::pad_gyro, Setting::pad_prompts})
-        CHECK(geometry::is_choice(choice) && !geometry::is_switch(choice));
+        CHECK(geometry::kind_of(choice) == geometry::RowKind::choice);
     for (const Setting toggle :
          {Setting::pad_glide, Setting::pad_magnetism, Setting::pad_left_handed})
-        CHECK(geometry::is_switch(toggle));
-    CHECK(geometry::is_text(Setting::pad_steam_input_notice));
-    CHECK(!geometry::is_switch(Setting::pad_steam_input_notice));
+        CHECK(geometry::kind_of(toggle) == geometry::RowKind::toggle);
+    CHECK(geometry::kind_of(Setting::pad_steam_input_notice) == geometry::RowKind::text);
+    CHECK(geometry::kind_of(Setting::pad_steam_input_notice) != geometry::RowKind::toggle);
 
     // Every part inside the dialog and apart, at every offset, with and
     // without the notice; no game lock reaches a Controller row.

@@ -44,6 +44,8 @@ endif()
 # FreeType and the fonts text outside the game's own fonts is drawn with,
 # from tools/bootstrap_text_fonts.py (cmake/OaTextFonts.cmake).
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaTextFonts.cmake")
+# The registries the game ships with, copied beside it (cmake/OaRegistries.cmake).
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaRegistries.cmake")
 
 # OA_GAME_DIR, the installed game the game-data tests and native checks read,
 # and the helpers that register those tests (cmake/OaGameData.cmake).
@@ -2769,6 +2771,7 @@ endif()
 # after it in the extension list.
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
+add_subdirectory(src/ui/map-previews)
 add_subdirectory(src/netgame)
 # Catalogues are fetched with the HTTP client src/netgame adds, so this
 # library follows that directory. oa-game is linked earlier in this file,
@@ -2892,6 +2895,9 @@ endif()
 # finds them (cmake/OaTextFonts.cmake).
 if(TARGET oa-game)
   oa_copy_text_fonts(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
+  # The built-in registry descriptors, beside the fonts
+  # (cmake/OaRegistries.cmake).
+  oa_copy_registries(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")
 set(oa_notice_files "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/ATTRIBUTIONS.md"

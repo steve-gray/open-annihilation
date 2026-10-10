@@ -1010,7 +1010,12 @@ void test_challenge_cancel() {
     OA_CHECK(wait_state(downloads, *id, content::DownloadState::challenge, 5000));
     downloads.cancel(*id);
     OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, 5000));
+    // A poll already on the wire when the cancel lands may still arrive. Let it
+    // land, then no other may come in six poll times (40 ms apart here).
+    const int cancelled_at = polls.load();
+    threads::sleep_ms(100);
     const int stopped = polls.load();
+    OA_CHECK(stopped <= cancelled_at + 1);
     threads::sleep_ms(250);
     OA_CHECK(polls.load() == stopped);
     OA_CHECK(count_results(session.server) == 0);

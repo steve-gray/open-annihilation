@@ -285,7 +285,10 @@ void paint_item(const Canvas& canvas, const Item& item) {
         paint_text(drawn, item.font, item.text, item.rect, item.align, item.colour);
         break;
     case Role::picture:
-        renderer::draw_picture(surface, placement, item.rect, drawn.icon);
+        if (const auto* look = std::get_if<PictureLook>(&item.look))
+            renderer::draw_picture(surface, placement, item.rect, look->picture);
+        else
+            renderer::draw_picture(surface, placement, item.rect, drawn.icon);
         break;
     case Role::mark:
         if (const auto* look = std::get_if<MarkLook>(&item.look))

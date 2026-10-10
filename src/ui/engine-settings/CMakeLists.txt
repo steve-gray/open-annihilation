@@ -8,7 +8,7 @@
 # (engine_settings/notice.hpp), and the prompts that ask with buttons of
 # their own in the same look (engine_settings/prompt.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/mods.cpp src/notice.cpp src/prompt.cpp)
+  src/developer.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
@@ -35,6 +35,15 @@ if(BUILD_TESTING)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)
   # The dialog's fonts from the installed game, and its texts in them.
   oa_add_game_data_test(ui-engine-settings-dialog-data oa-ui-engine-settings-dialog-test --data)
+
+  # Every setting's row as a table of literals: its kind, label, hint lines,
+  # stops, levels or choices, and locks.
+  add_executable(oa-ui-engine-settings-rows-test tests/rows_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-rows-test PRIVATE oa-ui-engine-settings
+    oa-test-support oa-options)
+  target_include_directories(oa-ui-engine-settings-rows-test PRIVATE src)
+  add_test(NAME ui-engine-settings-rows COMMAND oa-ui-engine-settings-rows-test)
+  set_tests_properties(ui-engine-settings-rows PROPERTIES TIMEOUT 30)
 
   # SHA-256 pictures of the dialog, its notices, its prompts and the OA button.
   add_executable(oa-ui-engine-settings-pixels-test tests/pixels_test.cpp)

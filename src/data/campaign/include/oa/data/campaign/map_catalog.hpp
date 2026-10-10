@@ -29,12 +29,16 @@ struct MapList {
     int32_t count{};
 };
 
-// Caller hook for the cursor animation shown around the scan. In 3.1c the
-// multiplayer messages that arrive during a full scan are also handled after
-// each file; the scan here does not handle them.
+// Caller hook for the cursor animation shown around the scan, and for each
+// map the scan lists. In 3.1c the multiplayer messages that arrive during a
+// full scan are also handled after each file; the scan here does not handle
+// them. `eligible` is called with the map's name and the document the scan
+// parsed, before that document is freed. A map the scan leaves out is not
+// reported. A null function reports nothing.
 struct MapScanHost {
     void* context{};
     void (*set_cursor)(void* context, uint32_t animation){};
+    void (*eligible)(void* context, const char* name, const oa::formats::tdf::Document* ota){};
 };
 
 /// Builds or hands out the list of maps with a multiplayer schema.

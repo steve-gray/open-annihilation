@@ -262,6 +262,14 @@ struct ProgressLook {
     int32_t whole{}; ///< the whole; 0 or less fills nothing
 };
 
+/// A picture of the screen's own, scaled to fill the item's rectangle, such
+/// as a mod's badge.
+struct PictureLook {
+    /// The picture. It refers to pixels the screen keeps, which must outlive
+    /// the display list.
+    oa::ui::frontend_renderer::RgbaPicture picture{};
+};
+
 /// What a component item draws. Empty for a generic role. Later components
 /// append looks. A locked fade has no look of its own: its rectangle is the
 /// item's.
@@ -290,6 +298,7 @@ using Look = std::variant<
     CardLook,
     HoverCardLook,
     LinkLook,
-    ProgressLook>;
+    ProgressLook,
+    PictureLook>;
 
 } // namespace oa::ui::kit

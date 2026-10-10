@@ -1615,11 +1615,97 @@ void click_map_row(Driver& d, mp::Control& names, int32_t row, int32_t ox, int32
     const int32_t visible =
         names.list_item_height > 0 ? std::max(names.height / names.list_item_height, 1) : 1;
     if (row < names.list_first || row >= names.list_first + visible)
-        names.list_first = std::max(row, 0);
+        names.list_first = static_cast<int16_t>(std::max(row, int32_t{0}));
     d.pointer_click(
         ox + names.x + 20,
         oy + names.y + 2 + (row - names.list_first) * names.list_item_height +
             names.list_item_height / 2
+    );
+}
+
+/// Base maps supplied by the bound source, and no scan of the installed maps.
+///
+/// One of them is an installed map, so the battle room can select it. Its
+/// description is not the one in its map file.
+struct BoundBaseMaps {
+    static constexpr const char* kReal = "Coast To Coast";
+    static constexpr const char* kRidge = "ridge";
+    static constexpr const char* kDescription = "Bound by the one start scan.";
+
+    static int32_t count(void*) { return 1; }
+
+    static bool at(void*, int32_t index, mp::LobbyPackMap* out) {
+        if (index != 0 || out == nullptr)
+            return false;
+        *out = {PackProbe::kName, "A ring of cinders", "16x16", 16};
+        return true;
+    }
+
+    static bool prepare(void*, const char*, char*, std::size_t) { return true; }
+
+    static void release(void*) {}
+
+    static int32_t base_count(void*) { return 2; }
+
+    static bool base_at(void*, int32_t index, mp::LobbyPackMap* out) {
+        if (out == nullptr)
+            return false;
+        if (index == 0) {
+            *out = {kReal, kDescription, "12 x 12", 16};
+            return true;
+        }
+        if (index == 1) {
+            *out = {kRidge, "A high ridge", "20 x 20", 24};
+            return true;
+        }
+        return false;
+    }
+
+    mp::LobbyMapSource source() {
+        mp::LobbyMapSource bound{};
+        bound.context = this;
+        bound.count = count;
+        bound.at = at;
+        bound.prepare = prepare;
+        bound.release = release;
+        bound.base_count = base_count;
+        bound.base_at = base_at;
+        return bound;
+    }
+};
+
+/// The battle room's map list is the bound base maps plus the pack map, and
+/// not the installed maps. The binding is cleared when the check ends.
+void check_bound_base_maps(Driver& d) {
+    struct Guard {
+        ~Guard() { mp::multiplayer_bind_map_source({}); }
+    } guard;
+
+    BoundBaseMaps bound;
+    mp::multiplayer_bind_map_source(bound.source());
+    mp::multiplayer_reset();
+    if (!host_battleroom(d, "Ridge", "Host"))
+        return;
+    expect(d.click("MAP"), "MAP opens on the bound base maps");
+    auto* modal = mp::multiplayer_modal();
+    auto* names = modal != nullptr ? mp::panel_control(*modal, "MAPNAMES") : nullptr;
+    expect(names != nullptr, "SELMAP lists the bound maps");
+    if (names == nullptr)
+        return;
+    const std::vector<std::string> listed(names->items.begin(), names->items.end());
+    std::vector<std::string> expected{
+        BoundBaseMaps::kReal, PackProbe::kName, BoundBaseMaps::kRidge
+    };
+    std::sort(expected.begin(), expected.end());
+    const bool other = std::find(listed.begin(), listed.end(), "Two Continents") != listed.end() ||
+                       std::find(listed.begin(), listed.end(), "two continents") != listed.end();
+    expect(
+        listed == expected && !other,
+        "the bound list is the supplied maps and no other installed map"
+    );
+    expect(
+        mp::panel_text(*modal, "DESCRIPTION") == BoundBaseMaps::kDescription,
+        "the selected map's description is the one the source supplied"
     );
 }
 
@@ -3348,6 +3434,7 @@ int main() {
     check_launch_exit(d);
     check_engine_banner(d);
     check_pack_maps(d);
+    check_bound_base_maps(d);
     check_presence_badges(d);
 
     if (failures != 0) {

@@ -10,7 +10,11 @@
 #include "oa/data/mod_profile/value.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/rows.hpp"
 #include "oa/ui/kit/theme.hpp"
+
+#include "settings_rows.hpp"
 
 #include <array>
 #include <cstddef>
@@ -523,12 +527,6 @@ inline constexpr int32_t most_shown_choices = oa::ui::kit::compact_metrics.most_
 /// the marker the chosen item shows.
 inline constexpr int32_t choice_item_text_inset =
     oa::ui::kit::compact_metrics.choice_item_text_inset;
-/// The columns a drop-down field gives its choice's text.
-inline constexpr int32_t choice_field_text_room =
-    choice_width - choice_text_inset - choice_arrow_room;
-/// The columns an open list's item gives its text.
-inline constexpr int32_t choice_item_text_room =
-    choice_width - 2 - choice_item_text_inset - list_text_margin;
 
 /// What a slider offers: its stops' count.
 struct Slider {
@@ -768,13 +766,12 @@ struct ModRowText {
     const Dialog& dialog, const std::function<int32_t(std::string_view)>& text_width
 );
 
-/// Returns how a setting is changed.
-///
-/// @param setting the setting
-/// @return true for a slider, false for a switch, a level strip or a drop-down
-[[nodiscard]] bool is_slider(Setting setting) noexcept;
+// The functions from here to hint_is_status read a setting's row in the
+// table (row_spec): each is the kit's reading of the row's spec, over a
+// dialog that offers what its arguments give.
 
-/// Returns what a slider setting offers.
+/// Returns what a slider setting offers at most: its row's stops, each snap
+/// radius up to the most any mod allows.
 ///
 /// @param setting a slider setting
 /// @param highest_offered_unit the unit limit slider's highest value, in
@@ -788,7 +785,7 @@ struct ModRowText {
     std::span<const ScreenSize> offered_sizes = screen_sizes
 ) noexcept;
 
-/// Returns the stops a slider setting offers for the settings shown: a
+/// Returns the stops a slider setting's row offers for the settings shown: a
 /// snap radius runs from 0 to the mod's most (at least two stops), the
 /// others as slider_of gives them.
 ///
@@ -807,7 +804,7 @@ struct ModRowText {
     std::span<const ScreenSize> offered_sizes = screen_sizes
 ) noexcept;
 
-/// Returns the stop nearest a setting's value.
+/// Returns the stop nearest a setting's value, as its row reads it.
 ///
 /// @param settings the settings
 /// @param setting a slider setting
@@ -824,7 +821,7 @@ struct ModRowText {
     std::span<const ScreenSize> offered_sizes = screen_sizes
 ) noexcept;
 
-/// Sets a slider setting to a stop's value.
+/// Sets a slider setting to a stop's value, through its row.
 ///
 /// @param[in,out] settings the settings
 /// @param setting a slider setting
@@ -841,47 +838,34 @@ void set_stop(
     std::span<const ScreenSize> offered_sizes = screen_sizes
 ) noexcept;
 
-/// Tells whether a setting is a strip of levels: Enhanced anti-aliasing,
-/// Hardware acceleration, One-finger drag and QUEUE and ADD.
-///
-/// @param setting the setting
-/// @return true for a level strip, false for a slider or a switch
-[[nodiscard]] bool is_strip(Setting setting) noexcept;
-
-/// Returns what a strip setting offers.
+/// Returns what a strip setting's row offers.
 ///
 /// @param setting a strip setting
 /// @return its levels and their width; no levels for any other setting
 [[nodiscard]] Strip strip_of(Setting setting) noexcept;
 
-/// Returns the level a strip setting shows.
+/// Returns the level a strip setting's row shows.
 ///
 /// @param settings the settings
 /// @param setting a strip setting
 /// @return its level's index, from 0 at the strip's left
 [[nodiscard]] std::size_t strip_level(const EngineSettings& settings, Setting setting) noexcept;
 
-/// Sets a strip setting to a level.
+/// Sets a strip setting to a level, through its row: a level the strip
+/// shows but does not offer changes nothing.
 ///
 /// @param[in,out] settings the settings
 /// @param setting a strip setting; any other is left alone
-/// @param level the level's index, clamped to the strip's
+/// @param level the level's index
 void set_strip_level(EngineSettings& settings, Setting setting, std::size_t level) noexcept;
 
-/// Returns a level's caption in a strip.
+/// Returns a level's caption in a strip, in English: its row spec's.
 ///
 /// @param setting a strip setting
 /// @param level the level's index
 /// @return "Off", "2x", "Basic", "Automatic", "Stay on" and so on; empty
-///     past the strip's last
-[[nodiscard]] std::string_view strip_caption(Setting setting, std::size_t level) noexcept;
-
-/// Tells whether a setting is a drop-down: a field that shows the choice
-/// and opens a list of the choices.
-///
-/// @param setting the setting
-/// @return true for Language and Mod
-[[nodiscard]] bool is_choice(Setting setting) noexcept;
+///     past the strip's last, and for a setting that is no strip
+[[nodiscard]] std::string strip_caption(Setting setting, std::size_t level);
 
 /// Returns the languages the Language drop-down offers after System
 /// default: the playable languages, a built-in or an installed pack, in
@@ -890,12 +874,12 @@ void set_strip_level(EngineSettings& settings, Setting setting, std::size_t leve
 /// @return the languages
 [[nodiscard]] std::span<const oa::data::languages::Language* const> offered_languages();
 
-/// Returns how many choices a drop-down offers.
+/// Returns how many choices a drop-down's row offers.
 ///
 /// @param dialog the dialog
 /// @param setting a drop-down setting
-/// @return for Language, 1 and the offered languages; 0 for any other
-///     setting
+/// @return the items; for Language, 1 and the offered languages; 0 for a
+///     setting that is no drop-down
 [[nodiscard]] std::size_t choice_count(const Dialog& dialog, Setting setting);
 
 /// Returns a drop-down's choice as the drop-down names it: Language's first
@@ -908,50 +892,14 @@ void set_strip_level(EngineSettings& settings, Setting setting, std::size_t leve
 /// @return the text, in UTF-8; empty past the last choice
 [[nodiscard]] std::string choice_text(const Dialog& dialog, Setting setting, std::size_t index);
 
-/// Returns a drop-down's choice as it shows in a room: choice_text, but a
-/// picked folder's path as its tail that fits (path_tail).
-///
-/// @param dialog the dialog
-/// @param setting a drop-down setting
-/// @param index the choice, from 0
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the font it is drawn in
-/// @return the text, in UTF-8
-[[nodiscard]] std::string shown_choice_text(
-    const Dialog& dialog,
-    Setting setting,
-    std::size_t index,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-);
-
-/// Returns what a drop-down's closed field shows: its choice, as
-/// shown_choice_text gives it; but on the Mod row a game locks
-/// (Lock::in_game), the mod the game plays (Dialog::playing_mod_folder):
-/// No Mod, an offered mod's name, or another folder's path as its tail that
-/// fits (path_tail).
-///
-/// @param dialog the dialog
-/// @param row the drop-down's row
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the font it is drawn in
-/// @return the text, in UTF-8
-[[nodiscard]] std::string field_text(
-    const Dialog& dialog,
-    const Row& row,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-);
-
 /// Returns the choice a drop-down shows.
 ///
 /// @param dialog the dialog, whose chosen settings count
 /// @param setting a drop-down setting
-/// @return the choice, from 0; 0, System default or No Mod, for a value not
-///     offered
+/// @return the choice, from 0; 0, System default, for a value not offered
 [[nodiscard]] std::size_t choice_index(const Dialog& dialog, Setting setting);
 
-/// Sets a drop-down setting to a choice.
+/// Sets a drop-down setting to a choice, through its row.
 ///
 /// @param[in,out] dialog the dialog, whose chosen settings change
 /// @param setting a drop-down setting; any other is left alone
@@ -987,35 +935,6 @@ void set_choice(Dialog& dialog, Setting setting, std::size_t index);
     return oa::ui::kit::choice_item(list, shown);
 }
 
-/// Tells whether a setting's row has a button on its label line that asks
-/// the host to act: Game files' summary row and its MANAGE….
-///
-/// @param setting the setting
-/// @return true for Setting::game_files_summary
-[[nodiscard]] bool is_button(Setting setting) noexcept;
-
-/// Tells whether a setting's row only shows text and takes no press: Where
-/// the files are.
-///
-/// @param setting the setting
-/// @return true for Setting::game_files_location
-[[nodiscard]] bool is_text(Setting setting) noexcept;
-
-/// Tells whether a setting is an Off/On switch.
-///
-/// @param setting the setting
-/// @return true for a switch, false for a slider, a level strip, a
-///     drop-down, a button, a text row or a row of buttons
-[[nodiscard]] bool is_switch(Setting setting) noexcept;
-
-/// Tells whether a setting is a row of buttons that each open a folder: Your
-/// files, whose buttons stand on its label line, right-aligned, and change
-/// no setting.
-///
-/// @param setting the setting
-/// @return true for Your files
-[[nodiscard]] bool is_buttons(Setting setting) noexcept;
-
 /// The columns between two of Your files' buttons.
 inline constexpr int32_t folder_button_gap = 4;
 /// Each of Your files' buttons' width, left to right: room for its caption
@@ -1041,58 +960,20 @@ inline constexpr int32_t folder_buttons_width = folder_button_widths[0] + folder
 ///     as between two buttons
 [[nodiscard]] std::size_t folder_button_at(const SourceRect& area, int32_t x, int32_t y) noexcept;
 
-/// Returns the caption of one of Your files' buttons.
-///
-/// @param index the button, from 0 at the left
-/// @return "SAVES", "SCREENSHOTS" or "MODS"; empty past the last
-[[nodiscard]] std::string_view folder_button_text(std::size_t index) noexcept;
-
-/// Returns a line of a row's hint as it is drawn in a width: row_hint's
-/// text, but Your files' first line, the player's own folder, as its tail
-/// that fits (path_tail).
-///
-/// @param dialog the dialog
-/// @param setting the row's setting
-/// @param line the line, from 0
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the small font
-/// @return the text, in UTF-8
-[[nodiscard]] std::string shown_hint_text(
-    const Dialog& dialog,
-    Setting setting,
-    std::size_t line,
-    int32_t width,
-    const std::function<int32_t(std::string_view)>& text_width
-);
-
-/// Tells whether a switch setting is On. Every switch is read and set
-/// through one table from the setting to its value, so a new switch is
-/// added in one place.
+/// Tells whether a switch setting is On, as its row reads it: each switch's
+/// row binds its own value, so a new switch is added in one place.
 ///
 /// @param settings the settings
 /// @param setting a switch setting
 /// @return true for On; false for a setting that is not a switch
 [[nodiscard]] bool switch_on(const EngineSettings& settings, Setting setting) noexcept;
 
-/// Sets a switch setting, through the same table as switch_on.
+/// Sets a switch setting, through its row as switch_on reads it.
 ///
 /// @param[in,out] settings the settings
 /// @param setting a switch setting; any other is left alone
 /// @param on true for On
 void set_switch(EngineSettings& settings, Setting setting, bool on) noexcept;
-
-/// Returns the lock a setting has.
-///
-/// @param locks the dialog's locks
-/// @param setting the setting
-/// @return why it cannot be changed now
-[[nodiscard]] Lock lock_of(const Locks& locks, Setting setting) noexcept;
-
-/// Returns a drop-down's field width.
-///
-/// @param setting a drop-down's setting
-/// @return wide_choice_width for Gyro pointer, else choice_width
-[[nodiscard]] int32_t choice_field_width(Setting setting) noexcept;
 
 /// What a dialog shows beyond each setting's own rows and lines.
 struct RowContext {
@@ -1109,8 +990,9 @@ struct RowContext {
 /// @return its Steam Input notice and its Steam Deck's screen rate
 [[nodiscard]] RowContext row_context(const Dialog& dialog) noexcept;
 
-/// Tells whether a setting's hint lines are its status: such a row, locked,
-/// shows its lock where its control was, and only its label line fades.
+/// Tells whether a setting's hint lines are its status, as its row spec
+/// says: such a row, locked, shows its lock where its control was, and only
+/// its label line fades.
 ///
 /// @param setting the setting
 /// @return true for Hardware acceleration, whose hint lines are its status
@@ -1125,6 +1007,49 @@ struct RowContext {
 /// @return its settings, top to bottom
 [[nodiscard]] std::span<const Setting>
 section_settings(Page page, const SectionHooks* section, const RowContext& context = {});
+
+/// A text's width in a font of the dialog, in source pixels.
+using TextWidth = std::function<int32_t(std::string_view)>;
+
+/// Returns a setting's row as the dialog shows it, read from its row spec:
+/// the spec's view, with the lock the dialog puts on the row, whether its
+/// hint lines are its status, a switch a language sets showing On, and each
+/// hint line looked up in the language shown once more, as the dialog has
+/// always drawn its hints, but a folder's path (hint_is_path), shown as its
+/// tail that fits the section's width.
+///
+/// @param dialog the dialog the row is shown in, whose choice it shows
+/// @param setting the row's setting
+/// @param lock the row's lock (section_lock)
+/// @param status its hint lines are its status (section_hint_is_status)
+/// @param small_width a text's width in the small font
+/// @return the row's view
+[[nodiscard]] oa::ui::kit::RowView row_view(
+    const Dialog& dialog, Setting setting, Lock lock, bool status, const TextWidth& small_width
+);
+
+/// Places a section's rows at its top, through the kit's placement of their
+/// views: from first_row_top, Developer's own rows with
+/// developer_row_padding and every other section's with row_padding, a
+/// hint's lines further apart while the dialog's words are drawn in the
+/// modern fonts, and the first row's control first_row_control.
+///
+/// @param dialog the dialog the rows are shown in
+/// @param page the section
+/// @param locks the locks the rows show
+/// @param section a check's own section; null for the dialog's
+/// @param small_width a text's width in the small font, for a folder's path
+/// @param[out] placed the kit's placement of the rows, their views with
+///     them; may be null
+/// @return the rows
+[[nodiscard]] Rows place_section(
+    const Dialog& dialog,
+    Page page,
+    const Locks& locks,
+    const SectionHooks* section,
+    const TextWidth& small_width,
+    oa::ui::kit::PlacedRows* placed = nullptr
+);
 
 /// Places the rows of a section; Developer's own, over its list, with
 /// developer_row_padding.
@@ -1183,6 +1108,61 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 /// @param dialog the dialog
 /// @return its rows, offset, limit and content height
 [[nodiscard]] ScrolledRows open_rows(const Dialog& dialog);
+
+/// Tells whether a row of Developer's list takes a press and the focus:
+/// every header, which opens and closes, and a parameter's control while it
+/// can change.
+///
+/// @param row the row
+/// @return true when it does
+[[nodiscard]] bool list_row_takes_input(const ListRow& row) noexcept;
+
+/// Returns the rows of Mods that offer ROLL BACK, by their places.
+///
+/// @param dialog the dialog
+/// @param open Mods' rows
+/// @return for each placed row, whether it shows ROLL BACK
+[[nodiscard]] std::vector<bool> roll_back_rows(const Dialog& dialog, const ScrolledRows& open);
+
+/// Returns the controls the keyboard focus moves through, in order: the
+/// open section's rows that can be changed (on Developer, then its list's
+/// rows, Show Active Only and, while Developer Mode is on, Restore profile
+/// values), the footer's buttons left to right, then the sections' entries.
+///
+/// @param dialog the dialog
+/// @param open the open section's rows
+/// @return the controls
+[[nodiscard]] std::vector<int32_t> focus_order(const Dialog& dialog, const ScrolledRows& open);
+
+/// The scroll group of the open section's rows, and of Mods' list.
+inline constexpr int32_t section_group = 0;
+/// The scroll group of Developer's list.
+inline constexpr int32_t developer_list_group = 1;
+
+/// The control of an open drop-down list's first item: the items count down
+/// from it, under the question's buttons, by their places in the list.
+inline constexpr int32_t first_menu_item_control = question_no_control - 1;
+
+/// Returns the control of an open drop-down list's item.
+///
+/// @param item the item, from 0
+/// @return its control
+[[nodiscard]] constexpr int32_t menu_item_control(int32_t item) noexcept {
+    return first_menu_item_control - item;
+}
+
+/// Returns what the dialog draws, in the order it draws it, and its
+/// controls, in the order a press tries them, each named for automation:
+/// the window's face, the header, the section list, the open section's
+/// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
+/// list and footer), the footer band and buttons, the edge, an open
+/// drop-down list and the question. Tab follows focus_order.
+///
+/// @param dialog the dialog
+/// @param fonts the fonts it is drawn in; null measures texts at
+///     estimated_character_width a character
+/// @return the display list
+[[nodiscard]] kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts);
 
 /// Returns the offset nearest the open one that shows a row whole: from its
 /// line to the line under it, or for the last row the section's end.
@@ -1378,28 +1358,22 @@ level_at(const SourceRect& area, const Strip& strip, int32_t column) noexcept {
     return oa::ui::kit::level_at(area, strip.levels, strip.level_width, column);
 }
 
-/// Returns the index of a level in anti_aliasing_levels.
-///
-/// @param level the level
-/// @return its index; 0 for a level that is not offered
-[[nodiscard]] std::size_t level_index(AntiAliasing level) noexcept;
-
-/// Returns a section's name, as its list entry shows it.
+/// Returns a section's name, as its list entry shows it: the table's.
 ///
 /// @param page the section
 /// @return the name
 [[nodiscard]] std::string_view page_name(Page page) noexcept;
 
-/// Returns a section's heading, as the open section shows it.
+/// Returns a section's heading, as the open section shows it: the table's.
 ///
 /// @param page the section
 /// @return the heading, in capitals
 [[nodiscard]] std::string_view page_heading(Page page) noexcept;
 
-/// Returns a setting's label.
+/// Returns a setting's label: its row spec's.
 ///
 /// @param setting the setting
-/// @return the label
+/// @return the label, in English
 [[nodiscard]] std::string_view label_of(Setting setting) noexcept;
 
 /// A line of the text under a row, and whether it is drawn as a notice.
@@ -1410,22 +1384,22 @@ struct HintLine {
     bool notice{};
 };
 
-/// Returns a hint's line, as the source writes it: Include in device
-/// backups' first line holds {device}, which row_hint fills, and the Game
-/// files section's other rows have none of their own (row_hint gives the
-/// host's texts).
+/// Returns a hint's line as its row spec gives it, with no dialog's own
+/// texts: in English, but Include in device backups' line naming the
+/// neutral device, Controller's Steam Input notice in the language shown,
+/// and the Game files rows and Your files' path empty.
 ///
 /// @param setting the setting
 /// @param settings the settings shown; the anti-aliasing hint depends on its level
 /// @param acceleration Hardware acceleration's status, which is its hint
 /// @param line the line, from 0
 /// @return the line; empty past the hint's last
-[[nodiscard]] std::string_view hint_line(
+[[nodiscard]] std::string hint_line(
     Setting setting,
     const EngineSettings& settings,
     const AccelerationStatus& acceleration,
     std::size_t line
-) noexcept;
+);
 
 /// Returns a line of Hardware acceleration's status: the first says what
 /// runs, or why not; the second what draws the view, what the player can
@@ -1437,15 +1411,15 @@ struct HintLine {
 [[nodiscard]] std::string_view
 status_line(const AccelerationStatus& acceleration, std::size_t line) noexcept;
 
-/// Returns the lines a setting's hint takes.
+/// Returns the lines a setting's hint takes, as its row spec gives them.
 ///
 /// @param setting the setting
 /// @return 1 or 2; most_notice_lines for the Steam Input notice
 [[nodiscard]] std::size_t hint_line_count(Setting setting) noexcept;
 
-/// Returns the lines a row's hint takes in a dialog: hint_line_count, and
-/// on a Steam Deck one more for Maximum frame rate, which names the rate it
-/// starts at.
+/// Returns the lines a row's hint takes in a dialog, as its row spec gives
+/// them: hint_line_count, and on a Steam Deck one more for Maximum frame
+/// rate, which names the rate it starts at.
 ///
 /// @param setting the setting
 /// @param context what the dialog shows beyond each setting's lines
@@ -1462,8 +1436,9 @@ inline constexpr std::string_view steam_input_notice_text =
 inline constexpr std::string_view steam_deck_rate_text =
     "Steam Deck: starts at the screen's {rate} fps.";
 
-/// Returns a line of the text under a row as the dialog shows it: the
-/// hint's (hint_line); for the Game files rows the host's texts: the
+/// Returns a line of the text under a row as its row spec gives it, before
+/// the dialog looks it up: the hint's (hint_line); for the Game files rows
+/// the host's texts: the
 /// summary and its sizes line, the backups hint with the device's name
 /// (Dialog::game_files_device, "device" without one), and where the files
 /// are, broken into lines between words (break_lines); for Your files
@@ -1477,12 +1452,6 @@ inline constexpr std::string_view steam_deck_rate_text =
 /// @param line the line, from 0
 /// @return the line; empty past the last
 [[nodiscard]] HintLine row_hint(const Dialog& dialog, Setting setting, std::size_t line);
-
-/// Returns a setting's label as the dialog shows it (label_of).
-///
-/// @param setting the setting
-/// @return the label
-[[nodiscard]] std::string_view row_label(Setting setting) noexcept;
 
 /// Breaks a text into lines of at most a number of characters, between
 /// words, after a location's mark between folders (›) where one stands in a
@@ -1505,11 +1474,11 @@ break_lines(std::string_view text, std::size_t characters, std::size_t most_line
 /// @return its rectangle
 [[nodiscard]] SourceRect dialog_list_item(const Dialog& dialog, Page page) noexcept;
 
-/// Returns a slider's value as it is shown.
+/// Returns a slider's value as its row shows it.
 ///
 /// @param setting a slider setting
 /// @param settings the settings shown
-/// @return the text
+/// @return the text; empty for a setting that is no slider
 [[nodiscard]] std::string value_text(Setting setting, const EngineSettings& settings);
 
 /// Returns the settings a dialog's sliders show: the settings chosen, but
@@ -1520,7 +1489,7 @@ break_lines(std::string_view text, std::size_t characters, std::size_t most_line
 /// @return the settings
 [[nodiscard]] EngineSettings slider_settings(const Dialog& dialog);
 
-/// Returns a slider's value as the dialog shows it: as value_text of
+/// Returns a slider's value as the dialog's row shows it: as value_text of
 /// slider_settings, but "Custom" for Screen size at the window's own size
 /// that the display does not offer (Dialog::custom_screen_size).
 ///
@@ -1534,12 +1503,6 @@ break_lines(std::string_view text, std::size_t characters, std::size_t most_line
 /// @param lock the lock
 /// @return the text; empty for Lock::none
 [[nodiscard]] std::string_view lock_text(Lock lock) noexcept;
-
-/// Returns a level's caption in the strip.
-///
-/// @param level the level
-/// @return "Off", "2x" and so on
-[[nodiscard]] std::string_view level_caption(AntiAliasing level) noexcept;
 
 /// The title's first words.
 inline constexpr std::string_view title_text = "OPEN ANNIHILATION";

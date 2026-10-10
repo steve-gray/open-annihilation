@@ -353,8 +353,11 @@ the mark alone on other screens) without the game's art, in
 the game's own fonts (`load_dialog_fonts`): its button font for labels,
 values, the section list and the title, and its smaller label font for the
 section heading, hints, locks, captions and the version, each readied for
-text in one colour. `src/geometry.hpp` places every part, so a control is
-pressed where it is drawn. The window's face and raised edge, its header,
+text in one colour. Every setting's row is declared once, in the rows'
+table (below), and `src/geometry.hpp` places every part, so a control is
+pressed where it is drawn. The dialog is drawn from one display list
+(`geometry::dialog_list`, below), which `draw_dialog` paints with the
+kit's `paint`. The window's face and raised edge, its header,
 its section list, a section's heading, a row's rule, label and hints, a
 locked row's fade and the footer's band are drawn by `oa/ui/kit/chrome.hpp`.
 The buttons, the switch, the level strip, the slider, the drop-down and its
@@ -594,6 +597,82 @@ never show or move it. A key that moves the focus onto a row, or acts on a
 focused row, first scrolls the least that shows the row whole; a key that
 moves it to a button or a section's entry does not scroll.
 
+## The rows' table
+
+Every setting has one row, declared once in `src/settings_rows.cpp`, in
+`Setting`'s order: a `kit::RowSpec<SettingsModel>` (`oa/ui/kit/rows.hpp`)
+holding its id, its kind, its English label and hints, and its binding to
+the settings the dialog shows. A `static_assert` holds the table to one row
+for every enumerator, each at its setting's place and its id the setting's
+name in kebab case (`setting_name`: `vertical-sync` for
+`Setting::vertical_sync`). Beside each spec the table keeps the field of the
+dialog's locks that locks the row, how Restore defaults copies it, and
+whether its first hint line is a folder's path. `SettingsModel` is the
+settings a row reads and sets and the dialog that shows them, for what a
+row shows beyond them: the unit limit's highest stop, the offered screen
+sizes, the system's language, Hardware acceleration's status, the Steam
+Input notice and a Steam Deck's rate, and the host's texts.
+
+Everything the dialog decides about one setting is read from its row: its
+kind (`geometry::kind_of`: a switch is `toggle`, a strip `levels`, a slider
+`slider`, a drop-down `choice`, MANAGE… a `value_and_button` with no value,
+Your files `buttons`, and Where the files are and the Steam Input notice
+`text`), its label and hints, its stops, levels or items and their
+captions and value texts, its lock and whether its hints are its status.
+Placement goes through the kit's `place_rows` with each row's view
+(`geometry::row_view`, `geometry::place_section`), and the events through
+the kit's `step`, `activate`, `press`, `drag` and `choose` on the row's
+spec. Restore defaults copies each row through `geometry::copy_row`: a
+switch, a strip and a drop-down of choices through their get and set, and
+a slider, Language, Zoomed out units and the Mod through their own fields,
+since their stops or items do not hold every value they may have (a value
+between two stops is kept as stored). The geometry functions the dialog's
+tests call (`stop_of`, `set_stop`, `strip_caption`, `value_text`,
+`switch_on` and the others) each read the table. A section's rows, name
+and heading are arrays indexed by `Page`.
+
+To add a setting: add its enumerator to `Setting` and its value to
+`EngineSettings` (with its key in `engine_settings.cpp`), then its row in
+the table at the enumerator's place, made by the kit's factory for its
+kind (`toggle`, `choice`, `slider`, `levels` and the others) with its id,
+label, hint and binding functions, its lock field when a lock applies and
+an exact copy when its stops do not hold every value; add its name to the
+names array, and list it in its section's rows. Nothing else in the dialog
+changes.
+
+## The display list and the names
+
+`geometry::dialog_list` returns what the dialog draws, in the order it
+draws it (the face, the header, the section list, the open section's
+heading and rows, Mods' list or Developer's rows, list and footer, the
+footer band and buttons, the edge, an open drop-down's menu and the
+question), and its controls, in the order a press tries them, each named
+for automation. The rows are the kit's `add_rows` with the prefix
+`settings`, each row's control in the section's scroll group; Mods' list,
+Developer's list and its footer are generic items and the kit's
+components. A mod's badge is a picture item. Tab follows the dialog's
+focus order (`geometry::focus_order`).
+
+The names: the section entries `settings.nav.<page>` (`mods`, `controls`,
+`common-tweaks`, `language`, `graphics`, `touch`, `controller`,
+`developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
+`mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,
+`settings.ok` and `settings.scroll-bar`; each row `settings.<row>`, its
+setting's name (`settings.vertical-sync`), MANAGE…
+`settings.game-files-summary.manage`, and Your files `settings.user-folder`;
+an open drop-down's items `settings.<row>.item-<n>`, counted from 1, while
+it is open; Developer's `settings.active-only`,
+`settings.restore-profile-values`, `settings.hack-area.<area>`,
+`settings.hack.<hack id>` and `settings.hack.<hack id>.<parameter>`, with
+`.<value>` for a set's value, `.<n>` for a list's item and `.length` for
+its length; Mods' rows `settings.mod.<mod>.switch` and their ROLL BACK
+`settings.mod.<mod>.roll-back`, `<mod>` being `no-mod` for No Mod and
+otherwise the folder's last component in lower case, every character
+outside `a`–`z`, `0`–`9` and `-` a `-`, a second folder of the same word
+with `-2` after it and a third with `-3`; `settings.open-mods-folder`; and
+the question's `settings.question.yes` and `settings.question.no`, which a
+press tries first while it shows.
+
 ## Developer Mode
 
 Developer Mode lets the player change the standard hacks of the profile
@@ -718,10 +797,10 @@ it dimmed and inert.
 
 ## Your files and the notice
 
-Common Tweaks' first row, Your files (`Setting::user_folder`, `is_buttons`),
-changes no setting. Its first hint line shows the player's own folder
-(`Dialog::user_folder`, which the host sets as the dialog opens) by its
-tail that fits (`shown_hint_text`, `path_tail`); its second says "Saved
+Common Tweaks' first row, Your files (`Setting::user_folder`, a row of
+buttons), changes no setting. Its first hint line shows the player's own
+folder (`Dialog::user_folder`, which the host sets as the dialog opens) by
+its tail that fits (`geometry::hint_is_path`, `path_tail`); its second says "Saved
 games, screenshots, films and mods.", or in amber why the last folder asked
 for could not be shown (`set_folder_notice`). Three buttons, SAVES,
 SCREENSHOTS and MODS, stand right-aligned on its label line, drawn as
@@ -771,9 +850,28 @@ reach (`prompt_pointer_*`, `prompt_finger_down`, `prompt_key`).
 ## Dependencies
 
 The dialog, its notices and its prompts draw through the OA UI kit
-(`oa-ui-kit`): its colours, its Compact metrics and its text.
+(`oa-ui-kit`): its colours, its Compact metrics and its text, and the
+dialog's rows are the kit's declared rows (`oa/ui/kit/rows.hpp`), drawn
+from its display list.
 
 ## Tests
+
+`ui-engine-settings-rows` holds every setting's row, written out as
+literals, to the table: its kind, label, hint lines without and with the
+Steam Input notice and a Steam Deck's rate, stops, levels or choices, a
+strip's level width or a drop-down's field width, the levels a strip
+offers, whether its hints are its status, its lock while a game is in
+progress, and the field of the locks that locks it. On every section of
+every kind of dialog (the engine's settings with and without Touch,
+Controller and Game files, with and without the Steam Input notice and a
+Steam Deck's rate, a mod's options and Language alone), at its top and its
+scroll end, unlocked and under a game's locks, it finds every control of
+the display list named once, every control `dialog_layout` lists in the
+list where the layout has it, and Tab in the dialog's focus order; and
+Developer with every hack open, an open drop-down's items, the question's
+buttons, Mods' names for folders of one word, and the Tab orders of
+Controls, Graphics, Developer with an area open and Mods with two mods as
+literals.
 
 `ui-engine-settings-pixels` and `ui-engine-settings-pixels-data` hold the
 dialog, its notices, its prompts and the OA button to the pictures they
@@ -923,3 +1021,14 @@ a profile keeps the overrides under the folder's own id. Over a match it
 finds Mods locked with its note, the mod played first, and neither a press
 nor a key asking to switch. `native-mod-switch` switches the mod ten times
 through the question, each a soft restart.
+
+## Limitations
+
+The dialog's input still uses its own hit test, focus order, finger reach
+and wheel (`control_at`, `focus_order`, `finger_target`), with Up and Down
+doing what Tab does, until U21 moves it onto the kit's over the display
+list; the list's controls, groups and Tab order are what that input will
+read. The names are the dialog's own; listing them to automation, with
+`oa.` before each and the parts of a switch, a strip, an open drop-down and
+Your files' buttons, is U11's, which also gives a drop-down's items ids of
+their own in place of their numbers.
