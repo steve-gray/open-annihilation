@@ -8,11 +8,17 @@ until then.
 ## Entry points
 
 - `theme.hpp`: the colour tokens (the settings dialog, the Game files screen
-  and the folder chooser, the touch controls) and the Compact metrics.
+  and the folder chooser, the touch controls) and the metrics of the three
+  size classes: `compact_metrics`, 0.7.3's, and `regular_metrics` and
+  `large_metrics`, which give the settings dialog, its notices and its
+  prompts more room (their sizes, the padding, the nav list's width and the
+  characters a host's line under a row holds) and keep every other size.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
   boxed line, and the one wrap.
-- `layout.hpp`: points, the Auto scale and the three size classes, rows,
-  columns, grids, splits and scroll areas, and the display list.
+- `layout.hpp`: points, the Auto scale and the three size classes,
+  `metrics_of` (a class's metrics, which a screen takes its window's sizes
+  from), rows, columns, grids, splits and scroll areas, and the display
+  list.
 - `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
   order, the arrows by where controls sit, the wheel, and a text field's
   editing: `insert_text` for typed text and `edit_text` for Backspace,
@@ -48,8 +54,9 @@ until then.
   Each has a draw function and an `add_*` that puts it in a display list
   with its name, kind and Tab place; `paint` draws them.
 - `components_more.hpp`: the notice and the question (the settings
-  dialog's notice and prompt): their models, placement, display lists,
-  pointer, finger and key events and drawing, and the progress bar.
+  dialog's notice and prompt): their models, placement at their size class
+  (`Notice::size_class`, `Question::size_class`), display lists, pointer,
+  finger and key events and drawing, and the progress bar.
 - `rows.hpp`: declared rows. A settings page is a table of `RowSpec`s,
   each made by a factory that takes the row's id first: `toggle`, `choice`,
   `slider`, `levels`, `value_and_button`, `buttons`, `text_field`, `link`
@@ -78,7 +85,10 @@ its hover card's timer in its own state.
 
 ## Invariants
 
-- Compact metrics are 0.7.3's exactly, for the controls 0.7.3 has.
+- Compact metrics are 0.7.3's exactly, for the controls 0.7.3 has. Regular
+  and Large metrics differ from them only in the sizes the design's table
+  gives the classes; rows, text and controls keep Compact's sizes, so a
+  larger class shows more rows instead of growing them.
 - Every token's value is pinned by `ui-kit-theme`.
 - One wrap. Its rules are the only differences between its callers.
 - The kit never looks text up in the interface catalogue. Callers pass what
@@ -116,7 +126,9 @@ its hover card's timer in its own state.
   keys, Backspace and Delete, follow it.
 - A hover card is due only once the pointer has rested on one control for
   `hover_card_delay_ms`. The timer is the screen's: the kit keeps none.
-- A notice and a question place their parts from the Compact metrics. A
+- A notice and a question place their parts from the Compact metrics, but
+  for their width and greatest height, which are their size class's: their
+  text wraps at the wider width, and their buttons keep their sizes. A
   question's buttons are as wide as their captions at the estimated width,
   whatever the fonts, so a press lands where a button is drawn. Their
   events hit and reach through `hit` and `reach` over the same controls
@@ -156,11 +168,15 @@ focused button, link, list row or tab.
 
 ## Tests
 
-`ui-kit-theme` checks every token against the value it replaces, and the
-Compact metrics against 0.7.3's numbers. `ui-kit-text` checks the UTF-8
+`ui-kit-theme` checks every token against the value it replaces, the
+Compact metrics against 0.7.3's numbers, Regular's and Large's against the
+design's table of sizes and that they differ from Compact's in nothing
+else, and that each class's dialog and notices fit the least window of their
+class. `ui-kit-text` checks the UTF-8
 helpers, the estimated width, the stand-ins, and the wrap against copies of
 the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
-window sizes, arrangements, the scroll arithmetic and hit testing.
+window sizes, that `metrics_of` gives each class its metrics, arrangements,
+the scroll arithmetic and hit testing.
 `ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys and
 their values, the wheel's fractions, the names, and a text field's typing
 and editing over characters of one to four bytes. `ui-kit-components` checks each control's
@@ -189,9 +205,12 @@ in one column; every event on every kind; and the page painted.
 
 ## Limitations
 
-Regular and Large metrics are U10's, and so is choosing a screen's layout
-from its size class. The canvas draws at whole scales; fractional sizes are
-U24's. The arrows' rule is one function, its weight named, and is to be
+The metrics hold the settings dialog's, its notices' and its prompts' sizes
+for each class (`regular_metrics`, `large_metrics`, `metrics_of`); the
+Library's and the map browser's are theirs to add. A drop-down's open menu
+keeps above the footer line it is given (`choice_menu`), the Compact
+settings dialog's unless a larger dialog gives its own. The canvas draws at
+whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
 tuned after controller playtests (D30). The screens' colour family converges
 with U13 and U14. The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's

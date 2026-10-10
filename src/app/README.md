@@ -173,8 +173,9 @@ each mapped the pointer, told a finger from a mouse, mapped the keys,
 latched the closing key and drew a backdrop.
 
 - **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
-  and darkens what lies under it, a drawing at 1× from its own top left
-  corner, its answers to the pointer, the keys, the wheel and typed text, a
+  and darkens what lies under it, a layout at the view's size class
+  (`lay_out`), a drawing from its own top left corner at the canvas's whole
+  scale, its answers to the pointer, the keys, the wheel and typed text, a
   text field, its display list and interaction (what automation lists), a
   tick and a revision. No call of it names an SDL type. A screen joins with
   `oa_layer().push(std::make_unique<...>())` and leaves when it answers
@@ -196,10 +197,12 @@ latched the closing key and drew a backdrop.
 - **Notices and questions.** `NoticeScreen` (name `notice`) holds a
   `kit::Notice`, and `QuestionScreen` (name `prompt`) a `kit::Question`,
   with the callbacks of their host (`NoticeScreen::Host`,
-  `QuestionScreen::Host`). Each shows over one screen of the game, centred
-  on the front end's picture at 1× (`(640 − 400) / 2`, `(480 − height) / 2`,
-  the height from `notice_height` or `prompt_height`), modal over a backdrop,
-  and is drawn with `draw_notice` or `draw_prompt`; its events go through
+  `QuestionScreen::Host`). Each shows over one screen of the game, laid out
+  at the view's size class (its class's notice width wide, as tall as its
+  text makes it, from `notice_height` or `prompt_height`) and centred in the
+  window at the view's scale, modal over a backdrop, and is drawn with
+  `draw_notice` or `draw_prompt`; a question keeps its class when its host
+  puts another question in its place (`changed`). Its events go through
   the kit's notice and question functions with the layer's point, reach and
   key, and its display list and interaction are the kit's
   (`notice_list`, `question_list`) with its hover, press and mark. A
@@ -215,15 +218,39 @@ latched the closing key and drew a backdrop.
   under it asked. The saves notice, the mod warning and the found folder's
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
+- **Scale and size class.** On the front end the layer draws its screens at
+  a whole scale and lays them out at the size class of the points left
+  over (`LayerView`, from `view`, worked out afresh whenever the window's
+  size or the touch state may have changed: each input, tick and present
+  lays the screens out again, `lay_out_screens`). It fills a `kit::Viewport`
+  as the Game files screen fills its own: the canvas in pixels (the
+  renderer's output size, a desktop window's size in pixels, never its
+  points), the canvas pixels a window point holds (`density`) and, while
+  the game has touch controls, the window's safe insets. The scale is
+  `kit::auto_scale`: the canvas height over 720, halves rounded up, never
+  below the density, so a point is never smaller than a window point; it is
+  then held to the largest scale at which Compact's 480 by 324 dialog fits
+  the canvas less its insets, and to at least 1. The class comes from
+  `kit::frame_of`: Compact below 960 by 540 points, Regular from 960 by 540,
+  Large from 1280 by 720. A 640 by 480 window is Compact at 1×, pixel for
+  pixel as 0.7.3; 1024 by 768 is Regular at 1×, 1280 by 720 Large at 1×,
+  1920 by 1080 and 2560 by 1080 Regular at 2×, 2560 by 1440 Large at 2× and
+  3840 by 2160 Large at 3×; a phone of 852 by 393 points at 3 pixels a
+  point is Compact at 3×. `scale`, `size_class` and `placement_of(name)`
+  report them, for the checks. Without a renderer the canvas is the picture
+  itself, Compact at 1×. In a match the view is Compact at 100%: the
+  in-match Settings keeps its own placement and look until U25.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
-  the coordinates input arrives in: the picture's pixels on the front end,
-  the window's in a match, and how many points it has. Every screen is
-  Compact and drawn at 1× today: Settings centred on the main menu's
-  picture at 80,78, and in a match where `match_dialog_rect` puts it, as the
-  picture and the side column are scaled. `LayerView::frame` already gives
-  a screen its room in points with a size class and a scale (Compact at
-  100% for now), for screens laid out at the layer's own scale. An empty
-  place means the screen does not show: it neither draws nor takes input.
+  window pixels, and how many points it has. Settings, a notice and a
+  question centre themselves in the view's room at its scale
+  (`centred_placement`): left = (window width − width × scale) / 2, rounded
+  down, and the same down, in the canvas less its safe insets on a touch
+  canvas. A screen anchored to a part of a 3.1c screen places itself by the
+  picture's rectangle (`LayerView::picture`, where the 640 by 480 frame is
+  drawn) at the same scale. The main menu's OA button stays in the frame.
+  In a match Settings shows where `match_dialog_rect` puts it, Compact and
+  stamped as before. An empty place means the screen does not show: it
+  neither draws nor takes input.
 - **Input.** One overlay at z 100 on every screen (`register_oa_layer`, over
   the extensions' overlays, under the frontend's message boxes) hands the
   layer every input. The key that closed a screen comes first: its presses
@@ -236,29 +263,41 @@ latched the closing key and drew a backdrop.
   points even outside its rectangle, and keeps its own hover: a move that
   only changes its hover is answered `pass`. A screen that needs input where
   it draws nothing can take it through an overlay of its own above z 100
-  that takes nothing while a modal screen shows. A point is mapped by the
-  placement (`layer_point`); a finger's press gets the reach of the touch
-  controls in the screen's points, a mouse's none; keys go through
-  `layer_key`.
+  that takes nothing while a modal screen shows. On the front end, where
+  input arrives in the picture's pixels, a point is first mapped into the
+  window through the picture's rectangle (`window_position`), then to the
+  screen's points by its placement (`layer_point`): floor((pixel − left) /
+  scale). A finger's press gets the reach of the touch controls in the
+  screen's points, the pick distance over the window pixels a point takes;
+  a mouse's none; keys go through `layer_key`.
 - **Typed text** goes to the screen taking input (`text`), and while that
   screen reports a `text_field` the system's text input stays started over
   the field, mapped back to the coordinates input arrives in
   (`Runtime::start_text_input`); it stops once no screen has one.
 - **On the front end** each modal screen with a backdrop darkens the frame
-  itself, a blend in 256ths (`darken_front_end`), so the picture the window
-  shows is the same at every size, and every screen under it, as its
-  drawing is darkened before it is stamped: a question over Settings darkens
-  the menu twice and Settings once. The screens are drawn at 1× and stamped
-  into the window over the picture's rectangle
-  (`SDL_GetRenderLogicalPresentationRect`) in the window's own pixels
-  (`RenderState::use_window_pixels`), each window pixel taking the screen's
-  pixel under its centre, as the picture's own pixels are scaled there;
-  then the software cursor is presented above them, and the frame holds no
-  cursor while a screen shows (`tick_and_draw_cursor`). The layer is
-  uploaded again only when a screen's drawing or place changes. Without a
-  renderer, and while `frame_without_cursor` draws the picture, the screens
-  are drawn into the frame instead (`compose_front_end`), which is what the
-  player sees.
+  itself, a blend in 256ths (`darken_front_end`), and the window round the
+  picture, which SDL clears to black, takes black darkened as often, so
+  the backdrop covers the whole window; every screen under it darkens too,
+  as its drawing is darkened before it is copied: a question over Settings
+  darkens the menu twice and Settings once. The screens are drawn through a
+  `kit::Canvas` at the view's scale onto a picture of their size in points
+  times the scale, never drawn at 1× and enlarged, and copied pixel for
+  pixel to their places in the window's own pixels
+  (`RenderState::use_window_pixels`); then the software cursor is
+  presented above them, and the frame holds no cursor while a screen shows
+  (`tick_and_draw_cursor`). The layer is uploaded again only when a
+  screen's drawing or place changes. Without a renderer, and while
+  `frame_without_cursor` draws the picture, the screens are drawn into the
+  frame instead (`compose_front_end`), each picture pixel taking the
+  screen's pixel at its centre in the window, which is what the player sees
+  where the picture fills the window. A check that compares the whole
+  window with what it expects asks for the whole window in the frames it
+  reads back (`read_whole_window`); otherwise the read-back holds the
+  picture's area, as it always has. `oa_layer_check.hpp` gives the checks
+  the frame expected with a screen open (`expected_layer_frame`), the pixels
+  a frame differs in outside the cursor's square (`layer_differences`), and
+  pointer and finger events at a window pixel (`window_pointer_event`,
+  `window_finger_event`, `layer_window_pixel`).
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
   under a modal screen, and the screens stamped at their places, each
@@ -1548,7 +1587,9 @@ latched the closing key and drew a backdrop.
   `Runtime::apply_vertical_sync` asks the renderer to wait for the display
   only when the setting in effect changes it, never while it stays Off.
   `--check-engine-settings` (`native-engine-settings`) drives them through
-  the SDL presenter over a preferences file it empties first:
+  the SDL presenter over a preferences file it empties first, the main
+  menu's part and the dialog's in a 640x480 window, where the dialog is
+  Compact at 1×:
   `runtime_engine_settings_check.cpp` holds the main menu's part, with each
   look of the button and the darkened menu under the dialog compared pixel
   for pixel with what they should draw, the 640x480 window compared with
@@ -1561,8 +1602,14 @@ latched the closing key and drew a backdrop.
   effect at once, Vertical sync read back from the renderer, Font shadow
   read back from the text style, OK, Cancel, Restore defaults and the keys
   they save) and the main menu with the
-  button and the dialog as 640x480, 1280x720, 1920x1080 and 2560x1080
-  windows show them, Graphics at its top and its end;
+  button as 640x480, 1024x768, 1280x720, 1920x1080 and 2560x1080 windows
+  show it, and in each the dialog at the size class and scale the window
+  gives it (Compact 1×, Regular 1×, Large 1×, Regular 2×, Regular 2×),
+  clicked where the window shows it and compared, every window pixel but
+  the cursor's square, with the menu's frame darkened and the dialog drawn
+  at its class and scale (`oa_layer_check.hpp`): each section, Developer
+  Mode's list open, off and on, and Graphics at its top and at its class's
+  end;
   `runtime_engine_settings_match_check.cpp` the in-game menu's button and
   dialog at those sizes, with the locks of a game played alone and of a
   shared game, Hardware acceleration set to Full and to Basic in a shared
@@ -2142,7 +2189,9 @@ the game's window ([docs/game-files.md](../../docs/game-files.md)).
   model of [src/ui/game-files](../ui/game-files/README.md);
   `game_files_paint.cpp` paints its layout with the touch controls' painter
   and the bundled fonts; `game_files_dialog.cpp` hosts the Language
-  settings over it.
+  settings over it, placed by the OA layer's rule over the screen's
+  viewport: its Auto scale held to what fits Compact's dialog, the size
+  class of the points left over, centred.
 - `game_files_check.cpp` is `--check-game-files`: scripted hooks, the route
   driven by taps and keys, pictures of each step and the verdict line.
 - `runtime_game_files.cpp` fills Settings › Game files and opens the
@@ -2233,7 +2282,10 @@ effect:
   requests instead (`recorded_folder_opener`).
 
 `--check-user-folder` (`native-user-folder`, `runtime_user_folder_check.cpp`)
-checks all of it beside its preferences file.
+checks all of it beside its preferences file: the saves notice in a
+640x480 window, Compact at 1× pixel for pixel, then in 1280x720 and
+1920x1080 windows at Large 1× and Regular 2×, the whole window compared
+with the menu darkened and the notice drawn at that class and scale.
 
 ## Mod profile and mod folders
 
@@ -2345,7 +2397,9 @@ same (`Runtime::start_skirmish_from_setup`) leaves no match and sets the
 skirmish setup up again, with the warning or the failure in a message box,
 in place of ending the program. `--check-mod-warning`
 (`native-mod-warning`, `runtime_mod_warning_check.cpp`) checks the warning
-and the refused start through the Mods page's Switch Mod question.
+and the refused start through the Mods page's Switch Mod question, the
+main menu's warning in 1280x720 and 1920x1080 windows at Large 1× and
+Regular 2× too.
 
 `inspect_game_install` resolves the profile (`resolve_folder_profile`) before
 any archive is mounted: `--mod`'s file, else the mod folder's, else the game
@@ -2477,7 +2531,9 @@ in place, and how what a stop leaves is settled). The runtime's part:
   offscreen video driver.
 
 `native-mod-install` (`--check-mod-install`, `runtime_mod_install_check.cpp`)
-drives every prompt over five runs.
+drives every prompt over five runs, pressing each where the OA layer shows
+it, and holds the first update question to its picture in 1280x720 and
+1920x1080 windows at Large 1× and Regular 2×.
 
 ### Map packs (.oamap)
 
