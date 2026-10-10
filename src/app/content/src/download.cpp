@@ -1589,7 +1589,7 @@ Room room_for(const fs::path& folder, uint64_t still) {
     if (error)
         return Room::disk;
     const uint64_t need = still + download_step_bytes;
-    if (static_cast<std::uintmax_t>(need) > space.available)
+    if (static_cast<uintmax_t>(need) > space.available)
         return Room::no_space;
     return Room::ok;
 }
@@ -1637,7 +1637,7 @@ bool prepare_part(
     if (file_size != catalogue) {
         keep = file_size - (file_size % download_step_bytes);
         if (keep != file_size) {
-            fs::resize_file(path, static_cast<std::uintmax_t>(keep), error);
+            fs::resize_file(path, static_cast<uintmax_t>(keep), error);
             if (error) {
                 halt = error == std::errc::no_space_on_device ? Halt::no_space : Halt::disk;
                 return false;
@@ -2261,7 +2261,7 @@ void Downloads::State::process(http::Client& client, uint64_t id) {
                 address = files[index];
             }
             std::error_code error;
-            std::uintmax_t before = 0;
+            uintmax_t before = 0;
             if (fs::is_regular_file(part, error))
                 before = fs::file_size(part, error);
             const FetchEnd end =
@@ -2322,7 +2322,7 @@ void Downloads::State::process(http::Client& client, uint64_t id) {
                 continue;
             }
             if (end == FetchEnd::resume) {
-                std::uintmax_t after = 0;
+                uintmax_t after = 0;
                 if (fs::is_regular_file(part, error))
                     after = fs::file_size(part, error);
                 if (after <= before)
