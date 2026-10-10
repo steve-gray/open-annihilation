@@ -7,7 +7,7 @@
 // from the multiplayer screens' own lobby; both are only read.
 #pragma once
 
-#include "oa/app/automation/json.hpp"
+#include "oa/formats/json.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +26,12 @@ struct Lobby;
 }
 
 namespace oa::app::automation {
+
+// A source can include more than one of these headers, so each name is declared once.
+#ifndef OA_APP_AUTOMATION_USING_JSON_WRITER
+#define OA_APP_AUTOMATION_USING_JSON_WRITER
+using oa::formats::json::JsonWriter;
+#endif
 
 /// Writes a match's members of the match answer: whether a match runs, its
 /// tick, pause and speed, its players, the local player, and its outcome.
