@@ -530,7 +530,8 @@ void Runtime::check_user_folder() {
         window_of(larger.width, larger.height);
         const auto presented = window_frame();
         require(
-            oa_layer().size_class() == larger.size_class && oa_layer().scale() == larger.scale,
+            oa_layer().screen_class() == larger.size_class &&
+                oa_layer().screen_scale() == larger.scale,
             "the notice is not laid out at " + std::string(size_class_name(larger.size_class)) +
                 ", " + std::to_string(larger.scale) + "x" + on
         );

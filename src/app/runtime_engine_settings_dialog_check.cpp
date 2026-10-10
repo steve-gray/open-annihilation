@@ -1764,8 +1764,8 @@ void Runtime::check_engine_settings_window_sizes() {
         point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
         const LayerView seen = oa_layer().view();
         require(
-            oa_layer().size_class() == expected_layout.size_class &&
-                oa_layer().scale() == expected_layout.scale &&
+            oa_layer().screen_class() == expected_layout.size_class &&
+                oa_layer().screen_scale() == expected_layout.scale &&
                 dialog->size_class == expected_layout.size_class,
             "the dialog is not laid out at " +
                 std::string(size_class_name(expected_layout.size_class)) + ", " +

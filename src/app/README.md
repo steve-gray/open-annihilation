@@ -236,7 +236,7 @@ latched the closing key and drew a backdrop.
   pixel as 0.7.3; 1024 by 768 is Regular at 1×, 1280 by 720 Large at 1×,
   1920 by 1080 and 2560 by 1080 Regular at 2×, 2560 by 1440 Large at 2× and
   3840 by 2160 Large at 3×; a phone of 852 by 393 points at 3 pixels a
-  point is Compact at 3×. `scale`, `size_class` and `placement_of(name)`
+  point is Compact at 3×. `screen_scale`, `screen_class` and `placement_of(name)`
   report them, for the checks. Without a renderer the canvas is the picture
   itself, Compact at 1×. In a match the view is Compact at 100%: the
   in-match Settings keeps its own placement and look until U25.

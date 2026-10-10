@@ -468,9 +468,9 @@ void Runtime::check_mod_install() {
         const auto* fonts = engine_settings_fonts();
         const auto placed = state.prompt->placement(oa_layer().view());
         // At the layer's class, drawn at its scale.
-        const int32_t scale = oa_layer().scale();
+        const int32_t scale = oa_layer().screen_scale();
         settings::Prompt sized = prompt;
-        sized.size_class = oa_layer().size_class();
+        sized.size_class = oa_layer().screen_class();
         require(
             oa_layer().holds(state.prompt) &&
                 placed.points_width == oa::ui::kit::metrics_of(sized.size_class).notice_width &&
@@ -750,8 +750,8 @@ void Runtime::check_mod_install() {
             window_of(larger.width, larger.height);
             const auto presented = window_frame();
             require(
-                state.prompt != nullptr && oa_layer().size_class() == larger.size_class &&
-                    oa_layer().scale() == larger.scale,
+                state.prompt != nullptr && oa_layer().screen_class() == larger.size_class &&
+                    oa_layer().screen_scale() == larger.scale,
                 "the question is not laid out at " +
                     std::string(size_class_name(larger.size_class)) + ", " +
                     std::to_string(larger.scale) + "x on the " + size + " window"

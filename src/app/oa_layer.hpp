@@ -385,12 +385,12 @@ class OaLayer {
     /// Returns the whole scale the front end's screens are drawn at now.
     ///
     /// @return window pixels a point; 1 in a match
-    [[nodiscard]] int32_t scale() const { return view().scale; }
+    [[nodiscard]] int32_t screen_scale() const { return view().scale; }
 
     /// Returns the size class the front end's screens are laid out at now.
     ///
     /// @return the class; Compact in a match
-    [[nodiscard]] oa::ui::kit::SizeClass size_class() const { return view().frame.size_class; }
+    [[nodiscard]] oa::ui::kit::SizeClass screen_class() const { return view().frame.size_class; }
 
     /// Returns where the topmost screen of a name shows now.
     ///
