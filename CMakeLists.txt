@@ -2565,6 +2565,11 @@ if(BUILD_TESTING)
     add_test(NAME mod-registry-sync-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_mod_registry.py --self-test)
     set_tests_properties(mod-registry-sync mod-registry-sync-selftest PROPERTIES TIMEOUT 60)
+    # The homepage, tag and engine-requirement rules (tools/oamod_yaml.py)
+    # agree with the table the C++ reader checks.
+    add_test(NAME oamod-yaml-selftest COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tools/oamod_yaml.py --self-test)
+    set_tests_properties(oamod-yaml-selftest PROPERTIES TIMEOUT 60)
     # The standard hack and script extension pages in docs/mods, their
     # tables in the README and table 7.2 of the OAMOD standard hold what the
     # OAMOD registry gives (tools/gen_mod_docs.py), and the tool still keeps

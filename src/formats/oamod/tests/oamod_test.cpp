@@ -6,12 +6,20 @@
 // numbers with their canonical text.
 
 #include "oa/formats/oamod.hpp"
+#include "oa/formats/oamod/package_keys.hpp"
 #include "oa/test/check.hpp"
 
 #include <cstdio>
+#include <fstream>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
+
+// OA_PACKAGE_KEYS_CASES is the path of src/formats/oamod/tests/package_keys_cases.txt.
+#ifndef OA_PACKAGE_KEYS_CASES
+#error "OA_PACKAGE_KEYS_CASES names the shared package-key case table"
+#endif
 
 namespace {
 
@@ -399,6 +407,126 @@ void test_numbers() {
     OA_CHECK(parse_number("- 1", number) == NumberStatus::not_a_number);
 }
 
+/// Prints a shared package-key case that did not hold.
+///
+/// @param line the case
+void fail_case(std::string_view line) {
+    std::fprintf(
+        stderr, "package key case failed: %.*s\n", static_cast<int>(line.size()), line.data()
+    );
+    OA_CHECK(false);
+}
+
+/// Splits comma-separated versions, keeping each item whole.
+///
+/// @param text the list; empty when there is none
+/// @return the items
+std::vector<std::string_view> split_versions(std::string_view text) {
+    std::vector<std::string_view> versions;
+    if (text.empty())
+        return versions;
+    size_t start = 0;
+    while (start <= text.size()) {
+        const size_t comma = text.find(',', start);
+        versions.push_back(text.substr(
+            start, comma == std::string_view::npos ? std::string_view::npos : comma - start
+        ));
+        if (comma == std::string_view::npos)
+            break;
+        start = comma + 1;
+    }
+    return versions;
+}
+
+/// The shared case table, the two player wordings, and an unquoted `>`.
+void test_package_keys() {
+    std::ifstream input{OA_PACKAGE_KEYS_CASES};
+    OA_CHECK(input.is_open());
+    if (!input.is_open())
+        return;
+    std::string line;
+    int count = 0;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty() || line.front() == '#')
+            continue;
+        ++count;
+        const size_t first = line.find(' ');
+        if (first == std::string::npos) {
+            fail_case(line);
+            continue;
+        }
+        const size_t second = line.find(' ', first + 1);
+        const std::string kind = line.substr(0, first);
+        const std::string status = second == std::string::npos
+                                       ? line.substr(first + 1)
+                                       : line.substr(first + 1, second - first - 1);
+        const std::string text =
+            second == std::string::npos ? std::string{} : line.substr(second + 1);
+        if (status != "ok" && status != "bad") {
+            fail_case(line);
+            continue;
+        }
+        if (kind == "range" && status == "ok") {
+            constexpr std::string_view marker = " :: ";
+            const size_t one = text.find(marker);
+            const size_t two = one == std::string::npos ? std::string::npos
+                                                        : text.find(marker, one + marker.size());
+            if (one == std::string::npos || two == std::string::npos ||
+                text.find(marker, two + marker.size()) != std::string::npos) {
+                fail_case(line);
+                continue;
+            }
+            const std::string requirement = text.substr(0, one);
+            const std::string meet = text.substr(one + marker.size(), two - (one + marker.size()));
+            const std::string miss = text.substr(two + marker.size());
+            const std::optional<EngineRange> range = parse_engine_range(requirement);
+            if (!range) {
+                fail_case(line);
+                continue;
+            }
+            for (const std::string_view version_text : split_versions(meet)) {
+                const std::optional<EngineVersion> version = parse_engine_version(version_text);
+                if (!version || !engine_range_met(*range, *version))
+                    fail_case(line);
+            }
+            for (const std::string_view version_text : split_versions(miss)) {
+                const std::optional<EngineVersion> version = parse_engine_version(version_text);
+                if (!version || engine_range_met(*range, *version))
+                    fail_case(line);
+            }
+            continue;
+        }
+        if (kind == "range") {
+            if (parse_engine_range(text))
+                fail_case(line);
+            continue;
+        }
+        if (kind == "version") {
+            if (parse_engine_version(text).has_value() != (status == "ok"))
+                fail_case(line);
+            continue;
+        }
+        if (kind == "homepage" || kind == "tag") {
+            const bool valid = kind == "homepage" ? homepage_valid(text) : tag_valid(text);
+            if (valid != (status == "ok"))
+                fail_case(line);
+            continue;
+        }
+        fail_case(line);
+    }
+    OA_CHECK(count >= 40);
+
+    const std::optional<EngineRange> later = parse_engine_range(">= 0.8.0");
+    OA_CHECK(later.has_value() && describe_engine_range(*later) == "0.8.0 or later");
+    const std::optional<EngineRange> window = parse_engine_range(">=0.8.0, <0.9.0");
+    OA_CHECK(
+        window.has_value() && describe_engine_range(*window) == "0.8.0 or later, before 0.9.0"
+    );
+    OA_CHECK(refused_as("requires: {engine: >= 0.8.0}\n", Rule::block_scalar));
+}
+
 } // namespace
 
 int main() {
@@ -409,5 +537,6 @@ int main() {
     test_limits();
     test_values();
     test_numbers();
+    test_package_keys();
     return oa::test::check_exit_status();
 }
