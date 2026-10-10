@@ -129,6 +129,23 @@ since they share an id; a saved game loads only under the same sim hash.
 Raise `packaging.revision` in `oamod.yaml` for each new package of the same
 version, so that the game offers it as an update.
 
+A package may also name a homepage, a few tags and the oldest Open
+Annihilation it runs on. Quote the engine requirement, because a value that
+starts with `>` is refused unless it is quoted:
+
+```yaml
+homepage: "https://example.org/example-mod"
+tags: [balance, ai]
+requires:
+  base: ta-3.1c
+  catalogue: 1
+  engine: ">= 0.8.0"
+```
+
+The Library links to the homepage and files the mod under its tags. A
+player whose Open Annihilation does not meet the requirement is told the
+version the mod needs.
+
 **What is refused.** A file that is not a zip archive or is damaged; one
 without `oamod.yaml` at its top or in the one folder at its top; a profile
 that the game would refuse to play, with its first errors shown and all of
