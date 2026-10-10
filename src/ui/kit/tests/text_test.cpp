@@ -30,8 +30,8 @@ constexpr std::string_view ellipsis = "\xE2\x80\xA6";
 /// The three full stops a mod question ends a shortened line with.
 constexpr std::string_view dots = "...";
 
-// The six wraps as they stood at the start commit. This is the only place
-// those algorithms remain.
+// Copies of the six wraps as they were before the kit, compared with the
+// kit's wrap.
 namespace before_kit {
 
 using Measure = std::function<int32_t(std::string_view)>;
@@ -681,7 +681,9 @@ void the_known_notice_lines_stay() {
     OA_CHECK(
         words[0] == "Screenshots," && words[1] == "films and mods" && words[2] == "now go here."
     );
-    OA_CHECK(before_kit::notice_wrap("Screenshots, films and mods now go here.", 16, measure) == words);
+    OA_CHECK(
+        before_kit::notice_wrap("Screenshots, films and mods now go here.", 16, measure) == words
+    );
     OA_CHECK(kit::wrap("", 16, measure).empty());
     const std::string wides(40, 'w');
     OA_CHECK(kit::wrap(wides, 16, measure).size() == 3);
@@ -836,7 +838,9 @@ void the_paint_wrap_keeps_its_lines() {
     for (const auto& wrapped : lines)
         OA_CHECK(paint::text_width(*fonts, wrapped, 16, true) <= 120);
     OA_CHECK(kit::wrap("", 120, measure, rules).empty());
-    OA_CHECK(lines == before_kit::paint_wrap("Hold to self-destruct the selected units", 120, measure));
+    OA_CHECK(
+        lines == before_kit::paint_wrap("Hold to self-destruct the selected units", 120, measure)
+    );
 }
 
 } // namespace
