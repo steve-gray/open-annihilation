@@ -7,9 +7,12 @@
 
 #include "settings_rows.hpp"
 
+#include "stored_words.hpp"
+
 #include "geometry.hpp"
 
 #include "oa/data/languages.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/pad_controls.hpp"
 
 #include <algorithm>
@@ -428,6 +431,33 @@ int32_t steps_from(int64_t value, int64_t lowest, int64_t step) noexcept {
     return static_cast<int32_t>((value - lowest + step / 2) / step);
 }
 
+/// Returns the word the preferences keep a choice as, from the setting's
+/// table of words (stored_words.hpp).
+template <const auto& Words, class Choice>
+std::string table_word(Choice choice) {
+    return std::string(word_of(Words, choice));
+}
+
+/// Returns the word the preferences keep a choice as, from the setting's
+/// text function.
+template <auto Text, class Choice>
+std::string text_word(Choice choice) {
+    return std::string(Text(choice));
+}
+
+/// Returns the word the preferences keep a level of anti-aliasing as: its
+/// factor, Off's 1.
+std::string anti_aliasing_word(AntiAliasing level) {
+    return std::to_string(static_cast<int>(level));
+}
+
+/// Returns the word of a way of Zoomed out units: the word the preferences
+/// keep it as, or for Icons, which they keep none of yet, its own name.
+std::string zoomed_out_units_word(ZoomedOutUnits units) {
+    const std::string_view stored = word_of(zoomed_out_units_words, units);
+    return std::string(stored.empty() ? std::string_view("icons") : stored);
+}
+
 /// Returns the text of a slider's stop: the value's own text at the stop it
 /// is on, so that a value between two stops shows as it is, and the text of
 /// the stop's value at any other.
@@ -468,14 +498,16 @@ struct Linear {
     }
 };
 
-/// A strip of levels over a choice of the settings. A level past those it
-/// offers is shown, and choosing it changes nothing.
+/// A strip of levels over a choice of the settings, each level named by the
+/// word the preferences keep its choice as. A level past those it offers is
+/// shown, and choosing it changes nothing.
 template <
     class Choice,
     std::size_t Count,
     const std::array<Choice, Count>& Choices,
     Choice EngineSettings::* Field,
     const std::array<std::string_view, Count>& Captions,
+    std::string (*Word)(Choice),
     std::size_t Offered = Count>
 struct LevelStrip {
     /// Returns its levels.
@@ -503,19 +535,28 @@ struct LevelStrip {
     /// Returns the levels a player may choose, from the left.
     static int32_t offered(const SettingsModel&) { return static_cast<int32_t>(Offered); }
 
+    /// Returns a level's id: its choice's stored word, in name form.
+    static std::string id(const SettingsModel&, int32_t level) {
+        if (level < 0 || static_cast<std::size_t>(level) >= Count)
+            return {};
+        return word_form(Word(Choices[static_cast<std::size_t>(level)]), false);
+    }
+
     /// Returns its stepper.
     static constexpr Stepper stepper() noexcept {
-        return {&count, &get, &set, &caption, Offered == Count ? nullptr : &offered};
+        return {&count, &get, &set, &caption, Offered == Count ? nullptr : &offered, &id};
     }
 };
 
-/// A drop-down over a choice of the settings.
+/// A drop-down over a choice of the settings, each item named by the word
+/// the preferences keep its choice as.
 template <
     class Choice,
     std::size_t Count,
     const std::array<Choice, Count>& Choices,
     Choice EngineSettings::* Field,
-    const std::array<std::string_view, Count>& Captions>
+    const std::array<std::string_view, Count>& Captions,
+    std::string (*Word)(Choice)>
 struct DropDown {
     /// Returns its items.
     static int32_t count(const SettingsModel&) { return static_cast<int32_t>(Count); }
@@ -537,8 +578,17 @@ struct DropDown {
         return std::string(shown_text(Captions[static_cast<std::size_t>(item)]));
     }
 
+    /// Returns an item's id: its choice's stored word, in name form.
+    static std::string id(const SettingsModel&, int32_t item) {
+        if (item < 0 || static_cast<std::size_t>(item) >= Count)
+            return {};
+        return word_form(Word(Choices[static_cast<std::size_t>(item)]), false);
+    }
+
     /// Returns its stepper.
-    static constexpr Stepper stepper() noexcept { return {&count, &get, &set, &caption, nullptr}; }
+    static constexpr Stepper stepper() noexcept {
+        return {&count, &get, &set, &caption, nullptr, &id};
+    }
 };
 
 /// Returns whether a switch of the settings is On.
@@ -923,6 +973,16 @@ void set_language(SettingsModel& model, int32_t index) {
     if (languages::chosen_language(settings.language, system_language(model)).needs ==
         languages::TextNeeds::modern_fonts)
         settings.modern_fonts = true;
+}
+
+/// Returns an item's id: the word the preferences keep it as, System
+/// default's languages::system_choice and a language's tag, in name form.
+std::string language_id(const SettingsModel& model, int32_t index) {
+    if (index < 0 || index >= language_count(model))
+        return {};
+    if (index == 0)
+        return word_form(languages::system_choice, false);
+    return word_form(offered_languages()[static_cast<std::size_t>(index - 1)]->tag, false);
 }
 
 /// Returns an item's text: System default naming the system's language, or a
@@ -1647,7 +1707,8 @@ constexpr Spec hardware_acceleration_row() noexcept {
             3,
             hardware_acceleration_levels,
             &EngineSettings::hardware_acceleration,
-            kAccelerationCaptions>::stepper(),
+            kAccelerationCaptions,
+            &text_word<&hardware_acceleration_text, HardwareAcceleration>>::stepper(),
         acceleration_level_width
     );
     spec.hint_is_status = true;
@@ -1660,7 +1721,14 @@ constexpr Spec language_row() noexcept {
         kit::choice(
             "language",
             "Language",
-            Stepper{&language_count, &language_index, &set_language, &language_caption, nullptr},
+            Stepper{
+                &language_count,
+                &language_index,
+                &set_language,
+                &language_caption,
+                nullptr,
+                &language_id
+            },
             {"The game's own text and unit names, where its", "data has them in the language."}
         ),
         choice_width
@@ -1728,17 +1796,17 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                            {"Scroll to zoom the battlefield in and out.", {}})},
     {.setting = S::max_zoom_out,
      .spec = changing(wide(kit::choice("max-zoom-out", "Maximum zoom out",
-                                       DropDown<ZoomOutLimit, 7, zoom_out_limits, &E::max_zoom_out, kZoomOutCaptions>::stepper()),
+                                       DropDown<ZoomOutLimit, 7, zoom_out_limits, &E::max_zoom_out, kZoomOutCaptions, &table_word<zoom_out_words, ZoomOutLimit>>::stepper()),
                            choice_width),
                       &max_zoom_out_hint, &lines<2>)},
     {.setting = S::max_zoom_in,
      .spec = changing(wide(kit::choice("max-zoom-in", "Maximum zoom in",
-                                       DropDown<ZoomInLimit, 4, zoom_in_limits, &E::max_zoom_in, kZoomInCaptions>::stepper()),
+                                       DropDown<ZoomInLimit, 4, zoom_in_limits, &E::max_zoom_in, kZoomInCaptions, &table_word<zoom_in_words, ZoomInLimit>>::stepper()),
                            choice_width),
                       &max_zoom_in_hint, &lines<2>)},
     {.setting = S::view_past_map_edge,
      .spec = changing(kit::levels("view-past-map-edge", "View past the map's edge",
-                                  LevelStrip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions>::stepper(),
+                                  LevelStrip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions, &table_word<view_past_map_edge_words, ViewPastMapEdge>>::stepper(),
                                   view_past_map_edge_level_width),
                       &view_past_map_edge_hint, &lines<2>)},
     {.setting = S::escape_opens_menu,
@@ -1761,7 +1829,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::max_frame_rate>},
     {.setting = S::anti_aliasing,
      .spec = changing(kit::levels("anti-aliasing", "Enhanced anti-aliasing",
-                                  LevelStrip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions>::stepper(),
+                                  LevelStrip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions, &anti_aliasing_word>::stepper(),
                                   level_width),
                       &anti_aliasing_hint, &lines<2>)},
     {.setting = S::screen_size,
@@ -1810,7 +1878,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::text_size>},
     {.setting = S::touch_drag,
      .spec = changing(kit::levels("touch-drag", "One-finger drag",
-                                  LevelStrip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions>::stepper(),
+                                  LevelStrip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions, &text_word<&touch_drag_text, TouchDrag>>::stepper(),
                                   touch_drag_level_width),
                       &touch_drag_hint, &lines<2>)},
     {.setting = S::touch_hold_delay,
@@ -1819,7 +1887,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::touch_hold_ms>},
     {.setting = S::touch_latches,
      .spec = changing(kit::levels("touch-latches", "QUEUE and ADD",
-                                  LevelStrip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions>::stepper(),
+                                  LevelStrip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions, &text_word<&touch_latches_text, TouchLatches>>::stepper(),
                                   touch_latches_level_width),
                       &touch_latches_hint, &lines<2>)},
     {.setting = S::touch_haptics,
@@ -1830,17 +1898,17 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                                   {"The minimap and the thumb controls on the", "right, the orders on the left."})},
     {.setting = S::touch_control_size,
      .spec = kit::levels("touch-control-size", "Control size",
-                         LevelStrip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions>::stepper(),
+                         LevelStrip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions, &table_word<control_size_words, ControlSize>>::stepper(),
                          control_size_level_width,
                          {"The size of the touch controls; the game's own", "screens keep theirs."})},
     {.setting = S::pad_scheme,
      .spec = changing(kit::levels("pad-scheme", "Scheme",
-                                  LevelStrip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions>::stepper(),
+                                  LevelStrip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions, &table_word<scheme_words, pad_controls::Scheme>>::stepper(),
                                   scheme_level_width),
                       &pad_scheme_hint, &lines<2>)},
     {.setting = S::pad_right_trackpad,
      .spec = changing(kit::levels("pad-right-trackpad", "Right trackpad",
-                                  LevelStrip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions>::stepper(),
+                                  LevelStrip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions, &table_word<right_trackpad_words, pad_controls::RightTrackpad>>::stepper(),
                                   right_trackpad_level_width),
                       &pad_right_trackpad_hint, &lines<1>)},
     {.setting = S::pad_pointer_speed,
@@ -1849,7 +1917,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::pad_pointer_speed>},
     {.setting = S::pad_acceleration,
      .spec = kit::levels("pad-acceleration", "Pointer acceleration",
-                         LevelStrip<pad_controls::Acceleration, 3, kAccelerationChoices, &E::pad_acceleration, kPadAccelerationCaptions>::stepper(),
+                         LevelStrip<pad_controls::Acceleration, 3, kAccelerationChoices, &E::pad_acceleration, kPadAccelerationCaptions, &table_word<acceleration_words, pad_controls::Acceleration>>::stepper(),
                          pad_acceleration_level_width,
                          {"A quick slide moves the pointer further.", {}})},
     {.setting = S::pad_glide,
@@ -1857,7 +1925,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                           {"The pointer keeps moving after a quick flick.", {}})},
     {.setting = S::pad_right_stick,
      .spec = changing(kit::levels("pad-right-stick", "Right stick",
-                                  LevelStrip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions>::stepper(),
+                                  LevelStrip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions, &table_word<right_stick_words, pad_controls::RightStick>>::stepper(),
                                   right_stick_level_width),
                       &pad_right_stick_hint, &lines<2>)},
     {.setting = S::pad_magnetism,
@@ -1865,7 +1933,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                               {"The stick pointer settles on a lone unit near it.", {}})},
     {.setting = S::pad_gyro,
      .spec = wide(kit::choice("pad-gyro", "Gyro pointer",
-                              DropDown<pad_controls::Gyro, 4, kGyroChoices, &E::pad_gyro, kGyroCaptions>::stepper(),
+                              DropDown<pad_controls::Gyro, 4, kGyroChoices, &E::pad_gyro, kGyroCaptions, &table_word<gyro_words, pad_controls::Gyro>>::stepper(),
                               {"Turning the controller fine-tunes the pointer.", {}}),
                   wide_choice_width)},
     {.setting = S::pad_gyro_speed,
@@ -1874,12 +1942,12 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::pad_gyro_speed>},
     {.setting = S::pad_haptics,
      .spec = kit::levels("pad-haptics", "Haptics",
-                         LevelStrip<pad_controls::Haptics, 3, kHapticsChoices, &E::pad_haptics, kPadHapticsCaptions>::stepper(),
+                         LevelStrip<pad_controls::Haptics, 3, kHapticsChoices, &E::pad_haptics, kPadHapticsCaptions, &table_word<haptics_words, pad_controls::Haptics>>::stepper(),
                          pad_haptics_level_width,
                          {"Small ticks and bumps felt through the controller.", {}})},
     {.setting = S::pad_prompts,
      .spec = wide(kit::choice("pad-prompts", "Button prompts",
-                              DropDown<pad_controls::Prompts, 6, kPromptsChoices, &E::pad_prompts, kPromptsCaptions>::stepper(),
+                              DropDown<pad_controls::Prompts, 6, kPromptsChoices, &E::pad_prompts, kPromptsCaptions, &table_word<prompts_words, pad_controls::Prompts>>::stepper(),
                               {"The button pictures the controls and rings show.", {}}),
                   choice_width)},
     {.setting = S::pad_left_handed,
@@ -1956,7 +2024,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .path_hint = true},
     {.setting = S::menu_scaling,
      .spec = changing(kit::levels("menu-scaling", "Menu scaling",
-                                  LevelStrip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions>::stepper(),
+                                  LevelStrip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions, &text_word<&menu_scaling_text, MenuScaling>>::stepper(),
                                   menu_scaling_level_width),
                       &menu_scaling_hint, &lines<2>)},
     {.setting = S::native_density,
@@ -1965,24 +2033,24 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .lock = &Locks::native_density},
     {.setting = S::explosion_flash,
      .spec = changing(kit::levels("explosion-flash", "Explosion flash",
-                                  LevelStrip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions>::stepper(),
+                                  LevelStrip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions, &table_word<explosion_flash_words, ExplosionFlash>>::stepper(),
                                   explosion_flash_level_width),
                       &explosion_flash_hint, &lines<2>)},
     {.setting = S::zoomed_out_units,
      .spec = changing(kit::levels("zoomed-out-units", "Zoomed out units",
-                                  LevelStrip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, offered_zoomed_out_units>::stepper(),
+                                  LevelStrip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, &zoomed_out_units_word, offered_zoomed_out_units>::stepper(),
                                   zoomed_out_units_level_width),
                       &zoomed_out_units_hint, &lines<2>),
      .copy = &copy_field<&E::zoomed_out_units>},
     {.setting = S::zoomed_out_after,
      .spec = changing(wide(kit::choice("zoomed-out-after", "After zoom",
-                                       DropDown<ZoomedOutAfter, 7, zoomed_out_afters, &E::zoomed_out_after, kZoomedOutAfterCaptions>::stepper()),
+                                       DropDown<ZoomedOutAfter, 7, zoomed_out_afters, &E::zoomed_out_after, kZoomedOutAfterCaptions, &table_word<zoomed_out_after_words, ZoomedOutAfter>>::stepper()),
                            choice_width),
                       &zoomed_out_after_hint, &lines<2>),
      .lock = &Locks::zoomed_out_after},
     {.setting = S::window_frame,
      .spec = changing(kit::levels("window-frame", "Window frame",
-                                  LevelStrip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions>::stepper(),
+                                  LevelStrip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions, &table_word<window_frame_words, WindowFrame>>::stepper(),
                                   window_frame_level_width),
                       &window_frame_hint, &lines<2>)},
     {.setting = S::hud_scaling,
@@ -2248,6 +2316,31 @@ void copy_row(Setting setting, const SettingsModel& to, const SettingsModel& fro
 
 std::string_view page_word(Page page) noexcept {
     return kPageWords[std::min(static_cast<std::size_t>(page), kPageWords.size() - 1)];
+}
+
+std::string word_form(std::string_view text, bool keep_dots) {
+    std::string word;
+    for (std::size_t at = 0; at < text.size();) {
+        const auto byte = static_cast<unsigned char>(text[at]);
+        const std::size_t bytes = std::max<std::size_t>(kit::character_bytes(text.substr(at)), 1);
+        at += bytes;
+        if (byte >= 'A' && byte <= 'Z')
+            word += static_cast<char>(byte - 'A' + 'a');
+        else if (
+            (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '-' ||
+            (keep_dots && byte == '.')
+        )
+            word += static_cast<char>(byte);
+        else
+            word += '-';
+    }
+    return word;
+}
+
+std::string
+choice_word(const kit::RowSpec<SettingsModel>& spec, const SettingsModel& model, int32_t at) {
+    const std::string id = word_form(kit::row_choice_id(spec, model, at), false);
+    return id.empty() ? std::to_string(at + 1) : id;
 }
 
 std::string_view status_line(const AccelerationStatus& acceleration, std::size_t line) noexcept {

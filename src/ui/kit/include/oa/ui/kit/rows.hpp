@@ -103,6 +103,10 @@ struct Stepper {
     /// Returns how many levels from the left a player may choose; null
     /// offers every level.
     int32_t (*offered)(const Model&){};
+    /// Returns a choice's item's, a level's or a stop's id, beside its
+    /// caption: the word automation names it by, of a-z, 0-9 and hyphens;
+    /// null gives none, and automation names it by its place from 1.
+    std::string (*id)(const Model&, int32_t){};
 };
 
 /// One row of a page, declared: its id, its English label and hints, its kind
@@ -153,6 +157,9 @@ struct RowSpec {
     int32_t Model::* index{};
     /// A choice's items for index, in English. They outlive the spec.
     std::span<const std::string_view> captions{};
+    /// Each of captions' items' id, beside it: the word automation names it
+    /// by, of a-z, 0-9 and hyphens. Empty gives none. They outlive the spec.
+    std::span<const std::string_view> choice_ids{};
     /// A choice's items, a strip's levels or a slider's stops, where index is null.
     Stepper<Model> stepper{};
     /// Returns what a value_and_button or a text row shows on its label line,
@@ -260,6 +267,30 @@ template <class Model>
     spec.index = index;
     spec.captions = captions;
     spec.hint = hint;
+    return spec;
+}
+
+/// Makes a row of a drop-down whose field holds the index of its item, each
+/// item with its id.
+///
+/// @param id the row's word
+/// @param label the label, in English
+/// @param index the field: the item's index among the captions
+/// @param captions the items, in English; they outlive the spec
+/// @param choice_ids each item's word, in the captions' order; they outlive the spec
+/// @param hint the hint's lines, in English
+/// @return the spec
+template <class Model>
+[[nodiscard]] constexpr RowSpec<Model> choice(
+    std::string_view id,
+    std::string_view label,
+    int32_t Model::* index,
+    std::span<const std::string_view> captions,
+    std::span<const std::string_view> choice_ids,
+    std::array<std::string_view, 2> hint = {}
+) noexcept {
+    RowSpec<Model> spec = choice(id, label, index, captions, hint);
+    spec.choice_ids = choice_ids;
     return spec;
 }
 
@@ -536,6 +567,22 @@ template <class Model>
     return spec.stepper.caption != nullptr ? spec.stepper.caption(model, at) : std::string();
 }
 
+/// Returns the id of a row's item, level or stop, as the spec gives it.
+///
+/// @param spec the row's spec
+/// @param model the model
+/// @param at the item, level or stop, from 0
+/// @return its id: choice_ids' for an index field, else the stepper's; empty when it has none
+template <class Model>
+[[nodiscard]] std::string
+row_choice_id(const RowSpec<Model>& spec, const Model& model, int32_t at) {
+    if (spec.index != nullptr)
+        return at >= 0 && static_cast<std::size_t>(at) < spec.choice_ids.size()
+                   ? std::string(spec.choice_ids[static_cast<std::size_t>(at)])
+                   : std::string();
+    return spec.stepper.id != nullptr ? spec.stepper.id(model, at) : std::string();
+}
+
 /// Returns how many levels from the left a strip offers.
 ///
 /// @param spec the row's spec
@@ -589,6 +636,9 @@ struct RowView {
     int32_t offered{};     ///< the levels a player may choose, from the left
     /// A switch's OFF and ON, a choice's items or a strip's levels, as shown.
     std::vector<std::string> captions{};
+    /// A choice's items' or a strip's levels' ids, in captions' order; an
+    /// empty one where the spec gives none (row_choice_id).
+    std::vector<std::string> choice_ids{};
     /// A slider's value text, a choice's field's text, or what a
     /// value_and_button or a text row shows, as shown.
     std::string value{};
@@ -662,8 +712,10 @@ view_of(const RowSpec<Model>& spec, const Model& model, const ShownText& shown) 
             view.value = shown_copy(shown, row_caption(spec, model, view.index));
             break;
         }
-        for (int32_t at = 0; at < view.count; ++at)
+        for (int32_t at = 0; at < view.count; ++at) {
             view.captions.push_back(shown_copy(shown, row_caption(spec, model, at)));
+            view.choice_ids.push_back(row_choice_id(spec, model, at));
+        }
         if (spec.kind == RowKind::choice && view.index >= 0 && view.index < view.count)
             view.value = view.captions[static_cast<std::size_t>(view.index)];
         break;
@@ -832,8 +884,10 @@ struct RowsState {
 /// <name_prefix>.<id> (a value_and_button row's <name_prefix>.<id>.<button
 /// id>; with no prefix, the id alone), of the row's kind (a value_and_button
 /// row's a button), taking steps unless it is a button or a link, enabled as
-/// its view says, in the state's group and clip. The enabled controls take
-/// Tab in the rows' order.
+/// its view says, in the state's group and clip. Its parts' words
+/// (Control::parts) are a strip's levels' or a drop-down's items' ids, or a
+/// row of buttons' buttons' words. The enabled controls take Tab in the
+/// rows' order.
 ///
 /// @param[in,out] list the display list
 /// @param placed the rows

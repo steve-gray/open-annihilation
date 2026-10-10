@@ -7,6 +7,8 @@
 #include "oa/ui/kit/input.hpp"
 
 #include "oa/present/game_text.hpp"
+#include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/looks.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -14,6 +16,9 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace oa::ui::kit {
 
@@ -253,6 +258,183 @@ centre_across(const Rect& from, const Rect& candidate, Direction direction) noex
         return false;
     }
     return word;
+}
+
+/// Tells whether a rectangle holds any point.
+///
+/// @param rect the rectangle
+/// @return true when it is wide and high
+[[nodiscard]] bool has_room(const Rect& rect) noexcept {
+    return rect.width > 0 && rect.height > 0;
+}
+
+/// One part of a control that takes a press of its own, as automation names it.
+struct Part {
+    std::string word;   ///< the word after its control's name
+    Rect rect{};        ///< where it lies, in points
+    bool inside{true};  ///< it lies inside its control, whose press area clips it
+    bool enabled{true}; ///< a press on it does something while its control takes one
+    bool checked{};     ///< it is the half, level or item chosen
+    std::string text;   ///< its caption, as shown
+};
+
+/// Returns the word a control names one of its parts by.
+///
+/// @param control the control
+/// @param place the part's place, from 0
+/// @return the control's word for it, else its place from 1
+[[nodiscard]] std::string part_word(const Control& control, std::size_t place) {
+    if (place < control.parts.size() && !control.parts[place].empty())
+        return control.parts[place];
+    return std::to_string(place + 1);
+}
+
+/// Returns the first item that draws a control in a role.
+///
+/// @param list the display list
+/// @param id the control
+/// @param role the role
+/// @return the item; null when none draws it so
+[[nodiscard]] const Item* drawn_as(const DisplayList& list, ControlId id, Role role) noexcept {
+    for (const Item& item : list.items)
+        if (item.control == id && item.role == role)
+            return &item;
+    return nullptr;
+}
+
+/// Returns a switch's halves: Off on the left, On on the right, as a press
+/// on its right half from its middle column turns it on.
+///
+/// @param area the switch
+/// @param look its state and captions
+/// @return the two halves
+[[nodiscard]] std::vector<Part> switch_halves(const Rect& area, const SwitchLook& look) {
+    const int32_t half = area.width / 2;
+    std::vector<Part> halves(2);
+    halves[0] = {
+        "off", {area.x, area.y, half, area.height}, true, true, !look.on, look.off_caption
+    };
+    halves[1] = {
+        "on",
+        {area.x + half, area.y, area.width - half, area.height},
+        true,
+        true,
+        look.on,
+        look.on_caption
+    };
+    return halves;
+}
+
+/// Returns a strip's levels: for each, the columns level_at finds it at.
+///
+/// @param control the strip's control, for its levels' words
+/// @param area the strip
+/// @param look its levels, their width, the one chosen and those offered
+/// @return one part per level, left to right
+[[nodiscard]] std::vector<Part>
+strip_levels(const Control& control, const Rect& area, const LevelsLook& look) {
+    const std::size_t count = look.captions.size();
+    std::vector<Part> levels;
+    for (std::size_t level = 0; level < count; ++level) {
+        Part part;
+        part.word = part_word(control, level);
+        part.rect = {area.x, area.y, 0, area.height};
+        part.enabled = level < look.offered;
+        part.checked = level == look.chosen;
+        part.text = look.captions[level];
+        levels.push_back(std::move(part));
+    }
+    if (count == 0)
+        return levels;
+    // Each column belongs to the level a press there chooses.
+    bool started = false;
+    std::size_t current = 0;
+    for (int32_t column = area.x; column < area.x + area.width; ++column) {
+        const std::size_t level = level_at(area, count, look.level_width, column);
+        Rect& rect = levels[level].rect;
+        if (!started || level != current)
+            rect.x = column;
+        rect.width = column + 1 - rect.x;
+        started = true;
+        current = level;
+    }
+    return levels;
+}
+
+/// Returns an open drop-down's items as its menu shows them.
+///
+/// @param control the drop-down's control, for its items' words
+/// @param list the display list, which holds the menu
+/// @return one part per item the menu shows, top to bottom; none without a menu
+[[nodiscard]] std::vector<Part> menu_items(const Control& control, const DisplayList& list) {
+    std::vector<Part> items;
+    for (const Item& item : list.items) {
+        const auto* look = std::get_if<ChoiceMenuLook>(&item.look);
+        if (item.role != Role::choice_menu || look == nullptr)
+            continue;
+        for (std::size_t place = 0; place < look->shown.size(); ++place) {
+            const int32_t index = look->first + static_cast<int32_t>(place);
+            Part part;
+            part.word = part_word(control, static_cast<std::size_t>(std::max(index, int32_t{0})));
+            part.rect = choice_item(item.rect, static_cast<int32_t>(place));
+            part.inside = false;
+            part.checked = index == look->chosen;
+            part.text = look->shown[place];
+            items.push_back(std::move(part));
+        }
+        break;
+    }
+    return items;
+}
+
+/// Returns the parts of a control that take a press of their own.
+///
+/// @param list the display list
+/// @param control the control
+/// @return its parts, in order; none for a control of one press
+[[nodiscard]] std::vector<Part> parts_of(const DisplayList& list, const Control& control) {
+    if (control.kind == ControlKind::buttons) {
+        std::vector<Part> buttons;
+        for (const Item& item : list.items) {
+            if (item.control != control.id || item.role != Role::button)
+                continue;
+            Part part;
+            part.word = part_word(control, buttons.size());
+            part.rect = item.rect;
+            part.text = item.text;
+            buttons.push_back(std::move(part));
+        }
+        return buttons;
+    }
+    if (const Item* drawn = drawn_as(list, control.id, Role::toggle))
+        if (const auto* look = std::get_if<SwitchLook>(&drawn->look))
+            return switch_halves(drawn->rect, *look);
+    if (const Item* drawn = drawn_as(list, control.id, Role::levels))
+        if (const auto* look = std::get_if<LevelsLook>(&drawn->look))
+            return strip_levels(control, drawn->rect, *look);
+    if (const Item* drawn = drawn_as(list, control.id, Role::choice))
+        if (const auto* look = std::get_if<ChoiceLook>(&drawn->look); look != nullptr && look->open)
+            return menu_items(control, list);
+    return {};
+}
+
+/// Returns a named control as automation_entries lists it.
+///
+/// @param control the control
+/// @param interaction the focus
+/// @return the entry
+[[nodiscard]] AutomationEntry entry_of(const Control& control, const Interaction& interaction) {
+    AutomationEntry entry;
+    entry.name = control.name;
+    entry.kind = control.kind;
+    entry.rect = control.rect;
+    entry.shown = in_view(control);
+    entry.enabled = control.enabled;
+    entry.focused = interaction.focus_shown && interaction.focused == control.id;
+    entry.checked = control.checked;
+    entry.text = control.text;
+    entry.focusable = control.focusable;
+    return entry;
 }
 
 } // namespace
@@ -687,19 +869,55 @@ int32_t wheel_offset(
 std::vector<AutomationEntry>
 automation_entries(const DisplayList& list, const Interaction& interaction) {
     std::vector<AutomationEntry> entries;
+    for (const Control& control : list.controls)
+        if (!control.name.empty())
+            entries.push_back(entry_of(control, interaction));
+    return entries;
+}
+
+std::vector<AutomationEntry>
+automation_parts(const DisplayList& list, const Interaction& interaction) {
+    // Each named control with its parts, before a control an item stands for
+    // is left out.
+    std::vector<std::pair<AutomationEntry, std::vector<AutomationEntry>>> listed;
+    std::vector<std::string> part_names;
     for (const Control& control : list.controls) {
         if (control.name.empty())
             continue;
-        AutomationEntry entry;
-        entry.name = control.name;
-        entry.kind = control.kind;
-        entry.rect = control.rect;
-        entry.shown = in_view(control);
-        entry.enabled = control.enabled;
-        entry.focused = interaction.focus_shown && interaction.focused == control.id;
-        entry.checked = control.checked;
-        entry.text = control.text;
-        entries.push_back(std::move(entry));
+        AutomationEntry entry = entry_of(control, interaction);
+        const Rect area = press_area(control);
+        if (has_room(area))
+            entry.rect = area;
+        std::vector<AutomationEntry> parts;
+        for (Part& part : parts_of(list, control)) {
+            AutomationEntry added;
+            added.name = control.name + "." + part.word;
+            added.kind = control.kind;
+            added.rect = part.rect;
+            added.shown = has_room(part.rect);
+            if (part.inside) {
+                // A part shows, and is pressed, where its control's press area holds it.
+                const Rect reached = intersect(part.rect, area);
+                added.shown = has_room(reached);
+                if (added.shown)
+                    added.rect = reached;
+            }
+            added.enabled = control.enabled && part.enabled;
+            added.checked = part.checked;
+            added.text = std::move(part.text);
+            added.part = true;
+            part_names.push_back(added.name);
+            parts.push_back(std::move(added));
+        }
+        listed.emplace_back(std::move(entry), std::move(parts));
+    }
+    std::vector<AutomationEntry> entries;
+    for (auto& [entry, parts] : listed) {
+        // A control the screen made of an open drop-down's item is that item.
+        if (std::find(part_names.begin(), part_names.end(), entry.name) == part_names.end())
+            entries.push_back(std::move(entry));
+        for (AutomationEntry& part : parts)
+            entries.push_back(std::move(part));
     }
     return entries;
 }

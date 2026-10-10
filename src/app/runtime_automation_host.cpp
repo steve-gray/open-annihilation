@@ -7,6 +7,7 @@
 #include "oa/app/automation_host.hpp"
 
 #include "device_state.hpp"
+#include "oa_layer.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/gui_input.hpp"
@@ -256,7 +257,27 @@ struct AutomationHostAccess {
             game.screen_ != Screen::loading && !game.frame_owned_by_package()
         )
             frontend_controls(game, *controls);
+        layer_controls(game, *controls);
         stacked_dialog_controls(*controls);
+    }
+
+    /// Puts the controls of Open Annihilation's own screens (the OA layer)
+    /// before the others: the OA button and the screens that show take the
+    /// pointer over the screen and its panels. While one of them takes every
+    /// input, the controls under it are listed disabled.
+    ///
+    /// @param game the runtime
+    /// @param[in,out] controls the screen's controls, which the layer's go before
+    static void layer_controls(Runtime& game, std::vector<AutomationControl>& controls) {
+        if (!game.oa_layer_)
+            return;
+        const OaLayer& layer = *game.oa_layer_;
+        if (layer.modal_shown(game.screen_ == Screen::match))
+            for (AutomationControl& control : controls)
+                control.enabled = false;
+        std::vector<AutomationControl> own;
+        layer.automation_controls(own);
+        controls.insert(controls.begin(), own.begin(), own.end());
     }
 
     /// Puts the controls of the top stacked dialog (a message box such as

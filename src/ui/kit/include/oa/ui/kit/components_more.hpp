@@ -39,6 +39,14 @@ inline constexpr int32_t greatest_notice_height = 440;
 inline constexpr ControlId notice_ok = 0;
 /// A notice's button that opens its folder.
 inline constexpr ControlId notice_open = 1;
+/// A notice's or a question's text as a control that takes no press, which
+/// automation reads: past every button's number.
+inline constexpr ControlId notice_body = 3;
+
+/// The word a notice is named by unless it gives its own (Notice::word).
+inline constexpr std::string_view notice_word = "notice";
+/// The word a question is named by unless it gives its own (Question::word).
+inline constexpr std::string_view question_word = "prompt";
 
 /// The most buttons a question has. Its buttons are numbered from 0, left to right.
 inline constexpr std::size_t most_question_buttons = 3;
@@ -82,6 +90,9 @@ struct Notice {
     int32_t finger_shift_x{};
     int32_t finger_shift_y{}; ///< the rows a finger's held press was moved by, as finger_shift_x
     std::string ok_caption{"OK"}; ///< OK's caption
+    /// Its name to automation, which its controls' names start with: a word
+    /// of a-z, 0-9 and hyphens; any other is notice_word. Nothing draws it.
+    std::string word{notice_word};
 };
 
 /// What an event on a notice asks of its host.
@@ -124,6 +135,9 @@ struct Question {
     /// took (question_finger_down); its moves and its release are moved as far.
     int32_t finger_shift_x{};
     int32_t finger_shift_y{}; ///< the rows, as finger_shift_x
+    /// Its name to automation, which its controls' names start with: a word
+    /// of a-z, 0-9 and hyphens; any other is question_word. Nothing draws it.
+    std::string word{question_word};
 };
 
 /// What an event on a question asks of its host.
@@ -219,6 +233,18 @@ place_question(const Question& question, const Measure& regular, const Measure& 
 /// @return the placed question
 [[nodiscard]] PlacedQuestion place_question(const Question& question, const Fonts* fonts);
 
+/// Returns the word a notice is named by to automation.
+///
+/// @param notice the notice
+/// @return its word when that is a word of a-z, 0-9 and hyphens; else notice_word
+[[nodiscard]] std::string_view notice_word_of(const Notice& notice) noexcept;
+
+/// Returns the word a question is named by to automation.
+///
+/// @param question the question
+/// @return its word when that is a word of a-z, 0-9 and hyphens; else question_word
+[[nodiscard]] std::string_view question_word_of(const Question& question) noexcept;
+
 /// Returns a notice's text as it is shown: the caller's look-up of a text in
 /// the language shown. The kit never looks a text up itself.
 using LookUp = std::function<std::string_view(std::string_view)>;
@@ -226,8 +252,13 @@ using LookUp = std::function<std::string_view(std::string_view)>;
 /// Returns a notice's display list: its face, its header with the title, its
 /// lines, its footer band, the open button and OK each followed by the focus
 /// ring when the keys mark it, and its edge, in that order. Its controls are
-/// OK and the open button, tested in that order and named notice.ok and
-/// notice.open; Tab goes left to right, the open button then OK.
+/// OK and the open button, tested in that order and named <word>.ok and
+/// <word>.open (its sound word, notice_word_of), then its text; Tab goes left
+/// to right, the open button then OK. Its text is the control notice_body,
+/// named <word>.body, of kind area, neither enabled nor focusable, so that no
+/// press, finger or key reaches it: it lies over the title and the lines that
+/// fit, and its text is the title, the paragraphs and the failure, when there
+/// is one, one a line, as shown.
 ///
 /// @param notice the notice
 /// @param fonts the fonts it is drawn in; null to estimate widths
@@ -240,9 +271,10 @@ notice_list(const Notice& notice, const Fonts* fonts, const LookUp& look_up = {}
 /// its lines, its footer band, its progress bar, each button left to right
 /// followed by the focus ring when the keys mark it, and its edge, in that
 /// order. Its controls are its buttons, numbered, tested and in Tab order left
-/// to right, each named prompt.<id>, or prompt.button-1 to prompt.button-3 by
-/// its place from the left when its id is empty or not a word of a-z, 0-9 and
-/// hyphens.
+/// to right, each named <word>.<id> (its sound word, question_word_of), or
+/// <word>.button-1 to <word>.button-3 by its place from the left when its id
+/// is empty or not a word of a-z, 0-9 and hyphens; then its text, as a
+/// notice's is (notice_list), named <word>.body.
 ///
 /// @param question the question
 /// @param fonts the fonts it is drawn in; null to estimate widths

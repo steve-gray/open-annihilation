@@ -361,6 +361,8 @@ ModSummary read_mod_summary(const fs::path& folder) {
                 summary.version = std::move(*version);
             if (auto description = scalar_text(root, "description"))
                 summary.description = std::move(*description);
+            if (auto id = scalar_text(root, "id"))
+                summary.id = std::move(*id);
         }
     }
 

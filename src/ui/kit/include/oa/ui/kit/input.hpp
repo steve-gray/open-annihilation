@@ -268,16 +268,21 @@ struct WheelCarry {
     WheelCarry& carry, float notches, int32_t step, int32_t offset, int32_t limit
 ) noexcept;
 
-/// One named control, as automation reads it.
+/// One named control, or one part of it, as automation reads it.
 struct AutomationEntry {
     std::string name;   ///< its name
-    ControlKind kind{}; ///< what it is
+    ControlKind kind{}; ///< what it is; a part's is its control's
     Rect rect{};        ///< where it lies, in points
     bool shown{};       ///< some of its press area is in view
     bool enabled{};     ///< a press can reach it
     bool focused{};     ///< the focus is shown on it
     bool checked{};     ///< a switch that is on, or a chosen row
     std::string text;   ///< its caption or its value
+    bool focusable{};   ///< the arrows and Tab can stop on it; a part never
+    /// It is a part of the control before it that takes a press of its own:
+    /// a switch's half, a strip's level, a row of buttons' button or an open
+    /// drop-down's item (automation_parts).
+    bool part{};
 };
 
 /// Returns the named controls, in list order.
@@ -290,6 +295,36 @@ struct AutomationEntry {
 /// @return one entry per named control
 [[nodiscard]] std::vector<AutomationEntry>
 automation_entries(const DisplayList& list, const Interaction& interaction);
+
+/// Returns the named controls as automation presses them: each control, in
+/// list order, followed by the parts of it a press reaches on their own.
+///
+/// A control's rectangle is its press area while any of it shows, so that a
+/// press at its centre reaches it; otherwise where it lies. Its parts take
+/// their places from the components' own geometry, so a part is pressed
+/// where it is drawn:
+/// - a control a switch item draws (Role::toggle): its halves, named
+///   <name>.off and <name>.on, each half the switch, the On half's the
+///   wider by the odd column; checked on the half the switch shows;
+/// - a strip of levels (Role::levels): each level where level_at finds it,
+///   checked on the chosen level and enabled only where it is offered;
+/// - a row of buttons (ControlKind::buttons): each button the list draws for it;
+/// - a drop-down whose menu is open (Role::choice, ChoiceLook::open): each
+///   item the menu (Role::choice_menu) shows, at choice_item, checked on the
+///   chosen item. A control of the list that bears such an item's name is
+///   that item, and is listed once, as the part.
+///
+/// A part is named <name>.<word>, its word the control's parts word for it,
+/// else its place from 1; a switch's are off and on. A part's kind is its
+/// control's; it is never focusable or focused, and is enabled while its
+/// control is. A part inside its control shows where the control's press
+/// area holds it, and its rectangle is that share while it has room.
+///
+/// @param list the display list
+/// @param interaction the focus, for which control is focused
+/// @return one entry per named control and per part
+[[nodiscard]] std::vector<AutomationEntry>
+automation_parts(const DisplayList& list, const Interaction& interaction);
 
 /// Returns the control of a name.
 ///

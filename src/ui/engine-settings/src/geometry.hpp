@@ -1137,28 +1137,6 @@ inline constexpr int32_t first_menu_item_control = question_no_control - 1;
     return first_menu_item_control - item;
 }
 
-/// Returns what the dialog draws, in the order it draws it, and its
-/// controls, in the order a press tries them, each named for automation:
-/// the window's face, the header, the section list, the open section's
-/// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
-/// list and footer), the footer band and buttons, the edge, an open
-/// drop-down list and the question. Tab follows the declared order: the
-/// open section's rows that take a change (on Developer, then its list's
-/// rows, Show Active Only and, while Developer Mode is on, Restore profile
-/// values; on Mods, each row followed by its ROLL BACK, then OPEN MODS
-/// FOLDER), the footer's buttons, then the sections' entries. A row's
-/// control lies across the section at its control's line, so that the
-/// arrows keep to the column of rows, and a press reaches the control
-/// itself where the view shows it. The controls that take Left and Right
-/// as steps say so; the open section's rows, Developer's list and Mods'
-/// list each have a scroll group, and the entries and the footer none.
-///
-/// @param dialog the dialog
-/// @param fonts the fonts it is drawn in; null measures texts at
-///     estimated_character_width a character
-/// @return the display list
-[[nodiscard]] kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts);
-
 /// Returns the offset nearest the open one that shows a row whole: from its
 /// line to the line under it, or for the last row the section's end.
 ///
