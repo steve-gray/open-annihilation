@@ -200,6 +200,22 @@ worked out against the base game and against each mod, per map. A pack whose
 map clashes with the base game itself is refused when it is installed. A
 clash with one mod only greys that map in the pickers, with the reason.
 
+`oa-tool check` of a `.oamap` asks for `--game-dir`, the folder the game
+would play, and checks the pack against that base game. Each
+`--mod FOLDER[=KEY]` adds a target after it, in the order given. The key
+after the last `=` is kept. Without one, a catalogue origin record in the
+folder supplies `id@release`, such as `ridge@28`. A folder with no release
+uses the profile's id, and the check warns that the key has no release.
+
+For each map and each target the check builds the store the game would:
+the mod's folder first, the game's archives mounted, and that profile's
+data layout. It mounts that one map from the pack, runs the four rules,
+and unmounts it before the next map. A map that does not fit `ta-3.1c`
+refuses the pack. A clash with a mod is reported, and the pack is still
+accepted. Text prints one line per map and target, then each failure.
+JSON adds `maps`, and each map's `compatible` object lists `ta-3.1c` and
+then the mods.
+
 **Clean** is policy, not an engine check. No file of a pack may be a file of
 the original game. This version does not check that. The publisher's review
 keeps those files out until a check is built; the check is deferred to the

@@ -239,7 +239,8 @@ void test_help() {
           "oa-tool preview ARCHIVE PCX_ENTRY OUTPUT.ppm|OUTPUT.png\n",
           "oa-tool decode-pcx INPUT.pcx OUTPUT.ppm|OUTPUT.png\n",
           "oa-tool pack FOLDER [--out FILE] [--force] [--game-dir DIR]\n",
-          "oa-tool check FILE [--game-dir DIR] [--accept-unimplemented-hacks] [--json]\n"}) {
+          "oa-tool check FILE [--game-dir DIR] [--mod FOLDER[=KEY]]... "
+          "[--accept-unimplemented-hacks] [--json]\n"}) {
         OA_CHECK(contains(listed.out, line));
     }
 
