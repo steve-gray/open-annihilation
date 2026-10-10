@@ -8144,13 +8144,16 @@ std::vector<int32_t> columns_of(const Canvas& canvas, int32_t y, renderer::Rgb c
     return columns;
 }
 
-/// Returns the controls Tab moves through from no focus, once round.
+/// Returns the controls Tab moves through from no focus, once round, at
+/// most 200.
 ///
 /// @param dialog the dialog, its focus not shown
 /// @return each control the focus stops on, in order
 std::vector<int32_t> tab_round(settings::Dialog dialog) {
     std::vector<int32_t> order;
-    while (settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw) {
+    for (int32_t press = 0; press < 200; ++press) {
+        if (settings::dialog_key(dialog, DialogKey::tab) != DialogAction::redraw)
+            break;
         if (!order.empty() && dialog.focused == order.front())
             break;
         order.push_back(dialog.focused);
