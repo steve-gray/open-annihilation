@@ -66,6 +66,8 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/renderer_records.hpp"
 #include "oa/ui/frontend_renderer/scroll_bars.hpp"
 #include "oa/present/world_renderer/world_radar.hpp"
@@ -4080,6 +4082,50 @@ class Runtime final : public menu::Host,
     /// @param registry the registry id
     /// @return the ID, or nothing when it is off or the generator cannot be read
     [[nodiscard]] std::optional<std::string> content_install_id(std::string_view registry);
+
+    /// Queues one catalogue package for download.
+    ///
+    /// The target comes from the current snapshot. A registry whose install
+    /// ID is required has one made or read first, and the download is refused
+    /// when that ID is off. Nothing is fetched on this thread.
+    ///
+    /// @param registry the registry id
+    /// @param key the package key
+    /// @param reason why the player asked
+    /// @param[out] why why it was not queued; may be null
+    /// @return the queue item, or nothing when it was refused
+    [[nodiscard]] std::optional<uint64_t> queue_download(
+        std::string_view registry,
+        std::string_view key,
+        oa::app::content::DownloadReason reason,
+        std::string* why
+    );
+
+    /// Returns the download queue, starting the content service on first use.
+    ///
+    /// @return the queue
+    [[nodiscard]] oa::app::content::Downloads& content_downloads();
+
+    /// Stops downloads for a match, before the match loads anything.
+    void pause_content_for_match();
+
+    /// Reads every registry's install ID again and tells the queue.
+    ///
+    /// Settings › Downloads calls this after it resets an ID or turns one on
+    /// or off. No ID is made here.
+    void content_install_ids_changed();
+
+    /// Returns the folder that holds downloaded packages.
+    ///
+    /// @return the downloads folder; empty when the game has no data folder
+    [[nodiscard]] std::filesystem::path content_downloads_folder() const;
+
+    /// Removes downloaded packages no queued item is using.
+    ///
+    /// This is the player's EMPTY in Settings › Downloads.
+    ///
+    /// @return what was removed, and how many files were left in use
+    oa::app::content::EmptyResult empty_content_downloads();
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
