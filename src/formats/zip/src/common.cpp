@@ -104,6 +104,10 @@ const char* zip_status_message(ZipStatus status) noexcept {
         return "an entry's data overlaps another entry or the central directory";
     case ZipStatus::bad_name_encoding:
         return "an entry name marked UTF-8 is not UTF-8";
+    case ZipStatus::entry_open:
+        return "a call is out of order";
+    case ZipStatus::wrong_size:
+        return "an entry ended with other than its declared size";
     }
     return "unknown zip status";
 }

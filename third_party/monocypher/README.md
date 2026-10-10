@@ -1,0 +1,22 @@
+# Monocypher
+
+Ed25519 signatures from Monocypher, which the engine uses to check that a
+downloaded catalogue is the one the maintainers signed.
+
+- Source: <https://monocypher.org/download/monocypher-4.0.2.tar.gz>, version
+  4.0.2, SHA-256
+  `38d07179738c0c90677dba3ceb7a7b8496bcfea758ba1a53e803fed30ae0879c`.
+  The files copied from that release are `monocypher.c` (SHA-256
+  `afe2b098c8569577a84488e0b98d276d1fba6506adea68bb9241a52111734c59`),
+  `monocypher.h` (SHA-256
+  `f78bb31255cfb7beba66afd2137f5194c8a025cf40488b6cc1e295234d43f374`),
+  `monocypher-ed25519.c` (SHA-256
+  `7c9b16056cbd27521919e8a6f56a228808b9e718afc42e3d33f28c08e5abdee2`),
+  `monocypher-ed25519.h` (SHA-256
+  `bd546edcd468d64e28caa3dbf4b1d6bfad7435c0ce994723fd81aae26405121b`)
+  and `LICENSE`, the release's `LICENCE.md` (SHA-256
+  `5f8360e4c06ddcc584bdb4b210c6af824c4bb301e6a9a521869b6d90795ca4b3`).
+- Licence: BSD-2-Clause, chosen from the dual licence in `LICENSE`
+  (BSD-2-Clause or CC0-1.0).
+
+The files are unchanged.
