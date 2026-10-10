@@ -8,6 +8,7 @@
 // pause, speed and leave. --net-loopback-check hosts and joins in one
 // process over 127.0.0.1, runs the in-game team panels over the session
 // and compares both worlds after a settled run.
+#include "oa/app/pack_map_source.hpp"
 #include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
@@ -1732,6 +1733,7 @@ void NetworkPlay::net_bind_multiplayer() {
     bind_profile_rules();
     if (net_->connected)
         mp::multiplayer_bind_net(nm::session_lobby_net(&net_->connection));
+    mp::multiplayer_bind_map_source(oa::app::pack_map_source(runtime_));
     if (net_options().check_host_not_found)
         mp::multiplayer_bind_clock({nullptr, [](void*) { return host_not_found_clock_ms(); }});
     mp::multiplayer_bind_player_timeout(net_launch_switches().net_timeout_seconds);

@@ -285,6 +285,16 @@ struct LobbyMaps {
     const data::campaign::CampaignFile* (*map_context)(void* context){};
     // Bytes of a map file at an offset; false when fewer are there.
     bool (*read_map)(void* context, const char* path, uint32_t offset, void* out, uint32_t size){};
+    /// Why the named map was refused the last time it was chosen.
+    ///
+    /// Null, or a null or empty result, means the map was not refused. Set
+    /// this by member name after the positional binding: later members are
+    /// appended here, and a positional list would assign them.
+    ///
+    /// @param context LobbyMaps.context
+    /// @param name the map's name
+    /// @return the reason, valid until the next choice; null when there is none
+    const char* (*refusal)(void* context, const char* name){};
 };
 
 /// Returns the memory, in MB, a map needs by the size of its terrain file.
