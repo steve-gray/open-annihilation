@@ -38,6 +38,21 @@ game's own default, so that a check plays the same on every machine. 3.1c
 takes its language from the command line or the registry and never asks
 the operating system; the engine differs there on purpose.
 
+## Language names before their pack
+
+A language's own name, and the notice that its pack is not installed yet,
+are drawn before that pack is installed. The endonym face,
+`NotoSansCJKsc-Bold-Endonyms.otf`, is a cut of Noto Sans CJK SC Bold that
+holds those names and the notice's lines. It travels with the game, so the
+list can show 简体中文, and the names the catalogue may grow into, while
+the language's own pack is absent. The sans faces draw the Latin and
+Cyrillic names. The face is sized as the CJK face is, and it keeps that
+face's rows, so a line does not move.
+
+To add a name, add its line to `tools/text-fonts/endonyms.txt`, run
+`python3 tools/bootstrap_text_fonts.py --fonts-only`, and put the SHA-256
+and the character count it prints into that script.
+
 ## What is shown in it
 
 Everything comes from the game data, read as 3.1c reads it for its
