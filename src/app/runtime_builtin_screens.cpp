@@ -707,9 +707,10 @@ void Runtime::register_screens() {
     for (uint32_t index = 0; index < screens_.overlay_count; ++index)
         if (!holds_overlay(built_in, screens_.overlays[index]))
             extension_overlays_.push_back(screens_.overlays[index]);
-    // The OA button and the settings dialog, on the main menu and in a match.
-    register_engine_settings_overlays();
-    register_engine_settings_match_overlay();
+    // The main menu's OA button, and the OA layer, which hosts the settings
+    // on the main menu and in a match with the in-game menu's OA button.
+    register_engine_settings_button();
+    register_oa_layer();
     // The notice of the saved games' move, over the main menu.
     register_saves_notice_overlay();
     register_mod_install_overlay();

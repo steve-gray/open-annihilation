@@ -7,6 +7,7 @@
 
 #include "engine_settings_match_host.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/runtime.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
@@ -127,14 +128,16 @@ void Runtime::open_engine_settings_in_match(settings::DialogKind kind) {
         if (!ingame_menu_column_shown())
             return;
     }
-    // The dialog is drawn and fed from engine_settings_dialog().
+    // The dialog is drawn and fed from engine_settings_dialog(), as the OA
+    // layer's settings screen. A settings screen whose dialog closed outside
+    // its events goes first.
+    if (oa_layer().find("settings") != nullptr) {
+        oa_layer().close_above("settings");
+        oa_layer().close_top();
+    }
     open_engine_settings_dialog(kind);
     play_ui_sound(kOpenSound, 0);
-    auto& host = engine_settings_match_host();
-    host.dialog_open = true;
-    host.button_hovered = false;
-    host.button_pressed = false;
-    ++host.revision;
+    push_settings_screen(true);
 }
 
 settings::Locks Runtime::engine_settings_locks() const {

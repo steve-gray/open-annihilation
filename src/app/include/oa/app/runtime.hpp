@@ -3699,9 +3699,10 @@ class Runtime final : public menu::Host,
 
     // The Open Annihilation settings (oa/ui/engine_settings.hpp): read at
     // start and put in effect (runtime_engine_settings.cpp), and the dialog
-    // that changes them, opened from the OA button on the main menu
-    // (runtime_engine_settings_menu.cpp) and in the in-game menu's column
-    // (runtime_engine_settings_match.cpp), with Cmd+, on macOS or Ctrl+,
+    // that changes them, a screen of the OA layer (oa_layer.cpp), opened
+    // from the OA button on the main menu (runtime_engine_settings_menu.cpp)
+    // and in the in-game menu's column (oa_layer.cpp,
+    // runtime_engine_settings_match.cpp), with Cmd+, on macOS or Ctrl+,
     // elsewhere, and from the macOS application menu's Settings… item
     // (runtime_engine_settings_app_menu.cpp).
 
@@ -3819,7 +3820,9 @@ class Runtime final : public menu::Host,
     ///         empty picture, which draws the OA mark, when it cannot be decoded
     [[nodiscard]] oa::ui::frontend_renderer::RgbaPicture engine_settings_icon();
 
-    /// Returns the meaning a key has in the dialog.
+    /// Returns the meaning a key has in the dialog's notices and prompts: the
+    /// OA layer's (layer_key), for the notices and prompts that map their
+    /// own keys.
     ///
     /// @param key SDL keycode
     /// @param modifiers SDL_Keymod bits
@@ -4280,11 +4283,12 @@ class Runtime final : public menu::Host,
     /// @return the host
     EngineSettingsMenuHost& engine_settings_menu_host();
 
-    /// Registers the main menu's overlays: the OA button under the
-    /// extensions' overlays and the dialog over them.
-    void register_engine_settings_overlays();
+    /// Registers the main menu's OA button: an overlay under the extensions'
+    /// overlays, drawn into the main menu's picture.
+    void register_engine_settings_button();
 
-    /// Opens the dialog over the darkened main menu.
+    /// Opens the dialog over the darkened main menu, as the OA layer's
+    /// settings screen.
     void open_engine_settings_from_menu();
 
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
@@ -4472,8 +4476,9 @@ class Runtime final : public menu::Host,
     /// dialog beside the in-game menu's column.
     void register_engine_settings_match_overlay();
 
-    /// Opens the dialog beside the darkened in-game menu, opening the menu
-    /// first from play; a game played alone stays paused, a shared game runs on.
+    /// Opens the dialog beside the darkened in-game menu, as the OA layer's
+    /// settings screen, opening the menu first from play; a game played alone
+    /// stays paused, a shared game runs on.
     ///
     /// @param kind which settings it shows; the mod options only while the
     ///     profile turns ui.options-dialog on

@@ -8,6 +8,7 @@
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/runtime.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -35,9 +36,6 @@ constexpr int32_t kButtonInset = 12;
 /// The button overlay's z: under the extensions' overlays, which draw over
 /// the button and see input before it.
 constexpr int16_t kButtonOverlayZ = -100;
-/// The dialog overlay's z: over the extensions' overlays, under the
-/// frontend's message boxes.
-constexpr int16_t kDialogOverlayZ = 100;
 /// The sound the OA button and OK play.
 constexpr std::string_view kOpenSound = "Options";
 /// The sound Cancel plays.
@@ -102,13 +100,9 @@ int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*)
     auto& runtime = *static_cast<Runtime*>(context->host);
     auto& host = runtime.engine_settings_menu_host();
     const auto& input = *context->input;
-    if (host.latched_key != 0 && input.key == host.latched_key) {
-        if (input.kind == ScreenInputKind::key_up)
-            host.latched_key = 0;
-        if (input.kind == ScreenInputKind::key_down || input.kind == ScreenInputKind::key_up)
-            return 1;
-    }
-    if (host.dialog_shown || !button_shown(runtime)) {
+    // Under a modal screen of the OA layer the button sees no input: the
+    // layer takes it first.
+    if (runtime.oa_layer().modal_shown(false) || !button_shown(runtime)) {
         host.button_hovered = false;
         host.button_pressed = false;
         return 0;
@@ -154,7 +148,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         return;
     const auto& host = runtime.engine_settings_menu_host();
     auto look = settings::ButtonLook::idle;
-    if (!host.dialog_shown && host.button_hovered)
+    if (!runtime.oa_layer().modal_shown(false) && host.button_hovered)
         look = host.button_pressed ? settings::ButtonLook::pressed : settings::ButtonLook::hovered;
     const auto rect = button_rect(runtime);
     settings::draw_oa_button(
@@ -284,7 +278,7 @@ void Runtime::EngineSettingsMenuHost::dialog_draw(ScreenContext* context, void*)
     );
 }
 
-void Runtime::register_engine_settings_overlays() {
+void Runtime::register_engine_settings_button() {
     OverlayDesc button{};
     button.name = "engine_settings_button";
     button.screen = screen_id(Screen::main_menu);
@@ -294,16 +288,6 @@ void Runtime::register_engine_settings_overlays() {
     // A refused overlay is recorded in the registry, and register_screens
     // reports it once every screen and overlay is in.
     overlay_register(&screens_, &button);
-    // On every screen, so that its tick closes the dialog when another screen
-    // replaces the main menu; it takes input and draws on the main menu only.
-    OverlayDesc dialog{};
-    dialog.name = "engine_settings_menu_dialog";
-    dialog.screen = kScreenAny;
-    dialog.z = kDialogOverlayZ;
-    dialog.event = EngineSettingsMenuHost::dialog_event;
-    dialog.tick = EngineSettingsMenuHost::dialog_tick;
-    dialog.draw = EngineSettingsMenuHost::dialog_draw;
-    overlay_register(&screens_, &dialog);
 }
 
 void Runtime::open_engine_settings_from_menu() {
@@ -313,10 +297,16 @@ void Runtime::open_engine_settings_from_menu() {
         oa::ui::frontend_dialogs::dialog_count() != 0 || engine_settings_dialog() != nullptr ||
         saves_notice_shown() || engine_settings_fonts() == nullptr)
         return;
-    // The dialog is drawn and fed from engine_settings_dialog().
+    // The dialog is drawn and fed from engine_settings_dialog(), as the OA
+    // layer's settings screen, over every other screen of the layer. A
+    // settings screen whose dialog closed outside its events goes first.
+    if (oa_layer().find("settings") != nullptr) {
+        oa_layer().close_above("settings");
+        oa_layer().close_top();
+    }
     open_engine_settings_dialog();
+    push_settings_screen(false);
     auto& host = engine_settings_menu_host();
-    host.dialog_shown = true;
     host.button_hovered = false;
     host.button_pressed = false;
     play_ui_sound(kOpenSound, 0);

@@ -5,6 +5,7 @@
 // the dialog's session that both hosts share.
 
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/prompts.hpp"
@@ -1306,39 +1307,7 @@ oa::ui::frontend_renderer::RgbaPicture Runtime::engine_settings_icon() {
 
 std::optional<settings::DialogKey>
 Runtime::engine_settings_dialog_key(uint32_t key, uint16_t modifiers) noexcept {
-    switch (key) {
-    case SDLK_RETURN:
-        return settings::DialogKey::enter;
-    case SDLK_ESCAPE:
-        return settings::DialogKey::escape;
-    case SDLK_UP:
-        return settings::DialogKey::up;
-    case SDLK_DOWN:
-        return settings::DialogKey::down;
-    case SDLK_LEFT:
-        return settings::DialogKey::left;
-    case SDLK_RIGHT:
-        return settings::DialogKey::right;
-    case SDLK_SPACE:
-        return settings::DialogKey::space;
-    case SDLK_TAB:
-        return (modifiers & SDL_KMOD_SHIFT) != 0 ? settings::DialogKey::back_tab
-                                                 : settings::DialogKey::tab;
-    case SDLK_PAGEUP:
-        return settings::DialogKey::page_up;
-    case SDLK_PAGEDOWN:
-        return settings::DialogKey::page_down;
-    case SDLK_HOME:
-        return settings::DialogKey::home;
-    case SDLK_END:
-        return settings::DialogKey::end;
-    case SDLK_Y:
-        return settings::DialogKey::yes;
-    case SDLK_N:
-        return settings::DialogKey::no;
-    default:
-        return std::nullopt;
-    }
+    return layer_key(key, modifiers);
 }
 
 void Runtime::release_unsaved_unit_limit() {
