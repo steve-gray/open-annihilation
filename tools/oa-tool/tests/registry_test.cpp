@@ -597,11 +597,14 @@ void test_bad_hash(
     OA_CHECK(!flipped.empty());
     if (!flipped.empty())
         flipped[0] ^= 0x01;
+    const std::string got = hex_of(flipped);
     server.server.serve_bytes("/v1/p/" + ridge.hex + ".oamod", std::move(flipped));
     const fs::path dest = scratch / "bad-hash";
     const Captured refused = mirror_at(server.url("/registry.yaml"), dest);
     exited("bad hash", refused, oa::tool::exit_failed);
-    OA_CHECK(contains(refused.err, "the file is not the one the catalogue named"));
+    OA_CHECK(contains(refused.err, "the file's SHA-256 is " + got));
+    OA_CHECK(contains(refused.err, "; the catalogue names " + ridge.hex));
+    OA_CHECK(!contains(refused.err, "the file is not the one the catalogue named"));
     OA_CHECK(!fs::exists(dest / "v1" / "p" / (ridge.hex + ".oamod")));
     OA_CHECK(!fs::exists(dest / "v1" / "p" / (ridge.hex + ".oamod.part")));
     OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
@@ -771,6 +774,207 @@ void test_tokens(
     catalogue_host.expect_loopback();
 }
 
+/// One direct registry that lists `package` only, served on 127.0.0.1.
+struct ServedPackage {
+    fs::path root;
+    Fixture server;
+
+    ServedPackage(
+        const fs::path& scratch,
+        std::string_view name,
+        const fs::path& origin,
+        const Packed& package,
+        const fs::path& key,
+        const fs::path& pass
+    )
+        : root(scratch / name), server(root) {
+        copy_tree(origin, root);
+        if (!publish_catalogue(root, 1, {package}, key, pass))
+            return;
+        retarget(root / "registry.yaml", server.base());
+    }
+};
+
+void test_named_refusals(
+    const fs::path& scratch,
+    const fs::path& origin,
+    const Packed& vale,
+    const fs::path& key,
+    const fs::path& pass
+) {
+    {
+        ServedPackage served(scratch, "unnamed-picture", origin, vale, key, pass);
+        std::string text = read_text(served.root / "v1" / "catalogue.json");
+        const std::string picture = "/v1/i/badge.png";
+        const std::string file = "\"/v1/p/" + vale.hex + ".oamod\"";
+        const auto at = text.find(file);
+        OA_CHECK(at != std::string::npos);
+        if (at == std::string::npos)
+            return;
+        text.insert(at + file.size(), ",\"badge\":\"" + picture + "\"");
+        write_text(served.root / "v1" / "catalogue.json", text);
+        if (!sign_catalogue(served.root / "v1" / "catalogue.json", key, pass))
+            return;
+        const fs::path dest = scratch / "unnamed-picture-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("unnamed picture", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, picture));
+        OA_CHECK(contains(refused.err, "the picture is not named by its SHA-256"));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "key-not-ready", origin, vale, key, pass);
+        registry::Descriptor loaded;
+        std::string error;
+        OA_CHECK(
+            registry::read_descriptor(read_bytes(served.root / "registry.yaml"), loaded, &error)
+        );
+        loaded.mode = registry::DownloadMode::tokens;
+        loaded.install_id = registry::InstallIdUse::required;
+        url::UrlError url_error = url::UrlError::none;
+        const std::optional<url::Url> api =
+            url::parse_http_url(served.server.base() + "/api/v1", &url_error);
+        OA_CHECK(api.has_value());
+        if (!api)
+            return;
+        loaded.api = *api;
+        write_text(served.root / "registry.yaml", registry::descriptor_text(loaded));
+        served.server.server.handle("POST", "/api/v1/downloads", [](const fixture::LoggedRequest&) {
+            return json_reply(403, "{\"error\":\"forbidden\",\"message\":\"no key\"}");
+        });
+        const fs::path dest = scratch / "key-not-ready-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("key", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "a download key was not ready"));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "missing-file", origin, vale, key, pass);
+        fixture::Reply missing;
+        missing.status = 404;
+        served.server.server.override_next("/v1/p/" + vale.hex + ".oamod", std::move(missing));
+        const fs::path dest = scratch / "missing-file-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("missing", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "/v1/p/" + vale.hex + ".oamod"));
+        OA_CHECK(contains(refused.err, "the file was not found"));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "size-under", origin, vale, key, pass);
+        const std::vector<uint8_t> short_body = {'n', 'o'};
+        served.server.server.serve_bytes("/v1/p/" + vale.hex + ".oamod", short_body);
+        const fs::path dest = scratch / "size-under-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("size under", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(
+            refused.err,
+            "the file is " + std::to_string(short_body.size()) + " bytes; the catalogue names " +
+                std::to_string(vale.size)
+        ));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod.part")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "size-over", origin, vale, key, pass);
+        std::vector<uint8_t> long_body =
+            read_bytes(served.root / "v1" / "p" / (vale.hex + ".oamod"));
+        long_body.insert(long_body.end(), 8, 'x');
+        served.server.server.serve_bytes("/v1/p/" + vale.hex + ".oamod", long_body);
+        const fs::path dest = scratch / "size-over-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("size over", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(
+            refused.err,
+            "the file is " + std::to_string(long_body.size()) + " bytes; the catalogue names " +
+                std::to_string(vale.size)
+        ));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod.part")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "resume-failed", origin, vale, key, pass);
+        fixture::Reply range;
+        range.status = 416;
+        served.server.server.override_next("/v1/p/" + vale.hex + ".oamod", std::move(range), 2);
+        const fs::path dest = scratch / "resume-failed-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("resume failed", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "the server did not resume the file"));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "no-length", origin, vale, key, pass);
+        fixture::Reply open;
+        open.no_length = true;
+        open.body = {'n', 'o'};
+        served.server.server.override_next("/v1/p/" + vale.hex + ".oamod", std::move(open));
+        const fs::path dest = scratch / "no-length-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("no length", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(
+            refused.err,
+            "the response named no length; the catalogue names " + std::to_string(vale.size) +
+                " bytes"
+        ));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "server-status", origin, vale, key, pass);
+        fixture::Reply failed;
+        failed.status = 500;
+        served.server.server.override_next("/v1/p/" + vale.hex + ".oamod", std::move(failed));
+        const fs::path dest = scratch / "server-status-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("server status", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "the server answered 500"));
+        OA_CHECK(!fs::exists(dest / "v1" / "p" / (vale.hex + ".oamod")));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "picture-large", origin, vale, key, pass);
+        std::string text = read_text(served.root / "v1" / "catalogue.json");
+        const std::string picture = "/v1/i/" + vale.hex + ".png";
+        const std::string file = "\"/v1/p/" + vale.hex + ".oamod\"";
+        const auto at = text.find(file);
+        OA_CHECK(at != std::string::npos);
+        if (at == std::string::npos)
+            return;
+        text.insert(at + file.size(), ",\"badge\":\"" + picture + "\"");
+        write_text(served.root / "v1" / "catalogue.json", text);
+        if (!sign_catalogue(served.root / "v1" / "catalogue.json", key, pass))
+            return;
+        // One byte past the 64 MiB picture limit. The length is declared and the
+        // body is empty, so the refusal is the limit, not a downloaded file.
+        const std::string raw =
+            "HTTP/1.1 200 OK\r\nContent-Length: 67108865\r\nConnection: close\r\n\r\n";
+        fixture::Reply huge;
+        huge.raw = std::vector<uint8_t>(raw.begin(), raw.end());
+        served.server.server.override_next(picture, std::move(huge));
+        const fs::path dest = scratch / "picture-large-copy";
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("picture large", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, picture));
+        OA_CHECK(contains(refused.err, "the picture is too large"));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+}
+
 } // namespace
 
 int main() {
@@ -806,6 +1010,7 @@ int main() {
 
     test_direct(scratch.path, server, origin, ridge, vale);
     test_bad_hash(scratch.path, origin, ridge, vale);
+    test_named_refusals(scratch.path, origin, vale, key, pass);
     test_bad_signature(scratch.path, origin);
     test_sequence(scratch.path, origin, packages, key, pass);
     test_collision(scratch.path, server, origin);
