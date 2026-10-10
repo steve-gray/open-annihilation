@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The kinds of package the game installs, and the names and folder reads
-// each kind shares: oamod and oamap.
+// each kind shares: oamod, oamap and oalang.
 
 #include "files.hpp"
 
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oalang.hpp"
 #include "oa/app/package_install/oamap.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/origin.hpp"
@@ -62,6 +63,15 @@ constexpr KindPrompts kMapPrompts{
     .refused = &oamap::refused_prompt,
 };
 
+constexpr KindPrompts kLanguagePrompts{
+    .installing = &oalang::installing_prompt,
+    .question = &oalang::question_prompt,
+    .installed = &oalang::installed_prompt,
+    .updated = &oalang::updated_prompt,
+    .refusal_text = &oalang::refusal_text,
+    .refused = &oalang::refused_prompt,
+};
+
 constexpr PackageKind kKinds[] = {
     {
         .name = "oamod",
@@ -90,6 +100,20 @@ constexpr PackageKind kKinds[] = {
         .plan = &oamap::plan_install,
         .check_staged = &oamap::check_staged,
         .prompts = &kMapPrompts,
+    },
+    {
+        .name = "oalang",
+        .extension = oalang::oalang_extension,
+        .manifest = "language.yaml",
+        .manifest_most_bytes = oa::formats::oamod::max_input_bytes,
+        .root_folder = oalang::languages_folder_name,
+        .prefix = ".oalang-",
+        .read_manifest = &oalang::read_manifest,
+        .read_installed = &oalang::read_installed,
+        .read_backup = &oalang::read_backup,
+        .plan = &oalang::plan_install,
+        .check_staged = &oalang::check_staged,
+        .prompts = &kLanguagePrompts,
     },
 };
 
