@@ -277,6 +277,7 @@ struct PackageOptions;
 
 class MapPacks;
 struct PackMap;
+class OaLayer;
 
 namespace content {
 class Service;
@@ -4416,6 +4417,43 @@ class Runtime final : public menu::Host,
         int left_out_size,
         std::string_view label
     ) const;
+
+    // The OA layer (oa_layer.hpp): one host for Open Annihilation's own
+    // screens over every screen of the game, the in-game OA button with it.
+    friend class OaLayer;
+
+    /// The settings dialog as a screen of the OA layer, on the main menu or
+    /// in a match (oa_layer.cpp).
+    struct SettingsScreen;
+
+    /// Frees the OA layer.
+    ///
+    /// @param layer layer to free; null is allowed
+    static void destroy_oa_layer(OaLayer* layer) noexcept;
+
+    /// Returns the OA layer, through which every screen reaches the host of
+    /// Open Annihilation's own screens; made on first use.
+    ///
+    /// @return the layer
+    OaLayer& oa_layer();
+
+    /// Registers the OA layer's overlay: one overlay on every screen, over
+    /// the extensions' overlays, that hands the layer the input, the frames'
+    /// ticks and, on the front end, the frame.
+    void register_oa_layer();
+
+    /// Puts the open settings dialog on the OA layer as its top screen.
+    ///
+    /// @param in_match the dialog was opened in a match; otherwise on the main menu
+    void push_settings_screen(bool in_match);
+
+    /// Hands the settings screen on the OA layer an action of the dialog, as
+    /// its own events do: its sound, the settings, and the layer taking the
+    /// screen off when the dialog closes. Without the screen, the action
+    /// goes to the settings alone (take_engine_settings_action).
+    ///
+    /// @param action what the dialog asked
+    void take_settings_screen_action(oa::ui::engine_settings::DialogAction action);
 
     /// The in-game menu's OA button and dialog (engine_settings_match_host.hpp).
     struct EngineSettingsMatchHost;
@@ -14842,6 +14880,9 @@ class Runtime final : public menu::Host,
     };
     // The gamepads' state; null until a gamepad or the pad check needs it.
     std::unique_ptr<PadState, void (*)(PadState*) noexcept> pad_{nullptr, destroy_pad_state};
+    // The OA layer and its screens; null until first used. Declared after
+    // render_run_, so its textures go before the renderer they belong to.
+    std::unique_ptr<OaLayer, void (*)(OaLayer*) noexcept> oa_layer_{nullptr, destroy_oa_layer};
     bool lifecycle_watch_installed_ = false; // install_lifecycle_watch ran
     // The SDL event type the macOS Settings… item posts; 0 while none is registered.
     uint32_t engine_settings_menu_event_{};
