@@ -53,8 +53,9 @@ expanded and checked, and the notary service's logs.
 2. **Checks the build:** both architectures, macOS 11.0 as the oldest
    release in each and in `Info.plist`, only the system's libraries linked,
    the source's notices in `Contents/Resources`, the text fonts in its
-   `fonts` folder, each the bootstrap's byte for byte, and nothing else in
-   the bundle. The notices are `LICENSE`, `ATTRIBUTIONS.md` and the files of
+   `fonts` folder, each the bootstrap's byte for byte, the built-in
+   registries in `registries/` (Core Prime's descriptor the same bytes as
+   the source), and nothing else in the bundle. The notices are `LICENSE`, `ATTRIBUTIONS.md` and the files of
    `licenses/` that Git tracks; a file Git does not track there, a
    `.DS_Store` for one, stops the script, since the build would put it in
    the application.
@@ -273,7 +274,7 @@ Steam Deck package is the Linux x86_64 package with one folder more,
 
 | File | What it holds |
 |---|---|
-| `open-annihilation-vX.Y.Z-steam-deck.zip` | the folder `open-annihilation-vX.Y.Z-steam-deck`, holding the Linux x86_64 package's files (`open-annihilation`, `oa-intro`, `oa-tool`, `LICENSE`, `ATTRIBUTIONS.md`, `licenses/` and `fonts/`) and the `steam-deck` folder |
+| `open-annihilation-vX.Y.Z-steam-deck.zip` | the folder `open-annihilation-vX.Y.Z-steam-deck`, holding the Linux x86_64 package's files (`open-annihilation`, `oa-intro`, `oa-tool`, `LICENSE`, `ATTRIBUTIONS.md`, `licenses/`, `fonts/` and `registries/`) and the `steam-deck` folder |
 
 The `steam-deck` folder holds the Steam Input templates and the library
 artwork that the Steam Deck guide

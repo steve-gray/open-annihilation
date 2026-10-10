@@ -30,7 +30,7 @@ struct PinnedKey {
 /// A built-in registry whose id is here is used only when its file names
 /// exactly these keys. An id with no row is trusted as its file stands.
 ///
-/// @return the pinned keys; empty until a built-in registry's key is pinned
+/// @return the pinned keys; Core Prime's catalogue key is the one this build pins
 [[nodiscard]] std::span<const PinnedKey> pinned_keys() noexcept;
 
 /// Reads the built-in registry descriptors from a folder.

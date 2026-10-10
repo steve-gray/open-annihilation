@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -580,7 +581,14 @@ void pinned_keys_are_honoured() {
         OA_CHECK(kept[1].id == "beta");
     }
     OA_CHECK(problems.size() == 2);
-    OA_CHECK(registry::pinned_keys().empty());
+    // The compiled table is Core Prime's key. This case passes its own pins.
+    const std::span<const registry::PinnedKey> compiled = registry::pinned_keys();
+    OA_CHECK(compiled.size() == 1);
+    if (compiled.size() == 1) {
+        OA_CHECK(compiled[0].registry == "coreprime");
+        OA_CHECK(compiled[0].key_id == "steve-2026");
+        OA_CHECK(compiled[0].public_key == "ed25519:dHXqUJM9LbifF+boPakeKsZoSD29qhTEAxkyRj+s5yU=");
+    }
 }
 
 /// Built-in registries come first. A disabled one is off. An added id a built-in has taken conflicts.
