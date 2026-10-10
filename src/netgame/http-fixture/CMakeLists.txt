@@ -10,7 +10,7 @@ target_compile_features(oa-netgame-http-fixture PUBLIC cxx_std_20)
 target_link_libraries(oa-netgame-http-fixture PUBLIC oa-options PRIVATE oa-netgame oa-base-threads ZLIB::ZLIB)
 
 add_executable(oa-http-fixture src/main.cpp)
-target_link_libraries(oa-http-fixture PRIVATE oa-netgame-http-fixture oa-base-threads)
+target_link_libraries(oa-http-fixture PRIVATE oa-netgame-http-fixture oa-base-threads oa-platform-shims)
 
 add_executable(oa-netgame-http-fixture-test tests/server_test.cpp)
 target_link_libraries(oa-netgame-http-fixture-test PRIVATE oa-netgame-http-fixture oa-netgame ZLIB::ZLIB)
