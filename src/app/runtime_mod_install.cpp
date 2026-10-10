@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The mod packages opened in the game, installed over the main menu: each
-// taken from the inbox once the menu has settled, read, its question asked
-// in a prompt in the settings dialog's look, its files unpacked a budget a
-// frame with the progress shown, put in place, and what came of it told;
-// a change to the mod played waits for the run to end. PLAY NOW switches to
-// the mod installed, and the Mods page's ROLL BACK swaps a mod folder with
-// the version its .backup keeps.
+// The packages opened in the game, installed over the main menu: each taken
+// from the inbox once the menu has settled, read, its question asked in a
+// prompt in the settings dialog's look, its files unpacked a budget a frame
+// with the progress shown, put in place, and what came of it told; a change
+// to the mod played waits for the run to end. A catalogue map pack, and a
+// catalogue language pack, ask nothing and show nothing, including while
+// Settings or a notice show and in a run nobody watches. PLAY NOW switches
+// to the mod installed, and the Mods page's ROLL BACK swaps a mod folder
+// with the version its .backup keeps.
 
 #include "engine_settings_state.hpp"
 #include "mod_install_state.hpp"
@@ -611,10 +613,12 @@ void Runtime::tell_mod_installs() {
         switch (state.plan.kind) {
         case install::PlanKind::install:
             state.target = state.plan.target;
-            state.change =
-                state.plan.replacing ? install::Change::replace : install::Change::install;
-            state.expected =
-                state.plan.replacing ? state.plan.installed : install::InstalledPackage{};
+            state.change = state.plan.reinstalling ? install::Change::reinstall
+                           : state.plan.replacing  ? install::Change::replace
+                                                   : install::Change::install;
+            state.expected = state.plan.reinstalling || state.plan.replacing
+                                 ? state.plan.installed
+                                 : install::InstalledPackage{};
             state.target_played = false;
             answer_mod_install_prompt(-1);
             return;
@@ -661,13 +665,36 @@ void Runtime::tell_mod_installs() {
             return;
         }
     };
+    // A catalogue language pack asks nothing. It is installed with no prompt
+    // while Settings or a notice show, and in a run nobody watches. A match
+    // still waits. Any other package is left in the inbox.
+    const auto take_catalogue_language = [&]() -> bool {
+        if (state.stage != ModInstallState::Stage::idle || state.shown)
+            return false;
+        const auto next = install::next_package_file();
+        if (!next)
+            return false;
+        const install::PackageKind* kind = install::kind_for_file(next->file);
+        if (kind == nullptr || kind->name != "oalang" ||
+            next->origin.kind != install::OriginKind::catalogue)
+            return false;
+        const auto opened_file = install::take_package_file();
+        if (!opened_file)
+            return false;
+        state.quiet = true;
+        begin_package(*opened_file);
+        return true;
+    };
     if (!settled) {
         state.settled_frames = 0;
         // Nothing starts while a match loads or runs. A catalogue map pack
-        // otherwise installs here, with no prompt; every other package waits.
+        // or language pack otherwise installs here, with no prompt; every
+        // other package waits.
         if (match_ != nullptr || screen_ == Screen::loading || screen_ == Screen::match)
             return;
         if (state.stage != ModInstallState::Stage::idle || state.shown)
+            return;
+        if (take_catalogue_language())
             return;
         if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts)
             return;
@@ -689,9 +716,12 @@ void Runtime::tell_mod_installs() {
     }
     if (++state.settled_frames < kPromptMenuFrames || engine_settings_fonts() == nullptr)
         return;
-    // A run nobody watches leaves the packages waiting for one someone does.
-    if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts)
+    // A run nobody watches leaves the packages waiting for one someone does,
+    // except a catalogue language pack, which asks nothing.
+    if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts) {
+        std::ignore = take_catalogue_language();
         return;
+    }
     if (state.discarder.busy())
         std::ignore = state.discarder.step();
     if (state.stage != ModInstallState::Stage::idle || state.shown)

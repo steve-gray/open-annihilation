@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The kind table holds oamod, then oamap. A made-up kind, built here
+// The kind table holds oamod, then oamap, then oalang. A made-up kind, built here
 // and not in the table, installs, replaces, rolls back and recovers through
 // the same unpacking and renames, and its own names are the only ones it
 // leaves in its root while it works.
@@ -253,18 +253,27 @@ bool commit_unpacked(
 
 void test_table() {
     const auto kinds = install::package_kinds();
-    OA_CHECK(kinds.size() == 2);
+    OA_CHECK(kinds.size() == 3);
     OA_CHECK(kinds[0].name == "oamod");
     OA_CHECK(kinds[1].name == "oamap");
+    OA_CHECK(kinds[2].name == "oalang");
     OA_CHECK(install::find_kind("oamod") == &install::mod_kind());
     const install::PackageKind* maps = install::find_kind("oamap");
     OA_CHECK(maps != nullptr && maps == &kinds[1]);
     OA_CHECK(maps != nullptr && maps->root_folder == "Maps" && maps->check_staged != nullptr);
+    const install::PackageKind* languages = install::find_kind("oalang");
+    OA_CHECK(languages != nullptr && languages == &kinds[2]);
+    OA_CHECK(
+        languages != nullptr && languages->root_folder == "Languages" &&
+        languages->check_staged != nullptr
+    );
     OA_CHECK(install::find_kind("oatest") == nullptr);
     OA_CHECK(install::kind_for_file("a.oamod") == &install::mod_kind());
     OA_CHECK(install::kind_for_file("B.OAMOD") == &install::mod_kind());
     OA_CHECK(install::kind_for_file("a.oamap") == maps);
     OA_CHECK(install::kind_for_file("B.OAMAP") == maps);
+    OA_CHECK(install::kind_for_file("a.oalang") == languages);
+    OA_CHECK(install::kind_for_file("B.OALANG") == languages);
     OA_CHECK(install::kind_for_file("a.zip") == nullptr);
     OA_CHECK(install::kind_for_file("a.oamod.zip") == nullptr);
     OA_CHECK(install::kind_for_file("oamod") == nullptr);
@@ -276,6 +285,17 @@ void test_table() {
     OA_CHECK(names.restore == ".oamod-restore-");
     OA_CHECK(names.discard == ".oamod-discard-");
     OA_CHECK(names.lock == ".oamod-lock");
+    OA_CHECK(languages != nullptr);
+    if (languages != nullptr) {
+        const install::FolderNames language_names = install::folder_names(*languages);
+        OA_CHECK(language_names.reserved == ".oalang-");
+        OA_CHECK(language_names.staging == ".oalang-staging-");
+        OA_CHECK(language_names.old == ".oalang-old-");
+        OA_CHECK(language_names.replaced == ".oalang-replaced-");
+        OA_CHECK(language_names.restore == ".oalang-restore-");
+        OA_CHECK(language_names.discard == ".oalang-discard-");
+        OA_CHECK(language_names.lock == ".oalang-lock");
+    }
 }
 
 void test_open(const fs::path& scratch) {

@@ -135,6 +135,10 @@ namespace oa::media::director {
 struct EngineView;
 } // namespace oa::media::director
 
+namespace oa::data::map_fit {
+struct Fit;
+} // namespace oa::data::map_fit
+
 namespace oa::platform::text_font {
 class FontStack;
 } // namespace oa::platform::text_font
@@ -265,6 +269,7 @@ struct PackageOptions;
 } // namespace package_install
 
 class MapPacks;
+struct PackMap;
 
 namespace content {
 class Service;
@@ -590,6 +595,11 @@ class Runtime final : public menu::Host,
     ///
     /// @return true once they have opened
     [[nodiscard]] static bool modern_fonts_open();
+
+    /// Returns how many pack faces the open modern font stack holds.
+    ///
+    /// @return the count; 0 when the stack is not open
+    [[nodiscard]] static std::size_t modern_font_pack_faces();
 
     /// Tells whether the language shown draws its text in the modern fonts,
     /// which are then on whatever the setting (Simplified Chinese).
@@ -3937,6 +3947,15 @@ class Runtime final : public menu::Host,
     /// std::runtime_error on a failure.
     void check_mod_switch();
 
+    /// Checks pack maps in the skirmish list (--check-map-packs): writes two
+    /// map packs into the player's own Maps folder, one that fits and one
+    /// whose feature clashes with the game's; lists both after the base
+    /// maps; mounts the first when it is chosen and unmounts it for a base
+    /// map; plays a skirmish on it with its files readable, unmounted when
+    /// the match ends; and refuses the second, the map picker showing why
+    /// and keeping the earlier map. Throws std::runtime_error on a failure.
+    void check_map_packs();
+
     /// The mod packages opened in the game: their questions, unpacking and
     /// what came of them over the main menu (mod_install_state.hpp,
     /// runtime_mod_install.cpp).
@@ -3968,6 +3987,69 @@ class Runtime final : public menu::Host,
     /// @return the index
     [[nodiscard]] MapPacks& map_packs() const;
 
+    /// The pack map whose files the store shows, the game's names, each
+    /// pack map's fit and the reasons maps were refused
+    /// (runtime_pack_maps.cpp).
+    struct PackMapState;
+
+    /// Frees the pack maps' state.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_pack_map_state(PackMapState* state) noexcept;
+
+    /// Returns the pack maps' state, made on first use.
+    ///
+    /// @return the state
+    PackMapState& pack_map_state();
+
+    /// Returns the installed pack map of a name.
+    ///
+    /// The name must split into a stem and a pack id; the installed packs
+    /// are then asked for it, read from their manifests the first time.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @return the map; null for any name that is not an installed pack map
+    [[nodiscard]] const PackMap* pack_map(std::string_view name);
+
+    /// Returns how a pack map fits the game and the mod being played.
+    ///
+    /// Checks the map's files in its pack's folder, whatever layer is
+    /// mounted. The game's names are collected once, with the run's data
+    /// layout, at the first check; a run's archives never change. The fit is
+    /// kept for the pack's SHA-256 and the map's stem.
+    ///
+    /// @param map the map
+    /// @return every rule the map breaks; kept until the runtime ends
+    const oa::data::map_fit::Fit& pack_map_fit(const PackMap& map);
+
+    /// Makes a pack map's files, and no other map's, the store's pack layer.
+    ///
+    /// A map already mounted answers at once. Otherwise any mounted layer is
+    /// released first. A map whose kept fit fails is refused. Its files are
+    /// then mounted from its pack's folder, labelled with the pack's id and
+    /// the first 8 hex digits of its SHA-256, and checked again as mounted;
+    /// a failure there unmounts them and refuses the map. Each failure is
+    /// logged on a line of its own, and the first one's description is the
+    /// reason pack_map_refusal gives. Main thread only, never while a match
+    /// loads or runs.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @param[out] reason receives why the map was refused, if not null
+    /// @return true when the map's files are mounted
+    bool prepare_pack_map(std::string_view name, std::string* reason);
+
+    /// Unmounts the pack layer and logs it, when a map's files are mounted.
+    ///
+    /// Main thread only, never while a match loads or runs.
+    void release_pack_map();
+
+    /// Returns why a pack map was last refused.
+    ///
+    /// @param name the map's name
+    /// @return the first failure's description; nothing when the map was not
+    ///         refused, or was mounted since
+    [[nodiscard]] std::optional<std::string> pack_map_refusal(std::string_view name) const;
+
     /// The registries and cached catalogues (runtime_content.cpp).
     struct ContentState;
 
@@ -3986,6 +4068,18 @@ class Runtime final : public menu::Host,
     ///
     /// @return the service
     [[nodiscard]] content::Service& content_service();
+
+    /// Returns one registry's install ID for a download, making it when none is stored.
+    ///
+    /// This is the only way a registry's ID is made for a download. The
+    /// player's RESET in Settings › Downloads (M07), through reset_install_id,
+    /// is the only other way an ID is made. Nothing is made when that
+    /// registry's ID is off, or when the system's generator cannot be read.
+    /// A new ID is written to the preferences before this returns.
+    ///
+    /// @param registry the registry id
+    /// @return the ID, or nothing when it is off or the generator cannot be read
+    [[nodiscard]] std::optional<std::string> content_install_id(std::string_view registry);
 
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
@@ -4080,6 +4174,11 @@ class Runtime final : public menu::Host,
     /// across soft restarts, checking the player's Mods folder after each
     /// (--check-mod-install). Each run is one turn.
     void check_mod_install();
+
+    /// Installs the pseudo language pack through the main menu's question,
+    /// declines installing it again, then installs a catalogue revision while
+    /// Settings stay open and no prompt shows (--check-language-install).
+    void check_language_install();
 
     /// The main menu's OA button and dialog (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
@@ -6393,6 +6492,18 @@ class Runtime final : public menu::Host,
     /// the operating system for its preferred locales, reads the interface
     /// catalogue and the setting, and puts the language in effect.
     void start_language();
+
+    /// Reads the language packs again and puts them in effect, on the
+    /// interface's thread between frames: the registry, the interface
+    /// catalogue, the pack layers and the font faces. When the raw language
+    /// setting names a pack that can now be shown, the game switches to it.
+    /// When the system's language now finds a pack, System default follows.
+    void reload_language_packs();
+
+    /// Reads the three pack lists, registers the player's and the engine's,
+    /// chooses the system's language again and rebuilds the interface
+    /// catalogue. start_language and reload_language_packs both call it.
+    void load_language_packs();
 
     /// Reads the interface catalogue files of the languages folder beside the
     /// game's other files, in the order of their names; a file that does not
@@ -12562,10 +12673,12 @@ class Runtime final : public menu::Host,
     init::MapListHandle construct(init::MapListHandle handle, int32_t selector_value) override;
 
     /// Lists the maps the skirmish and multiplayer map pickers offer: every map with a multiplayer
-    /// schema, in find order; the first one is the default selection.
+    /// schema, in find order; the first one is the default selection. The installed pack maps
+    /// follow, in the order the installed packs list them, without opening any of their files;
+    /// the default selection is always a base map.
     ///
-    /// Game data with no such map, such as the Total Annihilation demo (1997), leaves both the
-    /// list and the default selection empty.
+    /// Game data with no such map, such as the Total Annihilation demo (1997), leaves the
+    /// default selection empty, and the list empty unless pack maps are installed.
     void discover_first_map();
 
     /// Finds a gadget of the current screen by name.
@@ -13011,12 +13124,29 @@ class Runtime final : public menu::Host,
 
     /// Selects a map by name for a skirmish: its OTA metadata, terrain and start markers.
     ///
+    /// An installed pack map's files are mounted first (prepare_pack_map); a
+    /// pack map that is refused clears the selection as a missing file does.
+    /// Any other name releases a mounted pack map before its files are read.
     /// Throws std::runtime_error when the metadata or terrain does not parse.
     ///
     /// @param name map name
-    /// @return 1 when the map loads; 0 when a file is missing or it has no
-    ///     two-player schema
+    /// @return 1 when the map loads; 0 when a file is missing, it has no
+    ///     two-player schema or it is a pack map that does not fit
     int32_t select_map(std::string_view name) override;
+
+    /// Returns why a map in the picker cannot be chosen.
+    ///
+    /// @param name map name
+    /// @return the reason a pack map was refused; nothing for any other map
+    std::optional<std::string> map_refusal(std::string_view name) override;
+
+    /// Shows a refused pack map in the picker: MAPNAME its title, SIZE its
+    /// size and players, DESCRIPTION "Doesn't fit {game}: {reason}", where
+    /// the game is the mod played or Total Annihilation 3.1c, and no picture.
+    ///
+    /// @param name map name
+    /// @param reason why the map was refused
+    void show_refused_map(std::string_view name, std::string_view reason) override;
 
     /// Returns how many players the selected map holds for the roster's player count, keeping its
     /// start markers.
@@ -14566,6 +14696,11 @@ class Runtime final : public menu::Host,
     // The installed map packs and a map pack's fit check; null until first used.
     mutable std::unique_ptr<MapPackState, void (*)(MapPackState*) noexcept> map_pack_state_{
         nullptr, destroy_map_pack_state
+    };
+    // The mounted pack map, the game's names, the fits and the refusals;
+    // null until a pack map is first named.
+    std::unique_ptr<PackMapState, void (*)(PackMapState*) noexcept> pack_map_state_{
+        nullptr, destroy_pack_map_state
     };
     // The registries and their catalogues; null until start_content.
     std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{

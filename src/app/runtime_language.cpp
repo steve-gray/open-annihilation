@@ -106,11 +106,48 @@ Runtime::LanguageState& Runtime::language_state() {
     return *language_;
 }
 
-void Runtime::start_language() {
+namespace {
+
+/// Drops the spaces and tabs at both ends of a preference.
+///
+/// @param text the text
+/// @return the text inside them
+std::string_view trimmed_preference(std::string_view text) noexcept {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+        text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' ||
+                             text.back() == '\n'))
+        text.remove_suffix(1);
+    return text;
+}
+
+/// Tells whether a preference names System default, without regard to case.
+///
+/// @param text the preference
+/// @return true for "system"
+bool names_system(std::string_view text) noexcept {
+    if (text.size() != languages::system_choice.size())
+        return false;
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        char letter = text[index];
+        if (letter >= 'A' && letter <= 'Z')
+            letter = static_cast<char>(letter - 'A' + 'a');
+        if (letter != languages::system_choice[index])
+            return false;
+    }
+    return true;
+}
+
+} // namespace
+
+void Runtime::load_language_packs() {
     auto& state = language_state();
     // The packs first, and not their interface texts yet: the catalogue's
     // own files come before any pack. A pack whose interface.tdf does not
     // read is still left out.
+    state.engine_packs.clear();
+    state.player_packs.clear();
+    state.mod_packs.clear();
     if (const char* base = SDL_GetBasePath(); base != nullptr)
         read_language_packs(
             path_from_utf8(base) / path_from_utf8(kCatalogueFolder), state.engine_packs, nullptr
@@ -131,6 +168,19 @@ void Runtime::start_language() {
         installed_entries({&state.player_packs, &state.engine_packs}), {}
     );
     state.system = &languages::preferred_language(oa::platform::locale::preferred_locales());
+    // The catalogue is built again from nothing, in the same order as the
+    // start: the files beside the game, then the engine's packs, the
+    // player's and the mod's.
+    state.catalogue = {};
+    read_interface_catalogue();
+    add_pack_interface_texts(state.engine_packs, state.catalogue);
+    add_pack_interface_texts(state.player_packs, state.catalogue);
+    add_pack_interface_texts(state.mod_packs, state.catalogue);
+}
+
+void Runtime::start_language() {
+    auto& state = language_state();
+    load_language_packs();
     // The loaders read every live language's unit texts, one that is not
     // installed included, and the command line's word when it names one no
     // playable entry knows and the list does not already hold, as 3.1c
@@ -204,16 +254,42 @@ void Runtime::start_language() {
         return nullptr;
     };
     languages::set_translation_hooks(hooks);
-    read_interface_catalogue();
-    // The files beside the game, then the engine's packs, the player's and
-    // the mod's, so that each one's words replace those before it.
-    add_pack_interface_texts(state.engine_packs, state.catalogue);
-    add_pack_interface_texts(state.player_packs, state.catalogue);
-    add_pack_interface_texts(state.mod_packs, state.catalogue);
     state.choice = oa::ui::engine_settings::stored_language(
         preference_values_, !options_.preferences_file.has_value()
     );
     apply_language();
+}
+
+void Runtime::reload_language_packs() {
+    // Nothing may keep a pointer into the packs this replaces: the unit
+    // layers, the picture captions and the manifest a chat setting reads.
+    languages::set_unit_pack_layers({});
+    languages::set_interface_language(nullptr, languages::english());
+    auto& state = language_state();
+    state.layers.clear();
+    state.unicode_manifest = nullptr;
+    state.pictures.clear();
+    load_language_packs();
+    apply_language();
+    // The raw setting, not the choice read at start: a tag the registry did
+    // not know then is still the player's choice. A command-line word decides
+    // the run and is left as it is.
+    if (oa::app::command_line::launch_language(options_.launch) == nullptr) {
+        const auto found =
+            preference_values_.find(std::string{oa::ui::engine_settings::key::language});
+        if (found != preference_values_.end()) {
+            const std::string_view raw = trimmed_preference(found->second);
+            if (!names_system(raw)) {
+                if (const languages::Language* language = languages::find_by_tag(raw);
+                    language != nullptr && languages::playable(*language) &&
+                    (state.shown == nullptr || state.shown->tag != language->tag))
+                    set_language_choice(language->tag);
+            }
+        }
+    }
+    const std::size_t installed =
+        state.engine_packs.size() + state.player_packs.size() + state.mod_packs.size();
+    std::cerr << "open-annihilation: language packs read again: " << installed << " installed\n";
 }
 
 void Runtime::read_interface_catalogue() {

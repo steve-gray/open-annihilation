@@ -161,6 +161,10 @@ struct PeerRecords {
     /// lengths instead of ending the frame, as a machine running the recorder
     /// splits them.
     bool recorder_records{};
+    /// A 0xf0 that starts right after the frame's sequence number, and whose
+    /// length word equals the rest of the frame, is split out as a record.
+    /// A 0xf0 anywhere else ends the split, as on 3.1c.
+    bool presence_records{};
     // Two spare bytes: a 0x2c record at the very end of a frame takes its
     // length from the bytes after the frame, which keep what an earlier,
     // longer frame left there, as in 3.1c.
@@ -183,9 +187,13 @@ enum class UnpackOutcome : uint8_t {
 /// records are re-stamped with tick instead. Otherwise the frame is copied
 /// into the ring. The split stops at a byte <= 0x01 or >= 0x2d, or at a
 /// record that does not fit (dropping the rest); with the ring's
-/// recorder_records set, recorder records are split out by their lengths. Beyond 0x200 records, that
-/// many 0x2c records are dropped from the front. A zero-length record would
-/// never advance the split, so it reports zero_length_record.
+/// recorder_records set, recorder records are split out by their lengths.
+/// With presence_records set, a 0xf0 that starts right after the sequence
+/// number and whose length word equals the rest of the frame is split out
+/// as a record; a 0xf0 anywhere else ends the split, as on 3.1c. Beyond
+/// 0x200 records, that many 0x2c records are dropped from the front. A
+/// zero-length record would never advance the split, so it reports
+/// zero_length_record.
 ///
 /// @param[in,out] records The sending peer's record ring.
 /// @param frame Frame bytes, sequence header included; may be null only when size is 0.
@@ -237,6 +245,9 @@ struct FrameReceiver {
     /// Every peer's frames are split with the recorder's records
     /// (PeerRecords::recorder_records).
     bool recorder_records{};
+    /// Every peer's frames are split with presence records
+    /// (PeerRecords::presence_records).
+    bool presence_records{};
 };
 
 struct FrameDelivery {

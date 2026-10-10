@@ -59,8 +59,9 @@ struct PackFontFile {
 [[nodiscard]] std::vector<PackFontFile> pack_fonts(const LoadedLanguagePack& pack);
 
 /// Reads every language pack in a folder: each folder in it that holds
-/// language.yaml. A pack whose manifest or a table does not read is
-/// reported and left out whole; tables larger than
+/// language.yaml, except one whose name starts with '.' (the installer's
+/// own staging and discard folders). A pack whose manifest or a table does
+/// not read is reported and left out whole; tables larger than
 /// oa::data::languages::most_pack_table_bytes are refused.
 ///
 /// @param root the folder that holds the packs' folders; one that is not

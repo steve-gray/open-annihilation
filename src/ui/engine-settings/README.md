@@ -354,10 +354,13 @@ the game's own fonts (`load_dialog_fonts`): its button font for labels,
 values, the section list and the title, and its smaller label font for the
 section heading, hints, locks, captions and the version, each readied for
 text in one colour. `src/geometry.hpp` places every part, so a control is
-pressed where it is drawn. The buttons, the switch, the level strip, the
-slider, the drop-down and its menu, the lock, the scroll bar, the focus
-ring and the OA mark are drawn by `oa/ui/kit/components.hpp`. The dialog
-places each one and passes the caption it has already looked up. `Dialog::section_hooks` (`SectionHooks`) lets the
+pressed where it is drawn. The window's face and raised edge, its header,
+its section list, a section's heading, a row's rule, label and hints, a
+locked row's fade and the footer's band are drawn by `oa/ui/kit/chrome.hpp`.
+The buttons, the switch, the level strip, the slider, the drop-down and its
+menu, the lock, the scroll bar, the focus ring and the OA mark are drawn by
+`oa/ui/kit/components.hpp`. The dialog places each one and passes the
+caption it has already looked up. `Dialog::section_hooks` (`SectionHooks`) lets the
 dialog's tests and the game's checks show rows and locks of their own in
 place of a section's, on Developer in place of its list and the list's
 footer too; a host never sets it.

@@ -19,6 +19,7 @@ add_library(oa-netgame
   wire/recorder_session.cpp
   wire/unicode_chat.cpp
   wire/presence_block.cpp
+  wire/presence.cpp
   wire/dplay.cpp
   dplay/protocol.cpp
   dplay/engine.cpp
@@ -105,6 +106,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-presence-block-test PRIVATE oa-netgame)
   add_test(NAME net-presence-block COMMAND oa-netgame-presence-block-test)
   set_tests_properties(net-presence-block PROPERTIES TIMEOUT 30)
+
+  # The presence record OA machines exchange.
+  add_executable(oa-netgame-presence-test tests/presence_test.cpp)
+  target_link_libraries(oa-netgame-presence-test PRIVATE oa-netgame)
+  add_test(NAME net-presence COMMAND oa-netgame-presence-test)
+  set_tests_properties(net-presence PROPERTIES TIMEOUT 30)
 
   # The condenser's datagram envelope, pinned for every platform.
   add_executable(oa-netgame-condenser-golden-test tests/condenser_golden_test.cpp)

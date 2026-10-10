@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string_view>
+#include <type_traits>
 
 using namespace oa::netgame;
 
@@ -73,8 +74,15 @@ void versions_and_development_builds() {
 // are not written. A revision of 0 writes nothing.
 void stamping_writes_five_bytes() {
     start_case("stamping_writes_five_bytes");
-    PlayerInfoRecord record{};
-    std::memset(&record, 0x5a, sizeof record);
+    // The record is a wire layout. Filling a byte array and copying it in
+    // keeps the "every other byte stays 0x5a" proof without writing the
+    // struct through memset (its default member initialisers make it
+    // non-trivial, so that call is rejected).
+    static_assert(std::is_trivially_copyable_v<PlayerInfoRecord>);
+    alignas(PlayerInfoRecord) unsigned char filled[sizeof(PlayerInfoRecord)];
+    std::memset(filled, 0x5a, sizeof filled);
+    PlayerInfoRecord record;
+    std::memcpy(&record, filled, sizeof record);
     PresenceBlock block{};
     block.revision = 1;
     block.major = 0;

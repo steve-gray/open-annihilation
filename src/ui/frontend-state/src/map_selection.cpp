@@ -3,10 +3,14 @@
 
 #include "oa/ui/frontend_state/map_selection.hpp"
 #include "oa/data/campaign/directory_list.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <tuple>
 
 namespace oa::ui::frontend_state::map_selection {
 namespace {
@@ -76,6 +80,12 @@ bool open(ModalState& modal, const game_entry::SkirmishSettings& settings, Host&
         throw std::invalid_argument("map enumeration changed while opening modal");
     modal.names.resize(static_cast<std::size_t>(count));
     sort_map_names(modal.names);
+    // The installed pack maps follow every base map, each part in the sorted
+    // order, so the base maps keep their rows.
+    std::ignore =
+        std::stable_partition(modal.names.begin(), modal.names.end(), [](const std::string& name) {
+            return !oa::data::map_pack::split_pack_map_name(name);
+        });
     h.bind_map_names(modal.names);
     h.install_map_selection_callback();
     for (std::size_t i = 0; i < modal.names.size(); ++i)
@@ -120,8 +130,14 @@ void update_preview(Host& h) {
 }
 
 void preview_selection(const ModalState& modal, Host& h) {
-    if (h.select_map(selected_name(modal, h)) != 0)
+    const auto& name = selected_name(modal, h);
+    if (h.select_map(name) != 0) {
         update_preview(h);
+        return;
+    }
+    // A map that cannot be chosen still shows what it is and why.
+    if (const auto reason = h.map_refusal(name))
+        h.show_refused_map(name, *reason);
 }
 
 void handle_event(
@@ -148,7 +164,13 @@ void handle_event(
     }
     if (h.button_result(event.menu, Button::load) != 0)
         h.play_ui_sound("SmallButton", 0);
-    settings.map_name = selected_name(modal, h);
+    // A map that cannot be chosen says why, and the earlier map stays.
+    const auto& chosen = selected_name(modal, h);
+    if (const auto reason = h.map_refusal(chosen)) {
+        h.show_frontend_message(*reason, refusal_message_width, 1, 1);
+        return;
+    }
+    settings.map_name = chosen;
     h.select_map(settings.map_name);
     h.set_parent_map_name(event.menu, settings.map_name);
 }

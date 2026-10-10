@@ -4,7 +4,12 @@
 #include "oa/ui/frontend_state/map_selection.hpp"
 #include <algorithm>
 #include <iostream>
+#include <map>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
 using namespace oa::ui::frontend_state;
 namespace map = oa::ui::frontend_state::map_selection;
 
@@ -22,6 +27,8 @@ struct TestHost final : map::Host {
     int32_t count_override = -1;
     bool have_title = true, load_success = true;
     map::PictureHandle image{7};
+    // Maps that cannot be chosen, and why; select_map answers 0 for them.
+    std::map<std::string, std::string, std::less<>> refusals;
 
     int32_t map_count() override {
         calls.push_back("count");
@@ -40,8 +47,15 @@ struct TestHost final : map::Host {
 
     void
     show_frontend_message(std::string_view text, int32_t width, int32_t a, int32_t b) override {
-        check(text == map::no_maps_message && width == 320 && a == 1 && b == 1, "no-maps message");
-        calls.push_back("message");
+        if (refusals.empty()) {
+            check(
+                text == map::no_maps_message && width == 320 && a == 1 && b == 1, "no-maps message"
+            );
+            calls.push_back("message");
+            return;
+        }
+        check(width == map::refusal_message_width && a == 1 && b == 1, "refusal message");
+        calls.push_back("message:" + std::string(text));
     }
 
     map::MenuHandle load_modal(std::string_view name, uint32_t flags) override {
@@ -110,7 +124,18 @@ struct TestHost final : map::Host {
 
     int32_t select_map(std::string_view s) override {
         calls.push_back("map:" + std::string(s));
-        return select_result;
+        return refusals.contains(s) ? 0 : select_result;
+    }
+
+    std::optional<std::string> map_refusal(std::string_view s) override {
+        const auto found = refusals.find(s);
+        if (found == refusals.end())
+            return std::nullopt;
+        return found->second;
+    }
+
+    void show_refused_map(std::string_view s, std::string_view reason) override {
+        calls.push_back("refused:" + std::string(s) + ":" + std::string(reason));
     }
 
     void set_parent_map_name(map::MenuHandle m, std::string_view s) override {
@@ -314,12 +339,117 @@ void modal_tests() {
     }
     check(caught, "invalid selection rejected");
 }
+
+void pack_map_tests() {
+    constexpr std::string_view reason = "New names: the feature 'rock' is defined already";
+    game_entry::SkirmishSettings settings;
+    settings.map_name = "Beta";
+    map::ModalState modal;
+    TestHost h;
+    h.names = {"isle@isles", "Zulu", "alpha", "Aa@archipelago", "Beta", "shoals@isles"};
+    h.refusals.emplace("shoals@isles", reason);
+    // The base maps keep their sorted rows; the pack maps follow, sorted too.
+    check(map::open(modal, settings, h), "modal with pack maps opens");
+    check(
+        modal.names ==
+                std::vector<std::string>{
+                    "alpha", "Beta", "Zulu", "Aa@archipelago", "isle@isles", "shoals@isles"
+                } &&
+            h.selected == 1,
+        "pack maps follow the base maps"
+    );
+    check(h.saw("text:SIZE:16 mb  Players: 2,4"), "a base map previews as before");
+    // A pack map that fits previews as a base map does.
+    h.calls.clear();
+    h.selected = 4;
+    map::preview_selection(modal, h);
+    check(
+        h.saw("map:isle@isles") && h.saw("load-picture") && h.saw("text:DESCRIPTION:Description"),
+        "a pack map that fits previews"
+    );
+    // A refused row shows its reason and none of the preview's updates.
+    h.calls.clear();
+    h.selected = 5;
+    map::preview_selection(modal, h);
+    check(
+        h.calls ==
+            std::vector<std::string>{
+                "index", "map:shoals@isles", "refused:shoals@isles:" + std::string(reason)
+            },
+        "a refused row shows its reason"
+    );
+    // LOAD on it says why and keeps the earlier map.
+    h.calls.clear();
+    h.buttons = {0, 0x100, 0};
+    map::handle_event(modal, settings, {{12}, 0}, h);
+    check(
+        settings.map_name == "Beta" && h.calls ==
+                                           std::vector<std::string>{
+                                               "button:MAPNAMES",
+                                               "button:LOAD",
+                                               "button:LOAD",
+                                               "sound:SmallButton",
+                                               "index",
+                                               "message:" + std::string(reason)
+                                           },
+        "LOAD on a refused row keeps the earlier map"
+    );
+    // So does a click on its row.
+    h.calls.clear();
+    h.buttons = {1, 0, 0};
+    map::handle_event(modal, settings, {{12}, 0}, h);
+    check(
+        settings.map_name == "Beta" && !h.saw("parent:shoals@isles") &&
+            h.saw("message:" + std::string(reason)),
+        "a click on a refused row keeps the earlier map"
+    );
+    // The pack map that fits is chosen as a base map is.
+    h.calls.clear();
+    h.selected = 4;
+    map::handle_event(modal, settings, {{12}, 0}, h);
+    check(
+        settings.map_name == "isle@isles" &&
+            h.calls ==
+                std::vector<std::string>{
+                    "button:MAPNAMES", "button:LOAD", "index", "map:isle@isles", "parent:isle@isles"
+                },
+        "a pack map that fits is chosen"
+    );
+    // A base map's flow is as before.
+    h.calls.clear();
+    h.buttons = {0, 0x100, 0};
+    h.selected = 0;
+    map::handle_event(modal, settings, {{12}, 0}, h);
+    check(
+        settings.map_name == "alpha" && h.calls ==
+                                            std::vector<std::string>{
+                                                "button:MAPNAMES",
+                                                "button:LOAD",
+                                                "button:LOAD",
+                                                "sound:SmallButton",
+                                                "index",
+                                                "map:alpha",
+                                                "parent:alpha"
+                                            },
+        "a base map is chosen as before"
+    );
+    // A map that does not load and gives no reason keeps the earlier preview.
+    h.calls.clear();
+    h.select_result = 0;
+    h.selected = 2;
+    map::preview_selection(modal, h);
+    check(
+        h.calls == std::vector<std::string>{"index", "map:Zulu"},
+        "a map without a reason keeps the earlier preview"
+    );
+}
 } // namespace
 
 int main() {
     try {
         sort_tests();
         modal_tests();
+        pack_map_tests();
         std::cout << "map selection passed\n";
         return 0;
     } catch (const std::exception& e) {
