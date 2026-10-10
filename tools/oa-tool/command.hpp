@@ -146,6 +146,66 @@ class Failure : public std::runtime_error {
 ///         when the arguments are not the command's
 [[nodiscard]] int run_check(std::span<const std::string> arguments, Output& output);
 
+// The catalogue commands, defined in catalogue.cpp.
+
+/// Makes a sealed publisher key.
+///
+/// `--id` is the key id a signature names. `--out` is the key file, which is
+/// created only when that name is new. `--passphrase-file` reads the
+/// passphrase from a file; otherwise the terminal asks twice, with echo off.
+/// The passphrase is at least 12 bytes. Prints the key id, the public key
+/// and its fingerprint.
+///
+/// @param arguments the options
+/// @param[in,out] output receives the three lines, and a usage line when the
+///        arguments are not the command's
+/// @return exit_done, or exit_usage when the arguments are not the command's
+/// @throws Failure when the key cannot be made
+[[nodiscard]] int run_catalogue_keygen(std::span<const std::string> arguments, Output& output);
+
+/// Prints a sealed key's id, public key and fingerprint.
+///
+/// The passphrase is not used.
+///
+/// @param arguments the key file
+/// @param[in,out] output receives the three lines
+/// @return exit_done
+/// @throws Failure when the file is not a sealed key
+[[nodiscard]] int run_catalogue_public(std::span<const std::string> arguments, Output& output);
+
+/// Signs a catalogue with a sealed key.
+///
+/// `--key` is the sealed key. The positional argument is the catalogue.
+/// `--out` names the signature file; without it the signature is written
+/// beside the catalogue, with `.sig` added to the name. The catalogue is
+/// refused, before the key is opened, when this build cannot read it. The
+/// written pair is checked before the command reports success.
+///
+/// @param arguments the key, the catalogue and any options
+/// @param[in,out] output receives the signed line, and a usage line when the
+///        arguments are not the command's
+/// @return exit_done, or exit_usage when the arguments are not the command's
+/// @throws Failure when the catalogue cannot be signed
+[[nodiscard]] int run_catalogue_sign(std::span<const std::string> arguments, Output& output);
+
+/// Checks a catalogue's signature.
+///
+/// The positional argument is the catalogue. `--sig` names the signature
+/// file; without it the signature is the catalogue's name with `.sig` added.
+/// `--descriptor` reads that registry's id and keys. `--registry` and one or
+/// more `--key` values name them directly; every key is the key the
+/// signature names, and the first is the one that is trusted. Prints the
+/// signing key and the verdict, and exits 0 when the catalogue can be used.
+/// A refused catalogue prints the verdict and exits 1.
+///
+/// @param arguments the catalogue and any options
+/// @param[in,out] output receives the verdict, and a usage line when the
+///        arguments are not the command's
+/// @return exit_done when the catalogue can be used, exit_failed when it is
+///         refused, or exit_usage when the arguments are not the command's
+/// @throws Failure when the catalogue or the signature cannot be read
+[[nodiscard]] int run_catalogue_verify(std::span<const std::string> arguments, Output& output);
+
 /// Returns the tool's commands, in the order help lists them.
 ///
 /// @return the command table

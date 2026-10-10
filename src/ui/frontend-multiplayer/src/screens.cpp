@@ -159,9 +159,6 @@ struct Ui {
     netgame::WireRules wire_rules{};
     /// This machine sends and reads chat as UTF-8; off until bound.
     bool unicode_chat{};
-    /// What this machine says of itself in the setup block. A revision of 0
-    /// writes nothing, until a presence is bound. It survives multiplayer_reset.
-    netgame::PresenceBlock presence{};
     /// The line this machine's recorder answers .report with.
     std::string program_line;
     std::string message;
@@ -851,7 +848,6 @@ void bind_boundaries() {
     lobby.maps.refusal = maps_refusal;
     lobby.wire_rules = state.wire_rules;
     lobby.unicode_chat = state.unicode_chat;
-    lobby.presence = state.presence;
     lobby.local_version_major = state.wire_rules.version_major;
     lobby.local_version_minor = state.wire_rules.version_minor;
     std::snprintf(
@@ -3113,11 +3109,6 @@ void multiplayer_bind_net(const LobbyNet& net) noexcept {
 void multiplayer_bind_unicode_chat(bool on) noexcept {
     ui().unicode_chat = on;
     ui().lobby.unicode_chat = on;
-}
-
-void multiplayer_bind_presence(const netgame::PresenceBlock& presence) noexcept {
-    ui().presence = presence;
-    ui().lobby.presence = presence;
 }
 
 void multiplayer_bind_wire_rules(const netgame::WireRules& rules, const char* program) noexcept {

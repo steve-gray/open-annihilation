@@ -14,7 +14,6 @@
 #include "oa/core/game_state.h"
 #include "oa/core/types.h"
 #include "oa/core/unit_def.h"
-#include "oa/netgame/presence_block.hpp"
 #include "oa/netgame/recorder_session.hpp"
 #include "oa/netgame/wire_rules.hpp"
 #include "oa/ui/frontend_multiplayer/launch_block.hpp"
@@ -24,7 +23,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <cstring>
 #include <string>
@@ -118,17 +116,12 @@ struct PlayerSetupInfo {
     uint8_t version_major{};
     uint8_t version_minor{};
     uint32_t map_hash{};
-    uint8_t engine_signature[2]{}; // 'O', 'A' when OA sent the block
-    uint8_t presence_revision{};   // presence revision, 0 for none; 3.1c never reads it
-    uint8_t oa_version_major{};    // OA version major; 3.1c never reads it
-    uint8_t oa_version_minor{};    // OA version minor; 3.1c never reads it
-    uint8_t
-        oa_version_patch{};   // OA version patch, 255 for a development build; 3.1c never reads it
-    uint8_t presence_flags{}; // presence flags; 3.1c never reads it
-    uint8_t recorder_protocol{};         // the sender's recorder version, 0 for none
-    uint8_t chat_signature[2]{};         // 'U', '8' when chat_flags holds the sender's chat
-    uint8_t chat_flags{};                // netgame::chat_flag_utf8, read after chat_signature
-    uint8_t reserved_after_chat_flags{}; // copied with the block; never read
+    uint8_t engine_signature[2]{};            // 'O', 'A' when OA sent the block
+    uint8_t reserved_after_signature[0x05]{}; // copied with the block; never read
+    uint8_t recorder_protocol{};              // the sender's recorder version, 0 for none
+    uint8_t chat_signature[2]{};              // 'U', '8' when chat_flags holds the sender's chat
+    uint8_t chat_flags{};                     // netgame::chat_flag_utf8, read after chat_signature
+    uint8_t reserved_after_chat_flags{};      // copied with the block; never read
 };
 
 #pragma pack(pop)
@@ -155,11 +148,7 @@ OA_ASSERT_OFFSET(PlayerSetupInfo, version_major, 0xa7);
 OA_ASSERT_OFFSET(PlayerSetupInfo, version_minor, 0xa8);
 OA_ASSERT_OFFSET(PlayerSetupInfo, map_hash, 0xa9);
 OA_ASSERT_OFFSET(PlayerSetupInfo, engine_signature, 0xad);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_revision, 0xaf);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_major, 0xb0);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_minor, 0xb1);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_patch, 0xb2);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_flags, 0xb3);
+OA_ASSERT_OFFSET(PlayerSetupInfo, reserved_after_signature, 0xaf);
 OA_ASSERT_OFFSET(PlayerSetupInfo, recorder_protocol, 0xb4);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_signature, 0xb5);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_flags, 0xb7);
@@ -391,9 +380,6 @@ struct Lobby {
     /// the form it reads (lobby_say). Not one of the game's rules: players
     /// with it on and off play together.
     bool unicode_chat{};
-    /// What this machine says of itself in the setup block's bytes 0xAF-0xB3.
-    /// Revision 0 writes nothing, until a presence is bound.
-    netgame::PresenceBlock presence{};
 };
 
 // ---------------------------------------------------------------------------
@@ -626,21 +612,6 @@ bool recorder_chat_line(Lobby& lobby, int32_t sender_slot, const char* text) noe
 /// @param[in,out] lobby Lobby state.
 /// @param slot The player's slot.
 void recorder_note_block(Lobby& lobby, int32_t slot) noexcept;
-
-/// Reads the presence a battle-room slot carries.
-///
-/// A slot this machine plays (a local player or a computer player) answers
-/// with Lobby::presence when that revision is 1 or more. Any other occupied
-/// slot answers with the presence read from its block, which is nothing
-/// unless the block says Open Annihilation sent it and names a revision of
-/// 1 or more. An empty slot, and a slot number outside the battle room,
-/// answers with nothing.
-///
-/// @param lobby Lobby state.
-/// @param slot The slot; outside 0..9 answers with nothing.
-/// @return The presence, or nothing.
-[[nodiscard]] std::optional<netgame::PresenceBlock>
-lobby_slot_presence(Lobby& lobby, int32_t slot) noexcept;
 
 /// Reads a recorder record another machine sent to the battle room: the host's options and warp-done.
 ///

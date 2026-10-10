@@ -60,9 +60,10 @@ languages::LanguageEntry make_entry(
     return entry;
 }
 
-/// The registry holds English, German, Spanish, French, Italian and
-/// Simplified Chinese, English first and the others in the order of their
-/// own names, each with its name in itself and the game data's word for it.
+/// The registry holds English, German, Spanish, French and Italian as
+/// built-in languages, English first and the others in the order of their
+/// own names, and Simplified Chinese as available. Each has its name in
+/// itself and the game data's word for it.
 void registry_lists_the_built_in_languages_in_menu_order() {
     clear_pack_languages();
     const auto known = languages::known_languages();
@@ -85,14 +86,17 @@ void registry_lists_the_built_in_languages_in_menu_order() {
         OA_CHECK(known[index]->tag == tags[index]);
         OA_CHECK(known[index]->endonym == endonyms[index]);
         OA_CHECK(known[index]->game_name == words[index]);
-        OA_CHECK(known[index]->source == languages::Source::built_in);
+        const bool available = known[index]->tag == "zh-Hans";
         OA_CHECK(
-            known[index]->needs == (known[index]->tag == "zh-Hans"
-                                        ? languages::TextNeeds::modern_fonts
-                                        : languages::TextNeeds::game_fonts)
+            known[index]->source ==
+            (available ? languages::Source::available : languages::Source::built_in)
+        );
+        OA_CHECK(
+            known[index]->needs ==
+            (available ? languages::TextNeeds::modern_fonts : languages::TextNeeds::game_fonts)
         );
         OA_CHECK(languages::drawable(*known[index]));
-        OA_CHECK(languages::playable(*known[index]));
+        OA_CHECK(languages::playable(*known[index]) == !available);
     }
     OA_CHECK(&languages::english() == known[0]);
     OA_CHECK(languages::english().english_name == "English");
@@ -147,7 +151,18 @@ void tags_and_game_words_are_found_without_regard_to_case() {
     OA_CHECK(tag_of(languages::find_by_game_name("french")) == "fr");
     OA_CHECK(tag_of(languages::find_by_game_name("italian")) == "it");
     OA_CHECK(tag_of(languages::find_by_game_name("english")) == "en");
+    // Simplified Chinese is available until its pack is installed, so 3.1c's
+    // word does not find it yet.
+    OA_CHECK(tag_of(languages::find_by_game_name("chinese")) == "none");
+    languages::LanguageEntry chinese;
+    chinese.tag = "zh-Hans";
+    chinese.endonym = "\347\256\200\344\275\223\344\270\255\346\226\207";
+    chinese.english_name = "Chinese (Simplified)";
+    chinese.word = "Chinese";
+    chinese.needs = languages::TextNeeds::modern_fonts;
+    languages::set_pack_languages(std::array<languages::LanguageEntry, 1>{chinese}, {});
     OA_CHECK(tag_of(languages::find_by_game_name("chinese")) == "zh-Hans");
+    clear_pack_languages();
     OA_CHECK(tag_of(languages::find_by_game_name("piglatin")) == "none");
     OA_CHECK(tag_of(languages::find_by_game_name("")) == "none");
 }
@@ -208,13 +223,19 @@ void locales_choose_languages_by_their_leading_subtags() {
     OA_CHECK(tag_of(languages::match_locale("es-419")) == "es");
     OA_CHECK(tag_of(languages::match_locale("en-GB")) == "en");
     OA_CHECK(tag_of(languages::match_locale("pt-BR")) == "none");
-    // Simplified Chinese by its script, its places or Chinese alone;
-    // Traditional Chinese's script and places choose none, never Simplified.
-    OA_CHECK(tag_of(languages::match_locale("zh-CN")) == "zh-Hans");
-    OA_CHECK(tag_of(languages::match_locale("zh_SG.UTF-8")) == "zh-Hans");
-    OA_CHECK(tag_of(languages::match_locale("zh-Hans-CN")) == "zh-Hans");
-    OA_CHECK(tag_of(languages::match_locale("zh")) == "zh-Hans");
+    // Simplified Chinese is available until its pack is installed. Its
+    // script, its places and Chinese alone want it, and none of them chooses
+    // it. Traditional Chinese's script and places choose none either way.
+    OA_CHECK(tag_of(languages::match_locale("zh-CN")) == "none");
+    OA_CHECK(tag_of(languages::match_locale("zh-CN", true)) == "zh-Hans");
+    OA_CHECK(tag_of(languages::match_locale("zh_SG.UTF-8")) == "none");
+    OA_CHECK(tag_of(languages::match_locale("zh_SG.UTF-8", true)) == "zh-Hans");
+    OA_CHECK(tag_of(languages::match_locale("zh-Hans-CN")) == "none");
+    OA_CHECK(tag_of(languages::match_locale("zh-Hans-CN", true)) == "zh-Hans");
+    OA_CHECK(tag_of(languages::match_locale("zh")) == "none");
+    OA_CHECK(tag_of(languages::match_locale("zh", true)) == "zh-Hans");
     OA_CHECK(tag_of(languages::match_locale("zh-TW")) == "none");
+    OA_CHECK(tag_of(languages::match_locale("zh-TW", true)) == "none");
     OA_CHECK(tag_of(languages::match_locale("zh-Hant-HK")) == "none");
     OA_CHECK(tag_of(languages::match_locale("zh_HK")) == "none");
     OA_CHECK(tag_of(languages::match_locale("deu")) == "none");
@@ -233,7 +254,9 @@ void preferred_locales_choose_the_first_known_language() {
     OA_CHECK(pick({"de_DE.UTF-8", "fr"}) == "de");
     OA_CHECK(pick({"en-US", "de"}) == "en");
     OA_CHECK(pick({"ja-JP", "zh-Hant-TW", "ko"}) == "en");
-    OA_CHECK(pick({"zh-TW", "zh-CN"}) == "zh-Hans");
+    OA_CHECK(pick({"zh-TW", "zh-CN"}) == "en");
+    const std::vector<std::string> chinese_locales{"zh-TW", "zh-CN"};
+    OA_CHECK(tag_of(languages::wanted_language(chinese_locales)) == "zh-Hans");
     OA_CHECK(pick({"C", "es_ES"}) == "es");
     OA_CHECK(pick({}) == "en");
 }
@@ -435,9 +458,8 @@ void installed_unit_texts_answer_the_interface() {
 /// an available language comes after every one of those.
 void packs_add_languages_in_menu_order() {
     clear_pack_languages();
-    // "Nederlands" and "Português" fall between Italiano and 简体中文.
-    // "Japanese" would fall earlier, and still comes last because it is
-    // only available.
+    // "Nederlands" and "Português" fall among the built-ins by their names.
+    // "Japanese" and 简体中文 are available, and "Japanese" comes first.
     const languages::LanguageEntry dutch = make_entry("nl", "Nederlands", "Dutch", "Dutch");
     const languages::LanguageEntry portuguese = make_entry(
         "pt-BR",
@@ -454,7 +476,7 @@ void packs_add_languages_in_menu_order() {
 
     const auto known = languages::known_languages();
     const std::array<std::string_view, 9> tags{
-        "en", "de", "es", "fr", "it", "nl", "pt-BR", "zh-Hans", "ja"
+        "en", "de", "es", "fr", "it", "nl", "pt-BR", "ja", "zh-Hans"
     };
     OA_CHECK(known.size() == tags.size());
     for (std::size_t index = 0; index < known.size() && index < tags.size(); ++index)
@@ -463,9 +485,12 @@ void packs_add_languages_in_menu_order() {
     OA_CHECK(known[6]->source == languages::Source::installed);
     OA_CHECK(languages::playable(*known[5]));
     OA_CHECK(languages::playable(*known[6]));
+    OA_CHECK(known[7]->source == languages::Source::available);
+    OA_CHECK(!languages::playable(*known[7]));
+    OA_CHECK(!languages::drawable(*known[7]));
     OA_CHECK(known[8]->source == languages::Source::available);
     OA_CHECK(!languages::playable(*known[8]));
-    OA_CHECK(!languages::drawable(*known[8]));
+    OA_CHECK(languages::drawable(*known[8]));
 }
 
 /// Each rule for keeping a pack entry: what is dropped, what is filled,
@@ -585,8 +610,17 @@ void pack_entries_are_kept_by_rule() {
     }
     OA_CHECK(dutch_at != 0 && flemish_at != 0 && dutch_at < flemish_at);
 
-    // No compiled offered language suppresses an available entry, because
-    // that table is empty. Installing the same tag removes the available one.
+    // A compiled offered language suppresses an available entry for its tag.
+    // Installing the same tag removes the available one.
+    const languages::LanguageEntry waiting_chinese =
+        make_entry("zh-Hans", "Waiting", "Waiting", "Chinese", languages::TextNeeds::modern_fonts);
+    languages::set_pack_languages({}, std::array<languages::LanguageEntry, 1>{waiting_chinese});
+    const languages::Language* offered_chinese = languages::find_by_tag("zh-Hans");
+    OA_CHECK(offered_chinese != nullptr);
+    if (offered_chinese != nullptr) {
+        OA_CHECK(offered_chinese->source == languages::Source::available);
+        OA_CHECK(offered_chinese->english_name == "Chinese (Simplified)");
+    }
     const languages::LanguageEntry waiting = make_entry("ja", "Japanese", "Japanese", "Japanese");
     languages::set_pack_languages({}, std::array<languages::LanguageEntry, 1>{waiting});
     const languages::Language* available_japanese = languages::find_by_tag("ja");

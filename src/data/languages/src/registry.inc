@@ -21,8 +21,9 @@
 // - needs: what drawing its text needs (TextNeeds).
 //
 // The game data of 3.1c holds German, French, Italian and Spanish.
-// Simplified Chinese draws in the modern fonts, its text in UTF-8, from the
-// game data under its word or from a language pack (language_pack.hpp).
+// Simplified Chinese is a pack the engine knows of (kOfferedLanguages), not
+// compiled as built-in. Its text is UTF-8 and it draws in the modern fonts,
+// from the game data under its word or from that pack (language_pack.hpp).
 // Among the languages a later entry might add:
 //
 // - Portuguese ("pt", Português) or Dutch ("nl", Nederlands): every
@@ -32,8 +33,8 @@
 //   and Japanese ("ja"): TextNeeds::more_font_faces, for the Traditional
 //   Chinese and Japanese faces of Noto Sans CJK. Until Traditional Chinese
 //   has an entry, its locales are kUnofferedLocales.
-// - Korean ("ko"): TextNeeds::more_font_faces while the cut CJK face keeps
-//   only KS X 1001's syllables.
+// - Korean ("ko"): TextNeeds::more_font_faces, for a face that holds its
+//   Hangul syllables.
 // - Hindi ("hi"): TextNeeds::text_shaping, for Devanagari's shaping and a
 //   face that holds it.
 //
@@ -62,8 +63,8 @@ constexpr std::array<std::string_view, 5> kSimplifiedChineseLocales{
 /// "zh-TW" or "zh-Hant-HK" never reaches "zh" and Simplified Chinese.
 constexpr std::array<std::string_view, 4> kUnofferedLocales{"zh-Hant", "zh-TW", "zh-HK", "zh-MO"};
 
-/// Every language the game knows.
-constexpr std::array<Language, 6> kLanguages{{
+/// Every language 3.1c's data holds, which the game knows without a pack.
+constexpr std::array<Language, 5> kLanguages{{
     {"en", "English", "English", "English", kEnglishLocales, {}, TextNeeds::game_fonts},
     {"de", "Deutsch", "German", "German", kGermanLocales, {}, TextNeeds::game_fonts},
     // Español
@@ -85,6 +86,15 @@ constexpr std::array<Language, 6> kLanguages{{
      {},
      TextNeeds::game_fonts},
     {"it", "Italiano", "Italian", "Italian", kItalianLocales, {}, TextNeeds::game_fonts},
+}};
+
+/// Languages the engine knows a pack exists for, offered before any
+/// catalogue is read. Each entry is written with Source::available, since
+/// the default would mark it built in. Simplified Chinese is the entry.
+/// An installed pack for one of these tags takes its place among the
+/// languages the game shows; the entry here stays, and an available entry
+/// passed for the same tag is dropped in its favour.
+constexpr std::array<Language, 1> kOfferedLanguages{{
     // 简体中文
     {"zh-Hans",
      "\347\256\200\344\275\223\344\270\255\346\226\207",
@@ -92,14 +102,6 @@ constexpr std::array<Language, 6> kLanguages{{
      "Chinese",
      kSimplifiedChineseLocales,
      {},
-     TextNeeds::modern_fonts},
+     TextNeeds::modern_fonts,
+     Source::available},
 }};
-
-/// Languages the engine knows a pack exists for, offered before any
-/// catalogue is read. Each entry is written with Source::available, since
-/// the default would mark it built in. The table is empty until Simplified
-/// Chinese moves here from the compiled languages. An installed pack for
-/// one of these tags takes its place among the languages the game shows;
-/// the entry here stays, and an available entry passed for the same tag is
-/// dropped in its favour.
-constexpr std::array<Language, 0> kOfferedLanguages{};

@@ -6,7 +6,6 @@
 
 #include "oa/netgame/frame.hpp"
 #include "oa/netgame/presence.hpp"
-#include "oa/netgame/presence_block.hpp"
 #include "oa/netgame/records.hpp"
 
 #include <cstdio>
@@ -521,9 +520,6 @@ void only_oa_blocks_are_peers() {
     uint8_t block[player_info_block_bytes]{};
     CHECK(!presence_peer(block));
     mark_engine_signature(block);
-    block[player_info_presence_revision_offset] = 0;
-    CHECK(!presence_peer(block));
-    block[player_info_presence_revision_offset] = 1;
     CHECK(presence_peer(block));
 }
 

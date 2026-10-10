@@ -37,13 +37,13 @@ enum class TextNeeds : uint8_t {
     /// The modern fonts (oa/platform/text_font.hpp), which hold the
     /// letters outside the code page, and game data that holds its text as
     /// UTF-8 (a mod profile's ui.text-rendering, unicode). Simplified
-    /// Chinese is one: the bundled Noto Sans CJK SC cut holds GB 2312.
+    /// Chinese is one: a pack the engine knows of, whose font comes with
+    /// the pack.
     modern_fonts,
     /// A modern font face the game does not bundle: Traditional Chinese and
-    /// Japanese draw their characters in their own regional forms, which
-    /// the Simplified Chinese face draws differently, and the bundled cut
-    /// keeps only the commonest Traditional and Japanese characters and
-    /// 2,350 Hangul syllables of Korean's 11,172.
+    /// Japanese draw their characters in their own regional forms, which a
+    /// Simplified Chinese face draws differently, and Korean needs a face
+    /// that holds its Hangul syllables.
     more_font_faces,
     /// Complex text shaping: letters that join, stack and change order, as
     /// Devanagari's do in Hindi, which the FreeType-only drawing cannot lay

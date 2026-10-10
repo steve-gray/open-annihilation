@@ -9,7 +9,6 @@
 // process over 127.0.0.1, runs the in-game team panels over the session
 // and compares both worlds after a settled run.
 #include "oa/app/pack_map_source.hpp"
-#include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
 #include "network_play.hpp"
@@ -26,7 +25,6 @@
 #include "oa/netgame/match/match_binding.hpp"
 #include "oa/netgame/match/net_match.hpp"
 #include "oa/netgame/match/session_lobby.hpp"
-#include "oa/netgame/presence_block.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/netgame/unicode_chat.hpp"
 #include "oa/app/netgame/extension_api.hpp"
@@ -61,6 +59,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -512,7 +511,7 @@ void mark_agreed_units(void* context, UnitDef* headers, uint32_t count) {
 #error "OA_ENGINE_VERSION names the engine's version for the recorder's report line"
 #endif
 #ifndef OA_ENGINE_VERSION_LABEL
-#error "OA_ENGINE_VERSION_LABEL names a development build for the setup block's presence"
+#error "OA_ENGINE_VERSION_LABEL names the engine's version label, empty for a release build"
 #endif
 
 /// The line this machine's recorder answers .report with: the program and its version.
@@ -1796,22 +1795,8 @@ void NetworkPlay::follow_unicode_chat() {
 }
 
 void NetworkPlay::follow_presence() {
-    if (presence_taken_ && !mp::multiplayer_showing())
-        return;
-    presence_taken_ = true;
-    const auto facts = presence_facts(runtime_);
-    auto block = oa::netgame::presence_version(OA_ENGINE_VERSION, OA_ENGINE_VERSION_LABEL);
-    if (facts.developer_mode)
-        block.flags =
-            static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::developer_mode);
-    if (facts.rules_differ_from_base)
-        block.flags = static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::rules_differ);
-    if (!facts.view_hacks.empty())
-        block.flags = static_cast<uint8_t>(block.flags | oa::netgame::presence_flag::view_hacks);
-    if (block == bound_presence_)
-        return;
-    mp::multiplayer_bind_presence(block);
-    bound_presence_ = block;
+    // The presence record (oa/netgame/presence.hpp) is bound here once OA
+    // machines send it; the setup block carries no presence.
 }
 
 // Per frame: the load barrier while loading; in the match a pause set
@@ -2137,8 +2122,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         mp::lobby_reset(*side->lobby, *side->game);
         side->lobby->net = side->net;
         side->lobby->wire_rules = runtime_wire_rules(side->play->runtime_);
-        side->play->follow_presence();
-        side->lobby->presence = side->play->bound_presence_;
         side->lobby->unicode_chat = side->play->unicode_chat();
         side->lobby->local_version_major = side->lobby->wire_rules.version_major;
         side->lobby->local_version_minor = side->lobby->wire_rules.version_minor;
@@ -2427,22 +2410,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     };
     const auto probes_before_build = joiner_received(oa::netgame::RecordType::probe);
     std::vector<uint8_t> build_progress;
-    // The match copies each kept block and sends that copy on. The battle
-    // room's send stamps a record, which does not write the block it keeps,
-    // and this check never enters the battle room, so the local and computer
-    // blocks are marked here, after seating and before each launch.
-    const auto mark_kept_presence = [](mp::Lobby& lobby) {
-        for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
-            const auto& player = mp::slot_player(lobby, slot);
-            if (player.in_use == 0)
-                continue;
-            if (player.status != mp::kSlotLocal && player.status != mp::kSlotComputer)
-                continue;
-            if (auto* info = mp::slot_info(lobby, slot))
-                oa::netgame::mark_presence(reinterpret_cast<uint8_t*>(info), lobby.presence);
-        }
-    };
-    mark_kept_presence(*host.lobby);
     NetHost::launch(*this, *host.lobby);
     require(net_->active && net_->loading, "host launch");
     wait_until(
@@ -2463,7 +2430,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             !build_progress.empty() && build_progress.front() < nm::load_progress_complete,
         "the host's build sent no probe or load progress to the joiner"
     );
-    mark_kept_presence(*client.lobby);
     NetHost::launch(joiner_play, *client.lobby);
     require(joiner_play.net_->active && joiner_play.net_->loading, "client launch");
     // The load barrier and the match entry run through the per-frame path.
@@ -2518,14 +2484,43 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
             "a machine did not start the network game at the normal speed"
         );
     }
+    const auto& host_world = runtime_.match_->state();
+    const auto& client_world = joiner.match_->state();
+    // The setup blocks each machine holds of the other machine's players, a
+    // computer player's among them, came from that machine and carry the
+    // five bytes after the engine signature as zero, as 0.7 sent them:
+    // presence travels only in the presence record. Counted are the remote
+    // blocks seen, and those whose five bytes are all zero.
+    int32_t remote_blocks = 0;
+    int32_t blocks_without_presence = 0;
+    for (const auto* world : {&host_world, &client_world})
+        for (const auto& player : world->game.players) {
+            if (player.in_use == 0 || player.status != OA_PLAYER_STATUS_MIRRORED)
+                continue;
+            const auto* info = world_player_info(world, &player);
+            if (info == nullptr)
+                continue;
+            ++remote_blocks;
+            if (std::all_of(
+                    std::begin(info->reserved_after_signature),
+                    std::end(info->reserved_after_signature),
+                    [](uint8_t at) { return at == 0; }
+                ))
+                ++blocks_without_presence;
+        }
+    std::cout << "net loopback check: setup blocks carry no presence bytes: "
+              << blocks_without_presence << " / " << remote_blocks << '\n';
+    require(remote_blocks > 0, "no remote setup block reached either machine");
+    require(
+        blocks_without_presence == remote_blocks,
+        "a remote setup block carried bytes after the engine signature"
+    );
     if (computer) {
         NetHost::computer_match(*this, joiner_play, ticks, computer_id, watching);
         return 0;
     }
     const auto host_commander = NetHost::local_commander(*this);
     require(host_commander != 0, "host commander");
-    const auto& host_world = runtime_.match_->state();
-    const auto& client_world = joiner.match_->state();
     const auto commander_z = host_world.units[host_commander].position.z;
     const auto speed_before = runtime_.preferences_.current_game_speed;
     // The host commander's pose at each host tick; the client's copy is
@@ -2564,34 +2559,6 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     require(
         unicode_chat() || (utf8_blocks(host_world) == 0 && utf8_blocks(client_world) == 0),
         "a setup block said UTF-8 chat with Unicode chat off"
-    );
-    // Each machine's in-match block of the other player carries this build's
-    // presence. The host's world holds the joiner's block, and the joiner's
-    // world holds the host's.
-    const auto expected = oa::netgame::presence_version(OA_ENGINE_VERSION, OA_ENGINE_VERSION_LABEL);
-    const auto presence_blocks = [&](const World& world, uint32_t player_id) {
-        int32_t count = 0;
-        for (const auto& player : world.game.players) {
-            if (player.in_use == 0 || player.player_id != player_id)
-                continue;
-            const auto* info = world_player_info(&world, &player);
-            if (info == nullptr)
-                continue;
-            const auto carried = oa::netgame::read_presence(reinterpret_cast<const uint8_t*>(info));
-            if (carried && carried->revision == expected.revision &&
-                carried->major == expected.major && carried->minor == expected.minor &&
-                carried->patch == expected.patch)
-                ++count;
-        }
-        return count;
-    };
-    const auto host_presence = presence_blocks(host_world, client_id);
-    const auto joiner_presence = presence_blocks(client_world, host_id);
-    std::cout << "net loopback check: presence in the remote setup blocks " << host_presence
-              << " / " << joiner_presence << '\n';
-    require(
-        host_presence == 1 && joiner_presence == 1,
-        "a remote setup block did not carry this build's presence"
     );
     std::vector<UnitPose> host_poses;
     uint32_t copy_compared = 0;
