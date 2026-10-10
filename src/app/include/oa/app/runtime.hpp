@@ -6394,6 +6394,18 @@ class Runtime final : public menu::Host,
     /// catalogue and the setting, and puts the language in effect.
     void start_language();
 
+    /// Reads the language packs again and puts them in effect, on the
+    /// interface's thread between frames: the registry, the interface
+    /// catalogue, the pack layers and the font faces. When the raw language
+    /// setting names a pack that can now be shown, the game switches to it.
+    /// When the system's language now finds a pack, System default follows.
+    void reload_language_packs();
+
+    /// Reads the three pack lists, registers the player's and the engine's,
+    /// chooses the system's language again and rebuilds the interface
+    /// catalogue. start_language and reload_language_packs both call it.
+    void load_language_packs();
+
     /// Reads the interface catalogue files of the languages folder beside the
     /// game's other files, in the order of their names; a file that does not
     /// read is reported and skipped.
