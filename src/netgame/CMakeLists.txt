@@ -121,6 +121,9 @@ if(WIN32)
   endforeach()
 endif()
 
+# Fetches catalogues and packages over plain HTTP.
+add_subdirectory(http)
+
 add_subdirectory(replication)
 add_subdirectory(match)
 add_subdirectory(frontend)
