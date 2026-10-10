@@ -4,6 +4,7 @@
 #include "oa/formats/hpi.hpp"
 
 #include "oa/base/threads.hpp"
+#include "oa/formats/zip/stream.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -373,6 +374,495 @@ find_loose_directory(const std::filesystem::path& root, const std::string& key) 
 
 } // namespace
 
+// One published pack layer. It is never changed after the store shares it:
+// a new set of hidden marks is a new PackLayer that shares the zip source.
+struct AssetStore::PackLayer {
+    // The open zip, shared by every copy of the layer. The lock is held only
+    // around one read of the file, never across inflation.
+    struct ZipSource {
+        base::threads::Mutex lock;
+        std::ifstream file;
+        uint64_t size = 0;
+        formats::zip::StreamDirectory directory;
+    };
+
+    struct Entry {
+        std::string path;
+        std::string key;
+        std::string name;
+        std::filesystem::path host;
+        std::size_t zip_index = 0;
+        uint32_t size = 0;
+        bool hidden = false;
+    };
+
+    // One child of a folder the layer's paths imply. A directory child is the
+    // first spelling of that prefix; a file child points at entries.
+    struct Child {
+        std::string name;
+        bool directory = false;
+        uint32_t size = 0;
+        std::size_t entry = 0;
+    };
+
+    struct Folder {
+        std::vector<Child> children;
+    };
+
+    PackLayerKind kind = PackLayerKind::folder;
+    std::filesystem::path location;
+    std::string label;
+    uint64_t serial = 0;
+    std::vector<Entry> entries;
+    std::unordered_map<std::string, std::size_t> index;
+    std::unordered_map<std::string, Folder> folders;
+    std::shared_ptr<ZipSource> zip;
+};
+
+struct AssetStore::PackLayerSlot {
+    base::threads::Mutex lock;
+    std::shared_ptr<const PackLayer> layer;
+};
+
+namespace {
+
+/// Returns the next serial a pack layer is published with.
+///
+/// @return the serial, different for every call in this process
+uint64_t next_pack_serial() {
+    static std::atomic<uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed);
+}
+
+/// Returns why a pack path is one a loose lookup would refuse, or empty.
+///
+/// @param path the shown path or the source path
+/// @return the reason, or empty when the path can be stored
+std::string pack_path_problem(std::string_view path) {
+    if (path.empty())
+        return "empty path";
+    if (path.front() == '/' || path.front() == '\\')
+        return "absolute path";
+    if (path.find(':') != std::string_view::npos)
+        return "drive-qualified path";
+    if (path.find('\0') != std::string_view::npos)
+        return "path contains NUL";
+    if (path.size() > kMaxPathLength)
+        return "path is too long";
+    const auto key = normalized_path(path);
+    if (key.empty())
+        return "empty path";
+    if (hidden_at_top(first_part(key)))
+        return "path starts with the backup folder";
+    for (std::size_t begin = 0; begin < key.size();) {
+        const auto end = key.find('/', begin);
+        const auto part = key.substr(begin, end == std::string::npos ? end : end - begin);
+        if (part.empty() || part == "." || part == "..")
+            return "path contains traversal";
+        if (end == std::string::npos)
+            break;
+        begin = end + 1;
+    }
+    return {};
+}
+
+/// Sets a refusal that names one pack file.
+///
+/// @param error receives the message
+/// @param file the path at fault
+/// @param reason why it was refused
+void pack_file_error(std::string& error, std::string_view file, std::string_view reason) {
+    error = "pack layer file '" + std::string(file) + "': " + std::string(reason);
+}
+
+/// Splits a pack path into its parts, keeping each part's spelling.
+///
+/// @param path the path, with '/' or '\\' between parts
+/// @return the parts, empty segments dropped
+std::vector<std::string> pack_parts(std::string_view path) {
+    std::vector<std::string> parts;
+    std::string current;
+    for (const char character : path) {
+        if (character == '/' || character == '\\') {
+            if (!current.empty())
+                parts.push_back(std::move(current));
+            current.clear();
+            continue;
+        }
+        current.push_back(character);
+    }
+    if (!current.empty())
+        parts.push_back(std::move(current));
+    return parts;
+}
+
+/// Resolves one source file below a pack folder, ignoring ASCII case.
+///
+/// As loose_path_listed_in: two names that fold alike are refused, the file
+/// must be regular, and a link that leaves the folder is refused.
+///
+/// @param root the pack folder
+/// @param source the source path
+/// @param[out] reason why the file cannot be taken
+/// @return the host file, or nullopt
+std::optional<std::filesystem::path>
+resolve_pack_file(const std::filesystem::path& root, std::string_view source, std::string& reason) {
+    const auto key = normalized_path(source);
+    auto current = root;
+    for (std::size_t begin = 0; begin < key.size();) {
+        const auto end = key.find('/', begin);
+        const auto part = key.substr(begin, end == std::string::npos ? end : end - begin);
+        std::error_code error;
+        if (!std::filesystem::is_directory(current, error)) {
+            reason = "not a file in the pack";
+            return std::nullopt;
+        }
+        std::optional<std::filesystem::path> match;
+        for (const auto& item : std::filesystem::directory_iterator(current, error)) {
+            if (normalized_path(utf8_text(item.path().filename())) != part)
+                continue;
+            if (match) {
+                reason = "ambiguous case";
+                return std::nullopt;
+            }
+            match = item.path();
+        }
+        if (error || !match) {
+            reason = "not a file in the pack";
+            return std::nullopt;
+        }
+        current = *match;
+        if (end == std::string::npos)
+            break;
+        begin = end + 1;
+    }
+    if (!stays_inside(root, current)) {
+        reason = "leaves the pack";
+        return std::nullopt;
+    }
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(current, error)) {
+        reason = "not a regular file";
+        return std::nullopt;
+    }
+    const auto size = std::filesystem::file_size(current, error);
+    if (error || !formats::hpi::entry_size_allowed(size)) {
+        reason = "exceeds the entry size limit";
+        return std::nullopt;
+    }
+    return current;
+}
+
+} // namespace
+
+// Builds and reads a pack layer. A friend of AssetStore so it can name the
+// private layer type from code that is not a member.
+struct PackLayerOps {
+    static bool zip_read_at(void* context, uint64_t offset, std::span<uint8_t> bytes);
+    static std::vector<uint8_t>
+    read_pack_zip(const AssetStore::PackLayer& layer, const AssetStore::PackLayer::Entry& entry);
+    static AssetData
+    read_pack_entry(const AssetStore::PackLayer& layer, const AssetStore::PackLayer::Entry& entry);
+    static bool add_pack_entry(
+        AssetStore::PackLayer& layer,
+        const std::string& path,
+        const std::filesystem::path& host,
+        std::size_t zip_index,
+        uint32_t size,
+        std::string& error
+    );
+    static std::shared_ptr<AssetStore::PackLayer>
+    make_pack_layer(const PackLayerSpec& spec, std::string& error);
+    static void append_pack_matches(
+        std::vector<FoundEntry>& found,
+        const AssetStore::PackLayer& layer,
+        std::string_view directory,
+        std::string_view spec,
+        int mount
+    );
+};
+
+/// Reads one range of a pack zip. The lock is released before the caller inflates.
+///
+/// @param context the ZipSource
+/// @param offset file offset of the first byte
+/// @param bytes receives bytes.size() bytes
+/// @return true when every byte was read
+bool PackLayerOps::zip_read_at(void* context, uint64_t offset, std::span<uint8_t> bytes) {
+    auto* source = static_cast<AssetStore::PackLayer::ZipSource*>(context);
+    const base::threads::LockGuard guard(source->lock);
+    if (offset > source->size || bytes.size() > source->size - offset)
+        return false;
+    source->file.clear();
+    source->file.seekg(static_cast<std::streamoff>(offset));
+    if (!source->file)
+        return false;
+    source->file.read(
+        reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())
+    );
+    return static_cast<std::size_t>(source->file.gcount()) == bytes.size();
+}
+
+/// Reads one zip entry of a pack layer.
+///
+/// @param layer the layer
+/// @param entry the layer's file
+/// @return the entry's bytes
+/// @throws std::runtime_error naming the path, the label and the reason
+std::vector<uint8_t> PackLayerOps::read_pack_zip(
+    const AssetStore::PackLayer& layer, const AssetStore::PackLayer::Entry& entry
+) {
+    formats::zip::SourceHooks hooks{layer.zip.get(), zip_read_at};
+    std::vector<uint8_t> bytes;
+    formats::zip::ZipError error;
+    const auto& zip_entry = layer.zip->directory.entries[entry.zip_index];
+    if (!formats::zip::read_stream_entry(
+            hooks, layer.zip->size, zip_entry, formats::hpi::EntryByteLimit, bytes, error
+        )) {
+        fail(
+            "pack layer '" + layer.label + "' cannot read '" + entry.path +
+            "': " + formats::zip::zip_status_message(error.status)
+        );
+    }
+    return bytes;
+}
+
+/// Reads a pack layer's own copy of one of its files.
+///
+/// @param layer the layer
+/// @param entry the layer's file
+/// @return the bytes, the providing path and whether they came from a zip
+AssetData PackLayerOps::read_pack_entry(
+    const AssetStore::PackLayer& layer, const AssetStore::PackLayer::Entry& entry
+) {
+    if (layer.kind == PackLayerKind::zip)
+        return {read_pack_zip(layer, entry), layer.location, true};
+    try {
+        return {read_loose(entry.host), entry.host, false};
+    } catch (const std::runtime_error& error) {
+        fail("pack layer '" + layer.label + "' cannot read '" + entry.path + "': " + error.what());
+    }
+}
+
+/// Adds one shown file and the folder prefixes it implies.
+///
+/// @param layer the layer being built
+/// @param path the path the store shows
+/// @param host the resolved folder file; empty for a zip
+/// @param zip_index the zip entry, when host is empty
+/// @param size the file's size
+/// @param[out] error the reason when the path collides with a folder
+/// @return false when the path cannot be added
+bool PackLayerOps::add_pack_entry(
+    AssetStore::PackLayer& layer,
+    const std::string& path,
+    const std::filesystem::path& host,
+    std::size_t zip_index,
+    uint32_t size,
+    std::string& error
+) {
+    const auto parts = pack_parts(path);
+    std::string prefix;
+    for (std::size_t index = 0; index + 1 < parts.size(); ++index) {
+        const auto folded = normalized_path(parts[index]);
+        const std::string next = prefix.empty() ? folded : prefix + "/" + folded;
+        if (layer.index.contains(next)) {
+            pack_file_error(error, path, "'" + parts[index] + "' is a file");
+            return false;
+        }
+        auto& folder = layer.folders[prefix];
+        bool present = false;
+        for (const auto& child : folder.children) {
+            if (child.directory && normalized_path(child.name) == folded) {
+                present = true;
+                break;
+            }
+        }
+        if (!present)
+            folder.children.push_back({parts[index], true, 0, 0});
+        prefix = next;
+    }
+    const auto key = normalized_path(path);
+    if (layer.folders.contains(key)) {
+        pack_file_error(error, path, "the path is a folder");
+        return false;
+    }
+    AssetStore::PackLayer::Entry stored;
+    stored.path = path;
+    stored.key = key;
+    stored.name = parts.empty() ? path : parts.back();
+    stored.host = host;
+    stored.zip_index = zip_index;
+    stored.size = size;
+    const auto index = layer.entries.size();
+    layer.entries.push_back(std::move(stored));
+    layer.index.emplace(key, index);
+    layer.folders[prefix].children.push_back({layer.entries.back().name, false, size, index});
+    return true;
+}
+
+/// Builds a pack layer without publishing it.
+///
+/// The count, the label and the paths are checked before any file is opened.
+///
+/// @param spec the folder or zip, the files it shows and its label
+/// @param[out] error the reason when no layer is returned
+/// @return the layer, or null
+std::shared_ptr<AssetStore::PackLayer>
+PackLayerOps::make_pack_layer(const PackLayerSpec& spec, std::string& error) {
+    if (spec.files.empty()) {
+        error = "a pack layer lists no files";
+        return nullptr;
+    }
+    if (spec.files.size() > formats::hpi::PackLayerFileLimit) {
+        pack_file_error(
+            error,
+            spec.files[formats::hpi::PackLayerFileLimit].path,
+            "a pack layer lists at most " + std::to_string(formats::hpi::PackLayerFileLimit) +
+                " files"
+        );
+        return nullptr;
+    }
+    if (spec.label.empty()) {
+        error = "a pack layer needs a label";
+        return nullptr;
+    }
+    if (spec.label.find('\n') != std::string::npos || spec.label.find('\r') != std::string::npos) {
+        error = "a pack layer label holds more than one line";
+        return nullptr;
+    }
+    std::unordered_map<std::string, std::string> seen;
+    for (const auto& file : spec.files) {
+        if (const auto problem = pack_path_problem(file.path); !problem.empty()) {
+            pack_file_error(error, file.path, problem);
+            return nullptr;
+        }
+        if (const auto problem = pack_path_problem(file.source); !problem.empty()) {
+            pack_file_error(error, file.source, problem);
+            return nullptr;
+        }
+        const auto key = normalized_path(file.path);
+        const auto [slot, inserted] = seen.emplace(key, file.path);
+        if (!inserted) {
+            pack_file_error(error, file.path, "the same path as " + slot->second);
+            return nullptr;
+        }
+    }
+
+    auto layer = std::make_shared<AssetStore::PackLayer>();
+    layer->kind = spec.kind;
+    layer->label = spec.label;
+    layer->location = resolved(spec.location);
+
+    if (spec.kind == PackLayerKind::folder) {
+        std::error_code status;
+        if (!std::filesystem::is_directory(layer->location, status)) {
+            pack_file_error(error, utf8_text(spec.location), "not a folder");
+            return nullptr;
+        }
+        for (const auto& file : spec.files) {
+            std::string reason;
+            const auto host = resolve_pack_file(layer->location, file.source, reason);
+            if (!host) {
+                pack_file_error(error, file.source, reason);
+                return nullptr;
+            }
+            std::error_code size_error;
+            const auto size = std::filesystem::file_size(*host, size_error);
+            if (size_error || !formats::hpi::entry_size_allowed(size)) {
+                pack_file_error(error, file.source, "exceeds the entry size limit");
+                return nullptr;
+            }
+            if (!add_pack_entry(*layer, file.path, *host, 0, static_cast<uint32_t>(size), error))
+                return nullptr;
+        }
+        return layer;
+    }
+
+    auto zip = std::make_shared<AssetStore::PackLayer::ZipSource>();
+    std::error_code status;
+    zip->size = std::filesystem::file_size(layer->location, status);
+    zip->file.open(layer->location, std::ios::binary);
+    if (status || !zip->file) {
+        pack_file_error(error, utf8_text(spec.location), "cannot open the zip");
+        return nullptr;
+    }
+    formats::zip::SourceHooks hooks{zip.get(), zip_read_at};
+    formats::zip::ZipError zip_error;
+    if (!formats::zip::read_stream_directory(
+            hooks, zip->size, formats::zip::StreamLimits{}, zip->directory, zip_error
+        )) {
+        pack_file_error(
+            error, utf8_text(spec.location), formats::zip::zip_status_message(zip_error.status)
+        );
+        return nullptr;
+    }
+    layer->zip = std::move(zip);
+    for (const auto& file : spec.files) {
+        const auto key = normalized_path(file.source);
+        std::vector<std::size_t> matches;
+        for (std::size_t index = 0; index < layer->zip->directory.entries.size(); ++index)
+            if (normalized_path(layer->zip->directory.entries[index].name) == key)
+                matches.push_back(index);
+        if (matches.size() != 1) {
+            pack_file_error(
+                error,
+                file.source,
+                matches.empty() ? "not a file in the pack" : "names more than one entry"
+            );
+            return nullptr;
+        }
+        const auto& zip_entry = layer->zip->directory.entries[matches[0]];
+        if (zip_entry.directory || zip_entry.symbolic_link || zip_entry.special_file) {
+            pack_file_error(error, file.source, "not a file in the pack");
+            return nullptr;
+        }
+        if (!formats::hpi::entry_size_allowed(zip_entry.bytes)) {
+            pack_file_error(error, file.source, "exceeds the entry size limit");
+            return nullptr;
+        }
+        if (!add_pack_entry(
+                *layer, file.path, {}, matches[0], static_cast<uint32_t>(zip_entry.bytes), error
+            ))
+            return nullptr;
+    }
+    return layer;
+}
+
+/// Appends a pack folder's children that match a find.
+///
+/// @param[in,out] found matches appended in the layer's order
+/// @param layer the layer
+/// @param directory directory part of the pattern, with its trailing separator
+/// @param spec wildcard for the names
+/// @param mount mount index past every archive
+void PackLayerOps::append_pack_matches(
+    std::vector<FoundEntry>& found,
+    const AssetStore::PackLayer& layer,
+    std::string_view directory,
+    std::string_view spec,
+    int mount
+) {
+    std::string folder;
+    if (!directory.empty()) {
+        if (directory.back() == '/' || directory.back() == '\\')
+            directory.remove_suffix(1);
+        folder = normalized_path(directory);
+    }
+    const auto listed = layer.folders.find(folder);
+    if (listed == layer.folders.end())
+        return;
+    for (const auto& child : listed->second.children) {
+        if (!match_wildcard(child.name, spec))
+            continue;
+        if (!child.directory && layer.entries[child.entry].hidden)
+            continue;
+        found.push_back(
+            {child.name, child.directory, child.directory ? 0 : child.size, mount, true}
+        );
+    }
+}
+
 struct ResourceFile {
     std::ifstream loose;
     uint32_t loose_size = 0;
@@ -384,6 +874,11 @@ struct ResourceFile {
     uint32_t position = 0;
     // Decoded 64 KiB block of a chunked entry, dropped on crossing a block.
     std::vector<uint8_t> block;
+    // The pack layer this handle was opened from, kept until close.
+    std::shared_ptr<const AssetStore::PackLayer> pack_layer;
+    // A zip pack entry, read whole when the handle was opened.
+    std::vector<uint8_t> memory;
+    bool pack_zip = false;
 };
 
 // Folder listings of the loose tree, keyed by the folded resource path of the
@@ -466,14 +961,16 @@ void AssetStore::LooseIndex::reset() {
 
 AssetStore::AssetStore(std::filesystem::path loose_root, std::size_t loose_index_limit)
     : loose_roots_{std::filesystem::absolute(std::move(loose_root))},
-      loose_index_(std::make_unique<LooseIndex>(loose_index_limit)) {
+      loose_index_(std::make_unique<LooseIndex>(loose_index_limit)),
+      pack_layer_(std::make_unique<PackLayerSlot>()) {
 }
 
 AssetStore::AssetStore(
     std::vector<std::filesystem::path> loose_roots, std::size_t loose_index_limit
 )
     : loose_roots_(std::move(loose_roots)),
-      loose_index_(std::make_unique<LooseIndex>(loose_index_limit)) {
+      loose_index_(std::make_unique<LooseIndex>(loose_index_limit)),
+      pack_layer_(std::make_unique<PackLayerSlot>()) {
     if (loose_roots_.empty())
         fail("an asset store needs a folder");
     for (auto& root : loose_roots_)
@@ -838,6 +1335,94 @@ AssetStore::providing_archive(std::string_view resource) const {
     return std::nullopt;
 }
 
+std::shared_ptr<const AssetStore::PackLayer> AssetStore::pack_layer_snapshot() const {
+    if (pack_layer_ == nullptr)
+        return nullptr;
+    const base::threads::LockGuard guard(pack_layer_->lock);
+    return pack_layer_->layer;
+}
+
+bool AssetStore::mount_pack_layer(PackLayerSpec spec, std::string* error) {
+    if (pack_layer_ == nullptr)
+        pack_layer_ = std::make_unique<PackLayerSlot>();
+    if (const auto mounted = pack_layer_snapshot()) {
+        if (error != nullptr)
+            *error = "a pack layer is mounted already: " + mounted->label;
+        return false;
+    }
+    std::string reason;
+    auto built = PackLayerOps::make_pack_layer(spec, reason);
+    if (!built) {
+        if (error != nullptr)
+            *error = std::move(reason);
+        return false;
+    }
+    for (auto& entry : built->entries)
+        entry.hidden = loose_path(entry.path).has_value();
+    built->serial = next_pack_serial();
+    const base::threads::LockGuard guard(pack_layer_->lock);
+    if (pack_layer_->layer) {
+        if (error != nullptr)
+            *error = "a pack layer is mounted already: " + pack_layer_->layer->label;
+        return false;
+    }
+    pack_layer_->layer = std::move(built);
+    return true;
+}
+
+bool AssetStore::unmount_pack_layer() noexcept {
+    if (pack_layer_ == nullptr)
+        return false;
+    const base::threads::LockGuard guard(pack_layer_->lock);
+    const bool mounted = pack_layer_->layer != nullptr;
+    pack_layer_->layer.reset();
+    return mounted;
+}
+
+bool AssetStore::pack_layer_mounted() const {
+    return pack_layer_snapshot() != nullptr;
+}
+
+std::optional<std::string> AssetStore::pack_layer_label() const {
+    const auto layer = pack_layer_snapshot();
+    if (!layer)
+        return std::nullopt;
+    return layer->label;
+}
+
+std::vector<std::string> AssetStore::pack_layer_paths() const {
+    const auto layer = pack_layer_snapshot();
+    std::vector<std::string> paths;
+    if (!layer)
+        return paths;
+    paths.reserve(layer->entries.size());
+    for (const auto& entry : layer->entries)
+        paths.push_back(entry.path);
+    return paths;
+}
+
+Provider AssetStore::provider(std::string_view resource) const {
+    if (const auto loose = loose_path(resource))
+        return {ProviderKind::loose, *loose, "loose:" + utf8_text(*loose)};
+    if (const auto found = archived_node(resource, nullptr)) {
+        const auto& path = mounts_[found->mount].path;
+        return {ProviderKind::archive, path, "archive:" + utf8_text(path)};
+    }
+    return {};
+}
+
+bool AssetStore::provided_above_pack_layer(std::string_view resource) const {
+    const auto kind = provider(resource).kind;
+    return kind == ProviderKind::loose || kind == ProviderKind::archive;
+}
+
+std::optional<std::vector<uint8_t>> AssetStore::read_pack_layer(std::string_view resource) const {
+    note_lookup(resource);
+    if (!pack_path_problem(resource).empty())
+        return std::nullopt;
+    return std::nullopt;
+}
+
 std::optional<std::vector<uint8_t>>
 AssetStore::load_file_contents(std::string_view resource) const {
     ResourceFile* file = open(resource);
@@ -1035,10 +1620,16 @@ void AssetStore::close(ResourceFile* file) noexcept {
 }
 
 bool AssetStore::archived(const ResourceFile* file) noexcept {
-    return file->archive != nullptr;
+    return file->archive != nullptr || file->pack_zip;
 }
 
 int32_t AssetStore::seek(ResourceFile* file, uint32_t position) {
+    if (file->pack_zip) {
+        if (position == kSeekToEnd)
+            position = file->size;
+        file->position = position;
+        return 0;
+    }
     if (file->archive == nullptr) {
         file->loose.clear();
         if (position == kSeekToEnd)
@@ -1059,16 +1650,34 @@ int32_t AssetStore::seek(ResourceFile* file, uint32_t position) {
 }
 
 int32_t AssetStore::tell(const ResourceFile* file) {
+    if (file->pack_zip)
+        return static_cast<int32_t>(file->position);
     if (file->archive == nullptr)
         return static_cast<int32_t>(const_cast<ResourceFile*>(file)->loose.tellg());
     return static_cast<int32_t>(file->position);
 }
 
 uint32_t AssetStore::length(const ResourceFile* file) {
+    if (file->pack_zip)
+        return file->size;
     return file->archive == nullptr ? file->loose_size : file->size;
 }
 
 int32_t AssetStore::read(ResourceFile* file, std::span<uint8_t> output) {
+    if (file->pack_zip) {
+        if (file->position >= file->size || output.empty())
+            return 0;
+        const auto count = std::min<std::size_t>(
+            output.size(), static_cast<std::size_t>(file->size - file->position)
+        );
+        std::copy_n(
+            file->memory.begin() + static_cast<std::ptrdiff_t>(file->position),
+            count,
+            output.begin()
+        );
+        file->position += static_cast<uint32_t>(count);
+        return static_cast<int32_t>(count);
+    }
     if (file->archive == nullptr) {
         file->loose.read(
             reinterpret_cast<char*>(output.data()), static_cast<std::streamsize>(output.size())
@@ -1145,28 +1754,30 @@ void create_directory_path(const std::filesystem::path& path) {
     std::filesystem::create_directory(text, ignored);
 }
 
-std::vector<std::string>
-AssetStore::list_effective(std::string_view directory, std::string_view extension) const {
-    auto result = list_effective_in_mount_order(directory, extension);
+std::vector<std::string> AssetStore::list_effective(
+    std::string_view directory, std::string_view extension, bool include_pack_layer
+) const {
+    auto result = list_effective_in_mount_order(directory, extension, include_pack_layer);
     std::sort(result.begin(), result.end());
     return result;
 }
 
 std::vector<std::string> AssetStore::list_effective_in_mount_order(
-    std::string_view directory, std::string_view extension
+    std::string_view directory, std::string_view extension, bool include_pack_layer
 ) const {
-    return list_resources(directory, extension, false);
+    return list_resources(directory, extension, false, include_pack_layer);
 }
 
-std::vector<std::string>
-AssetStore::list_effective_recursive(std::string_view directory, std::string_view extension) const {
+std::vector<std::string> AssetStore::list_effective_recursive(
+    std::string_view directory, std::string_view extension, bool include_pack_layer
+) const {
     // Feature loading retains this enumeration order; the first document
     // containing a requested section wins.
-    return list_resources(directory, extension, true);
+    return list_resources(directory, extension, true, include_pack_layer);
 }
 
 std::vector<std::string> AssetStore::list_resources(
-    std::string_view directory, std::string_view extension, bool recursive
+    std::string_view directory, std::string_view extension, bool recursive, bool include_pack_layer
 ) const {
     if (directory.size() > kMaxPathLength ||
         directory.find_first_of("\\:\0", 0, 3) != std::string_view::npos ||
@@ -1266,6 +1877,8 @@ std::vector<std::string> AssetStore::list_resources(
             if (matches(key) && keys.insert(key).second)
                 result.push_back(key);
         }
+    if (!include_pack_layer)
+        return result;
     return result;
 }
 
