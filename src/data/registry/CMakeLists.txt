@@ -10,3 +10,17 @@ target_include_directories(oa-data-registry PUBLIC include)
 target_compile_features(oa-data-registry PUBLIC cxx_std_20)
 target_link_libraries(oa-data-registry PUBLIC oa-base-signing oa-formats-url oa-options
   PRIVATE oa-formats-oamod oa-platform-shims)
+
+if(BUILD_TESTING)
+  # Descriptor rules, the player's registry file and replacing that file only
+  # through the platform's file replace.
+  add_executable(oa-data-registry-test tests/descriptor_test.cpp)
+  target_link_libraries(oa-data-registry-test PRIVATE oa-data-registry oa-test-support)
+  add_test(NAME data-registry COMMAND oa-data-registry-test)
+  # Which registries a player may add, the built-in folder and the registries
+  # in effect.
+  add_executable(oa-data-registry-trust-test tests/trust_test.cpp)
+  target_link_libraries(oa-data-registry-trust-test PRIVATE oa-data-registry oa-test-support)
+  add_test(NAME data-registry-trust COMMAND oa-data-registry-trust-test)
+  set_tests_properties(data-registry data-registry-trust PROPERTIES TIMEOUT 30)
+endif()
