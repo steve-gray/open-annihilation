@@ -25,7 +25,7 @@ target_link_libraries(oa-ui-frontend-multiplayer
 if(BUILD_TESTING)
   add_executable(oa-ui-frontend-multiplayer-lobby-test tests/lobby_test.cpp)
   target_link_libraries(oa-ui-frontend-multiplayer-lobby-test PRIVATE oa-ui-frontend-multiplayer oa-formats-hpi
-    oa-formats-gaf oa-data-languages oa-test-game-data)
+    oa-formats-gaf oa-data-languages oa-data-mod-profile oa-test-game-data)
   add_test(NAME ui-multiplayer-lobby COMMAND oa-ui-frontend-multiplayer-lobby-test)
   # The lounge and game list over the GUI files of the install OA_GAME_DIR
   # names, and the screens over its store.
