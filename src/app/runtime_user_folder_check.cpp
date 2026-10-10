@@ -9,8 +9,8 @@
 // closed, and the settings' Your files buttons, all through a recorded
 // opener, so that no file manager opens.
 
-#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -526,7 +526,8 @@ void Runtime::check_user_folder() {
         "Your files did not make the folders it showed"
     );
     std::ignore = take_engine_settings_action(settings::DialogAction::cancelled);
-    engine_settings_menu_host().dialog_shown = false;
+    // The settings screen goes from the OA layer with its dialog.
+    oa_layer().close_top();
 
     // The Mods folder's mods are offered beside the game folder's, a folder
     // without an oamod.yaml among them, each with what Mods shows of it.

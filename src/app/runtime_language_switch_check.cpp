@@ -8,9 +8,6 @@
 // what it shows opened again in the language, and back in Chinese what it
 // showed as the run started in it.
 
-#include "engine_settings_match_host.hpp"
-#include "engine_settings_menu_host.hpp"
-
 #include "oa/app/runtime.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings.hpp"
@@ -194,9 +191,7 @@ void Runtime::check_language_switch() {
     auto menu_before = menu_started;
     for (const auto tag : kChosenTags) {
         open_engine_settings_from_menu();
-        choose(tag, [this](settings::DialogAction action) {
-            EngineSettingsMenuHost::take_action(*this, action, 0);
-        });
+        choose(tag, [this](settings::DialogAction action) { take_settings_screen_action(action); });
         const auto switched = menu_frame();
         snapshot("menu-" + std::string(tag), switched);
         load(Screen::main_menu);
@@ -247,9 +242,7 @@ void Runtime::check_language_switch() {
     auto match_before = match_started;
     for (const auto tag : kChosenTags) {
         open_engine_settings_in_match();
-        choose(tag, [this](settings::DialogAction action) {
-            std::ignore = EngineSettingsMatchHost::take_action(*this, action);
-        });
+        choose(tag, [this](settings::DialogAction action) { take_settings_screen_action(action); });
         if (!ingame_menu_column_shown())
             fail("the in-game menu closed with the settings");
         const auto switched = match_frame();

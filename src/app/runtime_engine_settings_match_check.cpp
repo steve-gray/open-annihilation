@@ -5,9 +5,9 @@
 // dialog beside the darkened column, the pause and the locks.
 
 #include "check_host_input.hpp"
-#include "engine_settings_match_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/runtime.hpp"
 
@@ -122,7 +122,6 @@ fs::path step_snapshot(const fs::path& snapshot, std::string_view step) {
 } // namespace
 
 void Runtime::check_engine_settings_in_match() {
-    using MatchHost = EngineSettingsMatchHost;
     const auto require = [](bool ok, const std::string& what) {
         if (!ok)
             throw std::runtime_error("engine settings check: " + what);
@@ -137,7 +136,7 @@ void Runtime::check_engine_settings_in_match() {
     {
         const layout::Insets insets{177, 0, 177, 63};
         const auto phone = layout::make_phone_layout(2556, 1179, 3.0, insets);
-        const auto safe = MatchHost::safe_area(phone);
+        const auto safe = OaLayer::match_safe_area(phone);
         require(
             safe.x == 177 && safe.y == 0 && safe.width == 2202 && safe.height == 1116,
             "the phone's safe area is not the canvas less its insets"
@@ -147,7 +146,7 @@ void Runtime::check_engine_settings_in_match() {
                    rect.x + rect.width <= safe.x + safe.width &&
                    rect.y + rect.height <= safe.y + safe.height;
         };
-        const auto dialog_at = MatchHost::dialog_rect(phone, true);
+        const auto dialog_at = OaLayer::match_dialog_rect(phone, true);
         // min(2202 / 480, 1116 / 324): the safe area's height decides.
         const double scale = 1116.0 / settings::dialog_height;
         require(
@@ -156,21 +155,21 @@ void Runtime::check_engine_settings_in_match() {
                 std::abs(2 * dialog_at.x + dialog_at.width - (2 * safe.x + safe.width)) <= 1,
             "the dialog does not fit the phone's safe area, centred"
         );
-        const auto point = MatchHost::dialog_point(
-            phone,
+        const auto point = layer_point(
+            {dialog_at, settings::dialog_width, settings::dialog_height},
             static_cast<float>(dialog_at.x + dialog_at.width - 1),
-            static_cast<float>(dialog_at.y + dialog_at.height - 1),
-            true
+            static_cast<float>(dialog_at.y + dialog_at.height - 1)
         );
         require(
             point.x == settings::dialog_width - 1 && point.y == settings::dialog_height - 1,
             "the fitted dialog's corner does not map to its last source pixel"
         );
-        const auto button = MatchHost::button_rect(phone, true);
+        const auto button = OaLayer::match_button_rect(phone, true);
         require(inside_safe(button), "the OA button leaves the phone's safe area");
-        const auto unfitted = MatchHost::dialog_rect(phone);
+        const auto unfitted = OaLayer::match_dialog_rect(phone);
         require(
-            unfitted.width == settings::dialog_width && !inside_safe(MatchHost::button_rect(phone)),
+            unfitted.width == settings::dialog_width &&
+                !inside_safe(OaLayer::match_button_rect(phone)),
             "without fitting, the dialog does not keep the side column's scale"
         );
     }
@@ -233,7 +232,7 @@ void Runtime::check_engine_settings_in_match() {
     const auto icon = engine_settings_icon();
     require(renderer::picture_drawable(icon), "the in-game OA button has no icon to show");
     const auto button_face = [&](settings::ButtonLook look, bool darkened, const auto& fonts) {
-        return MatchHost::button_face(match_layout_, look, darkened, fonts, icon);
+        return OaLayer::match_button_face(match_layout_, look, darkened, fonts, icon);
     };
     const auto dialog_face = [&icon](const settings::Dialog& dialog, const auto& fonts) {
         renderer::Surface face;
@@ -249,7 +248,7 @@ void Runtime::check_engine_settings_in_match() {
 
     // Clicks the middle of a part of the dialog that shows beside the column.
     const auto click_dialog = [&](const artless::SourceRect& part) {
-        const auto at = MatchHost::dialog_rect(match_layout_);
+        const auto at = OaLayer::match_dialog_rect(match_layout_);
         const layout::Point point{
             at.x + (part.x + part.width / 2) * at.width / settings::dialog_width,
             at.y + (part.y + part.height / 2) * at.height / settings::dialog_height
@@ -404,8 +403,8 @@ void Runtime::check_engine_settings_in_match() {
             "the match canvas is not the window's size" + on
         );
         const auto& fonts = *engine_settings_fonts();
-        const auto button = MatchHost::button_rect(match_layout_);
-        const auto dialog_at = MatchHost::dialog_rect(match_layout_);
+        const auto button = OaLayer::match_button_rect(match_layout_);
+        const auto dialog_at = OaLayer::match_dialog_rect(match_layout_);
         require(
             button.y + button.height <= match_layout_.hud_height && button.x >= 0 &&
                 button.x + button.width <= match_layout_.left,
@@ -420,7 +419,7 @@ void Runtime::check_engine_settings_in_match() {
         // In play the column and the button are hidden, and a press on the
         // button's place opens nothing.
         render();
-        require(!MatchHost::button_shown(*this), "the OA button shows in play" + on);
+        require(!OaLayer::match_button_shown(*this), "the OA button shows in play" + on);
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, centre(button), 0);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, centre(button), SDL_BUTTON_LEFT);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre(button), SDL_BUTTON_LEFT);
@@ -440,7 +439,7 @@ void Runtime::check_engine_settings_in_match() {
             const auto panel = layout::source_rect_to_canvas(
                 match, menu_panel.x, menu_panel.y, menu_panel.width, menu_panel.height
             );
-            const auto placed = MatchHost::button_rect(match);
+            const auto placed = OaLayer::match_button_rect(match);
             const double scale = match.column_narrowed() ? match.column_scale : match.scale;
             const auto at = [scale](int source) {
                 return static_cast<int>(std::lround(static_cast<double>(source) * scale));
@@ -452,9 +451,11 @@ void Runtime::check_engine_settings_in_match() {
                 "the OA button leaves the in-game menu" + where
             );
             require(
-                std::abs(placed.x - panel.x - at(MatchHost::button_source_x - menu_panel.x)) <= 1 &&
-                    std::abs(placed.y - panel.y - at(MatchHost::button_source_y - menu_panel.y)) <=
-                        1,
+                std::abs(placed.x - panel.x - at(OaLayer::match_button_source_x - menu_panel.x)) <=
+                        1 &&
+                    std::abs(
+                        placed.y - panel.y - at(OaLayer::match_button_source_y - menu_panel.y)
+                    ) <= 1,
                 "the OA button is not under Resume" + where
             );
         };
@@ -645,23 +646,26 @@ void Runtime::check_engine_settings_in_match() {
             // ends, and the next frame draws them.
             struct OwnSections {
                 Runtime& runtime;
-                uint64_t& revision;
 
                 ~OwnSections() {
                     if (auto* shown = runtime.engine_settings_dialog()) {
                         tall::show_own_sections(*shown);
-                        ++revision;
+                        runtime.oa_layer().redraw();
                     }
                 }
-            } own_sections{*this, engine_settings_match_host().revision};
+            } own_sections{*this};
 
             tall::show_tall_section(*engine_settings_dialog());
+            const auto settings_revision = [this] {
+                const auto* screen = oa_layer().find("settings");
+                return screen != nullptr ? screen->revision() : uint64_t{0};
+            };
             const auto offset = [this] {
                 const auto* open = engine_settings_dialog();
                 return open->scroll[static_cast<std::size_t>(open->page)];
             };
             const float zoom = match_zoom_target_;
-            const uint64_t revision = engine_settings_match_host().revision;
+            const uint64_t revision = settings_revision();
             const auto over = centre(dialog_at);
             SDL_Event wheel =
                 check_host_input::wheel_event(sdl_.renderer, sdl_.window, over.x, over.y, -1.0F);
@@ -674,10 +678,7 @@ void Runtime::check_engine_settings_in_match() {
             require(
                 match_zoom_target_ == zoom, "the wheel over the dialog zoomed the battlefield" + on
             );
-            require(
-                engine_settings_match_host().revision != revision,
-                "a scroll did not draw the dialog again" + on
-            );
+            require(settings_revision() != revision, "a scroll did not draw the dialog again" + on);
             tap_key(SDLK_HOME, SDL_KMOD_NONE);
             require(offset() == 0, "Home did not scroll the dialog back to its top" + on);
         }
@@ -899,7 +900,7 @@ void Runtime::check_engine_settings_in_match() {
             "the window is already 1280x720"
         );
         show_match_pause_menu();
-        const auto button = MatchHost::button_rect(match_layout_);
+        const auto button = OaLayer::match_button_rect(match_layout_);
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, centre(button), 0);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, centre(button), SDL_BUTTON_LEFT);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre(button), SDL_BUTTON_LEFT);
