@@ -571,48 +571,6 @@ bool layout::list_row_takes_input(const layout::ListRow& row) noexcept {
            !row.locked;
 }
 
-std::vector<bool> layout::roll_back_rows(const Dialog& dialog, const layout::ScrolledRows& open) {
-    std::vector<bool> shown(open.rows.rows.size(), false);
-    if (!layout::mods_page(dialog))
-        return shown;
-    const auto rows = mod_rows(dialog);
-    for (std::size_t index = 0; index < shown.size() && index < rows.size(); ++index)
-        shown[index] = layout::offers_roll_back(dialog, rows[index]);
-    return shown;
-}
-
-std::vector<int32_t> layout::focus_order(const Dialog& dialog, const layout::ScrolledRows& open) {
-    std::vector<int32_t> order;
-    // A row that only shows text takes no focus; a row of Mods is followed
-    // by its ROLL BACK.
-    const std::vector<bool> roll_backs = roll_back_rows(dialog, open);
-    for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
-        const layout::Row& row = open.rows.rows[index];
-        if (row.lock == Lock::none && row.control_area.width > 0)
-            order.push_back(row.control);
-        if (row.lock == Lock::none && roll_backs[index])
-            order.push_back(layout::roll_back_control(open.rows, index));
-    }
-    if (layout::developer_page(dialog)) {
-        for (const layout::ListRow& row : open.list.rows) {
-            if (list_row_takes_input(row))
-                order.push_back(row.control);
-        }
-        order.push_back(active_only_control);
-        if (developer::restore_profile_enabled(dialog))
-            order.push_back(restore_profile_control);
-    }
-    if (layout::mods_page(dialog) && dialog.locks.mod == Lock::none)
-        order.push_back(layout::mods_folder_control(open.rows));
-    order.push_back(restore_control);
-    order.push_back(cancel_control);
-    order.push_back(ok_control);
-    for (const Page page :
-         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller))
-        order.push_back(page_control(page));
-    return order;
-}
-
 namespace {
 
 /// Tells whether a rectangle lies wholly in another.

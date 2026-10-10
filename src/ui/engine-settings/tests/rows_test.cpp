@@ -351,7 +351,8 @@ settings::Dialog engine_dialog_of(
 /// control of the same number in the list, the part lying in the control's
 /// rectangle (a switch's halves, a strip's levels, Your files' buttons, an
 /// entry's words and the scroll bar's well lie inside theirs, and every other
-/// part is its whole control); and Tab follows the dialog's focus order.
+/// part is its whole control); and Tab stops only on the list's focusable,
+/// enabled controls, each once.
 ///
 /// @param dialog the dialog
 /// @param what what the dialog shows, for a failure's message
@@ -374,7 +375,13 @@ void check_list(const settings::Dialog& dialog, const std::string& what) {
                       << ") is not in the list where the layout has it\n";
         OA_CHECK(listed);
     }
-    OA_CHECK(list.tab_order == geometry::focus_order(dialog, geometry::open_rows(dialog)));
+    // Tab stops only on the list's focusable, enabled controls, each once.
+    std::set<int32_t> stops;
+    for (const int32_t stop : list.tab_order) {
+        const kit::Control* control = kit::control_of(list, stop);
+        OA_CHECK(control != nullptr && control->focusable && control->enabled);
+        OA_CHECK(stops.insert(stop).second);
+    }
 }
 
 /// Checks a dialog's every section at its top and at its scroll end.

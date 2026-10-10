@@ -92,8 +92,14 @@ struct Building {
     std::vector<kit::Control> scroll;     ///< the scroll bar
     std::vector<kit::Control> footer;     ///< Restore defaults, Cancel and OK
     std::vector<kit::Control> nav;        ///< the sections' entries
-    kit::Canvas measure{};                ///< what texts are measured in
-    const DialogFonts* fonts{};           ///< the fonts; null to estimate widths
+    /// The open section's controls Tab stops on, in the declared order: its
+    /// rows that take a change (on Mods, each row and then its ROLL BACK),
+    /// then on Developer its list's rows that take input, Show Active Only
+    /// and Restore profile values while it is enabled, and on Mods OPEN MODS
+    /// FOLDER. The footer's buttons and the sections' entries follow them.
+    std::vector<kit::ControlId> section_tab;
+    kit::Canvas measure{};      ///< what texts are measured in
+    const DialogFonts* fonts{}; ///< the fonts; null to estimate widths
 };
 
 /// Returns how wide a text is in one of the dialog's fonts, or at the
@@ -583,6 +589,9 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
             added.checked = playing;
             added.text = shown.title;
             building.rows.push_back(std::move(added));
+            building.section_tab.push_back(row.control);
+            if (roll_back)
+                building.section_tab.push_back(layout::roll_back_control(open.rows, index));
         }
     }
     if (open.limit > 0) {
@@ -618,6 +627,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
             control_of(control, folder_button, named("open-mods-folder"), kit::ControlKind::button);
         added.text = caption;
         building.folder.push_back(std::move(added));
+        building.section_tab.push_back(control);
     }
     text(
         list,
@@ -811,6 +821,7 @@ void add_list_row(
     added.checked = row.on;
     added.text = row.kind == layout::ListRowKind::slider ? row.shown : row.text;
     building.developer.push_back(std::move(added));
+    building.section_tab.push_back(row.control);
 }
 
 /// Adds what lies under Developer's rows: its list clipped to the list's
@@ -879,6 +890,7 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
     active_only.checked = dialog.developer.active_only;
     active_only.text = dialog.developer.active_only ? active.on_caption : active.off_caption;
     building.footer_own.push_back(std::move(active_only));
+    building.section_tab.push_back(active_only_control);
     // Restore profile values takes a press only while Developer Mode is on.
     // It lights while the pointer is over it or a press on it is held.
     const SourceRect& restore = layout::restore_profile_button;
@@ -903,6 +915,8 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
     restore_profile.enabled = enabled;
     restore_profile.text = caption;
     building.footer_own.push_back(std::move(restore_profile));
+    if (enabled)
+        building.section_tab.push_back(restore_profile_control);
 }
 
 /// Adds the open section: its heading, its rows clipped to the view they
@@ -947,6 +961,8 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     kit::add_rows(rows, placed, state);
     for (kit::Item& added : rows.items)
         list.items.push_back(std::move(added));
+    // Tab stops on the rows that take a change, top to bottom.
+    building.section_tab = rows.tab_order;
     // A row's control lies across its row, at the control's own line, so
     // that the arrows keep to the column of rows wherever on its line each
     // control sits. A press reaches the control itself where the view shows
@@ -1231,6 +1247,12 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     if (dialog.switch_question != no_question)
         add_question(building, dialog);
     kit::DisplayList list = std::move(building.list);
+    // Tab: the open section's controls, the footer's buttons left to right,
+    // then the sections' entries in the list's order.
+    list.tab_order = std::move(building.section_tab);
+    for (const auto* group : {&building.footer, &building.nav})
+        for (const kit::Control& control : *group)
+            list.tab_order.push_back(control.id);
     for (auto* group :
          {&building.question,
           &building.menu,
@@ -1244,7 +1266,6 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
           &building.nav})
         for (kit::Control& control : *group)
             list.controls.push_back(std::move(control));
-    list.tab_order = focus_order(dialog, open);
     return list;
 }
 

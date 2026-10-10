@@ -1117,23 +1117,6 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 /// @return true when it does
 [[nodiscard]] bool list_row_takes_input(const ListRow& row) noexcept;
 
-/// Returns the rows of Mods that offer ROLL BACK, by their places.
-///
-/// @param dialog the dialog
-/// @param open Mods' rows
-/// @return for each placed row, whether it shows ROLL BACK
-[[nodiscard]] std::vector<bool> roll_back_rows(const Dialog& dialog, const ScrolledRows& open);
-
-/// Returns the controls the keyboard focus moves through, in order: the
-/// open section's rows that can be changed (on Developer, then its list's
-/// rows, Show Active Only and, while Developer Mode is on, Restore profile
-/// values), the footer's buttons left to right, then the sections' entries.
-///
-/// @param dialog the dialog
-/// @param open the open section's rows
-/// @return the controls
-[[nodiscard]] std::vector<int32_t> focus_order(const Dialog& dialog, const ScrolledRows& open);
-
 /// The scroll group of the open section's rows. The arrows move the focus
 /// within a control's own group first (kit::focus_toward).
 inline constexpr int32_t section_group = 0;
@@ -1159,7 +1142,11 @@ inline constexpr int32_t first_menu_item_control = question_no_control - 1;
 /// the window's face, the header, the section list, the open section's
 /// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
 /// list and footer), the footer band and buttons, the edge, an open
-/// drop-down list and the question. Tab follows focus_order. A row's
+/// drop-down list and the question. Tab follows the declared order: the
+/// open section's rows that take a change (on Developer, then its list's
+/// rows, Show Active Only and, while Developer Mode is on, Restore profile
+/// values; on Mods, each row followed by its ROLL BACK, then OPEN MODS
+/// FOLDER), the footer's buttons, then the sections' entries. A row's
 /// control lies across the section at its control's line, so that the
 /// arrows keep to the column of rows, and a press reaches the control
 /// itself where the view shows it. The controls that take Left and Right
