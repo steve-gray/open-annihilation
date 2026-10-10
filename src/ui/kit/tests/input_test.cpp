@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The kit's pointer, finger reach, keys, two-dimensional focus, wheel,
-// control names and text editing.
+// control names, the parts automation lists, and text editing.
 //
 // The wheel numbers were computed with the settings dialog's dialog_wheel at
 // 5f7fdbd8, the start of this branch, by a throwaway program that was not
@@ -10,13 +10,16 @@
 // notice_finger_down lands on for its two buttons at height 150.
 
 #include "oa/test/check.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/input.hpp"
+#include "oa/ui/kit/looks.hpp"
 
 #include <cstddef>
 #include <initializer_list>
 #include <limits>
 #include <stdint.h>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -859,6 +862,193 @@ void automation_reads_the_named_controls() {
     OA_CHECK(kit::control_named(list, "missing") == kit::no_control);
 }
 
+/// Returns the entry of a name.
+///
+/// @param entries the entries
+/// @param name the name
+/// @return the entry; null when none has it
+const kit::AutomationEntry*
+entry_named(const std::vector<kit::AutomationEntry>& entries, std::string_view name) {
+    for (const kit::AutomationEntry& entry : entries)
+        if (entry.name == name)
+            return &entry;
+    return nullptr;
+}
+
+/// Tells whether a rectangle is one given.
+///
+/// @param rect the rectangle
+/// @param x its left column
+/// @param y its top row
+/// @param width its width
+/// @param height its height
+/// @return true when every edge matches
+bool rect_is(const kit::Rect& rect, int32_t x, int32_t y, int32_t width, int32_t height) {
+    return rect.x == x && rect.y == y && rect.width == width && rect.height == height;
+}
+
+/// A switch's two halves split its rectangle, the On half from its middle
+/// column, as a press there turns it on.
+void a_switch_lists_its_two_halves() {
+    kit::DisplayList list;
+    kit::add_switch(list, {100, 20, 53, 16}, {true, false, false, "OFF", "ON"}, 4, "screen.sound");
+    const auto entries = kit::automation_parts(list, {});
+    OA_CHECK(entries.size() == 3u);
+    if (entries.size() != 3u)
+        return;
+    OA_CHECK(entries[0].name == "screen.sound" && !entries[0].part);
+    OA_CHECK(entries[0].kind == kit::ControlKind::toggle && entries[0].focusable);
+    OA_CHECK(entries[1].name == "screen.sound.off" && entries[1].part);
+    OA_CHECK(entries[2].name == "screen.sound.on" && entries[2].part);
+    OA_CHECK(rect_is(entries[1].rect, 100, 20, 26, 16));
+    OA_CHECK(rect_is(entries[2].rect, 126, 20, 27, 16));
+    OA_CHECK(!entries[1].checked && entries[2].checked);
+    OA_CHECK(entries[1].text == "OFF" && entries[2].text == "ON");
+    OA_CHECK(entries[1].kind == kit::ControlKind::toggle && !entries[1].focusable);
+    OA_CHECK(entries[1].enabled && entries[1].shown && !entries[1].focused);
+    // Each half's centre lies on its own side of the middle column.
+    for (std::size_t half = 1; half < 3; ++half) {
+        const kit::Rect& rect = entries[half].rect;
+        const int32_t centre = rect.x + rect.width / 2;
+        OA_CHECK((centre >= 100 + 53 / 2) == (half == 2));
+    }
+    // automation_entries lists the switch alone.
+    OA_CHECK(kit::automation_entries(list, {}).size() == 1u);
+}
+
+/// A strip's levels lie where level_at finds them, and only those offered
+/// take a press.
+void a_strip_lists_its_levels_where_level_at_finds_them() {
+    kit::DisplayList list;
+    kit::LevelsLook look;
+    look.captions = {"Off", "25%", "50%"};
+    look.level_width = 34;
+    look.chosen = 1;
+    look.offered = 2;
+    const kit::Rect strip{40, 10, 3 * 34 + 2, 16};
+    kit::add_levels(list, strip, look, 7, "screen.edge");
+    list.controls.back().parts = {"off", "25"};
+    const auto entries = kit::automation_parts(list, {});
+    OA_CHECK(entries.size() == 4u);
+    if (entries.size() != 4u)
+        return;
+    OA_CHECK(entries[1].name == "screen.edge.off");
+    OA_CHECK(entries[2].name == "screen.edge.25");
+    // A level the control gives no word is named by its place from 1.
+    OA_CHECK(entries[3].name == "screen.edge.3");
+    int32_t next = strip.x;
+    for (std::size_t level = 0; level < 3; ++level) {
+        const kit::AutomationEntry& entry = entries[level + 1];
+        OA_CHECK(entry.part && entry.kind == kit::ControlKind::levels);
+        // The levels share the strip, left to right, with no gap.
+        OA_CHECK(entry.rect.x == next && entry.rect.y == strip.y);
+        OA_CHECK(entry.rect.height == strip.height);
+        next = entry.rect.x + entry.rect.width;
+        for (int32_t column = entry.rect.x; column < next; ++column)
+            OA_CHECK(kit::level_at(strip, 3, 34, column) == level);
+        OA_CHECK(kit::level_at(strip, 3, 34, entry.rect.x + entry.rect.width / 2) == level);
+        OA_CHECK(entry.checked == (level == 1));
+        OA_CHECK(entry.text == look.captions[level]);
+        OA_CHECK(entry.enabled == (level < 2));
+    }
+    OA_CHECK(next == strip.x + strip.width);
+}
+
+/// An open drop-down's items lie where its menu shows them, and a control
+/// the screen made of an item is that item, listed once.
+void an_open_drop_down_lists_its_items_at_choice_item() {
+    kit::DisplayList list;
+    const kit::Rect field{60, 40, 120, 16};
+    kit::add_choice(list, field, {"Whole map", false, true}, 2, "screen.zoom");
+    list.controls.back().parts = {"automatic", "whole-map", "1-32", "1-16"};
+    const kit::Rect menu = kit::choice_menu(field, 4);
+    kit::Item drawn;
+    drawn.role = kit::Role::choice_menu;
+    drawn.rect = menu;
+    kit::ChoiceMenuLook shown;
+    shown.shown = {"Whole map", "1/32", "1/16"};
+    shown.first = 1;
+    shown.total = 4;
+    shown.chosen = 1;
+    drawn.look = shown;
+    list.items.push_back(drawn);
+    // The screen's own control for the item it shows second, tried first.
+    kit::Control item = placed(90, kit::choice_item(menu, 1));
+    item.name = "screen.zoom.1-32";
+    item.kind = kit::ControlKind::list_item;
+    list.controls.insert(list.controls.begin(), item);
+
+    const auto entries = kit::automation_parts(list, {});
+    OA_CHECK(entries.size() == 4u);
+    if (entries.size() != 4u)
+        return;
+    OA_CHECK(entries[0].name == "screen.zoom" && !entries[0].part);
+    OA_CHECK(rect_is(entries[0].rect, field.x, field.y, field.width, field.height));
+    const std::vector<std::string> names{
+        "screen.zoom.whole-map", "screen.zoom.1-32", "screen.zoom.1-16"
+    };
+    for (int32_t place = 0; place < 3; ++place) {
+        const kit::AutomationEntry& entry = entries[static_cast<std::size_t>(place) + 1];
+        const kit::Rect at = kit::choice_item(menu, place);
+        OA_CHECK(entry.name == names[static_cast<std::size_t>(place)]);
+        OA_CHECK(entry.part && entry.kind == kit::ControlKind::choice);
+        OA_CHECK(rect_is(entry.rect, at.x, at.y, at.width, at.height));
+        OA_CHECK(entry.shown && entry.enabled);
+        OA_CHECK(entry.checked == (place == 0));
+        OA_CHECK(entry.text == shown.shown[static_cast<std::size_t>(place)]);
+    }
+    // Closed, it has no parts, and the screen's control is listed as itself.
+    kit::DisplayList closed;
+    kit::add_choice(closed, field, {"Whole map", false, false}, 2, "screen.zoom");
+    closed.controls.back().parts = {"automatic", "whole-map"};
+    OA_CHECK(kit::automation_parts(closed, {}).size() == 1u);
+}
+
+/// A row of buttons lists each button it draws; a control's rectangle is
+/// the part of it a press reaches.
+void buttons_list_each_button_and_a_clip_narrows_a_control() {
+    kit::DisplayList list;
+    for (int32_t at = 0; at < 3; ++at) {
+        kit::Item button;
+        button.role = kit::Role::button;
+        button.rect = {200 + at * 60, 10, 56, 16};
+        button.control = 5;
+        button.text = at == 0 ? "SAVES" : at == 1 ? "SCREENSHOTS" : "MODS";
+        list.items.push_back(button);
+    }
+    kit::Control row = placed(5, {0, 10, 400, 16});
+    row.clip = {200, 0, 170, 300};
+    row.name = "screen.folders";
+    row.kind = kit::ControlKind::buttons;
+    row.parts = {"saves", "screenshots", "mods"};
+    list.controls.push_back(row);
+    kit::Control below = placed(6, {0, 400, 40, 16});
+    below.clip = {0, 0, 400, 300};
+    below.name = "screen.below";
+    list.controls.push_back(below);
+
+    kit::Interaction interaction;
+    interaction.focus_shown = true;
+    interaction.focused = 5;
+    const auto entries = kit::automation_parts(list, interaction);
+    OA_CHECK(entries.size() == 5u);
+    if (entries.size() != 5u)
+        return;
+    OA_CHECK(entries[0].name == "screen.folders" && entries[0].focused);
+    OA_CHECK(rect_is(entries[0].rect, 200, 10, 170, 16));
+    OA_CHECK(entries[1].name == "screen.folders.saves" && entries[1].text == "SAVES");
+    OA_CHECK(entries[2].name == "screen.folders.screenshots" && !entries[2].focused);
+    OA_CHECK(entries[3].name == "screen.folders.mods");
+    OA_CHECK(rect_is(entries[1].rect, 200, 10, 56, 16));
+    // The last button lies partly past the clip: it is listed where a press reaches it.
+    OA_CHECK(rect_is(entries[3].rect, 320, 10, 50, 16));
+    OA_CHECK(entries[1].part && entries[1].kind == kit::ControlKind::buttons);
+    // Scrolled out of its view, a control is listed where it lies, not shown.
+    OA_CHECK(entries[4].name == "screen.below" && !entries[4].shown);
+    OA_CHECK(rect_is(entries[4].rect, 0, 400, 40, 16));
+    OA_CHECK(entry_named(entries, "screen.missing") == nullptr);
+}
+
 /// The keys keep the settings dialog's values up to No, and the editing
 /// keys follow it.
 void the_keys_keep_their_values() {
@@ -1114,6 +1304,10 @@ int main() {
     the_wheel_keeps_the_dialogs_fractions();
     a_name_must_be_present_well_formed_and_unique();
     automation_reads_the_named_controls();
+    a_switch_lists_its_two_halves();
+    a_strip_lists_its_levels_where_level_at_finds_them();
+    an_open_drop_down_lists_its_items_at_choice_item();
+    buttons_list_each_button_and_a_clip_narrows_a_control();
     the_keys_keep_their_values();
     typing_inserts_at_the_caret();
     typing_refuses_what_is_not_text();

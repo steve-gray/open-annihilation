@@ -90,8 +90,8 @@ been served and `tick` is the running match's (0 outside a match), or
 | Request | Answer |
 |---|---|
 | `hello` | `version` (1), `engine` (`version`), `automation` (1), `window` (`width`, `height` in the window's pixels), `canvas` (`width`, `height`, and `rect`, `[x, y, w, h]`, where the game's canvas lies in the window: the 640x480 screen on the menus, the whole window in a match), `tick_rate` (30), `fixed_clock` |
-| `screen` | `screen` (`main_menu`, `single_player`, `skirmish`, `map_selection`, `loading`, `match`, `options`, `load_game`, `briefing`, `mp_providers`, `mp_tcp`, `mp_game_list`, `mp_new_game`, `mp_battleroom` and the like; `screen_<id>` for one without a name), `frontend_state`, `dialogs` (the dialogs over the screen whose controls take the pointer, the top one first, by their GUI file's name: `selmap`, `tcp`, `yesorno`, `msgbox` and the like), `focused` (the name of the control that takes the keys, or null), `pointer` (`x`, `y` on the canvas), and in a match `camera` (`x`, `y`, the map pixel at the battlefield's top-left corner; null elsewhere) |
-| `controls` | `screen`, and `controls`: an extension's windows first (they take the pointer over the screen), then those of the panel that takes the pointer, a dialog's first while one is up (a message box's before the dialog it is over). Each has `name` (as the GUI file spells it, or as the extension spells it), `kind` (`button`, `check box`, `list`, `text field`, `slider`, `label`, `area`, `image`), `dialog` (null for the screen's own and for an extension's), `window` (the extension window's name, or null), `rect` (`[x, y, w, h]` on the canvas), `window_rect` (in the window's pixels), `enabled`, `visible`, `text` and `focused`; a check box adds `checked`; a list adds `items`, `first_visible`, `rows`, `row_height`, `selected` (-1 for none) and `scroll_up` and `scroll_down` (null: a list's scroll bar carries its own arrows). With `screen`, refused `screen_changed` when another is shown |
+| `screen` | `screen` (`main_menu`, `single_player`, `skirmish`, `map_selection`, `loading`, `match`, `options`, `load_game`, `briefing`, `mp_providers`, `mp_tcp`, `mp_game_list`, `mp_new_game`, `mp_battleroom` and the like; `screen_<id>` for one without a name), `frontend_state`, `dialogs` (the dialogs over the screen whose controls take the pointer, the top one first, by their GUI file's name: `selmap`, `tcp`, `yesorno`, `msgbox` and the like, or for Open Annihilation's own screens `oa.settings`, `oa.notice`, `oa.prompt`), `focused` (the name of the control that takes the keys, or null), `pointer` (`x`, `y` on the canvas), and in a match `camera` (`x`, `y`, the map pixel at the battlefield's top-left corner; null elsewhere) |
+| `controls` | `screen`, and `controls`: an extension's windows first (they take the pointer over the screen), then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then those of the panel that takes the pointer, a dialog's first while one is up (a message box's before the dialog it is over). Each has `name` (as the GUI file spells it, or as the extension spells it), `kind` (`button`, `check box`, `list`, `text field`, `slider`, `label`, `area`, `image`), `dialog` (null for the screen's own and for an extension's), `window` (the extension window's name, or null), `rect` (`[x, y, w, h]` on the canvas), `window_rect` (in the window's pixels: an Open Annihilation screen's control's exact rectangle, the others' worked out from `rect`), `enabled`, `visible`, `text` and `focused`; a check box adds `checked`; a list adds `items`, `first_visible`, `rows`, `row_height`, `selected` (-1 for none) and `scroll_up` and `scroll_down` (null: a list's scroll bar carries its own arrows). With `screen`, refused `screen_changed` when another is shown |
 | `input` | `consumed` (`frame`, `tick`): the frame and tick at which the game took the events. See below |
 | `prefs` | `path`, the preferences file, and `values`, the preferences as the game holds them now, whether written to the file yet or not; with `names`, a list of keys, only those |
 | `quit` | nothing more; once the answer is written the game quits as a player closing its window does: at once from the menus, through the surrender question in a match |
@@ -99,6 +99,42 @@ been served and `tick` is the running match's (0 outside a match), or
 | `match` | `in_match`; `paused`; `speed` (1 to 20, 10 normal); `players`, each seated player with `slot`, `name`, `status` (`local`, `computer`, `remote`), `side`, `side_name`, `colour`, `team` (null for none), `allies` (slots), `computer`, `local`, `alive` (has units), `units`, `kills`, `losses`; `local_player` (a slot); `game_over`, `outcome` (`victory` or `defeat` for the local player) and `winner` (the local player when it won, else the one player with units left, else null). With `"state_hash": true`, also `state_hash`: the digest of the match's state a saved game carries, as the saved-game check prints it, in 16 hexadecimal digits, worked out only when asked |
 | `room` | `in_room`, while the battle room shows; then `session` (the game's name), `host` and `host_slot`, `local_slot`, `hosting`, `players` (each seated one with `slot`, `name`, `status`, `ready`, `watcher`, `side`, `side_name`, `colour`, `team`, `ping`), `map` (the host's), `options` (the host's: `commander` `continues`, `ends` or `deathmatch`; `line_of_sight` `permanent`, `circular` or `true`; `mapped`, `cheats`, `fixed_locations`, `watching_allowed`, `locked`, `password`; `energy`, `metal` and `max_units` to start with) and `chat`, the room's lines; outside it the members are null or empty |
 | `subscribe` | `events`: the kinds of event the client is sent from now on, in place of those it took before, as the request's `events` names them: `"all"`, or a list of kinds; an empty list stops them. Subscribing to `screen` is answered with a `screen` event naming the screen shown |
+
+### OA's own screens
+
+While the OA button or one of Open Annihilation's own screens (Settings, a
+notice, a prompt, and later the Library, the map browser, the gallery)
+shows, the automation host lists its controls (`OaLayer::automation_controls`):
+
+- **Which and in what order.** The OA button, `oa.button`, while it shows
+  on the main menu or in the in-game menu, with no `dialog`; then each
+  screen that shows, from the top down to the first that takes every
+  input, each of its controls followed by its parts
+  (`kit::automation_parts`). They come right after a message box's and
+  ahead of everything else but an extension's windows (`collect_controls`
+  keeps them with the dialogs, which come before the screen's own). While
+  an OA screen takes every input, the controls listed after it are listed
+  disabled, and so is the OA button under it.
+- **The names.** `oa.` and the kit's name: `oa.settings.nav.<page>`,
+  `oa.settings.<row>`, `oa.settings.<row>.<value>`, `oa.settings.ok`,
+  `oa.<word>.ok`, `oa.<word>.<id>` and the rest, as
+  [docs/automation.md](../../../docs/automation.md#oas-own-screens) tabulates.
+  Words are the code's, never the shown text. `dialog` is `oa.` and the
+  screen's name: `oa.settings`, `oa.notice` or `oa.prompt` (a notice's or
+  a prompt's own word when it gives one).
+- **Parts.** A control's parts that take a press of their own follow it,
+  one word longer: a switch's `.off` and `.on`, a strip's levels and an
+  open drop-down's items by their values, a row of buttons' buttons by
+  their words. A switch, a strip and a row of buttons are listed as labels,
+  their halves and levels as check boxes and their buttons as buttons
+  (`automation_kind`).
+- **Rectangles.** The screens are drawn in the window's pixels, not on the
+  canvas, so each control carries its exact `window_rect`
+  (`AutomationControl::window_pixels`): the window pixels present draws it
+  on. Its `rect` is that rectangle's corners mapped back onto the canvas
+  through the canvas's placement, the top left rounded down and the bottom
+  right up; it may reach past 640. A click at its centre presses the
+  control or the part, at every window size.
 
 The endpoint reads the game through the check host (`check_host.hpp`),
 the automation host (`automation_host.hpp`), which gives the running
@@ -312,6 +348,19 @@ system's sockets elsewhere.
   quit sent at once by a client that then ends its side of the connection,
   both answered, ending the game with status 0; the log names the address
   and never the token.
+- `native-automation-settings` (`tools/check_native_automation_settings.py`)
+  starts the game in the same way in a 640x480 window and in a 1920x1080
+  one, where the menus are drawn larger. In each it lists `oa.button`, with
+  no dialog and enabled, and clicks it at its rectangle's centre; with
+  Settings open, `screen`'s dialogs holds `oa.settings`, SINGLE is listed
+  disabled and after every `oa.` control, and no two names are equal
+  ignoring case; it clicks `oa.settings.nav.controls`,
+  `oa.settings.wheel-zoom.off` (checked then),
+  `oa.settings.max-zoom-out`, its `oa.settings.max-zoom-out.whole-map` and
+  `oa.settings.ok`, and `prefs` holds wheel zoom `0` and `whole-map`;
+  opened again, wheel zoom shows Off, and its On half and Cancel leave the
+  value stored; every `oa.` control's window rectangle lies in the window
+  hello reports.
 - `native-automation-input` (`tools/check_native_automation_input.py`)
   drives the game by input alone: input requests sent far faster than the
   game takes them, of which it reads no more than about a frame's worth

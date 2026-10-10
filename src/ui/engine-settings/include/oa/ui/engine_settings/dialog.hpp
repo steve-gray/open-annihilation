@@ -529,6 +529,9 @@ struct ModDetails {
     std::string roll_back_from{};
     /// The version its .backup keeps, named as roll_back_from is.
     std::string roll_back_to{};
+    /// The id its oamod.yaml gives, by which automation names its row;
+    /// empty without one, and the row is named by its folder's name.
+    std::string profile_id{};
 };
 
 /// What the question over Mods asks about its row.
@@ -1114,6 +1117,42 @@ void draw_dialog(
     const DialogFonts& fonts,
     const oa::ui::frontend_renderer::RgbaPicture& icon
 );
+
+namespace geometry {
+
+/// Returns what the dialog draws, in the order it draws it, and its
+/// controls, in the order a press tries them, each named for automation:
+/// the window's face, the header, the section list, the open section's
+/// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
+/// list and footer), the footer band and buttons, the edge, an open
+/// drop-down list and the question. Tab follows the declared order: the
+/// open section's rows that take a change (on Developer, then its list's
+/// rows, Show Active Only and, while Developer Mode is on, Restore profile
+/// values; on Mods, each row followed by its ROLL BACK, then OPEN MODS
+/// FOLDER), the footer's buttons, then the sections' entries. A row's
+/// control lies across the section at its control's line, so that the
+/// arrows keep to the column of rows, and a press reaches the control
+/// itself where the view shows it. The controls that take Left and Right
+/// as steps say so; the open section's rows, Developer's list and Mods'
+/// list each have a scroll group, and the entries and the footer none.
+///
+/// The controls are named for automation, which lists them after oa.
+/// (docs/automation.md): settings.nav.<section>, settings.<row> and its
+/// parts, settings.<row>.<item> while a drop-down is open,
+/// settings.mod.<mod>.switch and .roll-back, settings.open-mods-folder,
+/// settings.hack-area.<area>, settings.hack.<hack> and its parameters,
+/// settings.active-only, settings.restore-profile-values,
+/// settings.question.yes and .no, settings.restore-defaults,
+/// settings.cancel, settings.ok and settings.scroll-bar. Each word is one
+/// of the code's, never a text as shown.
+///
+/// @param dialog the dialog
+/// @param fonts the fonts it is drawn in; null measures texts at
+///     estimated_character_width a character
+/// @return the display list
+[[nodiscard]] oa::ui::kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts);
+
+} // namespace geometry
 
 /// Draws the OA button: a small bevelled square showing the Open
 /// Annihilation icon, scaled to the button's side less 3 source pixels all

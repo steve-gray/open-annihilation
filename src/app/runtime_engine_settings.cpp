@@ -536,6 +536,7 @@ void Runtime::list_offered_mods() {
         details.version = std::move(summary.version);
         details.description = std::move(summary.description);
         details.has_profile = summary.has_profile;
+        details.profile_id = std::move(summary.id);
         details.badge_width = summary.badge.width;
         details.badge_height = summary.badge.height;
         details.badge_pixels = std::move(summary.badge.pixels);

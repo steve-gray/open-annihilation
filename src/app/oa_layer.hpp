@@ -15,6 +15,7 @@
 // question (QuestionScreen).
 #pragma once
 
+#include "oa/app/automation_host.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -264,6 +265,20 @@ struct WindowPosition {
 /// @return the kit's key; nothing for a key no screen answers to
 [[nodiscard]] std::optional<oa::ui::kit::Key>
 layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept;
+
+/// Returns the kind the automation endpoint lists a control or a part of a
+/// screen of the OA layer as: a button, a link and a row of buttons' button
+/// are buttons; a switch, a strip and a row of buttons are labels, their
+/// parts (a switch's halves, a strip's levels) check boxes; a drop-down is a
+/// button and an open one's items check boxes; a slider and a scroll bar
+/// are sliders; a tab and a list's row are check boxes; a text field and a
+/// list are themselves; and an area is an area, but one neither enabled nor
+/// focusable is text a journey reads, a label.
+///
+/// @param entry the control or part, as kit::automation_parts lists it
+/// @return its kind
+[[nodiscard]] AutomationControlKind
+automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 
 /// The host of Open Annihilation's own screens over every screen of the
 /// game (Runtime::oa_layer).
@@ -516,6 +531,23 @@ class OaLayer {
 
     /// Destroys the layer's texture; the next present makes it again.
     void destroy_textures() noexcept;
+
+    /// Appends what the layer shows to the automation endpoint's controls
+    /// (docs/automation.md, "OA's own screens"): the OA button while it
+    /// shows, named oa.button with no dialog and enabled while no modal
+    /// screen shows; then each screen that shows, from the top down to the
+    /// first modal one, each control and part of its display list
+    /// (kit::automation_parts) named oa. and its name, of the kind
+    /// automation_kind gives, its dialog oa. and the screen's name.
+    ///
+    /// Each carries its exact rectangle in the window's pixels, as present
+    /// draws it there (AutomationControl::window_pixels), and as its canvas
+    /// rectangle that rectangle's corners mapped back through the canvas's
+    /// placement, the top left rounded down and the bottom right up; without
+    /// a renderer the two are the same.
+    ///
+    /// @param[in,out] controls the list they are appended to
+    void automation_controls(std::vector<AutomationControl>& controls) const;
 
     /// The layer's overlay's input callback (OverlayDesc::event): take_input.
     ///
@@ -799,8 +831,9 @@ class OaLayer {
 class NoticeScreen final : public LayerScreen {
   public:
 
-    /// The name every notice has on the layer.
-    static constexpr std::string_view screen_name = "notice";
+    /// The name a notice has on the layer unless it gives a word of its own
+    /// (kit::Notice::word).
+    static constexpr std::string_view screen_name = oa::ui::kit::notice_word;
 
     /// What the notice's host does.
     struct Host {
@@ -834,10 +867,13 @@ class NoticeScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
-    /// Returns "notice".
+    /// Returns the notice's word (kit::notice_word_of): "notice" unless it
+    /// gives its own.
     ///
     /// @return the name
-    [[nodiscard]] std::string_view name() const override { return screen_name; }
+    [[nodiscard]] std::string_view name() const override {
+        return oa::ui::kit::notice_word_of(notice_);
+    }
 
     /// Returns where the notice shows: centred in the view's room at its
     /// scale, its size class's notice width wide and as tall as its text
@@ -950,8 +986,9 @@ class NoticeScreen final : public LayerScreen {
 class QuestionScreen final : public LayerScreen {
   public:
 
-    /// The name every question has on the layer.
-    static constexpr std::string_view screen_name = "prompt";
+    /// The name a question has on the layer unless it gives a word of its
+    /// own (kit::Question::word).
+    static constexpr std::string_view screen_name = oa::ui::kit::question_word;
 
     /// What the question's host does.
     struct Host {
@@ -1001,10 +1038,13 @@ class QuestionScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
-    /// Returns "prompt".
+    /// Returns the question's word (kit::question_word_of): "prompt" unless
+    /// it gives its own.
     ///
     /// @return the name
-    [[nodiscard]] std::string_view name() const override { return screen_name; }
+    [[nodiscard]] std::string_view name() const override {
+        return oa::ui::kit::question_word_of(question_);
+    }
 
     /// Returns where the question shows: centred in the view's room at its
     /// scale, its size class's notice width wide and as tall as its text

@@ -739,18 +739,34 @@ The names: the section entries `settings.nav.<page>` (`mods`, `controls`,
 `settings.ok` and `settings.scroll-bar`; each row `settings.<row>`, its
 setting's name (`settings.vertical-sync`), MANAGE…
 `settings.game-files-summary.manage`, and Your files `settings.user-folder`;
-an open drop-down's items `settings.<row>.item-<n>`, counted from 1, while
-it is open; Developer's `settings.active-only`,
+an open drop-down's items `settings.<row>.<value>` while it is open;
+Developer's `settings.active-only`,
 `settings.restore-profile-values`, `settings.hack-area.<area>`,
 `settings.hack.<hack id>` and `settings.hack.<hack id>.<parameter>`, with
 `.<value>` for a set's value, `.<n>` for a list's item and `.length` for
 its length; Mods' rows `settings.mod.<mod>.switch` and their ROLL BACK
 `settings.mod.<mod>.roll-back`, `<mod>` being `no-mod` for No Mod and
-otherwise the folder's last component in lower case, every character
-outside `a`–`z`, `0`–`9` and `-` a `-`, a second folder of the same word
-with `-2` after it and a third with `-3`; `settings.open-mods-folder`; and
-the question's `settings.question.yes` and `settings.question.no`, which a
-press tries first while it shows.
+otherwise the mod's profile id (`ModDetails::profile_id`) or, for a folder
+without one, the folder's last component, in lower case, every character
+outside `a`–`z`, `0`–`9` and `-` a `-` (`geometry::word_form`), a second
+row of the same word with `-2` after it and a third with `-3`;
+`settings.open-mods-folder`; and the question's `settings.question.yes` and
+`settings.question.no`, which a press tries first while it shows.
+
+Every word is the code's, never a text as shown, so no name changes with
+the language. A row's word is its `Setting`'s enumerator with `_` as `-`,
+its spec's id; a drop-down's item's or a strip's level's `<value>` is its
+id (`kit::Stepper::id`): the word the preferences keep it as
+(`stored_words.hpp`, or the text functions such as `menu_scaling_text`),
+lower case with every other character a `-` (`1/32` gives `1-32`, a
+language's tag `zh-Hans` gives `zh-hans`, System default `system`), and
+for Zoomed out units' Icons, which no preference keeps yet, `icons`.
+`geometry::choice_word` gives it, and the dialog names an open menu's item
+controls by it. The kit lists the parts of a control that take a press of
+their own after it (`kit::automation_parts`): a switch's
+`.off` and `.on`, a strip's levels, Your files' `.saves`, `.screenshots`
+and `.mods`, an open drop-down's items. The automation endpoint lists
+them all after `oa.` ([docs/automation.md](../../../docs/automation.md#oas-own-screens)).
 
 ## Developer Mode
 
@@ -942,7 +958,10 @@ literals, to the table: its kind, label, hint lines without and with the
 Steam Input notice and a Steam Deck's rate, stops, levels or choices, a
 strip's level width or a drop-down's field width, the levels a strip
 offers, whether its hints are its status, its lock while a game is in
-progress, and the field of the locks that locks it. On every section of
+progress, and the field of the locks that locks it. Every row's id is one
+word, none twice in a section, and every drop-down's item and strip's
+level has an id of one word, none twice in its row, that is the word the
+preferences keep once the row is set there (`write_settings`). On every section of
 every kind of dialog (the engine's settings with and without Touch,
 Controller and Game files, with and without the Steam Input notice and a
 Steam Deck's rate, a mod's options and Language alone), at its top and its
@@ -951,9 +970,19 @@ the display list named once, every control `dialog_layout` lists in the
 list where the layout has it, and Tab stopping only on the list's
 focusable, enabled controls, each once; and
 Developer with every hack open, an open drop-down's items, the question's
-buttons, Mods' names for folders of one word, and the Tab orders of
-Controls, Graphics, Developer with an area open and Mods with two mods as
-literals.
+buttons, Mods' names for folders of one word and for a profile's id, and
+the Tab orders of Controls, Graphics, Developer with an area open and Mods
+with two mods as literals.
+
+`ui-engine-settings-dialog` checks the names the automation endpoint lists
+for the dialog, `oa.` before each name and part `kit::automation_parts`
+gives, on every section of the engine's settings with Touch, Controller and
+Game files listed and every hack open, with a drop-down open on Controls,
+on Mods with its question, and on every section of a mod's options: the
+kit finds no fault in the names, each matches `^oa(\.[a-z0-9-]+)+$`, is
+at most 120 bytes and like no other ignoring case, and the names a journey
+presses (`oa.settings.wheel-zoom.off`, `oa.settings.max-zoom-out.whole-map`,
+`oa.settings.user-folder.saves`, the footer's and others) are among them.
 
 `ui-engine-settings-pixels` and `ui-engine-settings-pixels-data` hold the
 dialog, its notices, its prompts and the OA button to the pictures they

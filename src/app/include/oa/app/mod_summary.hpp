@@ -76,6 +76,9 @@ struct ModSummary {
     std::string description{};
     /// The folder holds an oamod.yaml, readable or not.
     bool has_profile{};
+    /// The profile's id; empty when the folder has no oamod.yaml, or its
+    /// oamod.yaml gives no id that can be read.
+    std::string id{};
     /// The folder's oamod.png, decoded; empty when it is missing or cannot be used.
     ModBadge badge{};
 };

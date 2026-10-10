@@ -35,7 +35,9 @@
 // version and description, long texts cut, the list scrolling under fixed
 // buttons, the Switch Mod question by pointer and keys, ROLL BACK on a row
 // whose folder keeps an earlier version and its question, the locks during
-// a game and by the command line, and OPEN MODS FOLDER.
+// a game and by the command line, and OPEN MODS FOLDER. The names the
+// automation endpoint lists every control and part by, on every section,
+// at each size class.
 // At Regular and Large: every section inside the dialog with its parts
 // apart, hints kept to their lines, Graphics showing more whole rows, the
 // footer's buttons at their Compact sizes, and each control pressed where it
@@ -53,6 +55,7 @@
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/present/game_text.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/test/game_assets.hpp"
 #include "oa/test/game_data.hpp"
 
@@ -66,6 +69,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -8137,6 +8141,185 @@ void a_finger_takes_the_nearest_control() {
     );
 }
 
+/// The most bytes a name the automation endpoint lists may have.
+constexpr std::size_t kEndpointNameBytes = 120;
+
+/// Tells whether a name has the automation endpoint's form for Open
+/// Annihilation's own screens: oa, then words of a to z, 0 to 9 and hyphens,
+/// each after a dot.
+///
+/// @param name the name
+/// @return true when it matches ^oa(\.[a-z0-9-]+)+$
+bool endpoint_form(std::string_view name) {
+    constexpr std::string_view prefix = "oa.";
+    if (name.substr(0, prefix.size()) != prefix || name.size() == prefix.size())
+        return false;
+    bool word = false;
+    for (const char character : name.substr(prefix.size())) {
+        const bool letter = character >= 'a' && character <= 'z';
+        const bool digit = character >= '0' && character <= '9';
+        if (letter || digit || character == '-') {
+            word = true;
+            continue;
+        }
+        if (character != '.' || !word)
+            return false;
+        word = false;
+    }
+    return word;
+}
+
+/// Returns a name in lower case, ASCII letters alone changed.
+///
+/// @param name the name
+/// @return the name, its capitals small
+std::string folded(std::string_view name) {
+    std::string lower(name);
+    for (char& character : lower)
+        if (character >= 'A' && character <= 'Z')
+            character = static_cast<char>(character - 'A' + 'a');
+    return lower;
+}
+
+/// Checks the names the automation endpoint lists a dialog's controls and
+/// their parts by, and adds them to those seen: the kit finds no fault in
+/// the controls' names, and every name the endpoint lists, oa. before each
+/// that kit::automation_parts gives, has its form, is at most
+/// kEndpointNameBytes long and is like no other ignoring case.
+///
+/// @param dialog the dialog
+/// @param what what the dialog shows, for a failure's message
+/// @param[in,out] seen every name listed so far
+void check_endpoint_names(
+    const settings::Dialog& dialog, const std::string& what, std::set<std::string>& seen
+) {
+    const oa::ui::kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    const std::string problem = oa::ui::kit::name_problem(list);
+    if (!problem.empty())
+        std::cerr << what << ": " << problem << '\n';
+    CHECK(problem.empty());
+    oa::ui::kit::Interaction interaction;
+    interaction.hovered = dialog.hovered;
+    interaction.pressed = dialog.pressed;
+    interaction.focused = dialog.focused;
+    interaction.focus_shown = dialog.focused != settings::no_control;
+    std::set<std::string> listed;
+    for (const oa::ui::kit::AutomationEntry& entry :
+         oa::ui::kit::automation_parts(list, interaction)) {
+        const std::string name = "oa." + entry.name;
+        const bool sound = endpoint_form(name) && name.size() <= kEndpointNameBytes &&
+                           listed.insert(folded(name)).second;
+        if (!sound)
+            std::cerr << what << ": the endpoint name " << name
+                      << " is malformed, too long or listed twice\n";
+        CHECK(sound);
+        seen.insert(name);
+    }
+}
+
+/// Checks a dialog's endpoint names on every section it lists, at each
+/// section's top and at its scroll end.
+///
+/// @param dialog the dialog
+/// @param what what the dialog is, for a failure's message
+/// @param[in,out] seen every name listed so far
+void check_every_section_endpoint_names(
+    settings::Dialog dialog, const std::string& what, std::set<std::string>& seen
+) {
+    for (const Page page :
+         settings::dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
+        dialog.page = page;
+        const auto at = static_cast<std::size_t>(page);
+        dialog.scroll[at] = 0;
+        check_endpoint_names(dialog, what + ", section " + std::to_string(at), seen);
+        dialog.scroll[at] = 100000;
+        check_endpoint_names(dialog, what + ", section " + std::to_string(at) + " scrolled", seen);
+        dialog.scroll[at] = 0;
+    }
+}
+
+/// Checks the names the automation endpoint lists every control and part
+/// by, laid out at one size class: the names do not depend on the class.
+///
+/// @param size_class the class the dialogs are laid out at
+void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
+    std::set<std::string> seen;
+    // The engine's settings with Touch, Controller and Game files listed,
+    // Your files' folder known and Developer's every area and hack open.
+    settings::Dialog engine = opened_with_controller(Page::controls, true, true, true);
+    engine.size_class = size_class;
+    engine.user_folder = std::string(kUserFolder);
+    engine.chosen.developer_mode = true;
+    for (uint8_t& open : engine.developer.areas_open)
+        open = 1;
+    for (uint8_t& open : engine.developer.hacks_open)
+        open = 1;
+    check_every_section_endpoint_names(engine, "engine", seen);
+    // A drop-down open on Controls: Maximum zoom out, the second row.
+    settings::Dialog dropped = engine;
+    dropped.page = Page::controls;
+    for (const auto key : {DialogKey::tab, DialogKey::tab, DialogKey::space})
+        static_cast<void>(settings::dialog_key(dropped, key));
+    CHECK(dropped.open_list != settings::no_control);
+    check_endpoint_names(dropped, "Controls, a drop-down open", seen);
+    // Mods with three mods, and its Switch Mod question.
+    settings::Dialog mods = mods_dialog(kModFolders[0]);
+    mods.size_class = size_class;
+    check_endpoint_names(mods, "mods", seen);
+    static_cast<void>(click(mods, mod_point(mods, 1)));
+    CHECK(mods.switch_question == 1);
+    check_endpoint_names(mods, "mods, the question showing", seen);
+    // A mod's options.
+    settings::Dialog options;
+    settings::open_mod_options_dialog(options, {}, {}, {}, "v0.2.0", Page::mod_keys);
+    options.size_class = size_class;
+    check_every_section_endpoint_names(options, "mod options", seen);
+
+    for (const std::string_view name : {
+             "oa.settings.nav.controls",
+             "oa.settings.wheel-zoom",
+             "oa.settings.wheel-zoom.off",
+             "oa.settings.wheel-zoom.on",
+             "oa.settings.max-zoom-out",
+             "oa.settings.max-zoom-out.whole-map",
+             "oa.settings.menu-scaling.whole-steps",
+             "oa.settings.user-folder.saves",
+             "oa.settings.user-folder.screenshots",
+             "oa.settings.user-folder.mods",
+             "oa.settings.game-files-summary.manage",
+             "oa.settings.developer-mode.off",
+             "oa.settings.frame-stats.on",
+             "oa.settings.active-only.off",
+             "oa.settings.restore-profile-values",
+             "oa.settings.mod.no-mod.switch",
+             "oa.settings.open-mods-folder",
+             "oa.settings.question.yes",
+             "oa.settings.question.no",
+             "oa.settings.scroll-bar",
+             "oa.settings.nav.mod-keys",
+             "oa.settings.ok",
+             "oa.settings.cancel",
+             "oa.settings.restore-defaults",
+         }) {
+        const bool listed = seen.count(std::string(name)) == 1;
+        if (!listed)
+            std::cerr << "the endpoint lists no " << name << '\n';
+        CHECK(listed);
+    }
+    // The open drop-down's items are named by the words the preferences
+    // keep them as, never by their places.
+    for (const std::string& name : seen)
+        CHECK(name.find(".item-") == std::string::npos);
+}
+
+void the_endpoint_names_every_control_and_part_once() {
+    for (const auto size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large})
+        endpoint_names_at(size_class);
+}
+
 } // namespace
 
 /// Returns the columns of a row of a canvas that show a colour.
@@ -8872,6 +9055,7 @@ int main(int argc, char** argv) {
         the_notice_wraps_its_text_and_places_its_buttons();
         the_notice_answers_its_buttons_and_keys();
         the_notice_draws_in_the_dialogs_colours(settings::DialogFonts{});
+        the_endpoint_names_every_control_and_part_once();
         the_larger_classes_lay_out_every_section_inside_the_dialog();
         the_larger_classes_keep_hints_to_their_lines();
         the_larger_classes_show_more_graphics_rows();

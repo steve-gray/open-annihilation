@@ -17,6 +17,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [Turning it on](#turning-it-on)
 - [Connecting](#connecting)
 - [Requests](#requests)
+- [OA's own screens](#oas-own-screens)
 - [Input](#input)
 - [Events](#events)
 - [What it never does](#what-it-never-does)
@@ -142,7 +143,7 @@ print(read(sock)[0]["screen"])  # main_menu
 |---|---|
 | `hello` | the protocol's version, the engine's, the window's size, where the game's 640x480 canvas lies in it, the tick rate (30) |
 | `screen` | the screen shown (`main_menu`, `skirmish`, `mp_battleroom`, `match` and the like), the dialogs over it, the control that takes the keys, the pointer, and in a match where the camera looks |
-| `controls` | an extension's windows first, then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows |
+| `controls` | an extension's windows first, then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows |
 | `input` | once the game has taken the events it was given, the frame and tick at which it took them ([below](#input)) |
 | `frame` | the frame the game presented in its window, or the one it composed, whole or a region of it, as RGB pixels, a PNG file, or a hash and mean colour |
 | `prefs` | the preferences as the game holds them now, and their file |
@@ -153,6 +154,106 @@ print(read(sock)[0]["screen"])  # main_menu
 
 [src/app/automation](../src/app/automation/README.md#the-protocol) gives
 every request's fields and answers, and the errors it is refused with.
+
+## OA's own screens
+
+Open Annihilation's own screens (the OA button, Settings, a notice, a
+prompt, and every later one: the Library, the map browser, the gallery)
+are drawn by the engine's UI kit, and `controls` lists them under names of
+one scheme, so that a journey presses them by name as it presses the
+original screens' controls.
+
+**The names.** Each control is listed as `oa.` followed by its kit name:
+lower-case words of `a`–`z`, `0`–`9` and `-` joined by dots, at most 120
+bytes in all, unique ignoring case. Every word is one of the code's, never
+a text as the player sees it, so no name changes with the language:
+
+- a word made from a code name is the enumerator's name with `_` as `-`;
+- a word made from a value is the word the setting's preference stores,
+  lower-cased, every other character a `-` (`1/32` gives `1-32`, `zh-Hans`
+  gives `zh-hans`);
+- a button's word is its English caption as the code holds it, lower-cased,
+  an ellipsis dropped and spaces as `-` (MANAGE… gives `manage`).
+
+A part of a control that takes a press of its own is listed after it with
+one word more: a switch's halves `.off` and `.on`, a strip's levels and an
+open drop-down's items by their values, a row of buttons' buttons by their
+words. A click at a part's centre presses that part; a click at a switch's
+centre would land on the line between Off and On.
+
+| Control | Name | Kind, and what it reports |
+|---|---|---|
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; its caption, empty while it has none |
+| A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
+| A switch, and its halves | `oa.settings.<row>`, `oa.settings.<row>.off`, `oa.settings.<row>.on` | the switch a label with its text; the halves check boxes, checked on the half shown |
+| A level strip, and its levels | `oa.settings.<row>`, `oa.settings.<row>.<value>` | label; check boxes, checked on the level chosen |
+| A drop-down, closed | `oa.settings.<row>` | button; its text the choice shown |
+| A drop-down's item, while open | `oa.settings.<row>.<value>` | check box, checked on the choice |
+| A slider | `oa.settings.<row>` | slider; its text the value shown |
+| A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
+| Your files' buttons | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
+| A mod's row and its ROLL BACK | `oa.settings.mod.<mod>.switch`, `oa.settings.mod.<mod>.roll-back`; OPEN MODS FOLDER `oa.settings.open-mods-folder` | check box, checked on the mod played; button |
+| Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
+| Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
+| The footer | `oa.settings.restore-defaults`, `oa.settings.cancel`, `oa.settings.ok` | button |
+| The Switch Mod question | `oa.settings.question.yes`, `oa.settings.question.no` | button |
+| The section's scroll bar | `oa.settings.scroll-bar` | slider |
+| A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
+| A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
+| A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
+
+`<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
+`<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
+word (`whole-map`, `whole-steps`, `1-32`). `<mod>` is the mod's profile id,
+`no-mod` for No Mod, a folder without a profile taking its folder's name in
+that form, a second row of the same word `-2` and a third `-3`. `<hack>`
+is the standard hack's id with its dots kept. `<word>` is a notice's or a
+prompt's own word: `notice` and `prompt` unless the code that raises it
+gives one, as the missing-language question does (`language-notice`). The
+installs' prompts' ids are their answers: `cancel`, `ok`, `replace`,
+`alongside`, `reinstall`, `open-folder`, `play-now`.
+
+**The kinds.** Each kit control maps to one kind: a button, a link and a
+row of buttons' button are `button`; a switch, a strip and a row of
+buttons themselves are `label` with the shown text, their parts listed
+after them; a drop-down is a `button` whose text is the shown choice, an
+open one's items `check box`; a slider and a scroll bar are `slider`; a tab
+and a list's row are `check box`, checked while selected; a text field is
+`text field` with the typed text; an area is `area`, but one neither
+enabled nor focusable is a line a journey reads, such as a notice's words,
+listed as `label` with its text; a list is `list` with `items` empty, its
+rows being controls of their own.
+
+**Where they are listed.** `dialog` is the OA screen's name after `oa.`:
+`oa.settings`, `oa.notice`, `oa.prompt` (or `oa.<word>`), and `oa.<name>`
+for every later screen; it is null for `oa.button`, so that `screen`'s
+`dialogs` names the screen that is open. The OA screen's controls come
+right after a message box's, ahead of everything else but an extension's
+windows. While an OA screen takes every input, the controls listed after
+it, the screen's own and its panels', are listed disabled. `rect` is on
+the canvas, which on the menus is the 640x480 frame while the OA screens
+are drawn in the window's pixels: `window_rect` is the exact rectangle in
+the window, and `rect` that rectangle's corners mapped back onto the
+canvas, rounded outwards, so it may reach past 640. A click at `rect`'s
+centre through `input` presses the control or part at every window size.
+
+**Every other OA screen** is listed by the same rule, with no table of its
+own: each control `oa.` and its kit name, each part as above, `dialog`
+`oa.` and the screen's name. A screen names its kit controls with `[a-z0-9-]`
+words joined by dots, and a journey clicks the listed names, `oa.`
+included.
+
+**An example journey.** Turning the mouse wheel's zoom off and letting the
+map zoom out to the whole map, from the main menu:
+
+1. click `oa.button`; wait until `oa.settings.ok` is listed;
+2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
+   (its `checked` turns true);
+3. click `oa.settings.max-zoom-out`, then
+   `oa.settings.max-zoom-out.whole-map`;
+4. click `oa.settings.ok`: `prefs` then holds
+   `open-annihilation.wheel-zoom` `0` and `open-annihilation.max-zoom-out`
+   `whole-map`.
 
 ## Input
 
@@ -223,8 +324,9 @@ on, as it ends with ` DEV MODE` while Developer Mode is:
 The engine's tests of the endpoint are `automation-protocol`,
 `automation-options`, `automation-input`, `automation-reports` and the
 native checks `native-automation-menus`, `native-automation-input`,
-`native-automation-frame` and `native-automation-digest`, which run the
-game with `--fark` on the dummy drivers over an installed game.
+`native-automation-frame`, `native-automation-settings` and
+`native-automation-digest`, which run the game with `--fark` on the dummy
+drivers over an installed game.
 [testing.md](development/testing.md#the-automation-endpoint) says how to run them,
 and [src/app/automation](../src/app/automation/README.md#tests) what each
 checks.

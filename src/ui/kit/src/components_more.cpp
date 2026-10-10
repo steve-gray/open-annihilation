@@ -57,10 +57,6 @@ int32_t inner_width_in(int32_t width) noexcept {
     return width - 2 * metrics.edge;
 }
 
-/// The automation names of a notice's buttons.
-constexpr std::string_view ok_name = "notice.ok";
-constexpr std::string_view open_name = "notice.open";
-
 /// The text's lines and the row under the last of them.
 struct PlacedText {
     std::vector<PlacedLine> lines{}; ///< every line, top to bottom, before any is cut
@@ -241,27 +237,9 @@ void add_button_control(
     list.controls.push_back(std::move(control));
 }
 
-/// Returns a notice's controls at a height: OK, then the open button, as a
-/// press tests them.
+/// Tells whether a text may name a control, or start its name, to automation.
 ///
-/// @param height the notice's height
-/// @param width the notice's width
-/// @param ok OK's caption, for automation
-/// @param open the open button's caption, for automation
-/// @return the list, without items
-DisplayList
-notice_controls(int32_t height, int32_t width, std::string ok = {}, std::string open = {}) {
-    const NoticeButtons buttons = notice_buttons(height, width);
-    DisplayList list;
-    add_button_control(list, notice_ok, buttons.ok, std::string(ok_name), std::move(ok));
-    add_button_control(list, notice_open, buttons.open, std::string(open_name), std::move(open));
-    list.tab_order = {notice_open, notice_ok};
-    return list;
-}
-
-/// Tells whether a button's id may name it to automation.
-///
-/// @param id the id
+/// @param id the text
 /// @return true for a word of a-z, 0-9 and hyphens
 bool sound_id(std::string_view id) noexcept {
     return !id.empty() && std::all_of(id.begin(), id.end(), [](char character) {
@@ -270,15 +248,50 @@ bool sound_id(std::string_view id) noexcept {
     });
 }
 
+/// Returns a control's name: a notice's or a question's word, then a word of its own.
+///
+/// @param word the notice's or the question's word
+/// @param own the control's own word
+/// @return <word>.<own>
+std::string named(std::string_view word, std::string_view own) {
+    return std::string(word) + "." + std::string(own);
+}
+
+/// Returns a notice's controls at a height: OK, then the open button, as a
+/// press tests them.
+///
+/// @param height the notice's height
+/// @param width the notice's width
+/// @param word the notice's word, which starts their names
+/// @param ok OK's caption, for automation
+/// @param open the open button's caption, for automation
+/// @return the list, without items
+DisplayList notice_controls(
+    int32_t height,
+    int32_t width,
+    std::string_view word = notice_word,
+    std::string ok = {},
+    std::string open = {}
+) {
+    const NoticeButtons buttons = notice_buttons(height, width);
+    DisplayList list;
+    add_button_control(list, notice_ok, buttons.ok, named(word, "ok"), std::move(ok));
+    add_button_control(list, notice_open, buttons.open, named(word, "open"), std::move(open));
+    list.tab_order = {notice_open, notice_ok};
+    return list;
+}
+
 /// Returns a question button's automation name.
 ///
+/// @param word the question's word
 /// @param button the button
 /// @param index its place from the left, from 0
-/// @return prompt.<id>, or prompt.button-<place from 1>
-std::string question_button_name(const QuestionButton& button, std::size_t index) {
+/// @return <word>.<id>, or <word>.button-<place from 1>
+std::string
+question_button_name(std::string_view word, const QuestionButton& button, std::size_t index) {
     if (sound_id(button.id))
-        return "prompt." + button.id;
-    return "prompt.button-" + std::to_string(index + 1);
+        return named(word, button.id);
+    return named(word, "button-" + std::to_string(index + 1));
 }
 
 /// Returns a question's controls at a height: its buttons, left to right.
@@ -288,6 +301,7 @@ std::string question_button_name(const QuestionButton& button, std::size_t index
 /// @return the list, without items
 DisplayList question_controls(const Question& question, int32_t height) {
     const std::vector<Rect> rects = question_button_rects(question, height);
+    const std::string_view word = question_word_of(question);
     DisplayList list;
     for (std::size_t index = 0; index < rects.size(); ++index) {
         const auto id = static_cast<ControlId>(index);
@@ -295,12 +309,64 @@ DisplayList question_controls(const Question& question, int32_t height) {
             list,
             id,
             rects[index],
-            question_button_name(question.buttons[index], index),
+            question_button_name(word, question.buttons[index], index),
             question.buttons[index].caption
         );
         list.tab_order.push_back(id);
     }
     return list;
+}
+
+/// Appends a notice's or a question's text as a control automation reads
+/// (notice_body): over the title and the lines that fit, taking no press.
+///
+/// @param[in,out] list the display list
+/// @param word the notice's or the question's word
+/// @param title the title's place
+/// @param lines the lines that fit, placed
+/// @param text the title, the paragraphs and the failure, as shown, one a line
+void add_body(
+    DisplayList& list,
+    std::string_view word,
+    const Rect& title,
+    const std::vector<PlacedLine>& lines,
+    std::string text
+) {
+    Rect over = title;
+    for (const PlacedLine& line : lines) {
+        const int32_t right = std::max(over.x + over.width, line.rect.x + line.rect.width);
+        const int32_t bottom = std::max(over.y + over.height, line.rect.y + line.rect.height);
+        over.x = std::min(over.x, line.rect.x);
+        over.y = std::min(over.y, line.rect.y);
+        over.width = right - over.x;
+        over.height = bottom - over.y;
+    }
+    Control body;
+    body.id = notice_body;
+    body.rect = over;
+    body.enabled = false;
+    body.name = named(word, "body");
+    body.kind = ControlKind::area;
+    body.focusable = false;
+    body.text = std::move(text);
+    list.controls.push_back(std::move(body));
+}
+
+/// Returns a notice's or a question's text as one line each: its title, its
+/// paragraphs and its failure, when there is one.
+///
+/// @param title the title, as shown
+/// @param paragraphs the paragraphs, as shown
+/// @param failure the failure, as shown; empty for none
+/// @return the lines, joined by line breaks
+std::string
+body_text(std::string title, const std::vector<std::string>& paragraphs, std::string_view failure) {
+    std::string text = std::move(title);
+    for (const std::string& paragraph : paragraphs)
+        text += "\n" + paragraph;
+    if (!failure.empty())
+        text += "\n" + std::string(failure);
+    return text;
 }
 
 /// Returns the header a notice or a question shows.
@@ -556,12 +622,35 @@ PlacedQuestion place_question(const Question& question, const Fonts* fonts) {
     );
 }
 
+std::string_view notice_word_of(const Notice& notice) noexcept {
+    return sound_id(notice.word) ? std::string_view(notice.word) : notice_word;
+}
+
+std::string_view question_word_of(const Question& question) noexcept {
+    return sound_id(question.word) ? std::string_view(question.word) : question_word;
+}
+
 DisplayList notice_list(const Notice& notice, const Fonts* fonts, const LookUp& look_up) {
     const PlacedNotice placed = place_notice(notice, fonts);
     const int32_t width = box_width(notice.size_class);
     const std::string ok = shown(look_up, notice.ok_caption);
     const std::string open = shown(look_up, notice.open_caption);
-    DisplayList list = notice_controls(placed.height, width, ok, open);
+    const std::string_view word = notice_word_of(notice);
+    DisplayList list = notice_controls(placed.height, width, word, ok, open);
+    std::vector<std::string> paragraphs;
+    for (const Paragraph& paragraph : notice.paragraphs)
+        paragraphs.push_back(shown(look_up, paragraph.text));
+    add_body(
+        list,
+        word,
+        placed.title,
+        placed.lines,
+        body_text(
+            shown(look_up, notice.title),
+            paragraphs,
+            notice.failure.empty() ? std::string() : shown(look_up, notice.failure)
+        )
+    );
     add_face_and_header(list, placed.height, width, shown(look_up, notice.title));
     for (const PlacedLine& line : placed.lines)
         add_text_line(list, line, shown(look_up, line.text));
@@ -588,6 +677,16 @@ DisplayList question_list(const Question& question, const Fonts* fonts) {
     const PlacedQuestion placed = place_question(question, fonts);
     const int32_t width = box_width(question.size_class);
     DisplayList list = question_controls(question, placed.height);
+    std::vector<std::string> paragraphs;
+    for (const Paragraph& paragraph : question.paragraphs)
+        paragraphs.push_back(paragraph.text);
+    add_body(
+        list,
+        question_word_of(question),
+        placed.title,
+        placed.lines,
+        body_text(question.title, paragraphs, question.failure)
+    );
     add_face_and_header(list, placed.height, width, question.title);
     for (const PlacedLine& line : placed.lines)
         add_text_line(list, line, line.text);

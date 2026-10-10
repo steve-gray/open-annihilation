@@ -460,6 +460,11 @@ struct Control {
     int32_t group{-1};  ///< its scroll area's number; -1 when it is in none
     bool checked{};     ///< a switch that is on, or a chosen row, for automation
     std::string text{}; ///< its caption or its value, for automation
+    /// The words automation names its parts by, in order, each a word of
+    /// a-z, 0-9 and hyphens: a strip's levels, a row of buttons' buttons, a
+    /// drop-down's items. A part without one is named by its place from 1;
+    /// a switch's halves are always off and on (automation_parts).
+    std::vector<std::string> parts{};
 };
 
 /// What a screen drew, and where its controls are.

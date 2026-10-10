@@ -12,9 +12,11 @@
 
 #include "oa_layer.hpp"
 
+#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "render_state.hpp"
 
+#include "oa/app/automation_host.hpp"
 #include "oa/app/frame_coordinates.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -42,19 +44,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-
-namespace oa::ui::engine_settings::geometry {
-
-/// Returns what the settings dialog draws, in the order it draws it, and its
-/// controls, each named for automation. It is the engine-settings library's
-/// own (dialog_draw.cpp), which its public header does not list yet.
-///
-/// @param dialog the dialog
-/// @param fonts the fonts it is drawn in; null measures texts by estimate
-/// @return the display list
-[[nodiscard]] oa::ui::kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts);
-
-} // namespace oa::ui::engine_settings::geometry
 
 namespace oa::app {
 
@@ -247,6 +236,240 @@ void darken(renderer::Surface& picture, uint32_t passes, uint32_t opacity) {
             opacity
         );
 }
+
+/// How the window shows the canvas, for the rectangles automation lists the
+/// layer's controls at.
+struct WindowPlace {
+    SDL_Renderer* renderer{}; ///< the renderer; null shows the canvas one to one
+    float density{1.0F};      ///< the window's pixels to a window coordinate
+    /// The front end's picture is drawn in the window, the screens over it
+    /// in the window's own pixels (LayerPlacement::shown); otherwise the
+    /// screens lie on the match's canvas, or the frame holds them.
+    bool front_end{};
+    SDL_FRect picture{};     ///< where the picture lies in the window, in its pixels
+    double scale_x{};        ///< window pixels per picture pixel, across
+    double scale_y{};        ///< window pixels per picture pixel, down
+    int32_t output_width{};  ///< the window's width, in its pixels
+    int32_t output_height{}; ///< the window's height, in its pixels
+};
+
+/// Returns how the window shows the canvas now, as present places the layer.
+///
+/// @param renderer the renderer; may be null
+/// @param match a match shows
+/// @param surface_width the front end's picture's width, without a logical presentation
+/// @param surface_height its height
+/// @return the placement
+WindowPlace
+window_place(SDL_Renderer* renderer, bool match, int32_t surface_width, int32_t surface_height) {
+    WindowPlace place{};
+    place.renderer = renderer;
+    if (renderer == nullptr)
+        return place;
+    if (SDL_Window* window = SDL_GetRenderWindow(renderer)) {
+        const float density = SDL_GetWindowPixelDensity(window);
+        if (density > 0.0F)
+            place.density = density;
+    }
+    SDL_FRect area{};
+    int output_width = 0;
+    int output_height = 0;
+    if (match || !SDL_GetRenderLogicalPresentationRect(renderer, &area) || !(area.w > 0.0F) ||
+        !(area.h > 0.0F) || !SDL_GetRenderOutputSize(renderer, &output_width, &output_height))
+        return place;
+    // The picture's own size, which the logical presentation scales into area.
+    int picture_width = 0;
+    int picture_height = 0;
+    SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
+    if (!SDL_GetRenderLogicalPresentation(renderer, &picture_width, &picture_height, &mode) ||
+        mode == SDL_LOGICAL_PRESENTATION_DISABLED || picture_width <= 0 || picture_height <= 0) {
+        picture_width = surface_width;
+        picture_height = surface_height;
+    }
+    if (picture_width <= 0 || picture_height <= 0)
+        return place;
+    place.front_end = true;
+    place.picture = area;
+    place.scale_x = static_cast<double>(area.w) / picture_width;
+    place.scale_y = static_cast<double>(area.h) / picture_height;
+    place.output_width = output_width;
+    place.output_height = output_height;
+    return place;
+}
+
+/// A rectangle's edges on the canvas, not yet whole pixels.
+struct Edges {
+    double left{};   ///< its left edge
+    double top{};    ///< its top edge
+    double right{};  ///< the edge right of it
+    double bottom{}; ///< the edge under it
+};
+
+/// Returns where a rectangle of a screen's points lies where the screen is
+/// placed: the whole pixels the nearest pixel's rule stamps it on
+/// (OaLayer::stamp). On the front end, where a screen is drawn at the view's
+/// scale as large as its place, those are the window pixels it is drawn on.
+///
+/// @param placed where the screen shows
+/// @param points the rectangle, in the screen's points
+/// @param scale_percent the scale the screen is drawn at
+/// @return the edges; all 0 when the screen has no size
+Edges screen_edges(const LayerPlacement& placed, const kit::Rect& points, int32_t scale_percent) {
+    const kit::Rect drawn = kit::to_canvas(points, scale_percent);
+    const kit::Rect whole =
+        kit::to_canvas({0, 0, placed.points_width, placed.points_height}, scale_percent);
+    if (whole.width <= 0 || whole.height <= 0)
+        return {};
+    const auto along = [](int32_t start, int32_t shown_length, int32_t length, int32_t pixel) {
+        // The first pixel whose nearest drawn pixel is at or past this one.
+        const int64_t scaled = static_cast<int64_t>(pixel) * shown_length;
+        const int64_t first = scaled >= 0 ? (scaled + length - 1) / length : scaled / length;
+        return static_cast<double>(start + first);
+    };
+    const auto& shown = placed.shown;
+    return {
+        along(shown.x, shown.width, whole.width, drawn.x),
+        along(shown.y, shown.height, whole.height, drawn.y),
+        along(shown.x, shown.width, whole.width, drawn.x + drawn.width),
+        along(shown.y, shown.height, whole.height, drawn.y + drawn.height),
+    };
+}
+
+/// Returns the window's pixels a canvas rectangle is drawn on: over the
+/// front end's picture those whose centres it holds, clipped to the window,
+/// as the picture's own pixels are scaled there; in a match its corners
+/// through the renderer; without one, the canvas's own.
+///
+/// @param place how the window shows the canvas
+/// @param edges the rectangle's edges on the canvas
+/// @return the rectangle, in the window's pixels
+layout::Rect window_rect_of(const WindowPlace& place, const Edges& edges) {
+    if (place.renderer == nullptr) {
+        const auto whole = [](double edge) { return static_cast<int32_t>(std::lround(edge)); };
+        return {
+            whole(edges.left),
+            whole(edges.top),
+            whole(edges.right) - whole(edges.left),
+            whole(edges.bottom) - whole(edges.top)
+        };
+    }
+    if (place.front_end) {
+        const auto pixel = [](double area_start, double scale, double edge) {
+            return static_cast<int32_t>(std::ceil(area_start + edge * scale - 0.5));
+        };
+        const int32_t left =
+            std::clamp(pixel(place.picture.x, place.scale_x, edges.left), 0, place.output_width);
+        const int32_t first_row =
+            std::clamp(pixel(place.picture.y, place.scale_y, edges.top), 0, place.output_height);
+        const int32_t right = std::clamp(
+            pixel(place.picture.x, place.scale_x, edges.right), left, place.output_width
+        );
+        const int32_t bottom = std::clamp(
+            pixel(place.picture.y, place.scale_y, edges.bottom), first_row, place.output_height
+        );
+        return {left, first_row, right - left, bottom - first_row};
+    }
+    float left = 0.0F;
+    float first_row = 0.0F;
+    float right = 0.0F;
+    float bottom = 0.0F;
+    if (!frame_to_window(
+            place.renderer,
+            static_cast<float>(edges.left),
+            static_cast<float>(edges.top),
+            &left,
+            &first_row
+        ) ||
+        !frame_to_window(
+            place.renderer,
+            static_cast<float>(edges.right),
+            static_cast<float>(edges.bottom),
+            &right,
+            &bottom
+        ))
+        return {};
+    const auto pixel = [&place](float coordinate) {
+        return static_cast<int32_t>(std::lround(coordinate * place.density));
+    };
+    return {
+        pixel(left), pixel(first_row), pixel(right) - pixel(left), pixel(bottom) - pixel(first_row)
+    };
+}
+
+/// Returns the window's pixels a rectangle of a front-end screen is drawn on:
+/// its edges, which are window pixels already, clipped to the window.
+///
+/// @param place how the window shows the canvas
+/// @param edges the rectangle's edges, in the window's pixels
+/// @return the rectangle, in the window's pixels
+layout::Rect window_rect_at(const WindowPlace& place, const Edges& edges) {
+    const auto whole = [](double edge) { return static_cast<int32_t>(std::lround(edge)); };
+    const int32_t left = std::clamp(whole(edges.left), 0, place.output_width);
+    const int32_t first_row = std::clamp(whole(edges.top), 0, place.output_height);
+    const int32_t right = std::clamp(whole(edges.right), left, place.output_width);
+    const int32_t bottom = std::clamp(whole(edges.bottom), first_row, place.output_height);
+    return {left, first_row, right - left, bottom - first_row};
+}
+
+/// Returns the canvas rectangle a window rectangle covers: its corners
+/// mapped back through the canvas's placement, as the game maps the
+/// pointer, the top left rounded down and the bottom right up.
+///
+/// @param place how the window shows the canvas
+/// @param window the rectangle, in the window's pixels
+/// @return the rectangle, in canvas pixels; the window's own without a renderer
+layout::Rect canvas_rect_of(const WindowPlace& place, const layout::Rect& window) {
+    if (place.renderer == nullptr)
+        return window;
+    const FrameShift shift = renderer_frame_shift(place.renderer);
+    const auto to_canvas = [&place,
+                            &shift](int32_t x, int32_t y, float& canvas_x, float& canvas_y) {
+        if (!SDL_RenderCoordinatesFromWindow(
+                place.renderer,
+                static_cast<float>(x) / place.density,
+                static_cast<float>(y) / place.density,
+                &canvas_x,
+                &canvas_y
+            ))
+            return false;
+        canvas_x += shift.x;
+        canvas_y += shift.y;
+        return true;
+    };
+    float left = 0.0F;
+    float first_row = 0.0F;
+    float right = 0.0F;
+    float bottom = 0.0F;
+    if (!to_canvas(window.x, window.y, left, first_row) ||
+        !to_canvas(window.x + window.width, window.y + window.height, right, bottom))
+        return window;
+    const auto down = [](float edge) { return static_cast<int32_t>(std::floor(edge)); };
+    const auto up = [](float edge) { return static_cast<int32_t>(std::ceil(edge)); };
+    return {down(left), down(first_row), up(right) - down(left), up(bottom) - down(first_row)};
+}
+
+/// Sets a control's rectangles: in the window's pixels, and on the canvas.
+///
+/// @param[out] control the control
+/// @param place how the window shows the canvas
+/// @param window where it lies, in the window's pixels (window_rect_of, window_rect_at)
+void place_control(
+    AutomationControl& control, const WindowPlace& place, const layout::Rect& window
+) {
+    const layout::Rect canvas = canvas_rect_of(place, window);
+    control.x = canvas.x;
+    control.y = canvas.y;
+    control.width = canvas.width;
+    control.height = canvas.height;
+    control.window_pixels = true;
+    control.window_x = window.x;
+    control.window_y = window.y;
+    control.window_width = window.width;
+    control.window_height = window.height;
+}
+
+/// The prefix of every name and dialog the layer lists to automation.
+constexpr std::string_view kAutomationPrefix = "oa.";
 
 /// Returns a quotient rounded down, for a numerator below 0 too.
 ///
@@ -1931,6 +2154,113 @@ void OaLayer::destroy_textures() noexcept {
     texture_.reset();
     uploaded_.reset();
     front_uploaded_.reset();
+}
+
+// ---------------------------------------------------------------------------------------------
+// What automation lists of the layer
+
+AutomationControlKind automation_kind(const kit::AutomationEntry& entry) noexcept {
+    if (entry.part)
+        return entry.kind == kit::ControlKind::buttons ? AutomationControlKind::button
+                                                       : AutomationControlKind::check_box;
+    switch (entry.kind) {
+    case kit::ControlKind::button:
+    case kit::ControlKind::link:
+    case kit::ControlKind::choice:
+        return AutomationControlKind::button;
+    case kit::ControlKind::toggle:
+    case kit::ControlKind::levels:
+    case kit::ControlKind::buttons:
+        return AutomationControlKind::label;
+    case kit::ControlKind::slider:
+    case kit::ControlKind::scroll_bar:
+        return AutomationControlKind::slider;
+    case kit::ControlKind::tab:
+    case kit::ControlKind::list_item:
+        return AutomationControlKind::check_box;
+    case kit::ControlKind::text_field:
+        return AutomationControlKind::text_field;
+    case kit::ControlKind::list:
+        return AutomationControlKind::list;
+    case kit::ControlKind::area:
+        // An area that takes nothing is a line a journey reads.
+        return entry.enabled || entry.focusable ? AutomationControlKind::area
+                                                : AutomationControlKind::label;
+    }
+    return AutomationControlKind::area;
+}
+
+void OaLayer::automation_controls(std::vector<AutomationControl>& controls) const {
+    const LayerView seen = view();
+    const LayerScreen* modal = top_modal(seen);
+    const WindowPlace place = window_place(
+        runtime_.sdl_.renderer,
+        seen.match,
+        static_cast<int32_t>(runtime_.surface_.width),
+        static_cast<int32_t>(runtime_.surface_.height)
+    );
+    // The OA button, on the main menu's picture or in the in-game menu's column.
+    std::optional<layout::Rect> button_at;
+    if (seen.match) {
+        if (match_button_shown(runtime_))
+            button_at = match_button_rect(runtime_.match_layout_, match_fits_safe_area(runtime_));
+    } else if (Runtime::EngineSettingsMenuHost::button_shown(runtime_)) {
+        const auto square = Runtime::EngineSettingsMenuHost::button_rect(runtime_);
+        button_at = layout::Rect{square.x, square.y, square.width, square.height};
+    }
+    if (button_at) {
+        AutomationControl button;
+        button.name = std::string(kAutomationPrefix) + "button";
+        button.kind = AutomationControlKind::button;
+        button.visible = true;
+        // Under a modal screen it takes no press.
+        button.enabled = modal == nullptr;
+        place_control(
+            button,
+            place,
+            window_rect_of(
+                place,
+                {static_cast<double>(button_at->x),
+                 static_cast<double>(button_at->y),
+                 static_cast<double>(button_at->x + button_at->width),
+                 static_cast<double>(button_at->y + button_at->height)}
+            )
+        );
+        controls.push_back(std::move(button));
+    }
+    // The screens that show, from the top, down to the first that takes
+    // every input: nothing under it takes any.
+    for (auto it = screens_.rbegin(); it != screens_.rend(); ++it) {
+        const LayerScreen& screen = **it;
+        const LayerPlacement placed = screen.placement(seen);
+        if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
+            continue;
+        const std::string dialog = std::string(kAutomationPrefix) + std::string(screen.name());
+        const kit::DisplayList list = screen.display_list();
+        for (const kit::AutomationEntry& entry :
+             kit::automation_parts(list, screen.interaction())) {
+            AutomationControl control;
+            control.name = std::string(kAutomationPrefix) + entry.name;
+            control.kind = automation_kind(entry);
+            control.dialog = dialog;
+            control.visible = entry.shown;
+            control.enabled = entry.enabled;
+            control.focused = entry.focused;
+            control.checked = entry.checked;
+            control.text = entry.text;
+            // A front-end screen is drawn in the window's own pixels at its
+            // place; a match's on its canvas.
+            const Edges edges = screen_edges(placed, entry.rect, seen.frame.scale_percent);
+            place_control(
+                control,
+                place,
+                place.front_end ? window_rect_at(place, edges) : window_rect_of(place, edges)
+            );
+            controls.push_back(std::move(control));
+        }
+        if (screen.modal())
+            break;
+    }
 }
 
 } // namespace oa::app
