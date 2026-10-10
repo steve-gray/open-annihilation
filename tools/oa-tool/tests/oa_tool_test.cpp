@@ -216,7 +216,7 @@ void test_commands(const Scratch& scratch) {
 
 void test_help() {
     const auto table = oa::tool::commands();
-    OA_CHECK(table.size() == 8);
+    OA_CHECK(table.size() == 9);
     OA_CHECK(table[0].name == "list");
     OA_CHECK(table[1].name == "extract");
     OA_CHECK(table[2].name == "asset-extract");
@@ -225,6 +225,8 @@ void test_help() {
     OA_CHECK(table[5].name == "pack");
     OA_CHECK(table[6].name == "check");
     OA_CHECK(table[7].name == "catalogue");
+    OA_CHECK(table[8].name == "registry");
+    OA_CHECK(table[8].subcommands.size() == 2);
     OA_CHECK(table[7].subcommands.size() == 4);
     OA_CHECK(table[7].subcommands[0].name == "keygen");
     OA_CHECK(table[7].subcommands[1].name == "public");

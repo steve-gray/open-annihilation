@@ -56,15 +56,11 @@ if(BUILD_TESTING)
 
   # The download API's bodies, and the queue against a local fixture.
   add_executable(oa-app-content-download-api-test tests/download_api_test.cpp)
-  target_include_directories(oa-app-content-download-api-test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(oa-app-content-download-api-test PRIVATE oa-app-content oa-test-support)
   add_test(NAME app-content-download-api COMMAND oa-app-content-download-api-test)
   set_tests_properties(app-content-download-api PROPERTIES TIMEOUT 30)
 
   add_executable(oa-app-content-downloads-test tests/download_test.cpp)
-  target_include_directories(oa-app-content-downloads-test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(oa-app-content-downloads-test
     PRIVATE oa-app-content oa-netgame-http-fixture oa-base-signing oa-base-sha256 oa-base-threads
       oa-test-support)

@@ -41,6 +41,7 @@ enum class DownloadReason : uint8_t {
     update,           ///< a newer release than the one installed
     repair,           ///< the installed copy is being replaced
     offered_in_lobby, ///< offered while setting up a shared game
+    mirror,           ///< a registry is being copied
 };
 
 /// Where one queued package stands.
@@ -111,7 +112,7 @@ enum class DownloadFailure : uint8_t {
 /// The word the download API uses for a reason.
 ///
 /// @param reason why the player asked
-/// @return `install`, `update`, `repair` or `offered-in-lobby`; empty when unknown
+/// @return `install`, `update`, `repair`, `offered-in-lobby` or `mirror`; empty when unknown
 [[nodiscard]] std::string_view reason_text(DownloadReason reason) noexcept;
 
 /// One package to download, fixed when it is queued.

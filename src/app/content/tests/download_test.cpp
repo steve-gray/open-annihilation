@@ -3,7 +3,7 @@
 
 // The download queue against a local fixture: resume, a match, a challenge,
 // mirrors and the saved queue.
-#include "download_api.hpp"
+#include "oa/app/content/download_api.hpp"
 
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"

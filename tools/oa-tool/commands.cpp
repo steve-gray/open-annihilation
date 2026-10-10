@@ -70,6 +70,44 @@ const Command catalogue_commands[] = {
     },
 };
 
+const Command registry_commands[] = {
+    {
+        "init",
+        "FOLDER --id ID --name NAME --base-url URL --key KEY_FILE [--passphrase-file FILE] "
+        "[--homepage URL]",
+        "Make an empty signed registry.",
+        "Makes a direct registry in FOLDER: registry.yaml, an empty catalogue signed for 30 days, "
+        "its signature, and the v1/p and v1/i folders. FOLDER must be missing or empty. "
+        "--base-url is the http address the registry is served at, with no trailing slash. --id "
+        "and --name are the registry's. --key is a sealed publisher key; --passphrase-file reads "
+        "the passphrase from a file, and otherwise the terminal asks. --homepage is an optional "
+        "page. The descriptor and the signed catalogue are read back before the command reports "
+        "success. Prints the descriptor's path and the key's fingerprint.",
+        0,
+        any_count,
+        run_registry_init,
+        {},
+    },
+    {
+        "mirror",
+        "URL FOLDER [--key ed25519:<base64>]",
+        "Copy a registry into a folder.",
+        "Copies a registry into FOLDER, laid out as on the host that served it. URL is the "
+        "registry descriptor. The catalogue's signature is checked, and a sequence lower than "
+        "the one FOLDER already holds stops the copy. Each package and picture is checked by "
+        "SHA-256. A file already there with the right SHA-256 is skipped, and a .part is resumed "
+        "with a Range request. A file that fails its check is deleted. The catalogue and its "
+        "signature are written last, byte for byte. A tokens registry is copied through its "
+        "download API: the tool asks for a key, prints a check's code and address, and carries "
+        "on once the check is passed. A direct registry is fetched from the catalogue's own "
+        "addresses. The folder is served as a direct registry.",
+        0,
+        any_count,
+        run_registry_mirror,
+        {},
+    },
+};
+
 const Command command_table[] = {
     {
         "list",
@@ -184,6 +222,20 @@ const Command command_table[] = {
         0,
         nullptr,
         catalogue_commands,
+    },
+    {
+        "registry",
+        "COMMAND",
+        "Make an empty signed registry or copy one into a folder.",
+        "Makes a direct registry, with an empty catalogue signed for 30 days, or copies a "
+        "registry's descriptor, catalogue, signature, pictures and packages into a folder. A "
+        "copied folder is a registry of its own. It is served as a direct registry: the files "
+        "and signatures stand on their own, and the origin's download API stays the origin's "
+        "policy.",
+        0,
+        0,
+        nullptr,
+        registry_commands,
     },
 };
 
