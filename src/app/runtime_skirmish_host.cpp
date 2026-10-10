@@ -395,11 +395,16 @@ void Runtime::release_picture(map_modal::PictureHandle) {
 }
 
 map_modal::LoadedPicture Runtime::load_picture(std::string_view terrain_path) {
-    const auto bytes = assets_.read(terrain_path).bytes;
-    auto parsed = oa::formats::tnt::parse(bytes);
-    if (!parsed.ok())
-        throw std::runtime_error("cannot parse map terrain: " + parsed.error->message);
-    selected_tnt_ = std::move(*parsed.map);
+    // The highlighted map's terrain is already parsed for the match; its
+    // minimap comes from that parse.
+    const std::string held = "maps/" + selected_map_name_runtime_ + ".tnt";
+    if (!selected_tnt_ || terrain_path != held) {
+        const auto bytes = assets_.read(terrain_path).bytes;
+        auto parsed = oa::formats::tnt::parse(bytes);
+        if (!parsed.ok())
+            throw std::runtime_error("cannot parse map terrain: " + parsed.error->message);
+        selected_tnt_ = std::move(*parsed.map);
+    }
     auto& picture = map_picture_state();
     if (selected_tnt_->minimap) {
         const auto palette_data = assets_.read("palettes/palette.pal").bytes;

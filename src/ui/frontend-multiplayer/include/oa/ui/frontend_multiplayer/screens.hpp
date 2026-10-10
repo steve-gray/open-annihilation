@@ -135,7 +135,8 @@ struct LobbyPackMap {
     int32_t memory_mb{};       ///< memory the map needs, in MB
 };
 
-/// Where the battle room reads installed pack maps, and mounts the one it plays.
+/// Where the battle room reads installed pack maps and the base maps' summaries,
+/// and mounts the pack map it plays.
 ///
 /// A null member does nothing. The binding survives multiplayer_reset.
 struct LobbyMapSource {
@@ -159,12 +160,25 @@ struct LobbyMapSource {
     bool (*prepare)(void* context, const char* name, char* reason, std::size_t capacity){};
     /// Unmounts the pack map whose files are mounted.
     void (*release)(void* context){};
+    /// Returns how many base maps the one start scan listed.
+    int32_t (*base_count)(void* context){};
+    /// Writes the base map at `index`.
+    ///
+    /// The pointers stay valid until that scan lists the maps again.
+    ///
+    /// @param context the source's context
+    /// @param index the map's place, from 0
+    /// @param[out] out the map; left unchanged when `index` is out of range
+    /// @return true when `out` was written
+    bool (*base_at)(void* context, int32_t index, LobbyPackMap* out){};
 };
 
-/// Binds the pack maps the battle room lists beside the base maps.
+/// Binds the pack maps the battle room lists beside the base maps, and the
+/// base maps' summaries when the source carries them.
 ///
 /// The binding survives multiplayer_reset. A null member does nothing. The
-/// list is read again the next time the battle room opens.
+/// list is read again the next time the battle room opens. With no base maps
+/// bound, the list scans the installed maps as before.
 ///
 /// @param source the pack maps; a null member keeps that part unused
 void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept;

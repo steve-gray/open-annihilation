@@ -12,6 +12,7 @@
 #include "oa/app/view_rules.hpp"
 #include "oa/data/campaign/campaign_assets.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/lobby.hpp"
 #include "oa/data/campaign/map_catalog.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/platform/system.hpp"
@@ -34,6 +35,49 @@
 #include <tuple>
 
 namespace oa::app {
+namespace {
+
+/// True when `text` begins with `prefix`, ignoring ASCII case.
+bool starts_with_nocase(const char* text, const char* prefix) {
+    if (text == nullptr)
+        return false;
+    for (; *prefix != '\0'; ++text, ++prefix) {
+        if (*text == '\0')
+            return false;
+        const auto left = std::tolower(static_cast<unsigned char>(*text));
+        const auto right = std::tolower(static_cast<unsigned char>(*prefix));
+        if (left != right)
+            return false;
+    }
+    return true;
+}
+
+/// True when `type` is a network schema, Network 1 through Network 4.
+bool network_schema(const char* type) {
+    static constexpr const char* kTypes[] = {"Network 1", "Network 2", "Network 3", "Network 4"};
+    if (type == nullptr)
+        return false;
+    for (const char* known : kTypes)
+        if (oa::formats::tdf::compare_nocase(type, known) == 0)
+            return true;
+    return false;
+}
+
+/// Start positions of one schema: the specials whose kind begins with StartPos.
+int32_t start_positions(const oa::formats::tdf::Block* schema) {
+    const auto* specials = oa::formats::tdf::find_child(schema, "specials");
+    int32_t count = 0;
+    for (uint32_t index = 0; index < oa::formats::tdf::child_count(specials); ++index) {
+        const char* what = oa::formats::tdf::find_value(
+            oa::formats::tdf::child_at(specials, index), "specialwhat"
+        );
+        if (starts_with_nocase(what, "StartPos"))
+            ++count;
+    }
+    return count;
+}
+
+} // namespace
 
 [[nodiscard]] std::size_t Runtime::map_visible_rows() {
     const auto* list = widget("MAPNAMES");
@@ -401,14 +445,47 @@ init::MapListHandle Runtime::construct(init::MapListHandle handle, int32_t selec
     return handle;
 }
 
+void Runtime::remember_base_map(const char* name, const oa::formats::tdf::Document* ota) {
+    if (name == nullptr || name[0] == '\0')
+        return;
+    BaseMapSummary summary;
+    summary.name = name;
+    const auto* header =
+        ota != nullptr ? oa::formats::tdf::find_child(ota->root, "GlobalHeader") : nullptr;
+    if (const char* title = oa::formats::tdf::find_value(header, "missionname"))
+        summary.title = title;
+    if (const char* description = oa::formats::tdf::find_value(header, "missiondescription"))
+        summary.description = description;
+    if (const char* size = oa::formats::tdf::find_value(header, "size"))
+        summary.size = size;
+    int32_t players = 0;
+    for (uint32_t index = 0; index < oa::formats::tdf::child_count(header); ++index) {
+        const auto* schema = oa::formats::tdf::child_at(header, index);
+        if (!network_schema(oa::formats::tdf::find_value(schema, "type")))
+            continue;
+        players = std::max(players, start_positions(schema));
+    }
+    summary.players = players;
+    summary.memory_mb = oa::ui::frontend_multiplayer::map_memory_mb(
+        static_cast<int32_t>(assets_.file_size("maps/" + summary.name + ".tnt"))
+    );
+    base_map_summaries_.push_back(std::move(summary));
+}
+
 void Runtime::discover_first_map() {
     // The list keeps the maps' file names, which the screens find the maps
     // by; a chosen map shows its translated name (campaign_localized_name).
+    // The same scan records each base map's title, description, size and memory.
+    base_map_summaries_.clear();
     auto files = oa::data::campaign::campaign_asset_files(assets_);
     files.translate = nullptr;
     const oa::data::campaign::MapScanHost host{
-        this, [](void* runtime, uint32_t animation) {
+        this,
+        [](void* runtime, uint32_t animation) {
             static_cast<Runtime*>(runtime)->select_cursor_animation(animation);
+        },
+        [](void* runtime, const char* name, const oa::formats::tdf::Document* ota) {
+            static_cast<Runtime*>(runtime)->remember_base_map(name, ota);
         }
     };
     oa::data::campaign::MapList list{};
@@ -419,12 +496,17 @@ void Runtime::discover_first_map() {
     for (int32_t index = 0; name != nullptr && index < count;
          ++index, name += std::strlen(name) + 1)
         eligible_map_names_.emplace_back(name);
+    if (names == nullptr)
+        base_map_summaries_.clear();
     std::free(names);
     oa::data::campaign::map_clear_list_cache(list, nullptr);
     // The scan finds a mounted pack map's OTA too, under its own name; it is
     // listed with the other pack maps, so that every base map comes first.
     std::erase_if(eligible_map_names_, [this](const std::string& listed) {
         return pack_map(listed) != nullptr;
+    });
+    std::erase_if(base_map_summaries_, [this](const BaseMapSummary& listed) {
+        return pack_map(listed.name) != nullptr;
     });
     if (!eligible_map_names_.empty())
         first_map_name_ = eligible_map_names_.front();
