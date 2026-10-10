@@ -24,6 +24,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <cstring>
 #include <string>
@@ -383,6 +384,13 @@ struct PresenceRecords {
     /// A map-pack binding has come since pack was last asked: the next
     /// presence_refresh asks it again.
     bool pack_rebound{};
+    /// The sim hash of 3.1c's own rules: the plain baseline's, the profile
+    /// a game without a mod resolves to (base_game_profile_text in
+    /// oa/data/mod_profile/overrides.hpp), as this machine's presence
+    /// record carries it when it plays 3.1c. lobby_reset sets it; nothing
+    /// while the baseline does not resolve. Under a 3.1c host the rules dot
+    /// compares a player's record with it (lobby_rules_differ_from_host).
+    std::optional<netgame::PresenceDigest> plain_sim_hash{};
 };
 
 struct Lobby {
@@ -548,6 +556,8 @@ struct StartedOptions {
 /// No player is stalled, and a game with no player timeout gets
 /// kDefaultPlayerTimeoutSeconds. The presence records other players sent
 /// and what was sent to them are forgotten; this machine's own record stays.
+/// The plain baseline's sim hash is set (PresenceRecords::plain_sim_hash),
+/// resolved the first time a lobby is reset and kept for the run.
 ///
 /// @param[out] lobby Lobby to reset; it is bound to game.
 /// @param[in,out] game Game block whose player records and chat ring are cleared.
@@ -1216,6 +1226,62 @@ void presence_refresh(Lobby& lobby) noexcept;
 /// @param[in,out] lobby Lobby state.
 /// @param only_slot The one slot to look at; -1 looks at every slot.
 void presence_send_due(Lobby& lobby, int32_t only_slot = -1) noexcept;
+
+// ---------------------------------------------------------------------------
+// The OA badge and the rules dot: what a battle room row shows in its CD<slot>
+// rectangle.
+
+/// What a battle room row shows in its CD<slot> rectangle.
+enum class RowBadge : uint8_t {
+    none,              ///< nothing
+    disc,              ///< the CD icon: a player on 3.1c who has the game disc
+    open_annihilation, ///< the OA badge: a player on OA
+};
+
+/// What a battle room row shows in its CD<slot> rectangle, and whether its badge carries the dot.
+struct RowBadgeState {
+    RowBadge badge{};    ///< what the rectangle shows
+    bool rules_differ{}; ///< the OA badge carries the dot (lobby_rules_differ_from_host)
+};
+
+/// Returns what a battle room row shows in its CD<slot> rectangle, and whether its badge carries the dot.
+///
+/// A row shows something only while it shows a player (an active slot or a
+/// watcher) who is present: this machine's own player, or a remote player
+/// whose block says it is playing. Such a player has the OA badge when it is
+/// this machine's own player, which is always OA's, or its setup block
+/// carries the 'OA' signature; else the CD icon when its block says it has
+/// the game disc (status::has_disc); else nothing. OA asks for no disc, so
+/// an OA player never shows the CD icon, though its block reports one for a
+/// 3.1c host's count before START. The dot is lobby_rules_differ_from_host.
+/// Reads only the presence records' sim hashes and allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9; any other shows nothing.
+/// @return The row's badge and its dot.
+[[nodiscard]] RowBadgeState lobby_row_badge(Lobby& lobby, int32_t slot) noexcept;
+
+/// Tells whether a row's player plays by rules other than the host's, as the dot on its OA badge says.
+///
+/// Decided from the presence records alone (lobby_presence_record): a setup
+/// block carries no presence and is never read for rules. Never for the
+/// host's own row, a row without the OA badge, or when no host slot is found
+/// (lobby_host_slot). Otherwise:
+/// 1. when the row's record and the host's each carry a sim hash, the rules
+///    differ exactly when the two hashes do;
+/// 2. else, when the host is a 3.1c machine (not this machine, and its block
+///    without the 'OA' signature), the host plays 3.1c's own rules, and the
+///    row's differ when its record carries a sim hash other than the plain
+///    baseline's (PresenceRecords::plain_sim_hash);
+/// 3. else no record tells, and they do not differ.
+///
+/// Reads the records' sim hashes only (netgame::presence_sim_hash) and
+/// allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9; any other gives false.
+/// @return True when the row's OA badge carries the dot.
+[[nodiscard]] bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept;
 
 // ---------------------------------------------------------------------------
 // Machine groups: the players one machine seats share Player.machine_group

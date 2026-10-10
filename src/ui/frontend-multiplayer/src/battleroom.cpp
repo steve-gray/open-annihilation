@@ -5,6 +5,8 @@
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 
 #include "oa/base/game_loop.hpp"
+#include "oa/data/mod_profile.hpp"
+#include "oa/data/mod_profile/overrides.hpp"
 #include "oa/netgame/player_slots.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/netgame/private_channel.hpp"
@@ -23,7 +25,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -773,6 +777,33 @@ void presence_forget(PresenceRecords& records, int32_t slot) noexcept {
     records.sent_to[slot] = 0;
 }
 
+/// Returns the sim hash of 3.1c's own rules: the plain baseline's, the
+/// profile a game without a mod resolves to.
+///
+/// It is resolved the first time it is asked for and kept for the run.
+///
+/// @return The hash; nothing when the baseline does not resolve.
+const std::optional<netgame::PresenceDigest>& plain_baseline_sim_hash() noexcept {
+    static const std::optional<netgame::PresenceDigest> hash =
+        []() noexcept -> std::optional<netgame::PresenceDigest> {
+        namespace profiles = oa::data::mod_profile;
+        try {
+            const std::string text = profiles::base_game_profile_text();
+            const auto resolved = profiles::resolve_profile(
+                std::span<const uint8_t>(
+                    reinterpret_cast<const uint8_t*>(text.data()), text.size()
+                ),
+                profiles::base_game_id
+            );
+            if (resolved.resolution)
+                return resolved.resolution->profile.sim_hash;
+        } catch (const std::exception&) {
+        }
+        return std::nullopt;
+    }();
+    return hash;
+}
+
 /// Writes the value of a map pack's field into the presence records' answer.
 ///
 /// A descriptor URL, name or version longer than the field allows is sent
@@ -863,6 +894,60 @@ std::span<const uint8_t> lobby_presence_record(Lobby& lobby, int32_t slot) noexc
         records.peer_id[slot] != player.player_id)
         return {};
     return {records.peer[slot], records.peer_size[slot]};
+}
+
+namespace {
+
+/// Returns what a row shows in its CD<slot> rectangle, the dot left aside (lobby_row_badge).
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot; outside 0..9 shows nothing.
+/// @return The badge.
+RowBadge row_badge(Lobby& lobby, int32_t slot) noexcept {
+    if (lobby.game == nullptr || slot < 0 || slot >= kSlotCount)
+        return RowBadge::none;
+    const auto& player = slot_player(lobby, slot);
+    const auto& info = info_of(lobby, player);
+    const bool watcher = player.in_use != 0 && (info.options & option::watcher) != 0;
+    if (!slot_active(player) && !watcher)
+        return RowBadge::none;
+    const bool present = occupied_by(player, kSlotLocal) || slot_remote_playing(lobby, player);
+    if (!present)
+        return RowBadge::none;
+    if (occupied_by(player, kSlotLocal) ||
+        netgame::sent_by_open_annihilation(reinterpret_cast<const uint8_t*>(&info)))
+        return RowBadge::open_annihilation;
+    return (info.status & status::has_disc) != 0 ? RowBadge::disc : RowBadge::none;
+}
+
+} // namespace
+
+RowBadgeState lobby_row_badge(Lobby& lobby, int32_t slot) noexcept {
+    return {row_badge(lobby, slot), lobby_rules_differ_from_host(lobby, slot)};
+}
+
+bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept {
+    if (row_badge(lobby, slot) != RowBadge::open_annihilation)
+        return false;
+    const auto host = lobby_host_slot(lobby);
+    if (host == kNoSlot || host == slot)
+        return false;
+    const auto row_record = lobby_presence_record(lobby, slot);
+    const auto host_record = lobby_presence_record(lobby, host);
+    const auto row_hash = netgame::presence_sim_hash(row_record.data(), row_record.size());
+    const auto host_hash = netgame::presence_sim_hash(host_record.data(), host_record.size());
+    if (row_hash && host_hash)
+        return *row_hash != *host_hash;
+    // A 3.1c host sends no record and plays 3.1c's own rules. An OA host
+    // without a record (an OA 0.7 machine) tells nothing.
+    const auto& host_player = slot_player(lobby, host);
+    if (local_or_computer(host_player) ||
+        netgame::sent_by_open_annihilation(
+            reinterpret_cast<const uint8_t*>(&info_of(lobby, host_player))
+        ))
+        return false;
+    const auto& plain = lobby.presence_records.plain_sim_hash;
+    return row_hash && plain && *row_hash != *plain;
 }
 
 void presence_refresh(Lobby& lobby) noexcept {
@@ -1253,6 +1338,7 @@ void lobby_reset(Lobby& lobby, Game& game) noexcept {
     // The other players' presence records are forgotten; this machine's stays.
     for (int32_t slot = 0; slot < kSlotCount; ++slot)
         presence_forget(lobby.presence_records, slot);
+    lobby.presence_records.plain_sim_hash = plain_baseline_sim_hash();
     // The recorder's session starts again; the line it answers with stays.
     char program[sizeof lobby.recorder.program];
     std::memcpy(program, lobby.recorder.program, sizeof program);
@@ -1880,16 +1966,11 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
             continue;
         }
         const bool present = occupied_by(player, kSlotLocal) || slot_remote_playing(lobby, player);
-        // OA asks for no game disc, so an OA player's row shows no CD icon. A
-        // player on 3.1c still shows the disc it has: a 3.1c host counts them
-        // before START.
-        const bool open_annihilation =
-            occupied_by(player, kSlotLocal) ||
-            netgame::sent_by_open_annihilation(reinterpret_cast<const uint8_t*>(&info));
+        // OA asks for no game disc, so an OA player's row shows the OA badge
+        // in place of the CD icon. A player on 3.1c still shows the disc it
+        // has: a 3.1c host counts them before START.
         format(name, "CD%d", slot);
-        panel_set_active(
-            panel, name, present && !open_annihilation && (info.status & status::has_disc) != 0
-        );
+        panel_set_active(panel, name, lobby_row_badge(lobby, slot).badge == RowBadge::disc);
         panel_set_grayed(panel, name, false);
         if (auto* logo = row_control(panel, "LOGO%d", slot)) {
             logo->active = (info.color == kNoColor && my_ready == 0) ? 0 : 1;
