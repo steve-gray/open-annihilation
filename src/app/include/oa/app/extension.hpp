@@ -1159,16 +1159,19 @@ void keep_running_while_inactive(Runtime& runtime, bool hold);
 /// @return true when the browser was asked to open the address and could
 [[nodiscard]] bool open_web_address(const char* address);
 
-/// One font of the modern text stack, in the order a character is looked for.
+/// One font of the modern text stack. The values match the font stack's
+/// base faces. A line looks in them in the chain's order, which places the
+/// endonym face before emoji.
 enum class ModernTextFace : uint8_t {
     sans_bold, ///< Latin, Greek, Cyrillic and symbols, bold
     sans,      ///< the same scripts with more characters, regular
     cjk,       ///< Chinese, Japanese and Korean
     emoji,     ///< emoji, drawn in one colour like any character
+    endonyms,  ///< languages' own names and the notice before a pack is installed
 };
 
 /// How many fonts the modern text stack holds.
-inline constexpr int modern_text_face_count = 4;
+inline constexpr int modern_text_face_count = 5;
 
 /// The pixel size a modern line is drawn at.
 ///
@@ -1196,9 +1199,10 @@ struct ModernFaceMetrics {
 /// The modern faces a line looks in, and the rows of that line.
 ///
 /// count faces are filled, in fallback order. Entries at and after count are
-/// zero. A bold line looks in all four faces; a regular line looks in the
-/// regular sans face, then the CJK face, then emoji. ascent and descent are
-/// the rows of the line the game draws, which fit every face of the chain.
+/// zero. A bold line looks in all five faces; a regular line looks in the
+/// regular sans face, then the CJK face, then the endonym face, then emoji.
+/// ascent and descent are the rows of the line the game draws, which fit
+/// every face of the chain.
 struct ModernTextChain {
     std::array<ModernFaceMetrics, modern_text_face_count> faces{};
     int32_t count{};

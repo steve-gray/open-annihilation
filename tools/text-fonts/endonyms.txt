@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# The characters of NotoSansCJKsc-Bold-Endonyms.otf. One string a line: the
+# languages' own names the catalogue may list, and the lines of the notice
+# shown before a language's pack is installed. A line starting with # and a
+# blank line are ignored. The sans faces already draw Latin, Cyrillic and
+# U+00B7, so the cut keeps only the other characters.
+#
+# To add a name, add its line here, run tools/bootstrap_text_fonts.py and
+# put the SHA-256 and the character count it prints into that script.
+
+# The languages' own names
+简体中文
+繁體中文
+日本語
+한국어
+
+# Simplified Chinese: the missing-language notice
+简体中文现在需要单独下载（4.0 MB）。安装完成前，游戏将显示英文。
+简体中文现在需要单独下载。安装完成前，游戏将显示英文。
+下载 · Download
+下载失败。
+重试 · Try again
+现在无法下载。
