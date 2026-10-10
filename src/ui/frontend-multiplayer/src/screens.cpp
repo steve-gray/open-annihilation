@@ -159,6 +159,14 @@ struct Ui {
     netgame::WireRules wire_rules{};
     /// This machine sends and reads chat as UTF-8; off until bound.
     bool unicode_chat{};
+    /// The presence record this machine sends, without a map pack; empty
+    /// until one is bound. It survives multiplayer_reset.
+    std::vector<uint8_t> presence_record;
+    /// The map packs' answer to which pack the selected map comes from
+    /// (LobbyMaps::pack), and its context; null until bound. It survives
+    /// multiplayer_reset.
+    void* pack_context = nullptr;
+    bool (*pack)(void* context, netgame::PresenceMapPack* out) = nullptr;
     /// The line this machine's recorder answers .report with.
     std::string program_line;
     std::string message;
@@ -675,6 +683,18 @@ bool service_read_file(void*, const char* name, std::size_t limit, std::string* 
     return true;
 }
 
+/// Copies the bound presence record into a lobby's source (PresenceRecords::source).
+///
+/// @param[in,out] lobby the lobby
+/// @param record the record; empty for none
+void take_presence_record(Lobby& lobby, const std::vector<uint8_t>& record) noexcept {
+    auto& records = lobby.presence_records;
+    const auto size = std::min(record.size(), sizeof records.source);
+    if (size != 0)
+        std::memcpy(records.source, record.data(), size);
+    records.source_size = static_cast<uint16_t>(size);
+}
+
 /// Binds the lobby to the screens' transport, services, map list and units.
 ///
 /// A lobby with no game is reset first. The unit limits, the canvas size and
@@ -719,6 +739,11 @@ void bind_boundaries() {
         [](void*) -> const data::campaign::CampaignFile* { return bound_map_context(); },
         maps_read
     };
+    // The map packs' answer, bound by name; the battle room asks it again.
+    lobby.maps.pack_context = state.pack_context;
+    lobby.maps.pack = state.pack;
+    lobby.presence_records.pack_rebound = true;
+    take_presence_record(lobby, state.presence_record);
     lobby.wire_rules = state.wire_rules;
     lobby.unicode_chat = state.unicode_chat;
     lobby.local_version_major = state.wire_rules.version_major;
@@ -2973,6 +2998,25 @@ void multiplayer_bind_net(const LobbyNet& net) noexcept {
 void multiplayer_bind_unicode_chat(bool on) noexcept {
     ui().unicode_chat = on;
     ui().lobby.unicode_chat = on;
+}
+
+void multiplayer_bind_presence_record(const uint8_t* record, std::size_t size) noexcept {
+    auto& state = ui();
+    if (record == nullptr || size > netgame::presence_record_max_bytes)
+        size = 0;
+    state.presence_record.assign(record, record + size);
+    take_presence_record(state.lobby, state.presence_record);
+}
+
+void multiplayer_bind_map_pack(
+    void* context, bool (*pack)(void* context, netgame::PresenceMapPack* out)
+) noexcept {
+    auto& state = ui();
+    state.pack_context = context;
+    state.pack = pack;
+    state.lobby.maps.pack_context = context;
+    state.lobby.maps.pack = pack;
+    state.lobby.presence_records.pack_rebound = true;
 }
 
 void multiplayer_bind_wire_rules(const netgame::WireRules& rules, const char* program) noexcept {
