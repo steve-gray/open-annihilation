@@ -973,6 +973,34 @@ void test_named_refusals(
         OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
         served.server.expect_loopback();
     }
+    {
+        ServedPackage served(scratch, "cannot-write", origin, vale, key, pass);
+        const fs::path dest = scratch / "cannot-write-copy";
+        const fs::path part = dest / "v1" / "p" / (vale.hex + ".oamod.part");
+        fs::create_directories(part);
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        exited("cannot write", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "the file could not be written"));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
+    {
+        ServedPackage served(scratch, "cannot-read", origin, vale, key, pass);
+        const fs::path dest = scratch / "cannot-read-copy";
+        const fs::path part = dest / "v1" / "p" / (vale.hex + ".oamod.part");
+        fs::create_directories(part.parent_path());
+        fs::copy_file(served.root / "v1" / "p" / (vale.hex + ".oamod"), part);
+        fs::permissions(part, fs::perms::none);
+        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        std::error_code restore;
+        fs::permissions(
+            part, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::add, restore
+        );
+        exited("cannot read", refused, oa::tool::exit_failed);
+        OA_CHECK(contains(refused.err, "the file could not be read"));
+        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+        served.server.expect_loopback();
+    }
 }
 
 } // namespace
