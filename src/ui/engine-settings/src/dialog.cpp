@@ -615,16 +615,6 @@ std::vector<int32_t> layout::focus_order(const Dialog& dialog, const layout::Scr
 
 namespace {
 
-/// Tells whether a point lies in a rectangle.
-///
-/// @param rect the rectangle
-/// @param x the point's column
-/// @param y the point's row
-/// @return true inside it
-bool contains(const layout::SourceRect& rect, int32_t x, int32_t y) noexcept {
-    return x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
-}
-
 /// Tells whether a rectangle lies wholly in another.
 ///
 /// @param rect the rectangle
@@ -647,64 +637,17 @@ const layout::Row* row_of(const layout::Rows& rows, int32_t control) noexcept {
     return &rows.rows[static_cast<std::size_t>(index)];
 }
 
-/// Returns the control under a point that a press can act on.
-///
-/// A row's control answers only on the part the view shows, and a locked
-/// row's takes no press. The scroll bar answers while the section scrolls.
-/// On Developer, its list's rows, Show Active Only and, while Developer Mode
-/// is on, Restore profile values answer too.
+/// Returns the control a press at a point acts on: the first of the
+/// dialog's display list's controls that a press reaches there (kit::hit).
+/// While the question shows its buttons come first, and while a drop-down
+/// list is open its items do.
 ///
 /// @param dialog the dialog
-/// @param open the open section's rows
 /// @param x the point's column
 /// @param y the point's row
 /// @return the control; no_control when none is there
-int32_t
-control_at(const Dialog& dialog, const layout::ScrolledRows& open, int32_t x, int32_t y) noexcept {
-    if (layout::developer_page(dialog)) {
-        if (contains(layout::developer_view, x, y)) {
-            for (const layout::ListRow& row : open.list.rows) {
-                if (list_row_takes_input(row) && contains(row.control_area, x, y))
-                    return row.control;
-            }
-        }
-        if (contains(layout::active_only_switch, x, y))
-            return active_only_control;
-        if (developer::restore_profile_enabled(dialog) &&
-            contains(layout::restore_profile_button, x, y))
-            return restore_profile_control;
-    }
-    // Mods' rows answer in its list's own view; every other section's rows,
-    // Developer's above its list among them, in the view under the heading.
-    if (contains(layout::mods_page(dialog) ? open.area.view : layout::view, x, y)) {
-        // A row's ROLL BACK lies inside the row and answers first.
-        const std::vector<bool> roll_backs = roll_back_rows(dialog, open);
-        for (std::size_t index = 0; index < roll_backs.size(); ++index) {
-            const layout::Row& row = open.rows.rows[index];
-            if (roll_backs[index] && row.lock == Lock::none &&
-                contains(layout::roll_back_button(row), x, y))
-                return layout::roll_back_control(open.rows, index);
-        }
-        for (const layout::Row& row : open.rows.rows) {
-            if (row.lock == Lock::none && contains(row.control_area, x, y))
-                return row.control;
-        }
-    }
-    if (layout::mods_page(dialog) && dialog.locks.mod == Lock::none &&
-        contains(layout::mods_folder_button, x, y))
-        return layout::mods_folder_control(open.rows);
-    if (open.limit > 0 && contains(open.area.hit, x, y))
-        return scroll_bar_control;
-    for (const int32_t control : {restore_control, cancel_control, ok_control}) {
-        if (contains(layout::footer_button(control), x, y))
-            return control;
-    }
-    for (const Page page :
-         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
-        if (contains(layout::dialog_list_item(dialog, page), x, y))
-            return page_control(page);
-    }
-    return no_control;
+int32_t control_under(const Dialog& dialog, int32_t x, int32_t y) {
+    return kit::hit(layout::dialog_list(dialog, nullptr), {x, y});
 }
 
 /// Notes where the pointer is, so that the hover can follow the rows a
@@ -722,12 +665,11 @@ void note_pointer(Dialog& dialog, int32_t x, int32_t y) noexcept {
 /// Finds the control under the last pointer point again, after a scroll
 /// moved the rows under it; a held press keeps its hover.
 ///
-/// @param[in,out] dialog the dialog
-/// @param open the open section's rows, at the offset the scroll left
-void hover_again(Dialog& dialog, const layout::ScrolledRows& open) noexcept {
+/// @param[in,out] dialog the dialog, at the offset the scroll left
+void hover_again(Dialog& dialog) {
     if (!dialog.pointer_known || dialog.pressed != no_control)
         return;
-    dialog.hovered = control_at(dialog, open, dialog.pointer_x, dialog.pointer_y);
+    dialog.hovered = control_under(dialog, dialog.pointer_x, dialog.pointer_y);
 }
 
 /// Scrolls the open section to an offset, moving its placed rows with it;
@@ -739,7 +681,7 @@ void hover_again(Dialog& dialog, const layout::ScrolledRows& open) noexcept {
 ///     the new offset
 /// @param offset the offset, clamped to the section's limit
 /// @return DialogAction::redraw when the section moved, else DialogAction::none
-DialogAction scroll_to(Dialog& dialog, layout::ScrolledRows& open, int32_t offset) noexcept {
+DialogAction scroll_to(Dialog& dialog, layout::ScrolledRows& open, int32_t offset) {
     const int32_t next = std::clamp(offset, int32_t{0}, open.limit);
     dialog.scroll[layout::scroll_index(dialog.page)] = next;
     if (next == open.scroll)
@@ -748,7 +690,7 @@ DialogAction scroll_to(Dialog& dialog, layout::ScrolledRows& open, int32_t offse
         layout::scroll_rows(open.rows, next - open.scroll);
     layout::scroll_list(open.list, next - open.scroll);
     open.scroll = next;
-    hover_again(dialog, open);
+    hover_again(dialog);
     return DialogAction::redraw;
 }
 
@@ -759,7 +701,7 @@ DialogAction scroll_to(Dialog& dialog, layout::ScrolledRows& open, int32_t offse
 /// @param[in,out] open the open section's rows, left at the offset shown
 /// @param control the control
 /// @return DialogAction::redraw when the section moved, else DialogAction::none
-DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t control) noexcept {
+DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t control) {
     if (control < first_row_control || dialog.pressed != no_control)
         return DialogAction::none;
     // Developer's rows and its footer's switch and button stay where they
@@ -782,24 +724,21 @@ DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t contro
     );
 }
 
-/// Moves the focus to the next or previous control, and scrolls its row
-/// into view when it is a row.
+/// Moves the focus to the next or previous control in the display list's
+/// declared order (kit::next_in_tab_order), round from one end to the
+/// other, and scrolls its row into view when it is a row. From a control
+/// not in the order, forward goes to the first and back to the last.
 ///
 /// @param[in,out] dialog the dialog
 /// @param[in,out] open the open section's rows, left at the offset shown
 /// @param forward true for the next control, false for the previous
 /// @return DialogAction::redraw
-DialogAction move_focus(Dialog& dialog, layout::ScrolledRows& open, bool forward) {
-    const auto order = focus_order(dialog, open);
-    const auto found = std::find(order.begin(), order.end(), dialog.focused);
-    if (found == order.end()) {
-        dialog.focused = forward ? order.front() : order.back();
-    } else {
-        const auto count = static_cast<std::ptrdiff_t>(order.size());
-        const std::ptrdiff_t at = found - order.begin();
-        const std::ptrdiff_t next = (at + (forward ? 1 : count - 1)) % count;
-        dialog.focused = order[static_cast<std::size_t>(next)];
-    }
+DialogAction move_in_tab_order(Dialog& dialog, layout::ScrolledRows& open, bool forward) {
+    const int32_t next =
+        kit::next_in_tab_order(layout::dialog_list(dialog, nullptr), dialog.focused, forward);
+    if (next == no_control)
+        return DialogAction::none;
+    dialog.focused = next;
     static_cast<void>(show_row(dialog, open, dialog.focused));
     return DialogAction::redraw;
 }
@@ -811,7 +750,7 @@ DialogAction move_focus(Dialog& dialog, layout::ScrolledRows& open, bool forward
 /// @param[in,out] open the open section's rows, left at the new offset
 /// @param key the key
 /// @return DialogAction::redraw when the section moved, else DialogAction::none
-DialogAction scroll_key(Dialog& dialog, layout::ScrolledRows& open, DialogKey key) noexcept {
+DialogAction scroll_key(Dialog& dialog, layout::ScrolledRows& open, DialogKey key) {
     if (dialog.pressed != no_control)
         return DialogAction::none;
     int32_t next = open.scroll;
@@ -922,20 +861,17 @@ std::optional<OpenList> open_list(const Dialog& dialog, const layout::ScrolledRo
     };
 }
 
-/// Returns the item of an open list under a point.
+/// Returns the item of an open list under a point: the item whose control
+/// the display list puts there (control_under).
 ///
-/// @param dialog the dialog, whose first shown item counts
-/// @param list the list
+/// @param dialog the dialog, its list open
 /// @param x the point's column
 /// @param y the point's row
 /// @return the item, from 0; -1 for a point on no item
-int32_t list_item_at(const Dialog& dialog, const OpenList& list, int32_t x, int32_t y) noexcept {
-    for (int32_t shown = 0; shown < list.shown; ++shown)
-        if (contains(layout::choice_item(list.rect, shown), x, y)) {
-            const int32_t item = dialog.list_first + shown;
-            return item < static_cast<int32_t>(list.choices) ? item : -1;
-        }
-    return -1;
+int32_t list_item_at(const Dialog& dialog, int32_t x, int32_t y) {
+    const int32_t control = control_under(dialog, x, y);
+    return control <= layout::first_menu_item_control ? layout::first_menu_item_control - control
+                                                      : -1;
 }
 
 /// Closes the open list, choosing nothing.
@@ -1041,7 +977,7 @@ list_key(Dialog& dialog, layout::ScrolledRows& open, const OpenList& list, Dialo
     case DialogKey::tab:
     case DialogKey::back_tab:
         close_list(dialog);
-        return move_focus(dialog, open, key == DialogKey::tab);
+        return move_in_tab_order(dialog, open, key == DialogKey::tab);
     default:
         return DialogAction::none;
     }
@@ -1053,18 +989,16 @@ list_key(Dialog& dialog, layout::ScrolledRows& open, const OpenList& list, Dialo
     return DialogAction::redraw;
 }
 
-/// Returns the question's button under a point.
+/// Returns the question's button under a point: the button whose control
+/// the display list puts there (control_under).
 ///
 /// @param dialog the dialog, its question showing
 /// @param x the point's column
 /// @param y the point's row
 /// @return question_yes_control, question_no_control, or no_control for neither
-int32_t question_button_at(const Dialog& dialog, int32_t x, int32_t y) noexcept {
-    if (contains(layout::question_yes_rect(dialog), x, y))
-        return question_yes_control;
-    if (contains(layout::question_no_rect(dialog), x, y))
-        return question_no_control;
-    return no_control;
+int32_t question_button_at(const Dialog& dialog, int32_t x, int32_t y) {
+    const int32_t control = control_under(dialog, x, y);
+    return control == question_yes_control || control == question_no_control ? control : no_control;
 }
 
 /// Answers the question over Mods and puts it away: SWITCH makes the mod
@@ -1379,107 +1313,11 @@ DialogAction drag_to(Dialog& dialog, const layout::Row& row, int32_t column) {
     return changed_or_redraw(dialog, before);
 }
 
-/// A part of the dialog where a press acts on a control.
-struct PressArea {
-    int32_t control{no_control}; ///< the control
-    layout::SourceRect rect{};   ///< where it answers a press
-};
-
-/// Returns the part two rectangles share.
-///
-/// @param a a rectangle
-/// @param b another
-/// @return the rectangle in both; zero wide or high when they do not meet
-layout::SourceRect common_part(const layout::SourceRect& a, const layout::SourceRect& b) noexcept {
-    const int32_t left = std::max(a.x, b.x);
-    const int32_t top = std::max(a.y, b.y);
-    const int32_t right = std::min(a.x + a.width, b.x + b.width);
-    const int32_t bottom = std::min(a.y + a.height, b.y + b.height);
-    return {left, top, std::max(right - left, int32_t{0}), std::max(bottom - top, int32_t{0})};
-}
-
-/// Returns the parts where a press acts on a control now, as control_at
-/// tries them: on Developer its list's rows that take input, Show Active
-/// Only and Restore profile values while it is enabled; the open section's
-/// unlocked rows where the view shows them; the scroll bar while the
-/// section scrolls; the footer's buttons; the sections' entries.
-///
-/// @param dialog the dialog
-/// @param open the open section's rows
-/// @return the parts; a row the view hides has none
-std::vector<PressArea> press_areas(const Dialog& dialog, const layout::ScrolledRows& open) {
-    std::vector<PressArea> areas;
-    const auto add = [&areas](int32_t control, const layout::SourceRect& rect) {
-        if (rect.width > 0 && rect.height > 0)
-            areas.push_back(PressArea{control, rect});
-    };
-    if (layout::developer_page(dialog)) {
-        for (const layout::ListRow& row : open.list.rows)
-            if (list_row_takes_input(row))
-                add(row.control, common_part(row.control_area, layout::developer_view));
-        add(active_only_control, layout::active_only_switch);
-        if (developer::restore_profile_enabled(dialog))
-            add(restore_profile_control, layout::restore_profile_button);
-    }
-    // Mods' rows answer in its list's own view, under which OPEN MODS
-    // FOLDER stands; every other section's rows in the view under the
-    // heading.
-    const layout::SourceRect& rows_view = layout::mods_page(dialog) ? open.area.view : layout::view;
-    const std::vector<bool> roll_backs = roll_back_rows(dialog, open);
-    for (std::size_t index = 0; index < roll_backs.size(); ++index)
-        if (roll_backs[index] && open.rows.rows[index].lock == Lock::none)
-            add(layout::roll_back_control(open.rows, index),
-                common_part(layout::roll_back_button(open.rows.rows[index]), rows_view));
-    for (const layout::Row& row : open.rows.rows)
-        if (row.lock == Lock::none)
-            add(row.control, common_part(row.control_area, rows_view));
-    if (layout::mods_page(dialog) && dialog.locks.mod == Lock::none)
-        add(layout::mods_folder_control(open.rows), layout::mods_folder_button);
-    if (open.limit > 0)
-        add(scroll_bar_control, open.area.hit);
-    for (const int32_t control : {restore_control, cancel_control, ok_control})
-        add(control, layout::footer_button(control));
-    for (const Page page :
-         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller))
-        add(page_control(page), layout::dialog_list_item(dialog, page));
-    return areas;
-}
-
-/// A point of the dialog, in source pixels.
-struct SourcePoint {
-    int32_t x{}; ///< column
-    int32_t y{}; ///< row
-};
-
-/// Returns a rectangle's pixel nearest a point.
-///
-/// @param rect the rectangle, not empty
-/// @param x the point's column
-/// @param y the point's row
-/// @return the point itself inside the rectangle, else the nearest pixel on its edge
-SourcePoint nearest_pixel(const layout::SourceRect& rect, int32_t x, int32_t y) noexcept {
-    return {
-        std::clamp(x, rect.x, rect.x + rect.width - 1),
-        std::clamp(y, rect.y, rect.y + rect.height - 1),
-    };
-}
-
-/// Returns the square of the distance between two points.
-///
-/// @param a a point
-/// @param b another
-/// @return the distance squared, in source pixels squared
-int64_t distance_squared(SourcePoint a, SourcePoint b) noexcept {
-    const int64_t across = int64_t{a.x} - b.x;
-    const int64_t down = int64_t{a.y} - b.y;
-    return across * across + down * down;
-}
-
-/// Returns where a finger's press lands: the finger's own point over a
-/// control, else the nearest point of the nearest control within reach;
-/// while a drop-down list is open, the finger's point over one of its
-/// items, else the nearest point of the nearest item within reach; and
-/// while the Switch Mod question shows, the same of its two buttons.
+/// Returns where a finger's press lands, by the kit's reach (kit::reach)
+/// over the dialog's display list: the finger's own point over a control,
+/// else the nearest point of the nearest control within reach. While the
+/// question shows, only its two buttons are reached, and while a drop-down
+/// list is open only its items, since either takes every press.
 ///
 /// @param dialog the dialog
 /// @param open the open section's rows
@@ -1487,48 +1325,18 @@ int64_t distance_squared(SourcePoint a, SourcePoint b) noexcept {
 /// @param y the finger's row
 /// @param reach how far a control may lie from the finger, in source pixels
 /// @return the point the press takes; the finger's own with nothing within reach
-SourcePoint finger_target(
+kit::Point finger_landing(
     const Dialog& dialog, const layout::ScrolledRows& open, int32_t x, int32_t y, int32_t reach
 ) {
-    const SourcePoint finger{x, y};
-    if (reach <= 0)
-        return finger;
-    const int64_t within = int64_t{reach} * reach;
-    std::optional<SourcePoint> best;
-    int64_t best_distance = 0;
-    const auto consider = [&](SourcePoint candidate) {
-        const int64_t distance = distance_squared(candidate, finger);
-        if (distance <= within && (!best || distance < best_distance)) {
-            best = candidate;
-            best_distance = distance;
-        }
-    };
-    // The Switch Mod question takes every press: the finger's point over one
-    // of its buttons, else the nearest point of the nearer within reach.
-    if (dialog.switch_question != no_question) {
-        if (question_button_at(dialog, x, y) != no_control)
-            return finger;
-        consider(nearest_pixel(layout::question_yes_rect(dialog), x, y));
-        consider(nearest_pixel(layout::question_no_rect(dialog), x, y));
-        return best.value_or(finger);
-    }
-    if (const auto list = open_list(dialog, open)) {
-        if (list_item_at(dialog, *list, x, y) >= 0)
-            return finger;
-        for (int32_t shown = 0; shown < list->shown; ++shown)
-            if (dialog.list_first + shown < static_cast<int32_t>(list->choices))
-                consider(nearest_pixel(layout::choice_item(list->rect, shown), x, y));
-        return best.value_or(finger);
-    }
-    if (control_at(dialog, open, x, y) != no_control)
-        return finger;
-    // A part another control covers at its nearest pixel is passed over.
-    for (const PressArea& area : press_areas(dialog, open)) {
-        const SourcePoint candidate = nearest_pixel(area.rect, x, y);
-        if (control_at(dialog, open, candidate.x, candidate.y) == area.control)
-            consider(candidate);
-    }
-    return best.value_or(finger);
+    kit::DisplayList list = layout::dialog_list(dialog, nullptr);
+    const bool asking = dialog.switch_question != no_question;
+    if (asking || open_list(dialog, open).has_value())
+        std::erase_if(list.controls, [asking](const kit::Control& control) {
+            if (asking)
+                return control.id != question_yes_control && control.id != question_no_control;
+            return control.id > layout::first_menu_item_control;
+        });
+    return kit::reach(list, {x, y}, reach).at;
 }
 
 /// Tells whether a press is held: on a control, or on an open list's item.
@@ -1724,7 +1532,7 @@ DialogAction dialog_pointer_move(Dialog& dialog, int32_t x, int32_t y) {
     layout::ScrolledRows open = layout::open_rows(dialog);
     // An open list marks the item under the pointer.
     if (const auto list = open_list(dialog, open)) {
-        const int32_t item = list_item_at(dialog, *list, x, y);
+        const int32_t item = list_item_at(dialog, x, y);
         if (item < 0 || item == dialog.list_marked)
             return DialogAction::none;
         dialog.list_marked = item;
@@ -1746,7 +1554,7 @@ DialogAction dialog_pointer_move(Dialog& dialog, int32_t x, int32_t y) {
         if (row != nullptr)
             return drag_to(dialog, *row, x);
     }
-    const int32_t hovered = control_at(dialog, open, x, y);
+    const int32_t hovered = control_under(dialog, x, y);
     // Your files lights the button under the pointer.
     const layout::Row* buttons = row_of(open.rows, hovered);
     const std::size_t button =
@@ -1778,7 +1586,7 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
     if (const auto list = open_list(dialog, open)) {
         dialog.pressed = no_control;
         dialog.dragging = false;
-        const int32_t item = list_item_at(dialog, *list, x, y);
+        const int32_t item = list_item_at(dialog, x, y);
         if (item >= 0) {
             dialog.list_pressed = item;
             dialog.list_marked = item;
@@ -1788,7 +1596,7 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
         return DialogAction::redraw;
     }
     close_list(dialog);
-    const int32_t control = control_at(dialog, open, x, y);
+    const int32_t control = control_under(dialog, x, y);
     dialog.hovered = control;
     dialog.pressed = control;
     dialog.dragging = false;
@@ -1835,7 +1643,7 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
 }
 
 DialogAction dialog_finger_down(Dialog& dialog, int32_t x, int32_t y, int32_t reach) {
-    const SourcePoint target = finger_target(dialog, layout::open_rows(dialog), x, y, reach);
+    const kit::Point target = finger_landing(dialog, layout::open_rows(dialog), x, y, reach);
     const DialogAction action = dialog_pointer_down(dialog, target.x, target.y);
     if (press_held(dialog)) {
         dialog.finger_shift_x = target.x - x;
@@ -1871,7 +1679,7 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     if (const auto list = open_list(dialog, open)) {
         const int32_t held = dialog.list_pressed;
         dialog.list_pressed = -1;
-        if (held >= 0 && list_item_at(dialog, *list, x, y) == held)
+        if (held >= 0 && list_item_at(dialog, x, y) == held)
             return choose(dialog, *list, held);
         return held >= 0 ? DialogAction::redraw : DialogAction::none;
     }
@@ -1882,7 +1690,7 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     dialog.scroll_grab = 0;
     if (pressed == no_control)
         return DialogAction::none;
-    const int32_t control = control_at(dialog, open, x, y);
+    const int32_t control = control_under(dialog, x, y);
     dialog.hovered = control;
     if (dragged || control != pressed)
         return DialogAction::redraw;
@@ -1937,24 +1745,27 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
         return cancel(dialog);
     case DialogKey::down:
     case DialogKey::tab:
-        return move_focus(dialog, open, true);
+        return move_in_tab_order(dialog, open, true);
     case DialogKey::up:
     case DialogKey::back_tab:
-        return move_focus(dialog, open, false);
+        return move_in_tab_order(dialog, open, false);
     case DialogKey::page_up:
     case DialogKey::page_down:
     case DialogKey::home:
     case DialogKey::end:
         return scroll_key(dialog, open, key);
-    // Y and N answer a question, and do nothing while none shows.
+    // Y and N answer a question, and do nothing while none shows. The
+    // dialog has no text to edit.
     case DialogKey::yes:
     case DialogKey::no:
+    case DialogKey::backspace:
+    case DialogKey::delete_forward:
         return DialogAction::none;
     default:
         break;
     }
     if (dialog.focused == no_control)
-        return move_focus(dialog, open, true);
+        return move_in_tab_order(dialog, open, true);
     // A key that acts on a row brings it into view first, so that the
     // player sees what it changed.
     const DialogAction shown = show_row(dialog, open, dialog.focused);
@@ -2013,7 +1824,8 @@ DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {
     // An open list keeps the section still and scrolls itself, an item a
     // notch, when it holds more items than it shows.
     if (const auto list = open_list(dialog, open)) {
-        if (!contains(list->rect, x, y) || static_cast<int32_t>(list->choices) <= list->shown)
+        if (!kit::contains(list->rect, {x, y}) ||
+            static_cast<int32_t>(list->choices) <= list->shown)
             return DialogAction::none;
         const int32_t first = std::clamp(
             dialog.list_first - static_cast<int32_t>(std::lround(notches)),
@@ -2025,22 +1837,15 @@ DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {
         dialog.list_first = first;
         return DialogAction::redraw;
     }
-    if (open.limit == 0) {
-        dialog.wheel_rows = 0.0F;
+    // Away from the player scrolls towards the top, wheel_step rows a notch,
+    // the fraction carried to the next turn (kit::wheel_offset). A section
+    // that does not scroll drops what was carried.
+    kit::WheelCarry carry{dialog.wheel_rows};
+    const int32_t next =
+        kit::wheel_offset(carry, notches, layout::wheel_step, open.scroll, open.limit);
+    dialog.wheel_rows = carry.rows;
+    if (open.limit == 0)
         return DialogAction::none;
-    }
-    // Away from the player scrolls towards the top. A turn larger than the
-    // section scrolls to its end.
-    const float reach = static_cast<float>(open.limit) + 1.0F;
-    const float rows = std::clamp(
-        dialog.wheel_rows - notches * static_cast<float>(layout::wheel_step), -reach, reach
-    );
-    const auto whole = static_cast<int32_t>(rows);
-    dialog.wheel_rows = rows - static_cast<float>(whole);
-    const int32_t next = std::clamp(open.scroll + whole, int32_t{0}, open.limit);
-    // What is carried towards an end the section has reached is dropped.
-    if ((next == 0 && dialog.wheel_rows < 0.0F) || (next == open.limit && dialog.wheel_rows > 0.0F))
-        dialog.wheel_rows = 0.0F;
     return scroll_to(dialog, open, next);
 }
 

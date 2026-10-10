@@ -1134,10 +1134,13 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 /// @return the controls
 [[nodiscard]] std::vector<int32_t> focus_order(const Dialog& dialog, const ScrolledRows& open);
 
-/// The scroll group of the open section's rows, and of Mods' list.
+/// The scroll group of the open section's rows. The arrows move the focus
+/// within a control's own group first (kit::focus_toward).
 inline constexpr int32_t section_group = 0;
 /// The scroll group of Developer's list.
 inline constexpr int32_t developer_list_group = 1;
+/// The scroll group of Mods' list: its rows and their ROLL BACK buttons.
+inline constexpr int32_t mods_list_group = 2;
 
 /// The control of an open drop-down list's first item: the items count down
 /// from it, under the question's buttons, by their places in the list.

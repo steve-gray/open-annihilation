@@ -67,7 +67,7 @@ NoticeAction notice_pointer_up(Notice& notice, int32_t x, int32_t y, int32_t hei
 }
 
 NoticeAction notice_key(Notice& notice, DialogKey key) {
-    return kit::notice_key(notice, static_cast<kit::Key>(key));
+    return kit::notice_key(notice, key);
 }
 
 void draw_notice(

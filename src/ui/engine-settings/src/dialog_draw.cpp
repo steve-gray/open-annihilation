@@ -562,7 +562,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
                     kit::ControlKind::button
                 );
                 added.clip = view;
-                added.group = layout::section_group;
+                added.group = layout::mods_list_group;
                 added.text = caption;
                 building.roll_backs.push_back(std::move(added));
             }
@@ -579,7 +579,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
                 kit::ControlKind::list_item
             );
             added.clip = view;
-            added.group = layout::section_group;
+            added.group = layout::mods_list_group;
             added.checked = playing;
             added.text = shown.title;
             building.rows.push_back(std::move(added));

@@ -16,6 +16,7 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -302,24 +303,12 @@ static_assert(
     return first_page_control + (index >= first_mod ? index - first_mod : index);
 }
 
-/// The keys the dialog answers to; a host gives the platform's keys these meanings.
-enum class DialogKey : uint8_t {
-    enter,     ///< OK
-    escape,    ///< Cancel
-    up,        ///< the focus to the control above
-    down,      ///< the focus to the control below
-    left,      ///< the focused control one step down: Off, a lower value
-    right,     ///< the focused control one step up: On, a higher value
-    space,     ///< presses the focused button or flips the focused switch
-    tab,       ///< the focus to the next control
-    back_tab,  ///< the focus to the previous control
-    page_up,   ///< scrolls the open section up by most of its view
-    page_down, ///< scrolls the open section down by most of its view
-    home,      ///< scrolls the open section to its top
-    end,       ///< scrolls the open section to its end
-    yes,       ///< Y: answers the Switch Mod question SWITCH; nothing while it does not show
-    no,        ///< N: answers the Switch Mod question CANCEL; nothing while it does not show
-};
+/// The keys the dialog answers to: the kit's keys, which a host gives the
+/// platform's keys the meanings of. dialog_key says what each does in the
+/// dialog; Backspace and Delete, which edit a kit screen's text, do nothing
+/// here, nor in the dialog's drop-down lists, its question, notices and
+/// prompts.
+using DialogKey = oa::ui::kit::Key;
 
 /// The buttons of the Your files row, left to right: each opens a folder of
 /// the player's own folder.
