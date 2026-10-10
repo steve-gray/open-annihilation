@@ -118,6 +118,11 @@ struct CampaignFiles {
         void (*visit)(void* user, const FindRecord& record),
         void* user
     ) = nullptr;
+    /// Writes, ending in NUL and cut to `capacity`, text naming where the
+    /// file comes from, and returns that text's length. Null, or an answer
+    /// of -1, means no file is there; the lobby's map hash then keys by path
+    /// alone.
+    int32_t (*source)(void* context, const char* path, char* out, uint32_t capacity) = nullptr;
 };
 
 // The campaign object: the loaded campaign, the bound mission's resolved
