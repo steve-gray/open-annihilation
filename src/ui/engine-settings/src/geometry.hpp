@@ -12,6 +12,8 @@
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/theme.hpp"
 
+#include "settings_rows.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>

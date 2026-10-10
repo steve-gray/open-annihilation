@@ -8,7 +8,7 @@
 # (engine_settings/notice.hpp), and the prompts that ask with buttons of
 # their own in the same look (engine_settings/prompt.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/mods.cpp src/notice.cpp src/prompt.cpp)
+  src/developer.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)

@@ -1,0 +1,1811 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// The settings dialog's rows as one table, in Setting's order: each row's
+// spec and the small functions it is bound through, the sections' rows,
+// names and headings, and the geometry functions that read a row.
+
+#include "settings_rows.hpp"
+
+#include "geometry.hpp"
+
+#include "oa/data/languages.hpp"
+#include "oa/ui/pad_controls.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace oa::ui::engine_settings {
+
+namespace geometry {
+
+namespace {
+
+namespace pad_controls = oa::ui::pad_controls;
+namespace languages = oa::data::languages;
+
+using Spec = kit::RowSpec<SettingsModel>;
+using Stepper = kit::Stepper<SettingsModel>;
+using Hint = std::array<std::string_view, 2>;
+
+/// The number of settings: Setting's enumerators.
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::hud_scaling) + 1;
+
+/// Each section's name in kebab case, Page's enumerator with '_' as '-',
+/// in Page's order.
+constexpr std::array<std::string_view, page_count> kPageWords{
+    "mods",
+    "controls",
+    "common-tweaks",
+    "language",
+    "graphics",
+    "touch",
+    "controller",
+    "developer",
+    "game-files",
+    "mod-keys",
+    "mod-patrol",
+    "mod-guard",
+    "mod-tools",
+    "mod-chat",
+};
+static_assert(
+    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count, "every section has its word"
+);
+
+// ---------------------------------------------------------------------------
+// What the rows offer.
+
+/// Hardware acceleration's captions, in hardware_acceleration_levels' order.
+constexpr std::array<std::string_view, 3> kAccelerationCaptions{"Off", "Basic", "Full"};
+static_assert(
+    kAccelerationCaptions.size() == hardware_acceleration_levels.size(),
+    "every level of hardware acceleration has its caption"
+);
+/// Enhanced anti-aliasing's captions, in anti_aliasing_levels' order.
+constexpr std::array<std::string_view, 5> kAntiAliasingCaptions{"Off", "2x", "4x", "8x", "16x"};
+static_assert(
+    kAntiAliasingCaptions.size() == anti_aliasing_levels.size(),
+    "every level of anti-aliasing has its caption"
+);
+/// Menu scaling's captions, in menu_scaling_choices' order.
+constexpr std::array<std::string_view, 3> kMenuScalingCaptions{
+    "Sharp", "Whole steps", "Unfiltered"
+};
+static_assert(
+    kMenuScalingCaptions.size() == menu_scaling_choices.size(),
+    "every way of Menu scaling has its caption"
+);
+/// Explosion flash's captions, in explosion_flash_choices' order.
+constexpr std::array<std::string_view, 3> kExplosionFlashCaptions{"Off", "Reduced", "Full"};
+static_assert(
+    kExplosionFlashCaptions.size() == explosion_flash_choices.size(),
+    "every level of Explosion flash has its caption"
+);
+/// View past the map's edge's captions, in view_past_map_edge_choices' order.
+constexpr std::array<std::string_view, 3> kViewPastMapEdgeCaptions{"Off", "25%", "50%"};
+static_assert(
+    kViewPastMapEdgeCaptions.size() == view_past_map_edge_choices.size(),
+    "every choice of View past the map's edge has its caption"
+);
+/// Zoomed out units' captions, in zoomed_out_units_choices' order.
+constexpr std::array<std::string_view, 3> kZoomedOutUnitsCaptions{"Rendered", "Dots", "Icons"};
+static_assert(
+    kZoomedOutUnitsCaptions.size() == zoomed_out_units_choices.size(),
+    "every way of Zoomed out units has its caption"
+);
+/// Window frame's captions, in window_frame_choices' order.
+constexpr std::array<std::string_view, 2> kWindowFrameCaptions{"Hidden in play", "Always shown"};
+static_assert(
+    kWindowFrameCaptions.size() == window_frame_choices.size(),
+    "every way of Window frame has its caption"
+);
+/// One-finger drag's captions, in touch_drag_choices' order.
+constexpr std::array<std::string_view, 3> kTouchDragCaptions{"Automatic", "Box", "Scroll"};
+static_assert(
+    kTouchDragCaptions.size() == touch_drag_choices.size(),
+    "every way of One-finger drag has its caption"
+);
+/// QUEUE and ADD's captions, in touch_latches_choices' order.
+constexpr std::array<std::string_view, 2> kTouchLatchesCaptions{"Stay on", "One action"};
+static_assert(
+    kTouchLatchesCaptions.size() == touch_latches_choices.size(),
+    "every way of QUEUE and ADD has its caption"
+);
+/// Control size's captions, in control_size_choices' order.
+constexpr std::array<std::string_view, 3> kControlSizeCaptions{"Standard", "Large", "Larger"};
+static_assert(
+    kControlSizeCaptions.size() == control_size_choices.size(), "every Control size has its caption"
+);
+/// The schemes, in the order Scheme's strip offers them.
+constexpr std::array<pad_controls::Scheme, 2> kSchemeChoices{
+    pad_controls::Scheme::trackpads, pad_controls::Scheme::sticks
+};
+/// Scheme's captions, in kSchemeChoices' order.
+constexpr std::array<std::string_view, 2> kSchemeCaptions{"Trackpads", "Sticks"};
+/// The right trackpad's ways, in the order Right trackpad's strip offers them.
+constexpr std::array<pad_controls::RightTrackpad, 2> kRightTrackpadChoices{
+    pad_controls::RightTrackpad::relative, pad_controls::RightTrackpad::absolute
+};
+/// Right trackpad's captions, in kRightTrackpadChoices' order: the pointer,
+/// relative and absolute.
+constexpr std::array<std::string_view, 2> kRightTrackpadCaptions{"Relative", "Absolute"};
+/// The accelerations, in the order Pointer acceleration's strip offers them.
+constexpr std::array<pad_controls::Acceleration, 3> kAccelerationChoices{
+    pad_controls::Acceleration::off,
+    pad_controls::Acceleration::low,
+    pad_controls::Acceleration::high
+};
+/// Pointer acceleration's captions, in kAccelerationChoices' order.
+constexpr std::array<std::string_view, 3> kPadAccelerationCaptions{"Off", "Low", "High"};
+/// The right stick's roles, in the order Right stick's strip offers them.
+constexpr std::array<pad_controls::RightStick, 3> kRightStickChoices{
+    pad_controls::RightStick::zoom_and_pages,
+    pad_controls::RightStick::pointer,
+    pad_controls::RightStick::nothing
+};
+/// Right stick's captions, in kRightStickChoices' order: Zoom is zoom and
+/// build pages, which its hint says in full.
+constexpr std::array<std::string_view, 3> kRightStickCaptions{"Zoom", "Pointer", "Nothing"};
+/// The gyro's ways, in the order Gyro pointer's drop-down offers them.
+constexpr std::array<pad_controls::Gyro, 4> kGyroChoices{
+    pad_controls::Gyro::off,
+    pad_controls::Gyro::right_pad_touched,
+    pad_controls::Gyro::right_stick_touched,
+    pad_controls::Gyro::always
+};
+/// Gyro pointer's choices' texts, in kGyroChoices' order.
+constexpr std::array<std::string_view, 4> kGyroCaptions{
+    "Off", "While the right pad is touched", "While the right stick is touched", "Always"
+};
+/// The haptics' strengths, in the order Haptics' strip offers them.
+constexpr std::array<pad_controls::Haptics, 3> kHapticsChoices{
+    pad_controls::Haptics::off, pad_controls::Haptics::light, pad_controls::Haptics::strong
+};
+/// The Controller section's Haptics' captions, in kHapticsChoices' order.
+constexpr std::array<std::string_view, 3> kPadHapticsCaptions{"Off", "Light", "Strong"};
+/// The button prompts, in the order Button prompts' drop-down offers them.
+constexpr std::array<pad_controls::Prompts, 6> kPromptsChoices{
+    pad_controls::Prompts::automatic,
+    pad_controls::Prompts::steam_deck,
+    pad_controls::Prompts::xbox,
+    pad_controls::Prompts::playstation,
+    pad_controls::Prompts::nintendo,
+    pad_controls::Prompts::off
+};
+/// Button prompts' choices' texts, in kPromptsChoices' order.
+constexpr std::array<std::string_view, 6> kPromptsCaptions{
+    "Automatic", "Steam Deck", "Xbox", "PlayStation", "Nintendo", "Off"
+};
+/// Maximum zoom out's choices' texts, in zoom_out_limits' order.
+constexpr std::array<std::string_view, 7> kZoomOutCaptions{
+    "Automatic", "Whole map", "1/32", "1/16", "1/8", "1/4", "1/2"
+};
+static_assert(
+    kZoomOutCaptions.size() == zoom_out_limits.size(),
+    "every Maximum zoom out choice has its caption"
+);
+/// After zoom's choices' texts, in zoomed_out_afters' order.
+constexpr std::array<std::string_view, 7> kZoomedOutAfterCaptions{
+    "1/2", "1/3", "1/4", "1/6", "1/8", "1/12", "1/16"
+};
+static_assert(
+    kZoomedOutAfterCaptions.size() == zoomed_out_afters.size(),
+    "every After zoom choice has its caption"
+);
+/// Maximum zoom in's choices' texts, in zoom_in_limits' order.
+constexpr std::array<std::string_view, 4> kZoomInCaptions{"None", "2x", "3x", "4x"};
+static_assert(
+    kZoomInCaptions.size() == zoom_in_limits.size(), "every Maximum zoom in choice has its caption"
+);
+/// What patrolling builders do at each stop of their sliders.
+constexpr std::array<std::string_view, 3> kPatrolCaptions{"Reclaim only", "Both", "Assist only"};
+/// What guarding builders do at each stop of their sliders.
+constexpr std::array<std::string_view, 3> kGuardCaptions{"Stay", "Normal", "Scatter"};
+/// What the resource bar shows behind its text at each stop of its slider.
+constexpr std::array<std::string_view, 3> kPanelBackgroundCaptions{"None", "Text", "Solid"};
+
+// ---------------------------------------------------------------------------
+// Steps, stops and captions.
+
+/// Returns a choice's place among the choices a strip or a drop-down offers.
+///
+/// @param choices the choices, in order
+/// @param chosen the choice
+/// @return its index; 0 for a choice not offered
+template <typename Choice, std::size_t Count>
+int32_t choice_place(const std::array<Choice, Count>& choices, Choice chosen) noexcept {
+    const auto found = std::find(choices.begin(), choices.end(), chosen);
+    return found == choices.end() ? 0 : static_cast<int32_t>(found - choices.begin());
+}
+
+/// Returns a stop held to a slider's stops.
+///
+/// @param stop the stop
+/// @param stops the slider's stops
+/// @return the stop, 0 to stops - 1
+int32_t on_stops(int32_t stop, int32_t stops) noexcept {
+    return std::clamp(stop, int32_t{0}, std::max(stops - 1, int32_t{0}));
+}
+
+/// Returns a whole number of a range's steps, rounded to the nearest.
+///
+/// @param value the value
+/// @param lowest the range's lowest value
+/// @param step the step
+/// @return (value - lowest) / step, rounded half up
+int32_t steps_from(int64_t value, int64_t lowest, int64_t step) noexcept {
+    return static_cast<int32_t>((value - lowest + step / 2) / step);
+}
+
+/// Returns the text of a slider's stop: the value's own text at the stop it
+/// is on, so that a value between two stops shows as it is, and the text of
+/// the stop's value at any other.
+template <
+    int32_t (*Get)(const SettingsModel&),
+    void (*Set)(SettingsModel&, int32_t),
+    std::string (*Text)(const SettingsModel&)>
+std::string stop_caption(const SettingsModel& model, int32_t stop) {
+    if (stop == Get(model))
+        return Text(model);
+    EngineSettings moved = *model.settings;
+    SettingsModel probe{&moved, model.dialog};
+    Set(probe, stop);
+    return Text(probe);
+}
+
+/// A slider over a number of the settings, from its lowest in equal steps.
+template <
+    class Number,
+    Number EngineSettings::* Field,
+    int64_t Lowest,
+    int64_t Highest,
+    int64_t Step>
+struct Linear {
+    /// Returns its stops.
+    static int32_t count(const SettingsModel&) {
+        return static_cast<int32_t>((Highest - Lowest) / Step + 1);
+    }
+
+    /// Returns the stop nearest its value.
+    static int32_t get(const SettingsModel& model) {
+        return on_stops(steps_from(model.settings->*Field, Lowest, Step), count(model));
+    }
+
+    /// Sets it to a stop's value.
+    static void set(SettingsModel& model, int32_t stop) {
+        model.settings->*Field = static_cast<Number>(Lowest + on_stops(stop, count(model)) * Step);
+    }
+};
+
+/// A strip of levels over a choice of the settings. A level past those it
+/// offers is shown, and choosing it changes nothing.
+template <
+    class Choice,
+    std::size_t Count,
+    const std::array<Choice, Count>& Choices,
+    Choice EngineSettings::* Field,
+    const std::array<std::string_view, Count>& Captions,
+    std::size_t Offered = Count>
+struct Strip {
+    /// Returns its levels.
+    static int32_t count(const SettingsModel&) { return static_cast<int32_t>(Count); }
+
+    /// Returns the level it shows.
+    static int32_t get(const SettingsModel& model) {
+        return choice_place(Choices, model.settings->*Field);
+    }
+
+    /// Sets it to a level it offers.
+    static void set(SettingsModel& model, int32_t level) {
+        if (level < 0 || static_cast<std::size_t>(level) >= Offered)
+            return;
+        model.settings->*Field = Choices[static_cast<std::size_t>(level)];
+    }
+
+    /// Returns a level's caption, in English.
+    static std::string caption(const SettingsModel&, int32_t level) {
+        if (level < 0 || static_cast<std::size_t>(level) >= Count)
+            return {};
+        return std::string(Captions[static_cast<std::size_t>(level)]);
+    }
+
+    /// Returns the levels a player may choose, from the left.
+    static int32_t offered(const SettingsModel&) { return static_cast<int32_t>(Offered); }
+
+    /// Returns its stepper.
+    static constexpr Stepper stepper() noexcept {
+        return {&count, &get, &set, &caption, Offered == Count ? nullptr : &offered};
+    }
+};
+
+/// A drop-down over a choice of the settings.
+template <
+    class Choice,
+    std::size_t Count,
+    const std::array<Choice, Count>& Choices,
+    Choice EngineSettings::* Field,
+    const std::array<std::string_view, Count>& Captions>
+struct DropDown {
+    /// Returns its items.
+    static int32_t count(const SettingsModel&) { return static_cast<int32_t>(Count); }
+
+    /// Returns the item it shows.
+    static int32_t get(const SettingsModel& model) {
+        return choice_place(Choices, model.settings->*Field);
+    }
+
+    /// Sets it to an item, held to its items.
+    static void set(SettingsModel& model, int32_t item) {
+        model.settings->*Field = Choices[static_cast<std::size_t>(on_stops(item, count(model)))];
+    }
+
+    /// Returns an item's text, as the dialog shows it.
+    static std::string caption(const SettingsModel&, int32_t item) {
+        if (item < 0 || static_cast<std::size_t>(item) >= Count)
+            return {};
+        return std::string(shown_text(Captions[static_cast<std::size_t>(item)]));
+    }
+
+    /// Returns its stepper.
+    static constexpr Stepper stepper() noexcept { return {&count, &get, &set, &caption, nullptr}; }
+};
+
+/// Returns whether a switch of the settings is On.
+template <bool EngineSettings::* Flag>
+bool engine_flag(const SettingsModel& model) {
+    return model.settings->*Flag;
+}
+
+/// Sets a switch of the settings.
+template <bool EngineSettings::* Flag>
+void set_engine_flag(SettingsModel& model, bool on) {
+    model.settings->*Flag = on;
+}
+
+/// Returns whether a switch of the mod options is On.
+template <bool ModOptions::* Flag>
+bool option_flag(const SettingsModel& model) {
+    return model.settings->mod_options.*Flag;
+}
+
+/// Sets a switch of the mod options.
+template <bool ModOptions::* Flag>
+void set_option_flag(SettingsModel& model, bool on) {
+    model.settings->mod_options.*Flag = on;
+}
+
+/// Makes the row of a switch of the settings.
+template <bool EngineSettings::* Flag>
+constexpr Spec engine_switch(std::string_view id, std::string_view label, Hint hint) noexcept {
+    return kit::toggle(id, label, &engine_flag<Flag>, &set_engine_flag<Flag>, hint);
+}
+
+/// Makes the row of a switch of the mod options.
+template <bool ModOptions::* Flag>
+constexpr Spec option_switch(std::string_view id, std::string_view label, Hint hint) noexcept {
+    return kit::toggle(id, label, &option_flag<Flag>, &set_option_flag<Flag>, hint);
+}
+
+/// Copies one field of the settings.
+template <auto Field>
+void copy_field(const SettingsModel& to, const SettingsModel& from) {
+    to.settings->*Field = from.settings->*Field;
+}
+
+/// Copies one field of the mod options.
+template <auto Field>
+void copy_option(const SettingsModel& to, const SettingsModel& from) {
+    to.settings->mod_options.*Field = from.settings->mod_options.*Field;
+}
+
+/// Copies the mod and the folder the player picked.
+void copy_mod_folders(const SettingsModel& to, const SettingsModel& from) {
+    to.settings->mod_folder = from.settings->mod_folder;
+    to.settings->picked_mod_folder = from.settings->picked_mod_folder;
+}
+
+/// Returns a fixed number of hint lines.
+template <std::size_t Lines>
+std::size_t lines(const SettingsModel&) {
+    return Lines;
+}
+
+// Pathfinding cycles: base_path_search_nodes times its stop and one.
+
+/// Returns Pathfinding cycles' stops: one for each multiplier.
+int32_t path_search_stops(const SettingsModel&) {
+    return highest_path_search_multiplier;
+}
+
+/// Returns the stop of the multiplier nearest the path nodes.
+int32_t path_search_stop(const SettingsModel& model) {
+    return on_stops(
+        path_search_multiplier(model.settings->path_search_nodes) - 1, path_search_stops(model)
+    );
+}
+
+/// Sets the path nodes to a stop's multiplier of base_path_search_nodes.
+void set_path_search_stop(SettingsModel& model, int32_t stop) {
+    model.settings->path_search_nodes =
+        base_path_search_nodes * (on_stops(stop, path_search_stops(model)) + 1);
+}
+
+/// Returns the multiplier, as "4x".
+std::string path_search_text(const SettingsModel& model) {
+    return std::to_string(path_search_multiplier(model.settings->path_search_nodes)) + "x";
+}
+
+// Unit limit: from lowest_unit_limit in unit_limit_step steps to the
+// dialog's highest offered.
+
+/// Returns the unit limit's stops, up to the dialog's highest offered.
+int32_t unit_limit_stops(const SettingsModel& model) {
+    const uint16_t highest =
+        model.dialog != nullptr ? model.dialog->highest_offered_unit : highest_unit_limit;
+    return (highest - lowest_unit_limit) / unit_limit_step + 1;
+}
+
+/// Returns the stop nearest the unit limit.
+int32_t unit_limit_stop(const SettingsModel& model) {
+    return on_stops(
+        steps_from(model.settings->unit_limit, lowest_unit_limit, unit_limit_step),
+        unit_limit_stops(model)
+    );
+}
+
+/// Sets the unit limit to a stop's.
+void set_unit_limit_stop(SettingsModel& model, int32_t stop) {
+    model.settings->unit_limit = static_cast<uint16_t>(
+        lowest_unit_limit + on_stops(stop, unit_limit_stops(model)) * unit_limit_step
+    );
+}
+
+/// Returns the unit limit, as "250 per player".
+std::string unit_limit_text(const SettingsModel& model) {
+    return std::to_string(model.settings->unit_limit) + " " + std::string(shown_text("per player"));
+}
+
+// Maximum frame rate, Text size, Hold delay, Pointer speed and Gyro speed.
+
+using FrameRate = Linear<
+    uint32_t,
+    &EngineSettings::max_frame_rate,
+    lowest_frame_rate,
+    highest_frame_rate,
+    frame_rate_step>;
+using TextSize = Linear<
+    int32_t,
+    &EngineSettings::text_size,
+    lowest_text_size,
+    highest_text_size,
+    text_size_step>;
+using HoldDelay = Linear<
+    uint32_t,
+    &EngineSettings::touch_hold_ms,
+    lowest_touch_hold_ms,
+    highest_touch_hold_ms,
+    touch_hold_step_ms>;
+using PointerSpeed = Linear<
+    uint32_t,
+    &EngineSettings::pad_pointer_speed,
+    pad_controls::lowest_pointer_speed,
+    pad_controls::highest_pointer_speed,
+    pad_controls::pointer_speed_step>;
+using GyroSpeed = Linear<
+    uint32_t,
+    &EngineSettings::pad_gyro_speed,
+    pad_controls::lowest_gyro_speed,
+    pad_controls::highest_gyro_speed,
+    pad_controls::gyro_speed_step>;
+
+/// Returns the maximum frame rate, as "120 fps".
+std::string frame_rate_text(const SettingsModel& model) {
+    return std::to_string(model.settings->max_frame_rate) + " " + std::string(shown_text("fps"));
+}
+
+/// Returns the text size, as "80%".
+std::string text_size_text(const SettingsModel& model) {
+    return std::to_string(model.settings->text_size) + "%";
+}
+
+/// Returns the hold delay, as "350 ms".
+std::string hold_delay_text(const SettingsModel& model) {
+    return std::to_string(model.settings->touch_hold_ms) + " " + std::string(shown_text("ms"));
+}
+
+/// Returns the pointer speed, as "100%".
+std::string pointer_speed_text(const SettingsModel& model) {
+    return std::to_string(model.settings->pad_pointer_speed) + "%";
+}
+
+/// Returns the gyro speed, as "100%".
+std::string gyro_speed_text(const SettingsModel& model) {
+    return std::to_string(model.settings->pad_gyro_speed) + "%";
+}
+
+// Screen size: the dialog's offered sizes; in a window, the window's own
+// size until its knob moves (Dialog::window_screen_size).
+
+/// Returns the screen size the slider shows.
+///
+/// @param model the model
+/// @return the window's own size while the dialog keeps it, else the setting
+ScreenSize shown_screen_size(const SettingsModel& model) {
+    if (model.dialog != nullptr && model.dialog->window_screen_size)
+        return *model.dialog->window_screen_size;
+    return model.settings->screen_size;
+}
+
+/// Returns the sizes the slider offers.
+///
+/// @param model the model
+/// @return the dialog's offered sizes, or screen_sizes without a dialog
+std::span<const ScreenSize> offered_sizes(const SettingsModel& model) {
+    if (model.dialog == nullptr)
+        return screen_sizes;
+    return model.dialog->offered_screen_sizes;
+}
+
+/// Returns Screen size's stops: one for each offered size, at least one.
+int32_t screen_size_stops(const SettingsModel& model) {
+    return std::max(static_cast<int32_t>(offered_sizes(model).size()), int32_t{1});
+}
+
+/// Returns the stop of the size shown; the first for a size not offered.
+int32_t screen_size_stop(const SettingsModel& model) {
+    const auto sizes = offered_sizes(model);
+    const auto found = std::find(sizes.begin(), sizes.end(), shown_screen_size(model));
+    const int32_t stop = found == sizes.end() ? 0 : static_cast<int32_t>(found - sizes.begin());
+    return on_stops(stop, screen_size_stops(model));
+}
+
+/// Sets the screen size to a stop's size.
+void set_screen_size_stop(SettingsModel& model, int32_t stop) {
+    const auto sizes = offered_sizes(model);
+    if (!sizes.empty())
+        model.settings->screen_size =
+            sizes[static_cast<std::size_t>(on_stops(stop, screen_size_stops(model)))];
+}
+
+/// Returns a screen size as the slider shows it: Custom for the window's own
+/// size where the display offers no such size (Dialog::custom_screen_size).
+///
+/// @param model the model
+/// @param size the size
+/// @return the text
+std::string screen_size_text(const SettingsModel& model, ScreenSize size) {
+    if (model.dialog != nullptr && model.dialog->custom_screen_size &&
+        size == *model.dialog->custom_screen_size)
+        return std::string(shown_text("Custom"));
+    if (size == desktop_screen_size)
+        return std::string(shown_text("Desktop"));
+    return std::to_string(size.width) + " x " + std::to_string(size.height);
+}
+
+/// Returns a stop's text: the size shown at its own stop, else the stop's size.
+std::string screen_size_caption(const SettingsModel& model, int32_t stop) {
+    if (stop == screen_size_stop(model))
+        return screen_size_text(model, shown_screen_size(model));
+    const auto sizes = offered_sizes(model);
+    if (stop < 0 || static_cast<std::size_t>(stop) >= sizes.size())
+        return {};
+    return screen_size_text(model, sizes[static_cast<std::size_t>(stop)]);
+}
+
+// The mod's keys: option_keys, in their order.
+
+/// Returns a key's place among option_keys.
+///
+/// @param code the key's SDL key code
+/// @return its index; 0 for a key not offered
+int32_t option_key_index(uint32_t code) noexcept {
+    for (std::size_t index = 0; index < option_keys.size(); ++index)
+        if (option_keys[index].code == code)
+            return static_cast<int32_t>(index);
+    return 0;
+}
+
+/// A slider over one of the mod's keys.
+template <uint32_t ModOptions::* Key>
+struct KeySlider {
+    static int32_t count(const SettingsModel&) { return static_cast<int32_t>(option_keys.size()); }
+
+    static int32_t get(const SettingsModel& model) {
+        return option_key_index(model.settings->mod_options.*Key);
+    }
+
+    static void set(SettingsModel& model, int32_t stop) {
+        model.settings->mod_options.*Key =
+            option_keys[static_cast<std::size_t>(on_stops(stop, count(model)))].code;
+    }
+
+    static std::string text(const SettingsModel& model) {
+        return std::string(option_keys[static_cast<std::size_t>(get(model))].name);
+    }
+
+    static constexpr Stepper stepper() noexcept {
+        return {&count, &get, &set, &stop_caption<&get, &set, &text>, nullptr};
+    }
+};
+
+/// A slider of three choices of the mod options: patrolling or guarding
+/// builders under one move order, or the resource bar's background.
+template <uint8_t& (*Choice)(ModOptions&), const std::array<std::string_view, 3>& Captions>
+struct ThreeWay {
+    static int32_t count(const SettingsModel&) { return 3; }
+
+    static int32_t get(const SettingsModel& model) {
+        return on_stops(Choice(model.settings->mod_options), count(model));
+    }
+
+    static void set(SettingsModel& model, int32_t stop) {
+        Choice(model.settings->mod_options) = static_cast<uint8_t>(on_stops(stop, count(model)));
+    }
+
+    static std::string text(const SettingsModel& model) {
+        const auto choice = std::min<std::size_t>(Choice(model.settings->mod_options), 2);
+        return std::string(shown_text(Captions[choice]));
+    }
+
+    static void copy(const SettingsModel& to, const SettingsModel& from) {
+        Choice(to.settings->mod_options) = Choice(from.settings->mod_options);
+    }
+
+    static constexpr Stepper stepper() noexcept {
+        return {&count, &get, &set, &stop_caption<&get, &set, &text>, nullptr};
+    }
+};
+
+/// Returns the patrolling or guarding builders' choice under one move order.
+template <std::array<uint8_t, 3> ModOptions::* Orders, std::size_t Order>
+uint8_t& builders(ModOptions& options) {
+    return (options.*Orders)[Order];
+}
+
+/// Returns the resource bar's background.
+uint8_t& panel_background(ModOptions& options) {
+    return options.panel_background;
+}
+
+/// A snap radius' slider: from 0 cells to the mod's most, at least one.
+template <int32_t ModOptions::* Radius, int32_t ModOptions::* Most>
+struct SnapRadius {
+    static int32_t count(const SettingsModel& model) {
+        return std::clamp(model.settings->mod_options.*Most, int32_t{1}, most_snap_radius) + 1;
+    }
+
+    static int32_t get(const SettingsModel& model) {
+        return on_stops(model.settings->mod_options.*Radius, count(model));
+    }
+
+    static void set(SettingsModel& model, int32_t stop) {
+        ModOptions& options = model.settings->mod_options;
+        options.*Radius =
+            std::min(on_stops(stop, count(model)), std::max(options.*Most, int32_t{0}));
+    }
+
+    static std::string text(const SettingsModel& model) {
+        return std::to_string(model.settings->mod_options.*Radius) + " " +
+               std::string(shown_text("cells"));
+    }
+
+    static constexpr Stepper stepper() noexcept {
+        return {&count, &get, &set, &stop_caption<&get, &set, &text>, nullptr};
+    }
+};
+
+// Language: System default, then the languages the game draws.
+
+/// Returns the Language drop-down's items: System default and the languages offered.
+int32_t language_count(const SettingsModel&) {
+    return 1 + static_cast<int32_t>(offered_languages().size());
+}
+
+/// Returns the item of the language chosen; System default for one not offered.
+int32_t language_index(const SettingsModel& model) {
+    const auto offered = offered_languages();
+    for (std::size_t index = 0; index < offered.size(); ++index)
+        if (offered[index]->tag == model.settings->language)
+            return static_cast<int32_t>(index) + 1;
+    return 0;
+}
+
+/// Returns the language the operating system's preferred locales choose.
+///
+/// @param model the model
+/// @return the dialog's system language, or English
+const languages::Language& system_language(const SettingsModel& model) {
+    if (model.dialog != nullptr && model.dialog->system_language != nullptr)
+        return *model.dialog->system_language;
+    return languages::english();
+}
+
+/// Sets the language to an item, held to the items.
+void set_language(SettingsModel& model, int32_t index) {
+    const int32_t choice = on_stops(index, language_count(model));
+    EngineSettings& settings = *model.settings;
+    settings.language =
+        choice == 0 ? std::string(languages::system_choice)
+                    : std::string(offered_languages()[static_cast<std::size_t>(choice - 1)]->tag);
+    // A language drawn in the modern fonts turns them on, and keeps them on
+    // after it.
+    if (languages::chosen_language(settings.language, system_language(model)).needs ==
+        languages::TextNeeds::modern_fonts)
+        settings.modern_fonts = true;
+}
+
+/// Returns an item's text: System default naming the system's language, or a
+/// language named in itself.
+std::string language_caption(const SettingsModel& model, int32_t index) {
+    if (index < 0 || index >= language_count(model))
+        return {};
+    if (index == 0)
+        return std::string(shown_text("System default")) + " (" +
+               std::string(system_language(model).endonym) + ")";
+    return std::string(offered_languages()[static_cast<std::size_t>(index - 1)]->endonym);
+}
+
+// The hints that change with the settings or the dialog. Each returns its
+// line in English, as the source writes it, or, for a host's texts, as the
+// host gave them.
+
+/// The lowest level that draws units finer and needs the warning hint.
+constexpr AntiAliasing kDemandingLevel = AntiAliasing::x8;
+
+/// Enhanced anti-aliasing's hint while frames are drawn in Full, by the
+/// samples a pixel the graphics card draws the battlefield with: there the
+/// processor's anti-aliasing never runs, and the row's level is the
+/// samples across, as the renderer's texture limit and the memory allow
+/// at the window's size; where they allow fewer, the second line says so.
+constexpr Hint kFullAntiAliasingOff{
+    "In Full the graphics card draws the view 1:1;", "a level draws it finer for smoother edges."
+};
+constexpr std::string_view kFullAntiAliasingScaled = "and scales them down for smoother edges.";
+constexpr std::string_view kFullAntiAliasingCapped = "the most this window allows, scaled down.";
+constexpr Hint kFullAntiAliasingTwice{
+    "In Full the card draws 2x2 samples a pixel", kFullAntiAliasingScaled
+};
+constexpr Hint kFullAntiAliasingFourTimes{
+    "In Full the card draws 4x4 samples a pixel", kFullAntiAliasingScaled
+};
+constexpr Hint kFullAntiAliasingEightTimes{
+    "In Full the card draws 8x8 samples a pixel", kFullAntiAliasingScaled
+};
+constexpr Hint kFullAntiAliasingSixteenTimes{
+    "In Full the card draws 16x16 samples a pixel", kFullAntiAliasingScaled
+};
+
+/// Returns a line of a hint of two lines.
+///
+/// @param lines the hint
+/// @param line the line, from 0
+/// @return the line; empty past the second
+std::string line_of(const Hint& lines, std::size_t line) {
+    return line < lines.size() ? std::string(lines[line]) : std::string();
+}
+
+/// Returns the acceleration status the dialog shows.
+///
+/// @param model the model
+/// @return the dialog's status, or the default without a dialog
+AccelerationStatus acceleration_of(const SettingsModel& model) {
+    return model.dialog != nullptr ? model.dialog->acceleration : AccelerationStatus{};
+}
+
+/// Returns a line of Maximum zoom out's hint, by the choice.
+std::string max_zoom_out_hint(const SettingsModel& model, std::size_t line) {
+    // What the choice stops at, then what says how units look there.
+    constexpr std::string_view dots = "Graphics' Zoomed out units says how units look.";
+    switch (model.settings->max_zoom_out) {
+    case ZoomOutLimit::automatic:
+        return line_of(
+            {"As far as the view always went: 1/6 of normal",
+             "size with Full hardware acceleration, else 1/2."},
+            line
+        );
+    case ZoomOutLimit::whole_map:
+        return line_of({"Out until the whole map fits the view.", dots}, line);
+    case ZoomOutLimit::one_thirty_second:
+        return line_of({"Out to 1/32 of normal size, or the whole map.", dots}, line);
+    case ZoomOutLimit::one_sixteenth:
+        return line_of({"Out to 1/16 of normal size, or the whole map.", dots}, line);
+    case ZoomOutLimit::one_eighth:
+        return line_of({"Out to 1/8 of normal size, or the whole map.", dots}, line);
+    case ZoomOutLimit::one_quarter:
+        return line_of({"Out to 1/4 of normal size, or the whole map.", dots}, line);
+    case ZoomOutLimit::one_half:
+        return line_of({"Out to 1/2 of normal size, or the whole map.", dots}, line);
+    }
+    return {};
+}
+
+/// Returns a line of Maximum zoom in's hint, by the choice.
+std::string max_zoom_in_hint(const SettingsModel& model, std::size_t line) {
+    // What the choice stops at, then every way of zooming it holds.
+    constexpr std::string_view every = "The wheel, a pinch and a controller stop there.";
+    switch (model.settings->max_zoom_in) {
+    case ZoomInLimit::none:
+        return line_of({"Never closer than normal size.", every}, line);
+    case ZoomInLimit::twice:
+        return line_of({"In to 2x normal size at most.", every}, line);
+    case ZoomInLimit::three_times:
+        return line_of({"In to 3x normal size at most.", every}, line);
+    case ZoomInLimit::four_times:
+        return line_of({"In to 4x normal size at most.", every}, line);
+    }
+    return {};
+}
+
+/// Returns a line of View past the map's edge's hint, by the choice.
+std::string view_past_map_edge_hint(const SettingsModel& model, std::size_t line) {
+    // How much of the battlefield may lie past the map, and whether a zoom
+    // keeps to it.
+    switch (model.settings->view_past_map_edge) {
+    case ViewPastMapEdge::off:
+        return line_of(
+            {"The view stays on the map, as the game kept it.",
+             "With more than the map in view, it is centred."},
+            line
+        );
+    case ViewPastMapEdge::one_quarter:
+        return line_of(
+            {"Up to a quarter of the battlefield past the", "map's edges, however the view moves."},
+            line
+        );
+    case ViewPastMapEdge::one_half:
+        return line_of(
+            {"Up to half the battlefield past the map's edges;",
+             "a zoom keeps the ground under the pointer."},
+            line
+        );
+    }
+    return {};
+}
+
+/// Returns a line of Maximum frame rate's hint, and on a Steam Deck the rate it starts at.
+std::string max_frame_rate_hint(const SettingsModel& model, std::size_t line) {
+    // On a Steam Deck, a second line names the screen's rate, which the
+    // setting starts at.
+    const uint32_t rate = model.dialog != nullptr ? model.dialog->steam_deck_panel_hz : 0;
+    if (line == 1 && rate != 0) {
+        constexpr std::string_view rate_field = "{rate}";
+        std::string text(shown_text(steam_deck_rate_text));
+        const auto at = text.find(rate_field);
+        if (at != std::string::npos)
+            text.replace(at, rate_field.size(), std::to_string(rate));
+        return text;
+    }
+    return line_of({"Lower it to save power.", {}}, line);
+}
+
+/// Returns Maximum frame rate's hint lines: two on a Steam Deck.
+std::size_t max_frame_rate_lines(const SettingsModel& model) {
+    // On a Steam Deck, Maximum frame rate names the screen's rate it starts at.
+    return model.dialog != nullptr && model.dialog->steam_deck_panel_hz != 0 ? 2 : 1;
+}
+
+/// Returns a line of Enhanced anti-aliasing's hint, by the level and Full's samples.
+std::string anti_aliasing_hint(const SettingsModel& model, std::size_t line) {
+    const EngineSettings& settings = *model.settings;
+    const uint8_t drawn = acceleration_of(model).full_supersample;
+    Hint lines{};
+    if (drawn != 0) {
+        lines = drawn >= 16  ? kFullAntiAliasingSixteenTimes
+                : drawn >= 8 ? kFullAntiAliasingEightTimes
+                : drawn >= 4 ? kFullAntiAliasingFourTimes
+                : drawn >= 2 ? kFullAntiAliasingTwice
+                             : kFullAntiAliasingOff;
+        // Fewer samples than the row asks: the texture limit or the memory
+        // allows no more at this window's size.
+        if (drawn >= 2 && drawn < static_cast<uint8_t>(settings.anti_aliasing))
+            lines[1] = kFullAntiAliasingCapped;
+    } else if (settings.anti_aliasing == AntiAliasing::x16) {
+        lines = {"Units drawn at 16x and scaled down.", "Needs a fast CPU."};
+    } else if (
+        static_cast<uint8_t>(settings.anti_aliasing) >= static_cast<uint8_t>(kDemandingLevel)
+    ) {
+        lines = {"Units drawn at 8x and scaled down.", "Needs a fast CPU."};
+    } else {
+        lines = {"Units drawn at higher resolution and scaled down", "for smoother edges."};
+    }
+    return line_of(lines, line);
+}
+
+/// Returns a line of Hardware acceleration's status.
+std::string hardware_acceleration_hint(const SettingsModel& model, std::size_t line) {
+    // Its hint is its status, which the host keeps up to date.
+    return std::string(status_line(acceleration_of(model), line));
+}
+
+/// Returns a line of Menu scaling's hint, by the way chosen.
+std::string menu_scaling_hint(const SettingsModel& model, std::size_t line) {
+    // What the way chosen does to the menus.
+    switch (model.settings->menu_scaling) {
+    case MenuScaling::sharp:
+        return line_of({"The menus fill the window, every pixel", "as wide as the next."}, line);
+    case MenuScaling::whole_steps:
+        return line_of(
+            {"The largest whole-number scale that fits:", "smaller menus, every pixel square."},
+            line
+        );
+    case MenuScaling::unfiltered:
+        return line_of(
+            {"The menus fill the window, unfiltered,", "as the game always drew them."}, line
+        );
+    }
+    return {};
+}
+
+/// Returns a line of Explosion flash's hint, by the level.
+std::string explosion_flash_hint(const SettingsModel& model, std::size_t line) {
+    // What the level chosen draws; a mod's profile may draw less.
+    switch (model.settings->explosion_flash) {
+    case ExplosionFlash::off:
+        return line_of(
+            {"Explosions do not light up the ground,", "whatever a mod asks for."}, line
+        );
+    case ExplosionFlash::reduced:
+        return line_of(
+            {"Explosions light up the ground at half", "strength, or less where a mod asks."}, line
+        );
+    case ExplosionFlash::full:
+        return line_of(
+            {"Explosions light up the ground as the game", "drew it, or less where a mod asks."},
+            line
+        );
+    }
+    return {};
+}
+
+/// Returns a line of Zoomed out units' hint, by the way chosen.
+std::string zoomed_out_units_hint(const SettingsModel& model, std::size_t line) {
+    // What the way chosen draws past After zoom, and what it costs.
+    switch (model.settings->zoomed_out_units) {
+    case ZoomedOutUnits::rendered:
+    case ZoomedOutUnits::icons:
+        return line_of(
+            {"Units are drawn as models at every zoom.",
+             "Far out on a large map, needs a fast CPU."},
+            line
+        );
+    case ZoomedOutUnits::dots:
+        return line_of(
+            {"Past After zoom, each unit is a dot of its",
+             "owner's colour, framed while selected."},
+            line
+        );
+    }
+    return {};
+}
+
+/// Returns a line of After zoom's hint, by the choice.
+std::string zoomed_out_after_hint(const SettingsModel& model, std::size_t line) {
+    // Where the dots begin, then what is drawn nearer.
+    constexpr std::string_view nearer = "Closer in, units are drawn as models.";
+    switch (model.settings->zoomed_out_after) {
+    case ZoomedOutAfter::one_half:
+        return line_of({"Dots farther out than 1/2 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_third:
+        return line_of({"Dots farther out than 1/3 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_quarter:
+        return line_of({"Dots farther out than 1/4 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_sixth:
+        return line_of({"Dots farther out than 1/6 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_eighth:
+        return line_of({"Dots farther out than 1/8 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_twelfth:
+        return line_of({"Dots farther out than 1/12 of normal size.", nearer}, line);
+    case ZoomedOutAfter::one_sixteenth:
+        return line_of({"Dots farther out than 1/16 of normal size.", nearer}, line);
+    }
+    return {};
+}
+
+/// Returns a line of Window frame's hint, by the way chosen.
+std::string window_frame_hint(const SettingsModel& model, std::size_t line) {
+    // When a window shows its frame; full screen has none.
+    switch (model.settings->window_frame) {
+    case WindowFrame::hidden_in_play:
+        return line_of(
+            {"A window hides its title bar and borders",
+             "while a game is played; menus show them."},
+            line
+        );
+    case WindowFrame::always_shown:
+        return line_of(
+            {"A window shows its title bar and borders", "on every screen, a game's included."},
+            line
+        );
+    }
+    return {};
+}
+
+/// Returns a line of HUD scaling's hint, by the switch.
+std::string hud_scaling_hint(const SettingsModel& model, std::size_t line) {
+    // The size the game's side column and bars are drawn at.
+    if (model.settings->hud_scaling)
+        return line_of(
+            {"The side panel and bars grow with the window,",
+             "up to twice the original game's size."},
+            line
+        );
+    return line_of(
+        {"The side panel and bars keep the original", "game's size on every window."}, line
+    );
+}
+
+/// Returns a line of Text size's hint, by the modern fonts' switch.
+std::string text_size_hint(const SettingsModel& model, std::size_t line) {
+    return line_of(
+        {"The size of game text in the modern fonts.",
+         model.settings->modern_fonts ? "Larger sizes are easier to read."
+                                      : "The game's own fonts have fixed sizes."},
+        line
+    );
+}
+
+/// Returns a line of One-finger drag's hint, by the way chosen.
+std::string touch_drag_hint(const SettingsModel& model, std::size_t line) {
+    // What a drag does now, and what still gives the other.
+    switch (model.settings->touch_drag) {
+    case TouchDrag::automatic:
+        return line_of({"Automatic: a selection box on a tablet,", "scrolling on a phone."}, line);
+    case TouchDrag::box:
+        return line_of({"A drag draws a selection box;", "two fingers scroll the map."}, line);
+    case TouchDrag::scroll:
+        return line_of({"A drag scrolls the map;", "hold, then drag, for a selection box."}, line);
+    }
+    return {};
+}
+
+/// Returns a line of QUEUE and ADD's hint, by the way chosen.
+std::string touch_latches_hint(const SettingsModel& model, std::size_t line) {
+    if (model.settings->touch_latches == TouchLatches::one_action)
+        return line_of(
+            {"A tapped QUEUE, ADD or x5 turns off", "after the next order or selection."}, line
+        );
+    return line_of({"A tapped QUEUE, ADD or x5 stays on", "until it is tapped again."}, line);
+}
+
+/// Returns a line of Scheme's hint, by the scheme.
+std::string pad_scheme_hint(const SettingsModel& model, std::size_t line) {
+    if (model.settings->pad_scheme == pad_controls::Scheme::sticks)
+        return line_of({"The right stick moves the pointer and the left", "stick the map."}, line);
+    return line_of(
+        {"The right trackpad points and the left one moves",
+         "the map; a pad without trackpads plays Sticks."},
+        line
+    );
+}
+
+/// Returns Right trackpad's hint, by the way chosen.
+std::string pad_right_trackpad_hint(const SettingsModel& model, std::size_t line) {
+    if (model.settings->pad_right_trackpad == pad_controls::RightTrackpad::absolute)
+        return line_of({"Each point of the pad is a point of the view.", {}}, line);
+    return line_of({"The pointer moves as the thumb slides.", {}}, line);
+}
+
+/// Returns a line of Right stick's hint, by its role.
+std::string pad_right_stick_hint(const SettingsModel& model, std::size_t line) {
+    switch (model.settings->pad_right_stick) {
+    case pad_controls::RightStick::zoom_and_pages:
+        return line_of(
+            {"Up and down zoom about the pointer; a flick left",
+             "or right turns the build page while building."},
+            line
+        );
+    case pad_controls::RightStick::pointer:
+        return line_of({"The right stick moves the pointer, as in the", "Sticks scheme."}, line);
+    case pad_controls::RightStick::nothing:
+        return line_of({"The right stick does nothing.", {}}, line);
+    }
+    return {};
+}
+
+/// Returns a line of Controller's Steam Input notice, broken between words.
+std::string steam_input_notice_lines(const SettingsModel&, std::size_t line) {
+    // The notice, in the language shown, between words.
+    const auto lines =
+        break_lines(shown_text(steam_input_notice_text), hint_line_characters, most_notice_lines);
+    return line < lines.size() ? lines[line] : std::string{};
+}
+
+/// Tells that a line is a notice: every line of the Steam Input notice is.
+bool every_line_a_notice(const SettingsModel&, std::size_t) {
+    return true;
+}
+
+/// Returns a line of the host's texts under Installed: the summary, then its sizes.
+std::string game_files_summary_hint(const SettingsModel& model, std::size_t line) {
+    // What is installed, then its size and the free space.
+    if (model.dialog == nullptr)
+        return {};
+    if (line == 0)
+        return model.dialog->game_files_summary;
+    return line == 1 ? model.dialog->game_files_sizes : std::string{};
+}
+
+/// Include in device backups' hint: {device} is the device's own name.
+constexpr Hint kBackupsHint{
+    "After restoring this {device} from a backup,", "add the game files again."
+};
+
+/// Returns a line of Include in device backups' hint, naming the device.
+std::string backups_hint(const SettingsModel& model, std::size_t line) {
+    // The device's own name, or the neutral word, in the line shown.
+    std::string text(shown_text(line_of(kBackupsHint, line)));
+    constexpr std::string_view device_field = "{device}";
+    const std::string device = model.dialog == nullptr || model.dialog->game_files_device.empty()
+                                   ? std::string(shown_text("device"))
+                                   : model.dialog->game_files_device;
+    for (std::size_t at = text.find(device_field); at != std::string::npos;
+         at = text.find(device_field, at + device.size()))
+        text.replace(at, device_field.size(), device);
+    return text;
+}
+
+/// Returns a line of where the files are, broken between words.
+std::string game_files_location_hint(const SettingsModel& model, std::size_t line) {
+    if (model.dialog == nullptr)
+        return {};
+    const auto lines = break_lines(model.dialog->game_files_location, hint_line_characters, 2);
+    return line < lines.size() ? lines[line] : std::string{};
+}
+
+/// Returns a line under Your files: the folder's path, then why a folder
+/// could not be opened, or what the folder holds.
+std::string user_folder_hint(const SettingsModel& model, std::size_t line) {
+    // The player's own folder, then why a folder could not be opened, as a
+    // notice.
+    if (line == 0)
+        return model.dialog != nullptr ? model.dialog->user_folder : std::string{};
+    if (line == 1 && model.dialog != nullptr && !model.dialog->folder_notice.empty())
+        return model.dialog->folder_notice;
+    return line_of({std::string_view{}, user_folder_hint_text}, line);
+}
+
+/// Tells whether a line under Your files is a notice: why a folder could not be opened.
+bool user_folder_notice(const SettingsModel& model, std::size_t line) {
+    return line == 1 && model.dialog != nullptr && !model.dialog->folder_notice.empty();
+}
+
+// Specs that take more than their factory's arguments.
+
+/// Gives a spec hint lines that change with the model.
+constexpr Spec changing(
+    Spec spec,
+    std::string (*text)(const SettingsModel&, std::size_t),
+    std::size_t (*count)(const SettingsModel&)
+) noexcept {
+    spec.hint_text = text;
+    spec.hint_lines = count;
+    return spec;
+}
+
+/// Gives a spec its control width: a strip's level width or a drop-down's
+/// field width.
+constexpr Spec wide(Spec spec, int32_t width) noexcept {
+    spec.control_width = width;
+    return spec;
+}
+
+/// Makes a slider's row.
+constexpr Spec
+slider(std::string_view id, std::string_view label, Stepper stepper, Hint hint) noexcept {
+    return kit::slider(id, label, stepper, hint);
+}
+
+/// Makes a slider's row of a number in equal steps.
+template <class Slider, std::string (*Text)(const SettingsModel&)>
+constexpr Spec linear(std::string_view id, std::string_view label, Hint hint) noexcept {
+    return kit::slider(
+        id,
+        label,
+        Stepper{
+            &Slider::count,
+            &Slider::get,
+            &Slider::set,
+            &stop_caption<&Slider::get, &Slider::set, Text>,
+            nullptr
+        },
+        hint
+    );
+}
+
+/// The Mod row: the bespoke list of Mods stands in its place, and a check's
+/// own section shows it as a switch that changes nothing.
+constexpr Spec mod_row() noexcept {
+    Spec spec(kit::RowKind::toggle, "mod");
+    spec.label = "Mod";
+    spec.hint = {"A mod from a mods folder, or one picked.", "Applies from the next start."};
+    return spec;
+}
+
+/// The Game files summary row: what is installed, and MANAGE….
+constexpr Spec game_files_summary_row() noexcept {
+    Spec spec = kit::value_and_button<SettingsModel>(
+        "game-files-summary", "Installed", nullptr, manage_text, "manage", manage_game_files_action
+    );
+    spec.control_width = manage_button_width;
+    return changing(spec, &game_files_summary_hint, &lines<2>);
+}
+
+/// The Your files row: the player's own folder and its three folders' buttons.
+constexpr Spec user_folder_row() noexcept {
+    Spec spec = kit::buttons<SettingsModel>(
+        "user-folder",
+        "Your files",
+        {"SAVES", "SCREENSHOTS", "MODS"},
+        {"saves", "screenshots", "mods"},
+        {first_folder_action + static_cast<kit::ActionId>(FolderButton::saves),
+         first_folder_action + static_cast<kit::ActionId>(FolderButton::screenshots),
+         first_folder_action + static_cast<kit::ActionId>(FolderButton::mods)}
+    );
+    spec.hint_notice = &user_folder_notice;
+    return changing(spec, &user_folder_hint, &lines<2>);
+}
+
+/// Controller's Steam Input notice: a text row whose lines are a notice.
+constexpr Spec steam_input_notice_row() noexcept {
+    Spec spec = kit::text<SettingsModel>("pad-steam-input-notice", "Steam Input", nullptr);
+    spec.hint_notice = &every_line_a_notice;
+    return changing(spec, &steam_input_notice_lines, &lines<most_notice_lines>);
+}
+
+/// Where the files are: a text row of the host's text.
+constexpr Spec game_files_location_row() noexcept {
+    return changing(
+        kit::text<SettingsModel>("game-files-location", "Where the files are", nullptr),
+        &game_files_location_hint,
+        &lines<2>
+    );
+}
+
+/// Hardware acceleration: a strip whose two hint lines are its status.
+constexpr Spec hardware_acceleration_row() noexcept {
+    Spec spec = kit::levels(
+        "hardware-acceleration",
+        "Hardware acceleration",
+        Strip<
+            HardwareAcceleration,
+            3,
+            hardware_acceleration_levels,
+            &EngineSettings::hardware_acceleration,
+            kAccelerationCaptions>::stepper(),
+        acceleration_level_width
+    );
+    spec.hint_is_status = true;
+    return changing(spec, &hardware_acceleration_hint, &lines<2>);
+}
+
+/// Language: System default and the languages the game draws.
+constexpr Spec language_row() noexcept {
+    return wide(
+        kit::choice(
+            "language",
+            "Language",
+            Stepper{&language_count, &language_index, &set_language, &language_caption, nullptr},
+            {"The game's own text and unit names, where its", "data has them in the language."}
+        ),
+        choice_width
+    );
+}
+
+// The patrol, guard and background sliders' stops.
+
+using PatrolHold = ThreeWay<&builders<&ModOptions::patrol, 0>, kPatrolCaptions>;
+using PatrolManeuver = ThreeWay<&builders<&ModOptions::patrol, 1>, kPatrolCaptions>;
+using PatrolRoam = ThreeWay<&builders<&ModOptions::patrol, 2>, kPatrolCaptions>;
+using GuardHold = ThreeWay<&builders<&ModOptions::guard, 0>, kGuardCaptions>;
+using GuardManeuver = ThreeWay<&builders<&ModOptions::guard, 1>, kGuardCaptions>;
+using GuardRoam = ThreeWay<&builders<&ModOptions::guard, 2>, kGuardCaptions>;
+using PanelBackground = ThreeWay<&panel_background, kPanelBackgroundCaptions>;
+using MexSnap = SnapRadius<&ModOptions::mex_snap_radius, &ModOptions::mex_snap_most>;
+using WreckSnap = SnapRadius<&ModOptions::wreck_snap_radius, &ModOptions::wreck_snap_most>;
+
+/// What a patrolling builder's row says; it shows its first line.
+constexpr Hint kPatrolHint{"What patrolling builders do.", "Applies from the next game."};
+/// What a guarding builder's row says; it shows its first line.
+constexpr Hint kGuardHint{"What guarding builders do.", "Applies from the next game."};
+
+/// Makes a patrolling or guarding builder's row, which shows one hint line.
+constexpr Spec
+builders_row(std::string_view id, std::string_view label, Stepper stepper, Hint hint) noexcept {
+    Spec spec = kit::slider(id, label, stepper, hint);
+    spec.hint_lines = &lines<1>;
+    return spec;
+}
+
+// ---------------------------------------------------------------------------
+// The table.
+
+/// One setting's row: its spec, and what the dialog reads of it besides.
+struct SettingRow {
+    Setting setting{}; ///< the setting, the row's place in the table
+    Spec spec;         ///< what the row is, shows and changes
+    /// The field of the dialog's locks that locks the row; null for a row
+    /// the dialog never locks.
+    Lock Locks::* lock{};
+    /// Copies the row's own fields from one model to another, exactly; null
+    /// copies the row through its kind's get and set.
+    void (*copy)(const SettingsModel& to, const SettingsModel& from){};
+    /// The first hint line is a folder's path, shown as its tail that fits.
+    bool path_hint{};
+};
+
+using S = Setting;
+using E = EngineSettings;
+using O = ModOptions;
+
+// clang-format off
+/// Every setting's row, in Setting's order.
+constexpr std::array<SettingRow, kSettingCount> kDeclared{{
+    {.setting = S::path_search,
+     .spec = slider("path-search", "Pathfinding cycles",
+                    {&path_search_stops, &path_search_stop, &set_path_search_stop,
+                     &stop_caption<&path_search_stop, &set_path_search_stop, &path_search_text>, nullptr},
+                    {"More cycles find routes faster but use more CPU.", {}}),
+     .lock = &Locks::path_search,
+     .copy = &copy_field<&E::path_search_nodes>},
+    {.setting = S::wheel_zoom,
+     .spec = engine_switch<&E::wheel_zoom>("wheel-zoom", "Mouse wheel zoom",
+                                           {"Scroll to zoom the battlefield in and out.", {}})},
+    {.setting = S::max_zoom_out,
+     .spec = changing(wide(kit::choice("max-zoom-out", "Maximum zoom out",
+                                       DropDown<ZoomOutLimit, 7, zoom_out_limits, &E::max_zoom_out, kZoomOutCaptions>::stepper()),
+                           choice_width),
+                      &max_zoom_out_hint, &lines<2>)},
+    {.setting = S::max_zoom_in,
+     .spec = changing(wide(kit::choice("max-zoom-in", "Maximum zoom in",
+                                       DropDown<ZoomInLimit, 4, zoom_in_limits, &E::max_zoom_in, kZoomInCaptions>::stepper()),
+                           choice_width),
+                      &max_zoom_in_hint, &lines<2>)},
+    {.setting = S::view_past_map_edge,
+     .spec = changing(kit::levels("view-past-map-edge", "View past the map's edge",
+                                  Strip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions>::stepper(),
+                                  view_past_map_edge_level_width),
+                      &view_past_map_edge_hint, &lines<2>)},
+    {.setting = S::escape_opens_menu,
+     .spec = engine_switch<&E::escape_opens_menu>("escape-opens-menu", "Escape opens the game menu",
+                                                  {"The first press clears the selection,", "the second opens the menu."})},
+    {.setting = S::switch_alt,
+     .spec = engine_switch<&E::switch_alt>("switch-alt", "Select groups without Alt",
+                                           {"A number key selects its group on its own.", {}})},
+    {.setting = S::unit_limit,
+     .spec = slider("unit-limit", "Unit limit",
+                    {&unit_limit_stops, &unit_limit_stop, &set_unit_limit_stop,
+                     &stop_caption<&unit_limit_stop, &set_unit_limit_stop, &unit_limit_text>, nullptr},
+                    {"Units each player can have.", "Applies from the next game."}),
+     .lock = &Locks::unit_limit,
+     .copy = &copy_field<&E::unit_limit>},
+    {.setting = S::max_frame_rate,
+     .spec = changing(linear<FrameRate, &frame_rate_text>("max-frame-rate", "Maximum frame rate", {}),
+                      &max_frame_rate_hint, &max_frame_rate_lines),
+     .lock = &Locks::max_frame_rate,
+     .copy = &copy_field<&E::max_frame_rate>},
+    {.setting = S::anti_aliasing,
+     .spec = changing(kit::levels("anti-aliasing", "Enhanced anti-aliasing",
+                                  Strip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions>::stepper(),
+                                  level_width),
+                      &anti_aliasing_hint, &lines<2>)},
+    {.setting = S::screen_size,
+     .spec = slider("screen-size", "Screen size",
+                    {&screen_size_stops, &screen_size_stop, &set_screen_size_stop, &screen_size_caption, nullptr},
+                    {"Full screen at this size, or a window of it.", "Applies when you press OK."}),
+     .copy = &copy_field<&E::screen_size>},
+    {.setting = S::developer_mode,
+     .spec = engine_switch<&E::developer_mode>("developer-mode", "Enable Developer Mode",
+                                               {"Your changes to the profile's hacks apply while on.", {}})},
+    {.setting = S::frame_stats,
+     .spec = engine_switch<&E::frame_stats>("frame-stats", "Show performance statistics",
+                                            {"Frame and tick times over the battlefield.", {}})},
+    {.setting = S::hardware_acceleration,
+     .spec = hardware_acceleration_row(),
+     .lock = &Locks::hardware_acceleration},
+    {.setting = S::vertical_sync,
+     .spec = engine_switch<&E::vertical_sync>("vertical-sync", "Vertical sync",
+                                              {"Each frame waits for the display: no tearing.", {}}),
+     .lock = &Locks::vertical_sync},
+    {.setting = S::language,
+     .spec = language_row(),
+     .lock = &Locks::language,
+     .copy = &copy_field<&E::language>},
+    {.setting = S::modern_fonts,
+     .spec = engine_switch<&E::modern_fonts>("modern-fonts", "Use modern fonts for game text",
+                                             {"Modern fonts for in-game text,", "including internationalization."}),
+     .lock = &Locks::modern_fonts},
+    {.setting = S::text_outline,
+     .spec = engine_switch<&E::text_outline>("text-outline", "Font outline",
+                                             {"A dark edge round each letter of modern text.", {}})},
+    {.setting = S::text_shadow,
+     .spec = engine_switch<&E::text_shadow>("text-shadow", "Font shadow",
+                                            {"A dark shadow under modern text.", {}})},
+    {.setting = S::text_background,
+     .spec = engine_switch<&E::text_background>("text-background", "Game text background",
+                                                {"A shaded box behind each line of game text.", {}})},
+    {.setting = S::unicode_chat,
+     .spec = engine_switch<&E::unicode_chat>("unicode-chat", "Enable Unicode Multiplayer Chat",
+                                             {"Chat in any language with players who have it;", "others see ? for letters they lack."}),
+     .lock = &Locks::unicode_chat},
+    {.setting = S::text_size,
+     .spec = changing(linear<TextSize, &text_size_text>("text-size", "Text size", {}),
+                      &text_size_hint, &lines<2>),
+     .lock = &Locks::text_size,
+     .copy = &copy_field<&E::text_size>},
+    {.setting = S::touch_drag,
+     .spec = changing(kit::levels("touch-drag", "One-finger drag",
+                                  Strip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions>::stepper(),
+                                  touch_drag_level_width),
+                      &touch_drag_hint, &lines<2>)},
+    {.setting = S::touch_hold_delay,
+     .spec = linear<HoldDelay, &hold_delay_text>("touch-hold-delay", "Hold delay",
+                                                 {"How long a finger or button is held for a hold.", {}}),
+     .copy = &copy_field<&E::touch_hold_ms>},
+    {.setting = S::touch_latches,
+     .spec = changing(kit::levels("touch-latches", "QUEUE and ADD",
+                                  Strip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions>::stepper(),
+                                  touch_latches_level_width),
+                      &touch_latches_hint, &lines<2>)},
+    {.setting = S::touch_haptics,
+     .spec = engine_switch<&E::touch_haptics>("touch-haptics", "Haptics",
+                                              {"A short vibration as a touch control acts.", {}})},
+    {.setting = S::touch_left_handed,
+     .spec = engine_switch<&E::touch_left_handed>("touch-left-handed", "Left-handed layout",
+                                                  {"The minimap and the thumb controls on the", "right, the orders on the left."})},
+    {.setting = S::touch_control_size,
+     .spec = kit::levels("touch-control-size", "Control size",
+                         Strip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions>::stepper(),
+                         control_size_level_width,
+                         {"The size of the touch controls; the game's own", "screens keep theirs."})},
+    {.setting = S::pad_scheme,
+     .spec = changing(kit::levels("pad-scheme", "Scheme",
+                                  Strip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions>::stepper(),
+                                  scheme_level_width),
+                      &pad_scheme_hint, &lines<2>)},
+    {.setting = S::pad_right_trackpad,
+     .spec = changing(kit::levels("pad-right-trackpad", "Right trackpad",
+                                  Strip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions>::stepper(),
+                                  right_trackpad_level_width),
+                      &pad_right_trackpad_hint, &lines<1>)},
+    {.setting = S::pad_pointer_speed,
+     .spec = linear<PointerSpeed, &pointer_speed_text>("pad-pointer-speed", "Pointer speed",
+                                                       {"How far the pointer moves for a slide.", {}}),
+     .copy = &copy_field<&E::pad_pointer_speed>},
+    {.setting = S::pad_acceleration,
+     .spec = kit::levels("pad-acceleration", "Pointer acceleration",
+                         Strip<pad_controls::Acceleration, 3, kAccelerationChoices, &E::pad_acceleration, kPadAccelerationCaptions>::stepper(),
+                         pad_acceleration_level_width,
+                         {"A quick slide moves the pointer further.", {}})},
+    {.setting = S::pad_glide,
+     .spec = engine_switch<&E::pad_glide>("pad-glide", "Trackpad glide",
+                                          {"The pointer keeps moving after a quick flick.", {}})},
+    {.setting = S::pad_right_stick,
+     .spec = changing(kit::levels("pad-right-stick", "Right stick",
+                                  Strip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions>::stepper(),
+                                  right_stick_level_width),
+                      &pad_right_stick_hint, &lines<2>)},
+    {.setting = S::pad_magnetism,
+     .spec = engine_switch<&E::pad_magnetism>("pad-magnetism", "Magnetism (stick pointer)",
+                                              {"The stick pointer settles on a lone unit near it.", {}})},
+    {.setting = S::pad_gyro,
+     .spec = wide(kit::choice("pad-gyro", "Gyro pointer",
+                              DropDown<pad_controls::Gyro, 4, kGyroChoices, &E::pad_gyro, kGyroCaptions>::stepper(),
+                              {"Turning the controller fine-tunes the pointer.", {}}),
+                  wide_choice_width)},
+    {.setting = S::pad_gyro_speed,
+     .spec = linear<GyroSpeed, &gyro_speed_text>("pad-gyro-speed", "Gyro speed",
+                                                 {"How far the pointer moves as the controller turns.", {}}),
+     .copy = &copy_field<&E::pad_gyro_speed>},
+    {.setting = S::pad_haptics,
+     .spec = kit::levels("pad-haptics", "Haptics",
+                         Strip<pad_controls::Haptics, 3, kHapticsChoices, &E::pad_haptics, kPadHapticsCaptions>::stepper(),
+                         pad_haptics_level_width,
+                         {"Small ticks and bumps felt through the controller.", {}})},
+    {.setting = S::pad_prompts,
+     .spec = wide(kit::choice("pad-prompts", "Button prompts",
+                              DropDown<pad_controls::Prompts, 6, kPromptsChoices, &E::pad_prompts, kPromptsCaptions>::stepper(),
+                              {"The button pictures the controls and rings show.", {}}),
+                  choice_width)},
+    {.setting = S::pad_left_handed,
+     .spec = engine_switch<&E::pad_left_handed>("pad-left-handed", "Left-handed",
+                                                {"Mirrors the roles: the left pad points, the right", "pad moves the map, triggers and grips swap."})},
+    {.setting = S::pad_steam_input_notice,
+     .spec = steam_input_notice_row()},
+    {.setting = S::mod,
+     .spec = mod_row(),
+     .lock = &Locks::mod,
+     .copy = &copy_mod_folders},
+    {.setting = S::snap_override_key,
+     .spec = slider("snap-override-key", "Snap override key", KeySlider<&O::snap_override_key>::stepper(),
+                    {"Held, a click is not snapped.", {}}),
+     .copy = &copy_option<&O::snap_override_key>},
+    {.setting = S::autoclick_key,
+     .spec = slider("autoclick-key", "Autoclick key", KeySlider<&O::autoclick_key>::stepper(),
+                    {"Held, a build click lays a line or a ring.", {}}),
+     .copy = &copy_option<&O::autoclick_key>},
+    {.setting = S::rotate_build_key,
+     .spec = slider("rotate-build-key", "Rotate build key", KeySlider<&O::rotate_build_key>::stepper(),
+                    {"Turns the building being placed.", {}}),
+     .copy = &copy_option<&O::rotate_build_key>},
+    {.setting = S::patrol_hold,
+     .spec = builders_row("patrol-hold", "Hold position", PatrolHold::stepper(), kPatrolHint),
+     .copy = &PatrolHold::copy},
+    {.setting = S::patrol_maneuver,
+     .spec = builders_row("patrol-maneuver", "Maneuver", PatrolManeuver::stepper(), kPatrolHint),
+     .copy = &PatrolManeuver::copy},
+    {.setting = S::patrol_roam,
+     .spec = builders_row("patrol-roam", "Roam", PatrolRoam::stepper(), kPatrolHint),
+     .copy = &PatrolRoam::copy},
+    {.setting = S::guard_hold,
+     .spec = builders_row("guard-hold", "Hold position", GuardHold::stepper(), kGuardHint),
+     .copy = &GuardHold::copy},
+    {.setting = S::guard_maneuver,
+     .spec = builders_row("guard-maneuver", "Maneuver", GuardManeuver::stepper(), kGuardHint),
+     .copy = &GuardManeuver::copy},
+    {.setting = S::guard_roam,
+     .spec = builders_row("guard-roam", "Roam", GuardRoam::stepper(), kGuardHint),
+     .copy = &GuardRoam::copy},
+    {.setting = S::mex_snap_radius,
+     .spec = slider("mex-snap-radius", "Mex snap radius", MexSnap::stepper(),
+                    {"Cells a metal extractor snaps to metal.", {}}),
+     .lock = &Locks::mex_snap,
+     .copy = &copy_option<&O::mex_snap_radius>},
+    {.setting = S::wreck_snap_radius,
+     .spec = slider("wreck-snap-radius", "Wreck snap radius", WreckSnap::stepper(),
+                    {"Cells a reclaim click snaps to a wreck.", {}}),
+     .lock = &Locks::wreck_snap,
+     .copy = &copy_option<&O::wreck_snap_radius>},
+    {.setting = S::optimize_dt_rows,
+     .spec = option_switch<&O::optimize_dt_rows>("optimize-dt-rows", "Optimize DT rows",
+                                                 {"Lines of 2x2 walls build as a double row.", {}})},
+    {.setting = S::full_rings,
+     .spec = option_switch<&O::full_rings>("full-rings", "Full rings",
+                                           {"Rings include their corners.", {}})},
+    {.setting = S::chat_backdrop,
+     .spec = option_switch<&O::chat_backdrop>("chat-backdrop", "Accessible chat",
+                                              {"A dark backdrop under each chat line.", {}})},
+    {.setting = S::panel_background,
+     .spec = slider("panel-background", "Resource bar background", PanelBackground::stepper(),
+                    {"Behind the resource bar's text.", {}}),
+     .copy = &PanelBackground::copy},
+    {.setting = S::game_files_summary,
+     .spec = game_files_summary_row()},
+    {.setting = S::game_files_backed_up,
+     .spec = changing(engine_switch<&E::game_files_backed_up>("game-files-backed-up", "Include in device backups", kBackupsHint),
+                      &backups_hint, &lines<2>)},
+    {.setting = S::game_files_location,
+     .spec = game_files_location_row()},
+    {.setting = S::user_folder,
+     .spec = user_folder_row(),
+     .path_hint = true},
+    {.setting = S::menu_scaling,
+     .spec = changing(kit::levels("menu-scaling", "Menu scaling",
+                                  Strip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions>::stepper(),
+                                  menu_scaling_level_width),
+                      &menu_scaling_hint, &lines<2>)},
+    {.setting = S::native_density,
+     .spec = engine_switch<&E::native_density>("native-density", "Native pixel density",
+                                               {"The display's own pixel density (Retina on a Mac).", "Applies from the next start."}),
+     .lock = &Locks::native_density},
+    {.setting = S::explosion_flash,
+     .spec = changing(kit::levels("explosion-flash", "Explosion flash",
+                                  Strip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions>::stepper(),
+                                  explosion_flash_level_width),
+                      &explosion_flash_hint, &lines<2>)},
+    {.setting = S::zoomed_out_units,
+     .spec = changing(kit::levels("zoomed-out-units", "Zoomed out units",
+                                  Strip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, offered_zoomed_out_units>::stepper(),
+                                  zoomed_out_units_level_width),
+                      &zoomed_out_units_hint, &lines<2>),
+     .copy = &copy_field<&E::zoomed_out_units>},
+    {.setting = S::zoomed_out_after,
+     .spec = changing(wide(kit::choice("zoomed-out-after", "After zoom",
+                                       DropDown<ZoomedOutAfter, 7, zoomed_out_afters, &E::zoomed_out_after, kZoomedOutAfterCaptions>::stepper()),
+                           choice_width),
+                      &zoomed_out_after_hint, &lines<2>),
+     .lock = &Locks::zoomed_out_after},
+    {.setting = S::window_frame,
+     .spec = changing(kit::levels("window-frame", "Window frame",
+                                  Strip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions>::stepper(),
+                                  window_frame_level_width),
+                      &window_frame_hint, &lines<2>)},
+    {.setting = S::hud_scaling,
+     .spec = changing(engine_switch<&E::hud_scaling>("hud-scaling", "HUD scaling", {}),
+                      &hud_scaling_hint, &lines<2>)},
+}};
+// clang-format on
+
+/// Every setting's name, in kebab case, in Setting's order: each its row's id.
+constexpr std::array<std::string_view, kSettingCount> kSettingNames{
+    "path-search",
+    "wheel-zoom",
+    "max-zoom-out",
+    "max-zoom-in",
+    "view-past-map-edge",
+    "escape-opens-menu",
+    "switch-alt",
+    "unit-limit",
+    "max-frame-rate",
+    "anti-aliasing",
+    "screen-size",
+    "developer-mode",
+    "frame-stats",
+    "hardware-acceleration",
+    "vertical-sync",
+    "language",
+    "modern-fonts",
+    "text-outline",
+    "text-shadow",
+    "text-background",
+    "unicode-chat",
+    "text-size",
+    "touch-drag",
+    "touch-hold-delay",
+    "touch-latches",
+    "touch-haptics",
+    "touch-left-handed",
+    "touch-control-size",
+    "pad-scheme",
+    "pad-right-trackpad",
+    "pad-pointer-speed",
+    "pad-acceleration",
+    "pad-glide",
+    "pad-right-stick",
+    "pad-magnetism",
+    "pad-gyro",
+    "pad-gyro-speed",
+    "pad-haptics",
+    "pad-prompts",
+    "pad-left-handed",
+    "pad-steam-input-notice",
+    "mod",
+    "snap-override-key",
+    "autoclick-key",
+    "rotate-build-key",
+    "patrol-hold",
+    "patrol-maneuver",
+    "patrol-roam",
+    "guard-hold",
+    "guard-maneuver",
+    "guard-roam",
+    "mex-snap-radius",
+    "wreck-snap-radius",
+    "optimize-dt-rows",
+    "full-rings",
+    "chat-backdrop",
+    "panel-background",
+    "game-files-summary",
+    "game-files-backed-up",
+    "game-files-location",
+    "user-folder",
+    "menu-scaling",
+    "native-density",
+    "explosion-flash",
+    "zoomed-out-units",
+    "zoomed-out-after",
+    "window-frame",
+    "hud-scaling",
+};
+
+/// Tells whether every row stands at its setting's place and is named by
+/// its setting.
+///
+/// @return true when each row's setting is its index and its id its name
+constexpr bool rows_in_order() noexcept {
+    for (std::size_t index = 0; index < kDeclared.size(); ++index)
+        if (static_cast<std::size_t>(kDeclared[index].setting) != index ||
+            kDeclared[index].spec.id != kSettingNames[index])
+            return false;
+    return true;
+}
+
+static_assert(
+    kDeclared.size() == kSettingCount, "the table has a row for every enumerator of Setting"
+);
+static_assert(rows_in_order(), "each row stands at its setting's place, its id its name");
+
+/// Returns the lock the dialog shows on a setting's row: its field of the
+/// locks the dialog shows (shown_locks), as a check's own section has it.
+template <Setting Row>
+std::string_view row_lock_text(const SettingsModel& model) {
+    if (model.dialog == nullptr)
+        return {};
+    const Dialog& dialog = *model.dialog;
+    return lock_text(section_lock(shown_locks(dialog), Row, dialog.section_hooks));
+}
+
+/// Gives every row's spec its lock: the lock the dialog shows on it.
+template <std::size_t... Index>
+constexpr std::array<SettingRow, kSettingCount>
+locked_rows(std::array<SettingRow, kSettingCount> rows, std::index_sequence<Index...>) noexcept {
+    ((rows[Index].spec.lock = &row_lock_text<static_cast<Setting>(Index)>), ...);
+    return rows;
+}
+
+/// The table, each row's spec locked as the dialog shows it.
+constexpr std::array<SettingRow, kSettingCount> kRows =
+    locked_rows(kDeclared, std::make_index_sequence<kSettingCount>{});
+
+/// Returns a setting's row.
+///
+/// @param setting the setting
+/// @return its row; the last for a value past Setting's enumerators
+const SettingRow& entry(Setting setting) noexcept {
+    return kRows[std::min(static_cast<std::size_t>(setting), kRows.size() - 1)];
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// The table's own functions.
+
+const kit::RowSpec<SettingsModel>& row_spec(Setting setting) noexcept {
+    return entry(setting).spec;
+}
+
+kit::RowKind kind_of(Setting setting) noexcept {
+    return entry(setting).spec.kind;
+}
+
+std::string_view setting_name(Setting setting) noexcept {
+    return kSettingNames[std::min(static_cast<std::size_t>(setting), kSettingNames.size() - 1)];
+}
+
+Lock section_lock(const Locks& locks, Setting setting, const SectionHooks* section) {
+    const Lock lock = lock_of(locks, setting);
+    if (section == nullptr || section->lock == nullptr)
+        return lock;
+    return section->lock(section->context, setting, lock);
+}
+
+bool section_hint_is_status(Setting setting, const SectionHooks* section) {
+    if (section == nullptr || section->hint_is_status == nullptr)
+        return hint_is_status(setting);
+    return section->hint_is_status(section->context, setting);
+}
+
+bool hint_is_path(Setting setting) noexcept {
+    return entry(setting).path_hint;
+}
+
+void copy_row(Setting setting, const SettingsModel& to, const SettingsModel& from) {
+    const SettingRow& row = entry(setting);
+    if (row.copy != nullptr) {
+        row.copy(to, from);
+        return;
+    }
+    SettingsModel target = to;
+    switch (row.spec.kind) {
+    case kit::RowKind::toggle:
+        kit::set_row_on(row.spec, target, kit::row_on(row.spec, from));
+        break;
+    case kit::RowKind::choice:
+    case kit::RowKind::slider:
+    case kit::RowKind::levels:
+        kit::set_row_index(row.spec, target, kit::row_index(row.spec, from));
+        break;
+    case kit::RowKind::value_and_button:
+    case kit::RowKind::buttons:
+    case kit::RowKind::text_field:
+    case kit::RowKind::link:
+    case kit::RowKind::text:
+        break;
+    }
+}
+
+std::string_view page_word(Page page) noexcept {
+    return kPageWords[std::min(static_cast<std::size_t>(page), kPageWords.size() - 1)];
+}
+
+} // namespace geometry
+
+} // namespace oa::ui::engine_settings
