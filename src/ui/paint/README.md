@@ -10,8 +10,7 @@ and letters.
 
 - `painter.hpp`: `Canvas` and `Painter`; the shapes (rectangles, rounded
   panels, circles, wedges); the icon marks; and the text functions
-  (`draw_line`, `text_width`, `line_metrics`, `fit_text`, `wrap_text`,
-  `paint_line`).
+  (`draw_line`, `text_width`, `line_metrics`, `fit_text`, `paint_line`).
 - `pad_glyphs.hpp`: the glyphs (`glyph_width`, `draw_glyph`, `spec_width`,
   `draw_spec`, `chord_width`, `draw_chord`).
 
@@ -35,5 +34,5 @@ The text checks read the bundled fonts beside the test.
 
 ## Limitations
 
-The window icon is decoded in the app (`game_files_icon`). The kit's theme
-and its one wrap arrive in U02.
+The window icon is decoded in the app (`game_files_icon`). Text is wrapped by
+the OA UI kit; this painter shortens one line (`fit_text`) and does not wrap.
