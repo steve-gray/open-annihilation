@@ -160,6 +160,75 @@ logs it.
 7. Event hooks return nonzero to consume input; otherwise the built-in
    handler still runs.
 
+## The OA layer
+
+`oa_layer.hpp` and `oa_layer.cpp` are one host for Open Annihilation's own
+screens over every screen of the game: `OaLayer`, which every screen
+reaches through `Runtime::oa_layer()`. It holds the settings dialog on the
+main menu and in a match (`Runtime::SettingsScreen`), and the in-game
+menu's OA button. It replaces the main menu's and the match's own hosts of
+the dialog, which each mapped the pointer, told a finger from a mouse,
+mapped the keys, latched the closing key and drew a backdrop.
+
+- **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
+  and darkens what lies under it, a drawing at 1× from its own top left
+  corner, its answers to the pointer, the keys, the wheel and typed text, a
+  text field, its display list and interaction (what automation lists), a
+  tick and a revision. No call of it names an SDL type. A screen joins with
+  `oa_layer().push(std::make_unique<...>())` and leaves when it answers
+  `close`, or by `close_top` and `close_above(name)`; `close` tells it it
+  leaves, and a screen whose own model is still open closes it there as its
+  Cancel would.
+- **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
+  the coordinates input arrives in: the picture's pixels on the front end,
+  the window's in a match, and how many points it has. Every screen is
+  Compact and drawn at 1× today: Settings centred on the main menu's
+  picture at 80,78, and in a match where `match_dialog_rect` puts it, as the
+  picture and the side column are scaled. `LayerView::frame` already gives
+  a screen its room in points with a size class and a scale (Compact at
+  100% for now), for screens laid out at the layer's own scale. An empty
+  place means the screen does not show: it neither draws nor takes input.
+- **Input.** One overlay at z 100 on every screen (`register_oa_layer`, over
+  the extensions' overlays, under the frontend's message boxes) hands the
+  layer every input. The key that closed a screen comes first: its presses
+  do nothing until it is released. Then the top modal screen that shows
+  takes every input, and nothing under it sees any. With none, each screen
+  that shows sees the input from the top, and the first that answers other
+  than `pass` takes it; what none takes goes on to the overlays and the
+  screen under the layer, and in a match first to the in-game OA button.
+  So a screen that is not modal sees every pointer move, mapped to its
+  points even outside its rectangle, and keeps its own hover: a move that
+  only changes its hover is answered `pass`. A screen that needs input where
+  it draws nothing can take it through an overlay of its own above z 100
+  that takes nothing while a modal screen shows. A point is mapped by the
+  placement (`layer_point`); a finger's press gets the reach of the touch
+  controls in the screen's points, a mouse's none; keys go through
+  `layer_key`.
+- **Typed text** goes to the screen taking input (`text`), and while that
+  screen reports a `text_field` the system's text input stays started over
+  the field, mapped back to the coordinates input arrives in
+  (`Runtime::start_text_input`); it stops once no screen has one.
+- **On the front end** a modal screen with a backdrop darkens the frame
+  itself, a blend in 256ths (`darken_front_end`), so the picture the window
+  shows is the same at every size. The screens are drawn at 1× and stamped
+  into the window over the picture's rectangle
+  (`SDL_GetRenderLogicalPresentationRect`) in the window's own pixels
+  (`RenderState::use_window_pixels`), each window pixel taking the screen's
+  pixel under its centre, as the picture's own pixels are scaled there;
+  then the software cursor is presented above them, and the frame holds no
+  cursor while a screen shows (`tick_and_draw_cursor`). The layer is
+  uploaded again only when a screen's drawing or place changes. Without a
+  renderer, and while `frame_without_cursor` draws the picture, the screens
+  are drawn into the frame instead (`compose_front_end`), which is what the
+  player sees.
+- **In a match** the layer is one picture of the window's size while the
+  in-game menu's column shows: the OA button under Resume, the backdrop
+  under a modal screen, and the screens stamped at their places
+  (`refresh_match`), drawn again only when what it shows changes. It goes
+  over the composed frame (`compose_match`) and is presented after the
+  match's other layers and before the frontend dialogs' and the cursor
+  (`present`).
+
 ## Files
 
 - `app.hpp`, `runtime.hpp`, `runtime.cpp`, `runtime_frontend_host.cpp`,
@@ -1394,22 +1463,26 @@ logs it.
   (`register_load_game_screens`).
 - The Open Annihilation settings ([oa/ui/engine_settings.hpp](../ui/engine-settings/README.md)):
   `engine_settings_state.hpp` and `runtime_engine_settings.cpp` read them at
-  start, put them in effect, save them, and run the dialog for both of its
-  hosts. `engine_settings_menu_host.hpp` and
-  `runtime_engine_settings_menu.cpp` are the main menu's host: two overlays
-  on the main menu, the OA button at the picture's bottom-right corner (its
-  top-right corner while an extension's overlay stands over the main menu)
-  under the extensions' overlays, and the dialog centred over the darkened
-  menu above them, which takes every input while it shows. A press released
-  over the button, Cmd+, on macOS or Ctrl+, elsewhere, and the macOS
-  application menu's Settings… item open it; nothing opens over a message
-  box or a frame a package owns. Enter is OK and Escape is Cancel; the key
-  that closed the dialog does nothing more until it is released, so that a
-  held key never reaches the main menu, where Escape itself does nothing.
-  Another screen replacing the main menu closes the dialog as Cancel does.
-  `engine_settings_match_host.hpp` and
-  `runtime_engine_settings_match.cpp` are the in-game menu's host, and
-  `runtime_engine_settings_app_menu.cpp` the application menu's item.
+  start, put them in effect, save them, and run the dialog. The dialog is a
+  screen of the OA layer ([The OA layer](#the-oa-layer)),
+  `Runtime::SettingsScreen` in `oa_layer.cpp`, on the main menu and in a
+  match. `engine_settings_menu_host.hpp` and
+  `runtime_engine_settings_menu.cpp` hold the main menu's OA button, an
+  overlay at the picture's bottom-right corner (its top-right corner while
+  an extension's overlay stands over the main menu) under the extensions'
+  overlays, drawn into the main menu's picture; the dialog it opens is
+  centred over the darkened menu and takes every input while it shows. A
+  press released over the button, Cmd+, on macOS or Ctrl+, elsewhere, and
+  the macOS application menu's Settings… item open it; nothing opens over a
+  message box or a frame a package owns. Enter is OK and Escape is Cancel;
+  the key that closed the dialog does nothing more until it is released, so
+  that a held key never reaches the main menu, where Escape itself does
+  nothing. Another screen replacing the main menu closes the dialog as
+  Cancel does. `runtime_engine_settings_match.cpp` opens it beside the
+  in-game menu's column, whose OA button, with the shortcut and Ctrl+F2 for
+  the mod options, the layer draws and drives; the column going closes the
+  dialog as OK does. `runtime_engine_settings_app_menu.cpp` is the
+  application menu's item.
   `acceleration_status.hpp` and `acceleration_status.cpp`
   (`app-acceleration-status`) say what the dialog shows of the renderer:
   Hardware acceleration's status, first reason first, and whether nothing
@@ -1431,15 +1504,18 @@ logs it.
   (`render_probe::vertical_sync_resets_device`), where each change resets
   the graphics device and the game does not recover one the reset leaves
   lost; and once the renderer refused it.
-  `Runtime::acceleration_facts` gathers those facts, both hosts refresh
-  the status each frame while the dialog is open, and
+  `Runtime::acceleration_facts` gathers those facts, the settings screen
+  refreshes the status each frame while the dialog is open, and
   `Runtime::apply_vertical_sync` asks the renderer to wait for the display
   only when the setting in effect changes it, never while it stays Off.
   `--check-engine-settings` (`native-engine-settings`) drives them through
   the SDL presenter over a preferences file it empties first:
   `runtime_engine_settings_check.cpp` holds the main menu's part, with each
   look of the button and the darkened menu under the dialog compared pixel
-  for pixel with what they should draw, Escape doing nothing on the menu
+  for pixel with what they should draw, the 640x480 window compared with
+  that picture, the OA layer passing on what its screens do not take
+  (screens of the check's own that are not modal, a text field's text and
+  text input, `layer_key`, `close_above`), Escape doing nothing on the menu
   itself and EXIT ending the run;
   `runtime_engine_settings_dialog_check.cpp` the dialog driven by the
   pointer, the wheel and the keys (every section, scrolling, each setting in
@@ -2032,6 +2108,11 @@ the game's window ([docs/game-files.md](../../docs/game-files.md)).
   driven by taps and keys, pictures of each step and the verdict line.
 - `runtime_game_files.cpp` fills Settings › Game files and opens the
   screen's management state from its MANAGE… button over the main menu.
+- `render_state.hpp` (`RenderState`) keeps the renderer's target, logical
+  presentation, scale, viewport, clip, colour and blend mode and puts them
+  back, and `use_window_pixels` draws in the window's own pixels: the Game
+  files screen, the folder chooser and the OA layer each keep one while
+  they draw.
 
 ## The player's own folder
 
