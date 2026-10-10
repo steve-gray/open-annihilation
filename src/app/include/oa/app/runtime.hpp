@@ -264,6 +264,12 @@ struct PackageKind;
 struct PackageOptions;
 } // namespace package_install
 
+class MapPacks;
+
+namespace content {
+class Service;
+} // namespace content
+
 class Runtime final : public menu::Host,
                       public entry::SinglePlayerHost,
                       public frontend::Host,
@@ -3948,6 +3954,39 @@ class Runtime final : public menu::Host,
     /// @return the state
     ModInstallState& mod_install_state();
 
+    /// The installed map packs and the fit check a map pack's install uses.
+    struct MapPackState;
+
+    /// Frees the map packs' state.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_map_pack_state(MapPackState* state) noexcept;
+
+    /// Returns the installed map packs, made on first use over Maps in the
+    /// player's own folder. The manifests are not read until a refresh.
+    ///
+    /// @return the index
+    [[nodiscard]] MapPacks& map_packs() const;
+
+    /// The registries and cached catalogues (runtime_content.cpp).
+    struct ContentState;
+
+    /// Frees the content service, joining its worker.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_content_state(ContentState* state) noexcept;
+
+    /// Reads the registries and starts a refresh where one is due.
+    void start_content();
+
+    /// Passes Developer mode on when it changed.
+    void tick_content();
+
+    /// Returns the content service, starting it on first use.
+    ///
+    /// @return the service
+    [[nodiscard]] content::Service& content_service();
+
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
     void register_mod_install_overlay();
@@ -3957,16 +3996,19 @@ class Runtime final : public menu::Host,
     /// @return true while one shows
     [[nodiscard]] bool mod_install_prompt_shown() const noexcept;
 
-    /// Installs the mod packages opened in the game, one at a time, once the
+    /// Installs the packages opened in the game, one at a time, once the
     /// main menu, its own and not a screen package's, has shown for two
     /// frames and stays, with no dialog, notice or settings dialog over it:
     /// reads the next package, asks what its plan asks, unpacks it, a budget
     /// at a time each frame with its progress shown, puts it in place and
     /// tells what came of it; a change to the mod played waits for the run to
-    /// end (request_soft_restart). Also tells what a change that waited did,
-    /// takes the packages a second start handed over, and deletes the
-    /// folders a change dropped, a step a frame. A run nobody watches leaves
-    /// the packages waiting, unless --check-mod-install asks for them.
+    /// end (request_soft_restart). A map pack from a catalogue is the
+    /// exception: it installs on any screen but a match, with no prompt, and
+    /// a plan that asks waits for the settled main menu. Also tells what a
+    /// change that waited did, takes the packages a second start handed over,
+    /// and deletes the folders a change dropped, a step a frame. A run nobody
+    /// watches leaves the packages waiting, unless --check-mod-install asks
+    /// for them.
     void tell_mod_installs();
 
     /// Tells whether a folder is what the game plays now, which a kind
@@ -3988,15 +4030,16 @@ class Runtime final : public menu::Host,
     [[nodiscard]] bool package_offers_play(const package_install::PackageKind& kind) const;
 
     /// Takes in what a change of this kind put in place. A mod change lists
-    /// the Mods folder again.
+    /// the Mods folder again. A map pack change reads Maps again.
     ///
     /// @param kind the package's kind
     /// @param folder the folder the change put in place
     void package_changed(const package_install::PackageKind& kind, const fs::path& folder);
 
     /// Returns what a kind's hooks need from this run. A mod package gets
-    /// the unimplemented-hack setting, the preferences and the game folder;
-    /// every other kind gets the defaults, and its context stays null.
+    /// the unimplemented-hack setting, the preferences and the game folder.
+    /// A map pack's context points at the fit check against the base game.
+    /// Every other kind gets the defaults, and its context stays null.
     ///
     /// @param kind the package's kind
     /// @return the options
@@ -14519,6 +14562,14 @@ class Runtime final : public menu::Host,
     // The mod packages opened in the game and their prompt; null until first used.
     std::unique_ptr<ModInstallState, void (*)(ModInstallState*) noexcept> mod_install_state_{
         nullptr, destroy_mod_install_state
+    };
+    // The installed map packs and a map pack's fit check; null until first used.
+    mutable std::unique_ptr<MapPackState, void (*)(MapPackState*) noexcept> map_pack_state_{
+        nullptr, destroy_map_pack_state
+    };
+    // The registries and their catalogues; null until start_content.
+    std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{
+        nullptr, destroy_content_state
     };
     // The in-game menu's OA button and dialog; null until first used.
     std::unique_ptr<EngineSettingsMatchHost, void (*)(EngineSettingsMatchHost*) noexcept>

@@ -627,6 +627,14 @@ if(OA_BUILD_PLATFORM)
     add_test(NAME app-director-output COMMAND oa-app-director-output-test)
   endif()
 endif()
+# Installed map packs: each pack's maps from its manifest, cached by the
+# pack's SHA-256, and whether one map fits the base game.
+add_library(oa-app-map-packs src/app/map_packs.cpp)
+add_library(oa::app::map_packs ALIAS oa-app-map-packs)
+target_include_directories(oa-app-map-packs PUBLIC src/app)
+target_compile_features(oa-app-map-packs PUBLIC cxx_std_20)
+target_link_libraries(oa-app-map-packs PUBLIC oa-app-game-directory oa-app-package-install
+  oa-data-map-pack oa-data-map-fit oa-formats-hpi oa-app-user-folder oa-base-sha256)
 if(BUILD_TESTING)
   add_executable(oa-app-window-icon-test src/app/window_icon_test.cpp)
   target_link_libraries(oa-app-window-icon-test PRIVATE oa-app-window-icon oa-formats-png oa-options)
@@ -656,6 +664,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-user-folder-test PRIVATE oa-app-user-folder oa-app-mod-profile
     oa-test-support oa-options)
   add_test(NAME app-user-folder COMMAND oa-app-user-folder-test)
+  # Two packs' maps, a refresh that rereads one manifest, a broken manifest,
+  # and, with the game's data, a map that fits the base game and one that does not.
+  add_executable(oa-app-map-packs-test src/app/map_packs_test.cpp)
+  target_link_libraries(oa-app-map-packs-test PRIVATE oa-app-map-packs oa-formats-hpi
+    oa-formats-tnt oa-test-support oa-test-game-data oa-options)
+  add_test(NAME app-map-packs COMMAND oa-app-map-packs-test)
+  set_tests_properties(app-map-packs PROPERTIES TIMEOUT 30)
+  oa_add_game_data_test(app-map-packs-data oa-app-map-packs-test --data)
+  set_tests_properties(app-map-packs-data PROPERTIES TIMEOUT 120)
   add_executable(oa-game-directory-test src/app/game_directory_test.cpp)
   target_link_libraries(oa-game-directory-test PRIVATE oa-app-game-directory oa-app-headers oa-formats-hpi
     oa-platform-preferences oa-platform-shims oa-test-game-data oa-options)
@@ -917,7 +934,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/modern_text.cpp src/app/text_input_area.cpp
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
-  src/app/runtime_mod_install.cpp src/app/runtime_package_kinds.cpp src/app/mod_install_watch.cpp
+  src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
+  src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
   src/app/world_scaling.cpp src/app/far_view.cpp
@@ -997,6 +1015,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-full-terrain oa-app-full-supersampling oa-app-full-fog oa-app-card-executor
   oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-ui-paint oa-ui-kit
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
+  oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-ui-frontend-multiplayer)
 # The table that combines the extensions' tables of oa-game
@@ -2701,6 +2720,17 @@ endif()
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
 add_subdirectory(src/netgame)
+# Catalogues are fetched with the HTTP client src/netgame adds, so this
+# library follows that directory. oa-game is linked earlier in this file,
+# before the client exists: the content library cannot be named in
+# oa_game_libraries at that list's declaration. The game is linked with it
+# here, and the name is appended for the extension SDK below, which reads
+# the same list.
+add_subdirectory(src/app/content)
+if(TARGET oa-game)
+  target_link_libraries(oa-game PRIVATE oa-app-content)
+endif()
+list(APPEND oa_game_libraries oa-app-content)
 add_subdirectory(src/session/demo)
 add_subdirectory(src/app/netgame)
 if(TARGET oa-app-netgame)

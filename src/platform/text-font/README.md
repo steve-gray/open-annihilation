@@ -24,6 +24,7 @@ open font of the stack's chain that has it:
 | `dejavu_sans_bold` | `DejaVuSans-Bold.ttf` | Latin, Greek, Cyrillic and symbols in the bold weight; skipped in the regular weight |
 | `dejavu_sans` | `DejaVuSans.ttf` | the same scripts in the regular weight, and what the bold face lacks |
 | `noto_sans_cjk` | `NotoSansCJKsc-Bold.otf` | Chinese, Japanese kana and kanji, Korean Hangul, CJK punctuation and full-width forms; optional to open |
+| `endonyms` | `NotoSansCJKsc-Bold-Endonyms.otf` | the languages' own names and the notice shown before a language pack is installed; sized as Noto Sans CJK is, and required |
 | `noto_emoji` | `NotoEmoji.ttf` | emoji, in one colour like any character; its weight axis follows the line's weight |
 
 A language pack may add up to `most_pack_faces` (4) faces while the stack
@@ -31,8 +32,9 @@ is open (`add_face`). An `ideographs` face is drawn as Noto Sans CJK is,
 at the related size and no less than the style's least size. A `letters`
 face is drawn at the sans faces' size. Bold looks in DejaVu Sans Bold,
 DejaVu Sans, the letters pack faces in the order they were added, the
-ideographs pack faces in that order, Noto Sans CJK when it is open, then
-Noto Emoji. Regular is the same without DejaVu Sans Bold. `FontStack::chain`
+ideographs pack faces in that order, Noto Sans CJK when it is open, the
+endonym face, then Noto Emoji. Regular is the same without DejaVu Sans
+Bold. `FontStack::chain`
 gives that chain; `fallback_chain` stays the base faces only.
 
 A character no open font has draws the chain's first open font's
@@ -44,7 +46,9 @@ spaces and joiners, and the byte-order mark draw nothing and take no room
 SHA-256, into `local/deps`, and cuts Noto Sans CJK SC Bold down to the
 characters of the common Chinese, Japanese and Korean character sets, the
 Table of General Standard Chinese Characters among them (its help lists
-them). The build copies the fonts into the `fonts` folder beside
+them), and cuts the same face again to the languages' own names and the
+notice in `tools/text-fonts/endonyms.txt`. The build copies the fonts into
+the `fonts` folder beside
 the game (`cmake/OaTextFonts.cmake`), which `bundled_font_directory` finds at
 run time: the bundle's `Contents/Resources/fonts` on macOS, the fonts folder
 beside the executable elsewhere. Their licences are in the repository's
@@ -69,6 +73,9 @@ beside the executable elsewhere. Their licences are in the repository's
   A line wider than `max_line_width` is cut off there.
 - `FontStack::layout` gives each character's font and pen without drawing,
   and `FontStack::face_for` the font a character comes from.
+  `FontStack::draws` tells whether every visible character of a text is
+  held by a face of the chain, so a caller can choose between a language's
+  own name and its English name.
   `fallback_chain` gives the base faces a weight looks in.
   `FontStack::chain` gives the faces one open stack looks in, pack faces
   included, leaving out a face that is not open.
@@ -81,19 +88,21 @@ beside the executable elsewhere. Their licences are in the repository's
   as a scalable font.
 - `FontStack::face_metrics` gives one face's pixel size and rows at the size
   a style draws it at, and is empty when the face is not open. The sans
-  faces and letters pack faces take the style's pixel size. Noto Sans CJK
-  and ideographs pack faces take `related_pixel_size` of it, and no less
-  than the style's least size. Noto Emoji takes `related_pixel_size`.
+  faces and letters pack faces take the style's pixel size. Noto Sans CJK,
+  the endonym face and ideographs pack faces take `related_pixel_size` of
+  it, and no less than the style's least size. Noto Emoji takes
+  `related_pixel_size`.
   `FontStack::metrics` is the greatest ascent and descent of the open base
-  faces only. A pack's faces never change the line's rows. A stack opened
-  without Noto Sans CJK has the rows of the other base faces: at 14 px bold
-  that is 13 above the baseline and 4 below, where the full stack is 14 and
-  4 because of the CJK face.
-- `related_pixel_size` gives the size Noto Sans CJK, ideographs pack faces
-  and Noto Emoji are drawn at beside the DejaVu faces: 12 px beside 14 px,
+  faces only. A pack's faces never change the line's rows. The endonym face
+  keeps the CJK face's rows, so a stack opened without Noto Sans CJK is
+  still 14 above the baseline and 4 below at 14 px bold.
+- `related_pixel_size` gives the size Noto Sans CJK, the endonym face,
+  ideographs pack faces and Noto Emoji are drawn at beside the DejaVu
+  faces: 12 px beside 14 px,
   so ideographs stand a row or two taller than DejaVu's capitals, as the
   game's outlined capitals do. `Style::least_cjk_pixel_size` holds Noto
-  Sans CJK and ideographs pack faces to a least size. The line's rows grow
+  Sans CJK, the endonym face and ideographs pack faces to a least size.
+  The line's rows grow
   to hold a base face, not a pack face: the application draws ideographs at
   `least_cjk_language_pixel_size` (12 px) at the least while a Chinese,
   Japanese or Korean language is shown, since smaller ones fill in.
@@ -140,7 +149,10 @@ that stays within its bound and forgets the glyph used longest ago
 (`keeps_the_glyphs_used_last`),
 and ideographs held to a least size while Latin letters keep theirs
 (`holds_ideographs_to_a_least_size`), a stack opened without the CJK face,
-whose 14-px bold rows are 13 and 4 (`opens_without_the_cjk_face`), pack
+whose 14-px bold rows stay 14 and 4 because the endonym face keeps them
+(`opens_without_the_cjk_face`), the endonym face matching the CJK face's
+rows from 7 px to 48 px (`endonyms_keep_the_cjk_rows`) and drawing
+简体中文 with no CJK file (`endonyms_draw_without_the_cjk_face`), pack
 faces joining the chain, matching the full stack's drawing of an ideograph
 and refusing a fifth face or a file that is not a font
 (`pack_faces_join_the_chain`), a removed pack face leaving none of its
