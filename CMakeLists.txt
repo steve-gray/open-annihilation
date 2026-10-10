@@ -2476,8 +2476,11 @@ endif()
 if(OA_REQUIRE_GAME AND NOT TARGET oa-game)
   message(FATAL_ERROR "OA_REQUIRE_GAME is ON, but oa-game is not built: it needs OA_BUILD_PLATFORM=ON")
 endif()
+# The command library and its test live in tools/oa-tool. The executable stays
+# here so the Windows DLL copy and the packaged notices still attach to it.
+add_subdirectory(tools/oa-tool)
 add_executable(oa-tool tools/oa-tool/main.cpp)
-target_link_libraries(oa-tool PRIVATE oa-formats-hpi oa-formats-png oa-ui-decoded)
+target_link_libraries(oa-tool PRIVATE oa-tool-commands oa-options)
 # The Steam Deck's artwork and files for the Steam Deck package.
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaSteamDeck.cmake")
 
