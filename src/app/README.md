@@ -3120,15 +3120,44 @@ deliberate difference from 3.1c.
 The setup blocks OA sends carry no presence: the five bytes after the
 engine signature stay zero, as 0.7 sent them, in the battle room's blocks, a
 computer player's and the match's. OA machines know each other by the
-signature, 'O' and 'A', which 0.7 already sends. What a machine plays (its
-version, Developer Mode, the rules, its mod and hacks) travels only in the
-presence record, which OA machines send to each other and never to a 3.1c
-machine (`oa/netgame/presence.hpp`); `follow_presence`, run every frame, is
-where it is bound, and binds nothing yet. The presence facts it will send
-come from `presence_facts` (`oa/app/presence_facts.hpp`), which
-`--check-simulation-hash` checks. `--net-loopback-check` prints how many of
-the setup blocks each machine holds of the other's players carry no presence
-bytes.
+signature, 'O' and 'A', which 0.7 already sends. What a machine plays
+travels only in the presence record (`oa/netgame/presence.hpp`, type
+0xf0), which the battle room sends to the OA players of other machines:
+this build's version (`0.8.0`, with `-` and the version label after it in a
+development build), the platform and architecture, the mod (its id, name,
+version and packaging revision) and where it was published, the sim hash,
+the game and view hacks that are on with their counts, Developer Mode with
+its overrides, and on the host the map pack of its selected map.
+`follow_presence`, run every frame, reads the facts from `presence_facts`
+(`oa/app/presence_facts.hpp`, which `--check-simulation-hash` checks) while
+the multiplayer screens show, writes the record within 1024 bytes less the
+491 a map pack may take, so that the host's pack always fits beside it, and
+binds it to the battle room when its bytes change
+(`multiplayer_bind_presence_record`). A fact that breaks the record's rules,
+such as a mod name over 64 bytes, is left out with one line on the error
+stream the first time. Where the mod was published comes from the
+installer's origin record in the mod's folder (`.oa-origin.yaml`, read with
+`package_install::read_origin`): only a catalogue origin gives one, with
+its registry, release and SHA-256, and the registry's descriptor URL from
+the registries in effect (empty for a built-in registry or one added from a
+file); a mod installed from a file, or a folder without a record, sends
+none. The record is read again only when the mod or its folder changes. The
+host's map pack comes from `LobbyMaps::pack`, which the map packs bind
+through `multiplayer_bind_map_pack`; the battle room asks it once each time
+the selected map changes, and until it is bound no record names a pack.
+The battle room sends the record to every human player whose own setup
+block carries the signature (`presence_peer`), on joining, when the record
+changes and once to each such player who arrives later, from the local
+player to that player alone and alone in its frame; never to a computer
+player, to everyone at once or to a machine without the signature, so no
+3.1c machine receives one. OA 0.7 machines carry the signature too: they
+receive the record and lose nothing, since a frame that holds only a 0xf0
+gives a reader without presence records nothing, and the frames after it
+arrive as before. Each machine keeps the record each OA player sent it
+(`lobby_presence_record`) until that player leaves. `--net-loopback-check`
+checks that both machines hold each other's record, naming this build's
+version, and prints how many of the setup blocks each machine holds of the
+other's players carry no presence bytes.
 [docs/development/testing.md](../../docs/development/testing.md#network-play)
 lists its tests.
 

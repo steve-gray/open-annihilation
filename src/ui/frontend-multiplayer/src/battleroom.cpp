@@ -6,6 +6,7 @@
 
 #include "oa/base/game_loop.hpp"
 #include "oa/netgame/player_slots.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/netgame/private_channel.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/netgame/recorder_messages.hpp"
@@ -23,7 +24,9 @@
 #include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace oa::ui::frontend_multiplayer {
@@ -749,7 +752,178 @@ void recorder_random_map(Lobby& lobby) noexcept {
     lobby_publish_session(lobby);
 }
 
+// ---------------------------------------------------------------------------
+// Presence records
+
+/// Most bytes of a map pack's descriptor URL, name and version in its field.
+constexpr std::size_t kPackUrlMostBytes = 255;
+constexpr std::size_t kPackNameMostBytes = 64;
+constexpr std::size_t kPackVersionMostBytes = 32;
+
+/// Forgets a slot's presence entries: the record its player sent, whose
+/// block it holds, and what was sent to it.
+///
+/// @param[in,out] records the battle room's presence records
+/// @param slot the slot, 0..9
+void presence_forget(PresenceRecords& records, int32_t slot) noexcept {
+    records.peer_size[slot] = 0;
+    records.peer_id[slot] = 0;
+    records.block_player[slot] = 0;
+    records.sent_generation[slot] = 0;
+    records.sent_to[slot] = 0;
+}
+
+/// Writes the value of a map pack's field into the presence records' answer.
+///
+/// A descriptor URL, name or version longer than the field allows is sent
+/// empty. When the pack still breaks the field's rules its name, version
+/// and URL are all sent empty; when it breaks them even so, it is left out.
+///
+/// @param[in,out] records the battle room's presence records
+/// @param pack the pack LobbyMaps::pack named
+void presence_take_pack(PresenceRecords& records, netgame::PresenceMapPack pack) noexcept {
+    records.pack_size = 0;
+    if (pack.descriptor_url.size() > kPackUrlMostBytes)
+        pack.descriptor_url.clear();
+    if (pack.name.size() > kPackNameMostBytes)
+        pack.name.clear();
+    if (pack.version.size() > kPackVersionMostBytes)
+        pack.version.clear();
+    std::size_t written = 0;
+    if (netgame::encode_presence_map_pack(pack, records.pack, sizeof records.pack, &written) !=
+        netgame::WireError::ok) {
+        pack.descriptor_url.clear();
+        pack.name.clear();
+        pack.version.clear();
+        if (netgame::encode_presence_map_pack(pack, records.pack, sizeof records.pack, &written) !=
+            netgame::WireError::ok)
+            return;
+    }
+    records.pack_size = static_cast<uint16_t>(written);
+}
+
+/// Asks LobbyMaps::pack for the selected map's pack, on the host, when the
+/// map's name differs from the one last asked about or a binding has come
+/// since; the answer is kept between.
+///
+/// @param[in,out] lobby Lobby state; this machine hosts.
+void presence_ask_pack(Lobby& lobby) noexcept {
+    auto& records = lobby.presence_records;
+    // Unbound, nothing is asked: the first binding asks about the map.
+    if (lobby.maps.pack == nullptr) {
+        records.pack_map[0] = '\0';
+        records.pack_size = 0;
+        return;
+    }
+    // Cut to the size kept, so that a longer name is not asked about again.
+    const auto name = text_view(map_name(lobby), sizeof records.pack_map - 1);
+    if (!records.pack_rebound && name == text_view(records.pack_map, sizeof records.pack_map))
+        return;
+    records.pack_rebound = false;
+    copy_text(records.pack_map, sizeof records.pack_map, name);
+    records.pack_size = 0;
+    if (name.empty())
+        return;
+    netgame::PresenceMapPack pack;
+    if (lobby.maps.pack(lobby.maps.pack_context, &pack))
+        presence_take_pack(records, std::move(pack));
+}
+
+/// Keeps a presence record a seated remote player sent as that player's.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param event the record's event; its first byte is the presence record's type
+/// @return true when it was kept; false for an unseated sender, one of this
+///         machine's players, or a length word other than the event's size
+bool presence_keep(Lobby& lobby, const LobbyEvent& event) noexcept {
+    auto& records = lobby.presence_records;
+    const auto slot = slot_for_player_id(lobby, event.player_id);
+    uint16_t length = 0;
+    if (slot < 0 || !occupied_by(slot_player(lobby, slot), kSlotRemote) ||
+        netgame::presence_record_length(event.data, event.size, &length) !=
+            netgame::WireError::ok ||
+        length != event.size || event.size > sizeof records.peer[slot])
+        return false;
+    std::memcpy(records.peer[slot], event.data, event.size);
+    records.peer_size[slot] = event.size;
+    records.peer_id[slot] = event.player_id;
+    return true;
+}
+
 } // namespace
+
+std::span<const uint8_t> lobby_presence_record(Lobby& lobby, int32_t slot) noexcept {
+    if (slot < 0 || slot >= kSlotCount)
+        return {};
+    const auto& player = slot_player(lobby, slot);
+    const auto& records = lobby.presence_records;
+    if (local_or_computer(player))
+        return {records.local, records.local_size};
+    if (!occupied_by(player, kSlotRemote) || records.peer_size[slot] == 0 ||
+        records.peer_id[slot] != player.player_id)
+        return {};
+    return {records.peer[slot], records.peer_size[slot]};
+}
+
+void presence_refresh(Lobby& lobby) noexcept {
+    auto& records = lobby.presence_records;
+    const bool host = host_is_local(lobby);
+    if (host)
+        presence_ask_pack(lobby);
+    uint8_t composed[netgame::presence_record_max_bytes];
+    std::size_t size = 0;
+    if (records.source_size != 0 && records.source_size <= sizeof composed) {
+        std::memcpy(composed, records.source, records.source_size);
+        size = records.source_size;
+        // Only the host's record names a map pack.
+        std::size_t written = 0;
+        if (host && records.pack_size != 0 &&
+            netgame::append_presence_field(
+                composed,
+                size,
+                sizeof composed,
+                netgame::PresenceTag::map_pack,
+                {records.pack, records.pack_size},
+                &written
+            ) == netgame::WireError::ok)
+            size = written;
+    }
+    if (size == records.local_size && std::memcmp(composed, records.local, size) == 0)
+        return;
+    std::memcpy(records.local, composed, size);
+    records.local_size = static_cast<uint16_t>(size);
+    ++records.local_generation;
+}
+
+void presence_send_due(Lobby& lobby, int32_t only_slot) noexcept {
+    auto& records = lobby.presence_records;
+    if (records.local_size == 0 || (lobby.game->session_flags & kNetFlagLive) == 0 ||
+        only_slot >= kSlotCount)
+        return;
+    const int32_t first = only_slot < 0 ? 0 : only_slot;
+    const int32_t end = only_slot < 0 ? kSlotCount : only_slot + 1;
+    const auto from = local_player(lobby).player_id;
+    for (int32_t slot = first; slot < end; ++slot) {
+        const auto& player = slot_player(lobby, slot);
+        const auto* info = slot_info(lobby, slot);
+        // A human of another machine, whose own block has come and says OA.
+        if (!occupied_by(player, kSlotRemote) || player.player_id == kBroadcastId ||
+            info == nullptr || records.block_player[slot] != player.player_id ||
+            info->state != kInfoStatePlaying ||
+            !netgame::presence_peer(reinterpret_cast<const uint8_t*>(info)))
+            continue;
+        if (records.sent_generation[slot] == records.local_generation &&
+            records.sent_to[slot] == player.player_id)
+            continue;
+        // Alone in its frame: a machine that does not read the record loses
+        // nothing else with it.
+        flush(lobby);
+        send(lobby, from, player.player_id, records.local, records.local_size);
+        flush(lobby);
+        records.sent_generation[slot] = records.local_generation;
+        records.sent_to[slot] = player.player_id;
+    }
+}
 
 bool recorder_chat_line(Lobby& lobby, int32_t sender_slot, const char* text) noexcept {
     const auto& rules = lobby.wire_rules;
@@ -1076,6 +1250,9 @@ void lobby_reset(Lobby& lobby, Game& game) noexcept {
         game.player_timeout_seconds = kDefaultPlayerTimeoutSeconds;
     lobby.row_base = 0;
     lobby.refused_joiner = 0;
+    // The other players' presence records are forgotten; this machine's stays.
+    for (int32_t slot = 0; slot < kSlotCount; ++slot)
+        presence_forget(lobby.presence_records, slot);
     // The recorder's session starts again; the line it answers with stays.
     char program[sizeof lobby.recorder.program];
     std::memcpy(program, lobby.recorder.program, sizeof program);
@@ -1323,6 +1500,14 @@ void lobby_swap_slots(Lobby& lobby, int32_t first, int32_t second) noexcept {
     const Player held = b;
     b = a;
     a = held;
+    // The presence entries stay with their players.
+    auto& records = lobby.presence_records;
+    std::swap(records.peer[first], records.peer[second]);
+    std::swap(records.peer_size[first], records.peer_size[second]);
+    std::swap(records.peer_id[first], records.peer_id[second]);
+    std::swap(records.block_player[first], records.block_player[second]);
+    std::swap(records.sent_generation[first], records.sent_generation[second]);
+    std::swap(records.sent_to[first], records.sent_to[second]);
     slot_set_status(lobby, a, kSlotOpen);
     a.in_use = 0;
     // The game renumbers eleven records; the eleventh lies past the table.
@@ -1895,6 +2080,7 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     std::snprintf(info.map_name, sizeof(info.map_name), "%s", map_name(lobby));
     info.map_hash =
         lobby.maps.content_hash != nullptr ? lobby.maps.content_hash(lobby.maps.context) : 0;
+    presence_refresh(lobby);
     lobby_send_player_info(lobby);
     panel.focus = panel_find(panel, "MESSAGE");
     for (const char* key : kRowKeys)
@@ -2414,6 +2600,10 @@ LobbyAction lobby_tick(Lobby& lobby, Panel& panel, LobbyFront front, Panel* view
         game.frontend_pending_signal = 3;
         return LobbyAction::leave;
     }
+    // This machine's presence record as it is now, to each OA player who
+    // has not had it.
+    presence_refresh(lobby);
+    presence_send_due(lobby);
     if ((game.gui_flags & 1U) != 0) {
         if (!lobby.rows_built)
             lobby_build_rows(lobby, panel);
@@ -3299,6 +3489,8 @@ bool lobby_add_player(Lobby& lobby, uint32_t player_id, const char* name) noexce
             return false;
     }
     auto& player = game.players[slot];
+    // Its block may still hold an earlier player's bytes until its own comes.
+    presence_forget(lobby.presence_records, slot);
     copy_text(
         player.name,
         sizeof(player.name),
@@ -3358,6 +3550,7 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
         const auto slot = slot_for_player_id(lobby, event.player_id);
         if (slot < 0)
             return false;
+        presence_forget(lobby.presence_records, slot);
         auto& player = slot_player(lobby, slot);
         // The creator leaving before the start ends the game here: its
         // player and this machine's leave with reason 10.
@@ -3435,8 +3628,12 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
         std::memcpy(
             bytes + netgame::player_info_tail_offset, record.info_tail, sizeof(record.info_tail)
         );
+        lobby.presence_records.block_player[slot] = record.player_id;
         note_shared_machines(game);
         recorder_note_block(lobby, slot);
+        // A player who arrived, or whose block now says OA, gets this
+        // machine's presence record once.
+        presence_send_due(lobby, slot);
         return true;
     }
     case netgame::RecordType::machine_group_request: {
@@ -3583,6 +3780,8 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
         game.frontend_pending_signal = 0x11;
         return true;
     default:
+        if (event.data[0] == netgame::presence_record_type)
+            return presence_keep(lobby, event);
         if (lobby.wire_rules.recorder_protocol != netgame::recorder_protocol_plain &&
             netgame::is_recorder_record_type(event.data[0]))
             return recorder_lobby_record(
