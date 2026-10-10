@@ -264,6 +264,7 @@ void check_game_files_options(Options& options) {
         {options.check_engine_settings, "--check-engine-settings"},
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
+        {options.check_map_packs, "--check-map-packs"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
         {!options.open_files.empty(), "--open"},
@@ -514,6 +515,7 @@ void check_director_options(Options& options) {
         {options.check_engine_settings, "--check-engine-settings"},
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
+        {options.check_map_packs, "--check-map-packs"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
         {!options.open_files.empty(), "--open"},
@@ -577,6 +579,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_engine_settings, "--check-engine-settings"},
             {options.check_user_folder, "--check-user-folder"},
             {options.check_mod_switch, "--check-mod-switch"},
+            {options.check_map_packs, "--check-map-packs"},
             {options.check_mod_warning, "--check-mod-warning"},
             {options.check_mod_install, "--check-mod-install"},
             {options.check_renderer_ladder, "--check-renderer-ladder"},
@@ -868,6 +871,8 @@ namespace {
             result.check_user_folder = true;
         else if (argument == "--check-mod-switch")
             result.check_mod_switch = true;
+        else if (argument == "--check-map-packs")
+            result.check_map_packs = true;
         else if (argument == "--check-mod-warning")
             result.check_mod_warning = true;
         else if (argument == "--check-mod-install")
@@ -1019,7 +1024,8 @@ namespace {
                    "[--check-multiplayer-menu] "
                    "[--check-load-save] [--check-frontend-controls] "
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
-                   "[--check-user-folder] [--check-mod-switch] [--check-mod-warning] "
+                   "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
+                   "[--check-mod-warning] "
                    "[--check-mod-install] "
                    "[--check-renderer-ladder [--render-fault POINT[@FRAME]]] "
                    "[--check-briefing-narration] [--check-director-view] "
@@ -1197,7 +1203,7 @@ namespace {
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||
         result.check_director_render || result.check_interpolation || result.check_unit_playout ||
-        result.check_paused_save || result.check_simulation_hash;
+        result.check_paused_save || result.check_simulation_hash || result.check_map_packs;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||

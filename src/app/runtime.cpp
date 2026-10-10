@@ -379,6 +379,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_map_packs) {
+            check_map_packs();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_mod_warning) {
             check_mod_warning();
             flush_preferences();

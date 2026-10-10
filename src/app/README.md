@@ -2421,6 +2421,17 @@ open-annihilation: map <name> does not fit: <rule>: <why>
 
 A map that does not fit logs one line per failure, each time it is refused.
 
+`native-map-packs` (`--check-map-packs`, `runtime_map_packs_check.cpp`)
+writes two packs into the Maps folder of the run's own `--user-folder`: one
+whose map, made in code with one feature of its own drawn with a model of
+the game, fits, and one whose feature file also defines a feature the game
+has. It requires both listed after every base map, in the list and in the
+picker; nothing mounted before a map is chosen; the first mounted alone when
+chosen and unmounted for a base map; a skirmish on it playing 30 ticks with
+its terrain readable, and its end unmounting it and leaving the archives as
+they were; the second refused for New names, the picker showing that reason
+and LOAD keeping the earlier map; and nothing mounted at the main menu.
+
 ### Developer Mode
 
 Developer Mode, in the settings' Developer section

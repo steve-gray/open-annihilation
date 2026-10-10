@@ -3942,6 +3942,15 @@ class Runtime final : public menu::Host,
     /// std::runtime_error on a failure.
     void check_mod_switch();
 
+    /// Checks pack maps in the skirmish list (--check-map-packs): writes two
+    /// map packs into the player's own Maps folder, one that fits and one
+    /// whose feature clashes with the game's; lists both after the base
+    /// maps; mounts the first when it is chosen and unmounts it for a base
+    /// map; plays a skirmish on it with its files readable, unmounted when
+    /// the match ends; and refuses the second, the map picker showing why
+    /// and keeping the earlier map. Throws std::runtime_error on a failure.
+    void check_map_packs();
+
     /// The mod packages opened in the game: their questions, unpacking and
     /// what came of them over the main menu (mod_install_state.hpp,
     /// runtime_mod_install.cpp).
