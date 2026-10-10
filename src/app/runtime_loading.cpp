@@ -332,6 +332,8 @@ void Runtime::leave_match() {
     free_accelerated_match_textures();
     teardown_match();
     start_menu_music();
+    // The match that used a pack map's files is over: they are unmounted.
+    release_pack_map();
 }
 
 void Runtime::enter_match_view() {

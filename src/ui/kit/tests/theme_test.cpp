@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Every colour token equals the value it was copied from, written here as
-// hex, and Compact metrics equal the settings dialog's, its notices' and its
-// prompts' sizes.
+// Every colour token equals the value it was copied from, or the value the
+// design gives a new one, written here as hex, and Compact metrics equal the
+// settings dialog's, its notices' and its prompts' sizes and the sizes the
+// design gives the new controls.
 
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -53,6 +54,8 @@ void every_token_keeps_its_value() {
     equals(kit::colour::button_text, 0xc9, 0xcd, 0xbf);
     equals(kit::colour::lock, 0xe0, 0xb0, 0x4f);
     equals(kit::colour::backdrop, 5, 6, 4);
+    equals(kit::colour::danger, 0xe0, 0x6c, 0x5c);
+    equals(kit::colour::online, 0x6e, 0xa8, 0xd6);
 
     equals(kit::screen_colour::background, 0x1b, 0x1e, 0x19);
     equals(kit::screen_colour::panel, 0x23, 0x27, 0x21);
@@ -84,6 +87,7 @@ void every_token_keeps_its_value() {
     OA_CHECK(kit::menu_backdrop_opacity == 159);
     OA_CHECK(kit::ingame_backdrop_opacity == 128);
     OA_CHECK(kit::locked_fade == 115);
+    OA_CHECK(kit::selected_tint == 15);
 
     constexpr kit::Colour with_opacity{1, 2, 3, 4};
     OA_CHECK(kit::rgb(with_opacity) == (std::array<uint8_t, 3>{1, 2, 3}));
@@ -141,10 +145,45 @@ void compact_metrics_match_the_dialog() {
     OA_CHECK(kit::compact_metrics.progress_bar_height == 8);
 }
 
+/// Checks the Compact sizes of the list rows, chips, tabs, text fields,
+/// cards and hover cards, which the settings dialog does not have.
+void compact_metrics_of_the_new_controls() {
+    OA_CHECK(kit::compact_metrics.list_row_height == 36);
+    OA_CHECK(kit::compact_metrics.list_row_badge == 28);
+    OA_CHECK(kit::compact_metrics.short_list_row_height == 28);
+    OA_CHECK(kit::compact_metrics.list_row_inset == 4);
+    OA_CHECK(kit::compact_metrics.list_row_title_top == 1);
+    OA_CHECK(kit::compact_metrics.list_row_line_top == 15);
+    OA_CHECK(kit::compact_metrics.list_row_gap == 6);
+    OA_CHECK(kit::compact_metrics.hairline == 1);
+    OA_CHECK(kit::compact_metrics.badge_dash == 2);
+    OA_CHECK(kit::compact_metrics.badge_dash_gap == 1);
+    OA_CHECK(kit::compact_metrics.chip_height == 12);
+    OA_CHECK(kit::compact_metrics.chip_padding == 4);
+    OA_CHECK(kit::compact_metrics.chip_gap == 4);
+    OA_CHECK(kit::compact_metrics.tab_height == 18);
+    OA_CHECK(kit::compact_metrics.tab_padding == 10);
+    OA_CHECK(kit::compact_metrics.tab_tracking == 1);
+    OA_CHECK(kit::compact_metrics.tab_rule == 2);
+    OA_CHECK(kit::compact_metrics.tab_count_height == 12);
+    OA_CHECK(kit::compact_metrics.tab_count_padding == 3);
+    OA_CHECK(kit::compact_metrics.tab_count_gap == 4);
+    OA_CHECK(kit::compact_metrics.field_height == 16);
+    OA_CHECK(kit::compact_metrics.field_inset == 4);
+    OA_CHECK(kit::compact_metrics.magnifier_side == 7);
+    OA_CHECK(kit::compact_metrics.caret_width == 1);
+    OA_CHECK(kit::compact_metrics.card_least_width == 120);
+    OA_CHECK(kit::compact_metrics.card_gap == 6);
+    OA_CHECK(kit::compact_metrics.card_inset == 4);
+    OA_CHECK(kit::compact_metrics.hover_card_padding == 6);
+    OA_CHECK(kit::compact_metrics.hover_card_arrow == 5);
+}
+
 } // namespace
 
 int main() {
     every_token_keeps_its_value();
     compact_metrics_match_the_dialog();
+    compact_metrics_of_the_new_controls();
     return oa::test::check_exit_status();
 }

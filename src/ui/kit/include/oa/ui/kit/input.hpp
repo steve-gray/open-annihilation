@@ -18,8 +18,10 @@
 namespace oa::ui::kit {
 
 /// The keys a kit screen answers to. A host gives the platform's keys these
-/// meanings. The names and their order are the settings dialog's keys, so a
-/// host can pass one through as the other.
+/// meanings. The names and their order up to no are the settings dialog's
+/// keys, so a host can pass one through as the other; the editing keys after
+/// it are the kit's own. Enter also goes to a focused tab, and Home and End
+/// to a focused text field, as key says.
 enum class Key : uint8_t {
     enter,     ///< the focused button, link or list row; otherwise the screen accepts
     escape,    ///< the screen cancels
@@ -36,6 +38,10 @@ enum class Key : uint8_t {
     end,       ///< scrolls to the end
     yes,       ///< nothing on a kit screen
     no,        ///< nothing on a kit screen
+    /// A focused text field deletes the character before its caret.
+    backspace,
+    /// A focused text field deletes the character after its caret.
+    delete_forward,
 };
 
 /// One of the four ways the arrows move the focus.
@@ -198,15 +204,43 @@ struct KeyOutcome {
 /// and otherwise move by where controls sit. With no focus shown, Up and
 /// Shift+Tab show it on the last control of the order, and Tab, Down, Left,
 /// Right and Space on the first. Space goes to the focused control. Enter
-/// goes to it when it is a button, a link or a list row, and otherwise the
-/// screen accepts. Escape cancels. Page Up, Page Down, Home and End scroll.
-/// Yes and No do nothing.
+/// goes to it when it is a button, a link, a list row or a tab, and
+/// otherwise the screen accepts. Escape cancels. Page Up and Page Down
+/// scroll. Home and End go to a focused text field, which moves its caret,
+/// and otherwise scroll. Backspace and Delete go to a focused text field and
+/// otherwise do nothing. Yes and No do nothing.
 ///
 /// @param[in,out] interaction the focus; a move shows it and sets the control
 /// @param list the display list
 /// @param key the key
 /// @return what the screen does
 [[nodiscard]] KeyOutcome key(Interaction& interaction, const DisplayList& list, Key key);
+
+/// Inserts typed text at a field's caret and moves the caret past it.
+///
+/// The text is refused whole when it is not well-formed UTF-8 (an overlong
+/// form, a surrogate, a character past U+10FFFF or a cut sequence) or holds
+/// a control character (U+0000 to U+001F, U+007F or U+0080 to U+009F). A
+/// caret past the text's end, or inside a character, is first moved back to
+/// the boundary before it.
+///
+/// @param[in,out] field the text and its caret
+/// @param utf8 the typed text, in UTF-8
+/// @return true when the text was inserted; false when it was refused or empty
+bool insert_text(TextField& field, std::string_view utf8);
+
+/// Applies an editing key to a field.
+///
+/// Backspace deletes the whole character before the caret, and Delete the
+/// one after it. Left and Right move the caret one character, Home to the
+/// text's start and End to its end. Other keys change nothing. A caret past
+/// the text's end, or inside a character, is first moved back to the
+/// boundary before it.
+///
+/// @param[in,out] field the text and its caret
+/// @param pressed the key
+/// @return true when the text or the caret changed
+bool edit_text(TextField& field, Key pressed);
 
 /// The fraction of a row a turn of the wheel has not yet scrolled.
 struct WheelCarry {

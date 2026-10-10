@@ -80,13 +80,15 @@ struct Runtime::LanguageState {
     std::vector<std::unique_ptr<FallbackTable>> fallback_tables;
 
     /// The language packs of the mod played (its languages folder), read at
-    /// start; they come before the game data.
+    /// start and again when a pack is installed; they come before the game data.
     std::vector<std::unique_ptr<LoadedLanguagePack>> mod_packs;
     /// The player's language packs (Languages in their own folder), read at
-    /// start; they come after the game data, before the engine's.
+    /// start and again when a pack is installed; they come after the game
+    /// data, before the engine's.
     std::vector<std::unique_ptr<LoadedLanguagePack>> player_packs;
     /// The engine's own language packs (the languages folder beside the
-    /// game's other files), read at start; they come last.
+    /// game's other files), read at start and again when a pack is installed;
+    /// they come last.
     std::vector<std::unique_ptr<LoadedLanguagePack>> engine_packs;
     /// The packs each of words is looked up in, set with the language.
     std::vector<oa::data::languages::PackLayer> layers;

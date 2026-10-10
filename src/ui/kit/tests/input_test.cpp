@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The kit's pointer, finger reach, keys, two-dimensional focus, wheel and
-// control names.
+// The kit's pointer, finger reach, keys, two-dimensional focus, wheel,
+// control names and text editing.
 //
 // The wheel numbers were computed with the settings dialog's dialog_wheel at
 // 5f7fdbd8, the start of this branch, by a throwaway program that was not
@@ -12,6 +12,8 @@
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/input.hpp"
 
+#include <cstddef>
+#include <initializer_list>
 #include <limits>
 #include <stdint.h>
 #include <string>
@@ -821,6 +823,231 @@ void automation_reads_the_named_controls() {
     OA_CHECK(kit::control_named(list, "missing") == kit::no_control);
 }
 
+/// The keys keep the settings dialog's values up to No, and the editing
+/// keys follow it.
+void the_keys_keep_their_values() {
+    OA_CHECK(static_cast<int>(kit::Key::enter) == 0);
+    OA_CHECK(static_cast<int>(kit::Key::escape) == 1);
+    OA_CHECK(static_cast<int>(kit::Key::up) == 2);
+    OA_CHECK(static_cast<int>(kit::Key::down) == 3);
+    OA_CHECK(static_cast<int>(kit::Key::left) == 4);
+    OA_CHECK(static_cast<int>(kit::Key::right) == 5);
+    OA_CHECK(static_cast<int>(kit::Key::space) == 6);
+    OA_CHECK(static_cast<int>(kit::Key::tab) == 7);
+    OA_CHECK(static_cast<int>(kit::Key::back_tab) == 8);
+    OA_CHECK(static_cast<int>(kit::Key::page_up) == 9);
+    OA_CHECK(static_cast<int>(kit::Key::page_down) == 10);
+    OA_CHECK(static_cast<int>(kit::Key::home) == 11);
+    OA_CHECK(static_cast<int>(kit::Key::end) == 12);
+    OA_CHECK(static_cast<int>(kit::Key::yes) == 13);
+    OA_CHECK(static_cast<int>(kit::Key::no) == 14);
+    OA_CHECK(static_cast<int>(kit::Key::backspace) == 15);
+    OA_CHECK(static_cast<int>(kit::Key::delete_forward) == 16);
+}
+
+/// Tells whether a field holds a text with its caret at a byte.
+///
+/// @param field the field
+/// @param text the text it should hold
+/// @param caret where its caret should stand, in bytes
+/// @return true when both match
+bool holds(const kit::TextField& field, const std::string& text, std::size_t caret) {
+    return field.text == text && field.caret == caret;
+}
+
+/// Typed text goes in at the caret, which moves past it.
+void typing_inserts_at_the_caret() {
+    kit::TextField field;
+    OA_CHECK(kit::insert_text(field, "ridge"));
+    OA_CHECK(holds(field, "ridge", 5));
+    field.caret = 0;
+    OA_CHECK(kit::insert_text(field, "the "));
+    OA_CHECK(holds(field, "the ridge", 4));
+    field.caret = field.text.size();
+    // e acute, two bytes; a Chinese character, three; a face, four.
+    OA_CHECK(kit::insert_text(field, "\xc3\xa9"));
+    OA_CHECK(kit::insert_text(field, "\xe4\xb8\xad"));
+    OA_CHECK(kit::insert_text(field, "\xf0\x9f\x98\x80"));
+    OA_CHECK(holds(field, "the ridge\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80", 18));
+    // Nothing to insert changes nothing.
+    OA_CHECK(!kit::insert_text(field, ""));
+    OA_CHECK(holds(field, "the ridge\xc3\xa9\xe4\xb8\xad\xf0\x9f\x98\x80", 18));
+}
+
+/// A field refuses ill-formed UTF-8 and control characters whole.
+void typing_refuses_what_is_not_text() {
+    const std::string refused[] = {
+        std::string("a\x01", 2), // a C0 control character
+        "a\nb",                  // a new line
+        "\t",                    // a tab
+        "\x7f",                  // DEL
+        std::string(1, '\0'),    // NUL
+        "\xc2\x85",              // U+0085, a C1 control character
+        "\xc2\x9f",              // U+009F, the last of them
+        "\xff",                  // a byte that starts nothing
+        "\x80",                  // a continuation byte alone
+        "ab\xe4\xb8",            // a cut sequence
+        "\xc0\xaf",              // an overlong slash
+        "\xe0\x80\xaf",          // another
+        "\xed\xa0\x80",          // a surrogate
+        "\xf4\x90\x80\x80",      // past U+10FFFF
+    };
+    for (const std::string& text : refused) {
+        kit::TextField field{"ridge", 2};
+        OA_CHECK(!kit::insert_text(field, text));
+        OA_CHECK(holds(field, "ridge", 2));
+    }
+    // U+00A0, the first character after the C1 controls, is taken.
+    kit::TextField field{"ab", 1};
+    OA_CHECK(kit::insert_text(field, "\xc2\xa0"));
+    OA_CHECK(holds(
+        field,
+        "a\xc2\xa0"
+        "b",
+        3
+    ));
+}
+
+/// A caret inside a character, or past the text, moves back to a boundary first.
+void a_stray_caret_settles_on_a_boundary() {
+    kit::TextField inside{"\xe4\xb8\xad", 2};
+    OA_CHECK(kit::insert_text(inside, "a"));
+    OA_CHECK(holds(inside, "a\xe4\xb8\xad", 1));
+
+    kit::TextField past{"ab", 9};
+    OA_CHECK(kit::insert_text(past, "c"));
+    OA_CHECK(holds(past, "abc", 3));
+
+    kit::TextField moved{"x\xe4\xb8\xad", 3};
+    OA_CHECK(kit::edit_text(moved, kit::Key::space));
+    OA_CHECK(holds(moved, "x\xe4\xb8\xad", 1));
+    kit::TextField deleted{"x\xe4\xb8\xady", 2};
+    OA_CHECK(kit::edit_text(deleted, kit::Key::delete_forward));
+    OA_CHECK(holds(deleted, "xy", 1));
+}
+
+/// The editing keys take whole characters and move the caret by them.
+void editing_takes_whole_characters() {
+    // a, a Chinese character (3 bytes), a face (4 bytes), b.
+    const std::string text = "a\xe4\xb8\xad\xf0\x9f\x98\x80"
+                             "b";
+    kit::TextField field{text, 0};
+    OA_CHECK(kit::edit_text(field, kit::Key::right));
+    OA_CHECK(field.caret == 1);
+    OA_CHECK(kit::edit_text(field, kit::Key::right));
+    OA_CHECK(field.caret == 4);
+    OA_CHECK(kit::edit_text(field, kit::Key::right));
+    OA_CHECK(field.caret == 8);
+    OA_CHECK(kit::edit_text(field, kit::Key::right));
+    OA_CHECK(field.caret == 9);
+    OA_CHECK(!kit::edit_text(field, kit::Key::right));
+    OA_CHECK(field.caret == 9);
+    OA_CHECK(kit::edit_text(field, kit::Key::left));
+    OA_CHECK(field.caret == 8);
+    OA_CHECK(kit::edit_text(field, kit::Key::left));
+    OA_CHECK(field.caret == 4);
+    OA_CHECK(kit::edit_text(field, kit::Key::home));
+    OA_CHECK(field.caret == 0);
+    OA_CHECK(!kit::edit_text(field, kit::Key::left));
+    OA_CHECK(!kit::edit_text(field, kit::Key::home));
+    OA_CHECK(kit::edit_text(field, kit::Key::end));
+    OA_CHECK(field.caret == 9);
+    OA_CHECK(!kit::edit_text(field, kit::Key::end));
+
+    OA_CHECK(!kit::edit_text(field, kit::Key::delete_forward));
+    OA_CHECK(kit::edit_text(field, kit::Key::left));
+    OA_CHECK(kit::edit_text(field, kit::Key::backspace));
+    OA_CHECK(holds(
+        field,
+        "a\xe4\xb8\xad"
+        "b",
+        4
+    ));
+    OA_CHECK(kit::edit_text(field, kit::Key::backspace));
+    OA_CHECK(holds(field, "ab", 1));
+    OA_CHECK(kit::edit_text(field, kit::Key::home));
+    OA_CHECK(!kit::edit_text(field, kit::Key::backspace));
+    OA_CHECK(kit::edit_text(field, kit::Key::delete_forward));
+    OA_CHECK(holds(field, "b", 0));
+    OA_CHECK(kit::edit_text(field, kit::Key::delete_forward));
+    OA_CHECK(holds(field, "", 0));
+    OA_CHECK(!kit::edit_text(field, kit::Key::delete_forward));
+    OA_CHECK(!kit::edit_text(field, kit::Key::backspace));
+
+    // Keys that do not edit leave the field as it is.
+    kit::TextField other{"ab", 1};
+    for (const kit::Key pressed :
+         {kit::Key::up,
+          kit::Key::down,
+          kit::Key::enter,
+          kit::Key::escape,
+          kit::Key::tab,
+          kit::Key::page_up,
+          kit::Key::yes,
+          kit::Key::no}) {
+        OA_CHECK(!kit::edit_text(other, pressed));
+        OA_CHECK(holds(other, "ab", 1));
+    }
+}
+
+/// The editing keys, Home and End go to a focused text field; Enter goes to
+/// a focused tab.
+void a_text_field_and_a_tab_take_their_keys() {
+    kit::DisplayList list;
+    kit::Control field = placed(1, {0, 0, 100, 16});
+    field.kind = kit::ControlKind::text_field;
+    field.steps = true;
+    list.controls.push_back(field);
+    kit::Control button = placed(2, {0, 20, 40, 16});
+    button.kind = kit::ControlKind::button;
+    list.controls.push_back(button);
+    kit::Control tab = placed(3, {0, 40, 40, 18});
+    tab.kind = kit::ControlKind::tab;
+    list.controls.push_back(tab);
+    list.tab_order = {1, 2, 3};
+
+    kit::Interaction interaction;
+    interaction.focus_shown = true;
+    interaction.focused = 1;
+    for (const kit::Key pressed :
+         {kit::Key::left,
+          kit::Key::right,
+          kit::Key::home,
+          kit::Key::end,
+          kit::Key::backspace,
+          kit::Key::delete_forward,
+          kit::Key::space}) {
+        const kit::KeyOutcome outcome = kit::key(interaction, list, pressed);
+        OA_CHECK(outcome.result == kit::KeyResult::to_control);
+        OA_CHECK(outcome.control == 1 && outcome.key == pressed);
+        OA_CHECK(interaction.focused == 1);
+    }
+    OA_CHECK(kit::key(interaction, list, kit::Key::enter).result == kit::KeyResult::accept);
+    OA_CHECK(kit::key(interaction, list, kit::Key::page_down).result == kit::KeyResult::scroll);
+    const kit::KeyOutcome down = kit::key(interaction, list, kit::Key::down);
+    OA_CHECK(down.result == kit::KeyResult::redraw && down.control == 2);
+
+    // On a button, Home and End scroll and the editing keys do nothing.
+    OA_CHECK(kit::key(interaction, list, kit::Key::home).result == kit::KeyResult::scroll);
+    OA_CHECK(kit::key(interaction, list, kit::Key::end).result == kit::KeyResult::scroll);
+    const kit::KeyOutcome back = kit::key(interaction, list, kit::Key::backspace);
+    OA_CHECK(back.result == kit::KeyResult::none && back.control == kit::no_control);
+    OA_CHECK(kit::key(interaction, list, kit::Key::delete_forward).result == kit::KeyResult::none);
+    OA_CHECK(interaction.focused == 2);
+
+    // A tab takes Enter and Space; Left and Right move the focus instead.
+    interaction.focused = 3;
+    const kit::KeyOutcome entered = kit::key(interaction, list, kit::Key::enter);
+    OA_CHECK(entered.result == kit::KeyResult::to_control && entered.control == 3);
+    OA_CHECK(kit::key(interaction, list, kit::Key::space).result == kit::KeyResult::to_control);
+    OA_CHECK(kit::key(interaction, list, kit::Key::right).result == kit::KeyResult::none);
+
+    // With no focus shown, the editing keys do nothing and show nothing.
+    kit::Interaction fresh;
+    OA_CHECK(kit::key(fresh, list, kit::Key::backspace).result == kit::KeyResult::none);
+    OA_CHECK(!fresh.focus_shown);
+}
+
 } // namespace
 
 int main() {
@@ -850,5 +1077,11 @@ int main() {
     the_wheel_keeps_the_dialogs_fractions();
     a_name_must_be_present_well_formed_and_unique();
     automation_reads_the_named_controls();
+    the_keys_keep_their_values();
+    typing_inserts_at_the_caret();
+    typing_refuses_what_is_not_text();
+    a_stray_caret_settles_on_a_boundary();
+    editing_takes_whole_characters();
+    a_text_field_and_a_tab_take_their_keys();
     return oa::test::check_exit_status();
 }

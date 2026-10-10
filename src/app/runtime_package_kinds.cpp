@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // What each kind of package asks of the running game. A kind is named in
-// one branch of each function: a mod package (oamod) and a map pack (oamap).
+// one branch of each function: a mod package (oamod), a map pack (oamap)
+// and a language pack (oalang).
 
 #include "map_packs.hpp"
 #include "package_paths.hpp"
@@ -74,6 +75,10 @@ bool Runtime::package_target_in_use(
                same_folder(kept_path(folder), kept_path(options_.game_folders.front()));
     if (kind.name == "oamap")
         return false;
+    // A pack is read whole when packs are read. Nothing holds its folder
+    // open, and nothing waits for the run to end.
+    if (kind.name == "oalang")
+        return false;
     return false;
 }
 
@@ -81,6 +86,8 @@ bool Runtime::package_offers_play(const package_install::PackageKind& kind) cons
     if (kind.name == "oamod")
         return options_.mod_dir.empty() && !options_.base_game;
     if (kind.name == "oamap")
+        return false;
+    if (kind.name == "oalang")
         return false;
     return false;
 }
@@ -90,6 +97,10 @@ void Runtime::package_changed(const package_install::PackageKind& kind, const fs
         list_offered_mods();
     if (kind.name == "oamap")
         map_packs().refresh();
+    // A pack is read whole. Nothing holds its folder, so the lists, the
+    // catalogue and the font faces are replaced in place.
+    if (kind.name == "oalang")
+        reload_language_packs();
 }
 
 package_install::PackageOptions
@@ -108,6 +119,9 @@ Runtime::package_options(const package_install::PackageKind& kind) const {
         map_pack_state_->hooks.check_base_fit = &check_runtime_base_fit;
         options.context = &map_pack_state_->hooks;
     }
+    // A language pack's hooks read the package themselves and need no context.
+    if (kind.name == "oalang")
+        return options;
     return options;
 }
 

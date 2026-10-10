@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Pointer, finger reach, keys, two-dimensional focus and the wheel, over a
-// kit screen's display list.
+// kit screen's display list, and the editing of a text field.
 
 #include "oa/ui/kit/input.hpp"
+
+#include "oa/present/game_text.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -451,21 +453,30 @@ KeyOutcome key(Interaction& interaction, const DisplayList& list, Key pressed) {
     const bool shown = interaction.focus_shown && interaction.focused != no_control;
     const Control* focused = shown ? control_of(list, interaction.focused) : nullptr;
 
+    const bool on_field = focused != nullptr && focused->kind == ControlKind::text_field;
     switch (pressed) {
     case Key::escape:
         return outcome_of(KeyResult::cancel, no_control, pressed);
     case Key::yes:
     case Key::no:
         return outcome_of(KeyResult::none, no_control, pressed);
-    case Key::page_up:
-    case Key::page_down:
+    case Key::backspace:
+    case Key::delete_forward:
+        if (on_field)
+            return outcome_of(KeyResult::to_control, interaction.focused, pressed);
+        return outcome_of(KeyResult::none, no_control, pressed);
     case Key::home:
     case Key::end:
+        if (on_field)
+            return outcome_of(KeyResult::to_control, interaction.focused, pressed);
+        return outcome_of(KeyResult::scroll, shown ? interaction.focused : no_control, pressed);
+    case Key::page_up:
+    case Key::page_down:
         return outcome_of(KeyResult::scroll, shown ? interaction.focused : no_control, pressed);
     case Key::enter:
         if (focused != nullptr &&
             (focused->kind == ControlKind::button || focused->kind == ControlKind::link ||
-             focused->kind == ControlKind::list_item))
+             focused->kind == ControlKind::list_item || focused->kind == ControlKind::tab))
             return outcome_of(KeyResult::to_control, interaction.focused, pressed);
         return outcome_of(KeyResult::accept, no_control, pressed);
     case Key::up:
@@ -514,6 +525,136 @@ KeyOutcome key(Interaction& interaction, const DisplayList& list, Key pressed) {
     interaction.focused = next;
     interaction.focus_shown = true;
     return outcome_of(KeyResult::redraw, next, pressed);
+}
+
+namespace {
+
+/// The first character that is not a control character.
+constexpr char32_t kFirstPrintable = 0x20;
+/// DEL, the control character at the end of ASCII.
+constexpr char32_t kDeleteCharacter = 0x7f;
+/// The first byte of a sequence of more than one byte, and the first
+/// character such a sequence holds.
+constexpr unsigned char kFirstSequenceByte = 0x80;
+/// The control characters after ASCII, U+0080 to U+009F.
+constexpr char32_t kFirstLatinControl = 0x80;
+constexpr char32_t kLastLatinControl = 0x9f;
+
+/// Tells whether a character is a control character a field refuses.
+///
+/// @param character the character
+/// @return true for U+0000 to U+001F, U+007F and U+0080 to U+009F
+[[nodiscard]] bool control_character(char32_t character) noexcept {
+    return character < kFirstPrintable || character == kDeleteCharacter ||
+           (character >= kFirstLatinControl && character <= kLastLatinControl);
+}
+
+/// Tells whether a text is well-formed UTF-8 without a control character.
+///
+/// @param text the text
+/// @return true when every character is well formed and none is a control character
+[[nodiscard]] bool typeable(std::string_view text) noexcept {
+    for (std::size_t at = 0; at < text.size();) {
+        const auto first = static_cast<unsigned char>(text[at]);
+        if (first < kFirstSequenceByte) {
+            if (control_character(first))
+                return false;
+            ++at;
+            continue;
+        }
+        const oa::present::TextCharacter character = oa::present::utf8_sequence(text.substr(at));
+        if (!character.utf8_sequence || character.bytes == 0 ||
+            control_character(character.code_point))
+            return false;
+        at += character.bytes;
+    }
+    return true;
+}
+
+/// Moves a field's caret back onto the text: to its end when past it, and
+/// otherwise to the start of the character it is inside.
+///
+/// @param[in,out] field the text and its caret
+void settle_caret(TextField& field) noexcept {
+    field.caret = std::min(field.caret, field.text.size());
+    while (field.caret > 0 && field.caret < field.text.size() &&
+           continuation_byte(field.text[field.caret]))
+        --field.caret;
+}
+
+/// Returns the start of the character before a byte.
+///
+/// @param text the text
+/// @param at a character boundary, above 0
+/// @return the previous character's first byte
+[[nodiscard]] std::size_t previous_boundary(std::string_view text, std::size_t at) noexcept {
+    std::size_t before = at - 1;
+    while (before > 0 && continuation_byte(text[before]))
+        --before;
+    return before;
+}
+
+/// Returns the boundary after the character at a byte.
+///
+/// @param text the text
+/// @param at a character boundary before the text's end
+/// @return the next character's first byte, or the text's end
+[[nodiscard]] std::size_t next_boundary(std::string_view text, std::size_t at) noexcept {
+    std::size_t after = at + 1;
+    while (after < text.size() && continuation_byte(text[after]))
+        ++after;
+    return after;
+}
+
+} // namespace
+
+bool insert_text(TextField& field, std::string_view utf8) {
+    if (utf8.empty() || !typeable(utf8))
+        return false;
+    settle_caret(field);
+    field.text.insert(field.caret, utf8);
+    field.caret += utf8.size();
+    return true;
+}
+
+bool edit_text(TextField& field, Key pressed) {
+    const std::size_t was = field.caret;
+    settle_caret(field);
+    const std::string_view text = field.text;
+    switch (pressed) {
+    case Key::backspace:
+        if (field.caret > 0) {
+            const std::size_t start = previous_boundary(text, field.caret);
+            field.text.erase(start, field.caret - start);
+            field.caret = start;
+            return true;
+        }
+        break;
+    case Key::delete_forward:
+        if (field.caret < field.text.size()) {
+            const std::size_t end = next_boundary(text, field.caret);
+            field.text.erase(field.caret, end - field.caret);
+            return true;
+        }
+        break;
+    case Key::left:
+        if (field.caret > 0)
+            field.caret = previous_boundary(text, field.caret);
+        break;
+    case Key::right:
+        if (field.caret < field.text.size())
+            field.caret = next_boundary(text, field.caret);
+        break;
+    case Key::home:
+        field.caret = 0;
+        break;
+    case Key::end:
+        field.caret = field.text.size();
+        break;
+    default:
+        break;
+    }
+    return field.caret != was;
 }
 
 int32_t wheel_offset(

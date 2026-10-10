@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The settings dialog's controls, drawn for the crisp backend. The arithmetic
-// is the dialog's, moved here unchanged.
+// is the dialog's, moved here unchanged. paint draws every role, the
+// controls of controls.hpp among them.
 
 #include "oa/ui/kit/components.hpp"
 
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/controls.hpp"
 
 #include "oa/ui/frontend_renderer/artless.hpp"
 
@@ -82,12 +84,29 @@ constexpr std::array<uint8_t, 7 * 4> kChoiceArrowBits{
     0, 0, 0, 1, 0, 0, 0, //
 };
 
+/// A search field's magnifier, 7 by 7, row by row.
+constexpr std::array<uint8_t, 7 * 7> kMagnifierBits{
+    0, 1, 1, 1, 0, 0, 0, //
+    1, 0, 0, 0, 1, 0, 0, //
+    1, 0, 0, 0, 1, 0, 0, //
+    1, 0, 0, 0, 1, 0, 0, //
+    0, 1, 1, 1, 1, 0, 0, //
+    0, 0, 0, 0, 0, 1, 0, //
+    0, 0, 0, 0, 0, 0, 1, //
+};
+
 constexpr renderer::Mark kSmallMark{9, 7, kSmallMarkBits};
 constexpr renderer::Mark kLargeMark{12, 9, kLargeMarkBits};
 constexpr renderer::Mark kPadlock{5, 7, kPadlockBits};
 constexpr renderer::Mark kClosedArrow{5, 5, kClosedArrowBits};
 constexpr renderer::Mark kOpenArrow{5, 5, kOpenArrowBits};
 constexpr renderer::Mark kChoiceArrow{7, 4, kChoiceArrowBits};
+constexpr renderer::Mark kMagnifier{7, 7, kMagnifierBits};
+static_assert(
+    kMagnifier.width == compact_metrics.magnifier_side &&
+        kMagnifier.height == compact_metrics.magnifier_side,
+    "the magnifier is magnifier_side square"
+);
 
 /// The chosen menu item's marker, the same mark the section list uses.
 constexpr int32_t kChosenMarkerOffset = 5;
@@ -113,6 +132,8 @@ const renderer::Mark& bits_of(Mark mark) noexcept {
         return kOpenArrow;
     case Mark::choice_arrow:
         return kChoiceArrow;
+    case Mark::magnifier:
+        return kMagnifier;
     }
     return kSmallMark;
 }
@@ -336,6 +357,34 @@ void paint_item(const Canvas& canvas, const Item& item) {
     case Role::locked_fade:
         draw_locked_fade(drawn, item.rect);
         break;
+    case Role::list_row:
+        if (const auto* look = std::get_if<ListRowLook>(&item.look))
+            draw_list_row(drawn, item.rect, *look);
+        break;
+    case Role::chip:
+        if (const auto* look = std::get_if<ChipLook>(&item.look))
+            draw_chip(drawn, item.rect, *look);
+        break;
+    case Role::field:
+        if (const auto* look = std::get_if<SearchLook>(&item.look))
+            draw_search(drawn, item.rect, *look);
+        break;
+    case Role::tabs:
+        if (const auto* look = std::get_if<TabsLook>(&item.look))
+            draw_tabs(drawn, item.rect, *look);
+        break;
+    case Role::card:
+        if (const auto* look = std::get_if<CardLook>(&item.look))
+            draw_card(drawn, item.rect, *look);
+        break;
+    case Role::hover_card:
+        if (const auto* look = std::get_if<HoverCardLook>(&item.look))
+            draw_hover_card(drawn, item.rect, *look);
+        break;
+    case Role::link:
+        if (const auto* look = std::get_if<LinkLook>(&item.look))
+            draw_link(drawn, item.rect, *look);
+        break;
     case Role::progress:
         if (const auto* look = std::get_if<ProgressLook>(&item.look))
             draw_progress(drawn, item.rect, look->done, look->whole);
@@ -360,6 +409,11 @@ Canvas clipped(const Canvas& canvas, const Rect& rect) {
     if (out.placement.clip.width == 0 || out.placement.clip.height == 0)
         out.placement.scale = 0;
     return out;
+}
+
+Point mark_size(Mark mark) noexcept {
+    const renderer::Mark& bits = bits_of(mark);
+    return {bits.width, bits.height};
 }
 
 void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink) {
