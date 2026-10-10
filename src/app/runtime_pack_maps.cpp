@@ -10,6 +10,7 @@
 
 #include "oa/app/runtime.hpp"
 #include "oa/data/defs/layout.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/data/map_fit/map_fit.hpp"
 #include "oa/data/map_pack/manifest.hpp"
 #include "oa/data/map_pack/map_name.hpp"
@@ -20,6 +21,7 @@
 #include <cstddef>
 #include <exception>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -59,6 +61,12 @@ struct Runtime::PackMapState {
 
 namespace {
 
+/// The interface's words for a refused map; {game} and {reason} are filled.
+constexpr std::string_view kRefusedText = "Doesn't fit {game}: {reason}";
+
+/// The interface's name for the base game, when no mod is played.
+constexpr std::string_view kBaseGameText = "Total Annihilation 3.1c";
+
 /// The number of hex digits of a pack's SHA-256 in its layer's label.
 constexpr std::size_t kLabelDigestDigits = 8;
 
@@ -86,6 +94,23 @@ fit::Fit unreadable_fit(const std::string& subject, std::string detail) {
     fit::Fit unfit;
     unfit.failures.push_back({fit::Rule::complete, subject, std::move(detail)});
     return unfit;
+}
+
+/// Fills each "{name}" of a text with its value.
+///
+/// @param text the text
+/// @param fields each field's name and value
+/// @return the text with its fields filled
+std::string filled(
+    std::string text, std::initializer_list<std::pair<std::string_view, std::string_view>> fields
+) {
+    for (const auto& [name, value] : fields) {
+        const std::string field = "{" + std::string(name) + "}";
+        for (std::size_t at = text.find(field); at != std::string::npos;
+             at = text.find(field, at + value.size()))
+            text.replace(at, field.size(), value);
+    }
+    return text;
 }
 
 } // namespace
@@ -228,6 +253,39 @@ std::optional<std::string> Runtime::pack_map_refusal(std::string_view name) cons
     if (found == pack_map_state_->refusals.end())
         return std::nullopt;
     return found->second;
+}
+
+std::optional<std::string> Runtime::map_refusal(std::string_view name) {
+    return pack_map_refusal(name);
+}
+
+void Runtime::show_refused_map(std::string_view name, std::string_view reason) {
+    const PackMap* map = pack_map(name);
+    set_modal_text("MAPNAME", map != nullptr ? std::string_view(map->title) : name, 0);
+    set_modal_text(
+        "SIZE",
+        map != nullptr
+            ? map->size + "  " + translate_ui("Players") + ": " + std::to_string(map->players)
+            : std::string(),
+        0
+    );
+    const auto shown = picture();
+    if (shown.value != 0) {
+        release_picture(shown);
+        set_picture({});
+    }
+    const std::string game = options_.mod_profile && !options_.mod_profile->name.empty()
+                                 ? options_.mod_profile->name
+                                 : std::string(oa::data::languages::interface_text(kBaseGameText));
+    set_modal_text(
+        "DESCRIPTION",
+        filled(
+            std::string(oa::data::languages::interface_text(kRefusedText)),
+            {{"game", game}, {"reason", reason}}
+        ),
+        0
+    );
+    invalidate_menu();
 }
 
 } // namespace oa::app

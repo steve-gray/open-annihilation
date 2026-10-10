@@ -2384,7 +2384,9 @@ The skirmish map list (`discover_first_map`) lists the base maps as the
 scan of `Maps/*.ota` finds them, then every installed pack map by its name,
 `<stem>@<id>`, in the index's order. The pack maps come from the packs'
 manifests, read once when the list is first made: no pack map's OTA or TNT
-is opened to list it. The first base map stays the default selection.
+is opened to list it. The first base map stays the default selection. The
+map picker (SELMAP) sorts the base maps as before and the pack maps after
+them, so a base map keeps its row.
 
 Only one map's files are ever mounted (`runtime_pack_maps.cpp`). Choosing a
 pack map (`select_map`, from the picker, the skirmish setup, a saved game,
@@ -2397,8 +2399,11 @@ game's names are collected once for the run, whose archives never change,
 and the result is kept for each pack's SHA-256 and map stem. Once mounted,
 the files are checked again as the store shows them, whatever the kept
 check found, since the pack's folder may have changed on disk; a failure
-there unmounts them. A map that fails either check is refused: selecting
-it fails as a map with a missing file does, and it stays in the list. A
+there unmounts them. A map that fails either check is refused: it stays in
+the list, highlighting it shows its title, its size and players and
+"Doesn't fit {game}: {reason}", where the game is the mod played or Total
+Annihilation 3.1c and the reason is the first failure, with no picture,
+and choosing it says why in a message box and keeps the earlier map. A
 start on a refused map fails as other loads do. The layer stays while that
 map is selected and through its match. It is unmounted when another map is
 chosen, at the end of the match (`leave_match`) and whenever the main menu

@@ -13091,6 +13091,20 @@ class Runtime final : public menu::Host,
     ///     two-player schema or it is a pack map that does not fit
     int32_t select_map(std::string_view name) override;
 
+    /// Returns why a map in the picker cannot be chosen.
+    ///
+    /// @param name map name
+    /// @return the reason a pack map was refused; nothing for any other map
+    std::optional<std::string> map_refusal(std::string_view name) override;
+
+    /// Shows a refused pack map in the picker: MAPNAME its title, SIZE its
+    /// size and players, DESCRIPTION "Doesn't fit {game}: {reason}", where
+    /// the game is the mod played or Total Annihilation 3.1c, and no picture.
+    ///
+    /// @param name map name
+    /// @param reason why the map was refused
+    void show_refused_map(std::string_view name, std::string_view reason) override;
+
     /// Returns how many players the selected map holds for the roster's player count, keeping its
     /// start markers.
     ///
