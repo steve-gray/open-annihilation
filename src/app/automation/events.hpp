@@ -28,7 +28,7 @@
 //              that the endpoint reads reports units or resources given
 #pragma once
 
-#include "oa/app/automation/json.hpp"
+#include "oa/formats/json.hpp"
 #include "oa/core/player.h"
 
 #include <array>
@@ -47,6 +47,12 @@ struct Lobby;
 }
 
 namespace oa::app::automation {
+
+// A source can include more than one of these headers, so each name is declared once.
+#ifndef OA_APP_AUTOMATION_USING_JSON_WRITER
+#define OA_APP_AUTOMATION_USING_JSON_WRITER
+using oa::formats::json::JsonWriter;
+#endif
 
 /// The kinds of event, as bits of a subscription (Endpoint::subscribe).
 namespace event_kind {

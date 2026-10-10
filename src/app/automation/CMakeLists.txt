@@ -6,12 +6,14 @@
 # oa-app-automation, which the top-level CMakeLists.txt registers with
 # oa_add_extension in every build.
 
-# The automation protocol's codec: its frames and their JSON.
-add_library(oa-app-automation-protocol STATIC protocol.cpp json.cpp)
+# The automation protocol's frames. Their JSON is oa-formats-json, linked
+# publicly so every target that reached it through this library still does.
+add_library(oa-app-automation-protocol STATIC protocol.cpp)
 add_library(oa::app::automation_protocol ALIAS oa-app-automation-protocol)
 target_include_directories(oa-app-automation-protocol PUBLIC include)
 target_compile_features(oa-app-automation-protocol PUBLIC cxx_std_20)
-target_link_libraries(oa-app-automation-protocol PRIVATE ZLIB::ZLIB oa-options)
+target_link_libraries(oa-app-automation-protocol PUBLIC oa-formats-json
+  PRIVATE ZLIB::ZLIB oa-options)
 
 # The endpoint's options and their checks, and its token, which their
 # check runs without a running game.

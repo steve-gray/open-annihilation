@@ -6,9 +6,9 @@
 // discs, the radial menu's wedges, every icon inside its box, coverage maps
 // in their colour, lines of text from the bundled fonts when they lie
 // beside the test, and a gamepad glyph of every shape inside its box.
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 #include "oa/test/check.hpp"
-#include "pad_glyphs.hpp"
+#include "oa/ui/paint/pad_glyphs.hpp"
 
 #include <array>
 #include <cmath>
@@ -20,7 +20,7 @@
 
 namespace {
 
-namespace paint = oa::app::touch_paint;
+namespace paint = oa::ui::paint;
 namespace text_font = oa::platform::text_font;
 
 constexpr paint::Rgba red{200, 0, 0, 255};
@@ -299,7 +299,7 @@ void coverage_paints_in_its_colour() {
 void text_paints_in_its_colour() {
     auto fonts = text_font::FontStack::open(text_font::bundled_font_directory());
     if (!fonts) {
-        std::printf("app-touch-paint: no fonts beside the test, so FreeType text was not drawn\n");
+        std::printf("ui-paint: no fonts beside the test, so FreeType text was not drawn\n");
         return;
     }
     const auto line = paint::draw_line(*fonts, "QUEUE", 20, true);
@@ -404,7 +404,7 @@ int painted_inside(const paint::Canvas& canvas, paint::Area box, bool& outside) 
 /// stay inside the width chord_width gives.
 void pad_glyphs_paint_inside_their_boxes() {
     namespace pad = oa::ui::pad_controls;
-    namespace glyphs = oa::app::pad_glyphs;
+    namespace glyphs = oa::ui::paint::pad_glyphs;
     auto fonts = text_font::FontStack::open(text_font::bundled_font_directory());
     const paint::Rgba ink{0x1b, 0x1e, 0x19, 255};
     const paint::Rgba fill{0xf2, 0xf4, 0xee, 255};

@@ -11,7 +11,7 @@
 #include "events.hpp"
 #include "reports.hpp"
 
-#include "oa/app/automation/json.hpp"
+#include "oa/formats/json.hpp"
 #include "oa/core/world.h"
 #include "oa/sim/scenario/outcome.hpp"
 #include "oa/test/check.hpp"
@@ -29,24 +29,25 @@ namespace {
 
 namespace automation = oa::app::automation;
 namespace event_kind = automation::event_kind;
+namespace json = oa::formats::json;
 namespace mp = oa::ui::frontend_multiplayer;
 namespace outcome_flag = oa::sim::scenario::outcome_flag;
 
-using automation::Json;
-using automation::JsonWriter;
+using json::Json;
+using json::JsonWriter;
 
 /// Returns the object a writer's members make.
 ///
 /// @param members writes the members into the open object
 /// @return the object as the JSON reader reads it
 Json object_of(const std::function<void(JsonWriter&)>& members) {
-    JsonWriter json;
-    json.begin_object();
-    members(json);
-    json.end_object();
-    automation::JsonError error;
-    const auto parsed = automation::parse_json(json.text(), error);
-    OA_CHECK(parsed && parsed->type() == automation::JsonType::object);
+    JsonWriter writer;
+    writer.begin_object();
+    members(writer);
+    writer.end_object();
+    json::JsonError error;
+    const auto parsed = json::parse_json(writer.text(), error);
+    OA_CHECK(parsed && parsed->type() == json::JsonType::object);
     return parsed ? *parsed : Json{};
 }
 
@@ -88,7 +89,7 @@ bool is(const Json& object, std::string_view name, bool value) {
 /// @return true when it is
 bool is_null(const Json& object, std::string_view name) {
     const Json* member = object.find(name);
-    return member != nullptr && member->type() == automation::JsonType::null;
+    return member != nullptr && member->type() == json::JsonType::null;
 }
 
 /// Copies text into a fixed field, zero-filled.
@@ -192,8 +193,8 @@ automation::EventHooks hooks_into(Sent& sent) {
     };
     hooks.send = [](void* context, JsonWriter& event) {
         event.end_object();
-        automation::JsonError error;
-        if (auto parsed = automation::parse_json(event.text(), error))
+        json::JsonError error;
+        if (auto parsed = json::parse_json(event.text(), error))
             static_cast<Sent*>(context)->events.push_back(std::move(*parsed));
     };
     return hooks;

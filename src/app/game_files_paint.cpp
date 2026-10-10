@@ -28,14 +28,15 @@ namespace oa::app {
 
 namespace {
 
+namespace paint = oa::ui::paint;
 namespace gf = oa::ui::game_files;
 namespace text_font = oa::platform::text_font;
 namespace renderer = oa::ui::frontend_renderer;
-using touch_paint::Area;
-using touch_paint::Box;
-using touch_paint::Painter;
-using touch_paint::Rgba;
-using touch_paint::Spot;
+using paint::Area;
+using paint::Box;
+using paint::Painter;
+using paint::Rgba;
+using paint::Spot;
 
 /// The header bar's fill, a little darker than the screen behind it.
 constexpr gf::Colour header_colour{0x14, 0x16, 0x12};
@@ -128,7 +129,7 @@ class LayoutPainter {
     /// @param px_per_point canvas pixels per point
     /// @param icon the Open Annihilation icon; empty draws the OA mark
     LayoutPainter(
-        touch_paint::Canvas& canvas,
+        paint::Canvas& canvas,
         text_font::FontStack* fonts,
         float px_per_point,
         const renderer::RgbaPicture& icon
@@ -292,7 +293,7 @@ class LayoutPainter {
     [[nodiscard]] text_font::LineMetrics metrics(int pixel_size, bool bold) const {
         if (fonts_ == nullptr || pixel_size <= 0)
             return {};
-        return touch_paint::line_metrics(*fonts_, pixel_size, bold);
+        return paint::line_metrics(*fonts_, pixel_size, bold);
     }
 
     /// Paints an item's lines in a colour, top to bottom from the top of a box, one line
@@ -316,11 +317,11 @@ class LayoutPainter {
         const int top = centred_down ? box.y + (box.height - total) / 2 : box.y;
         int baseline = top + rows.ascent;
         for (const std::string& text : item.lines) {
-            const auto line = touch_paint::draw_line(*fonts_, text, item.pixel_size, item.bold);
+            const auto line = paint::draw_line(*fonts_, text, item.pixel_size, item.bold);
             int pen = box.x;
             if (align == Align::centre)
                 pen = box.x + (box.width - line.coverage.advance) / 2;
-            touch_paint::paint_line(painter_, line, pen, baseline, colour);
+            paint::paint_line(painter_, line, pen, baseline, colour);
             baseline += line_height;
         }
     }
@@ -441,7 +442,7 @@ class LayoutPainter {
         Rgba label = game_files_rgba(item.colour);
         if (item.role == gf::ItemRole::button_main) {
             painter_.fill_rounded_rect(
-                area, corner, touch_paint::with_opacity(game_files_rgba(gf::green_colour), opacity)
+                area, corner, paint::with_opacity(game_files_rgba(gf::green_colour), opacity)
             );
             label = game_files_rgba(gf::background_colour);
             if (!item.enabled)
@@ -451,7 +452,7 @@ class LayoutPainter {
                 area,
                 corner,
                 hairline,
-                touch_paint::with_opacity(game_files_rgba(gf::red_colour), opacity)
+                paint::with_opacity(game_files_rgba(gf::red_colour), opacity)
             );
             label = game_files_rgba(gf::red_colour);
         } else {
@@ -459,11 +460,11 @@ class LayoutPainter {
                 area,
                 corner,
                 hairline,
-                touch_paint::with_opacity(game_files_rgba(gf::line_colour), opacity)
+                paint::with_opacity(game_files_rgba(gf::line_colour), opacity)
             );
         }
         paint_pressed(item, area);
-        paint_label(item, touch_paint::with_opacity(label, opacity));
+        paint_label(item, paint::with_opacity(label, opacity));
     }
 
     /// Paints a button's label, with its mark before it, the pair centred in the box.
@@ -481,9 +482,8 @@ class LayoutPainter {
         int widest = 0;
         if (fonts_ != nullptr)
             for (const std::string& text : item.lines)
-                widest = std::max(
-                    widest, touch_paint::text_width(*fonts_, text, item.pixel_size, item.bold)
-                );
+                widest =
+                    std::max(widest, paint::text_width(*fonts_, text, item.pixel_size, item.bold));
         const int group = mark + (widest > 0 ? gap + widest : 0);
         const int left = item.box.x + (item.box.width - group) / 2;
         paint_mark(
@@ -518,20 +518,20 @@ class LayoutPainter {
         const gf::Rect& lit = item.on ? on_box : off_box;
         const Rgba lit_fill =
             item.on ? game_files_rgba(gf::green_colour) : game_files_rgba(gf::line_colour);
-        painter_.fill_rect(box_of(lit), touch_paint::with_opacity(lit_fill, opacity));
+        painter_.fill_rect(box_of(lit), paint::with_opacity(lit_fill, opacity));
         painter_.outline_rect(
             box_of(item.box),
             whole_px(hairline_points),
-            touch_paint::with_opacity(game_files_rgba(gf::line_colour), opacity)
+            paint::with_opacity(game_files_rgba(gf::line_colour), opacity)
         );
         paint_pressed(item, area);
         if (item.lines.size() < 2 || fonts_ == nullptr)
             return;
-        const Rgba lit_text = touch_paint::with_opacity(
+        const Rgba lit_text = paint::with_opacity(
             item.on ? game_files_rgba(gf::background_colour) : game_files_rgba(gf::text_colour),
             opacity
         );
-        const Rgba unlit_text = touch_paint::with_opacity(game_files_rgba(gf::dim_colour), opacity);
+        const Rgba unlit_text = paint::with_opacity(game_files_rgba(gf::dim_colour), opacity);
         gf::Item label = item;
         label.lines = {item.lines[0]};
         paint_lines(label, item.on ? unlit_text : lit_text, Align::centre, off_box, true);
@@ -546,10 +546,10 @@ class LayoutPainter {
     void paint_busy(const gf::Item& item, Area area) {
         painter_.fill_rect(box_of(item.box), game_files_rgba(track_colour));
         const Box kept = painter_.clip();
-        painter_.set_clip(touch_paint::intersect(kept, box_of(item.box)));
+        painter_.set_clip(paint::intersect(kept, box_of(item.box)));
         const float spacing = std::max(px(busy_stripe_spacing_points), 4.0F);
         const Rgba stripe =
-            touch_paint::with_opacity(game_files_rgba(gf::green_colour), busy_stripe_opacity);
+            paint::with_opacity(game_files_rgba(gf::green_colour), busy_stripe_opacity);
         for (float x = area.x - area.height; x < area.x + area.width + area.height; x += spacing)
             painter_.stroke_line(
                 Spot{x, area.y + area.height},
@@ -584,9 +584,7 @@ class LayoutPainter {
 int measure_width(void* context, std::string_view text, int pixel_size, bool bold) {
     if (context == nullptr || text.empty() || pixel_size <= 0)
         return 0;
-    return touch_paint::text_width(
-        *static_cast<text_font::FontStack*>(context), text, pixel_size, bold
-    );
+    return paint::text_width(*static_cast<text_font::FontStack*>(context), text, pixel_size, bold);
 }
 
 /// Measures a line's height in the bundled fonts (TextMeasureHooks::line_height).
@@ -594,7 +592,7 @@ int measure_line_height(void* context, int pixel_size, bool bold) {
     if (context == nullptr || pixel_size <= 0)
         return 0;
     const auto rows =
-        touch_paint::line_metrics(*static_cast<text_font::FontStack*>(context), pixel_size, bold);
+        paint::line_metrics(*static_cast<text_font::FontStack*>(context), pixel_size, bold);
     return rows.ascent + rows.descent;
 }
 
@@ -644,22 +642,19 @@ const renderer::RgbaPicture& game_files_icon() {
 }
 
 void paint_game_files(
-    touch_paint::Canvas& canvas, const gf::Layout& layout, text_font::FontStack* fonts
+    paint::Canvas& canvas, const gf::Layout& layout, text_font::FontStack* fonts
 ) {
     paint_game_files(canvas, layout, fonts, estimated_density(layout), game_files_icon());
 }
 
 void paint_game_files(
-    touch_paint::Canvas& canvas,
-    const gf::Layout& layout,
-    text_font::FontStack* fonts,
-    float px_per_point
+    paint::Canvas& canvas, const gf::Layout& layout, text_font::FontStack* fonts, float px_per_point
 ) {
     paint_game_files(canvas, layout, fonts, px_per_point, game_files_icon());
 }
 
 void paint_game_files(
-    touch_paint::Canvas& canvas,
+    paint::Canvas& canvas,
     const gf::Layout& layout,
     text_font::FontStack* fonts,
     float px_per_point,
@@ -680,7 +675,7 @@ void paint_game_files_oa_mark(Painter& painter, Area area, const renderer::RgbaP
         side,
         side
     };
-    const Box drawn = touch_paint::intersect(painter.clip(), square);
+    const Box drawn = paint::intersect(painter.clip(), square);
     if (drawn.width <= 0 || drawn.height <= 0)
         return;
     // The settings dialog draws on RGB pixels: the canvas's own under the square go in, and
@@ -841,7 +836,7 @@ void paint_game_files_glyph(Painter& painter, gf::Glyph glyph, Area area, Rgba c
 }
 
 bool write_game_files_png(
-    const std::filesystem::path& file, const touch_paint::Canvas& canvas, std::string* error
+    const std::filesystem::path& file, const paint::Canvas& canvas, std::string* error
 ) {
     if (canvas.width <= 0 || canvas.height <= 0 ||
         canvas.rgba.size() !=

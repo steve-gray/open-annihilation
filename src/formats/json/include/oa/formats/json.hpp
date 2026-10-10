@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The JSON of the automation protocol's frames: a strict reader (RFC 8259,
-// UTF-8, nested at most max_json_depth deep) that turns a frame's JSON part
+// The engine's strict JSON, first used by the automation protocol: a reader
+// (RFC 8259, UTF-8, nested at most max_json_depth deep) that turns a text
 // into a tree of values, and a writer that builds one compactly, always in
-// UTF-8: a text that is not UTF-8 is written as non_unicode_text_marker and
+// UTF-8. A text that is not UTF-8 is written as non_unicode_text_marker and
 // the base64 of its bytes (unicode_text). Numbers are kept as written; the
 // protocol's numbers are integers unless a field says otherwise.
 #pragma once
@@ -17,7 +17,7 @@
 #include <string_view>
 #include <vector>
 
-namespace oa::app::automation {
+namespace oa::formats::json {
 
 /// The deepest nesting of arrays and objects a JSON text may hold.
 inline constexpr size_t max_json_depth = 64;
@@ -197,4 +197,4 @@ class JsonWriter {
     bool after_key_{};            ///< a member's name was just written
 };
 
-} // namespace oa::app::automation
+} // namespace oa::formats::json

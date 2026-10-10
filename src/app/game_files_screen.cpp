@@ -34,6 +34,12 @@
 
 namespace oa::app {
 
+// Named once, whichever app header that draws with the painter is included first.
+#ifndef OA_APP_UI_PAINT
+#define OA_APP_UI_PAINT
+namespace paint = oa::ui::paint;
+#endif
+
 namespace view = oa::ui::game_files;
 namespace text_font = oa::platform::text_font;
 using game_files::SourceKind;
@@ -293,7 +299,7 @@ struct GameFilesScreen::State {
     view::Model model{};                         ///< the screen's model
     view::Layout layout{};                       ///< the layout last painted
     view::Viewport viewport{};                   ///< the viewport last laid out
-    touch_paint::Canvas canvas{};                ///< the canvas last painted
+    paint::Canvas canvas{};                      ///< the canvas last painted
     oa::platform::text_font::FontStack* fonts{}; ///< the bundled fonts, when open
     game_files::RunSnapshot run{};               ///< the copy's latest snapshot
     game_files::ScanSnapshot scan{};             ///< the scan's latest snapshot
@@ -938,7 +944,7 @@ void GameFilesScreen::State::repaint() {
         interaction_.focused = layout.focus_order.front();
     view::mark_interaction(layout, interaction_);
     if (canvas.width != viewport.width || canvas.height != viewport.height)
-        canvas = touch_paint::make_canvas(viewport.width, viewport.height);
+        canvas = paint::make_canvas(viewport.width, viewport.height);
     paint_game_files(canvas, layout, fonts, viewport.px_per_point);
     dirty_ = false;
     progress_dirty_ = false;
@@ -2125,7 +2131,7 @@ void GameFilesScreen::State::open_language() {
     dialog.version = request_.version;
     dialog.preferences_file = request_.preferences_file;
     dialog.hooks.context = this;
-    dialog.hooks.present = [](void* context, const touch_paint::Canvas& frame) {
+    dialog.hooks.present = [](void* context, const paint::Canvas& frame) {
         auto& state = *static_cast<State*>(context);
         state.canvas = frame;
         state.painted_ = true;
@@ -2214,7 +2220,7 @@ const oa::ui::game_files::Viewport& GameFilesScreen::viewport() const noexcept {
     return state_->viewport;
 }
 
-const touch_paint::Canvas& GameFilesScreen::canvas() const noexcept {
+const paint::Canvas& GameFilesScreen::canvas() const noexcept {
     return state_->canvas;
 }
 

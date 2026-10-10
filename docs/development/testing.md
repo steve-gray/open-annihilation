@@ -591,7 +591,7 @@ tested without a touch screen. Three tests need no game data:
   left-handed mirror, hit testing with the fat finger's reach, the radial,
   the help and label texts, and the texts the labels that stand for two
   things are looked up by;
-- `app-touch-paint` checks the touch layer's drawing primitives: rounded
+- `ui-paint` checks the touch layer's drawing primitives: rounded
   rectangles blended over a known background, the icon marks inside their
   boxes, text coverage and clipping at the layer's edges.
 
@@ -666,7 +666,7 @@ a gamepad. These tests need no game data:
   every row of the maps from buttons to actions with the fallback map and
   the left-handed mirror, the effective scheme, the glyph styles and the
   haptics;
-- `ui-touch-hud` and `app-touch-paint` also check the slim pad HUD, the
+- `ui-touch-hud` and `ui-paint` also check the slim pad HUD, the
   build and group rings, the badges and the glyphs;
 - `ui-engine-settings` and `ui-engine-settings-dialog` check the Controller
   section's settings, the Control size and the Steam Deck's defaults;

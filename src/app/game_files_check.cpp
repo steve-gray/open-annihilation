@@ -31,6 +31,7 @@
 namespace oa::app {
 namespace {
 
+namespace paint = oa::ui::paint;
 namespace view = oa::ui::game_files;
 using Clock = std::chrono::steady_clock;
 
@@ -276,7 +277,7 @@ void fail(std::string why) {
 ///
 /// @param file the picture
 /// @param canvas the canvas
-void write_picture(const fs::path& file, const touch_paint::Canvas& canvas) {
+void write_picture(const fs::path& file, const paint::Canvas& canvas) {
     std::string error;
     if (!write_game_files_png(file, canvas, &error))
         fail("the picture " + path_to_utf8(file.filename()) + " was not written: " + error);
@@ -327,7 +328,7 @@ void snap(GameFilesScreen& screen, std::string_view extra = {}) {
             );
         }
         const view::Layout layout = view::lay_out(model, viewport, measure);
-        touch_paint::Canvas canvas = touch_paint::make_canvas(viewport.width, viewport.height);
+        paint::Canvas canvas = paint::make_canvas(viewport.width, viewport.height);
         paint_game_files(canvas, layout, screen.fonts(), viewport.px_per_point);
         write_picture(run.work / (base + (phone ? "-phone.png" : "-tablet.png")), canvas);
     }

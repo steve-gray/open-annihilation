@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The automation protocol's JSON reader and writer (json.hpp).
-#include "oa/app/automation/json.hpp"
+// The engine's strict JSON reader and writer, first used by the automation
+// protocol (json.hpp).
+#include "oa/formats/json.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <limits>
 #include <utility>
 
-namespace oa::app::automation {
+namespace oa::formats::json {
 
 // Builds the values of a parsed text: the one place that writes Json's members.
 struct JsonBuilder {
@@ -705,4 +706,4 @@ void JsonWriter::raw(std::string_view json) {
     out_ += json;
 }
 
-} // namespace oa::app::automation
+} // namespace oa::formats::json

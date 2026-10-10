@@ -499,7 +499,9 @@ class Reader {
             return fail(Rule::tag, here());
         case '|':
         case '>':
-            return fail(flow ? Rule::unexpected_character : Rule::block_scalar, here());
+            // A value that starts with these is a block scalar, including
+            // `engine: >= 0.8.0` written inside a flow mapping.
+            return fail(Rule::block_scalar, here());
         case '?':
             if (is_blank_or_end(peek(1)) || (flow && is_flow_indicator(peek(1))))
                 return fail(Rule::complex_key, here());
