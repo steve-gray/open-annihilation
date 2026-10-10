@@ -4,6 +4,8 @@
 // Battleroom rules and map previews with the loopback net, and (with --data)
 // against the installed game's LOUNGE2.GUI and SELGAME.GUI layouts.
 #include "oa/data/languages/unit_texts.hpp"
+#include "oa/data/mod_profile.hpp"
+#include "oa/data/mod_profile/overrides.hpp"
 #include "oa/formats/gaf.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/netgame/private_channel.hpp"
@@ -1404,10 +1406,22 @@ void test_row_indicators(const oa::ui::gui_layout::Layout& lounge) {
     );
     expect(logo1 != nullptr && logo1->active != 0 && logo1->stage == 1, "a remote colour square");
     expect(mp::panel_control(f.panel, "CD0")->active == 0, "the host shows no CD icon");
+    const auto host_badge = mp::lobby_row_badge(f.lobby, 0);
+    expect(
+        host_badge.badge == mp::RowBadge::open_annihilation && !host_badge.rules_differ,
+        "the host's own row has the OA badge and no dot"
+    );
     expect(
         mp::panel_control(f.panel, "CD1")->active != 0, "a remote 3.1c player with a CD shows it"
     );
+    expect(
+        mp::lobby_row_badge(f.lobby, 1).badge == mp::RowBadge::disc,
+        "a remote 3.1c player with a CD has the CD icon for its badge"
+    );
     expect(mp::panel_control(f.panel, "CD2")->active == 0, "an open slot shows no CD");
+    expect(
+        mp::lobby_row_badge(f.lobby, 2).badge == mp::RowBadge::none, "an open slot has no badge"
+    );
     auto* remote_block = reinterpret_cast<uint8_t*>(mp::slot_info(f.lobby, 1));
     remote_block[oa::netgame::player_info_engine_signature_offset] =
         oa::netgame::engine_signature_first;
@@ -1415,6 +1429,10 @@ void test_row_indicators(const oa::ui::gui_layout::Layout& lounge) {
         oa::netgame::engine_signature_second;
     mp::lobby_update_status(f.lobby, f.panel);
     expect(mp::panel_control(f.panel, "CD1")->active == 0, "a remote OA player shows no CD icon");
+    expect(
+        mp::lobby_row_badge(f.lobby, 1).badge == mp::RowBadge::open_annihilation,
+        "a remote OA player has the OA badge"
+    );
     remote_block[oa::netgame::player_info_engine_signature_offset] = 0;
     remote_block[oa::netgame::player_info_engine_signature_offset + 1] = 0;
     expect(
@@ -4622,6 +4640,155 @@ void test_presence_records_in_the_battle_room() {
     map_name = saved_map;
 }
 
+/// Returns a presence record with an engine line and a sim hash.
+///
+/// @param hash the sim hash
+/// @return the record
+std::vector<uint8_t> presence_with_hash(const oa::netgame::PresenceDigest& hash) {
+    oa::netgame::PresenceRecord record;
+    record.engine = oa::netgame::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    record.sim_hash = hash;
+    return encoded_presence(record);
+}
+
+/// Returns a presence record with an engine line and no sim hash.
+///
+/// @return the record
+std::vector<uint8_t> presence_without_hash() {
+    oa::netgame::PresenceRecord record;
+    record.engine = oa::netgame::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    return encoded_presence(record);
+}
+
+/// Returns a sim hash of 32 equal bytes.
+///
+/// @param value each byte
+/// @return the hash
+oa::netgame::PresenceDigest filled_hash(uint8_t value) {
+    oa::netgame::PresenceDigest hash{};
+    hash.fill(value);
+    return hash;
+}
+
+/// Tells whether a row's OA badge carries the dot, checking that the row's
+/// badge and the rule agree.
+///
+/// @param lobby the lobby
+/// @param slot the row's slot
+/// @return true when the dot shows
+bool shows_dot(mp::Lobby& lobby, int32_t slot) {
+    const bool differ = mp::lobby_rules_differ_from_host(lobby, slot);
+    expect(
+        mp::lobby_row_badge(lobby, slot).rules_differ == differ,
+        "the row's badge carries the dot the rule gives"
+    );
+    return differ;
+}
+
+// The dot on an OA badge says that the row's player plays by other rules
+// than the host's, from the presence records alone: the two sim hashes when
+// both sent one, the row's against the plain baseline's under a 3.1c host,
+// and nothing when no record tells. The host's own row never carries it.
+void test_rules_dot() {
+    namespace profiles = oa::data::mod_profile;
+    {
+        auto room = std::make_unique<Room>(true);
+        auto& lobby = room->lobby;
+        expect(
+            mp::lobby_apply_event(lobby, record_event(kRoomGuest, setup_block(kRoomGuest, 1, 2))),
+            "the OA guest's block applies"
+        );
+        expect(
+            mp::lobby_row_badge(lobby, 0).badge == mp::RowBadge::open_annihilation &&
+                mp::lobby_row_badge(lobby, 1).badge == mp::RowBadge::open_annihilation,
+            "the host and the OA guest have the OA badge"
+        );
+        expect(
+            mp::lobby_row_badge(lobby, 2).badge == mp::RowBadge::none && !shows_dot(lobby, 2),
+            "this machine's computer player has no badge and no dot"
+        );
+        expect(
+            !shows_dot(lobby, 0) && !shows_dot(lobby, 1),
+            "with no records on either side there is no dot"
+        );
+        bind_presence_source(lobby, presence_with_hash(filled_hash(0x5a)));
+        mp::presence_refresh(lobby);
+        expect(!shows_dot(lobby, 1), "the host's record alone tells nothing");
+        expect(
+            mp::lobby_apply_event(
+                lobby, presence_event(kRoomGuest, presence_with_hash(filled_hash(0x5a)))
+            ),
+            "the guest's record is kept"
+        );
+        expect(!shows_dot(lobby, 0) && !shows_dot(lobby, 1), "equal sim hashes give no dot");
+        expect(
+            mp::lobby_apply_event(
+                lobby, presence_event(kRoomGuest, presence_with_hash(filled_hash(0x77)))
+            ),
+            "the guest's other record is kept"
+        );
+        expect(shows_dot(lobby, 1), "different sim hashes put the dot on the guest's row");
+        expect(!shows_dot(lobby, 0), "and never on the host's own row");
+        expect(
+            mp::lobby_apply_event(lobby, presence_event(kRoomGuest, presence_without_hash())),
+            "the guest's record without a sim hash is kept"
+        );
+        expect(!shows_dot(lobby, 1), "a record without a sim hash tells nothing");
+    }
+
+    {
+        const std::string text = profiles::base_game_profile_text();
+        const auto resolved = profiles::resolve_profile(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()),
+            profiles::base_game_id
+        );
+        expect(resolved.resolution.has_value(), "the plain baseline resolves");
+        if (!resolved.resolution)
+            return;
+        const auto plain = resolved.resolution->profile.sim_hash;
+        auto room = std::make_unique<Room>(false);
+        auto& lobby = room->lobby;
+        expect(
+            lobby.presence_records.plain_sim_hash == plain,
+            "the battle room holds the plain baseline's sim hash"
+        );
+        auto* host = mp::slot_info(lobby, 1);
+        host->state = mp::kInfoStatePlaying;
+        host->status = static_cast<uint16_t>(host->status | mp::status::has_disc);
+        host->engine_signature[0] = 0;
+        host->engine_signature[1] = 0;
+        expect(mp::lobby_host_slot(lobby) == 1, "the other machine's player hosts");
+        expect(
+            mp::lobby_row_badge(lobby, 0).badge == mp::RowBadge::open_annihilation,
+            "the local OA joiner has the OA badge"
+        );
+        expect(
+            mp::lobby_row_badge(lobby, 1).badge == mp::RowBadge::disc,
+            "the 3.1c host has the CD icon"
+        );
+        expect(!shows_dot(lobby, 0), "with no records on either side there is no dot");
+        bind_presence_source(lobby, presence_with_hash(plain));
+        mp::presence_refresh(lobby);
+        expect(!shows_dot(lobby, 0), "a joiner on the plain baseline's rules has no dot");
+        bind_presence_source(lobby, presence_with_hash(filled_hash(0x77)));
+        mp::presence_refresh(lobby);
+        expect(shows_dot(lobby, 0), "a joiner on other rules has the dot under a 3.1c host");
+        expect(!shows_dot(lobby, 1), "the host's row never has it");
+        bind_presence_source(lobby, presence_without_hash());
+        mp::presence_refresh(lobby);
+        expect(!shows_dot(lobby, 0), "a joiner's record without a sim hash tells nothing");
+        bind_presence_source(lobby, presence_with_hash(filled_hash(0x77)));
+        mp::presence_refresh(lobby);
+        host->engine_signature[0] = oa::netgame::engine_signature_first;
+        host->engine_signature[1] = oa::netgame::engine_signature_second;
+        expect(
+            mp::lobby_row_badge(lobby, 1).badge == mp::RowBadge::open_annihilation &&
+                !shows_dot(lobby, 0),
+            "an OA host that sent no record tells nothing"
+        );
+    }
+}
+
 // The battle room with Unicode chat on: the blocks it sends say so, and a
 // line goes to the machine whose block says UTF-8 in UTF-8 and to the one
 // whose block does not in the code page, '?' for each hanzi. A line from a
@@ -6012,6 +6179,7 @@ int main(int argc, char** argv) {
         test_recorder_in_the_battle_room();
         test_no_presence_bytes_in_the_battle_room();
         test_presence_records_in_the_battle_room();
+        test_rules_dot();
         test_unicode_chat_in_the_battle_room();
         test_recorder_commands_in_the_battle_room();
         test_recorder_prebuilt_base_in_the_battle_room();

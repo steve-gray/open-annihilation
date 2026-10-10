@@ -17,6 +17,7 @@
 #include "oa/formats/hpi.hpp"
 #include "oa/formats/ota.hpp"
 #include "oa/formats/tnt.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/present/palette_tables.hpp"
 #include "oa/ui/frontend_renderer.hpp"
@@ -27,6 +28,7 @@
 #include "oa/platform/files.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -1841,6 +1843,141 @@ void check_pack_maps(Driver& d) {
     expect(chat_lines(lobby, line) == said + 1, "the missing map is said once");
 }
 
+/// A colour of the drawn screen: red, green and blue.
+using Rgb = std::array<uint8_t, 3>;
+
+/// The OA badge's border, #7d6a2c, and its amber, #e2b23d, as the design gives them.
+constexpr Rgb kBadgeBorder{0x7d, 0x6a, 0x2c};
+constexpr Rgb kBadgeAmber{0xe2, 0xb2, 0x3d};
+
+/// A rectangle of the drawn 640x480 screen.
+struct Box {
+    int32_t x{}, y{}, width{}, height{};
+};
+
+/// Returns a control's rectangle on the screen: its own, moved by the panel's offset.
+Box badge_box(const mp::Control& control) {
+    const auto offset = mp::multiplayer_panel_offset();
+    return {control.x + offset.x, control.y + offset.y, control.width, control.height};
+}
+
+/// Tells whether a badge the battle room lists lies at a rectangle.
+bool same_box(const mp::PresenceBadgeSpot& spot, const Box& box) {
+    return spot.x == box.x && spot.y == box.y && spot.width == box.width &&
+           spot.height == box.height;
+}
+
+/// Tells whether a pixel of the drawn screen has a colour.
+bool pixel_is(const Driver& d, int32_t x, int32_t y, const Rgb& color) {
+    if (x < 0 || y < 0 || x >= static_cast<int32_t>(d.surface.width) ||
+        y >= static_cast<int32_t>(d.surface.height))
+        return false;
+    const auto at =
+        (static_cast<std::size_t>(y) * d.surface.width + static_cast<std::size_t>(x)) * 3U;
+    return d.surface.rgb[at] == color[0] && d.surface.rgb[at + 1] == color[1] &&
+           d.surface.rgb[at + 2] == color[2];
+}
+
+/// Tells whether a badge's text shows: some pixel inside its border is amber.
+bool shows_badge_text(const Driver& d, const Box& box) {
+    for (int32_t y = box.y + 1; y < box.y + box.height - 1; ++y)
+        for (int32_t x = box.x + 1; x < box.x + box.width - 1; ++x)
+            if (pixel_is(d, x, y, kBadgeAmber))
+                return true;
+    return false;
+}
+
+/// Returns a presence record with an engine line and a sim hash of 32 equal bytes.
+std::vector<uint8_t> presence_with_hash(uint8_t hash_byte) {
+    oa::netgame::PresenceRecord record;
+    record.engine = oa::netgame::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    record.sim_hash = oa::netgame::PresenceDigest{};
+    record.sim_hash->fill(hash_byte);
+    std::vector<uint8_t> bytes(oa::netgame::presence_record_max_bytes);
+    std::size_t written = 0;
+    expect(
+        oa::netgame::encode_presence(record, bytes.data(), bytes.size(), &written) ==
+            oa::netgame::WireError::ok,
+        "a test presence record encodes"
+    );
+    bytes.resize(written);
+    return bytes;
+}
+
+/// The battle room draws the OA badge on each OA player's row, and the dot on
+/// a guest's whose presence record carries another sim hash than the host's,
+/// and lists both badges where it draws them.
+void check_presence_badges(Driver& d) {
+    struct Guard {
+        ~Guard() { mp::multiplayer_bind_presence_record(nullptr, 0); }
+    } guard;
+
+    mp::multiplayer_reset();
+    const auto host_record = presence_with_hash(0x5a);
+    mp::multiplayer_bind_presence_record(host_record.data(), host_record.size());
+    if (!host_battleroom(d, "Badges", "Host"))
+        return;
+    auto& lobby = mp::multiplayer_lobby();
+    constexpr uint32_t kGuest = 0x4321;
+    expect(mp::lobby_add_player(lobby, kGuest, "Guest"), "an OA guest joins");
+    const auto slot = mp::slot_for_player_id(lobby, kGuest);
+    auto* guest = slot >= 0 ? mp::slot_info(lobby, slot) : nullptr;
+    expect(guest != nullptr, "the guest has a slot");
+    if (guest == nullptr)
+        return;
+    guest->state = mp::kInfoStatePlaying;
+    guest->color = 1;
+    guest->version_major = 3;
+    guest->version_minor = 1;
+    guest->engine_signature[0] = oa::netgame::engine_signature_first;
+    guest->engine_signature[1] = oa::netgame::engine_signature_second;
+    const auto guest_record = presence_with_hash(0x77);
+    mp::LobbyEvent event{};
+    event.kind = mp::LobbyEventKind::record;
+    event.player_id = kGuest;
+    std::copy(guest_record.begin(), guest_record.end(), event.data);
+    event.size = static_cast<uint16_t>(guest_record.size());
+    expect(mp::lobby_apply_event(lobby, event), "the guest's record is kept");
+    d.frame();
+    expect(d.drawn(), "the battle room is drawn with the guest");
+    d.snapshot("battleroom-badges");
+
+    const auto* host_disc = control("CD0");
+    const auto* guest_disc = control("CD" + std::to_string(slot));
+    expect(
+        host_disc != nullptr && guest_disc != nullptr, "the host's and the guest's CD rectangles"
+    );
+    if (host_disc == nullptr || guest_disc == nullptr)
+        return;
+    const auto host_box = badge_box(*host_disc);
+    const auto guest_box = badge_box(*guest_disc);
+    expect(guest_disc->active == 0, "the OA guest's row shows no CD icon");
+    expect(
+        pixel_is(d, guest_box.x, guest_box.y, kBadgeBorder) && shows_badge_text(d, guest_box),
+        "the OA guest's row shows the OA badge"
+    );
+    expect(
+        pixel_is(d, guest_box.x + guest_box.width - 1, guest_box.y, kBadgeAmber),
+        "the guest's badge carries the dot: its rules differ from the host's"
+    );
+    expect(
+        pixel_is(d, host_box.x + host_box.width - 1, host_box.y, kBadgeBorder),
+        "the host's badge still carries no dot"
+    );
+    mp::PresenceBadgeSpot spots[mp::kSlotCount]{};
+    const auto count = mp::multiplayer_presence_badges(spots, mp::kSlotCount);
+    expect(
+        count == 2 && spots[0].slot == 0 && same_box(spots[0], host_box) &&
+            !spots[0].rules_differ && spots[1].slot == slot && same_box(spots[1], guest_box) &&
+            spots[1].rules_differ,
+        "multiplayer_presence_badges lists both badges, the guest's with the dot"
+    );
+    expect(
+        mp::multiplayer_presence_badges(spots, 1) == 1 && spots[0].slot == 0,
+        "a list of one takes the first badge"
+    );
+}
+
 } // namespace
 
 int main() {
@@ -1988,6 +2125,26 @@ int main() {
             !shows_frame(d, art, disc, 0, control("CD0")),
         "the host's row shows no CD icon"
     );
+    // In its place the host's row shows the OA badge, with no dot: the host's
+    // rules are its own.
+    if (const auto* host_disc = control("CD0")) {
+        const auto box = badge_box(*host_disc);
+        expect(
+            pixel_is(d, box.x, box.y, kBadgeBorder),
+            "the host's badge has its border at the top left"
+        );
+        expect(shows_badge_text(d, box), "the host's badge says OA in amber");
+        expect(
+            pixel_is(d, box.x + box.width - 1, box.y, kBadgeBorder),
+            "the host's badge has its border at the top right: no dot"
+        );
+        mp::PresenceBadgeSpot spots[mp::kSlotCount]{};
+        const auto count = mp::multiplayer_presence_badges(spots, mp::kSlotCount);
+        expect(
+            count == 1 && spots[0].slot == 0 && same_box(spots[0], box) && !spots[0].rules_differ,
+            "multiplayer_presence_badges lists the host's badge at CD0's rectangle"
+        );
+    }
     expect(
         control("SIDE0") != nullptr &&
             shows_frame(d, art, sides, control("SIDE0")->stage, control("SIDE0")),
@@ -3191,6 +3348,7 @@ int main() {
     check_launch_exit(d);
     check_engine_banner(d);
     check_pack_maps(d);
+    check_presence_badges(d);
 
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
