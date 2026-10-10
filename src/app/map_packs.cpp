@@ -94,7 +94,7 @@ std::optional<fs::path> find_entry(const fs::path& folder, std::string_view rela
 uint64_t size_of(const fs::path& file) {
     std::error_code error;
     const auto size = fs::file_size(file, error);
-    if (error || size < 0)
+    if (error)
         return 0;
     return static_cast<uint64_t>(size);
 }
