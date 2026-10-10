@@ -154,14 +154,14 @@ void falls_back_through_the_chain() {
         return;
     const auto bold = text_font::fallback_chain(Weight::bold);
     const auto regular = text_font::fallback_chain(Weight::regular);
-    OA_CHECK(bold.size() == 4 && regular.size() == 3);
+    OA_CHECK(bold.size() == 5 && regular.size() == 4);
     OA_CHECK(
         bold[0] == Face::dejavu_sans_bold && bold[1] == Face::dejavu_sans &&
-        bold[2] == Face::noto_sans_cjk && bold[3] == Face::noto_emoji
+        bold[2] == Face::noto_sans_cjk && bold[3] == Face::endonyms && bold[4] == Face::noto_emoji
     );
     OA_CHECK(
         regular[0] == Face::dejavu_sans && regular[1] == Face::noto_sans_cjk &&
-        regular[2] == Face::noto_emoji
+        regular[2] == Face::endonyms && regular[3] == Face::noto_emoji
     );
     OA_CHECK(stack->face_for(U'A', Weight::bold) == bold.front());
     OA_CHECK(stack->face_for(U'A', Weight::regular) == regular.front());
@@ -394,10 +394,11 @@ struct TemporaryFonts {
                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::filesystem::create_directories(directory);
         const auto bundled = text_font::bundled_font_directory();
-        for (const std::string_view name :
-             {std::string_view("DejaVuSans-Bold.ttf"),
-              std::string_view("DejaVuSans.ttf"),
-              std::string_view("NotoEmoji.ttf")}) {
+        // Every base face except Noto Sans CJK. The endonym face is required,
+        // and it is what draws a language's own name when the CJK file is absent.
+        for (const std::string_view name : text_font::face_files) {
+            if (name == "NotoSansCJKsc-Bold.otf")
+                continue;
             std::error_code error;
             std::filesystem::copy_file(
                 bundled / std::filesystem::path(name),
@@ -451,16 +452,55 @@ void opens_without_the_cjk_face() {
     OA_CHECK(stack->has_face(Face::dejavu_sans_bold));
     OA_CHECK(stack->has_face(Face::dejavu_sans));
     OA_CHECK(!stack->has_face(Face::noto_sans_cjk));
+    OA_CHECK(stack->has_face(Face::endonyms));
     OA_CHECK(stack->has_face(Face::noto_emoji));
     OA_CHECK(stack->pack_face_count() == 0);
-    // No face has U+4E2D, so it draws the chain's first missing-glyph box.
-    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == Face::dejavu_sans_bold);
+    // U+4E2D is in the endonym face. The CJK file is not in this folder.
+    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == Face::endonyms);
     OA_CHECK(!stack->face_metrics(Face::noto_sans_cjk, style_of(14, Weight::bold)));
     const auto line = stack->metrics(style_of(14, Weight::bold));
     // The full stack's 14-px bold line is 14 above the baseline and 4 below,
-    // because Noto Sans CJK at 12 px sets those rows. Without that face the
-    // line is the bold sans face's 13 and 4.
-    OA_CHECK(line && line->ascent == 13 && line->descent == 4);
+    // because Noto Sans CJK at 12 px sets those rows. The endonym face is cut
+    // from that face and keeps the rows, so this stack is 14 and 4 as well.
+    // A stack of only the two DejaVu faces and Noto Emoji, which no longer
+    // opens, was 13 and 4.
+    OA_CHECK(line && line->ascent == 14 && line->descent == 4);
+}
+
+void endonyms_keep_the_cjk_rows() {
+    auto stack = open_beside();
+    if (!stack)
+        return;
+    for (int32_t size = 7; size <= 48; ++size) {
+        for (const Weight weight : {Weight::bold, Weight::regular}) {
+            const Style style = style_of(size, weight);
+            const auto cjk = stack->face_metrics(Face::noto_sans_cjk, style);
+            const auto endonyms = stack->face_metrics(Face::endonyms, style);
+            OA_CHECK(
+                cjk && endonyms && cjk->pixel_size == endonyms->pixel_size &&
+                cjk->ascent == endonyms->ascent && cjk->descent == endonyms->descent
+            );
+        }
+    }
+    const auto line = stack->metrics(style_of(14, Weight::bold));
+    OA_CHECK(line && line->ascent == 14 && line->descent == 4);
+}
+
+void endonyms_draw_without_the_cjk_face() {
+    TemporaryFonts fonts;
+    auto stack = text_font::FontStack::open(fonts.directory);
+    OA_CHECK(stack != nullptr);
+    if (!stack)
+        return;
+    OA_CHECK(!stack->has_face(Face::noto_sans_cjk));
+    OA_CHECK(stack->has_face(Face::endonyms));
+    OA_CHECK(stack->draws("简体中文", Weight::bold));
+    OA_CHECK(stack->face_for(0x7B80, Weight::bold) == Face::endonyms);
+    OA_CHECK(!stack->draws("漢", Weight::bold));
+    const auto line = stack->metrics(style_of(14, Weight::bold));
+    // The endonym face keeps the CJK rows, unlike the three-face stack of
+    // the two DejaVu faces and Noto Emoji, whose 14-px bold line was 13 and 4.
+    OA_CHECK(line && line->ascent == 14 && line->descent == 4);
 }
 
 void pack_faces_join_the_chain() {
@@ -487,24 +527,26 @@ void pack_faces_join_the_chain() {
     // A pack face does not change the line's rows.
     const auto after = stack->metrics(style);
     OA_CHECK(rows && after && rows->ascent == after->ascent && rows->descent == after->descent);
-    OA_CHECK(after && after->ascent == 13 && after->descent == 4);
+    OA_CHECK(after && after->ascent == 14 && after->descent == 4);
 
     OA_CHECK(stack->add_face(fonts.directory / "DejaVuSans.ttf", FaceRole::letters));
     const auto bold = stack->chain(Weight::bold);
     const auto regular = stack->chain(Weight::regular);
-    OA_CHECK(bold.size() == 5 && regular.size() == 4);
-    if (bold.size() == 5) {
+    OA_CHECK(bold.size() == 6 && regular.size() == 5);
+    if (bold.size() == 6) {
         OA_CHECK(bold[0] == Face::dejavu_sans_bold);
         OA_CHECK(bold[1] == Face::dejavu_sans);
         OA_CHECK(bold[2] == text_font::pack_face(1));
         OA_CHECK(bold[3] == text_font::pack_face(0));
-        OA_CHECK(bold[4] == Face::noto_emoji);
+        OA_CHECK(bold[4] == Face::endonyms);
+        OA_CHECK(bold[5] == Face::noto_emoji);
     }
-    if (regular.size() == 4) {
+    if (regular.size() == 5) {
         OA_CHECK(regular[0] == Face::dejavu_sans);
         OA_CHECK(regular[1] == text_font::pack_face(1));
         OA_CHECK(regular[2] == text_font::pack_face(0));
-        OA_CHECK(regular[3] == Face::noto_emoji);
+        OA_CHECK(regular[3] == Face::endonyms);
+        OA_CHECK(regular[4] == Face::noto_emoji);
     }
     // U+4E2D is still the ideographs face: the letters face has no such character.
     OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == text_font::pack_face(0));
@@ -534,18 +576,21 @@ void removed_faces_leave_no_glyphs() {
         return;
     const Style style = style_of(14, Weight::bold);
     const auto bundled = text_font::bundled_font_directory();
+    // U+6F22 is in the CJK face and not in the endonym face, so removing the
+    // pack face leaves the missing-glyph box rather than a matching glyph.
+    constexpr std::string_view traditional = "\xE6\xBC\xA2";
     OA_CHECK(stack->add_face(bundled / "NotoSansCJKsc-Bold.otf", FaceRole::ideographs));
-    const auto ideograph = stack->draw("\xE4\xB8\xAD", style);
-    const auto missing_box = plain->draw("\xE4\xB8\xAD", style);
+    const auto ideograph = stack->draw(traditional, style);
+    const auto missing_box = plain->draw(traditional, style);
     OA_CHECK(ideograph && missing_box && stack->cached_glyphs() >= 1);
     const auto ideograph_ink = ideograph ? covered_pixels(*ideograph) : std::vector<uint8_t>{};
     stack->remove_pack_faces();
     OA_CHECK(stack->pack_face_count() == 0);
     OA_CHECK(stack->cached_glyphs() == 0);
-    // The same index, a face with no U+4E2D. The cached ideograph must not be drawn.
+    // The same index, a face with no U+6F22. The cached ideograph must not be drawn.
     OA_CHECK(stack->add_face(fonts.directory / "DejaVuSans.ttf", FaceRole::ideographs));
-    OA_CHECK(stack->face_for(0x4E2D, Weight::bold) == Face::dejavu_sans_bold);
-    const auto drawn = stack->draw("\xE4\xB8\xAD", style);
+    OA_CHECK(stack->face_for(0x6F22, Weight::bold) == Face::dejavu_sans_bold);
+    const auto drawn = stack->draw(traditional, style);
     OA_CHECK(drawn && missing_box);
     if (drawn && missing_box) {
         const auto ink = covered_pixels(*drawn);
@@ -607,6 +652,22 @@ int check_pixels() {
         if (drawn != mixed_picture)
             std::cout << "drawn:\n" << drawn;
     }
+    // The same line from a stack that has no NotoSansCJKsc-Bold.otf. The
+    // endonym face draws 中, and the picture is the one the CJK face draws.
+    TemporaryFonts fonts;
+    auto without = text_font::FontStack::open(fonts.directory);
+    OA_CHECK(without != nullptr);
+    OA_CHECK(without && !without->has_face(Face::noto_sans_cjk));
+    if (without) {
+        const auto again = without->draw(mixed_line, style_of(14, Weight::bold));
+        OA_CHECK(again.has_value());
+        if (again) {
+            const std::string drawn = picture(*again);
+            OA_CHECK(drawn == mixed_picture);
+            if (drawn != mixed_picture)
+                std::cout << "without the CJK face:\n" << drawn;
+        }
+    }
     return oa::test::check_exit_status();
 }
 
@@ -632,6 +693,8 @@ int main(int argc, char** argv) {
     keeps_the_glyphs_used_last();
     holds_ideographs_to_a_least_size();
     opens_without_the_cjk_face();
+    endonyms_keep_the_cjk_rows();
+    endonyms_draw_without_the_cjk_face();
     pack_faces_join_the_chain();
     removed_faces_leave_no_glyphs();
     face_file_opens();
