@@ -34,6 +34,7 @@ struct ScanState {
     // map is read from the first of them, so the others are the same map.
     char* scanned{};
     std::size_t scanned_bytes{};
+    const MapScanHost* host{};
 };
 
 // Notes a file name as scanned; false when the name, in any capitalisation,
@@ -107,11 +108,13 @@ void scan_map_file(void* context, const char* file_name) {
         display_name(rules, file_name, name, sizeof(name));
         // The setup block carries the name whole. One that does not fit,
         // with its terminating NUL, is left out rather than cut short.
-        if (std::strlen(name) + 1 > kMapNameFieldBytes)
-            return;
-        append_name(*scan.list, name);
-        if (scan.first_only)
-            scan.stopped = true;
+        if (std::strlen(name) + 1 <= kMapNameFieldBytes) {
+            if (append_name(*scan.list, name) && scan.host != nullptr &&
+                scan.host->eligible != nullptr)
+                scan.host->eligible(scan.host->context, name, &ota);
+            if (scan.first_only)
+                scan.stopped = true;
+        }
     }
     oa::formats::tdf::document_free(&ota);
 }
@@ -135,7 +138,7 @@ int32_t map_build_multiplayer_list(
             return 0;
         list.names[0] = '\0';
         list.count = 0;
-        ScanState scan{&list, &files, first_only, false, nullptr, 0};
+        ScanState scan{&list, &files, first_only, false, nullptr, 0, &host};
         if (files.list != nullptr)
             files.list(files.context, kMapsDirectory, "ota", scan_map_file, &scan);
         std::free(scan.scanned);

@@ -2769,6 +2769,7 @@ endif()
 # after it in the extension list.
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
+add_subdirectory(src/ui/map-previews)
 add_subdirectory(src/netgame)
 # Catalogues are fetched with the HTTP client src/netgame adds, so this
 # library follows that directory. oa-game is linked earlier in this file,

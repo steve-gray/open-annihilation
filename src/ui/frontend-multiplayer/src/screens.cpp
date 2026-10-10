@@ -443,57 +443,73 @@ void load_maps() {
     if (state.maps_loaded || state.ctx == nullptr || state.ctx->assets == nullptr)
         return;
     state.maps_loaded = true;
-    auto& assets = *state.ctx->assets;
-    char* names = nullptr;
-    // The list keeps the maps' file names, which the screens find the maps
-    // by; a chosen map shows its translated name (campaign_localized_name).
-    auto files = map_files();
-    files.translate = nullptr;
-    const auto count =
-        data::campaign::map_build_multiplayer_list(state.map_list, files, {}, &names, false, false);
-    const char* name = names;
-    for (int32_t index = 0; name != nullptr && index < count;
-         ++index, name += std::strlen(name) + 1) {
-        try {
-            const auto bytes = assets.read(std::string("maps/") + name + ".ota").bytes;
-            const auto parsed = oa::formats::ota::parse(
-                std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size())
-            );
-            if (!parsed.ok())
-                continue;
+    const auto append =
+        [&](const char* name, const char* description, const char* size, int32_t memory) {
+            if (name == nullptr || name[0] == '\0')
+                return;
+            const bool listed =
+                std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
+                    return info.name == name;
+                });
+            if (listed)
+                return;
             MapInfo info;
             info.name = name;
-            info.description = parsed.metadata->mission_description;
-            info.size = parsed.metadata->map_size;
-            info.memory = map_memory_mb(
-                static_cast<int32_t>(assets.file_size(std::string("maps/") + name + ".tnt"))
-            );
+            info.description = description != nullptr ? description : "";
+            info.size = size != nullptr ? size : "";
+            info.memory = memory;
             state.maps.push_back(std::move(info));
-        } catch (const std::exception&) {
+        };
+    // A bound source already gathered the base maps in the one start scan.
+    // With no binding, the list scans the installed maps as before.
+    if (g_map_source.base_count != nullptr && g_map_source.base_at != nullptr) {
+        const int32_t base = g_map_source.base_count(g_map_source.context);
+        for (int32_t index = 0; index < base; ++index) {
+            LobbyPackMap map{};
+            if (g_map_source.base_at(g_map_source.context, index, &map))
+                append(map.name, map.description, map.size, map.memory_mb);
         }
+    } else {
+        auto& assets = *state.ctx->assets;
+        char* names = nullptr;
+        // The list keeps the maps' file names, which the screens find the maps
+        // by; a chosen map shows its translated name (campaign_localized_name).
+        auto files = map_files();
+        files.translate = nullptr;
+        const auto count = data::campaign::map_build_multiplayer_list(
+            state.map_list, files, {}, &names, false, false
+        );
+        const char* name = names;
+        for (int32_t index = 0; name != nullptr && index < count;
+             ++index, name += std::strlen(name) + 1) {
+            try {
+                const auto bytes = assets.read(std::string("maps/") + name + ".ota").bytes;
+                const auto parsed = oa::formats::ota::parse(
+                    std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size())
+                );
+                if (!parsed.ok())
+                    continue;
+                append(
+                    name,
+                    parsed.metadata->mission_description.c_str(),
+                    parsed.metadata->map_size.c_str(),
+                    map_memory_mb(
+                        static_cast<int32_t>(assets.file_size(std::string("maps/") + name + ".tnt"))
+                    )
+                );
+            } catch (const std::exception&) {
+            }
+        }
+        std::free(names);
     }
-    std::free(names);
     // Installed pack maps join the list from the source's own fields. Their
     // map files are read when one is chosen, not while the list is built.
     if (g_map_source.count != nullptr && g_map_source.at != nullptr) {
         const int32_t extra = g_map_source.count(g_map_source.context);
         for (int32_t index = 0; index < extra; ++index) {
             LobbyPackMap pack{};
-            if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr ||
-                pack.name[0] == '\0')
-                continue;
-            const bool listed =
-                std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
-                    return info.name == pack.name;
-                });
-            if (listed)
-                continue;
-            MapInfo info;
-            info.name = pack.name;
-            info.description = pack.description != nullptr ? pack.description : "";
-            info.size = pack.size != nullptr ? pack.size : "";
-            info.memory = pack.memory_mb;
-            state.maps.push_back(std::move(info));
+            if (g_map_source.at(g_map_source.context, index, &pack))
+                append(pack.name, pack.description, pack.size, pack.memory_mb);
         }
     }
     std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
