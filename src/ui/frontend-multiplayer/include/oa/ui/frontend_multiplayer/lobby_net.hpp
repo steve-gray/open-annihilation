@@ -32,6 +32,8 @@ inline constexpr std::size_t kMaxSessions = 20;      // sessions the game list h
 inline constexpr std::size_t kPlayerInfoBytes = 0xb9;
 inline constexpr std::size_t kChatTextBytes = 64;
 inline constexpr std::size_t kLobbyRecordBytes = 0xba; // largest lobby record (0x20)
+/// The largest record a battle room receives: a presence record.
+inline constexpr std::size_t kLobbyEventBytes = 1024;
 
 // Connection kinds matched against the stored provider GUID.
 enum class ProviderKind : uint8_t { modem = 0, tcpip = 1, ipx = 2, serial = 3, other = 4 };
@@ -97,7 +99,7 @@ struct LobbyEvent {
     /// A refused joiner stays in the session until it leaves by itself.
     uint8_t refuse_reason{};
     uint16_t size{};
-    uint8_t data[kLobbyRecordBytes]{};
+    uint8_t data[kLobbyEventBytes]{};
 };
 
 // Result codes for host/join.
@@ -179,7 +181,7 @@ struct LoopbackNet {
     int32_t queue_head{};  // index of the oldest queued event
     int32_t queue_count{}; // events queued
     // Every sent record in order (bounded; oldest dropped).
-    uint8_t sent[kLoopbackSentRecords][kLobbyRecordBytes]{};
+    uint8_t sent[kLoopbackSentRecords][kLobbyEventBytes]{};
     uint16_t sent_size[kLoopbackSentRecords]{};
     uint32_t sent_to[kLoopbackSentRecords]{};
     uint32_t sent_from[kLoopbackSentRecords]{};

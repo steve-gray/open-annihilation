@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/netgame/frame.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/netgame/recorder_messages.hpp"
 #include "oa/base/game_loop.hpp"
 #include <cstdint>
@@ -74,11 +75,13 @@ const QueuedRecord* record_queue_pop(PeerRecords* r) noexcept {
 /// Returns the length of the record at an offset into the peer's frame copy.
 ///
 /// A 0x2c record at the frame's end takes its length from the bytes after
-/// it, which keep what an earlier frame left there, as in 3.1c.
+/// it, which keep what an earlier frame left there, as in 3.1c. A presence
+/// record is measured with presence_record_length only when it is the whole
+/// frame; any other 0xf0 has no length, so the split ends.
 ///
 /// @param r The peer's records, holding the frame copy.
 /// @param at Offset of the record's type byte in the copy.
-/// @return The record's u16 length for a 0x2c record, else its length-table entry.
+/// @return The record's length, or 0 when a presence record is not the whole frame.
 uint16_t copy_record_length(const PeerRecords* r, std::size_t at) noexcept {
     const auto type = r->copy[at];
     if (type == static_cast<uint8_t>(RecordType::unit_state))
@@ -89,6 +92,16 @@ uint16_t copy_record_length(const PeerRecords* r, std::size_t at) noexcept {
         return recorder_record_length(r->copy + at, available, &length) == WireError::ok ? length
                                                                                          : 0;
     }
+    if (type == presence_record_type) {
+        if (r->presence_records && at == frame_header_bytes) {
+            uint16_t length = 0;
+            const std::size_t available = r->copy_size > at ? r->copy_size - at : 0;
+            if (presence_record_length(r->copy + at, available, &length) == WireError::ok &&
+                static_cast<std::size_t>(length) == available)
+                return length;
+        }
+        return 0;
+    }
     return record_length_table[type];
 }
 
@@ -96,9 +109,11 @@ uint16_t copy_record_length(const PeerRecords* r, std::size_t at) noexcept {
 ///
 /// @param r the peer's records
 /// @param type the byte
-/// @return true for 0x02..0x2c, and for a recorder record when the ring splits them
+/// @return true for 0x02..0x2c, for a recorder record when the ring splits
+///         them, and for 0xf0 when the ring splits presence records
 bool splits_record(const PeerRecords* r, uint8_t type) noexcept {
-    return is_record_type(type) || (r->recorder_records && is_recorder_record_type(type));
+    return is_record_type(type) || (r->recorder_records && is_recorder_record_type(type)) ||
+           (r->presence_records && type == presence_record_type);
 }
 
 /// Binds a peer slot to a sender with no sequence, nothing held and an empty ring.
