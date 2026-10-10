@@ -127,14 +127,23 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
 /// @return at most the compact most_shown_choices
 [[nodiscard]] int32_t shown_choices(std::size_t choices) noexcept;
 
+/// The settings dialog's footer line at Compact: the row choice_menu keeps
+/// a menu above unless it is given another.
+inline constexpr int32_t compact_footer_line =
+    compact_metrics.dialog_height - compact_metrics.edge - compact_metrics.footer_height - 1;
+
 /// Returns where a drop-down's open menu lies: under its field, as wide as
 /// the field and as tall as the items it shows, and over the field when that
-/// would pass the settings dialog's footer line.
+/// would pass the screen's footer line.
 ///
 /// @param field the drop-down's field
 /// @param choices the choices it offers
+/// @param footer_line the row of the screen's footer line: the settings
+///     dialog's at its size class, Compact's when not given
 /// @return the menu's rectangle
-[[nodiscard]] Rect choice_menu(const Rect& field, std::size_t choices) noexcept;
+[[nodiscard]] Rect choice_menu(
+    const Rect& field, std::size_t choices, int32_t footer_line = compact_footer_line
+) noexcept;
 
 /// Returns one shown item's rectangle in an open menu.
 ///

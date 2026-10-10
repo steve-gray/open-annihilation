@@ -3,10 +3,12 @@
 
 // The Open Annihilation settings dialog: its sections and rows, what a press,
 // a drag or a key does to them, and how it and the OA button that opens it
-// are drawn. The dialog is laid out in the game's 640x480 source pixels and
-// drawn without the game's art (oa/ui/frontend_renderer/artless.hpp) in the
-// game's own fonts. A host places it, darkens what lies under it, turns its
-// events into dialog pixels and puts the settings it reports in effect.
+// are drawn. The dialog is laid out in points, one point a pixel of the
+// game's 640x480 picture, at its size class (Dialog::size_class: Compact,
+// 0.7.3's 480 by 324, Regular or Large), and drawn without the game's art
+// (oa/ui/frontend_renderer/artless.hpp) in the game's own fonts at a whole
+// scale. A host places it, darkens what lies under it, turns its events into
+// dialog points and puts the settings it reports in effect.
 #pragma once
 
 #include "oa/formats/fnt.hpp"
@@ -17,6 +19,7 @@
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/input.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -32,10 +35,11 @@
 
 namespace oa::ui::engine_settings {
 
-/// The dialog's width, in source pixels.
-inline constexpr int32_t dialog_width = 480;
-/// The dialog's height, in source pixels.
-inline constexpr int32_t dialog_height = 324;
+/// The dialog's width at Compact, in source pixels. Each size class has its
+/// own (oa::ui::kit::metrics_of).
+inline constexpr int32_t dialog_width = oa::ui::kit::compact_metrics.dialog_width;
+/// The dialog's height at Compact, in source pixels.
+inline constexpr int32_t dialog_height = oa::ui::kit::compact_metrics.dialog_height;
 /// The OA button's side on the main menu, in source pixels.
 inline constexpr int32_t menu_button_side = 32;
 /// The OA button's side in the in-game menu's column, in source pixels.
@@ -706,6 +710,12 @@ struct Dialog {
     /// The open list's first item shown, while it holds more items than it
     /// shows.
     int32_t list_first{};
+    /// The size class it is laid out at: its size, padding, section list and
+    /// content column are the class's (oa::ui::kit::metrics_of), and a larger
+    /// class shows more rows, each at its Compact size. A host sets it from
+    /// the room it has; the scroll offsets are held to the class's limits
+    /// wherever they are used.
+    oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
 };
 
 /// Returns every standard hack as Developer Mode shows it: as the profile
@@ -1064,16 +1074,25 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 ///     section scrolled, else DialogAction::none
 [[nodiscard]] DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches);
 
-/// Tells whether a point lies on the dialog.
+/// Tells whether a point lies on the dialog at Compact.
 ///
 /// @param x the point's column, in source pixels from the dialog's left edge
 /// @param y the point's row, in source pixels from the dialog's top edge
 /// @return true inside its dialog_width by dialog_height
 [[nodiscard]] bool dialog_contains(int32_t x, int32_t y) noexcept;
 
-/// Draws the dialog. Its header shows the Open Annihilation icon, scaled
-/// to 20 by 20 source pixels at the surface's own resolution; without the
-/// icon it shows the OA mark, green letters in a green outlined square.
+/// Tells whether a point lies on the dialog at its size class.
+///
+/// @param dialog the dialog
+/// @param x the point's column, in points from the dialog's left edge
+/// @param y the point's row, in points from the dialog's top edge
+/// @return true inside its class's width and height
+[[nodiscard]] bool dialog_contains(const Dialog& dialog, int32_t x, int32_t y) noexcept;
+
+/// Draws the dialog at its size class (Dialog::size_class), at the
+/// placement's whole scale. Its header shows the Open Annihilation icon,
+/// scaled to 20 by 20 source pixels at the surface's own resolution; without
+/// the icon it shows the OA mark, green letters in a green outlined square.
 ///
 /// @param[in,out] target the surface
 /// @param placement where the dialog's top left corner lands, and its scale

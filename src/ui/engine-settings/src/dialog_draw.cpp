@@ -262,7 +262,7 @@ kit::SwitchLook switch_look(bool on, bool hovered, bool locked) {
 /// @return the header's look
 kit::HeaderLook dialog_header(const Dialog& dialog) {
     kit::HeaderLook header;
-    header.width = dialog_width;
+    header.width = layout::sizes_of(dialog).dialog_width;
     header.title = std::string(layout::shown_text(layout::title_text));
     header.title_width = layout::title_width;
     header.tracking = layout::heading_tracking;
@@ -282,11 +282,12 @@ kit::HeaderLook dialog_header(const Dialog& dialog) {
 /// @param dialog the dialog
 void add_nav(Building& building, const Dialog& dialog) {
     kit::NavLook nav;
-    const int32_t body_height = layout::footer_rule_row - layout::body_top;
-    nav.area = {layout::edge, layout::body_top, layout::list_width, body_height};
-    nav.rule_column = layout::list_rule_column;
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const int32_t body_height = sized.footer_rule_row - layout::body_top;
+    nav.area = {layout::edge, layout::body_top, sized.list_width, body_height};
+    nav.rule_column = sized.list_rule_column;
     if (dialog.kind == DialogKind::engine)
-        nav.divider = layout::list_divider();
+        nav.divider = layout::list_divider(dialog.size_class);
     for (const Page page :
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
         const int32_t control = page_control(page);
@@ -412,6 +413,7 @@ std::vector<std::string> mod_words(const Dialog& dialog, const std::vector<ModRo
 /// @param open Mods' rows
 void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
+    const layout::Sizes& sized = layout::sizes_of(dialog);
     const bool locked = dialog.locks.mod != Lock::none;
     const auto small_width = width_in(building.fonts, DialogFont::small);
     const auto regular_width = width_in(building.fonts, DialogFont::regular);
@@ -419,27 +421,26 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
         mark(
             list,
             kit::Mark::padlock,
-            {layout::mods_lock_line.x,
-             layout::mods_lock_text.y +
-                 (layout::mods_lock_text.height - layout::padlock_height) / 2},
+            {sized.mods_lock_line.x,
+             sized.mods_lock_text.y + (sized.mods_lock_text.height - layout::padlock_height) / 2},
             kit::colour::lock,
             {}
         );
         kit::WrapRules rules;
         rules.shorten_word = [&](std::string_view word) {
-            return layout::cut_text(word, layout::mods_lock_text.width, small_width);
+            return layout::cut_text(word, sized.mods_lock_text.width, small_width);
         };
         const auto lines = kit::wrap(
             layout::shown_text(
                 dialog.locks.mod == Lock::command_line ? layout::mod_from_command_line_text
                                                        : layout::mod_in_game_text
             ),
-            layout::mods_lock_text.width,
+            sized.mods_lock_text.width,
             small_width,
             rules
         );
         for (std::size_t line = 0; line < lines.size() && line < 2; ++line) {
-            SourceRect rect = layout::mods_lock_text;
+            SourceRect rect = sized.mods_lock_text;
             rect.y += static_cast<int32_t>(line) * rect.height;
             text(
                 list,
@@ -605,7 +606,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
         );
     }
     const int32_t control = layout::mods_folder_control(open.rows);
-    const SourceRect& folder_button = layout::mods_folder_button;
+    const SourceRect& folder_button = sized.mods_folder_button;
     const bool over = !locked && (dialog.hovered == control || dialog.pressed == control);
     const bool held = !locked && dialog.pressed == control;
     const std::string caption(
@@ -633,7 +634,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
         list,
         DialogFont::small,
         layout::shown_text(layout::shown_text(layout::mods_folders_text[0])),
-        layout::mods_note_first,
+        sized.mods_note_first,
         kit::Align::left,
         kit::colour::quiet,
         {}
@@ -646,7 +647,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
             notice ? std::string_view(dialog.folder_notice)
                    : layout::shown_text(layout::mods_folders_text[1])
         ),
-        layout::mods_note_second,
+        sized.mods_note_second,
         kit::Align::left,
         notice ? kit::colour::lock : kit::colour::quiet,
         {}
@@ -702,7 +703,8 @@ void add_list_row(
     Building& building, const Dialog& dialog, const layout::ListRow& row, bool first
 ) {
     kit::DisplayList& list = building.list;
-    const SourceRect& clip = layout::developer_view_clip;
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const SourceRect& clip = sized.developer_view_clip;
     const bool header =
         row.kind == layout::ListRowKind::area || row.kind == layout::ListRowKind::hack;
     const bool takes = header || !row.locked;
@@ -710,9 +712,7 @@ void add_list_row(
                          (dialog.hovered == row.control || dialog.pressed == row.control);
     const bool focused = takes && row.control != no_control && dialog.focused == row.control;
     if (row.kind == layout::ListRowKind::area && !first)
-        fill(
-            list, {layout::content_left, row.top, layout::content_width, 1}, kit::colour::rule, clip
-        );
+        fill(list, {sized.content_left, row.top, sized.content_width, 1}, kit::colour::rule, clip);
     if (header && hovered)
         fill(
             list,
@@ -815,7 +815,7 @@ void add_list_row(
     else if (row.kind == layout::ListRowKind::slider)
         kind = kit::ControlKind::slider;
     kit::Control added = control_of(row.control, row.control_area, list_row_name(row), kind);
-    added.clip = layout::developer_view;
+    added.clip = sized.developer_view;
     added.steps = true;
     added.group = layout::developer_list_group;
     added.checked = row.on;
@@ -833,6 +833,7 @@ void add_list_row(
 /// @param open Developer's rows and list (layout::open_rows)
 void add_developer(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
+    const layout::Sizes& sized = layout::sizes_of(dialog);
     const auto hot = [&](int32_t control) {
         return dialog.hovered == control || dialog.pressed == control;
     };
@@ -842,9 +843,9 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
     if (open.scroll > 0)
         fill(
             list,
-            {layout::content_left, layout::developer_view.y, layout::content_width, 1},
+            {sized.content_left, sized.developer_view.y, sized.content_width, 1},
             kit::colour::rule,
-            layout::developer_view_clip
+            sized.developer_view_clip
         );
     if (open.limit > 0)
         scroll_bar(
@@ -855,7 +856,7 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
         );
     fill(
         list,
-        {layout::content_left, layout::developer_footer_rule, layout::content_width, 1},
+        {sized.content_left, sized.developer_footer_rule, sized.content_width, 1},
         kit::colour::rule,
         {}
     );
@@ -870,19 +871,19 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
         list,
         DialogFont::regular,
         label,
-        layout::active_only_label,
+        sized.active_only_label,
         kit::Align::left,
         kit::colour::text,
         {}
     );
     const kit::SwitchLook active =
         switch_look(dialog.developer.active_only, hot(active_only_control), false);
-    toggle(list, layout::active_only_switch, active, active_only_control, {});
+    toggle(list, sized.active_only_switch, active, active_only_control, {});
     if (dialog.focused == active_only_control)
-        focus_ring(list, layout::active_only_switch, true, {});
+        focus_ring(list, sized.active_only_switch, true, {});
     kit::Control active_only = control_of(
         active_only_control,
-        layout::active_only_switch,
+        sized.active_only_switch,
         named("active-only"),
         kit::ControlKind::toggle
     );
@@ -893,7 +894,7 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
     building.section_tab.push_back(active_only_control);
     // Restore profile values takes a press only while Developer Mode is on.
     // It lights while the pointer is over it or a press on it is held.
-    const SourceRect& restore = layout::restore_profile_button;
+    const SourceRect& restore = sized.restore_profile_button;
     const bool enabled = developer::restore_profile_enabled(dialog);
     const std::string caption(layout::shown_text(layout::restore_profile_text));
     button(
@@ -928,7 +929,8 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
 /// @param open the open section's rows (layout::open_rows)
 void add_section(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
-    item(list, kit::Role::heading, layout::heading, {}).look =
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    item(list, kit::Role::heading, sized.heading, {}).look =
         kit::HeadingLook{std::string(layout::shown_text(layout::page_heading(dialog.page)))};
     if (layout::mods_page(dialog)) {
         add_mods(building, dialog, open);
@@ -956,7 +958,7 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     state.marked_button = static_cast<std::size_t>(dialog.folder_marked);
     state.hovered_button = dialog.folder_hovered;
     state.group = layout::section_group;
-    state.clip = layout::view_clip;
+    state.clip = sized.view_clip;
     kit::DisplayList rows;
     kit::add_rows(rows, placed, state);
     for (kit::Item& added : rows.items)
@@ -969,8 +971,8 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     // it: the clip is the view narrowed to the control's columns.
     for (kit::Control& added : rows.controls) {
         const SourceRect control = added.rect;
-        added.rect = {layout::content_left, control.y, layout::content_width, control.height};
-        added.clip = {control.x, layout::view.y, control.width, layout::view.height};
+        added.rect = {sized.content_left, control.y, sized.content_width, control.height};
+        added.clip = {control.x, sized.view.y, control.width, sized.view.height};
         building.rows.push_back(std::move(added));
     }
     if (layout::developer_page(dialog)) {
@@ -985,8 +987,8 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
         kit::Item& rule = item(
             list,
             kit::Role::rule,
-            {layout::content_left, layout::view.y, layout::content_width, 1},
-            layout::view_clip
+            {sized.content_left, sized.view.y, sized.content_width, 1},
+            sized.view_clip
         );
         rule.colour = kit::colour::rule;
     }
@@ -1015,7 +1017,7 @@ void add_footer(Building& building, const Dialog& dialog) {
         {ok_control, layout::ok_text, "ok"},
     }};
     for (const FooterButton& footer : buttons) {
-        const SourceRect rect = layout::footer_button(footer.control);
+        const SourceRect rect = layout::footer_button(footer.control, dialog.size_class);
         const bool held = dialog.pressed == footer.control && dialog.hovered == footer.control;
         const bool hovered = dialog.hovered == footer.control;
         const std::string caption(layout::shown_text(footer.caption));
@@ -1055,8 +1057,9 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
         const auto& spec = layout::row_spec(row.setting);
         const layout::SettingsModel model = layout::reading(dialog.chosen, dialog);
         const int32_t choices = kit::row_count(spec, model);
-        const SourceRect menu =
-            layout::choice_list(row.control_area, static_cast<std::size_t>(choices));
+        const SourceRect menu = layout::choice_list(
+            row.control_area, static_cast<std::size_t>(choices), dialog.size_class
+        );
         const int32_t shown = layout::shown_choices(static_cast<std::size_t>(choices));
         kit::ChoiceMenuLook look;
         look.first = dialog.list_first;
@@ -1095,29 +1098,29 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
 /// @param dialog the dialog
 void add_question(Building& building, const Dialog& dialog) {
     kit::DisplayList& list = building.list;
-    fill(list, layout::question_box, kit::colour::band, {});
-    outline(list, layout::question_box, kit::colour::accent, {});
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    fill(list, sized.question_box, kit::colour::band, {});
+    outline(list, sized.question_box, kit::colour::accent, {});
     const bool roll_back = dialog.mod_question == ModQuestion::roll_back;
-    item(list, kit::Role::heading, layout::question_heading, {}).look =
-        kit::HeadingLook{std::string(
+    item(list, kit::Role::heading, sized.question_heading, {}).look = kit::HeadingLook{std::string(
+        layout::shown_text(
             layout::shown_text(
-                layout::shown_text(
-                    roll_back ? layout::roll_back_heading_text : layout::switch_heading_text
-                )
+                roll_back ? layout::roll_back_heading_text : layout::switch_heading_text
             )
-        )};
+        )
+    )};
     const layout::ModRowText offered =
         layout::mod_row_text(dialog, ModRow{dialog.switch_question, false});
-    add_badge(list, layout::question_badge, offered, dialog.switch_question == no_mod_row, {});
+    add_badge(list, sized.question_badge, offered, dialog.switch_question == no_mod_row, {});
     const auto small_width = width_in(building.fonts, DialogFont::small);
     const auto regular_width = width_in(building.fonts, DialogFont::regular);
     text(
         list,
         DialogFont::regular,
         layout::shown_text(
-            layout::cut_text(offered.title, layout::question_title.width, regular_width)
+            layout::cut_text(offered.title, sized.question_title.width, regular_width)
         ),
-        layout::question_title,
+        sized.question_title,
         kit::Align::left,
         kit::colour::text,
         {}
@@ -1128,11 +1131,11 @@ void add_question(Building& building, const Dialog& dialog) {
         layout::shown_text(
             layout::cut_text(
                 layout::question_version_text(dialog, offered),
-                layout::question_version.width,
+                sized.question_version.width,
                 small_width
             )
         ),
-        layout::question_version,
+        sized.question_version,
         kit::Align::left,
         kit::colour::hint,
         {}
@@ -1141,19 +1144,19 @@ void add_question(Building& building, const Dialog& dialog) {
     // The note's lines, the last ones, are drawn in the lock's colour.
     kit::WrapRules note_rules;
     note_rules.shorten_word = [&](std::string_view word) {
-        return layout::cut_text(word, layout::question_first_line.width, small_width);
+        return layout::cut_text(word, sized.question_first_line.width, small_width);
     };
     const std::size_t note_lines = offered.has_profile || roll_back
                                        ? 0
                                        : kit::wrap(
                                              layout::switch_no_profile_text,
-                                             layout::question_first_line.width,
+                                             sized.question_first_line.width,
                                              small_width,
                                              note_rules
                                          )
                                              .size();
     for (std::size_t line = 0; line < lines.size(); ++line) {
-        SourceRect rect = layout::question_first_line;
+        SourceRect rect = sized.question_first_line;
         rect.y += static_cast<int32_t>(line) * rect.height;
         const bool note = line + note_lines >= lines.size();
         text(
@@ -1218,20 +1221,21 @@ namespace geometry {
 kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     Building building;
     building.fonts = fonts;
-    const SourceRect whole{0, 0, dialog_width, dialog_height};
+    const Sizes& sized = sizes_of(dialog);
+    const SourceRect whole{0, 0, sized.dialog_width, sized.dialog_height};
     fill(building.list, whole, kit::colour::panel, {});
-    item(building.list, kit::Role::header, {0, 0, dialog_width, header_rule_row + 1}, {}).look =
-        dialog_header(dialog);
+    item(building.list, kit::Role::header, {0, 0, sized.dialog_width, header_rule_row + 1}, {})
+        .look = dialog_header(dialog);
     add_nav(building, dialog);
     const ScrolledRows open = open_rows(dialog);
     add_section(building, dialog, open);
     item(
         building.list,
         kit::Role::footer_band,
-        {0, footer_rule_row, dialog_width, footer_height + 1},
+        {0, sized.footer_rule_row, sized.dialog_width, footer_height + 1},
         {}
     )
-        .look = kit::FooterBandLook{dialog_width, footer_rule_row};
+        .look = kit::FooterBandLook{sized.dialog_width, sized.footer_rule_row};
     add_footer(building, dialog);
     if (open.limit > 0) {
         kit::Control bar = control_of(
