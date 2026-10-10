@@ -10,12 +10,18 @@
 
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/game_files.hpp"
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <filesystem>
 #include <string>
 
 namespace oa::app {
+
+// Named once, whichever app header that draws with the painter is included first.
+#ifndef OA_APP_UI_PAINT
+#define OA_APP_UI_PAINT
+namespace paint = oa::ui::paint;
+#endif
 
 /// The bundled fonts as the screen's text measure (TextMeasureHooks over a FontStack).
 ///
@@ -38,7 +44,7 @@ game_files_measure(oa::platform::text_font::FontStack* fonts) noexcept;
 /// @param layout the laid-out step
 /// @param fonts the bundled fonts; null paints no text
 void paint_game_files(
-    touch_paint::Canvas& canvas,
+    paint::Canvas& canvas,
     const oa::ui::game_files::Layout& layout,
     oa::platform::text_font::FontStack* fonts
 );
@@ -51,7 +57,7 @@ void paint_game_files(
 /// @param fonts the bundled fonts; null paints no text
 /// @param px_per_point canvas pixels per point (Viewport::px_per_point)
 void paint_game_files(
-    touch_paint::Canvas& canvas,
+    paint::Canvas& canvas,
     const oa::ui::game_files::Layout& layout,
     oa::platform::text_font::FontStack* fonts,
     float px_per_point
@@ -67,7 +73,7 @@ void paint_game_files(
 /// @param px_per_point canvas pixels per point (Viewport::px_per_point)
 /// @param icon the Open Annihilation icon; empty draws the OA mark
 void paint_game_files(
-    touch_paint::Canvas& canvas,
+    paint::Canvas& canvas,
     const oa::ui::game_files::Layout& layout,
     oa::platform::text_font::FontStack* fonts,
     float px_per_point,
@@ -84,9 +90,7 @@ void paint_game_files(
 /// @param area where it goes
 /// @param icon the Open Annihilation icon; empty draws the OA mark
 void paint_game_files_oa_mark(
-    touch_paint::Painter& painter,
-    touch_paint::Area area,
-    const oa::ui::frontend_renderer::RgbaPicture& icon
+    paint::Painter& painter, paint::Area area, const oa::ui::frontend_renderer::RgbaPicture& icon
 );
 
 /// Draws one of the screen's marks centred in an area, as large as its shorter side, with the
@@ -98,17 +102,14 @@ void paint_game_files_oa_mark(
 /// @param area where it goes
 /// @param colour its colour
 void paint_game_files_glyph(
-    touch_paint::Painter& painter,
-    oa::ui::game_files::Glyph glyph,
-    touch_paint::Area area,
-    touch_paint::Rgba colour
+    paint::Painter& painter, oa::ui::game_files::Glyph glyph, paint::Area area, paint::Rgba colour
 );
 
 /// Returns a colour of the screen as the painter's colour.
 ///
 /// @param colour the screen's colour
 /// @return the same colour with straight alpha
-[[nodiscard]] touch_paint::Rgba game_files_rgba(oa::ui::game_files::Colour colour) noexcept;
+[[nodiscard]] paint::Rgba game_files_rgba(oa::ui::game_files::Colour colour) noexcept;
 
 /// Writes a canvas as an RGB PNG (alpha laid over the background colour).
 ///
@@ -117,7 +118,7 @@ void paint_game_files_glyph(
 /// @param[out] error why it could not be written
 /// @return true when it was written
 bool write_game_files_png(
-    const std::filesystem::path& file, const touch_paint::Canvas& canvas, std::string* error
+    const std::filesystem::path& file, const paint::Canvas& canvas, std::string* error
 );
 
 } // namespace oa::app

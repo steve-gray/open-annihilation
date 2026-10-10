@@ -12,6 +12,9 @@ target_include_directories(oa-data-mod-profile PUBLIC include)
 target_link_libraries(oa-data-mod-profile PUBLIC oa-formats-oamod oa-data-limits oa-data-match-rules oa-base-sha256
   PRIVATE oa-options)
 target_compile_features(oa-data-mod-profile PUBLIC cxx_std_20)
+# The resolver checks a profile's engine requirement against this build.
+set_property(SOURCE src/resolver.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+  "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
   # The resolver's cases: blocks, presets, shorthand, settings, match options,
@@ -19,6 +22,10 @@ if(BUILD_TESTING)
   add_executable(oa-data-mod-profile-test tests/mod_profile_test.cpp)
   target_link_libraries(oa-data-mod-profile-test PRIVATE oa-data-mod-profile oa-platform-shims oa-test-support
     oa-options)
+  # The unmet-requirement message names this build's version, so the test
+  # reads the same macro rather than a literal that a later release would stale.
+  set_property(SOURCE tests/mod_profile_test.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
   add_test(NAME data-mod-profile COMMAND oa-data-mod-profile-test)
   # Every registry parameter is bound to exactly one record field that can
   # hold it, whose default is the parameter's baseline; the registry's own

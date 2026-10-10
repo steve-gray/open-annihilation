@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Painting for the touch controls' layer (touch_paint.hpp). Every shape is
+// Painting for the touch controls' layer (painter.hpp). Every shape is
 // blended by how much of each pixel it covers, judged from the distance of
 // the pixel's centre to the shape's edge.
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <algorithm>
 #include <array>
@@ -12,7 +12,7 @@
 #include <initializer_list>
 #include <numbers>
 
-namespace oa::app::touch_paint {
+namespace oa::ui::paint {
 
 namespace text_font = oa::platform::text_font;
 
@@ -942,4 +942,4 @@ Box paint_line(Painter& painter, const TextLine& line, int pen_x, int baseline_y
     return Box{x, y, line.coverage.width, line.coverage.height};
 }
 
-} // namespace oa::app::touch_paint
+} // namespace oa::ui::paint
