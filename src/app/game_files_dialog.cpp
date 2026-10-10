@@ -19,6 +19,8 @@
 #include "oa/present/game_text.hpp"
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
 #include <array>
@@ -52,8 +54,6 @@ constexpr std::string_view catalogue_folder = engine_languages_folder;
 constexpr std::string_view catalogue_extension = ".tdf";
 /// The most drawn lines the dialog's text hooks keep before they start again.
 constexpr std::size_t kept_lines = 512;
-/// The margin kept round the dialog, in points.
-constexpr float dialog_margin_points = 16.0F;
 /// How long the dialog's loop waits for an event, in milliseconds: briefly while the check
 /// drives it, else long enough to idle.
 constexpr int32_t check_wait_ms = 16;
@@ -358,29 +358,58 @@ class TextHooksInstall {
     oa::present::GameTextHooks previous_{}; ///< the hooks in place before
 };
 
-/// Where the dialog lies on the canvas, and how large.
+/// Where the dialog lies on the canvas, how large, and at which size class.
 struct DialogPlace {
     int32_t x{};      ///< the canvas column of the dialog's left edge
     int32_t y{};      ///< the canvas row of its top edge
-    int32_t scale{1}; ///< canvas pixels across each of the dialog's pixels
+    int32_t scale{1}; ///< canvas pixels across each of the dialog's points
+    /// The size class the dialog is laid out at, from the points the scale leaves.
+    oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
+    int32_t width{settings::dialog_width};   ///< the dialog's width, in points
+    int32_t height{settings::dialog_height}; ///< the dialog's height, in points
 };
 
-/// Places the dialog centred on a viewport at the largest whole scale that fits with a margin.
+/// Returns a quotient rounded down, for a numerator below 0 too.
+///
+/// @param numerator the numerator
+/// @param denominator the denominator, above 0
+/// @return floor(numerator / denominator)
+[[nodiscard]] int32_t floor_quotient(int32_t numerator, int32_t denominator) noexcept {
+    const int32_t quotient = numerator / denominator;
+    return numerator % denominator < 0 ? quotient - 1 : quotient;
+}
+
+/// Places the dialog on a viewport as the OA layer places its screens: at
+/// the viewport's Auto scale (oa::ui::kit::auto_scale), no larger than lets
+/// Compact's dialog fit the canvas less its safe insets and at least 1, laid
+/// out at the size class of the points left over, and centred in the canvas
+/// less its insets, rounded down.
 ///
 /// @param viewport the viewport
 /// @return the place
 [[nodiscard]] DialogPlace place_dialog(const oa::ui::game_files::Viewport& viewport) noexcept {
-    const float margin = dialog_margin_points * viewport.px_per_point * 2.0F;
-    const int32_t across = static_cast<int32_t>(std::floor(
-        (static_cast<float>(viewport.width) - margin) / static_cast<float>(settings::dialog_width)
-    ));
-    const int32_t down = static_cast<int32_t>(std::floor(
-        (static_cast<float>(viewport.height) - margin) / static_cast<float>(settings::dialog_height)
-    ));
+    namespace kit = oa::ui::kit;
+    kit::Viewport canvas;
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.density = viewport.px_per_point;
+    canvas.safe = {
+        viewport.safe.left, viewport.safe.top, viewport.safe.right, viewport.safe.bottom
+    };
+    const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
+    const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
+    const int32_t fits = std::min(
+        room_width / kit::compact_metrics.dialog_width,
+        room_height / kit::compact_metrics.dialog_height
+    );
     DialogPlace place;
-    place.scale = std::max(1, std::min(across, down));
-    place.x = (viewport.width - settings::dialog_width * place.scale) / 2;
-    place.y = (viewport.height - settings::dialog_height * place.scale) / 2;
+    place.scale = std::max(1, std::min(kit::auto_scale(canvas.height, canvas.density), fits));
+    canvas.scale_percent = place.scale * 100;
+    place.size_class = kit::frame_of(canvas).size_class;
+    place.width = kit::metrics_of(place.size_class).dialog_width;
+    place.height = kit::metrics_of(place.size_class).dialog_height;
+    place.x = canvas.safe.left + floor_quotient(room_width - place.width * place.scale, 2);
+    place.y = canvas.safe.top + floor_quotient(room_height - place.height * place.scale, 2);
     return place;
 }
 
@@ -419,8 +448,8 @@ struct DialogPlace {
         out[3] = 255;
     }
     renderer::Surface surface;
-    surface.width = static_cast<uint32_t>(settings::dialog_width * place.scale);
-    surface.height = static_cast<uint32_t>(settings::dialog_height * place.scale);
+    surface.width = static_cast<uint32_t>(place.width * place.scale);
+    surface.height = static_cast<uint32_t>(place.height * place.scale);
     surface.rgb.assign(static_cast<std::size_t>(surface.width) * surface.height * 3U, 0);
     for (std::size_t pixel = 0, count = surface.rgb.size() / 3U; pixel < count; ++pixel) {
         surface.rgb[pixel * 3U] = back.r;
@@ -596,6 +625,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
     oa::ui::game_files::Viewport viewport =
         hooks.viewport != nullptr ? hooks.viewport(hooks.context) : oa::ui::game_files::Viewport{};
     DialogPlace place = place_dialog(viewport);
+    dialog.size_class = place.size_class;
     // Canvas pixels to the dialog's own.
     const auto source_x = [&](float x) {
         return static_cast<int32_t>(
@@ -635,6 +665,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
                 next.px_per_point != viewport.px_per_point) {
                 viewport = next;
                 place = place_dialog(viewport);
+                dialog.size_class = place.size_class;
                 dirty = true;
             }
         }
@@ -728,8 +759,8 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
                         const bool cancelled = event.type == SDL_EVENT_FINGER_CANCELED;
                         action = settings::dialog_pointer_up(
                             dialog,
-                            cancelled ? -settings::dialog_width : source_x(x),
-                            cancelled ? -settings::dialog_height : source_y(y)
+                            cancelled ? -place.width : source_x(x),
+                            cancelled ? -place.height : source_y(y)
                         );
                         finger.reset();
                     }

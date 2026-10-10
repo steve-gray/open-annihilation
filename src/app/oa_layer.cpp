@@ -6,13 +6,16 @@
 // picture and over a match, the overlay that hands it the game's input and
 // frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
 // on the main menu and in a match, and the screens of a notice and a
-// question (NoticeScreen, QuestionScreen).
+// question (NoticeScreen, QuestionScreen). On the front end the screens are
+// laid out at the size class of the window's canvas and drawn at its whole
+// scale in the window's own pixels.
 
 #include "oa_layer.hpp"
 
 #include "engine_settings_state.hpp"
 #include "render_state.hpp"
 
+#include "oa/app/frame_coordinates.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/display_layout.hpp"
@@ -154,69 +157,61 @@ layout::Rect union_rect(const layout::Rect& first, const layout::Rect& second) n
     return {left, top, right - left, bottom - top};
 }
 
-/// Returns the first window pixel, along one axis, whose centre lies at or
-/// past an edge of the picture: the pixel the picture's own pixels start
-/// from there, as SDL takes them for its nearest scaling.
+/// Returns the rectangle two rectangles share.
 ///
-/// @param area_start where the picture starts in the window
-/// @param scale window pixels per picture pixel
-/// @param edge the edge, in the picture's pixels
-/// @return the window pixel
-int32_t first_window_pixel(double area_start, double scale, int32_t edge) noexcept {
-    return static_cast<int32_t>(std::ceil(area_start + static_cast<double>(edge) * scale - 0.5));
+/// @param first a rectangle
+/// @param second another
+/// @return the shared rectangle; empty when they do not meet
+layout::Rect intersection(const layout::Rect& first, const layout::Rect& second) noexcept {
+    const int32_t left = std::max(first.x, second.x);
+    const int32_t top = std::max(first.y, second.y);
+    const int32_t right = std::min(first.x + first.width, second.x + second.width);
+    const int32_t bottom = std::min(first.y + first.height, second.y + second.height);
+    if (right <= left || bottom <= top)
+        return {};
+    return {left, top, right - left, bottom - top};
 }
 
-/// Returns the screen point under a window pixel's centre, along one axis.
+/// Copies a screen drawn in window pixels onto the front end's picture: each
+/// picture pixel the screen covers takes the screen's pixel at the picture
+/// pixel's centre in the window. Where the picture fills the window, pixel
+/// for pixel, that is the drawing copied at its place.
 ///
-/// @param pixel the window pixel
-/// @param area_start where the picture starts in the window
-/// @param scale window pixels per picture pixel
-/// @param shown_start where the screen starts on the picture
-/// @param shown_length the screen's length on the picture
-/// @param points the screen's length in its own points
-/// @return the point, within the screen's points
-int32_t point_under(
-    int32_t pixel,
-    double area_start,
-    double scale,
-    int32_t shown_start,
-    int32_t shown_length,
-    int32_t points
-) noexcept {
-    const double picture = (static_cast<double>(pixel) + 0.5 - area_start) / scale;
-    const double point = std::floor(
-        (picture - static_cast<double>(shown_start)) * static_cast<double>(points) /
-        static_cast<double>(shown_length)
-    );
-    return std::clamp(static_cast<int32_t>(point), 0, points - 1);
-}
-
-/// Copies a surface into a rectangle of an RGB frame, each frame pixel taking
-/// the surface pixel it lands on (nearest).
-///
-/// @param[in,out] frame the frame
-/// @param source the surface
-/// @param rect where the surface lands, in frame pixels; clipped to the frame
-void stamp_rgb(
-    renderer::Surface& frame, const renderer::Surface& source, const layout::Rect& rect
+/// @param[in,out] frame the picture
+/// @param drawn the screen's drawing, as large as its place
+/// @param shown where the screen shows, in window pixels
+/// @param view where the picture lies in the window
+void stamp_onto_picture(
+    renderer::Surface& frame,
+    const renderer::Surface& drawn,
+    const layout::Rect& shown,
+    const LayerView& view
 ) {
-    if (source.width == 0 || source.height == 0 || empty_rect(rect))
+    if (drawn.width == 0 || drawn.height == 0 || empty_rect(shown))
         return;
     const auto width = static_cast<int32_t>(frame.width);
     const auto height = static_cast<int32_t>(frame.height);
-    const int32_t top = std::max(rect.y, 0);
-    const int32_t bottom = std::min(rect.y + rect.height, height);
-    const int32_t left = std::max(rect.x, 0);
-    const int32_t right = std::min(rect.x + rect.width, width);
-    for (int32_t row = top; row < bottom; ++row) {
-        const auto source_row = static_cast<std::size_t>(
-            static_cast<int64_t>(row - rect.y) * source.height / rect.height
-        );
-        for (int32_t column = left; column < right; ++column) {
-            const auto source_column = static_cast<std::size_t>(
-                static_cast<int64_t>(column - rect.x) * source.width / rect.width
-            );
-            const auto* from = source.rgb.data() + (source_row * source.width + source_column) * 3U;
+    // The window pixel under a picture pixel's centre, along one axis.
+    const auto window_pixel = [](int32_t pixel, int32_t start, int32_t length, int32_t size) {
+        return start + static_cast<int32_t>(
+                           (static_cast<int64_t>(2 * pixel + 1) * length) / (2 * int64_t{size})
+                       );
+    };
+    for (int32_t row = 0; row < height; ++row) {
+        const int32_t source_row =
+            window_pixel(row, view.picture.y, view.picture.height, view.picture_size.y) - shown.y;
+        if (source_row < 0 || source_row >= static_cast<int32_t>(drawn.height))
+            continue;
+        for (int32_t column = 0; column < width; ++column) {
+            const int32_t source_column =
+                window_pixel(column, view.picture.x, view.picture.width, view.picture_size.x) -
+                shown.x;
+            if (source_column < 0 || source_column >= static_cast<int32_t>(drawn.width))
+                continue;
+            const auto* from =
+                drawn.rgb.data() + (static_cast<std::size_t>(source_row) * drawn.width +
+                                    static_cast<std::size_t>(source_column)) *
+                                       3U;
             auto* to = frame.rgb.data() + (static_cast<std::size_t>(row) * frame.width +
                                            static_cast<std::size_t>(column)) *
                                               3U;
@@ -253,20 +248,32 @@ void darken(renderer::Surface& picture, uint32_t passes, uint32_t opacity) {
         );
 }
 
-/// Returns where a notice or a question of a height shows: centred on the
-/// front end's picture at 1×.
+/// Returns a quotient rounded down, for a numerator below 0 too.
 ///
+/// @param numerator the numerator
+/// @param denominator the denominator, above 0
+/// @return floor(numerator / denominator)
+int32_t floor_div(int32_t numerator, int32_t denominator) noexcept {
+    const int32_t quotient = numerator / denominator;
+    return numerator % denominator < 0 ? quotient - 1 : quotient;
+}
+
+/// Returns the size class a screen of the front end is laid out at.
+///
+/// @param view what the screen is placed on
+/// @return the view's class; Compact in a match
+kit::SizeClass front_class(const LayerView& view) noexcept {
+    return view.match ? kit::SizeClass::compact : view.frame.size_class;
+}
+
+/// Returns where a notice or a question of a height shows: centred in the
+/// view's room at its scale, its class's notice width wide.
+///
+/// @param view what it is placed on
 /// @param box_height its height, in points
 /// @return its place
-LayerPlacement centred_box(int32_t box_height) noexcept {
-    return {
-        {(kCanvasWidth - kit::notice_width) / 2,
-         (kCanvasHeight - box_height) / 2,
-         kit::notice_width,
-         box_height},
-        kit::notice_width,
-        box_height
-    };
+LayerPlacement centred_box(const LayerView& view, int32_t box_height) noexcept {
+    return centred_placement(view, kit::metrics_of(front_class(view)).notice_width, box_height);
 }
 
 } // namespace
@@ -289,8 +296,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// @return the name
     [[nodiscard]] std::string_view name() const override { return kSettingsName; }
 
-    /// Returns where the dialog shows: centred on the main menu's picture at
-    /// 1×; in a match where match_dialog_rect puts it.
+    /// Returns where the dialog shows: on the main menu at the view's size
+    /// class, centred in the window at its scale; in a match at Compact where
+    /// match_dialog_rect puts it.
     ///
     /// @param view what the screen is placed on
     /// @return its place; empty once the dialog closed, or off its screen
@@ -300,14 +308,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
         if (!in_match_) {
             if (view.match || runtime_.screen_ != Screen::main_menu)
                 return {};
-            return {
-                {(kCanvasWidth - settings::dialog_width) / 2,
-                 (kCanvasHeight - settings::dialog_height) / 2,
-                 settings::dialog_width,
-                 settings::dialog_height},
-                settings::dialog_width,
-                settings::dialog_height
-            };
+            // At the view's class (lay_out), centred at its scale.
+            const kit::Metrics& sized = kit::metrics_of(front_class(view));
+            return centred_placement(view, sized.dialog_width, sized.dialog_height);
         }
         if (!view.match || view.match_layout == nullptr)
             return {};
@@ -328,7 +331,22 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// @return true
     [[nodiscard]] bool backdrop() const override { return true; }
 
-    /// Draws the dialog with the dialog's fonts and icon.
+    /// Lays the dialog out at the view's size class on the main menu, and at
+    /// Compact in a match (Dialog::size_class).
+    ///
+    /// @param view what the screen is placed on
+    void lay_out(const LayerView& view) override {
+        auto* dialog = runtime_.engine_settings_dialog();
+        if (dialog == nullptr)
+            return;
+        const kit::SizeClass size_class = in_match_ ? kit::SizeClass::compact : front_class(view);
+        if (dialog->size_class == size_class)
+            return;
+        dialog->size_class = size_class;
+        ++revision_;
+    }
+
+    /// Draws the dialog with the dialog's fonts and icon, at the canvas's scale.
     ///
     /// @param canvas where it draws
     void draw(const kit::Canvas& canvas) const override {
@@ -530,7 +548,18 @@ int32_t NoticeScreen::shown_height() const {
 LayerPlacement NoticeScreen::placement(const LayerView& view) const {
     if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
         return {};
-    return centred_box(shown_height());
+    // As tall as its text makes it at the view's class.
+    kit::Notice sized = notice_;
+    sized.size_class = front_class(view);
+    return centred_box(view, settings::notice_height(sized, layer_.screen_fonts()));
+}
+
+void NoticeScreen::lay_out(const LayerView& view) {
+    const kit::SizeClass size_class = front_class(view);
+    if (notice_.size_class == size_class)
+        return;
+    notice_.size_class = size_class;
+    ++revision_;
 }
 
 void NoticeScreen::draw(const kit::Canvas& canvas) const {
@@ -620,7 +649,18 @@ int32_t QuestionScreen::shown_height() const {
 LayerPlacement QuestionScreen::placement(const LayerView& view) const {
     if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
         return {};
-    return centred_box(shown_height());
+    // As tall as its text makes it at the view's class.
+    kit::Question sized = question_;
+    sized.size_class = front_class(view);
+    return centred_box(view, settings::prompt_height(sized, layer_.screen_fonts()));
+}
+
+void QuestionScreen::lay_out(const LayerView& view) {
+    size_class_ = front_class(view);
+    if (question_.size_class == size_class_)
+        return;
+    question_.size_class = size_class_;
+    ++revision_;
 }
 
 void QuestionScreen::draw(const kit::Canvas& canvas) const {
@@ -719,6 +759,38 @@ kit::Point layer_point(const LayerPlacement& placement, float x, float y) noexce
     };
 }
 
+LayerPlacement
+centred_placement(const LayerView& view, int32_t width_points, int32_t height_points) noexcept {
+    const int32_t scale = std::max(view.scale, 1);
+    const int32_t width = width_points * scale;
+    const int32_t height = height_points * scale;
+    return {
+        {view.room.x + floor_div(view.room.width - width, 2),
+         view.room.y + floor_div(view.room.height - height, 2),
+         width,
+         height},
+        width_points,
+        height_points
+    };
+}
+
+WindowPosition window_position(const LayerView& view, float x, float y) noexcept {
+    if (view.match || view.picture_size.x <= 0 || view.picture_size.y <= 0)
+        return {static_cast<double>(x), static_cast<double>(y)};
+    // The picture's pixels as the window draws them; a pixel's edge mapped
+    // back from the picture lands on it to the nearest 64th.
+    const auto along = [](float at, int32_t start, int32_t shown, int32_t size) {
+        const double exact = static_cast<double>(start) + static_cast<double>(at) *
+                                                              static_cast<double>(shown) /
+                                                              static_cast<double>(size);
+        return std::round(exact * 64.0) / 64.0;
+    };
+    return {
+        along(x, view.picture.x, view.picture.width, view.picture_size.x),
+        along(y, view.picture.y, view.picture.height, view.picture_size.y)
+    };
+}
+
 std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept {
     switch (sdl_key) {
     case SDLK_RETURN:
@@ -810,6 +882,7 @@ void OaLayer::overlay_draw(ScreenContext* context, void*) {
     if (runtime.screen_ == Screen::match)
         return;
     auto& layer = runtime.oa_layer();
+    layer.lay_out_screens();
     layer.darken_front_end(*context->surface);
     // With a renderer the screens go into the window over the picture
     // (present); the frame holds them without one, and for the picture
@@ -821,6 +894,7 @@ void OaLayer::overlay_draw(ScreenContext* context, void*) {
 void OaLayer::push(std::unique_ptr<LayerScreen> screen) {
     if (!screen)
         return;
+    screen->lay_out(view());
     screens_.push_back(std::move(screen));
     button_hovered_ = false;
     button_pressed_ = false;
@@ -891,21 +965,107 @@ LayerView OaLayer::view() const {
     seen.match = runtime_.screen_ == Screen::match;
     seen.game_screen = runtime_.screen_;
     if (seen.match) {
+        // The in-match Settings keeps its own placement, at Compact.
         seen.match_layout = &runtime_.match_layout_;
         seen.fit_safe_area = match_fits_safe_area(runtime_);
         const auto safe = match_safe_area(runtime_.match_layout_);
         seen.frame.area = {safe.x, safe.y, safe.width, safe.height};
-    } else {
-        seen.frame.area = {
-            0,
-            0,
-            static_cast<int32_t>(runtime_.surface_.width),
-            static_cast<int32_t>(runtime_.surface_.height)
-        };
+        seen.frame.size_class = kit::SizeClass::compact;
+        seen.frame.scale_percent = 100;
+        seen.room = safe;
+        seen.picture = {0, 0, runtime_.match_layout_.width, runtime_.match_layout_.height};
+        seen.picture_size = {runtime_.match_layout_.width, runtime_.match_layout_.height};
+        return seen;
     }
-    seen.frame.size_class = kit::SizeClass::compact;
-    seen.frame.scale_percent = 100;
+    // The front end's picture, which without a renderer is the canvas too.
+    const auto picture_width = static_cast<int32_t>(runtime_.surface_.width);
+    const auto picture_height = static_cast<int32_t>(runtime_.surface_.height);
+    seen.picture_size = {picture_width, picture_height};
+    seen.picture = {0, 0, picture_width, picture_height};
+    kit::Viewport viewport;
+    viewport.width = picture_width;
+    viewport.height = picture_height;
+    SDL_Renderer* sdl_renderer = runtime_.sdl_.renderer;
+    SDL_Window* window = runtime_.sdl_.window;
+    int output_width = 0;
+    int output_height = 0;
+    if (sdl_renderer != nullptr &&
+        SDL_GetRenderOutputSize(sdl_renderer, &output_width, &output_height) && output_width > 0 &&
+        output_height > 0) {
+        // The canvas in pixels and the window points it holds, as the Game
+        // files screen fills its viewport.
+        viewport.width = output_width;
+        viewport.height = output_height;
+        int window_width = 0;
+        int window_height = 0;
+        if (window != nullptr && SDL_GetWindowSize(window, &window_width, &window_height) &&
+            window_width > 0)
+            viewport.density = static_cast<float>(output_width) / static_cast<float>(window_width);
+        // The window's safe area, kept clear while the game has touch controls.
+        SDL_Rect safe{};
+        if (window != nullptr && runtime_.touch_controls_active() &&
+            SDL_GetWindowSafeArea(window, &safe) && safe.w > 0 && safe.h > 0) {
+            const auto pixels = [&viewport](int points) {
+                return static_cast<int32_t>(
+                    std::lround(static_cast<float>(points) * viewport.density)
+                );
+            };
+            viewport.safe = {
+                pixels(safe.x),
+                pixels(safe.y),
+                pixels(window_width - safe.x - safe.w),
+                pixels(window_height - safe.y - safe.h)
+            };
+        }
+        // Where the picture is drawn, from the whole pixel SDL starts it at.
+        int logical_width = 0;
+        int logical_height = 0;
+        SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
+        SDL_FRect reckoned{};
+        if (SDL_GetRenderLogicalPresentation(
+                sdl_renderer, &logical_width, &logical_height, &mode
+            ) &&
+            mode != SDL_LOGICAL_PRESENTATION_DISABLED && logical_width > 0 && logical_height > 0 &&
+            SDL_GetRenderLogicalPresentationRect(sdl_renderer, &reckoned) && reckoned.w > 0.0F &&
+            reckoned.h > 0.0F) {
+            const SDL_Rect drawn = drawn_frame_rect(reckoned);
+            seen.picture = {drawn.x, drawn.y, drawn.w, drawn.h};
+            seen.picture_size = {logical_width, logical_height};
+        } else {
+            seen.picture = {0, 0, output_width, output_height};
+        }
+    }
+    seen.room = {
+        viewport.safe.left,
+        viewport.safe.top,
+        viewport.width - viewport.safe.left - viewport.safe.right,
+        viewport.height - viewport.safe.top - viewport.safe.bottom
+    };
+    // The Auto scale, no larger than lets Compact's dialog fit the room, and
+    // at least 1; the class from the points left over.
+    const kit::Metrics& compact = kit::compact_metrics;
+    const int32_t fits =
+        std::min(seen.room.width / compact.dialog_width, seen.room.height / compact.dialog_height);
+    seen.scale =
+        std::max(int32_t{1}, std::min(kit::auto_scale(viewport.height, viewport.density), fits));
+    viewport.scale_percent = seen.scale * 100;
+    seen.frame = kit::frame_of(viewport);
     return seen;
+}
+
+LayerPlacement OaLayer::placement_of(std::string_view name) const {
+    const LayerScreen* named = find(name);
+    if (named == nullptr)
+        return {};
+    return named->placement(view());
+}
+
+void OaLayer::lay_out_screens() {
+    const LayerView seen = view();
+    for (const auto& screen : screens_)
+        screen->lay_out(seen);
+    for (const auto& screen : queue_)
+        screen->lay_out(seen);
 }
 
 bool OaLayer::shows(bool match) const {
@@ -962,6 +1122,7 @@ bool OaLayer::take_input(const ScreenInput& input) {
             latched_key_ = 0;
         return true;
     }
+    lay_out_screens();
     const LayerView seen = view();
     const uint32_t key_down = input.kind == ScreenInputKind::key_down ? input.key : 0U;
     bool taken = false;
@@ -1008,23 +1169,34 @@ LayerAnswer OaLayer::deliver(LayerScreen& screen, const LayerView& seen, const S
 LayerAnswer
 OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInput& input) {
     const LayerPlacement placed = screen.placement(seen);
+    // The pointer in the window's pixels, mapped to the screen's points by
+    // its placement.
+    const WindowPosition at = window_position(seen, input.x, input.y);
+    const kit::Point point =
+        layer_point(placed, static_cast<float>(at.x), static_cast<float>(at.y));
     switch (input.kind) {
     case ScreenInputKind::pointer_move:
     case ScreenInputKind::pointer_down:
     case ScreenInputKind::pointer_up: {
-        // A finger's reach, in the screen's points as it shows.
+        // A finger's reach, in the screen's points as it shows: the pick
+        // distance in the canvas the touch controls measure it in (the
+        // picture's pixels on the front end), over the canvas pixels a
+        // point takes.
         int32_t reach = 0;
-        if (runtime_.engine_settings_state().finger_pointer && placed.points_width > 0)
+        if (runtime_.engine_settings_state().finger_pointer && placed.points_width > 0 &&
+            seen.picture.width > 0) {
+            const double window_per_point =
+                static_cast<double>(placed.shown.width) / static_cast<double>(placed.points_width);
+            const double canvas_per_window =
+                static_cast<double>(seen.picture_size.x) / static_cast<double>(seen.picture.width);
             reach = Runtime::EngineSettingsState::finger_reach(
-                runtime_,
-                static_cast<double>(placed.shown.width) / static_cast<double>(placed.points_width)
+                runtime_, window_per_point * canvas_per_window
             );
-        return screen.pointer(
-            input.kind, input.button, layer_point(placed, input.x, input.y), reach
-        );
+        }
+        return screen.pointer(input.kind, input.button, point, reach);
     }
     case ScreenInputKind::wheel:
-        return screen.wheel(layer_point(placed, input.x, input.y), input.wheel_y);
+        return screen.wheel(point, input.wheel_y);
     case ScreenInputKind::key_down:
         if (const auto pressed = layer_key(input.key, input.modifiers))
             return screen.key(*pressed, input.key);
@@ -1086,6 +1258,8 @@ void OaLayer::show_waiting() {
 }
 
 void OaLayer::tick() {
+    // The window's size, and with it the screens' class, may have changed.
+    lay_out_screens();
     // A tick may close a screen, or open another. The screens waiting are
     // ticked too, so that one whose screen of the game goes leaves the queue.
     std::vector<LayerScreen*> ticking;
@@ -1161,28 +1335,44 @@ bool OaLayer::take_match_button(const ScreenInput& input) {
 
 void OaLayer::sync_text_input() {
     const LayerView seen = view();
-    // The field of a screen, in the coordinates input arrives in.
+    // The field of a screen, in the coordinates input arrives in: through
+    // its placement into the window, and on the front end through the
+    // picture's rectangle into the picture.
     const auto field_of = [&seen](const LayerScreen& screen) -> std::optional<layout::Rect> {
         const auto field = screen.text_field();
         if (!field)
             return std::nullopt;
         const LayerPlacement placed = screen.placement(seen);
-        if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
+        if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0 ||
+            empty_rect(seen.picture))
             return std::nullopt;
         const auto start =
             [](int32_t shown_start, int32_t shown_length, int32_t points, int32_t at) {
                 return shown_start +
                        static_cast<int32_t>(static_cast<int64_t>(at) * shown_length / points);
             };
+        const auto in_x = [&seen](int32_t window) {
+            return static_cast<int32_t>(
+                static_cast<int64_t>(window - seen.picture.x) * seen.picture_size.x /
+                seen.picture.width
+            );
+        };
+        const auto in_y = [&seen](int32_t window) {
+            return static_cast<int32_t>(
+                static_cast<int64_t>(window - seen.picture.y) * seen.picture_size.y /
+                seen.picture.height
+            );
+        };
         const int32_t left =
-            start(placed.shown.x, placed.shown.width, placed.points_width, field->x);
+            in_x(start(placed.shown.x, placed.shown.width, placed.points_width, field->x));
         const int32_t first_row =
-            start(placed.shown.y, placed.shown.height, placed.points_height, field->y);
-        const int32_t right =
-            start(placed.shown.x, placed.shown.width, placed.points_width, field->x + field->width);
-        const int32_t bottom = start(
-            placed.shown.y, placed.shown.height, placed.points_height, field->y + field->height
+            in_y(start(placed.shown.y, placed.shown.height, placed.points_height, field->y));
+        const int32_t right = in_x(
+            start(placed.shown.x, placed.shown.width, placed.points_width, field->x + field->width)
         );
+        const int32_t bottom = in_y(start(
+            placed.shown.y, placed.shown.height, placed.points_height, field->y + field->height
+        ));
         return layout::Rect{left, first_row, right - left, bottom - first_row};
     };
     std::optional<layout::Rect> wanted;
@@ -1207,16 +1397,18 @@ void OaLayer::sync_text_input() {
 }
 
 renderer::Surface
-OaLayer::draw_screen(const LayerScreen& screen, const LayerPlacement& placed) const {
+OaLayer::draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const {
+    // At the scale itself: never drawn at 1× and enlarged.
+    const int32_t whole = std::max(scale, int32_t{1});
     renderer::Surface drawn;
-    drawn.width = static_cast<uint32_t>(std::max(placed.points_width, 0));
-    drawn.height = static_cast<uint32_t>(std::max(placed.points_height, 0));
+    drawn.width = static_cast<uint32_t>(std::max(placed.points_width, 0) * whole);
+    drawn.height = static_cast<uint32_t>(std::max(placed.points_height, 0) * whole);
     drawn.rgb.assign(static_cast<std::size_t>(drawn.width) * drawn.height * 3U, 0);
     if (drawn.rgb.empty())
         return drawn;
     kit::Canvas canvas{};
     canvas.surface = &drawn;
-    canvas.placement = {0, 0, 1};
+    canvas.placement = {0, 0, whole};
     canvas.fonts = runtime_.engine_settings_fonts();
     canvas.icon = runtime_.engine_settings_icon();
     screen.draw(canvas);
@@ -1239,7 +1431,8 @@ void OaLayer::darken_front_end(renderer::Surface& frame) const {
 
 void OaLayer::compose_front_end(renderer::Surface& frame) const {
     const LayerView seen = view();
-    if (seen.match)
+    if (seen.match || empty_rect(seen.picture) || seen.picture_size.x <= 0 ||
+        seen.picture_size.y <= 0)
         return;
     const std::vector<uint32_t> above = backdrops_above(seen);
     for (std::size_t index = 0; index < screens_.size(); ++index) {
@@ -1249,9 +1442,9 @@ void OaLayer::compose_front_end(renderer::Surface& frame) const {
             continue;
         // A screen under a modal screen with a backdrop darkens with what
         // lies under it.
-        renderer::Surface drawn = draw_screen(screen, placed);
+        renderer::Surface drawn = draw_screen(screen, placed, seen.scale);
         darken(drawn, above[index], kit::menu_backdrop_opacity);
-        stamp_rgb(frame, drawn, placed.shown);
+        stamp_onto_picture(frame, drawn, placed.shown, seen);
     }
 }
 
@@ -1271,55 +1464,85 @@ void OaLayer::present(const SDL_FRect* picture_area) {
 
 void OaLayer::present_front_end(const SDL_FRect& area) {
     SDL_Renderer* sdl_renderer = runtime_.sdl_.renderer;
+    lay_out_screens();
     const LayerView seen = view();
     if (seen.match || !(area.w > 0.0F) || !(area.h > 0.0F))
         return;
-    // The picture's own size, which the logical presentation scales into area.
-    int picture_width = 0;
-    int picture_height = 0;
-    SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
-    if (!SDL_GetRenderLogicalPresentation(sdl_renderer, &picture_width, &picture_height, &mode) ||
-        mode == SDL_LOGICAL_PRESENTATION_DISABLED || picture_width <= 0 || picture_height <= 0) {
-        picture_width = static_cast<int>(runtime_.surface_.width);
-        picture_height = static_cast<int>(runtime_.surface_.height);
-    }
     int output_width = 0;
     int output_height = 0;
     if (!SDL_GetRenderOutputSize(sdl_renderer, &output_width, &output_height) ||
-        picture_width <= 0 || picture_height <= 0 || output_width <= 0 || output_height <= 0)
+        output_width <= 0 || output_height <= 0)
         return;
-    const double scale_x = static_cast<double>(area.w) / picture_width;
-    const double scale_y = static_cast<double>(area.h) / picture_height;
+    const layout::Rect output{0, 0, output_width, output_height};
     FrontLook look{};
-    look.picture_width = picture_width;
-    look.picture_height = picture_height;
+    look.picture_width = seen.picture_size.x;
+    look.picture_height = seen.picture_size.y;
     look.area = {area.x, area.y, area.w, area.h};
     layout::Rect bounds{};
     const std::vector<uint32_t> above = backdrops_above(seen);
+    uint32_t darkenings = 0;
     for (std::size_t index = 0; index < screens_.size(); ++index) {
         const auto& screen = *screens_[index];
         const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
             continue;
-        // The window pixels whose centres fall on the screen's place on the
-        // picture, as the picture's own pixels are scaled there.
-        const int32_t left = std::max(first_window_pixel(area.x, scale_x, placed.shown.x), 0);
-        const int32_t first_row = std::max(first_window_pixel(area.y, scale_y, placed.shown.y), 0);
-        const int32_t right = std::min(
-            first_window_pixel(area.x, scale_x, placed.shown.x + placed.shown.width), output_width
-        );
-        const int32_t bottom = std::min(
-            first_window_pixel(area.y, scale_y, placed.shown.y + placed.shown.height), output_height
-        );
-        if (right <= left || bottom <= first_row)
+        if (screen.modal() && screen.backdrop())
+            ++darkenings;
+        // The part of its place the window shows.
+        const layout::Rect window = intersection(placed.shown, output);
+        if (empty_rect(window))
             continue;
         FrontPiece piece{};
-        piece.window = {left, first_row, right - left, bottom - first_row};
+        piece.window = window;
         piece.shown = placed.shown;
-        piece.drawn = draw_screen(screen, placed);
+        // Drawn at the view's scale, as large as its place.
+        piece.drawn = draw_screen(screen, placed, seen.scale);
         darken(piece.drawn, above[index], kit::menu_backdrop_opacity);
         bounds = union_rect(bounds, piece.window);
         look.pieces.push_back(std::move(piece));
+    }
+    // In the window's own pixels, not through the picture's logical
+    // presentation; everything is put back for the cursor and the next frame.
+    const RenderState kept(sdl_renderer);
+    kept.use_window_pixels();
+    // Under a modal screen with a backdrop the whole window darkens: the
+    // picture is darkened in the frame (darken_front_end), and the window
+    // outside it, where SDL clears to black, takes black darkened as often.
+    if (darkenings > 0) {
+        renderer::Surface black;
+        black.width = 1;
+        black.height = 1;
+        black.rgb.assign(3U, 0);
+        darken(black, darkenings, kit::menu_backdrop_opacity);
+        if (!runtime_.gamma_identity_)
+            runtime_.apply_gamma_rgb(black.rgb.data(), 1U, 3);
+        std::vector<SDL_FRect> bars;
+        const auto bar = [&bars](int32_t x, int32_t y, int32_t width, int32_t height) {
+            if (width > 0 && height > 0)
+                bars.push_back(
+                    {static_cast<float>(x),
+                     static_cast<float>(y),
+                     static_cast<float>(width),
+                     static_cast<float>(height)}
+                );
+        };
+        const layout::Rect& picture = seen.picture;
+        bar(0, 0, output_width, picture.y);
+        bar(
+            0, picture.y + picture.height, output_width, output_height - picture.y - picture.height
+        );
+        bar(0, picture.y, picture.x, picture.height);
+        bar(picture.x + picture.width,
+            picture.y,
+            output_width - picture.x - picture.width,
+            picture.height);
+        if (!bars.empty()) {
+            SDL_SetRenderDrawBlendMode(sdl_renderer, SDL_BLENDMODE_NONE);
+            SDL_SetRenderDrawColor(
+                sdl_renderer, black.rgb[0], black.rgb[1], black.rgb[2], SDL_ALPHA_OPAQUE
+            );
+            SDL_RenderFillRects(sdl_renderer, bars.data(), static_cast<int>(bars.size()));
+        }
     }
     if (look.pieces.empty())
         return;
@@ -1351,45 +1574,26 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         std::vector<uint8_t> rgba(
             static_cast<std::size_t>(bounds.width) * static_cast<std::size_t>(bounds.height) * 4U, 0
         );
+        // Each piece's pixels as drawn, one window pixel each.
         for (const auto& piece : look.pieces) {
-            const auto points_width = static_cast<int32_t>(piece.drawn.width);
-            const auto points_height = static_cast<int32_t>(piece.drawn.height);
-            if (points_width <= 0 || points_height <= 0)
-                continue;
-            // Each window pixel takes the screen's pixel under its centre.
-            std::vector<int32_t> columns(static_cast<std::size_t>(piece.window.width));
-            for (int32_t column = 0; column < piece.window.width; ++column)
-                columns[static_cast<std::size_t>(column)] = point_under(
-                    piece.window.x + column,
-                    area.x,
-                    scale_x,
-                    piece.shown.x,
-                    piece.shown.width,
-                    points_width
-                );
+            const int32_t first_column = piece.window.x - piece.shown.x;
             for (int32_t row = 0; row < piece.window.height; ++row) {
-                const auto source_row = static_cast<std::size_t>(point_under(
-                    piece.window.y + row,
-                    area.y,
-                    scale_y,
-                    piece.shown.y,
-                    piece.shown.height,
-                    points_height
-                ));
+                const auto source_row =
+                    static_cast<std::size_t>(piece.window.y + row - piece.shown.y);
+                const auto* from =
+                    piece.drawn.rgb.data() +
+                    (source_row * piece.drawn.width + static_cast<std::size_t>(first_column)) * 3U;
                 auto* to =
                     rgba.data() + (static_cast<std::size_t>(piece.window.y + row - bounds.y) *
                                        static_cast<std::size_t>(bounds.width) +
                                    static_cast<std::size_t>(piece.window.x - bounds.x)) *
                                       4U;
-                for (const int32_t source_column : columns) {
-                    const auto* from =
-                        piece.drawn.rgb.data() +
-                        (source_row * piece.drawn.width + static_cast<std::size_t>(source_column)) *
-                            3U;
+                for (int32_t column = 0; column < piece.window.width; ++column) {
                     to[0] = from[0];
                     to[1] = from[1];
                     to[2] = from[2];
                     to[3] = 255U;
+                    from += 3;
                     to += 4;
                 }
             }
@@ -1403,10 +1607,6 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         uploaded_.reset();
         uploaded_gamma_ = runtime_.gamma_table_;
     }
-    // In the window's own pixels, not through the picture's logical
-    // presentation; everything is put back for the cursor and the next frame.
-    const RenderState kept(sdl_renderer);
-    kept.use_window_pixels();
     const SDL_FRect at{
         static_cast<float>(bounds.x),
         static_cast<float>(bounds.y),
@@ -1642,7 +1842,7 @@ bool OaLayer::refresh_match() {
     for (const auto& shown : shown_screens) {
         // A screen under a modal screen with a backdrop darkens as the
         // button does.
-        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed);
+        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed, 1);
         darken(drawn, shown.darkenings, settings::ingame_backdrop_opacity);
         stamp(rgba_, look.width, look.height, drawn, shown.placed.shown);
         bounds_ = union_rect(bounds_, shown.placed.shown);
