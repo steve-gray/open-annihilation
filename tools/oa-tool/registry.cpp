@@ -420,11 +420,12 @@ class PartSink final : public http::BodySink {
         if (head.status == 200) {
             if (package_size_) {
                 if (!head.content_length || *head.content_length != *package_size_) {
-                    halt_ = Halt::differs;
+                    note_length(head.content_length);
                     return false;
                 }
             } else if (head.content_length && *head.content_length > picture_limit) {
                 halt_ = Halt::differs;
+                over_limit_ = true;
                 return false;
             }
             if (ranged_)
@@ -432,16 +433,17 @@ class PartSink final : public http::BodySink {
             total_ = package_size_ ? package_size_ : head.content_length;
         } else if (head.status == 206) {
             if (!head.content_range || head.content_range->first != done_) {
-                halt_ = Halt::differs;
+                halt_ = Halt::other;
                 return false;
             }
             if (package_size_) {
                 if (!head.content_range->total || *head.content_range->total != *package_size_) {
-                    halt_ = Halt::differs;
+                    note_length(head.content_range->total);
                     return false;
                 }
             } else if (head.content_range->total && *head.content_range->total > picture_limit) {
                 halt_ = Halt::differs;
+                over_limit_ = true;
                 return false;
             }
             total_ = head.content_range && head.content_range->total ? head.content_range->total
@@ -475,12 +477,25 @@ class PartSink final : public http::BodySink {
         while (offset < bytes.size()) {
             const uint64_t ceiling = total_ ? *total_ : picture_limit;
             if (done_ + static_cast<uint64_t>(buffer_.size()) > ceiling) {
-                halt_ = Halt::differs;
+                if (package_size_)
+                    note_length(done_ + static_cast<uint64_t>(buffer_.size()));
+                else {
+                    halt_ = Halt::differs;
+                    over_limit_ = true;
+                }
                 return false;
             }
             const uint64_t room = ceiling - done_ - static_cast<uint64_t>(buffer_.size());
             if (room == 0) {
-                halt_ = Halt::differs;
+                if (package_size_)
+                    note_length(
+                        done_ + static_cast<uint64_t>(buffer_.size()) +
+                        static_cast<uint64_t>(bytes.size() - offset)
+                    );
+                else {
+                    halt_ = Halt::differs;
+                    over_limit_ = true;
+                }
                 return false;
             }
             std::size_t take = bytes.size() - offset;
@@ -528,9 +543,23 @@ class PartSink final : public http::BodySink {
     int status_ = 0;
     Halt halt_ = Halt::none;
     bool opened_ = false;
+    bool over_limit_ = false;
+    bool length_known_ = false;
+    uint64_t length_got_ = 0;
     uint64_t done_ = 0;
 
   private:
+
+    /// Records a length the catalogue did not name, and stops the body.
+    ///
+    /// @param got the length the response named, when it named one
+    void note_length(const std::optional<uint64_t>& got) {
+        halt_ = Halt::differs;
+        if (got) {
+            length_known_ = true;
+            length_got_ = *got;
+        }
+    }
 
     bool flush_buffer() {
         if (buffer_.empty())
@@ -553,7 +582,26 @@ class PartSink final : public http::BodySink {
     std::vector<uint8_t> buffer_;
 };
 
-enum class Transfer : uint8_t { finished, partial, denied, missing, differs, range, failed };
+/// How one body ended, and the lengths a size refusal is naming.
+struct Transfer {
+    enum class Kind : uint8_t {
+        finished,
+        partial,
+        denied,
+        missing,
+        range,
+        failed,
+        unreadable,
+        length,
+        limit,
+    };
+
+    Kind kind = Kind::failed;
+    bool length_known = false; ///< `got` is the length the response or the file had
+    uint64_t got = 0;          ///< that length, in bytes
+    uint64_t named = 0;        ///< the length the catalogue names, in bytes
+    int status = 0;            ///< the response status, when the server refused the body
+};
 
 Transfer transfer_body(
     http::Client& client,
@@ -574,42 +622,118 @@ Transfer transfer_body(
     const bool clean = response.failure == http::Failure::none && sink.halt_ == Halt::none;
     sink.finish_tail(clean);
     sink.close_file();
-    if (sink.halt_ == Halt::denied)
-        return Transfer::denied;
+    if (sink.halt_ == Halt::denied) {
+        Transfer ended;
+        ended.kind = Transfer::Kind::denied;
+        ended.status = sink.status_;
+        return ended;
+    }
     if (sink.halt_ == Halt::missing)
-        return Transfer::missing;
+        return Transfer{Transfer::Kind::missing};
     if (sink.halt_ == Halt::range)
-        return Transfer::range;
+        return Transfer{Transfer::Kind::range};
     if (sink.halt_ == Halt::disk)
-        return Transfer::failed;
-    if (sink.halt_ == Halt::differs || sink.halt_ == Halt::other) {
+        return Transfer{Transfer::Kind::failed};
+    if (sink.halt_ == Halt::other) {
         if (sink.opened_)
             remove_file(part);
-        return Transfer::differs;
+        Transfer ended;
+        ended.kind = Transfer::Kind::failed;
+        ended.status = sink.status_;
+        return ended;
+    }
+    if (sink.halt_ == Halt::differs) {
+        if (sink.opened_)
+            remove_file(part);
+        if (sink.over_limit_)
+            return Transfer{Transfer::Kind::limit};
+        Transfer ended;
+        ended.kind = Transfer::Kind::length;
+        ended.length_known = sink.length_known_;
+        ended.got = sink.length_got_;
+        ended.named = package_size.value_or(0);
+        return ended;
     }
     if (response.failure == http::Failure::too_large) {
+        // A body past the catalogue size is refused before the sink opens, so the
+        // length to name is the one the response declared, not the empty part.
         std::error_code error;
         const auto size = fs::is_regular_file(part, error) ? fs::file_size(part, error) : 0;
-        if (package_size && !error && size == *package_size)
-            return Transfer::finished;
+        if (package_size && !error && static_cast<uint64_t>(size) == *package_size)
+            return Transfer{Transfer::Kind::finished};
         remove_file(part);
-        return Transfer::differs;
+        if (!package_size)
+            return Transfer{Transfer::Kind::limit};
+        const bool declared = response.content_length && *response.content_length != *package_size;
+        if (error && !declared)
+            return Transfer{Transfer::Kind::failed};
+        Transfer ended;
+        ended.kind = Transfer::Kind::length;
+        ended.length_known = true;
+        ended.got = declared ? *response.content_length : static_cast<uint64_t>(size);
+        ended.named = *package_size;
+        return ended;
     }
     if (response.failure == http::Failure::connection_lost ||
         response.failure == http::Failure::timed_out)
-        return Transfer::partial;
+        return Transfer{Transfer::Kind::partial};
     if (response.failure != http::Failure::none)
-        return Transfer::partial;
+        return Transfer{Transfer::Kind::partial};
     if (package_size) {
         std::error_code error;
         const auto size = fs::file_size(part, error);
-        if (error || size != *package_size)
-            return Transfer::partial;
+        if (error)
+            return Transfer{Transfer::Kind::unreadable};
+        if (static_cast<uint64_t>(size) != *package_size) {
+            remove_file(part);
+            Transfer ended;
+            ended.kind = Transfer::Kind::length;
+            ended.length_known = true;
+            ended.got = static_cast<uint64_t>(size);
+            ended.named = *package_size;
+            return ended;
+        }
     }
-    return Transfer::finished;
+    return Transfer{Transfer::Kind::finished};
 }
 
-enum class CopyEnd : uint8_t { ok, bad, partial, give_up };
+/// Why a payload was not copied. A size or a hash carries the figures behind it.
+struct CopyEnd {
+    enum class Kind : uint8_t {
+        ok,
+        partial,
+        give_up,
+        unnamed_picture,
+        key_not_ready,
+        transfer_failed,
+        unreadable,
+        not_found,
+        size_differs,
+        hash_differs,
+        resume_failed,
+        picture_too_large,
+    };
+
+    Kind kind = Kind::ok;
+    bool length_known = false;
+    uint64_t got = 0;
+    uint64_t named = 0;
+    int status = 0;
+    sha::Digest actual{};
+    bool hashed = false;
+};
+
+/// A copy that kept the file the catalogue named.
+CopyEnd copy_ok() {
+    return {};
+}
+
+/// A copy that stopped for `kind`, with no sizes and no digest yet.
+CopyEnd copy_kind(CopyEnd::Kind kind) {
+    CopyEnd ended;
+    ended.kind = kind;
+    return ended;
+}
 
 struct Payload {
     std::string path;
@@ -827,10 +951,38 @@ CopyEnd store_part(const fs::path& part, const fs::path& destination, const sha:
     if (!actual || *actual != digest) {
         remove_file(part);
         remove_file(destination);
-        return CopyEnd::bad;
+        if (!actual)
+            return copy_kind(CopyEnd::Kind::unreadable);
+        CopyEnd ended = copy_kind(CopyEnd::Kind::hash_differs);
+        ended.actual = *actual;
+        ended.hashed = true;
+        return ended;
     }
     replace_with(part, destination);
-    return CopyEnd::ok;
+    return copy_ok();
+}
+
+/// The refusal that matches how the body ended.
+///
+/// @param transfer the body's outcome
+/// @return the copy's refusal
+CopyEnd from_transfer(const Transfer& transfer) {
+    if (transfer.kind == Transfer::Kind::length) {
+        CopyEnd ended = copy_kind(CopyEnd::Kind::size_differs);
+        ended.length_known = transfer.length_known;
+        ended.got = transfer.got;
+        ended.named = transfer.named;
+        return ended;
+    }
+    if (transfer.kind == Transfer::Kind::limit)
+        return copy_kind(CopyEnd::Kind::picture_too_large);
+    if (transfer.kind == Transfer::Kind::missing)
+        return copy_kind(CopyEnd::Kind::not_found);
+    if (transfer.kind == Transfer::Kind::unreadable)
+        return copy_kind(CopyEnd::Kind::unreadable);
+    CopyEnd ended = copy_kind(CopyEnd::Kind::transfer_failed);
+    ended.status = transfer.status;
+    return ended;
 }
 
 CopyEnd copy_payload(
@@ -844,7 +996,7 @@ CopyEnd copy_payload(
     Output& output
 ) {
     if (payload.picture && !payload.named)
-        return CopyEnd::bad;
+        return copy_kind(CopyEnd::Kind::unnamed_picture);
     const fs::path destination = placed_file(root, payload.path);
     fs::path part = destination;
     part += content::part_suffix;
@@ -852,7 +1004,7 @@ CopyEnd copy_payload(
     if (fs::is_regular_file(destination, error)) {
         const std::optional<sha::Digest> actual = hash_file(destination);
         if (actual && *actual == payload.digest)
-            return CopyEnd::ok;
+            return copy_ok();
         remove_file(destination);
     }
     uint64_t have = 0;
@@ -878,12 +1030,12 @@ CopyEnd copy_payload(
     for (;;) {
         if (keyed) {
             if (api == nullptr || package == nullptr)
-                return CopyEnd::bad;
+                return copy_kind(CopyEnd::Kind::key_not_ready);
             const HeldKey held = obtain_key(client, *api, key_fields(*package, install), output);
             if (held.hold == KeyHold::give_up)
-                return CopyEnd::give_up;
+                return copy_kind(CopyEnd::Kind::give_up);
             if (held.hold != KeyHold::ready)
-                return CopyEnd::bad;
+                return copy_kind(CopyEnd::Kind::key_not_ready);
             address = held.key.url;
         }
         std::error_code size_error;
@@ -896,14 +1048,14 @@ CopyEnd copy_payload(
         const Transfer transfer = transfer_body(
             client, address, part, have, payload.picture ? std::nullopt : payload.size
         );
-        if (transfer == Transfer::denied && keyed) {
+        if (transfer.kind == Transfer::Kind::denied && keyed) {
             if (package_rekeys >= rekey_limit)
-                return CopyEnd::bad;
+                return copy_kind(CopyEnd::Kind::key_not_ready);
             ++package_rekeys;
             output.out << "asking for a key again\n";
             continue;
         }
-        if (transfer == Transfer::range) {
+        if (transfer.kind == Transfer::Kind::range) {
             if (payload.size && have == *payload.size)
                 return store_part(part, destination, payload.digest);
             if (!range_restarted) {
@@ -911,18 +1063,65 @@ CopyEnd copy_payload(
                 range_restarted = true;
                 continue;
             }
-            return CopyEnd::bad;
+            return copy_kind(CopyEnd::Kind::resume_failed);
         }
-        if (transfer == Transfer::partial)
-            return CopyEnd::partial;
-        if (transfer == Transfer::finished)
+        if (transfer.kind == Transfer::Kind::partial)
+            return copy_kind(CopyEnd::Kind::partial);
+        if (transfer.kind == Transfer::Kind::finished)
             return store_part(part, destination, payload.digest);
-        if (transfer == Transfer::differs) {
+        if (transfer.kind == Transfer::Kind::length || transfer.kind == Transfer::Kind::limit) {
             remove_file(part);
             remove_file(destination);
         }
-        return CopyEnd::bad;
+        return from_transfer(transfer);
     }
+}
+
+/// The sentence for one refusal, naming the size or the SHA-256 when that is why.
+std::string copy_problem(const CopyEnd& ended, const sha::Digest& expected) {
+    switch (ended.kind) {
+    case CopyEnd::Kind::unnamed_picture:
+        return "the picture is not named by its SHA-256";
+    case CopyEnd::Kind::key_not_ready:
+        return "a download key was not ready";
+    case CopyEnd::Kind::not_found:
+        return "the file was not found";
+    case CopyEnd::Kind::unreadable:
+        return "the file could not be read";
+    case CopyEnd::Kind::transfer_failed:
+        if (ended.status != 0)
+            return "the server answered " + std::to_string(ended.status);
+        return "the file could not be written";
+    case CopyEnd::Kind::picture_too_large:
+        return "the picture is too large";
+    case CopyEnd::Kind::resume_failed:
+        return "the server did not resume the file";
+    case CopyEnd::Kind::size_differs:
+        if (ended.length_known) {
+            return "the file is " + std::to_string(ended.got) + " bytes; the catalogue names " +
+                   std::to_string(ended.named);
+        }
+        return "the response named no length; the catalogue names " + std::to_string(ended.named) +
+               " bytes";
+    case CopyEnd::Kind::hash_differs: {
+        std::string text = "the file's SHA-256 is ";
+        if (ended.hashed) {
+            const auto got = sha::to_hex(ended.actual);
+            text.append(got.begin(), got.end());
+        } else {
+            text += "unreadable";
+        }
+        text += "; the catalogue names ";
+        const auto named = sha::to_hex(expected);
+        text.append(named.begin(), named.end());
+        return text;
+    }
+    case CopyEnd::Kind::ok:
+    case CopyEnd::Kind::partial:
+    case CopyEnd::Kind::give_up:
+        break;
+    }
+    return "the file could not be copied";
 }
 
 std::string
@@ -1324,13 +1523,13 @@ int run_registry_mirror(std::span<const std::string> arguments, Output& output) 
         }
         const CopyEnd end =
             copy_payload(client, folder, payload, tokens, api, package, install, output);
-        if (end == CopyEnd::give_up)
+        if (end.kind == CopyEnd::Kind::give_up)
             throw Failure("the check expired");
-        if (end == CopyEnd::partial) {
+        if (end.kind == CopyEnd::Kind::partial) {
             report_file(output, payload.path, "the download stopped before the file was complete");
             failed = true;
-        } else if (end == CopyEnd::bad) {
-            report_file(output, payload.path, "the file is not the one the catalogue named");
+        } else if (end.kind != CopyEnd::Kind::ok) {
+            report_file(output, payload.path, copy_problem(end, payload.digest));
             failed = true;
         }
     }
