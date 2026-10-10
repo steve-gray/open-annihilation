@@ -7,7 +7,7 @@ add_library(oa-formats-hpi assets.cpp archive.cpp asset_store.cpp hpi_writer.cpp
 add_library(oa::formats::hpi ALIAS oa-formats-hpi)
 target_include_directories(oa-formats-hpi PUBLIC include)
 target_link_libraries(oa-formats-hpi PUBLIC oa-base-bytes oa-formats-sqsh ZLIB::ZLIB oa-options)
-target_link_libraries(oa-formats-hpi PRIVATE oa-base-threads)
+target_link_libraries(oa-formats-hpi PRIVATE oa-base-threads oa-formats-zip)
 
 add_executable(oa-hpi-inspect tools/inspect.cpp)
 target_link_libraries(oa-hpi-inspect PRIVATE oa-formats-hpi oa-options)
@@ -34,4 +34,11 @@ if(BUILD_TESTING)
   add_executable(oa-hpi-layering-test tests/layering_test.cpp)
   target_link_libraries(oa-hpi-layering-test PRIVATE oa-formats-hpi oa-options)
   add_test(NAME hpi-layering COMMAND oa-hpi-layering-test)
+  # One folder or zip beneath the loose files and the archives, mounted and
+  # unmounted while other threads read.
+  add_executable(oa-hpi-pack-layer-test tests/pack_layer_test.cpp)
+  target_link_libraries(oa-hpi-pack-layer-test PRIVATE oa-formats-hpi oa-formats-zip oa-base-threads
+    oa-options)
+  add_test(NAME hpi-pack-layer COMMAND oa-hpi-pack-layer-test)
+  set_tests_properties(hpi-pack-layer PROPERTIES TIMEOUT 60)
 endif()

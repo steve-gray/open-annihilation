@@ -75,6 +75,11 @@ if(BUILD_TESTING)
   add_test(NAME net-socket-search COMMAND oa-netgame-socket-search-test)
   set_tests_properties(net-socket-search PROPERTIES TIMEOUT 30)
 
+  add_executable(oa-netgame-stream-socket-test tests/stream_socket_test.cpp)
+  target_link_libraries(oa-netgame-stream-socket-test PRIVATE oa-netgame oa-test-support)
+  add_test(NAME net-stream-socket COMMAND oa-netgame-stream-socket-test)
+  set_tests_properties(net-stream-socket PROPERTIES TIMEOUT 60)
+
   # Malformed and mutated messages, frames, records and recordings; .tad
   # recordings given as arguments, or directories of them, join the seeds.
   add_executable(oa-netgame-wire-malformed-test tests/wire_malformed_test.cpp)
@@ -104,7 +109,7 @@ endif()
 if(WIN32)
   set(oa_netgame_executables oa-netgame-tool oa-netgame-dplay-peer)
   if(BUILD_TESTING)
-    list(APPEND oa_netgame_executables oa-netgame-test)
+    list(APPEND oa_netgame_executables oa-netgame-test oa-netgame-stream-socket-test)
   endif()
   foreach(target IN LISTS oa_netgame_executables)
     add_custom_command(TARGET ${target} POST_BUILD
