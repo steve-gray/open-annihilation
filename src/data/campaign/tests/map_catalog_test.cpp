@@ -215,6 +215,51 @@ void list_tests() {
     map_clear_list_cache(list, nullptr);
 }
 
+// Lists only the names the test put in listed_again, in that order, so a
+// stem keeps the capitalisation the test wrote.
+void list_named(
+    void* context,
+    const char* /*directory*/,
+    const char* /*extension*/,
+    void (*visit)(void*, const char*),
+    void* visit_context
+) {
+    auto* files = static_cast<MemoryFiles*>(context);
+    for (const auto& name : files->listed_again)
+        visit(visit_context, name.c_str());
+}
+
+// A name of 127 bytes fits the setup block's map name field with its NUL; a
+// name of 128 bytes does not, and is left out. A pack map is listed by its
+// suffixed stem when nothing translates it.
+void long_and_suffixed_name_tests() {
+    MemoryFiles memory;
+    const std::string fits(127, 'a');
+    const std::string over(128, 'b');
+    const std::string isle = "isle_of_ashes@archipelago";
+    const auto body = ota("Network 1\0");
+    memory.files["maps/" + fits + ".ota"] = body;
+    memory.files["maps/" + over + ".ota"] = body;
+    memory.files["maps/" + isle + ".ota"] = body;
+    memory.listed_again = {fits + ".ota", over + ".ota", isle + ".ota"};
+    auto files = services(memory);
+    files.list = list_named;
+
+    MapList list{};
+    char* names = nullptr;
+    const auto count = map_build_multiplayer_list(list, files, MapScanHost{}, &names, false, false);
+    const auto listed = unpack(names, count);
+    expect(
+        count == 2 && listed.size() == 2, "the 127-byte name is listed and the 128-byte name is not"
+    );
+    expect(listed.size() == 2 && listed[0] == fits, "the name that fits is the 127-byte stem");
+    expect(
+        listed.size() == 2 && listed[1] == isle, "isle_of_ashes@archipelago is listed untranslated"
+    );
+    std::free(names);
+    map_clear_list_cache(list, nullptr);
+}
+
 // The installed game's maps, read through its store as the game reads them.
 void corpus_tests(const oa::AssetStore& assets) {
     const CampaignFiles files = campaign_asset_files(assets);
@@ -244,8 +289,10 @@ void corpus_tests(const oa::AssetStore& assets) {
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         corpus_tests(oa::test::require_game_assets("the installed map catalogue"));
-    else
+    else {
         list_tests();
+        long_and_suffixed_name_tests();
+    }
     if (failures != 0) {
         std::cerr << failures << " failure(s)\n";
         return 1;

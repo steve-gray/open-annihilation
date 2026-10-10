@@ -105,6 +105,10 @@ void scan_map_file(void* context, const char* file_name) {
         find_matching_schema(SessionKind::multiplayer, &ota, 0, 0, nullptr, 0)) {
         char name[kCampaignNameBytes];
         display_name(rules, file_name, name, sizeof(name));
+        // The setup block carries the name whole. One that does not fit,
+        // with its terminating NUL, is left out rather than cut short.
+        if (std::strlen(name) + 1 > kMapNameFieldBytes)
+            return;
         append_name(*scan.list, name);
         if (scan.first_only)
             scan.stopped = true;
