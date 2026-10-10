@@ -4,43 +4,39 @@
 // The player's own folder: chosen at start, the saved games and recordings
 // moved into it once, the paths the game names placed in it, in the folders
 // of the mod played, its folders shown in the system's file manager, and the
-// main menu's notice of the saved games' moves, drawn over the darkened main
-// menu in the settings dialog's look; the mod's warning
-// (runtime_mod_warning.cpp) is drawn and driven as the same notice.
+// main menu's notice of the saved games' moves, a notice screen of the OA
+// layer over the darkened main menu in the settings dialog's look; the
+// mod's warning (runtime_mod_warning.cpp) and the notice of where the game
+// folder was found (runtime_found_install.cpp) are shown the same way.
 
-#include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/platform/preferences.hpp"
-#include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
-#include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
 
 #include <SDL3/SDL.h>
 
-#include <cmath>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
-namespace artless = oa::ui::frontend_renderer;
 
 namespace {
 
-/// The notice overlay's z: over the settings dialog's overlay, which never
-/// shows with it, and the extensions' overlays.
-constexpr int16_t kNoticeOverlayZ = 101;
 /// Frames in a row the main menu shows before the notice: a start that
 /// passes the main menu at its first update shows none.
 constexpr uint32_t kNoticeMenuFrames = 2;
@@ -80,17 +76,6 @@ bool unwatched_run(bool unattended) {
                              ci == nullptr ? std::string_view{} : std::string_view(ci),
                              driver == nullptr ? std::string_view{} : std::string_view(driver)
                          );
-}
-
-/// Returns the source pixel an input's pointer is over: on the main menu
-/// the pointer is in the picture's pixels.
-///
-/// @param input the input
-/// @param[out] x the pixel's column
-/// @param[out] y the pixel's row
-void pointer_pixel(const ScreenInput& input, int32_t& x, int32_t& y) {
-    x = static_cast<int32_t>(std::floor(input.x));
-    y = static_cast<int32_t>(std::floor(input.y));
 }
 
 } // namespace
@@ -265,122 +250,32 @@ bool Runtime::UserFolderState::unwatched(bool unattended) {
     return unwatched_run(unattended);
 }
 
-artless::Placement Runtime::UserFolderState::notice_placement(int32_t height) {
-    return {(kCanvasWidth - settings::notice_width) / 2, (kCanvasHeight - height) / 2, 1};
-}
-
-int Runtime::UserFolderState::notice_event(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (!runtime.user_folder_state_)
-        return 0;
-    auto& state = *runtime.user_folder_state_;
-    const auto& input = *context->input;
-    if (state.latched_key != 0 && input.key == state.latched_key) {
-        if (input.kind == ScreenInputKind::key_up)
-            state.latched_key = 0;
-        if (input.kind == ScreenInputKind::key_down || input.kind == ScreenInputKind::key_up)
-            return 1;
-    }
-    if (!state.notice || runtime.screen_ != state.notice_screen)
-        return 0;
-    auto& notice = *state.notice;
-    const auto* fonts = runtime.engine_settings_fonts();
-    const int32_t height = settings::notice_height(notice, fonts);
-    const auto placement = notice_placement(height);
-    int32_t x = 0;
-    int32_t y = 0;
-    pointer_pixel(input, x, y);
-    x -= placement.x;
-    y -= placement.y;
-    auto action = settings::NoticeAction::none;
-    uint32_t key_down = 0;
-    switch (input.kind) {
-    case ScreenInputKind::pointer_move:
-        action = settings::notice_pointer_move(notice, x, y, height);
-        break;
-    case ScreenInputKind::pointer_down:
-        // A finger's press takes the nearer button within reach.
-        if (input.button == SDL_BUTTON_LEFT)
-            action = runtime.engine_settings_state().finger_pointer
-                         ? settings::notice_finger_down(
-                               notice, x, y, height, EngineSettingsState::finger_reach(runtime, 1.0)
-                           )
-                         : settings::notice_pointer_down(notice, x, y, height);
-        break;
-    case ScreenInputKind::pointer_up:
-        if (input.button == SDL_BUTTON_LEFT)
-            action = settings::notice_pointer_up(notice, x, y, height);
-        break;
-    case ScreenInputKind::key_down:
-        if (const auto key = engine_settings_dialog_key(input.key, input.modifiers)) {
-            action = settings::notice_key(notice, *key);
-            key_down = input.key;
-        }
-        break;
-    default:
-        break;
-    }
-    if (action == settings::NoticeAction::open_folder) {
-        const FolderOpening opening = runtime.open_player_folder(state.notice_folder);
-        notice.failure = opening.opened ? std::string() : opening.reason;
-    } else if (action == settings::NoticeAction::closed) {
-        runtime.play_ui_sound(kCloseSound, 0);
-        state.notice.reset();
-        state.latched_key = key_down;
-    }
-    // The notice is modal: nothing under it sees any input while it shows.
-    return 1;
-}
-
-void Runtime::UserFolderState::notice_tick(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (runtime.user_folder_state_ && runtime.user_folder_state_->notice &&
-        runtime.screen_ != runtime.user_folder_state_->notice_screen)
-        runtime.user_folder_state_->notice.reset();
-}
-
-void Runtime::UserFolderState::notice_draw(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (!runtime.user_folder_state_ || !runtime.user_folder_state_->notice ||
-        runtime.screen_ != runtime.user_folder_state_->notice_screen || context->surface == nullptr)
-        return;
-    const auto* fonts = runtime.engine_settings_fonts();
-    if (fonts == nullptr)
-        return;
-    const auto& notice = *runtime.user_folder_state_->notice;
-    auto& frame = *context->surface;
-    artless::blend_source_rect(
-        frame,
-        {0, 0, 1},
-        {0, 0, static_cast<int32_t>(frame.width), static_cast<int32_t>(frame.height)},
-        settings::backdrop_color,
-        settings::menu_backdrop_opacity
+void Runtime::UserFolderState::show_notice(
+    Runtime& runtime, settings::Notice told, fs::path folder_shown, Screen over
+) {
+    NoticeScreen::Host host;
+    // Its button shows the folder, and the notice stays, saying why one
+    // could not be shown.
+    host.open = [&runtime, folder_shown] {
+        const FolderOpening opening = runtime.open_player_folder(folder_shown);
+        return opening.opened ? std::string() : opening.reason;
+    };
+    host.ok = [&runtime] { runtime.play_ui_sound(kCloseSound, 0); };
+    // It closes once a screen other than its own shows.
+    host.tick = [&runtime, over] { return runtime.screen_ != over; };
+    auto& layer = runtime.oa_layer();
+    layer.show_when_free(
+        std::make_unique<NoticeScreen>(layer, over, std::move(told), std::move(host))
     );
-    settings::draw_notice(
-        frame,
-        notice_placement(settings::notice_height(notice, fonts)),
-        notice,
-        *fonts,
-        runtime.engine_settings_icon()
-    );
+}
+
+bool Runtime::UserFolderState::notice_pending(const Runtime& runtime) noexcept {
+    return runtime.oa_layer_ && (runtime.oa_layer_->find(NoticeScreen::screen_name) != nullptr ||
+                                 runtime.oa_layer_->waiting(NoticeScreen::screen_name) != nullptr);
 }
 
 bool Runtime::saves_notice_shown() const noexcept {
-    return user_folder_state_ && user_folder_state_->notice;
-}
-
-void Runtime::register_saves_notice_overlay() {
-    // On every screen, so that its tick closes the notice when another
-    // screen replaces the one it shows over; it takes input and draws on
-    // that screen only.
-    OverlayDesc notice{};
-    notice.name = "saves_moved_notice";
-    notice.screen = kScreenAny;
-    notice.z = kNoticeOverlayZ;
-    notice.event = UserFolderState::notice_event;
-    notice.tick = UserFolderState::notice_tick;
-    notice.draw = UserFolderState::notice_draw;
-    overlay_register(&screens_, &notice);
+    return oa_layer_ && oa_layer_->find(NoticeScreen::screen_name) != nullptr;
 }
 
 void Runtime::tell_saves_moved() {
@@ -388,7 +283,7 @@ void Runtime::tell_saves_moved() {
     if (!saves_notice_due_in(preference_values_))
         return;
     auto& state = user_folder_state();
-    if (state.notice)
+    if (UserFolderState::notice_pending(*this))
         return;
     namespace frontend_state = oa::ui::frontend_state;
     const bool settled = screen_ == Screen::main_menu && !frame_owned_by_package() &&
@@ -407,9 +302,10 @@ void Runtime::tell_saves_moved() {
         return;
     const MovesTold moves = moves_to_tell(preference_values_);
     if (moves.beside_preferences || moves.loose_in_saves) {
-        state.notice = saves_moved_notice(moves, oa::app::saves_folder(user_folder_, {}));
-        state.notice_folder = oa::app::saves_folder(user_folder_, {});
-        state.notice_screen = Screen::main_menu;
+        const fs::path saves = oa::app::saves_folder(user_folder_, {});
+        UserFolderState::show_notice(
+            *this, saves_moved_notice(moves, saves), saves, Screen::main_menu
+        );
         ++state.notices_shown;
     }
     // Told from now on: no later start shows it again.

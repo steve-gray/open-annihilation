@@ -7,6 +7,7 @@
 // and no prompt shows. The player's Languages folder is checked after each.
 
 #include "mod_install_state.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install.hpp"
@@ -200,8 +201,8 @@ void Runtime::check_language_install() {
     const auto until_prompt = [&](std::string_view what) {
         for (int frame = 0; frame < kMostFrames; ++frame) {
             tell_mod_installs();
-            if (state.shown && (state.stage == ModInstallState::Stage::asking ||
-                                state.stage == ModInstallState::Stage::telling))
+            if (state.prompt != nullptr && (state.stage == ModInstallState::Stage::asking ||
+                                            state.stage == ModInstallState::Stage::telling))
                 return;
         }
         require(false, std::string("no prompt showed: ") + std::string(what));
@@ -212,20 +213,20 @@ void Runtime::check_language_install() {
         require(!state.discarder.busy(), "the folders a change dropped were not deleted");
     };
     const auto click = [&](install::Answer answer) {
-        require(state.shown.has_value(), "no prompt to answer");
-        const auto& prompt = state.shown->prompt;
-        const auto& answers = state.shown->answers;
+        require(state.prompt != nullptr, "no prompt to answer");
+        const auto& prompt = state.prompt->question();
+        const auto& answers = state.answers;
         const auto found = std::find(answers.begin(), answers.end(), answer);
         require(found != answers.end(), "the prompt has no such button");
         const auto button = static_cast<int32_t>(found - answers.begin());
         const auto* fonts = engine_settings_fonts();
-        const auto placement =
-            ModInstallState::prompt_placement(settings::prompt_height(prompt, fonts));
+        // Where the OA layer shows the prompt.
+        const auto placed = state.prompt->placement(oa_layer().view());
         for (const auto& part : settings::prompt_layout(prompt, fonts))
             if (part.control == button) {
                 const oa::ui::display_layout::Point point{
-                    placement.x + part.rect.x + part.rect.width / 2,
-                    placement.y + part.rect.y + part.rect.height / 2
+                    placed.shown.x + part.rect.x + part.rect.width / 2,
+                    placed.shown.y + part.rect.y + part.rect.height / 2
                 };
                 send_check_pointer(SDL_EVENT_MOUSE_MOTION, point, 0);
                 send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
@@ -241,7 +242,7 @@ void Runtime::check_language_install() {
     install::post_opened_file(dropped);
     until_prompt("the dropped language pack");
     require(
-        state.shown && state.shown->prompt.title == "INSTALL LANGUAGE",
+        state.prompt != nullptr && state.prompt->question().title == "INSTALL LANGUAGE",
         "installing the language was not asked"
     );
     click(install::Answer::alongside);
@@ -263,11 +264,11 @@ void Runtime::check_language_install() {
     install::post_opened_file(dropped);
     until_prompt("the same language pack");
     require(
-        state.shown && state.shown->prompt.title == "REINSTALL LANGUAGE",
+        state.prompt != nullptr && state.prompt->question().title == "REINSTALL LANGUAGE",
         "reinstalling the language was not asked"
     );
     click(install::Answer::cancel);
-    require(!state.shown, "Cancel did not close the question");
+    require(state.prompt == nullptr, "Cancel did not close the question");
     require(
         std::string_view(shown_language().tag) == kTag, "cancelling changed the language shown"
     );
@@ -290,7 +291,10 @@ void Runtime::check_language_install() {
     bool committed = false;
     for (int frame = 0; frame < kMostFrames; ++frame) {
         tell_mod_installs();
-        require(!state.shown && state.prompts_shown == prompts, "a catalogue pack showed a prompt");
+        require(
+            state.prompt == nullptr && state.prompts_shown == prompts,
+            "a catalogue pack showed a prompt"
+        );
         require(engine_settings_dialog() != nullptr, "Settings closed during the install");
         if (revision_in(folder) == 2 && state.stage == ModInstallState::Stage::idle &&
             !state.unpacking) {

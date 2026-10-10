@@ -23,6 +23,7 @@
 // plays whole: it sees no warning and starts a skirmish.
 
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "touch_state.hpp"
 #include "user_folder_state.hpp"
 
@@ -249,6 +250,14 @@ void Runtime::check_mod_warning() {
     auto& state = user_folder_state();
     // The notices show although nobody watches the check.
     state.check_shows_notice = true;
+    // The warning on the OA layer, and where the layer shows it.
+    const auto shown_warning = [this]() -> const NoticeScreen& {
+        const auto* shown =
+            dynamic_cast<const NoticeScreen*>(oa_layer().find(NoticeScreen::screen_name));
+        require(shown != nullptr, "no warning is on the OA layer");
+        return *shown;
+    };
+    const auto warning_place = [&]() { return shown_warning().placement(oa_layer().view()); };
 
     // The window's frame of a step, when --snapshot names a file.
     if (!options_.snapshot.empty() &&
@@ -289,18 +298,21 @@ void Runtime::check_mod_warning() {
     // A finger's tap through the touch dispatcher just under the warning's
     // OK, within a finger's reach of it, which closes the warning.
     const auto tap_under_ok = [&](Screen screen, std::string_view where) {
-        const auto& shown = *state.notice;
+        const auto& shown = shown_warning().notice();
         const auto* fonts = engine_settings_fonts();
-        const int32_t height = settings::notice_height(shown, fonts);
-        const auto placement = UserFolderState::notice_placement(height);
-        const int32_t reach = EngineSettingsState::finger_reach(*this, 1.0);
+        const auto placed = warning_place();
+        // A finger's reach, in the warning's points as the layer shows it.
+        const int32_t reach = EngineSettingsState::finger_reach(
+            *this,
+            static_cast<double>(placed.shown.width) / static_cast<double>(placed.points_width)
+        );
         float x = 0.0F;
         float y = 0.0F;
         for (const auto& part : settings::notice_layout(shown, fonts))
             if (part.control == settings::notice_ok_control) {
-                x = static_cast<float>(placement.x + part.rect.x + part.rect.width / 2);
+                x = static_cast<float>(placed.shown.x + part.rect.x + part.rect.width / 2);
                 y = static_cast<float>(
-                    placement.y + part.rect.y + part.rect.height - 1 + std::max(1, reach * 2 / 3)
+                    placed.shown.y + part.rect.y + part.rect.height - 1 + std::max(1, reach * 2 / 3)
                 );
             }
         require(
@@ -409,10 +421,10 @@ void Runtime::check_mod_warning() {
             tell_incomplete_mod();
         require(
             saves_notice_shown() && state.mod_warnings_shown == 1 &&
-                state.notice_screen == Screen::main_menu,
+                shown_warning().over() == Screen::main_menu,
             "the side files' warning did not show over the main menu"
         );
-        const auto& notice = *state.notice;
+        const auto& notice = shown_warning().notice();
         require(
             notice.title == "MOD FILES MISSING" && notice.open_caption == "OPEN MOD FOLDER" &&
                 notice.paragraphs.size() == 5 &&
@@ -578,10 +590,10 @@ void Runtime::check_mod_warning() {
             tell_incomplete_mod();
         require(
             saves_notice_shown() && state.mod_warnings_shown == 1 &&
-                state.notice_screen == Screen::main_menu,
+                shown_warning().over() == Screen::main_menu,
             "the warning did not show over the main menu"
         );
-        const auto& notice = *state.notice;
+        const auto& notice = shown_warning().notice();
         require(
             notice.title == "MOD FILES MISSING" && notice.open_caption == "OPEN MOD FOLDER" &&
                 notice.paragraphs.front().text == "Warning Check Hollow is missing files." &&
@@ -590,16 +602,16 @@ void Runtime::check_mod_warning() {
             "the warning does not name the mod, its first side's commander and its folder"
         );
         snapshot("main-menu");
-        // OPEN MOD FOLDER shows the mod's folder and the warning stays.
+        // OPEN MOD FOLDER, where the OA layer shows it, shows the mod's
+        // folder and the warning stays.
         const auto* fonts = engine_settings_fonts();
-        const int32_t height = settings::notice_height(notice, fonts);
-        const auto placement = UserFolderState::notice_placement(height);
+        const auto placed = warning_place();
         oa::ui::display_layout::Point open_point{};
         for (const auto& part : settings::notice_layout(notice, fonts))
             if (part.control == settings::notice_open_control)
                 open_point = {
-                    placement.x + part.rect.x + part.rect.width / 2,
-                    placement.y + part.rect.y + part.rect.height / 2
+                    placed.shown.x + part.rect.x + part.rect.width / 2,
+                    placed.shown.y + part.rect.y + part.rect.height / 2
                 };
         state.opened.clear();
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, open_point, 0);
@@ -625,7 +637,7 @@ void Runtime::check_mod_warning() {
         exercise_click(skirmish::resource_name(skirmish::Button::start));
         require(
             screen_ == Screen::skirmish && !match_ && saves_notice_shown() &&
-                state.notice_screen == Screen::skirmish && state.mod_warnings_shown == 2,
+                shown_warning().over() == Screen::skirmish && state.mod_warnings_shown == 2,
             "Start did not warn and stay on the skirmish setup"
         );
         snapshot("skirmish");
@@ -686,10 +698,10 @@ void Runtime::check_mod_warning() {
             tell_incomplete_mod();
         require(
             saves_notice_shown() && state.mod_warnings_shown == 1 &&
-                state.notice->paragraphs.size() > 2 &&
-                state.notice->paragraphs[1].text == commander_line() &&
-                state.notice->paragraphs[2].text == side_file_line(panels) &&
-                state.notice->paragraphs[3].text ==
+                shown_warning().notice().paragraphs.size() > 2 &&
+                shown_warning().notice().paragraphs[1].text == commander_line() &&
+                shown_warning().notice().paragraphs[2].text == side_file_line(panels) &&
+                shown_warning().notice().paragraphs[3].text ==
                     "Its games can't start until the mod's files are added to its folder:",
             "the warning of the dropped commander and the missing panels did not show over the "
             "main menu"

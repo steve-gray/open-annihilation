@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // --check-mod-install: made-up mod packages installed through the game,
-// each question answered through the prompt's overlay by keys and the
+// each question answered through its screen on the OA layer by keys and the
 // pointer, and the player's Mods folder checked after each. Each run of
 // the check is one turn. The first: the command line's missing package
 // refused; a catalogue map pack installed from the skirmish setup with no
@@ -24,6 +24,7 @@
 
 #include "engine_settings_state.hpp"
 #include "mod_install_state.hpp"
+#include "oa_layer.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -416,8 +417,8 @@ void Runtime::check_mod_install() {
     const auto until_prompt = [&](std::string_view what) {
         for (int frame = 0; frame < kMostFrames; ++frame) {
             tell_mod_installs();
-            if (state.shown && (state.stage == ModInstallState::Stage::asking ||
-                                state.stage == ModInstallState::Stage::telling))
+            if (state.prompt != nullptr && (state.stage == ModInstallState::Stage::asking ||
+                                            state.stage == ModInstallState::Stage::telling))
                 return;
         }
         require(false, std::string("no prompt showed: ") + std::string(what));
@@ -429,17 +430,17 @@ void Runtime::check_mod_install() {
         require(!state.discarder.busy(), "the folders a change dropped were not deleted");
     };
     const auto says = [&](std::string_view part) {
-        if (!state.shown)
+        if (state.prompt == nullptr)
             return false;
-        for (const auto& paragraph : state.shown->prompt.paragraphs)
+        for (const auto& paragraph : state.prompt->question().paragraphs)
             if (paragraph.text.find(part) != std::string::npos)
                 return true;
         return false;
     };
     const auto titled = [&](std::string_view title) {
-        return state.shown && state.shown->prompt.title == title;
+        return state.prompt != nullptr && state.prompt->question().title == title;
     };
-    // A key's press and release, through the prompt's overlay.
+    // A key's press and release, through the OA layer.
     const auto key = [this](SDL_Keycode code) {
         for (const SDL_EventType type : {SDL_EVENT_KEY_DOWN, SDL_EVENT_KEY_UP}) {
             SDL_Event event{};
@@ -453,22 +454,27 @@ void Runtime::check_mod_install() {
             require(running, "a key on a prompt ended the run");
         }
     };
-    // A click on the button that answers, through the prompt's overlay.
+    // A click on the button that answers, where the OA layer shows the
+    // prompt.
     const auto click = [&](install::Answer answer) {
-        require(state.shown.has_value(), "no prompt to answer");
-        const auto& prompt = state.shown->prompt;
-        const auto& answers = state.shown->answers;
+        require(state.prompt != nullptr, "no prompt to answer");
+        const auto& prompt = state.prompt->question();
+        const auto& answers = state.answers;
         const auto found = std::find(answers.begin(), answers.end(), answer);
         require(found != answers.end(), "the prompt has no such button");
         const auto button = static_cast<int32_t>(found - answers.begin());
         const auto* fonts = engine_settings_fonts();
-        const auto placement =
-            ModInstallState::prompt_placement(settings::prompt_height(prompt, fonts));
+        const auto placed = state.prompt->placement(oa_layer().view());
+        require(
+            oa_layer().holds(state.prompt) && placed.shown.width == settings::notice_width &&
+                placed.shown.height == settings::prompt_height(prompt, fonts),
+            "the prompt does not show on the OA layer at 1x"
+        );
         for (const auto& part : settings::prompt_layout(prompt, fonts))
             if (part.control == button) {
                 const oa::ui::display_layout::Point point{
-                    placement.x + part.rect.x + part.rect.width / 2,
-                    placement.y + part.rect.y + part.rect.height / 2
+                    placed.shown.x + part.rect.x + part.rect.width / 2,
+                    placed.shown.y + part.rect.y + part.rect.height / 2
                 };
                 send_check_pointer(SDL_EVENT_MOUSE_MOTION, point, 0);
                 send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
@@ -547,7 +553,7 @@ void Runtime::check_mod_install() {
             "a missing package is not refused"
         );
         key(SDLK_RETURN);
-        require(!state.shown, "Enter did not close the refusal");
+        require(state.prompt == nullptr, "Enter did not close the refusal");
 
         // A catalogue map pack installs from the skirmish setup, with no
         // prompt. A catalogue mod posted the same way waits for the main menu.
@@ -569,7 +575,9 @@ void Runtime::check_mod_install() {
         std::vector<install::PackageOutcome> pack_outcomes;
         for (int frame = 0; frame < kMostFrames; ++frame) {
             tell_mod_installs();
-            require(!state.shown, "a catalogue map pack showed a prompt off the main menu");
+            require(
+                state.prompt == nullptr, "a catalogue map pack showed a prompt off the main menu"
+            );
             require(
                 screen_ == Screen::skirmish && match_ == nullptr,
                 "a catalogue map pack left the skirmish setup"
@@ -609,7 +617,7 @@ void Runtime::check_mod_install() {
         install::post_package_file(waiting_mod, mod_origin);
         for (int frame = 0; frame < 8; ++frame) {
             tell_mod_installs();
-            require(!state.shown, "a catalogue mod showed a prompt off the main menu");
+            require(state.prompt == nullptr, "a catalogue mod showed a prompt off the main menu");
             require(
                 screen_ == Screen::skirmish && match_ == nullptr,
                 "a catalogue mod left the skirmish setup"
@@ -626,7 +634,7 @@ void Runtime::check_mod_install() {
         until_prompt("the catalogue mod");
         require(titled("MOD INSTALLED"), "the catalogue mod was not installed on the main menu");
         key(SDLK_RETURN);
-        require(!state.shown, "Enter did not close the catalogue mod's notice");
+        require(state.prompt == nullptr, "Enter did not close the catalogue mod's notice");
 
         // A package the Finder made, dropped on the window: installed with
         // no question.
@@ -672,7 +680,7 @@ void Runtime::check_mod_install() {
             "OPEN FOLDER did not show the mod's folder"
         );
         key(SDLK_ESCAPE);
-        require(!state.shown, "Escape did not close the notice");
+        require(state.prompt == nullptr, "Escape did not close the notice");
 
         // An update asked, cancelled, then replaced.
         install::post_package_file(mod_package(packages, "1.0", 2));
@@ -682,7 +690,7 @@ void Runtime::check_mod_install() {
             "an update was not asked"
         );
         key(SDLK_ESCAPE);
-        require(!state.shown && revision_in(folder) == 1, "CANCEL changed the folder");
+        require(state.prompt == nullptr && revision_in(folder) == 1, "CANCEL changed the folder");
         install::post_package_file(mod_package(packages, "1.0", 2));
         until_prompt("the second revision again");
         key(SDLK_RETURN);
@@ -702,7 +710,7 @@ void Runtime::check_mod_install() {
             "the kept version's removal is not said"
         );
         require(
-            state.shown->answers[static_cast<std::size_t>(state.shown->prompt.marked)] ==
+            state.answers[static_cast<std::size_t>(state.prompt->question().marked)] ==
                 install::Answer::cancel,
             "CANCEL is not marked first"
         );
@@ -881,7 +889,7 @@ void Runtime::check_mod_install() {
             "the refusal closed the dialog or went to the page's note"
         );
         key(SDLK_RETURN);
-        require(!state.shown, "Enter did not close the roll back's refusal");
+        require(state.prompt == nullptr, "Enter did not close the roll back's refusal");
         require(engine_settings_dialog() != nullptr, "the refusal's OK closed the dialog");
         std::ignore = take_engine_settings_action(settings::DialogAction::cancelled);
         until_deleted();
@@ -893,7 +901,7 @@ void Runtime::check_mod_install() {
         until_prompt("the last reinstall's outcome");
         // PLAY NOW ends the run, which a pointer event the check sends may
         // not do: the answer goes to the prompt as its click would.
-        const auto& answers = state.shown->answers;
+        const auto& answers = state.answers;
         const auto play = std::find(answers.begin(), answers.end(), install::Answer::play_now);
         require(play != answers.end(), "the update offers no PLAY NOW");
         answer_mod_install_prompt(static_cast<int32_t>(play - answers.begin()));

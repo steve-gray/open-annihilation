@@ -902,8 +902,7 @@ void Runtime::check_engine_settings_in_menu() {
             "text input stayed on after the text field closed"
         );
     }
-    // The layer's keys: those the dialog has, as it maps them, and Backspace
-    // and Delete.
+    // The layer's keys: those the dialog has, and Backspace and Delete.
     {
         const std::array<std::pair<std::pair<SDL_Keycode, SDL_Keymod>, kit::Key>, 9> keys{{
             {{SDLK_TAB, SDL_KMOD_NONE}, kit::Key::tab},
@@ -917,11 +916,9 @@ void Runtime::check_engine_settings_in_menu() {
             {{SDLK_SPACE, SDL_KMOD_NONE}, kit::Key::space},
         }};
         for (const auto& [pressed, meant] : keys) {
-            const auto mapped = layer_key(pressed.first, pressed.second);
             require(
-                mapped == meant &&
-                    engine_settings_dialog_key(pressed.first, pressed.second) == mapped,
-                "the layer does not map a key as the dialog does"
+                layer_key(pressed.first, pressed.second) == meant,
+                "the layer does not map a key as the dialog means it"
             );
         }
         require(
