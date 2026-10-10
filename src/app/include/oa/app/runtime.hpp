@@ -135,6 +135,10 @@ namespace oa::media::director {
 struct EngineView;
 } // namespace oa::media::director
 
+namespace oa::data::map_fit {
+struct Fit;
+} // namespace oa::data::map_fit
+
 namespace oa::platform::text_font {
 class FontStack;
 } // namespace oa::platform::text_font
@@ -265,6 +269,7 @@ struct PackageOptions;
 } // namespace package_install
 
 class MapPacks;
+struct PackMap;
 
 namespace content {
 class Service;
@@ -3967,6 +3972,69 @@ class Runtime final : public menu::Host,
     ///
     /// @return the index
     [[nodiscard]] MapPacks& map_packs() const;
+
+    /// The pack map whose files the store shows, the game's names, each
+    /// pack map's fit and the reasons maps were refused
+    /// (runtime_pack_maps.cpp).
+    struct PackMapState;
+
+    /// Frees the pack maps' state.
+    ///
+    /// @param state state to free; null is allowed
+    static void destroy_pack_map_state(PackMapState* state) noexcept;
+
+    /// Returns the pack maps' state, made on first use.
+    ///
+    /// @return the state
+    PackMapState& pack_map_state();
+
+    /// Returns the installed pack map of a name.
+    ///
+    /// The name must split into a stem and a pack id; the installed packs
+    /// are then asked for it, read from their manifests the first time.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @return the map; null for any name that is not an installed pack map
+    [[nodiscard]] const PackMap* pack_map(std::string_view name);
+
+    /// Returns how a pack map fits the game and the mod being played.
+    ///
+    /// Checks the map's files in its pack's folder, whatever layer is
+    /// mounted. The game's names are collected once, with the run's data
+    /// layout, at the first check; a run's archives never change. The fit is
+    /// kept for the pack's SHA-256 and the map's stem.
+    ///
+    /// @param map the map
+    /// @return every rule the map breaks; kept until the runtime ends
+    const oa::data::map_fit::Fit& pack_map_fit(const PackMap& map);
+
+    /// Makes a pack map's files, and no other map's, the store's pack layer.
+    ///
+    /// A map already mounted answers at once. Otherwise any mounted layer is
+    /// released first. A map whose kept fit fails is refused. Its files are
+    /// then mounted from its pack's folder, labelled with the pack's id and
+    /// the first 8 hex digits of its SHA-256, and checked again as mounted;
+    /// a failure there unmounts them and refuses the map. Each failure is
+    /// logged on a line of its own, and the first one's description is the
+    /// reason pack_map_refusal gives. Main thread only, never while a match
+    /// loads or runs.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @param[out] reason receives why the map was refused, if not null
+    /// @return true when the map's files are mounted
+    bool prepare_pack_map(std::string_view name, std::string* reason);
+
+    /// Unmounts the pack layer and logs it, when a map's files are mounted.
+    ///
+    /// Main thread only, never while a match loads or runs.
+    void release_pack_map();
+
+    /// Returns why a pack map was last refused.
+    ///
+    /// @param name the map's name
+    /// @return the first failure's description; nothing when the map was not
+    ///         refused, or was mounted since
+    [[nodiscard]] std::optional<std::string> pack_map_refusal(std::string_view name) const;
 
     /// The registries and cached catalogues (runtime_content.cpp).
     struct ContentState;
@@ -12562,10 +12630,12 @@ class Runtime final : public menu::Host,
     init::MapListHandle construct(init::MapListHandle handle, int32_t selector_value) override;
 
     /// Lists the maps the skirmish and multiplayer map pickers offer: every map with a multiplayer
-    /// schema, in find order; the first one is the default selection.
+    /// schema, in find order; the first one is the default selection. The installed pack maps
+    /// follow, in the order the installed packs list them, without opening any of their files;
+    /// the default selection is always a base map.
     ///
-    /// Game data with no such map, such as the Total Annihilation demo (1997), leaves both the
-    /// list and the default selection empty.
+    /// Game data with no such map, such as the Total Annihilation demo (1997), leaves the
+    /// default selection empty, and the list empty unless pack maps are installed.
     void discover_first_map();
 
     /// Finds a gadget of the current screen by name.
@@ -13011,11 +13081,14 @@ class Runtime final : public menu::Host,
 
     /// Selects a map by name for a skirmish: its OTA metadata, terrain and start markers.
     ///
+    /// An installed pack map's files are mounted first (prepare_pack_map); a
+    /// pack map that is refused clears the selection as a missing file does.
+    /// Any other name releases a mounted pack map before its files are read.
     /// Throws std::runtime_error when the metadata or terrain does not parse.
     ///
     /// @param name map name
-    /// @return 1 when the map loads; 0 when a file is missing or it has no
-    ///     two-player schema
+    /// @return 1 when the map loads; 0 when a file is missing, it has no
+    ///     two-player schema or it is a pack map that does not fit
     int32_t select_map(std::string_view name) override;
 
     /// Returns how many players the selected map holds for the roster's player count, keeping its
@@ -14566,6 +14639,11 @@ class Runtime final : public menu::Host,
     // The installed map packs and a map pack's fit check; null until first used.
     mutable std::unique_ptr<MapPackState, void (*)(MapPackState*) noexcept> map_pack_state_{
         nullptr, destroy_map_pack_state
+    };
+    // The mounted pack map, the game's names, the fits and the refusals;
+    // null until a pack map is first named.
+    std::unique_ptr<PackMapState, void (*)(PackMapState*) noexcept> pack_map_state_{
+        nullptr, destroy_pack_map_state
     };
     // The registries and their catalogues; null until start_content.
     std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{

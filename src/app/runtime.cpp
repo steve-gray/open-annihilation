@@ -1054,6 +1054,10 @@ void Runtime::move_frontend_focus(oa::ui::gui_input::FocusDirection direction) {
 }
 
 void Runtime::load(Screen screen) {
+    // A pack map's files are mounted for the skirmish setup that chose the
+    // map and the match it starts; the main menu shows none.
+    if (screen == Screen::main_menu)
+        release_pack_map();
     // The load and save dialogs are drawn over the screen they open from.
     if (screen == Screen::load_game && screen_ != Screen::load_game)
         capture_load_game_parent();

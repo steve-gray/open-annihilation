@@ -468,6 +468,17 @@ void Runtime::fit_picture(
 }
 
 int32_t Runtime::select_map(std::string_view name) {
+    // A pack map's files are mounted before they are read, and a map that
+    // does not fit is not selected; any other map shows no pack map's files.
+    if (pack_map(name) != nullptr) {
+        if (!prepare_pack_map(name, nullptr)) {
+            selected_map_metadata_.reset();
+            selected_start_markers_.clear();
+            return 0;
+        }
+    } else {
+        release_pack_map();
+    }
     const auto base = "maps/" + std::string(name);
     const auto tnt_data = read(base + ".tnt");
     const auto ota_data = read(base + ".ota");
