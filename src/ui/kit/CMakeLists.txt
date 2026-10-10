@@ -9,6 +9,8 @@
 # until the kit is declared stable.
 add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/components.cpp
   src/chrome.cpp src/controls.cpp)
+# Declared rows: a settings page as a table (include/oa/ui/kit/rows.hpp).
+target_sources(oa-ui-kit PRIVATE src/rows.cpp)
 add_library(oa::ui::kit ALIAS oa-ui-kit)
 target_include_directories(oa-ui-kit PUBLIC include)
 target_compile_features(oa-ui-kit PUBLIC cxx_std_20)
@@ -53,4 +55,9 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-kit-controls-test PRIVATE oa-ui-kit oa-test-support oa-options)
   add_test(NAME ui-kit-controls COMMAND oa-ui-kit-controls-test)
   set_tests_properties(ui-kit-controls PROPERTIES TIMEOUT 30)
+
+  add_executable(oa-ui-kit-rows-test tests/rows_test.cpp)
+  target_link_libraries(oa-ui-kit-rows-test PRIVATE oa-ui-kit oa-test-support oa-options)
+  add_test(NAME ui-kit-rows COMMAND oa-ui-kit-rows-test)
+  set_tests_properties(ui-kit-rows PROPERTIES TIMEOUT 30)
 endif()
