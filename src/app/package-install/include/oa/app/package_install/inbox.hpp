@@ -19,7 +19,8 @@ namespace oa::app::package_install {
 
 /// Queues a package to be installed once the main menu shows. A path already
 /// queued, or the one being installed now, is not queued again: paths are
-/// compared as std::filesystem::weakly_canonical gives them.
+/// compared after the path is made absolute, then canonical as far as it
+/// exists, then lexically normal.
 ///
 /// @param file the package
 void post_package_file(const std::filesystem::path& file);
@@ -50,9 +51,10 @@ void finish_package_file();
 /// @return true when the extension is one of those
 [[nodiscard]] bool opens_file(const std::filesystem::path& file);
 
-/// Queues a .oareg file to be added once the main menu shows. A path already queued is not
-/// queued again: paths are compared as std::filesystem::weakly_canonical gives them. The file
-/// waits on the add-registry queue, and is logged.
+/// Queues a .oareg file to be added once the main menu shows. A path already
+/// queued is not queued again: it is made absolute, then canonical as far as
+/// it exists, then lexically normal, before it is compared. The file waits on
+/// the add-registry queue, and is logged.
 ///
 /// @param file the .oareg file
 void post_registry_file(const std::filesystem::path& file);
