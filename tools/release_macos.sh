@@ -294,9 +294,11 @@ if [[ "$release_build" == 1 ]]; then
     binary="$app/Contents/MacOS/$app_executable"
     [[ "$(ls -A "$app/Contents/MacOS")" == "$app_executable" ]] || fail "Contents/MacOS holds more than $app_executable"
     resources="$(ls -A "$app/Contents/Resources" | LC_ALL=C sort | tr '\n' ' ')"
-    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts licenses "$(plist_value "$app" CFBundleIconFile)" \
+    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts licenses registries "$(plist_value "$app" CFBundleIconFile)" \
         | LC_ALL=C sort | tr '\n' ' ')"
     [[ "$resources" == "$expected" ]] || fail "unexpected files in Contents/Resources: $resources"
+    cmp -s "$repo_dir/registries/coreprime.yaml" "$app/Contents/Resources/registries/coreprime.yaml" \
+        || fail "Contents/Resources/registries/coreprime.yaml differs from the source"
     # The fonts this version ships, read from the bootstrap's FONT_FILES.
     # The fonts folder may hold more than that, for older checkouts.
     shipped_fonts="$(

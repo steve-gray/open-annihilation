@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+# SPDX-License-Identifier: GPL-3.0-only
+
+# The registries Open Annihilation ships with. A packager may ship others
+# here. Each one's keys are also compiled into the engine
+# (src/data/registry/src/pinned_keys.inc) and must match them.
+
+# registries/coreprime.yaml: ships with OA; its keys are also compiled into the engine
+registry: 1 # the specification's version
+id: coreprime
+name: Core Prime
+homepage: https://coreprime.net
+catalogue: http://downloads.coreprime.net/v1/catalogue.json
+keys: # Ed25519; any one signs a catalogue
+ - {id: steve-2026, public: "ed25519:dHXqUJM9LbifF+boPakeKsZoSD29qhTEAxkyRj+s5yU="}
+downloads:
+ mode: tokens # direct · tokens
+ api: http://downloads.coreprime.net/api/v1 # keys per download, challenges, counts
+ install-id: required

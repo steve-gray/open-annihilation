@@ -22,5 +22,10 @@ if(BUILD_TESTING)
   add_executable(oa-data-registry-trust-test tests/trust_test.cpp)
   target_link_libraries(oa-data-registry-trust-test PRIVATE oa-data-registry oa-test-support)
   add_test(NAME data-registry-trust COMMAND oa-data-registry-trust-test)
-  set_tests_properties(data-registry data-registry-trust PROPERTIES TIMEOUT 30)
+  # The registries the game ships with, against the keys compiled into the engine.
+  add_executable(oa-data-registry-builtin-test tests/builtin_test.cpp)
+  target_link_libraries(oa-data-registry-builtin-test PRIVATE oa-data-registry oa-test-support)
+  add_test(NAME data-registry-builtin COMMAND oa-data-registry-builtin-test
+    "${PROJECT_SOURCE_DIR}/registries")
+  set_tests_properties(data-registry data-registry-trust data-registry-builtin PROPERTIES TIMEOUT 30)
 endif()
