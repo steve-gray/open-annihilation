@@ -146,8 +146,9 @@ frame and its delay, and links; and that every `add_*` names its controls
 and `paint` matches the direct draws.
 `ui-kit-notices` checks where six notices and six questions place their
 parts against the settings dialog's own placement, their display lists'
-names, kinds and Tab order, where a finger lands, every key, that `paint`
-matches `draw_notice` and `draw_question`, and the progress bar's fill.
+names, kinds and Tab order, where a finger lands, every key (the editing
+keys, which do nothing, among them), that `paint` matches `draw_notice` and
+`draw_question`, and the progress bar's fill.
 
 ## Limitations
 

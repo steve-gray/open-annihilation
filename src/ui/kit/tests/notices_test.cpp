@@ -3,8 +3,8 @@
 
 // The kit's notice and question: where six notices and six questions place
 // their parts, their display lists' names, kinds and Tab order, where a
-// finger's press lands, every key, paint against a direct draw, and the
-// progress bar's fill.
+// finger's press lands, every key (the editing keys among them), paint
+// against a direct draw, and the progress bar's fill.
 //
 // The placements and the finger's landings below are literal values,
 // computed once with the settings dialog's own notice and prompt placement
@@ -794,6 +794,9 @@ constexpr std::array<kit::Key, 15> every_key{
     kit::Key::no,
 };
 
+/// The keys a text field takes, which a notice and a question do not.
+constexpr std::array<kit::Key, 2> editing_keys{kit::Key::backspace, kit::Key::delete_forward};
+
 void every_key_on_a_notice() {
     using kit::NoticeAction;
 
@@ -847,6 +850,14 @@ void every_key_on_a_notice() {
         OA_CHECK(kit::notice_key(on_open, every_key[index]) == from_open[index].action);
         OA_CHECK(on_open.marked == from_open[index].marked);
     }
+    // The editing keys do nothing, from either mark.
+    for (const kit::Key key : editing_keys)
+        for (const kit::ControlId mark : {kit::notice_ok, kit::notice_open}) {
+            kit::Notice notice = short_notice();
+            notice.marked = mark;
+            OA_CHECK(kit::notice_key(notice, key) == NoticeAction::none);
+            OA_CHECK(notice.marked == mark);
+        }
 }
 
 void every_key_on_a_question() {
@@ -945,6 +956,17 @@ void every_key_on_a_question() {
         kit::Question none{};
         OA_CHECK(kit::question_key(none, key).action == QuestionAction::none);
     }
+    // The editing keys do nothing on one, two or three buttons.
+    for (const kit::Key key : editing_keys)
+        for (const kit::Question& start :
+             {question_of({"OK"}),
+              question_of({"CANCEL", "REPLACE"}),
+              question_of({"CANCEL", "INSTALL ALONGSIDE", "REPLACE"})}) {
+            kit::Question question = start;
+            const kit::QuestionAnswer answer = kit::question_key(question, key);
+            OA_CHECK(answer.action == QuestionAction::none && answer.button == -1);
+            OA_CHECK(question.marked == start.marked);
+        }
 }
 
 // --- Drawing -------------------------------------------------------------
