@@ -134,6 +134,8 @@ inline constexpr uint64_t EntryByteLimit = 512ULL << 20;
 
 // Plain *.HPI archives mounted from the game directory before the scan stops.
 inline constexpr int PlainArchiveMountLimit = 10;
+/// Most files one pack layer lists. A longer list is refused.
+inline constexpr std::size_t PackLayerFileLimit = 4096;
 
 // Squash codec status; squash_status_name gives each value's SQUASHERR_* name.
 enum class SquashStatus : uint8_t {
@@ -425,20 +427,78 @@ struct AssetData {
     bool archived = false;
 };
 
-// One match of a find over loose files, then archives.
+// One match of a find over loose files, then archives, then the pack layer.
 struct FoundEntry {
     std::string name;
     bool directory = false;
     uint32_t size = 0;
-    // -1 for a loose file, otherwise the mount index that produced it.
+    // -1 for a loose file. An archive match is its mount index. A pack-layer
+    // match uses mount_paths().size(), past every archive, and pack_layer.
     int mount = -1;
+    /// True when the match comes from the pack layer. mount is then
+    /// mount_paths().size().
+    bool pack_layer = false;
 };
 
 // Where a find enumeration starts: loose files first (then every mount when
-// `continue_into_mounts`), or one mount onward.
+// `continue_into_mounts`), or one mount onward. The pack layer follows the
+// mounts when include_pack_layer is set and the search reaches it.
 struct FindScope {
     int first_mount = -1;
     bool continue_into_mounts = true;
+    /// True to list the pack layer once the search reaches it. A search that
+    /// stays inside one archive leaves the layer out.
+    bool include_pack_layer = true;
+};
+
+/// Whether a pack layer reads a folder or a zip archive.
+enum class PackLayerKind : uint8_t {
+    folder, ///< files in a directory
+    zip,    ///< files in a zip archive
+};
+
+/// One file a pack layer shows, and the file inside the pack it is read from.
+struct PackLayerFile {
+    /// Resource path the store shows, with '/' or '\\' between parts, matched
+    /// without ASCII case.
+    std::string path;
+    /// Path of the file inside the pack, with '/' or '\\' between parts,
+    /// matched without ASCII case.
+    std::string source;
+};
+
+/// A folder or a zip, the files it shows, and the name lookups report for it.
+struct PackLayerSpec {
+    /// Folder or zip.
+    PackLayerKind kind{PackLayerKind::folder};
+    /// Host path of the folder or the zip file.
+    std::filesystem::path location;
+    /// Files the layer shows, in the order listings report them. At most
+    /// formats::hpi::PackLayerFileLimit.
+    std::vector<PackLayerFile> files;
+    /// Single-line name of the layer, kept in its identity and its errors.
+    std::string label;
+};
+
+/// Which part of the store provides a resource.
+enum class ProviderKind : uint8_t {
+    none,       ///< nothing provides the resource
+    loose,      ///< a loose file
+    archive,    ///< a mounted archive
+    pack_layer, ///< the pack layer
+};
+
+/// Where a resource comes from, and an identity that stays put while it does.
+struct Provider {
+    /// Which part provides the resource.
+    ProviderKind kind{ProviderKind::none};
+    /// Host path of the loose file, the archive, or the pack folder or zip.
+    /// Empty when nothing provides the resource.
+    std::filesystem::path path;
+    /// "loose:" and the file's path, "archive:" and the archive's path, or
+    /// "pack:", the layer's label, '#' and its serial. Empty when nothing
+    /// provides the resource.
+    std::string identity;
 };
 
 /// Tells whether two archive file names name the same archive.
@@ -525,6 +585,21 @@ struct ResourceFile;
 // name, the earlier folder's file winning and the later folder's spelling
 // kept, as a copy over an existing file keeps its name. A folder named
 // backup_folder_name at the top of any of them is passed over.
+//
+// Below every archive the store holds at most one pack layer: a folder or a
+// zip, restricted to a list of files, each shown at a path the caller gives.
+// Lookups reach it only after the loose files and every archive, so mounting
+// it changes nothing a lookup above it returns. A second mount is refused
+// and leaves the store as it was. Mounting touches neither the loose index
+// nor the archives or their marks. Unmounting drops the layer and returns
+// every lookup to exactly what it returned before the mount. The layer is
+// not a mount: mount_paths() and mounted() never show it.
+//
+// Reads on other threads stay safe while one thread mounts or unmounts. A
+// lookup copies the layer under a lock and reads that copy, and never holds
+// the lock across a read. A handle opened while the layer is mounted keeps
+// that copy until the handle is closed, so unmounting does not free what the
+// handle still reads.
 class AssetStore {
   public:
 
@@ -554,7 +629,10 @@ class AssetStore {
         std::vector<std::filesystem::path> loose_roots,
         std::size_t loose_index_limit = formats::hpi::LooseIndexEntryLimit
     );
-    /// Unmounts every archive.
+    /// Unmounts every archive and drops the pack layer.
+    ///
+    /// A handle opened while the layer was mounted keeps that layer until
+    /// the handle is closed.
     ~AssetStore();
     /// Takes over another store's root and mounts.
     ///
@@ -629,10 +707,74 @@ class AssetStore {
     ///
     /// @param observer the observer
     void observe_lookups(LookupObserver observer) noexcept;
-    /// Recomputes which archive files a loose file of the same path hides from find().
+    /// Recomputes which archive files, and which pack-layer files, a loose
+    /// file of the same path hides from find().
     ///
-    /// discover() does this after mounting.
+    /// discover() does this after mounting. The loose index is dropped and
+    /// the archives' marks are replaced. A mounted pack layer is published
+    /// again with its own marks recomputed; that does not change an archive's
+    /// marks beyond the replacement this already performs.
     void mark_loose_shadows();
+    /// Mounts one pack layer under every archive.
+    ///
+    /// Refuses, leaving the store unchanged, when a layer is already mounted,
+    /// the list is empty or longer than formats::hpi::PackLayerFileLimit, the
+    /// label is empty or holds more than one line, a path would be refused by
+    /// a loose lookup or starts with the backup folder, two paths are alike
+    /// ignoring ASCII case, or a file in the folder or the zip cannot be
+    /// taken. Mounting does not reset the loose index and does not touch the
+    /// archives or their marks. A file a loose file already provides is
+    /// hidden from find(), as an archive file is.
+    ///
+    /// @param spec the folder or zip, the files it shows and its label
+    /// @param[out] error receives the reason when the layer is not mounted, if not null
+    /// @return true when the layer is mounted
+    bool mount_pack_layer(PackLayerSpec spec, std::string* error = nullptr);
+    /// Drops the pack layer.
+    ///
+    /// A handle opened while it was mounted keeps the layer until the handle
+    /// is closed. Lookups made afterwards match the store from before the mount.
+    ///
+    /// @return true when a layer was mounted
+    bool unmount_pack_layer() noexcept;
+    /// Returns whether a pack layer is mounted.
+    ///
+    /// @return true when a layer is mounted
+    [[nodiscard]] bool pack_layer_mounted() const;
+    /// Returns the mounted layer's label.
+    ///
+    /// @return the label, or nullopt when no layer is mounted
+    [[nodiscard]] std::optional<std::string> pack_layer_label() const;
+    /// Returns the resource paths the mounted layer shows, in the order given.
+    ///
+    /// @return the paths, or an empty list when no layer is mounted
+    [[nodiscard]] std::vector<std::string> pack_layer_paths() const;
+    /// Returns what provides a resource: a loose file, else the earliest
+    /// archive, else the pack layer.
+    ///
+    /// Throws std::runtime_error for a path a loose lookup would refuse.
+    ///
+    /// @param resource '\\'- or '/'-separated path, matched ignoring ASCII case
+    /// @return the provider, or an empty provider when nothing provides it
+    [[nodiscard]] Provider provider(std::string_view resource) const;
+    /// Returns whether a loose file or an archive provides a resource.
+    ///
+    /// The pack layer does not count, so this is false when only the layer
+    /// holds the path.
+    ///
+    /// @param resource '\\'- or '/'-separated path, matched ignoring ASCII case
+    /// @return true when a loose file or an archive provides it
+    [[nodiscard]] bool provided_above_pack_layer(std::string_view resource) const;
+    /// Reads the pack layer's own copy of a resource, whatever is above it.
+    ///
+    /// A failing read throws std::runtime_error naming the path, the layer's
+    /// label and the reason.
+    ///
+    /// @param resource '\\'- or '/'-separated path, matched ignoring ASCII case
+    /// @return the bytes, or nullopt when no layer is mounted or it does not
+    ///         list the path
+    [[nodiscard]] std::optional<std::vector<uint8_t>>
+    read_pack_layer(std::string_view resource) const;
     /// Returns the mounted archive paths.
     ///
     /// @return canonical paths in lookup order
@@ -649,7 +791,8 @@ class AssetStore {
     /// @return the archive
     [[nodiscard]] const HpiArchive& mounted(std::size_t index) const;
 
-    /// Reads a whole resource: a loose file, else the first mount holding it as a file.
+    /// Reads a whole resource: a loose file, else the first archive holding it
+    /// as a file, else the pack layer.
     ///
     /// Throws std::runtime_error for an invalid or traversing path, an
     /// ambiguous loose case collision, or a resource nothing provides.
@@ -666,8 +809,12 @@ class AssetStore {
     read_without(std::string_view resource, const std::filesystem::path& archive) const;
     /// Returns the archive read() would take a resource from.
     ///
+    /// Answers for archives only: nullopt when a loose file provides the
+    /// resource, when only the pack layer provides it, or when nothing does.
+    ///
     /// @param resource '\\'- or '/'-separated path
-    /// @return the mount path, or nullopt when a loose file provides it or nothing does
+    /// @return the mount path, or nullopt when a loose file provides it, only
+    ///         the pack layer provides it, or nothing does
     [[nodiscard]] std::optional<std::filesystem::path>
     providing_archive(std::string_view resource) const;
     /// Loads a whole resource by reading it through a handle, so it holds what a handle read gives.
@@ -707,8 +854,11 @@ class AssetStore {
     /// Enumerates a directory in the order the game lists it.
     ///
     /// Loose matches come first in NTFS name order, led by "." and "..", then
-    /// each mount's records in stored order. Archive records shadowed by a
-    /// loose file are skipped; duplicates across archives are all reported.
+    /// each mount's records in stored order, then the pack layer's own files
+    /// and folders when the scope includes it. Archive records and pack-layer
+    /// files shadowed by a loose file are skipped; duplicates across archives
+    /// are all reported. A pack-layer file an archive also holds is reported
+    /// as well.
     ///
     /// @param pattern "dir\\*.ext"-style pattern; "*.*" matches everything
     /// @param scope where the enumeration starts and whether it continues into mounts
@@ -740,33 +890,40 @@ class AssetStore {
     ///
     /// @param directory '/'-separated directory, relative
     /// @param extension required suffix, or empty for any
+    /// @param include_pack_layer true to include the pack layer's files
     /// @return the names, each once
-    [[nodiscard]] std::vector<std::string>
-    list_effective(std::string_view directory, std::string_view extension) const;
+    [[nodiscard]] std::vector<std::string> list_effective(
+        std::string_view directory, std::string_view extension, bool include_pack_layer = true
+    ) const;
     /// Lists the effective resource names in a directory in mount order.
     ///
     /// Loose files come in host directory order, then mounts in insertion
-    /// order with archive entries in stored order; the first occurrence of a
-    /// path wins. Host loose-file order cannot reproduce the order Windows
-    /// lists loose files in.
+    /// order with archive entries in stored order, then the pack layer's
+    /// files; the first occurrence of a path wins. Host loose-file order
+    /// cannot reproduce the order Windows lists loose files in.
     ///
     /// @param directory '/'-separated directory, relative
     /// @param extension required suffix, or empty for any
+    /// @param include_pack_layer true to include the pack layer's files
     /// @return the names, ASCII case-folded, each once
-    [[nodiscard]] std::vector<std::string>
-    list_effective_in_mount_order(std::string_view directory, std::string_view extension) const;
+    [[nodiscard]] std::vector<std::string> list_effective_in_mount_order(
+        std::string_view directory, std::string_view extension, bool include_pack_layer = true
+    ) const;
     /// Lists the effective resource names under a directory, recursively, in mount order.
     ///
     /// Feature loading relies on this order: the first document containing a
-    /// requested section wins.
+    /// requested section wins. The pack layer's files come last.
     ///
     /// @param directory '/'-separated directory, relative
     /// @param extension required suffix, or empty for any
+    /// @param include_pack_layer true to include the pack layer's files
     /// @return the names, ASCII case-folded, each once
-    [[nodiscard]] std::vector<std::string>
-    list_effective_recursive(std::string_view directory, std::string_view extension) const;
+    [[nodiscard]] std::vector<std::string> list_effective_recursive(
+        std::string_view directory, std::string_view extension, bool include_pack_layer = true
+    ) const;
 
-    /// Opens a loose file or else the first archive holding that path as a file, for reading.
+    /// Opens a loose file, else the first archive holding that path as a
+    /// file, else the pack layer, for reading.
     ///
     /// @param resource '\\'- or '/'-separated path
     /// @return a handle to release with close(), or nullptr when the resource is absent
@@ -775,10 +932,10 @@ class AssetStore {
     ///
     /// @param file handle from open(), or null
     static void close(ResourceFile* file) noexcept;
-    /// Returns whether a handle reads from an archive rather than a loose file.
+    /// Returns whether a handle reads from an archive or a zip pack layer.
     ///
     /// @param file open handle
-    /// @return true for an archive entry
+    /// @return true for an archive entry or a file read from a zip pack layer
     [[nodiscard]] static bool archived(const ResourceFile* file) noexcept;
     /// Moves a handle's read position.
     ///
@@ -786,7 +943,8 @@ class AssetStore {
     ///
     /// @param[in,out] file open handle
     /// @param position new position, or 0xFFFFFFFF for the end
-    /// @return the new position for a loose file, 0 for an archive entry, or -1 on failure
+    /// @return the new position for a loose file, 0 for an archive entry or a
+    ///         zip pack file, or -1 on failure
     static int32_t seek(ResourceFile* file, uint32_t position);
     /// Returns a handle's read position.
     ///
@@ -807,6 +965,11 @@ class AssetStore {
 
   private:
 
+    // ResourceFile names the private pack-layer type it keeps open.
+    friend struct ResourceFile;
+    // PackLayerOps builds and reads the private pack-layer type.
+    friend struct PackLayerOps;
+
     /// Lists resource names under a directory with read()'s precedence.
     ///
     /// Throws std::runtime_error for an invalid or traversing path or a loose
@@ -815,9 +978,24 @@ class AssetStore {
     /// @param directory '/'-separated directory, relative
     /// @param extension required suffix, or empty for any
     /// @param recursive true to include subdirectories
+    /// @param include_pack_layer true to include the pack layer's files
     /// @return the names, loose files first, each once
-    [[nodiscard]] std::vector<std::string>
-    list_resources(std::string_view directory, std::string_view extension, bool recursive) const;
+    [[nodiscard]] std::vector<std::string> list_resources(
+        std::string_view directory,
+        std::string_view extension,
+        bool recursive,
+        bool include_pack_layer
+    ) const;
+    struct PackLayer;
+    struct PackLayerSlot;
+    /// Copies the mounted pack layer.
+    ///
+    /// The copy is taken under the layer's lock, which is not held across a
+    /// read. Empty when no layer is mounted, including a store that was moved
+    /// from.
+    ///
+    /// @return the mounted layer, or empty
+    [[nodiscard]] std::shared_ptr<const PackLayer> pack_layer_snapshot() const;
     /// Resolves a resource to a loose file, ignoring ASCII case.
     ///
     /// Throws std::runtime_error for an absolute, drive-qualified, traversing
@@ -884,7 +1062,8 @@ class AssetStore {
     /// @param prefix resource path of directory, with a trailing '\\'
     /// @param directory host directory walked
     void mark_loose_directory(const std::string& prefix, const std::filesystem::path& directory);
-    /// Continues an enumeration through the archive records of each mount.
+    /// Continues an enumeration through the archive records of each mount,
+    /// then the pack layer when the scope reaches it.
     ///
     /// @param[in,out] found matches appended in mount and stored order
     /// @param directory directory part of the pattern, with its trailing separator
@@ -912,6 +1091,9 @@ class AssetStore {
     // Folder listings kept by loose-file lookups; null in a moved-from store.
     struct LooseIndex;
     std::unique_ptr<LooseIndex> loose_index_;
+    // The pack layer and the lock that guards its pointer. Null in a
+    // moved-from store. The layer itself never changes once published.
+    std::unique_ptr<PackLayerSlot> pack_layer_;
     // The root mark_loose_shadows walks, and the folders it has walked, each
     // by its path with every link followed.
     std::filesystem::path walk_root_;

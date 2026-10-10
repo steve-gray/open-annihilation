@@ -1,0 +1,99 @@
+# oa-tool
+
+`oa-tool` reads archives and images from a game directory, and prints or
+writes what a script asks for. Mod authors run it by hand. The checks under
+`tools/` run `list` and `extract` and match their output. Packs, checks,
+catalogues and registries are further commands on the same table.
+
+## How to run it
+
+From a build tree, `build/oa-tool` is the program.
+
+- No arguments prints the command list on standard error and exits 2.
+- `oa-tool help`, `oa-tool --help` and `oa-tool -h` print that list on
+  standard output and exit 0.
+- `oa-tool help COMMAND` and `oa-tool COMMAND --help` (or `-h` before any
+  `--`) print that command's usage line and explanation on standard output
+  and exit 0. `oa-tool help GROUP SUBCOMMAND` does the same for a
+  subcommand.
+- A group with no subcommand prints its own list on standard error and
+  exits 2.
+
+Options, for a command that has any, may be written before, between or
+after the positional arguments. `--name value` and `--name=value` are the
+same. `--` ends options. A command takes its options through
+`parse_arguments` in `arguments.hpp`.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | The command did what was asked. |
+| 1 | The command ran and could not do it, or the answer is no. `Failure`, and any other exception, prints `oa-tool <command>: <message>` on standard error. |
+| 2 | The invocation is not one the tool can run: no command, an unknown command, or the wrong number of arguments. The line says what is wrong and names `oa-tool help`. |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `list ARCHIVE` | Prints each file in an HPI archive as `path`, a tab and its size in bytes. |
+| `extract ARCHIVE ENTRY OUTPUT` | Writes one archive entry to OUTPUT and prints nothing. |
+| `asset-extract ROOT ENTRY OUTPUT [ARCHIVE...]` | Writes ENTRY from loose files under ROOT, or from the named archives, and prints where it was read. A loose file wins. |
+| `preview ARCHIVE PCX_ENTRY OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX image from an archive as a PPM file, or a PNG file when the path ends in `.png`, and prints its size. |
+| `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
+
+## Entry points
+
+- `run_tool` in `command.hpp` turns an argument list into one command. The
+  program's `main` passes it the process arguments and the standard streams.
+  The overload that takes a table runs that table instead, which is how a
+  test drives a group the tool does not ship.
+- `commands` returns the table in `commands.cpp`.
+- `parse_arguments` splits options from positional arguments.
+- `read_file`, `write_file` and `write_image` in `files.hpp` move bytes and
+  images. Each throws `Failure` when it cannot.
+
+## State
+
+A run reads the archives, loose files and images named on its command line
+and writes the output file a command names. It keeps nothing after it exits.
+Commands print only through the `Output` they are given, so a test can
+capture every line.
+
+## Invariants
+
+- `list`, `extract`, `asset-extract`, `preview` and `decode-pcx` print the
+  same bytes on a successful run as they did before the command table, and
+  that run exits 0.
+- The exit code is 0, 1 or 2.
+- Help lists commands in the table's order, and a group's subcommands under
+  the group.
+- A repeating option keeps every value, in the order given. An option that
+  does not repeat, and every flag, is refused the second time.
+
+## Adding a command
+
+1. Write its `run` function in a `.cpp` file under `tools/oa-tool`, and
+   declare that function in `command.hpp` with the others from the same file.
+2. Add its row to the table in `commands.cpp`: the name, the usage arguments,
+   a one-line summary, a paragraph of help, how many arguments it takes and
+   the function. A group leaves the function null and names its subcommands.
+   A command whose options make the argument count vary sets the upper bound
+   to `any_count` and checks the arguments itself with `parse_arguments`.
+   Declare a repeating option with `repeats`; the parser already keeps every
+   value.
+3. Add the `.cpp` file to `oa-tool-commands` in `tools/oa-tool/CMakeLists.txt`.
+4. Cover the command from `tools/oa-tool/tests/oa_tool_test.cpp`. The test
+   runs commands in-process through `run_tool`, with streams of its own.
+
+## Tests
+
+`tools-oa-tool` (`oa-tool-test`) builds an archive in memory, runs every
+command, checks help and the usage failures, checks `parse_arguments`, and
+dispatches a group through `run_tool`'s table overload.
+
+## Limitations
+
+The five archive commands take no options. Catalogues, packs, checks and
+registries are further commands, not part of this table yet. The macOS
+package does not ship `oa-tool`.
