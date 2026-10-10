@@ -7,6 +7,7 @@
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/runtime.hpp"
 #include "oa/platform/preferences.hpp"
@@ -16,17 +17,22 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
 namespace artless = oa::ui::frontend_renderer;
+namespace kit = oa::ui::kit;
 
 namespace {
 
@@ -40,6 +46,9 @@ constexpr SDL_Keymod kShortcutModifier = SDL_KMOD_CTRL;
 /// A point of the main menu's picture over none of its buttons, where the
 /// pointer rests between the check's steps.
 constexpr oa::ui::display_layout::Point kRestingPointer{4, 240};
+
+/// How far round the pointer the cursor may draw, in the picture's pixels.
+constexpr int32_t kCursorReach = 40;
 
 /// Stops the check with a reason unless a condition holds.
 ///
@@ -99,6 +108,149 @@ std::size_t differing_pixels(
 fs::path step_snapshot(const fs::path& snapshot, std::string_view step) {
     return snapshot.parent_path() / (snapshot.stem().string() + '-' + std::string(step) + ".ppm");
 }
+
+/// What reached one of the check's screens of the OA layer.
+struct CheckScreenSeen {
+    int32_t moves{};    ///< pointer moves
+    int32_t presses{};  ///< pointer presses
+    int32_t releases{}; ///< pointer releases
+    kit::Point last{};  ///< the last pointer's point, in the screen's points
+    std::string text{}; ///< the text typed into it
+};
+
+/// A screen of the OA layer only the check pushes, on the main menu's
+/// picture: not modal and with no backdrop. A passing one answers pass to
+/// everything; a taking one takes the presses and releases inside its
+/// rectangle and the text typed, and reports a text field across itself.
+/// Either notes every pointer event and text that reaches it.
+class CheckScreen final : public LayerScreen {
+  public:
+
+    /// Makes the screen.
+    ///
+    /// @param name its name
+    /// @param area where it shows on the main menu's picture
+    /// @param takes it takes presses inside it and text
+    /// @param seen where it notes what reached it
+    CheckScreen(
+        std::string_view name,
+        oa::ui::display_layout::Rect area,
+        bool takes,
+        std::shared_ptr<CheckScreenSeen> seen
+    )
+        : name_(name), area_(area), takes_(takes), seen_(std::move(seen)) {}
+
+    /// Returns its name.
+    ///
+    /// @return the name
+    [[nodiscard]] std::string_view name() const override { return name_; }
+
+    /// Returns its place on the front end; it does not show in a match.
+    ///
+    /// @param view what it is placed on
+    /// @return its place at 1×
+    [[nodiscard]] LayerPlacement placement(const LayerView& view) const override {
+        if (view.match)
+            return {};
+        return {area_, area_.width, area_.height};
+    }
+
+    /// Tells that it is not modal.
+    ///
+    /// @return false
+    [[nodiscard]] bool modal() const override { return false; }
+
+    /// Tells that it darkens nothing.
+    ///
+    /// @return false
+    [[nodiscard]] bool backdrop() const override { return false; }
+
+    /// Draws nothing over the layer's black.
+    void draw(const kit::Canvas& /*canvas*/) const override {}
+
+    /// Notes a pointer event, and takes a taking screen's press or release
+    /// inside it; a move only changes its hover, and goes on.
+    ///
+    /// @param kind the event
+    /// @param at the pointer, in its points
+    /// @return pass, or none for a press or release it takes
+    LayerAnswer
+    pointer(ScreenInputKind kind, uint8_t /*button*/, kit::Point at, int32_t /*reach*/) override {
+        seen_->last = at;
+        if (kind == ScreenInputKind::pointer_move) {
+            ++seen_->moves;
+            return LayerAnswer::pass;
+        }
+        if (kind == ScreenInputKind::pointer_down)
+            ++seen_->presses;
+        else if (kind == ScreenInputKind::pointer_up)
+            ++seen_->releases;
+        const bool inside = at.x >= 0 && at.y >= 0 && at.x < area_.width && at.y < area_.height;
+        return takes_ && inside ? LayerAnswer::none : LayerAnswer::pass;
+    }
+
+    /// Lets every key go on.
+    ///
+    /// @return pass
+    LayerAnswer key(kit::Key /*pressed*/, uint32_t /*sdl_key*/) override {
+        return LayerAnswer::pass;
+    }
+
+    /// Lets the wheel go on.
+    ///
+    /// @return pass
+    LayerAnswer wheel(kit::Point /*at*/, float /*notches*/) override { return LayerAnswer::pass; }
+
+    /// Takes a taking screen's typed text.
+    ///
+    /// @param utf8 the text
+    /// @return none when it takes it; otherwise pass
+    LayerAnswer text(std::string_view utf8) override {
+        if (!takes_)
+            return LayerAnswer::pass;
+        seen_->text += std::string(utf8);
+        return LayerAnswer::none;
+    }
+
+    /// Returns a taking screen's text field: the whole screen.
+    ///
+    /// @return the field; none for a passing screen
+    [[nodiscard]] std::optional<kit::Rect> text_field() const override {
+        if (!takes_)
+            return std::nullopt;
+        return kit::Rect{0, 0, area_.width, area_.height};
+    }
+
+    /// Returns an empty list: it draws no controls.
+    ///
+    /// @return the list
+    [[nodiscard]] kit::DisplayList display_list() const override { return {}; }
+
+    /// Returns no hover, press or focus.
+    ///
+    /// @return the interaction
+    [[nodiscard]] kit::Interaction interaction() const override { return {}; }
+
+    /// Changes nothing.
+    ///
+    /// @return none
+    LayerAnswer tick() override { return LayerAnswer::none; }
+
+    /// Returns 0: it never draws anything else.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return 0; }
+
+    /// Has nothing to close.
+    void close(bool /*by_key*/) override {}
+
+  private:
+
+    std::string name_;                      ///< its name
+    oa::ui::display_layout::Rect area_{};   ///< where it shows, in the picture's pixels
+    bool takes_{};                          ///< it takes presses inside it and text
+    std::shared_ptr<CheckScreenSeen> seen_; ///< what reached it
+};
 
 } // namespace
 
@@ -468,7 +620,8 @@ void Runtime::check_engine_settings_in_menu() {
     // A click opens the dialog over the darkened main menu.
     click(centre(bottom));
     require(
-        engine_settings_dialog() != nullptr && host.dialog_shown && screen_ == Screen::main_menu,
+        engine_settings_dialog() != nullptr && oa_layer().find("settings") != nullptr &&
+            screen_ == Screen::main_menu,
         "a click on the OA button did not open the dialog"
     );
     require(release(SDLK_ESCAPE) && press(SDLK_ESCAPE), "Escape in the dialog ended the run");
@@ -481,11 +634,16 @@ void Runtime::check_engine_settings_in_menu() {
     const auto closed = frame();
     shortcut();
     auto* dialog = engine_settings_dialog();
-    require(dialog != nullptr && host.dialog_shown, "the shortcut did not open the dialog");
-    const auto placement = EngineSettingsMenuHost::dialog_placement();
+    const auto* settings_screen = oa_layer().find("settings");
     require(
-        placement.x == 80 && placement.y == 78 && placement.scale == 1,
-        "the dialog is not centred on the main menu at 80,78"
+        dialog != nullptr && settings_screen != nullptr, "the shortcut did not open the dialog"
+    );
+    const auto placed = settings_screen->placement(oa_layer().view());
+    const auto& placement = placed.shown;
+    require(
+        placement.x == 80 && placement.y == 78 && placement.width == placed.points_width &&
+            placement.height == placed.points_height,
+        "the dialog is not centred on the main menu at 80,78 at 1x"
     );
     {
         auto expected = closed;
@@ -496,13 +654,53 @@ void Runtime::check_engine_settings_in_menu() {
             settings::backdrop_color,
             settings::menu_backdrop_opacity
         );
-        settings::draw_dialog(expected, placement, *dialog, *fonts, icon);
+        settings::draw_dialog(expected, {placement.x, placement.y, 1}, *dialog, *fonts, icon);
         const auto shown = frame();
         snapshot("engine-settings-menu-dialog", shown);
         require(
             differing_pixels(shown, expected) == 0,
             "the dialog is not drawn over the darkened main menu"
         );
+        // The 640x480 window shows that picture: the darkened menu in the
+        // frame, the dialog over it in the window's own pixels and the
+        // cursor above both, its square left out.
+        int kept_width = 0;
+        int kept_height = 0;
+        SDL_GetWindowSize(sdl_.window, &kept_width, &kept_height);
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) &&
+                SDL_SyncWindow(sdl_.window),
+            "the window did not take 640x480"
+        );
+        apply_output_mode();
+        renderer::Surface presented;
+        menu_sparks_ = sparks;
+        capture_frame_ = &presented;
+        render();
+        capture_frame_ = nullptr;
+        auto picture = shown;
+        apply_gamma_rgb(picture.rgb.data(), picture.rgb.size() / 3U, 3);
+        const artless::SourceRect cursor{
+            kRestingPointer.x - kCursorReach,
+            kRestingPointer.y - kCursorReach,
+            2 * kCursorReach,
+            2 * kCursorReach
+        };
+        const auto differing_shown = differing_pixels(presented, picture, cursor);
+        if (differing_shown != 0 && !options_.snapshot.empty()) {
+            write_ppm(step_snapshot(options_.snapshot, "menu-dialog-presented"), presented);
+            write_ppm(step_snapshot(options_.snapshot, "menu-dialog-picture"), picture);
+        }
+        require(
+            differing_shown == 0,
+            "the 640x480 window does not show the dialog over the darkened main menu: " +
+                std::to_string(differing_shown) + " pixels differ"
+        );
+        require(
+            SDL_SetWindowSize(sdl_.window, kept_width, kept_height) && SDL_SyncWindow(sdl_.window),
+            "the window did not take its size back"
+        );
+        apply_output_mode();
     }
 
     // The dialog is modal: neither the main menu's buttons nor the OA button
@@ -530,14 +728,17 @@ void Runtime::check_engine_settings_in_menu() {
     );
     require(press(SDLK_ESCAPE), "Escape in the dialog ended the run");
     require(
-        engine_settings_dialog() == nullptr && !host.dialog_shown && engine_settings() == opened,
+        engine_settings_dialog() == nullptr && oa_layer().find("settings") == nullptr &&
+            engine_settings() == opened,
         "Escape did not close the dialog with the settings it opened with"
     );
     require(
         key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE, SDL_KMOD_NONE, true) && press(SDLK_ESCAPE),
         "Escape held after the dialog closed ended the run"
     );
-    require(release(SDLK_ESCAPE) && host.latched_key == 0, "Escape's release did not count");
+    require(
+        release(SDLK_ESCAPE) && oa_layer().latched_key() == 0, "Escape's release did not count"
+    );
     // On the main menu itself Escape does nothing.
     require(
         press(SDLK_ESCAPE) && release(SDLK_ESCAPE) && !exit_requested_ &&
@@ -559,12 +760,12 @@ void Runtime::check_engine_settings_in_menu() {
         "Enter did not close the dialog with the settings chosen"
     );
     require(
-        host.latched_key == static_cast<uint32_t>(SDLK_RETURN) &&
+        oa_layer().latched_key() == static_cast<uint32_t>(SDLK_RETURN) &&
             key(SDL_EVENT_KEY_DOWN, SDLK_RETURN, SDL_KMOD_NONE, true) &&
             engine_settings_dialog() == nullptr,
         "Enter held after the dialog closed reached the main menu"
     );
-    require(release(SDLK_RETURN) && host.latched_key == 0, "Enter's release did not count");
+    require(release(SDLK_RETURN) && oa_layer().latched_key() == 0, "Enter's release did not count");
     // The settings go back as they were, saved.
     shortcut();
     dialog = engine_settings_dialog();
@@ -610,7 +811,8 @@ void Runtime::check_engine_settings_in_menu() {
     load(Screen::single_player);
     tick_screen_packages();
     require(
-        engine_settings_dialog() == nullptr && !host.dialog_shown && engine_settings() == opened,
+        engine_settings_dialog() == nullptr && oa_layer().find("settings") == nullptr &&
+            engine_settings() == opened,
         "the dialog stayed open off the main menu"
     );
     load(Screen::main_menu);
@@ -620,6 +822,141 @@ void Runtime::check_engine_settings_in_menu() {
     require(engine_settings_dialog() != nullptr, "the request did not open the dialog");
     require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
     require(engine_settings_dialog() == nullptr, "Escape did not close the dialog");
+
+    // The layer passes on what its screens do not take. A screen that is
+    // not modal and passes everything lets a click through it reach the OA
+    // button, which opens Settings over it.
+    {
+        const oa::ui::display_layout::Rect over_button{
+            bottom.x - 8, bottom.y - 8, bottom.width + 16, bottom.height + 16
+        };
+        auto passed = std::make_shared<CheckScreenSeen>();
+        oa_layer().push(std::make_unique<CheckScreen>("check-pass", over_button, false, passed));
+        click(centre(bottom));
+        require(
+            engine_settings_dialog() != nullptr && oa_layer().top() != nullptr &&
+                oa_layer().top()->name() == "settings" && oa_layer().find("check-pass") != nullptr,
+            "a click through a screen that takes nothing did not open Settings over it"
+        );
+        require(
+            passed->presses == 1 && passed->releases == 1 && passed->moves >= 1,
+            "the screen that takes nothing did not see the click it passed on"
+        );
+        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+        require(
+            engine_settings_dialog() == nullptr && oa_layer().top() != nullptr &&
+                oa_layer().top()->name() == "check-pass",
+            "Escape did not close Settings back to the screen under it"
+        );
+        oa_layer().close_top();
+        require(oa_layer().find("check-pass") == nullptr, "the screen did not close");
+    }
+    // A screen that is not modal, takes clicks inside it and reports a text
+    // field, over the main menu's Exit button: a click inside reaches it and
+    // not the menu; a move outside reaches both it and the menu; a click
+    // outside reaches the menu; typed text reaches it; the system's text
+    // input is on while it shows, and off once it is closed.
+    {
+        const auto& exit_at = exit->common;
+        const oa::ui::display_layout::Rect over_exit{
+            exit_at.x, exit_at.y, exit_at.width, exit_at.height
+        };
+        auto taken = std::make_shared<CheckScreenSeen>();
+        oa_layer().push(std::make_unique<CheckScreen>("check-field", over_exit, true, taken));
+        require(SDL_TextInputActive(sdl_.window), "the text field did not start text input");
+        click({exit_at.x + exit_at.width / 2, exit_at.y + exit_at.height / 2});
+        require(
+            taken->presses == 1 && taken->releases == 1 && !exit_requested_ &&
+                screen_ == Screen::main_menu && engine_settings_dialog() == nullptr,
+            "a click inside the screen did not reach it alone"
+        );
+        const int32_t moves = taken->moves;
+        point(SDL_EVENT_MOUSE_MOTION, centre(bottom));
+        require(
+            taken->moves == moves + 1 &&
+                (taken->last.x >= over_exit.width || taken->last.y >= over_exit.height ||
+                 taken->last.x < 0 || taken->last.y < 0) &&
+                host.button_hovered,
+            "a move outside the screen did not reach both it and the menu"
+        );
+        click(centre(bottom));
+        require(
+            engine_settings_dialog() != nullptr && oa_layer().top() != nullptr &&
+                oa_layer().top()->name() == "settings",
+            "a click outside the screen did not reach the menu's OA button"
+        );
+        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+        require(engine_settings_dialog() == nullptr, "Escape did not close Settings");
+        point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+        SDL_Event typed{};
+        typed.type = SDL_EVENT_TEXT_INPUT;
+        typed.text.windowID = SDL_GetWindowID(sdl_.window);
+        typed.text.text = "Ridge";
+        bool running = true;
+        dispatch_event(typed, running);
+        require(running && taken->text == "Ridge", "typed text did not reach the screen");
+        require(SDL_TextInputActive(sdl_.window), "text input stopped while the text field shows");
+        oa_layer().close_top();
+        require(
+            oa_layer().find("check-field") == nullptr && !SDL_TextInputActive(sdl_.window),
+            "text input stayed on after the text field closed"
+        );
+    }
+    // The layer's keys: those the dialog has, as it maps them, and Backspace
+    // and Delete.
+    {
+        const std::array<std::pair<std::pair<SDL_Keycode, SDL_Keymod>, kit::Key>, 9> keys{{
+            {{SDLK_TAB, SDL_KMOD_NONE}, kit::Key::tab},
+            {{SDLK_TAB, SDL_KMOD_SHIFT}, kit::Key::back_tab},
+            {{SDLK_UP, SDL_KMOD_NONE}, kit::Key::up},
+            {{SDLK_DOWN, SDL_KMOD_NONE}, kit::Key::down},
+            {{SDLK_LEFT, SDL_KMOD_NONE}, kit::Key::left},
+            {{SDLK_RIGHT, SDL_KMOD_NONE}, kit::Key::right},
+            {{SDLK_RETURN, SDL_KMOD_NONE}, kit::Key::enter},
+            {{SDLK_ESCAPE, SDL_KMOD_NONE}, kit::Key::escape},
+            {{SDLK_SPACE, SDL_KMOD_NONE}, kit::Key::space},
+        }};
+        for (const auto& [pressed, meant] : keys) {
+            const auto mapped = layer_key(pressed.first, pressed.second);
+            require(
+                mapped == meant &&
+                    engine_settings_dialog_key(pressed.first, pressed.second) == mapped,
+                "the layer does not map a key as the dialog does"
+            );
+        }
+        require(
+            layer_key(SDLK_BACKSPACE, SDL_KMOD_NONE) == kit::Key::backspace &&
+                layer_key(SDLK_DELETE, SDL_KMOD_NONE) == kit::Key::delete_forward,
+            "the layer does not map Backspace and Delete"
+        );
+    }
+    // Over Settings, close_above leaves Settings on top.
+    {
+        shortcut();
+        require(engine_settings_dialog() != nullptr, "the shortcut did not open the dialog");
+        auto passed = std::make_shared<CheckScreenSeen>();
+        auto taken = std::make_shared<CheckScreenSeen>();
+        oa_layer().push(
+            std::make_unique<CheckScreen>(
+                "check-pass", oa::ui::display_layout::Rect{0, 0, 32, 32}, false, passed
+            )
+        );
+        oa_layer().push(
+            std::make_unique<CheckScreen>(
+                "check-field", oa::ui::display_layout::Rect{40, 0, 32, 32}, true, taken
+            )
+        );
+        oa_layer().close_above("settings");
+        require(
+            oa_layer().top() != nullptr && oa_layer().top()->name() == "settings" &&
+                oa_layer().find("check-pass") == nullptr &&
+                oa_layer().find("check-field") == nullptr && engine_settings_dialog() != nullptr,
+            "close_above did not leave Settings on top"
+        );
+        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+        require(engine_settings_dialog() == nullptr, "Escape did not close the dialog");
+    }
+    std::cout << "engine settings check: the layer passes on what its screens do not take\n";
 
     // EXIT ends the program. The check then goes on from the menu as it was.
     const auto menu_state = state_;

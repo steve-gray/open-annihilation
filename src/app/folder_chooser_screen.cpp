@@ -12,6 +12,7 @@
 #include "game_files_paint.hpp"
 #include "game_files_screen.hpp"
 #include "render_host.hpp"
+#include "render_state.hpp"
 
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/game_files_import.hpp"
@@ -190,68 +191,6 @@ bool nobody_watches(const Options& options) {
                driver == nullptr ? std::string_view{} : std::string_view(driver)
            );
 }
-
-/// The renderer's state the chooser changes, kept to put back at the end.
-class RendererState {
-  public:
-
-    /// Keeps the renderer's target, logical presentation, scale, viewport, clip, colour and
-    /// blend mode.
-    ///
-    /// @param renderer the renderer
-    explicit RendererState(SDL_Renderer* renderer) noexcept : renderer_(renderer) {
-        target_ = SDL_GetRenderTarget(renderer_);
-        SDL_GetRenderLogicalPresentation(
-            renderer_, &logical_width_, &logical_height_, &logical_mode_
-        );
-        SDL_GetRenderScale(renderer_, &scale_x_, &scale_y_);
-        viewport_set_ = SDL_RenderViewportSet(renderer_);
-        SDL_GetRenderViewport(renderer_, &viewport_);
-        clip_set_ = SDL_RenderClipEnabled(renderer_);
-        SDL_GetRenderClipRect(renderer_, &clip_);
-        SDL_GetRenderDrawColor(renderer_, &colour_[0], &colour_[1], &colour_[2], &colour_[3]);
-        SDL_GetRenderDrawBlendMode(renderer_, &blend_);
-    }
-
-    /// Puts everything back as it was.
-    ~RendererState() {
-        SDL_SetRenderTarget(renderer_, target_);
-        SDL_SetRenderLogicalPresentation(renderer_, logical_width_, logical_height_, logical_mode_);
-        SDL_SetRenderScale(renderer_, scale_x_, scale_y_);
-        SDL_SetRenderViewport(renderer_, viewport_set_ ? &viewport_ : nullptr);
-        SDL_SetRenderClipRect(renderer_, clip_set_ ? &clip_ : nullptr);
-        SDL_SetRenderDrawColor(renderer_, colour_[0], colour_[1], colour_[2], colour_[3]);
-        SDL_SetRenderDrawBlendMode(renderer_, blend_);
-    }
-
-    RendererState(const RendererState&) = delete;
-    RendererState& operator=(const RendererState&) = delete;
-
-    /// Draws to the window directly, in its own pixels.
-    void use_window_pixels() const noexcept {
-        SDL_SetRenderTarget(renderer_, nullptr);
-        SDL_SetRenderLogicalPresentation(renderer_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
-        SDL_SetRenderScale(renderer_, 1.0F, 1.0F);
-        SDL_SetRenderViewport(renderer_, nullptr);
-        SDL_SetRenderClipRect(renderer_, nullptr);
-    }
-
-  private:
-
-    SDL_Renderer* renderer_{}; ///< the renderer
-    SDL_Texture* target_{};    ///< its target
-    int logical_width_{};      ///< logical width
-    int logical_height_{};     ///< logical height
-    SDL_RendererLogicalPresentation logical_mode_{SDL_LOGICAL_PRESENTATION_DISABLED}; ///< its mode
-    float scale_x_{1.0F};                      ///< scale across
-    float scale_y_{1.0F};                      ///< scale down
-    bool viewport_set_{};                      ///< a viewport was set
-    SDL_Rect viewport_{};                      ///< the viewport
-    bool clip_set_{};                          ///< a clip was set
-    SDL_Rect clip_{};                          ///< the clip
-    std::array<uint8_t, 4> colour_{};          ///< the draw colour
-    SDL_BlendMode blend_{SDL_BLENDMODE_BLEND}; ///< the blend mode
-};
 
 /// The chooser on the game's window: its loop, its model and what its commands do.
 class ChooserScreen {
@@ -1138,12 +1077,12 @@ class ChooserScreen {
             host_->note_presented_frame(0);
     }
 
-    const Options& options_;     ///< the parsed command line
-    RendererHost* host_{};       ///< what made the renderer; may be null
-    SDL_Window* window_{};       ///< the game's window
-    SDL_Renderer* renderer_{};   ///< its renderer
-    GameFilesNeeded needed_{};   ///< why there is no folder, and the folders found
-    RendererState render_state_; ///< the renderer's state to put back
+    const Options& options_;   ///< the parsed command line
+    RendererHost* host_{};     ///< what made the renderer; may be null
+    SDL_Window* window_{};     ///< the game's window
+    SDL_Renderer* renderer_{}; ///< its renderer
+    GameFilesNeeded needed_{}; ///< why there is no folder, and the folders found
+    RenderState render_state_; ///< the renderer's state to put back
     std::unique_ptr<text_font::FontStack> fonts_{}; ///< the bundled fonts, when open
     chooser::Model model_{};                        ///< what the chooser shows
     chooser::UiState ui_{};                         ///< what the chooser keeps between frames

@@ -6,6 +6,7 @@
 #include "oa/app/runtime.hpp"
 #include "oa/app/game_directory.hpp"
 #include "graphics_report.hpp"
+#include "oa_layer.hpp"
 #include "pad_state.hpp"
 #include "render_host.hpp"
 #include "render_run.hpp"
@@ -445,7 +446,8 @@ void Runtime::destroy_match_layer_textures() {
         SDL_DestroyTexture(match_dialog_side_tex_);
         match_dialog_side_tex_ = nullptr;
     }
-    destroy_engine_settings_textures();
+    if (oa_layer_)
+        oa_layer_->destroy_textures();
     // The touch layer's texture goes with them; the next present makes it again.
     TouchDrawAccess::forget_textures(*this);
     match_dialog_side_tex_w_ = match_dialog_side_tex_h_ = 0;
@@ -592,7 +594,7 @@ void Runtime::compose_match_frame(renderer::Surface& frame) {
     // and the dialogs; the placed regions over the touch controls' sheets.
     compose_touch_layer(frame);
     compose_placed_hud_regions(frame);
-    compose_engine_settings_layer(frame);
+    oa_layer().compose_match(frame);
     if (!match_use_layers_ || oa::ui::frontend_dialogs::dialog_count() == 0 ||
         match_dialog_rgba_.size() != pixels * 4U)
         return;
@@ -767,7 +769,7 @@ void Runtime::finish_match_layers(
         };
         draw_one_to_one(sdl_.renderer, match_dialog_side_tex_, &side, one_to_one);
     }
-    present_engine_settings_layer();
+    oa_layer().present(nullptr);
     if (dialogs)
         draw_one_to_one(sdl_.renderer, match_dialog_tex_, nullptr, nullptr, one_to_one);
     present_software_cursor(true);
@@ -1053,6 +1055,15 @@ void Runtime::present_front_end() {
     }
     if (!drawn)
         draw_frame(sdl_.renderer, frontend_texture_, standard_mode);
+    // Open Annihilation's own screens go over the picture in the window's own
+    // pixels, and the software cursor over them (tick_and_draw_cursor left it
+    // out of the frame).
+    if (oa_layer().shows(false)) {
+        SDL_FRect picture_area{};
+        if (SDL_GetRenderLogicalPresentationRect(sdl_.renderer, &picture_area))
+            oa_layer().present(&picture_area);
+        present_software_cursor(false);
+    }
     capture_render_target();
     if (render_fault_due(RenderFaultPoint::present))
         throw PresentError("injected present error");

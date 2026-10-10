@@ -26,10 +26,10 @@
 // tier's buffers and then drops it; and the same for Full, whose rungs the
 // step-down takes first and whose pages the guard drops first.
 #include "oa/app/runtime.hpp"
-#include "engine_settings_match_host.hpp"
 #include "engine_settings_state.hpp"
 #include "full_presentation.hpp"
 #include "graphics_report.hpp"
+#include "oa_layer.hpp"
 #include "render_host.hpp"
 #include "render_run.hpp"
 #include "oa/app/frame_pacing.hpp"
@@ -715,7 +715,7 @@ struct Runtime::RendererLadder {
         expect(runtime.engine_settings_dialog() != nullptr, where, "the OA settings did not open");
         expect_composed("tiles-settings");
         expect(
-            runtime.engine_settings_match_host().layer.tile_count() > 1,
+            runtime.oa_layer().texture().tile_count() > 1,
             where,
             "the OA settings layer was not tiled"
         );

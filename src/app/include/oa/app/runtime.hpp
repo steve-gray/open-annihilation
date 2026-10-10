@@ -277,6 +277,7 @@ struct PackageOptions;
 
 class MapPacks;
 struct PackMap;
+class OaLayer;
 
 namespace content {
 class Service;
@@ -3698,9 +3699,10 @@ class Runtime final : public menu::Host,
 
     // The Open Annihilation settings (oa/ui/engine_settings.hpp): read at
     // start and put in effect (runtime_engine_settings.cpp), and the dialog
-    // that changes them, opened from the OA button on the main menu
-    // (runtime_engine_settings_menu.cpp) and in the in-game menu's column
-    // (runtime_engine_settings_match.cpp), with Cmd+, on macOS or Ctrl+,
+    // that changes them, a screen of the OA layer (oa_layer.cpp), opened
+    // from the OA button on the main menu (runtime_engine_settings_menu.cpp)
+    // and in the in-game menu's column (oa_layer.cpp,
+    // runtime_engine_settings_match.cpp), with Cmd+, on macOS or Ctrl+,
     // elsewhere, and from the macOS application menu's Settings… item
     // (runtime_engine_settings_app_menu.cpp).
 
@@ -3818,7 +3820,9 @@ class Runtime final : public menu::Host,
     ///         empty picture, which draws the OA mark, when it cannot be decoded
     [[nodiscard]] oa::ui::frontend_renderer::RgbaPicture engine_settings_icon();
 
-    /// Returns the meaning a key has in the dialog.
+    /// Returns the meaning a key has in the dialog's notices and prompts: the
+    /// OA layer's (layer_key), for the notices and prompts that map their
+    /// own keys.
     ///
     /// @param key SDL keycode
     /// @param modifiers SDL_Keymod bits
@@ -4266,24 +4270,25 @@ class Runtime final : public menu::Host,
     /// Settings stay open and no prompt shows (--check-language-install).
     void check_language_install();
 
-    /// The main menu's OA button and dialog (engine_settings_menu_host.hpp).
+    /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 
-    /// Frees the main menu's settings host.
+    /// Frees the main menu's OA button's state.
     ///
-    /// @param host host to free; null is allowed
+    /// @param host state to free; null is allowed
     static void destroy_engine_settings_menu_host(EngineSettingsMenuHost* host) noexcept;
 
-    /// Returns the main menu's settings host, made on first use.
+    /// Returns the main menu's OA button's state, made on first use.
     ///
-    /// @return the host
+    /// @return the state
     EngineSettingsMenuHost& engine_settings_menu_host();
 
-    /// Registers the main menu's overlays: the OA button under the
-    /// extensions' overlays and the dialog over them.
-    void register_engine_settings_overlays();
+    /// Registers the main menu's OA button: an overlay under the extensions'
+    /// overlays, drawn into the main menu's picture.
+    void register_engine_settings_button();
 
-    /// Opens the dialog over the darkened main menu.
+    /// Opens the dialog over the darkened main menu, as the OA layer's
+    /// settings screen.
     void open_engine_settings_from_menu();
 
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
@@ -4417,25 +4422,46 @@ class Runtime final : public menu::Host,
         std::string_view label
     ) const;
 
-    /// The in-game menu's OA button and dialog (engine_settings_match_host.hpp).
-    struct EngineSettingsMatchHost;
+    // The OA layer (oa_layer.hpp): one host for Open Annihilation's own
+    // screens over every screen of the game, the in-game OA button with it.
+    friend class OaLayer;
 
-    /// Frees the match's settings host.
+    /// The settings dialog as a screen of the OA layer, on the main menu or
+    /// in a match (oa_layer.cpp).
+    struct SettingsScreen;
+
+    /// Frees the OA layer.
     ///
-    /// @param host host to free; null is allowed
-    static void destroy_engine_settings_match_host(EngineSettingsMatchHost* host) noexcept;
+    /// @param layer layer to free; null is allowed
+    static void destroy_oa_layer(OaLayer* layer) noexcept;
 
-    /// Returns the match's settings host, made on first use.
+    /// Returns the OA layer, through which every screen reaches the host of
+    /// Open Annihilation's own screens; made on first use.
     ///
-    /// @return the host
-    EngineSettingsMatchHost& engine_settings_match_host();
+    /// @return the layer
+    OaLayer& oa_layer();
 
-    /// Registers the match's overlay: the OA button under Resume and the
-    /// dialog beside the in-game menu's column.
-    void register_engine_settings_match_overlay();
+    /// Registers the OA layer's overlay: one overlay on every screen, over
+    /// the extensions' overlays, that hands the layer the input, the frames'
+    /// ticks and, on the front end, the frame.
+    void register_oa_layer();
 
-    /// Opens the dialog beside the darkened in-game menu, opening the menu
-    /// first from play; a game played alone stays paused, a shared game runs on.
+    /// Puts the open settings dialog on the OA layer as its top screen.
+    ///
+    /// @param in_match the dialog was opened in a match; otherwise on the main menu
+    void push_settings_screen(bool in_match);
+
+    /// Hands the settings screen on the OA layer an action of the dialog, as
+    /// its own events do: its sound, the settings, and the layer taking the
+    /// screen off when the dialog closes. Without the screen, the action
+    /// goes to the settings alone (take_engine_settings_action).
+    ///
+    /// @param action what the dialog asked
+    void take_settings_screen_action(oa::ui::engine_settings::DialogAction action);
+
+    /// Opens the dialog beside the darkened in-game menu, as the OA layer's
+    /// settings screen, opening the menu first from play; a game played alone
+    /// stays paused, a shared game runs on.
     ///
     /// @param kind which settings it shows; the mod options only while the
     ///     profile turns ui.options-dialog on
@@ -4566,20 +4592,6 @@ class Runtime final : public menu::Host,
     ///
     /// @return hertz; 0 without a window or when the display reports none
     [[nodiscard]] float display_refresh_rate() const;
-
-    /// Draws the match's settings layer, the OA button and the dialog with the
-    /// column darkened, over a composed match frame at the display gamma.
-    ///
-    /// @param[in,out] frame the composed frame, at the window's size
-    void compose_engine_settings_layer(renderer::Surface& frame);
-
-    /// Draws the match's settings layer over the presented layers, under the
-    /// message boxes and the cursor, as the other layers laid out 1:1 are
-    /// drawn (one_to_one_scale_mode).
-    void present_engine_settings_layer();
-
-    /// Destroys the match's settings layer's textures.
-    void destroy_engine_settings_textures();
 
     /// Checks the in-game menu's OA button and dialog (part of --check-engine-settings).
     void check_engine_settings_in_match();
@@ -14798,7 +14810,7 @@ class Runtime final : public menu::Host,
     // The captions drawn over the player's own pictures; null until first used.
     std::unique_ptr<PictureCaptionState, void (*)(PictureCaptionState*) noexcept>
         picture_caption_state_{nullptr, destroy_picture_caption_state};
-    // The main menu's OA button and dialog; null until first used.
+    // The main menu's OA button; null until first used.
     std::unique_ptr<EngineSettingsMenuHost, void (*)(EngineSettingsMenuHost*) noexcept>
         engine_settings_menu_{nullptr, destroy_engine_settings_menu_host};
     // The player's own folder for this run (start_user_folder); empty
@@ -14826,9 +14838,6 @@ class Runtime final : public menu::Host,
     std::unique_ptr<ContentState, void (*)(ContentState*) noexcept> content_{
         nullptr, destroy_content_state
     };
-    // The in-game menu's OA button and dialog; null until first used.
-    std::unique_ptr<EngineSettingsMatchHost, void (*)(EngineSettingsMatchHost*) noexcept>
-        engine_settings_match_{nullptr, destroy_engine_settings_match_host};
     // The state of the renderer borrowed with its host; null without one,
     // as in a headless run, on a window of the runtime's own or in the
     // second runtime of a loopback check.
@@ -14842,6 +14851,9 @@ class Runtime final : public menu::Host,
     };
     // The gamepads' state; null until a gamepad or the pad check needs it.
     std::unique_ptr<PadState, void (*)(PadState*) noexcept> pad_{nullptr, destroy_pad_state};
+    // The OA layer and its screens; null until first used. Declared after
+    // render_run_, so its textures go before the renderer they belong to.
+    std::unique_ptr<OaLayer, void (*)(OaLayer*) noexcept> oa_layer_{nullptr, destroy_oa_layer};
     bool lifecycle_watch_installed_ = false; // install_lifecycle_watch ran
     // The SDL event type the macOS Settings… item posts; 0 while none is registered.
     uint32_t engine_settings_menu_event_{};

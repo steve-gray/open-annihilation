@@ -18,6 +18,7 @@
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
+#include "oa_layer.hpp"
 
 #include "oa/app/acceleration_status.hpp"
 #include "oa/app/game_directory.hpp"
@@ -432,7 +433,6 @@ fs::path step_snapshot(const fs::path& snapshot, std::string_view step) {
 
 void Runtime::check_engine_settings_dialog() {
     std::cout << "engine settings check: the dialog's sections and controls\n";
-    auto& host = engine_settings_menu_host();
     const auto previous_tick = fake_frontend_tick_;
     fake_frontend_tick_ = 1000U;
     load(Screen::main_menu);
@@ -445,14 +445,20 @@ void Runtime::check_engine_settings_dialog() {
     const auto defaults = settings::default_settings(EngineSettingsState::inputs(*this));
     require(engine_settings() == defaults, "the settings did not start at their defaults");
 
-    const auto placement = EngineSettingsMenuHost::dialog_placement();
+    // Where the OA layer's settings screen shows on the main menu's picture,
+    // while it is open.
+    const auto placement = [this] {
+        const auto* screen = oa_layer().find("settings");
+        require(screen != nullptr, "the settings screen is not on the OA layer");
+        return screen->placement(oa_layer().view()).shown;
+    };
     const auto point = [this](SDL_EventType type, layout::Point at) {
         send_check_pointer(type, at, type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT);
     };
     const auto rest = [&] { point(SDL_EVENT_MOUSE_MOTION, kRestingPointer); };
     // Clicks a point of the dialog, in its source pixels.
     const auto click_at = [&](int32_t x, int32_t y) {
-        const layout::Point at{placement.x + x, placement.y + y};
+        const layout::Point at{placement().x + x, placement().y + y};
         point(SDL_EVENT_MOUSE_MOTION, at);
         point(SDL_EVENT_MOUSE_BUTTON_DOWN, at);
         point(SDL_EVENT_MOUSE_BUTTON_UP, at);
@@ -485,7 +491,7 @@ void Runtime::check_engine_settings_dialog() {
         tap(SDLK_COMMA, kShortcutModifier);
         auto* dialog = engine_settings_dialog();
         require(
-            dialog != nullptr && host.dialog_shown,
+            dialog != nullptr && oa_layer().find("settings") != nullptr,
             "the shortcut did not open the dialog " + std::string(what)
         );
         rest();
@@ -512,13 +518,12 @@ void Runtime::check_engine_settings_dialog() {
         menu_sparks_ = sparks;
         return frame_without_cursor();
     };
-    const artless::SourceRect dialog_area{
-        placement.x, placement.y, settings::dialog_width, settings::dialog_height
-    };
-
     // Every section through its entry in the list: its rows, and nothing
     // outside the dialog changes.
     const auto* menu_dialog = open("from the main menu");
+    const artless::SourceRect dialog_area{
+        placement().x, placement().y, settings::dialog_width, settings::dialog_height
+    };
     // The main menu's dialog lists Game files only where the platform brings
     // game files in; this game lists it exactly then.
     const bool game_files = game_files_import_offered(game_files_hooks());
@@ -607,7 +612,7 @@ void Runtime::check_engine_settings_dialog() {
         };
         // The dialog's middle, over its rows.
         const layout::Point over_rows{
-            placement.x + settings::dialog_width / 2, placement.y + settings::dialog_height / 2
+            placement().x + settings::dialog_width / 2, placement().y + settings::dialog_height / 2
         };
         turn_wheel(over_rows, 1.0F);
         require(offset() == 0, "the wheel scrolled the dialog above its top");
@@ -993,7 +998,8 @@ void Runtime::check_engine_settings_dialog() {
     // main menu is drawn to the whole of it.
     click(settings::ok_control, "OK", "OK");
     require(
-        engine_settings_dialog() == nullptr && !host.dialog_shown, "OK did not close the dialog"
+        engine_settings_dialog() == nullptr && oa_layer().find("settings") == nullptr,
+        "OK did not close the dialog"
     );
     chosen.screen_size = kChosenScreenSize;
     require(engine_settings() == chosen, "OK did not keep the settings chosen");
@@ -1296,10 +1302,10 @@ void Runtime::check_engine_settings_dialog() {
         require(haptics_off != nullptr && engine_settings().touch_haptics, "Haptics is not On");
         const int32_t reach = EngineSettingsState::finger_reach(*this, 1.0);
         const layout::Point beside{
-            placement.x + haptics_off->rect.x - 1 - reach * 2 / 3,
-            placement.y + haptics_off->rect.y + haptics_off->rect.height / 2
+            placement().x + haptics_off->rect.x - 1 - reach * 2 / 3,
+            placement().y + haptics_off->rect.y + haptics_off->rect.height / 2
         };
-        click_at(beside.x - placement.x, beside.y - placement.y);
+        click_at(beside.x - placement().x, beside.y - placement().y);
         require(engine_settings().touch_haptics, "a mouse press beside Haptics' switch took it");
         finger_click({beside.x - reach, beside.y});
         require(engine_settings().touch_haptics, "a finger's press out of reach took Haptics");
@@ -1551,7 +1557,7 @@ void Runtime::check_engine_settings_dialog() {
         fs::remove_all(mod_folder, ignored);
     }
     rest();
-    host.latched_key = 0;
+    oa_layer().forget_latched_key();
     fake_frontend_tick_ = previous_tick;
     std::cout << "engine settings check: every section, each setting through the dialog's "
                  "pointer and keys, OK, Cancel and Restore defaults, the keys they save, "
@@ -1561,10 +1567,15 @@ void Runtime::check_engine_settings_dialog() {
 
 void Runtime::check_engine_settings_window_sizes() {
     std::cout << "engine settings check: the main menu as the window shows it\n";
-    auto& host = engine_settings_menu_host();
     const auto previous_tick = fake_frontend_tick_;
     fake_frontend_tick_ = 1000U;
-    const auto placement = EngineSettingsMenuHost::dialog_placement();
+    // Where the OA layer's settings screen shows on the main menu's picture,
+    // while it is open.
+    const auto placement = [this] {
+        const auto* screen = oa_layer().find("settings");
+        require(screen != nullptr, "the settings screen is not on the OA layer");
+        return screen->placement(oa_layer().view()).shown;
+    };
     const auto point = [this](SDL_EventType type, layout::Point at) {
         send_check_pointer(type, at, type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT);
     };
@@ -1657,7 +1668,7 @@ void Runtime::check_engine_settings_window_sizes() {
         click({button.x + button.width / 2, button.y + button.height / 2});
         auto* dialog = engine_settings_dialog();
         require(
-            dialog != nullptr && host.dialog_shown,
+            dialog != nullptr && oa_layer().find("settings") != nullptr,
             "a click on the OA button did not open the dialog" + on
         );
         for (const auto page : kPages) {
@@ -1665,8 +1676,8 @@ void Runtime::check_engine_settings_window_sizes() {
             const auto* entry = find_part(parts, settings::page_control(page), {});
             require(entry != nullptr, "the dialog has no entry for a section" + on);
             click(
-                {placement.x + entry->rect.x + entry->rect.width / 2,
-                 placement.y + entry->rect.y + entry->rect.height / 2}
+                {placement().x + entry->rect.x + entry->rect.width / 2,
+                 placement().y + entry->rect.y + entry->rect.height / 2}
             );
             require(dialog->page == page, "a click on a section's entry did not show it" + on);
             point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
@@ -1689,8 +1700,8 @@ void Runtime::check_engine_settings_window_sizes() {
                                             std::string_view what) {
                     require(part != nullptr, "Developer Mode shows no " + std::string(what) + on);
                     click(
-                        {placement.x + part->rect.x + part->rect.width / 2,
-                         placement.y + part->rect.y + part->rect.height / 2}
+                        {placement().x + part->rect.x + part->rect.width / 2,
+                         placement().y + part->rect.y + part->rect.height / 2}
                     );
                 };
                 // Clicks the part that shows a text.
@@ -1765,7 +1776,7 @@ void Runtime::check_engine_settings_window_sizes() {
         !SDL_SyncWindow(sdl_.window))
         throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
     load(Screen::main_menu);
-    host.latched_key = 0;
+    oa_layer().forget_latched_key();
     fake_frontend_tick_ = previous_tick;
 }
 
