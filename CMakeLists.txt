@@ -1022,7 +1022,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-language-packs-test src/app/language_packs_test.cpp
     src/app/language_packs.cpp)
   target_link_libraries(oa-app-language-packs-test PRIVATE oa-app-headers oa-data-languages
-    oa-formats-oamod oa-formats-tdf oa-test-support oa-options)
+    oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
 endif()

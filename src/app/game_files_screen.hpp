@@ -119,6 +119,27 @@ void install_game_files_language(
     const std::optional<fs::path>& user_folder_option
 );
 
+/// Reads the interface catalogue and the engine's and the player's language
+/// packs once, without registering them. The management screen reads them
+/// so its fonts can follow the language the runtime already shows.
+///
+/// @param user_folder_option --user-folder; empty leaves the player's folder
+/// @param preferences_file --preferences-file; empty: the player's own file
+void read_game_files_language_packs(
+    const std::optional<fs::path>& user_folder_option,
+    const std::optional<fs::path>& preferences_file
+);
+
+/// Removes the stack's pack faces and adds the faces of the packs whose tag
+/// or word is the language the interface shows.
+///
+/// The player's packs come first, then the engine's, each pack's fonts in
+/// manifest order, a path once, and at most most_pack_faces. A face that
+/// does not open is logged.
+///
+/// @param stack the open stack
+void use_game_files_language_fonts(oa::platform::text_font::FontStack& stack);
+
 /// Returns the header's version text: "v" and the engine's version.
 ///
 /// @return the text, such as "v0.6.0"

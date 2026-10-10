@@ -110,6 +110,8 @@ void pseudo_pack_reads_whole() {
     OA_CHECK(manifest.homepage == "https://example.org/pseudo");
     OA_CHECK(manifest.tags == std::vector<std::string>{"test"});
     OA_CHECK(manifest.requires_engine == ">= 0.0.1");
+    OA_CHECK(manifest.warmup == "warmup.txt");
+    OA_CHECK(manifest.fonts.empty());
     const languages::LanguageEntry entry = languages::entry_of(manifest);
     OA_CHECK(entry.tag == "en-XA");
     OA_CHECK(entry.endonym == manifest.name);
