@@ -984,6 +984,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
+  src/app/runtime_language_install_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1535,6 +1536,32 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-mod-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_install_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The pseudo language pack installed through the game: a dropped file
+      # asked and installed, the same package declined, then a catalogue
+      # revision installed while Settings stay open and no prompt shows.
+      # The pack's sources sit beside the player's folder, never in Languages
+      # until the check installs them.
+      set(oa_language_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-install")
+      file(MAKE_DIRECTORY "${oa_language_install_dir}")
+      file(WRITE "${oa_language_install_dir}/language-install.conf"
+        "open-annihilation-preferences 1\n\"open-annihilation.language\" \"en-XA\"\n")
+      add_test(NAME language-install-pack COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests/pseudo-pack"
+        "${oa_language_install_dir}/pseudo-pack")
+      set_tests_properties(language-install-pack PROPERTIES FIXTURES_SETUP language-install-pack)
+      # A previous run's pack would already be shown. Clear it before the
+      # process starts, which is when packs are read.
+      add_test(NAME language-install-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_language_install_dir}/Open Annihilation/Languages")
+      set_tests_properties(language-install-clean PROPERTIES FIXTURES_SETUP language-install-clean)
+      add_test(NAME native-language-install COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-language-install
+        --preferences-file "${oa_language_install_dir}/language-install.conf"
+        --user-folder "${oa_language_install_dir}/Open Annihilation")
+      set_tests_properties(native-language-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_language_install_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED "language-install-pack;language-install-clean")
       # A folder without a profile whose second side lacks its LOGO: the
       # Mods page refuses it. A folder without a profile, and a profile,
       # whose second side's intgaf and font name files no folder holds: the

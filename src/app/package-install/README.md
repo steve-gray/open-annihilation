@@ -1,11 +1,13 @@
 # Packages
 
 This module installs packages into a folder of the player's own folder. One
-table of kinds says what differs; it holds the mod kind, `oamod`, and the
-map pack kind, `oamap`. A mod package is a zip archive of a mod's folder,
-the one that holds its `oamod.yaml`; it installs into `Mods/<id>`, by the id
-its profile gives, whatever the file is called. A map pack installs into
-`Maps/<id>`. The module has no SDL: the game's runtime shows what it asks
+table of kinds says what differs; it holds the mod kind, `oamod`, the
+map pack kind, `oamap`, and the language pack kind, `oalang`. A mod package
+is a zip archive of a mod's folder, the one that holds its `oamod.yaml`; it
+installs into `Mods/<id>`, by the id its profile gives, whatever the file is
+called. A map pack installs into `Maps/<id>`. A language pack installs into
+`Languages/<tag>`, by the tag its `language.yaml` gives. The module has no
+SDL: the game's runtime shows what it asks
 and answers (`src/app/runtime_mod_install.cpp`,
 "Mod packages" in [src/app](../README.md#mod-packages-oamod) and
 "Map packs" in [src/app](../README.md#map-packs-oamap)).
@@ -38,7 +40,7 @@ and answers (`src/app/runtime_mod_install.cpp`,
 
 `oa/app/package_install/inbox.hpp` keeps what outlives each run of the game in
 one process: the packages waiting for the main menu (`post_package_file`,
-`take_package_file`), the `.oareg` files waiting on the add-registry queue
+`take_package_file`, `next_package_file`), the `.oareg` files waiting on the add-registry queue
 (`post_registry_file`, `take_registry_file`), `post_opened_file`, which sends
 a `.oareg` file there and every other opened file to the package queue, the
 change that waits for the run playing its target to end
@@ -55,11 +57,13 @@ running. The folder's name stays `opened-mods`.
 
 ## Kinds
 
-`kKinds` in `src/kinds.cpp` is the table. It holds `oamod`, then `oamap`.
-A mod uses the extension `.oamod`, the manifest `oamod.yaml` (at most
-256 KiB), the root folder `Mods` and the prefix `.oamod-` on the installer's
-own folders and on the lock. A map pack uses `.oamap`, `oamap.yaml` (the
-same limit), the root folder `Maps` and the prefix `.oamap-`.
+`kKinds` in `src/kinds.cpp` is the table. It holds `oamod`, then `oamap`,
+then `oalang`. A mod uses the extension `.oamod`, the manifest `oamod.yaml`
+(at most 256 KiB), the root folder `Mods` and the prefix `.oamod-` on the
+installer's own folders and on the lock. A map pack uses `.oamap`,
+`oamap.yaml` (the same limit), the root folder `Maps` and the prefix
+`.oamap-`. A language pack uses `.oalang`, `language.yaml` (the same limit),
+the root folder `Languages` and the prefix `.oalang-`.
 `package_kinds`, `kind_for_file` and `find_kind` read the table; `mod_kind`
 is the mod entry. A file whose extension is none of them is refused as
 `unknown_kind`, and nothing is read.
@@ -132,6 +136,42 @@ plan that needs a question goes back to the inbox and is asked on the
 settled main menu. A refusal is reported, with its sentence, and not shown
 off that menu. A file the player opened, of any kind, and a package of
 another kind, still wait for the settled main menu.
+
+### Language packs (.oalang)
+
+The hooks are `src/plan_oalang.cpp` and `src/prompts_oalang.cpp`
+(`oa/app/package_install/oalang.hpp`). The shared reading, unpacking,
+renames, lock, `.backup`, recovery and origin record are the ones above.
+Before a pack is put in place the kind checks, and refuses with the problem
+named:
+
+- `language.yaml` reads. `no_manifest` says it holds no `language.yaml`.
+  A manifest the reader refuses keeps that reader's message.
+- `requires.engine`, when the manifest writes one, is met by this build.
+  The sentence names the range and this build's version.
+- Each listed font is an entry `fonts/<file>` of the package. A missing
+  font names that entry.
+- The warm-up, when named, is in the package, at most 4,096 bytes, and
+  UTF-8.
+- Each of `translate.tdf`, `missions.tdf`, `pictures.tdf`, `units.tdf` and
+  `interface.tdf` that is present is at most 4 MiB and parses. A failure
+  names the file and the parse error. A table that is absent is skipped.
+- `check_staged` opens each listed font. One that does not open is refused
+  after unpacking, the staging is discarded, and the pack already installed
+  is left as it was.
+
+A file the player opened asks "Install the language {endonym} ({English
+name})?" with Install and Cancel. The same version at a higher revision, or
+a folder that is not this pack, asks to replace, and the old folder is kept
+as `.backup`. The same version and the same revision, when that revision is
+not zero, asks to reinstall. Nothing is installed alongside, and Play now
+is not offered.
+
+A catalogue language pack asks nothing and shows no prompt. It installs
+while Settings or a notice show, and in a run nobody watches, and it does
+not install while a match loads or runs. The same version and revision is
+installed again; any other folder already there is replaced and kept as
+`.backup`. What became of it is reported, and not shown.
 
 ## What a package holds
 
@@ -310,14 +350,19 @@ a replace that fails leaves the previous record as it was.
   a missing folder, a link and a lock that is held; the folder hooks'
   records; catalogue outcomes kept, capped and taken once, including one a
   pending change reports.
-- `app-package-install-kinds`: the kind table holds exactly `oamod`, a file
-  is a package only by that extension, the seven `.oamod-` names, and a
-  made-up kind built in the test installs, replaces, rolls back, recovers
-  and discards through the generic code, including a staged check that
-  refuses.
+- `app-package-install-kinds`: the kind table holds `oamod`, `oamap` and
+  `oalang`, a file is a package by those extensions, the seven folder names
+  of each, and a made-up kind built in the test installs, replaces, rolls
+  back, recovers and discards through the generic code, including a staged
+  check that refuses.
+- `app-package-install-oalang`: the pseudo pack installed into a scratch
+  Languages folder, a Reinstall question for the same package, a Replace
+  that keeps the old revision in `.backup`, a manifest inside one top
+  folder, and each refusal, including a font that does not open after
+  unpacking and an entry the shared names check refuses.
 
-The native check `native-mod-install` (`docs/development/testing.md`)
-installs packages in the game itself.
+The native checks `native-mod-install` and `native-language-install`
+(`docs/development/testing.md`) install packages in the game itself.
 
 ## Limitations
 
@@ -326,4 +371,6 @@ own lookups match names (`AssetStore` in `oa/formats/hpi.hpp`); two names
 that only a file system takes for one, by the case of other letters or by
 another Unicode form, are refused where it does, when the second cannot be
 made anew, and both unpack where it does not. Archives that span several
-disks or carry data before their first entry are not read.
+disks or carry data before their first entry are not read. The stock game
+data has no unit texts in a pack's word, so a pack's `units.tdf` is checked
+and read, and those names stay as the game data gives them.

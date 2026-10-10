@@ -591,6 +591,11 @@ class Runtime final : public menu::Host,
     /// @return true once they have opened
     [[nodiscard]] static bool modern_fonts_open();
 
+    /// Returns how many pack faces the open modern font stack holds.
+    ///
+    /// @return the count; 0 when the stack is not open
+    [[nodiscard]] static std::size_t modern_font_pack_faces();
+
     /// Tells whether the language shown draws its text in the modern fonts,
     /// which are then on whatever the setting (Simplified Chinese).
     ///
@@ -4093,6 +4098,11 @@ class Runtime final : public menu::Host,
     /// (--check-mod-install). Each run is one turn.
     void check_mod_install();
 
+    /// Installs the pseudo language pack through the main menu's question,
+    /// declines installing it again, then installs a catalogue revision while
+    /// Settings stay open and no prompt shows (--check-language-install).
+    void check_language_install();
+
     /// The main menu's OA button and dialog (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 
@@ -6405,6 +6415,18 @@ class Runtime final : public menu::Host,
     /// the operating system for its preferred locales, reads the interface
     /// catalogue and the setting, and puts the language in effect.
     void start_language();
+
+    /// Reads the language packs again and puts them in effect, on the
+    /// interface's thread between frames: the registry, the interface
+    /// catalogue, the pack layers and the font faces. When the raw language
+    /// setting names a pack that can now be shown, the game switches to it.
+    /// When the system's language now finds a pack, System default follows.
+    void reload_language_packs();
+
+    /// Reads the three pack lists, registers the player's and the engine's,
+    /// chooses the system's language again and rebuilds the interface
+    /// catalogue. start_language and reload_language_packs both call it.
+    void load_language_packs();
 
     /// Reads the interface catalogue files of the languages folder beside the
     /// game's other files, in the order of their names; a file that does not
