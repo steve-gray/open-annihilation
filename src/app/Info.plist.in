@@ -2,13 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The macOS bundle's properties, configured when the build is configured
-  (cmake/OaGameBundle.cmake). The bundle declares the .oamod mod package as its own type
-  (UTExportedTypeDeclarations) and opens it as the type's owner (CFBundleDocumentTypes), so
-  that opening one in the Finder starts the game, which asks before it installs the mod. The
-  type conforms to public.data, not public.zip-archive, although the file is a zip: as a zip,
-  a browser that opens safe files after downloading them, and archive tools, would unpack it
-  instead of handing it to the game. On macOS 11 and later the file's icon is the one the
-  system draws from the app's icon; before, it is the bundle's icon file.
+  (cmake/OaGameBundle.cmake). The bundle declares the four file types as its own
+  (UTExportedTypeDeclarations) and opens each as its owner (CFBundleDocumentTypes), so
+  that opening one in the Finder starts the game: a mod package (.oamod), a language pack
+  (.oalang), a map pack (.oamap) and a registry file (.oareg). Each conforms to public.data,
+  not public.zip-archive or public.archive, although a package is a zip: as a zip, a browser
+  that opens safe files after downloading them, and archive tools, would unpack it instead of
+  handing it to the game. A registry file conforms to public.data too, so a browser downloads
+  it rather than showing it. On macOS 11 and later a file's icon is the one the system draws
+  from the app's icon; before, it is the bundle's icon file.
 -->
 <plist version="1.0">
 <dict>
@@ -63,6 +65,69 @@
 				</array>
 			</dict>
 		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.coreprime.open-annihilation.oalang</string>
+			<key>UTTypeDescription</key>
+			<string>Open Annihilation language pack</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>oalang</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-oalang</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.coreprime.open-annihilation.oamap</string>
+			<key>UTTypeDescription</key>
+			<string>Open Annihilation map pack</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>oamap</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-oamap</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.coreprime.open-annihilation.oareg</string>
+			<key>UTTypeDescription</key>
+			<string>Open Annihilation registry</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>oareg</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-oareg</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
@@ -76,6 +141,54 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>net.coreprime.open-annihilation.oamod</string>
+			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
+			<key>CFBundleTypeIconFile</key>
+			<string>${MACOSX_BUNDLE_ICON_FILE}</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Open Annihilation language pack</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.coreprime.open-annihilation.oalang</string>
+			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
+			<key>CFBundleTypeIconFile</key>
+			<string>${MACOSX_BUNDLE_ICON_FILE}</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Open Annihilation map pack</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.coreprime.open-annihilation.oamap</string>
+			</array>
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<integer>1</integer>
+			<key>CFBundleTypeIconFile</key>
+			<string>${MACOSX_BUNDLE_ICON_FILE}</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Open Annihilation registry</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.coreprime.open-annihilation.oareg</string>
 			</array>
 			<key>CFBundleTypeIconSystemGenerated</key>
 			<integer>1</integer>

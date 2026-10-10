@@ -183,7 +183,14 @@ command, still takes the screenshots and films.
 - **To remove:** delete the game's folder. To remove your settings and logs
   too, delete the Local AppData folder above; your saved games,
   screenshots, films, recordings and mods are in the Open Annihilation
-  folder in Documents. To make Windows forget the game as the opener of `.oamod`
-  files, delete the keys `HKEY_CURRENT_USER\Software\Classes\.oamod` and
-  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Mod` with the
-  Registry Editor.
+  folder in Documents. To make Windows forget the game as the opener of
+  `.oamod`, `.oalang`, `.oamap` and `.oareg` files, delete these eight keys
+  with the Registry Editor:
+  `HKEY_CURRENT_USER\Software\Classes\.oamod`,
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Mod`,
+  `HKEY_CURRENT_USER\Software\Classes\.oalang`,
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Language`,
+  `HKEY_CURRENT_USER\Software\Classes\.oamap`,
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.MapPack`,
+  `HKEY_CURRENT_USER\Software\Classes\.oareg` and
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Registry`.

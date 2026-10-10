@@ -265,7 +265,7 @@ void Runtime::take_handed_mod_files() {
     const auto files = install::take_handed_files(*folder);
     for (const auto& file : files) {
         log_line("handed over by another start: " + path_to_utf8(file));
-        install::post_package_file(file);
+        install::post_opened_file(file);
     }
     if (!files.empty() && sdl_.window != nullptr) {
         if ((SDL_GetWindowFlags(sdl_.window) & SDL_WINDOW_MINIMIZED) != 0)

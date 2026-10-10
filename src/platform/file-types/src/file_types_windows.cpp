@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The Windows registration: the .oamod extension, its program identifier, the program's icon
-// and its open command under HKEY_CURRENT_USER, through calls Windows XP has.
+// The Windows registration: the four file types, each extension and its program identifier,
+// the program's icon and its open command under HKEY_CURRENT_USER, through calls Windows XP has.
 
 #include "oa/platform/file_types.hpp"
 
@@ -240,27 +240,37 @@ Registration register_in(const fs::path& executable, const Places& places) {
         return done;
     }
     const std::wstring classes = wide_of(places.classes_key);
-    const std::wstring extension = classes + L"\\." + wide_of(mod_extension);
-    const std::wstring program_id = wide_of(mod_program_id);
-    const std::wstring program_key = classes + L"\\" + program_id;
-    const RegistryValue values[] = {
-        {extension, L"", program_id},
-        {extension, L"Content Type", wide_of(mod_mime_type)},
-        {extension + L"\\OpenWithProgids", program_id, L""},
-        {program_key, L"", wide_of(mod_type_name)},
-        {program_key + L"\\DefaultIcon", L"", wide_of(default_icon(executable))},
-        {program_key + L"\\shell\\open\\command", L"", wide_of(open_command(executable))},
-    };
-    for (const RegistryValue& value : values) {
-        if (holds(value))
-            continue;
-        const LONG result = write(value);
-        if (result != ERROR_SUCCESS) {
-            done.error = "cannot write " + place_of(value) + ": " + error_text(result);
-            break;
+    const std::wstring icon = wide_of(default_icon(executable));
+    const std::wstring command = wide_of(open_command(executable));
+    bool failed = false;
+    for (const FileType& type : file_types) {
+        const std::wstring extension = classes + L"\\." + wide_of(type.extension);
+        const std::wstring program_id = wide_of(type.program_id);
+        const std::wstring program_key = classes + L"\\" + program_id;
+        // The six values of one type. Nothing else under the type is read or written, so a
+        // choice of opener the player made in Windows stays as it is.
+        const RegistryValue values[] = {
+            {extension, L"", program_id},
+            {extension, L"Content Type", wide_of(type.mime_type)},
+            {extension + L"\\OpenWithProgids", program_id, L""},
+            {program_key, L"", wide_of(type.type_name)},
+            {program_key + L"\\DefaultIcon", L"", icon},
+            {program_key + L"\\shell\\open\\command", L"", command},
+        };
+        for (const RegistryValue& value : values) {
+            if (holds(value))
+                continue;
+            const LONG result = write(value);
+            if (result != ERROR_SUCCESS) {
+                done.error = "cannot write " + place_of(value) + ": " + error_text(result);
+                failed = true;
+                break;
+            }
+            done.changed = true;
+            done.lines.push_back("wrote " + place_of(value));
         }
-        done.changed = true;
-        done.lines.push_back("wrote " + place_of(value));
+        if (failed)
+            break;
     }
     if (done.changed && places.notify_shell) {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);

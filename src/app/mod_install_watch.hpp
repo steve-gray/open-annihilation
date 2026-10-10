@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The files the system opens in the game, caught as SDL delivers them: a
-// .oamod file double-clicked in the Finder, opened from the iOS Files app
-// or dropped on the window arrives as a drop event, which whatever polls
+// file double-clicked in the Finder, opened from the iOS Files app or
+// dropped on the window arrives as a drop event, which whatever polls
 // SDL's queue at that moment might drop. A watch on SDL's events copies
-// each into the mod packages' inbox (oa/app/package_install/inbox.hpp) as it
-// is queued.
+// each into the inbox (oa/app/package_install/inbox.hpp) as it is queued.
 #pragma once
 
 namespace oa::app {

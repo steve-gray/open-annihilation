@@ -983,13 +983,13 @@ void recover_package_installs(const Options& options) {
     }
 }
 
-/// Makes this copy of the game the opener of .oamod files for the player,
-/// where the system takes it at run time; only a start someone plays does:
-/// no check, test or unattended run, and none that names its own
-/// preferences, player's or data folder, or draws no window.
+/// Makes this copy of the game the opener of the four file types for the
+/// player, where the system takes it at run time; only a start someone
+/// plays does: no check, test or unattended run, and none that names its
+/// own preferences, player's or data folder, or draws no window.
 ///
 /// @param options the parsed command line
-void register_mod_files(const Options& options) {
+void register_file_types_for_player(const Options& options) {
     if (options.headless_check || options.unattended || options.preferences_file ||
         options.user_folder || options.data_dir)
         return;
@@ -1000,16 +1000,16 @@ void register_mod_files(const Options& options) {
     const auto executable = file_types::running_executable();
     if (!executable)
         return;
-    const auto done = file_types::register_mod_file_type(*executable, window_icon_png());
+    const auto done = file_types::register_file_types(*executable, window_icon_png());
     for (const auto& line : done.lines)
         std::cerr << "open-annihilation: file types: " << line << '\n';
     if (!done.error.empty())
         std::cerr << "open-annihilation: file types: " << done.error << '\n';
 }
 
-/// Hands the mod packages a start carries to the copy of the game already
-/// running, when one holds the instance lock, or takes the lock for this
-/// copy's life and its hand-off folder. Only a start someone plays does.
+/// Hands the files a start carries to the copy of the game already running,
+/// when one holds the instance lock, or takes the lock for this copy's life
+/// and its hand-off folder. Only a start someone plays does.
 ///
 /// @param options the parsed command line
 /// @param[out] lock the instance lock, when this copy takes it
@@ -1028,10 +1028,10 @@ bool hand_over_or_lock(const Options& options, std::unique_ptr<package_install::
         package_install::set_handoff_folder(handoff);
         return false;
     }
-    // Another copy runs: a start that carries packages hands them to it.
-    if (options.install_mods.empty())
+    // Another copy runs: a start that carries files hands them to it.
+    if (options.open_files.empty())
         return false;
-    const auto written = package_install::hand_files_over(handoff, options.install_mods);
+    const auto written = package_install::hand_files_over(handoff, options.open_files);
     if (written.empty())
         return false;
 #ifdef _WIN32
@@ -1046,7 +1046,7 @@ bool hand_over_or_lock(const Options& options, std::unique_ptr<package_install::
             break;
         oa::base::threads::sleep_ms(kHandoffPollMs);
     }
-    std::cerr << "open-annihilation: the mod packages went to the copy already running\n";
+    std::cerr << "open-annihilation: the files went to the copy already running\n";
     return true;
 }
 
@@ -1115,14 +1115,14 @@ int main(int argc, char** argv) {
             !oa::platform::log_files::output_captured()
         )
             start_log();
-        // The mod packages the start carries are installed once the main
-        // menu shows, unless another copy already runs and takes them.
+        // The files the start carries are opened once the main menu shows,
+        // unless another copy already runs and takes them.
         std::unique_ptr<package_install::FileLock> instance_lock;
         if (hand_over_or_lock(parsed, instance_lock))
             return 0;
-        for (const auto& file : parsed.install_mods)
-            package_install::post_package_file(file);
-        register_mod_files(parsed);
+        for (const auto& file : parsed.open_files)
+            package_install::post_opened_file(file);
+        register_file_types_for_player(parsed);
         // Where the platform brings game files in, what a stopped import or
         // a change waiting for this start left is taken up before the
         // folder is looked for.

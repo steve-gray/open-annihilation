@@ -18,7 +18,8 @@ target_compile_features(oa-app-package-install PUBLIC cxx_std_20)
 target_link_libraries(oa-app-package-install PUBLIC oa-formats-zip oa-formats-hpi oa-data-mod-profile
   oa-platform-preferences oa-ui-engine-settings
   PRIVATE oa-formats-oamod oa-data-languages oa-app-mod-profile oa-app-user-folder
-  oa-app-game-directory oa-ui-game-files oa-platform-shims oa-base-threads oa-options)
+  oa-app-game-directory oa-ui-game-files oa-platform-shims oa-platform-file-types oa-base-threads
+  oa-options)
 
 if(BUILD_TESTING)
   # Packages read and checked: a Finder-made package with its top folder
@@ -48,6 +49,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-package-install-handoff-test PRIVATE oa-app-package-install oa-test-support
     oa-options)
   add_test(NAME app-mod-install-handoff COMMAND oa-app-package-install-handoff-test)
+  # A file opened in the game: each extension's queue, and a repeat dropped.
+  add_executable(oa-app-package-install-inbox-test tests/inbox_test.cpp)
+  target_link_libraries(oa-app-package-install-inbox-test PRIVATE oa-app-package-install
+    oa-test-support oa-options)
+  add_test(NAME app-package-install-inbox COMMAND oa-app-package-install-inbox-test)
+  set_tests_properties(app-package-install-inbox PROPERTIES TIMEOUT 30)
   add_executable(oa-app-package-install-kinds-test tests/kinds_test.cpp)
   target_link_libraries(oa-app-package-install-kinds-test PRIVATE oa-app-package-install oa-test-support oa-options)
   add_test(NAME app-package-install-kinds COMMAND oa-app-package-install-kinds-test)

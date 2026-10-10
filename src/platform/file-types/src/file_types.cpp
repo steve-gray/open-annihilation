@@ -89,15 +89,20 @@ std::string desktop_entry(const fs::path& executable) {
     entry += "Name=Open Annihilation\n";
     entry += "Comment=Plays Total Annihilation from your own game files\n";
     // %f: the file opened. Started with no file, the entry drops it and the game starts as
-    // usual; a bare argument ending in .oamod installs that file.
+    // usual; a bare argument naming one of the four file types opens that file.
     entry += "Exec=" + argument + " %f\n";
     // The entry is passed over once the executable is gone.
     entry += "TryExec=" + desktop_string(path) + "\n";
     entry += "Icon=" + std::string(desktop_id) + "\n";
     entry += "Terminal=false\n";
     entry += "Categories=Game;StrategyGame;\n";
-    entry += "MimeType=" + std::string(mod_mime_type) + ";\n";
-    // An opener of .oamod files that "Open With" lists, not an entry in the application menus.
+    std::string mime_types;
+    for (const FileType& type : file_types) {
+        mime_types += type.mime_type;
+        mime_types += ';';
+    }
+    entry += "MimeType=" + mime_types + "\n";
+    // An opener of the four file types that "Open With" lists, not an entry in the menus.
     entry += "NoDisplay=true\n";
     return entry;
 }
@@ -106,17 +111,19 @@ std::string mime_package() {
     std::string package;
     package += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     package += "<mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n";
-    package += "  <mime-type type=\"" + std::string(mod_mime_type) + "\">\n";
-    package += "    <comment>" + std::string(mod_type_name) + "</comment>\n";
-    package += "    <sub-class-of type=\"application/zip\"/>\n";
-    package += "    <glob pattern=\"*." + std::string(mod_extension) + "\"/>\n";
-    package += "  </mime-type>\n";
+    for (const FileType& type : file_types) {
+        package += "  <mime-type type=\"" + std::string(type.mime_type) + "\">\n";
+        package += "    <comment>" + std::string(type.type_name) + "</comment>\n";
+        package += "    <sub-class-of type=\"" + std::string(type.parent_mime_type) + "\"/>\n";
+        package += "    <glob pattern=\"*." + std::string(type.extension) + "\"/>\n";
+        package += "  </mime-type>\n";
+    }
     package += "</mime-info>\n";
     return package;
 }
 
 std::string open_command(const fs::path& executable) {
-    return "\"" + detail::utf8_of(executable) + "\" " + std::string(install_option) + " \"%1\"";
+    return "\"" + detail::utf8_of(executable) + "\" " + std::string(open_option) + " \"%1\"";
 }
 
 std::string default_icon(const fs::path& executable) {
@@ -172,7 +179,7 @@ std::optional<fs::path> running_executable() {
     }
 }
 
-Registration register_mod_file_type(
+Registration register_file_types(
     const fs::path& executable, std::span<const uint8_t> icon_png, const Places& places
 ) {
 #ifdef _WIN32

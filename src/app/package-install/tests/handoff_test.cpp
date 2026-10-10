@@ -53,6 +53,20 @@ int main() {
     for (const auto& request : written)
         OA_CHECK(!fs::exists(request));
     OA_CHECK(install::take_handed_files(folder).empty());
+
+    // A .oareg and a .oalang are handed over and taken back in that order.
+    std::vector<fs::path> opened;
+    for (const char* name : {"list.oareg", "words.oalang"}) {
+        opened.push_back(scratch / name);
+        std::ofstream(opened.back()) << "file";
+    }
+    const auto handed = install::hand_files_over(folder, opened);
+    OA_CHECK(handed.size() == 2);
+    const auto taken_opened = install::take_handed_files(folder);
+    OA_CHECK(taken_opened.size() == 2);
+    for (std::size_t index = 0; index < taken_opened.size() && index < opened.size(); ++index)
+        OA_CHECK(fs::equivalent(taken_opened[index], opened[index]));
+
     std::error_code ignored;
     fs::remove_all(scratch, ignored);
     return oa::test::check_exit_status();

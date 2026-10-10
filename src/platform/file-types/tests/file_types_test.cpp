@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The .oamod registration: the texts it writes; on every system but Windows the XDG files in a
-// scratch data folder, written once and only again when they differ, the database tools run
-// once after a change (recording scripts on a scratch PATH), missing tools and a tool that
-// hangs, each run again at the next start, and the starts that register nothing; on Windows
-// the registry values under a scratch key of
-// HKEY_CURRENT_USER, written once and only again when they differ, and a copy in the temporary
-// folder that registers nothing. No test registers anything for the user who runs it.
+// The registration of the four file types: the texts it writes; on every system but Windows the
+// XDG files in a scratch data folder, written once and only again when they differ, the
+// database tools run once after a change (recording scripts on a scratch PATH), missing tools
+// and a tool that hangs, each run again at the next start, and the starts that register
+// nothing; on Windows the registry values under a scratch key of HKEY_CURRENT_USER, written
+// once and only again when they differ, and a copy in the temporary folder that registers
+// nothing. No test registers anything for the user who runs it.
 
 #include "oa/platform/file_types.hpp"
 
@@ -77,7 +77,8 @@ void test_texts() {
                  "Icon=net.coreprime.open-annihilation\n"
                  "Terminal=false\n"
                  "Categories=Game;StrategyGame;\n"
-                 "MimeType=application/x-oamod;\n"
+                 "MimeType=application/x-oamod;application/x-oalang;application/x-oamap;"
+                 "application/x-oareg;\n"
                  "NoDisplay=true\n"
     );
     OA_CHECK(
@@ -93,6 +94,21 @@ void test_texts() {
         "    <sub-class-of type=\"application/zip\"/>\n"
         "    <glob pattern=\"*.oamod\"/>\n"
         "  </mime-type>\n"
+        "  <mime-type type=\"application/x-oalang\">\n"
+        "    <comment>Open Annihilation language pack</comment>\n"
+        "    <sub-class-of type=\"application/zip\"/>\n"
+        "    <glob pattern=\"*.oalang\"/>\n"
+        "  </mime-type>\n"
+        "  <mime-type type=\"application/x-oamap\">\n"
+        "    <comment>Open Annihilation map pack</comment>\n"
+        "    <sub-class-of type=\"application/zip\"/>\n"
+        "    <glob pattern=\"*.oamap\"/>\n"
+        "  </mime-type>\n"
+        "  <mime-type type=\"application/x-oareg\">\n"
+        "    <comment>Open Annihilation registry</comment>\n"
+        "    <sub-class-of type=\"text/plain\"/>\n"
+        "    <glob pattern=\"*.oareg\"/>\n"
+        "  </mime-type>\n"
         "</mime-info>\n"
     );
 #ifdef _WIN32
@@ -102,7 +118,7 @@ void test_texts() {
     const fs::path executable("/opt/Open Annihilation/open-annihilation");
     const std::string spelled = "/opt/Open Annihilation/open-annihilation";
 #endif
-    OA_CHECK(file_types::open_command(executable) == "\"" + spelled + "\" --install-mod \"%1\"");
+    OA_CHECK(file_types::open_command(executable) == "\"" + spelled + "\" --open \"%1\"");
     OA_CHECK(file_types::default_icon(executable) == spelled + ",0");
 }
 
@@ -258,18 +274,31 @@ void test_xdg_registration() {
     const std::string data = scratch.data.string();
     const fs::path program_icon =
         scratch.data / "icons/hicolor/256x256/apps/net.coreprime.open-annihilation.png";
-    const fs::path type_icon =
-        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oamod.png";
+    const fs::path type_icons[] = {
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oamod.png",
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oalang.png",
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oamap.png",
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oareg.png",
+    };
     const fs::path package = scratch.data / "mime/packages/net.coreprime.open-annihilation.xml";
     const fs::path entry = scratch.data / "applications/net.coreprime.open-annihilation.desktop";
+    const auto icons_match = [&](const std::vector<uint8_t>& bytes) {
+        const std::string text(bytes.begin(), bytes.end());
+        if (read_file(program_icon) != text)
+            return false;
+        for (const fs::path& type_icon : type_icons)
+            if (read_file(type_icon) != text)
+                return false;
+        return true;
+    };
 
-    // The first start writes the four files and runs the two database tools once each.
+    // The first start writes the five icon files, the MIME package and the desktop entry, and
+    // runs the two database tools once each.
     file_types::Registration done = file_types::register_xdg(executable, icon, places);
     OA_CHECK(done.supported);
     OA_CHECK(done.changed);
     OA_CHECK(done.error.empty());
-    OA_CHECK(read_file(program_icon) == std::string(icon.begin(), icon.end()));
-    OA_CHECK(read_file(type_icon) == std::string(icon.begin(), icon.end()));
+    OA_CHECK(icons_match(icon));
     OA_CHECK(read_file(package) == file_types::mime_package());
     OA_CHECK(read_file(entry) == file_types::desktop_entry(executable));
     std::vector<std::string> calls = calls_of(scratch);
@@ -316,8 +345,7 @@ void test_xdg_registration() {
     const std::vector<uint8_t> new_icon = icon_bytes(7);
     done = file_types::register_xdg(moved, new_icon, places);
     OA_CHECK(done.changed);
-    OA_CHECK(read_file(program_icon) == std::string(new_icon.begin(), new_icon.end()));
-    OA_CHECK(read_file(type_icon) == std::string(new_icon.begin(), new_icon.end()));
+    OA_CHECK(icons_match(new_icon));
 #if OA_PROCESS_SPAWNING
     calls = calls_of(scratch);
     OA_CHECK(calls.size() == 4);
@@ -483,9 +511,8 @@ void test_registration_by_system() {
     file_types::Places places{};
     places.data_home = scratch.data;
     const std::vector<uint8_t> icon = icon_bytes(1);
-    const file_types::Registration done = file_types::register_mod_file_type(
-        "/opt/Open Annihilation/open-annihilation", icon, places
-    );
+    const file_types::Registration done =
+        file_types::register_file_types("/opt/Open Annihilation/open-annihilation", icon, places);
 #if defined(__linux__)
     OA_CHECK(done.supported && done.changed && done.error.empty());
     OA_CHECK(fs::exists(scratch.data / "applications/net.coreprime.open-annihilation.desktop"));
@@ -534,32 +561,49 @@ void test_windows_registration() {
     OA_CHECK(done.supported);
     OA_CHECK(done.changed);
     OA_CHECK(done.error.empty());
-    OA_CHECK(done.lines.size() == 6);
-    OA_CHECK(read_value(classes + L"\\.oamod", nullptr) == L"OpenAnnihilation.Mod");
-    OA_CHECK(read_value(classes + L"\\.oamod", L"Content Type") == L"application/x-oamod");
-    OA_CHECK(read_value(classes + L"\\.oamod\\OpenWithProgids", L"OpenAnnihilation.Mod") == L"");
-    OA_CHECK(read_value(classes + L"\\OpenAnnihilation.Mod", nullptr) == L"Open Annihilation mod");
-    OA_CHECK(
-        read_value(classes + L"\\OpenAnnihilation.Mod\\DefaultIcon", nullptr) == program + L",0"
-    );
-    OA_CHECK(
-        read_value(classes + L"\\OpenAnnihilation.Mod\\shell\\open\\command", nullptr) ==
-        L"\"" + program + L"\" --install-mod \"%1\""
-    );
+    OA_CHECK(done.lines.size() == 24);
+    const std::wstring command = L"\"" + program + L"\" --open \"%1\"";
+    for (const file_types::FileType& type : file_types::file_types) {
+        const std::wstring extension(type.extension.begin(), type.extension.end());
+        const std::wstring program_id(type.program_id.begin(), type.program_id.end());
+        const std::wstring mime(type.mime_type.begin(), type.mime_type.end());
+        const std::wstring type_name(type.type_name.begin(), type.type_name.end());
+        OA_CHECK(read_value(classes + L"\\." + extension, nullptr) == program_id);
+        OA_CHECK(read_value(classes + L"\\." + extension, L"Content Type") == mime);
+        OA_CHECK(
+            read_value(classes + L"\\." + extension + L"\\OpenWithProgids", program_id.c_str()) ==
+            L""
+        );
+        OA_CHECK(read_value(classes + L"\\" + program_id, nullptr) == type_name);
+        OA_CHECK(
+            read_value(classes + L"\\" + program_id + L"\\DefaultIcon", nullptr) == program + L",0"
+        );
+        OA_CHECK(
+            read_value(classes + L"\\" + program_id + L"\\shell\\open\\command", nullptr) == command
+        );
+    }
 
     // The next start finds everything in place and writes nothing.
     done = file_types::register_windows(executable, places);
     OA_CHECK(done.supported && !done.changed && done.error.empty() && done.lines.empty());
 
-    // A copy started from elsewhere rewrites its icon and its command alone.
+    // A copy started from elsewhere rewrites two values per type: its icon and its command.
     const fs::path moved(L"D:\\Spiele\\open-annihilation.exe");
     done = file_types::register_windows(moved, places);
     OA_CHECK(done.changed && done.error.empty());
-    OA_CHECK(done.lines.size() == 2);
-    OA_CHECK(
-        read_value(classes + L"\\OpenAnnihilation.Mod\\DefaultIcon", nullptr) ==
-        moved.wstring() + L",0"
-    );
+    OA_CHECK(done.lines.size() == 8);
+    const std::wstring moved_command = L"\"" + moved.wstring() + L"\" --open \"%1\"";
+    for (const file_types::FileType& type : file_types::file_types) {
+        const std::wstring program_id(type.program_id.begin(), type.program_id.end());
+        OA_CHECK(
+            read_value(classes + L"\\" + program_id + L"\\DefaultIcon", nullptr) ==
+            moved.wstring() + L",0"
+        );
+        OA_CHECK(
+            read_value(classes + L"\\" + program_id + L"\\shell\\open\\command", nullptr) ==
+            moved_command
+        );
+    }
 
     // A copy in the temporary folder, as one started from inside a zip is, writes nothing.
     done = file_types::register_windows(
@@ -583,7 +627,7 @@ void test_windows_registration() {
 
     // The dispatch registers in the registry here.
     places.classes_key = fs::path(classes).string();
-    done = file_types::register_mod_file_type(executable, {}, places);
+    done = file_types::register_file_types(executable, {}, places);
     OA_CHECK(done.supported && done.changed && done.error.empty());
     OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, scratch.c_str()) == ERROR_SUCCESS);
     static_cast<void>(RegDeleteKeyW(HKEY_CURRENT_USER, parent.c_str()));
