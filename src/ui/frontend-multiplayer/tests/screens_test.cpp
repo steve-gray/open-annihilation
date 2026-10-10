@@ -1615,7 +1615,7 @@ void click_map_row(Driver& d, mp::Control& names, int32_t row, int32_t ox, int32
     const int32_t visible =
         names.list_item_height > 0 ? std::max(names.height / names.list_item_height, 1) : 1;
     if (row < names.list_first || row >= names.list_first + visible)
-        names.list_first = std::max(row, 0);
+        names.list_first = static_cast<int16_t>(std::max(row, int32_t{0}));
     d.pointer_click(
         ox + names.x + 20,
         oy + names.y + 2 + (row - names.list_first) * names.list_item_height +
