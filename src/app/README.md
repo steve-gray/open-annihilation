@@ -193,8 +193,9 @@ latched the closing key and drew a backdrop.
   opens over Settings. A screen waiting is ticked too, and leaves the queue
   when its tick closes it. `find(name)` finds a screen on the stack and
   `waiting(name)` one in the queue.
-- **Notices and questions.** `NoticeScreen` (name `notice`) holds a
-  `kit::Notice`, and `QuestionScreen` (name `prompt`) a `kit::Question`,
+- **Notices and questions.** `NoticeScreen` holds a `kit::Notice`, and
+  `QuestionScreen` a `kit::Question`, each named by its word (`notice` and
+  `prompt` unless the code that raises it gives its own),
   with the callbacks of their host (`NoticeScreen::Host`,
   `QuestionScreen::Host`). Each shows over one screen of the game, centred
   on the front end's picture at 1× (`(640 − 400) / 2`, `(480 − height) / 2`,
@@ -267,6 +268,12 @@ latched the closing key and drew a backdrop.
   over the composed frame (`compose_match`) and is presented after the
   match's other layers and before the frontend dialogs' and the cursor
   (`present`).
+- **Automation** lists what the layer shows (`automation_controls`), as
+  [docs/automation.md](../../docs/automation.md#oas-own-screens) describes:
+  `oa.button`, then the screens from the top down to the first modal one,
+  each control and part named `oa.` and its kit name, with its exact
+  rectangle in the window's pixels and that rectangle mapped back onto the
+  canvas.
 
 ## Files
 

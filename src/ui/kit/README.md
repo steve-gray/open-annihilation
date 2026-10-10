@@ -16,7 +16,15 @@ until then.
 - `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
   order, the arrows by where controls sit, the wheel, and a text field's
   editing: `insert_text` for typed text and `edit_text` for Backspace,
-  Delete, Left, Right, Home and End.
+  Delete, Left, Right, Home and End. For automation, `automation_entries`
+  lists the named controls, and `automation_parts` lists each control
+  followed by the parts of it that take a press of their own (an
+  `AutomationEntry` with `part` set): a switch's halves `<name>.off` and
+  `<name>.on`, a strip's levels where `level_at` finds them, a row of
+  buttons' buttons, and an open drop-down's items at `choice_item`, each
+  named by its control's `Control::parts` word, else its place from 1. A
+  control's rectangle there is the part of it a press reaches. The
+  endpoint lists them after `oa.` (docs/automation.md).
 - `looks.hpp`: how a control looks. A look owns its texts. A text field's
   state, `TextField`, is its text and its caret. A picture item draws its
   `PictureLook`'s picture, such as a mod's badge, or else the canvas's icon.
@@ -49,7 +57,15 @@ until then.
   with its name, kind and Tab place; `paint` draws them.
 - `components_more.hpp`: the notice and the question (the settings
   dialog's notice and prompt): their models, placement, display lists,
-  pointer, finger and key events and drawing, and the progress bar.
+  pointer, finger and key events and drawing, and the progress bar. A
+  notice's and a question's `word` (`notice` and `prompt` unless the code
+  that raises it gives its own, as the missing-language question's
+  `language-notice`) starts its controls' names: a notice's `<word>.ok` and
+  `<word>.open`, a question's buttons `<word>.<id>` by their
+  `QuestionButton::id`, or `<word>.button-<n>` from 1 without one, and
+  both's text `<word>.body`, a control of kind `area` that is neither
+  enabled nor focusable, so that no press, finger or key reaches it, whose
+  text is the title, the paragraphs and the failure, one a line.
 - `rows.hpp`: declared rows. A settings page is a table of `RowSpec`s,
   each made by a factory that takes the row's id first: `toggle`, `choice`,
   `slider`, `levels`, `value_and_button`, `buttons`, `text_field`, `link`
@@ -66,7 +82,12 @@ until then.
   `view_of` reads a row's `RowView` from its spec and the model through the
   caller's text function; `place_rows` places a column of views,
   `rows_scroll` and `scroll` scroll it, and `add_rows` lists what the rows
-  draw and their controls, named `<prefix>.<id>`. `step`, `activate`,
+  draw and their controls, named `<prefix>.<id>`. A drop-down's items and a
+  strip's levels have ids too, beside their captions: an index field's
+  `choice_ids` (the `choice` factory that takes them) and a stepper's `id`
+  function (`row_choice_id` reads either). `add_rows` gives a control its
+  levels' or items' ids, or a row of buttons' `button_ids`, as its parts'
+  words, which automation names its parts by. `step`, `activate`,
   `press`, `drag`, `choose`, `type` and `edit` change the model as a row's
   control is used.
 
@@ -133,7 +154,9 @@ its hover card's timer in its own state.
   controls are. Hit testing reads `controls`. Drawing reads `items`.
 - Every control of a kit screen carries a unique name: words of a-z, 0-9 and
   hyphens joined by dots, at most 100 bytes. The automation endpoint adds its
-  own prefix; the name here has none.
+  own prefix; the name here has none. A part of a control is named after it
+  with one word more, from the code's own words (a row's, a choice's or a
+  button's id), never from a text as shown.
 - A column of rows is placed exactly as the settings dialog places a
   section's rows: `ui-kit-rows` holds rows shaped as Controls', Graphics' and
   Developer's to the dialog's own placement, and U08 proves it on every page.
@@ -162,8 +185,12 @@ helpers, the estimated width, the stand-ins, and the wrap against copies of
 the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
 window sizes, arrangements, the scroll arithmetic and hit testing.
 `ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys and
-their values, the wheel's fractions, the names, and a text field's typing
-and editing over characters of one to four bytes. `ui-kit-components` checks each control's
+their values, the wheel's fractions, the names, the parts automation lists
+(a switch's halves splitting it, a strip's levels where `level_at` finds
+them, an open drop-down's items at `choice_item` and a screen's own item
+control listed once, a row of buttons' buttons and a clipped control's
+press area), and a text field's typing and editing over characters of one
+to four bytes. `ui-kit-components` checks each control's
 pixels, that `paint` matches a direct draw, and the controls' geometry.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
@@ -176,7 +203,9 @@ frame and its delay, and links; and that every `add_*` names its controls
 and `paint` matches the direct draws.
 `ui-kit-notices` checks where six notices and six questions place their
 parts against the settings dialog's own placement, their display lists'
-names, kinds and Tab order, where a finger lands, every key (the editing
+names, kinds and Tab order, a word of their own (`language-notice`) and
+their text's control, which changes what no press or finger finds at any
+point of the box, where a finger lands, every key (the editing
 keys, which do nothing, among them), that `paint` matches `draw_notice` and
 `draw_question`, and the progress bar's fill.
 `ui-kit-rows` lays out, draws, focuses and changes a page of every row
@@ -184,7 +213,8 @@ kind from a table: the placement of rows shaped as the settings dialog's
 Controls, Graphics and Developer sections, with the game's fonts and the
 modern fonts' taller hints, locked and not, against values computed with
 the dialog's own placement, and the scroll against the dialog's; the names,
-kinds, Tab order and drawing order of the display list; rows of two models
+kinds, Tab order and drawing order of the display list; the ids of a
+drop-down's items and a strip's levels, and the parts they name; rows of two models
 in one column; every event on every kind; and the page painted.
 
 ## Limitations
