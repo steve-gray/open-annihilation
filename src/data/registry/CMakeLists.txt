@@ -3,7 +3,8 @@
 
 # Registry descriptors, the player's registry file and the rules for which
 # registries a player may add. Nothing here fetches.
-add_library(oa-data-registry src/descriptor.cpp src/player_registries.cpp src/yaml_text.cpp)
+add_library(oa-data-registry src/descriptor.cpp src/player_registries.cpp src/trust.cpp
+  src/yaml_text.cpp)
 add_library(oa::data::registry ALIAS oa-data-registry)
 target_include_directories(oa-data-registry PUBLIC include)
 target_compile_features(oa-data-registry PUBLIC cxx_std_20)
