@@ -18,9 +18,14 @@ inline constexpr uint32_t kTntHeaderBytes = 0x40;
 inline constexpr uint32_t kTntAttributeBytes = 4; // per 16-pixel cell
 inline constexpr uint32_t kTntFeatureRecordBytes = 0x84;
 
-// Content hashes already computed this run, keyed by TNT path.
+// Content hashes already computed this run, keyed by the TNT path and the
+// provider the file comes from. A second release of a pack, or a remount,
+// is a different provider and is not answered from an older entry.
 struct MapHashEntry {
     char path[data::campaign::kCampaignPathBytes]{};
+    /// 64-bit FNV-1a of the text naming where the TNT comes from. 0 when that
+    /// text is not available, so the cache then keys by path alone.
+    uint64_t source_key{};
     uint32_t hash{};
 };
 
@@ -34,12 +39,15 @@ struct MapHashCache {
 ///
 /// Hashes the TNT header, cell attributes and feature names, caches the
 /// result in the map context and in the run's cache, and combines it with
-/// the OTA GlobalHeader hash. Offsets and sizes past the end of the file are
+/// the OTA GlobalHeader hash. The cache answers only when both the TNT path
+/// and the provider the file comes from match, so a second release of the
+/// same map is hashed again. Offsets and sizes past the end of the file are
 /// rejected rather than hashed.
 ///
 /// @param[in,out] map_context The selected map; its content hash is filled on first use.
-/// @param files File access used to read the TNT.
-/// @param[in,out] cache Hashes computed this run, keyed by TNT path; grows as needed.
+/// @param files File access used to read the TNT. When `files.source` is null
+///        or answers -1, the cache keys by path alone.
+/// @param[in,out] cache Hashes computed this run, keyed by TNT path and provider; grows as needed.
 /// @return header hash ^ content hash; 0 when the TNT cannot be read or is not version 0x2000.
 uint32_t map_compute_content_hash(
     data::campaign::CampaignFile& map_context,
