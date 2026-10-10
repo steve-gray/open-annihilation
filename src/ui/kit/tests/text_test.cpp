@@ -515,7 +515,10 @@ chooser_wrap(std::string_view text, int32_t width, const Measure& measure, int32
     return lines;
 }
 
+// The closing line stays as written so this file names the namespace once.
+// clang-format off
 } // the six wraps copied above
+// clang-format on
 
 /// Prints two wraps that disagree, then records the failed check.
 ///
@@ -694,7 +697,7 @@ void the_known_notice_lines_stay() {
 
 /// The rules a site's call passes to the one wrap.
 struct Site {
-    const char* name;        ///< which wrap
+    const char* name{};      ///< which wrap
     bool wide_scripts{true}; ///< a wide script breaks between characters
     bool newlines{};         ///< a new line starts a paragraph
     bool shorten{};          ///< a wide word is shortened
