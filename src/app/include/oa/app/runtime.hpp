@@ -3820,16 +3820,6 @@ class Runtime final : public menu::Host,
     ///         empty picture, which draws the OA mark, when it cannot be decoded
     [[nodiscard]] oa::ui::frontend_renderer::RgbaPicture engine_settings_icon();
 
-    /// Returns the meaning a key has in the dialog's notices and prompts: the
-    /// OA layer's (layer_key), for the notices and prompts that map their
-    /// own keys.
-    ///
-    /// @param key SDL keycode
-    /// @param modifiers SDL_Keymod bits
-    /// @return the dialog's key; nothing for a key it does not answer to
-    [[nodiscard]] static std::optional<oa::ui::engine_settings::DialogKey>
-    engine_settings_dialog_key(uint32_t key, uint16_t modifiers) noexcept;
-
     /// Checks that each setting takes effect, in step with its console
     /// command and the command line (part of --check-engine-settings).
     void check_engine_settings_wiring();
