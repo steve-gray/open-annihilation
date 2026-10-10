@@ -8,6 +8,8 @@
 #include "oa/formats/tdf.hpp"
 
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -169,6 +171,216 @@ bool read_text_needs(const oamod::Node& node, TextNeeds& needs, std::string& err
     return true;
 }
 
+/// Tells whether a name ends with a suffix, ignoring the case of ASCII letters.
+///
+/// @param text the name
+/// @param suffix the suffix, in lower case
+/// @return true when it ends so
+bool ends_with_any_case(std::string_view text, std::string_view suffix) {
+    if (text.size() < suffix.size())
+        return false;
+    const std::string_view tail = text.substr(text.size() - suffix.size());
+    for (std::size_t index = 0; index < suffix.size(); ++index) {
+        const char letter = tail[index];
+        const char folded =
+            letter >= 'A' && letter <= 'Z' ? static_cast<char>(letter - 'A' + 'a') : letter;
+        if (folded != suffix[index])
+            return false;
+    }
+    return true;
+}
+
+/// Tells whether a name is one file in a pack's own folder: 1 to 128 bytes of
+/// ASCII letters, digits, '-' , '_' and '.', ending in one of the suffixes.
+///
+/// A slash, a backslash or any other character is refused, so the name cannot
+/// leave the folder.
+///
+/// @param name the file name
+/// @param first a suffix, in lower case, such as ".otf"
+/// @param second another suffix; empty for none
+/// @return true for such a name
+bool pack_file_name(std::string_view name, std::string_view first, std::string_view second = {}) {
+    if (name.empty() || name.size() > 128)
+        return false;
+    for (const unsigned char letter : name) {
+        const bool allowed = (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z') ||
+                             (letter >= '0' && letter <= '9') || letter == '-' || letter == '_' ||
+                             letter == '.';
+        if (!allowed)
+            return false;
+    }
+    return ends_with_any_case(name, first) || (!second.empty() && ends_with_any_case(name, second));
+}
+
+/// Tells whether text is an ISO 8601 calendar date, YYYY-MM-DD, that exists.
+///
+/// @param text the date
+/// @return true for a four-digit year, a month 01 to 12 and a day within that
+///     month, February counting 29 days in Gregorian leap years
+bool calendar_date(std::string_view text) {
+    constexpr std::size_t year_digits = 4;
+    constexpr std::size_t month_start = year_digits + 1;
+    constexpr std::size_t day_start = month_start + 3;
+    constexpr std::size_t date_length = day_start + 2;
+    if (text.size() != date_length || text[month_start - 1] != '-' || text[day_start - 1] != '-')
+        return false;
+    const auto digits = [text](std::size_t start, std::size_t count, int& value) {
+        value = 0;
+        for (const char letter : text.substr(start, count)) {
+            if (letter < '0' || letter > '9')
+                return false;
+            value = value * 10 + (letter - '0');
+        }
+        return true;
+    };
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    if (!digits(0, year_digits, year) || !digits(month_start, 2, month) ||
+        !digits(day_start, 2, day))
+        return false;
+    if (month < 1 || month > 12 || day < 1)
+        return false;
+    constexpr std::array<int, 12> month_days{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    const int days = month == 2 && leap ? 29 : month_days[static_cast<std::size_t>(month - 1)];
+    return day <= days;
+}
+
+/// Reads a manifest's fonts sequence.
+///
+/// @param node the field's node
+/// @param[out] fonts the fonts
+/// @param[out] error why it was refused
+/// @return true when it was read
+bool read_fonts(const oamod::Node& node, std::vector<PackFont>& fonts, std::string& error) {
+    if (node.kind != oamod::NodeKind::sequence) {
+        error = "the manifest's fonts is not of its kind";
+        return false;
+    }
+    if (node.children.size() > most_pack_fonts) {
+        error = "the manifest's fonts holds more than " + std::to_string(most_pack_fonts);
+        return false;
+    }
+    fonts.clear();
+    for (const oamod::Node& item : node.children) {
+        if (item.kind != oamod::NodeKind::mapping) {
+            error = "the manifest's fonts is not of its kind";
+            return false;
+        }
+        bool saw_file = false;
+        bool saw_role = false;
+        PackFont font;
+        for (const oamod::Node& entry : item.children) {
+            if (entry.key.text == "file") {
+                saw_file = true;
+                if (entry.kind != oamod::NodeKind::string ||
+                    !pack_file_name(entry.text, ".otf", ".ttf")) {
+                    error = "the manifest's fonts file is not a font file";
+                    return false;
+                }
+                font.file = entry.text;
+            } else if (entry.key.text == "role") {
+                saw_role = true;
+                if (entry.kind == oamod::NodeKind::string && entry.text == "ideographs")
+                    font.role = PackFontRole::ideographs;
+                else if (entry.kind == oamod::NodeKind::string && entry.text == "letters")
+                    font.role = PackFontRole::letters;
+                else {
+                    error = "the manifest's fonts role must be ideographs or letters";
+                    return false;
+                }
+            } else {
+                error = "the manifest's fonts has no key " + entry.key.text;
+                return false;
+            }
+        }
+        if (!saw_file || !saw_role) {
+            error = "the manifest's fonts is not of its kind";
+            return false;
+        }
+        for (const PackFont& earlier : fonts) {
+            if (earlier.file == font.file) {
+                error = "the manifest's fonts names " + font.file + " twice";
+                return false;
+            }
+        }
+        fonts.push_back(std::move(font));
+    }
+    return true;
+}
+
+/// Reads a manifest's warmup file name.
+///
+/// @param node the field's node
+/// @param[out] warmup the file name
+/// @param[out] error why it was refused
+/// @return true when it was read
+bool read_warmup(const oamod::Node& node, std::string& warmup, std::string& error) {
+    if (node.kind != oamod::NodeKind::string || !pack_file_name(node.text, ".txt")) {
+        error = "the manifest's warmup is not a text file";
+        return false;
+    }
+    warmup = node.text;
+    return true;
+}
+
+/// Reads a manifest's packaging block.
+///
+/// @param node the field's node
+/// @param[out] packaging the block
+/// @param[out] error why it was refused
+/// @return true when it was read
+bool read_packaging(
+    const oamod::Node& node, std::optional<PackPackaging>& packaging, std::string& error
+) {
+    if (node.kind != oamod::NodeKind::mapping) {
+        error = "the manifest's packaging is not of its kind";
+        return false;
+    }
+    bool saw_revision = false;
+    bool saw_date = false;
+    bool saw_packager = false;
+    PackPackaging read;
+    for (const oamod::Node& entry : node.children) {
+        if (entry.key.text == "revision") {
+            saw_revision = true;
+            int64_t number = 0;
+            if (entry.kind != oamod::NodeKind::number ||
+                !oamod::integer_value(entry.number, number) || number < 1 || number > 65535) {
+                error = "the manifest's packaging revision must be an integer from 1 to 65535";
+                return false;
+            }
+            read.revision = number;
+        } else if (entry.key.text == "date") {
+            saw_date = true;
+            if (entry.kind != oamod::NodeKind::string || !calendar_date(entry.text)) {
+                error = "the manifest's packaging date must be an ISO 8601 date, YYYY-MM-DD";
+                return false;
+            }
+            read.date = entry.text;
+        } else if (entry.key.text == "packager") {
+            saw_packager = true;
+            if (entry.kind != oamod::NodeKind::string || entry.text.empty() ||
+                entry.text.size() > 128) {
+                error = "the manifest's packaging packager must be a string of 1 to 128 bytes";
+                return false;
+            }
+            read.packager = entry.text;
+        } else {
+            error = "the manifest's packaging has no key " + entry.key.text;
+            return false;
+        }
+    }
+    if (!saw_revision || !saw_date || !saw_packager) {
+        error = "the manifest's packaging is not of its kind";
+        return false;
+    }
+    packaging = std::move(read);
+    return true;
+}
+
 } // namespace
 
 bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::string* error) {
@@ -209,6 +421,15 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
             } else if (key == "unicode") {
                 ok = entry.kind == oamod::NodeKind::boolean;
                 read.unicode = ok && entry.boolean;
+            } else if (key == "fonts") {
+                if (!read_fonts(entry, read.fonts, failure))
+                    break;
+            } else if (key == "warmup") {
+                if (!read_warmup(entry, read.warmup, failure))
+                    break;
+            } else if (key == "packaging") {
+                if (!read_packaging(entry, read.packaging, failure))
+                    break;
             } else if (key == "homepage" || key == "tags") {
                 ok = true;
             } else if (key == "requires") {

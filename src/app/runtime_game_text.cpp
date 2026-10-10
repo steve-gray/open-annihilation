@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <list>
 #include <memory>
 #include <span>
@@ -34,22 +35,6 @@ namespace text_font = oa::platform::text_font;
 /// The most drawn lines kept; past it, the line drawn again longest ago is
 /// forgotten first.
 constexpr std::size_t kept_lines = 512;
-
-/// The characters drawn ahead into the glyph store when a Chinese language
-/// comes to be shown, so that its first screen draws few new glyphs on one
-/// core: the 360 hanzi the interface's and the game's texts use most, and
-/// the CJK punctuation.
-constexpr std::string_view common_cjk_characters =
-    "级机高能单甲战位产雷备生地水弹型的炮初量火空和导击器重建车子力工程动金属面配攻光"
-    "达大防舰可装下开射形气垫试对厂验选存上激储反速一造中核用游戏海取者斗等消自坦克集"
-    "发小潜两式体台离关箭飞无电定修超有栖度择置采只设船炸侦时平城指场艇敌声标加闭视制"
-    "移坞换隐以打究范围载图输目要扰转运回音长方筑页部出卫复理鱼墙干塔难利作快所令武保"
-    "限人队站门雾返于纳确死农当轰止许固透测深护轻极前全较坚家野信停控在统伤描述觉始源"
-    "玩挥过原蛛强个太阳具环塞事害种模明息应内井系陆行增读任项阵主收间默普通使到辆爆成"
-    "少非御观军名必杀特为脉远直合联禁允灭剩乐效认操冲向并巨将截查记录黑失屏入役恢命枪"
-    "神头手拦弱菜风族胜随实新守巡星短堆突清略被官道助真圆简般困界象共享称资毁距供之眼"
-    "像龙航升或察兵务亡放预后状态驱除没四活占领密去致切需耗聚变底垂摄闪虫引母蛇送潮汐"
-    "，。、：；？！（）《》「」…—";
 
 /// Tells whether a language is written in Chinese, Japanese or Korean.
 ///
@@ -93,6 +78,9 @@ struct ModernFonts {
     std::list<std::string> order{};
     /// the language the lines were drawn for; null before the first line
     const oa::data::languages::Language* language{};
+    /// the fonts generation the lines were drawn for; none matches a
+    /// language's, so the first line follows it
+    uint64_t fonts_generation{~uint64_t{0}};
     /// the least pixel size of ideographs for that language, 0 for none
     int32_t least_cjk_size{};
 };
@@ -134,39 +122,37 @@ face_style(oa::present::TextFace face, int32_t scale, int32_t text_size, int32_t
     return style;
 }
 
-/// Draws the common CJK characters into the glyph store in each face at a
-/// scale and text size.
-void warm_glyphs(ModernFonts& fonts, int32_t scale, int32_t text_size) {
-    auto* stack = opened_stack(fonts);
-    if (stack == nullptr)
+/// Readies the fonts for the language shown when it, or the packs' faces
+/// and warm-up, are not what their lines were drawn for: the least size of
+/// ideographs for it, the packs' faces on the open stack, no lines kept
+/// from before, and the pack's warm-up text laid out in each face.
+void follow_language(
+    ModernFonts& fonts,
+    const Runtime& runtime,
+    const oa::data::languages::Language& language,
+    int32_t scale,
+    int32_t text_size
+) {
+    if (fonts.language == &language &&
+        fonts.fonts_generation == runtime.language_fonts_generation())
+        return;
+    fonts.language = &language;
+    fonts.fonts_generation = runtime.language_fonts_generation();
+    fonts.least_cjk_size = writes_cjk(language) ? text_font::least_cjk_language_pixel_size : 0;
+    fonts.lines.clear();
+    fonts.order.clear();
+    text_font::FontStack* stack = opened_stack(fonts);
+    if (stack != nullptr)
+        runtime.use_language_fonts(*stack);
+    const std::string_view warmup = runtime.language_warmup();
+    if (stack == nullptr || warmup.empty())
         return;
     for (const auto face :
          {oa::present::TextFace::message,
           oa::present::TextFace::status,
           oa::present::TextFace::label})
-        std::ignore = stack->layout(
-            common_cjk_characters, face_style(face, scale, text_size, fonts.least_cjk_size)
-        );
-}
-
-/// Readies the fonts for the language shown when it is not the one their
-/// lines were drawn for: the least size of ideographs for it, no lines kept
-/// from before, and the common characters drawn ahead for a Chinese,
-/// Japanese or Korean language.
-void follow_language(
-    ModernFonts& fonts,
-    const oa::data::languages::Language& language,
-    int32_t scale,
-    int32_t text_size
-) {
-    if (fonts.language == &language)
-        return;
-    fonts.language = &language;
-    fonts.least_cjk_size = writes_cjk(language) ? text_font::least_cjk_language_pixel_size : 0;
-    fonts.lines.clear();
-    fonts.order.clear();
-    if (fonts.least_cjk_size != 0)
-        warm_glyphs(fonts, scale, text_size);
+        std::ignore =
+            stack->layout(warmup, face_style(face, scale, text_size, fonts.least_cjk_size));
 }
 
 /// Draws a line in the stack; null when it cannot.
@@ -215,7 +201,7 @@ void Runtime::warm_game_text() {
     auto& fonts = modern_fonts();
     const base::threads::LockGuard lock(fonts.mutex);
     fonts.language = nullptr;
-    follow_language(fonts, shown_language(), 1, size);
+    follow_language(fonts, *this, shown_language(), 1, size);
 }
 
 bool Runtime::game_text_utf8() const {
@@ -332,10 +318,10 @@ void Runtime::install_game_text_hooks() {
                     int32_t size) -> std::shared_ptr<const oa::present::TextMask> {
         if (text.empty() || text.size() > text_font::max_text_bytes)
             return nullptr;
-        const auto& language = static_cast<const Runtime*>(context)->shown_language();
+        const auto& runtime = *static_cast<const Runtime*>(context);
         auto& fonts = modern_fonts();
         const base::threads::LockGuard lock(fonts.mutex);
-        follow_language(fonts, language, scale, size);
+        follow_language(fonts, runtime, runtime.shown_language(), scale, size);
         const auto style = face_style(face, scale, size, fonts.least_cjk_size);
         std::string key;
         key.push_back(static_cast<char>(face));

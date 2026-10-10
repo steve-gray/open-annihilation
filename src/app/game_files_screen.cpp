@@ -516,6 +516,10 @@ void GameFilesScreen::State::start() {
     );
     if (request_.entry == GameFilesEntry::first_run)
         install_game_files_language(request_.preferences_file, request_.user_folder);
+    else
+        read_game_files_language_packs(request_.user_folder, request_.preferences_file);
+    if (fonts != nullptr)
+        use_game_files_language_fonts(*fonts);
     model.version = request_.version;
     model.management = request_.entry == GameFilesEntry::manage;
     const uint32_t capabilities =

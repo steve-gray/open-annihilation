@@ -18,6 +18,7 @@ add_library(oa-netgame
   wire/private_channel.cpp
   wire/recorder_session.cpp
   wire/unicode_chat.cpp
+  wire/presence_block.cpp
   wire/dplay.cpp
   dplay/protocol.cpp
   dplay/engine.cpp
@@ -98,6 +99,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-unicode-chat-test PRIVATE oa-netgame)
   add_test(NAME net-unicode-chat COMMAND oa-netgame-unicode-chat-test)
   set_tests_properties(net-unicode-chat PROPERTIES TIMEOUT 30)
+
+  # Presence in the setup block's spare bytes.
+  add_executable(oa-netgame-presence-block-test tests/presence_block_test.cpp)
+  target_link_libraries(oa-netgame-presence-block-test PRIVATE oa-netgame)
+  add_test(NAME net-presence-block COMMAND oa-netgame-presence-block-test)
+  set_tests_properties(net-presence-block PROPERTIES TIMEOUT 30)
 
   # The condenser's datagram envelope, pinned for every platform.
   add_executable(oa-netgame-condenser-golden-test tests/condenser_golden_test.cpp)

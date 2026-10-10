@@ -12,3 +12,4 @@ locales: [zh-Hans, zh-CN, zh-SG, zh-MY, zh]
 fallbacks: []
 text: {needs: modern-fonts}
 unicode: true
+warmup: warmup.txt

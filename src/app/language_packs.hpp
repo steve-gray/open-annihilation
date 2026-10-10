@@ -12,6 +12,7 @@
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/languages/language_pack.hpp"
+#include "oa/platform/text_font.hpp"
 
 #include <filesystem>
 #include <initializer_list>
@@ -37,7 +38,25 @@ struct LoadedLanguagePack {
     /// The folder it was read from; its files folder answers the game
     /// data's language folders.
     std::filesystem::path folder{};
+    /// The warm-up text, drawn into the glyph store when the language is
+    /// shown; empty when the manifest names none.
+    std::string warmup{};
 };
+
+/// One font file of a pack, at its path in the pack's fonts folder.
+struct PackFontFile {
+    std::filesystem::path file{};             ///< the font file
+    oa::platform::text_font::FaceRole role{}; ///< how the face is drawn
+};
+
+/// Returns a pack's font files, in the manifest's order.
+///
+/// Each file is <folder>/fonts/<file>. A name the manifest accepted is
+/// used as it is; reading the pack has already required the file to be there.
+///
+/// @param pack the pack
+/// @return the files
+[[nodiscard]] std::vector<PackFontFile> pack_fonts(const LoadedLanguagePack& pack);
 
 /// Reads every language pack in a folder: each folder in it that holds
 /// language.yaml. A pack whose manifest or a table does not read is

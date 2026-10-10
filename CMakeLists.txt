@@ -942,7 +942,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_pad.cpp src/app/runtime_pad_actions.cpp src/app/runtime_pad_pointer.cpp
   src/app/runtime_pad_haptics.cpp src/app/runtime_text_input.cpp
   src/app/folder_chooser_screen.cpp src/app/runtime_found_install.cpp
-  src/app/simulation_hash.cpp)
+  src/app/simulation_hash.cpp
+  src/app/presence_facts.cpp)
 # The self-checks: the --check-* options with which the game drives itself
 # through its screens and orders and reports a verdict, for the native
 # checks. OA_SELF_CHECKS=OFF leaves them out, as the release packages do.
@@ -1022,7 +1023,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-language-packs-test src/app/language_packs_test.cpp
     src/app/language_packs.cpp)
   target_link_libraries(oa-app-language-packs-test PRIVATE oa-app-headers oa-data-languages
-    oa-formats-oamod oa-formats-tdf oa-test-support oa-options)
+    oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
 endif()

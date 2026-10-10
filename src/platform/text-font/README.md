@@ -11,20 +11,34 @@ outline, shadow and background of
 
 ## The fonts
 
-`FontStack::open` opens four fonts from one folder, `face_files` in
-[text_font.hpp](include/oa/platform/text_font.hpp). Each character comes from
-the first font that has it:
+`FontStack::open` opens the base fonts from one folder, `face_files` in
+[text_font.hpp](include/oa/platform/text_font.hpp). Noto Sans CJK is
+optional to open: a missing file is skipped and that face stays closed.
+Every other base face is required. A file that is there and that FreeType
+cannot read, or that is not scalable, still fails the open. A shipped
+build still provides the CJK face. Each character comes from the first
+open font of the stack's chain that has it:
 
 | Face | File | Draws |
 |---|---|---|
 | `dejavu_sans_bold` | `DejaVuSans-Bold.ttf` | Latin, Greek, Cyrillic and symbols in the bold weight; skipped in the regular weight |
 | `dejavu_sans` | `DejaVuSans.ttf` | the same scripts in the regular weight, and what the bold face lacks |
-| `noto_sans_cjk` | `NotoSansCJKsc-Bold.otf` | Chinese, Japanese kana and kanji, Korean Hangul, CJK punctuation and full-width forms |
+| `noto_sans_cjk` | `NotoSansCJKsc-Bold.otf` | Chinese, Japanese kana and kanji, Korean Hangul, CJK punctuation and full-width forms; optional to open |
 | `noto_emoji` | `NotoEmoji.ttf` | emoji, in one colour like any character; its weight axis follows the line's weight |
 
-A character no font has draws the first font's missing-glyph box. Control
-characters, variation selectors, zero-width spaces and joiners, and the
-byte-order mark draw nothing and take no room (`is_invisible`).
+A language pack may add up to `most_pack_faces` (4) faces while the stack
+is open (`add_face`). An `ideographs` face is drawn as Noto Sans CJK is,
+at the related size and no less than the style's least size. A `letters`
+face is drawn at the sans faces' size. Bold looks in DejaVu Sans Bold,
+DejaVu Sans, the letters pack faces in the order they were added, the
+ideographs pack faces in that order, Noto Sans CJK when it is open, then
+Noto Emoji. Regular is the same without DejaVu Sans Bold. `FontStack::chain`
+gives that chain; `fallback_chain` stays the base faces only.
+
+A character no open font has draws the chain's first open font's
+missing-glyph box. Control characters, variation selectors, zero-width
+spaces and joiners, and the byte-order mark draw nothing and take no room
+(`is_invisible`).
 
 `tools/bootstrap_text_fonts.py` fetches the fonts and FreeType, pinned by
 SHA-256, into `local/deps`, and cuts Noto Sans CJK SC Bold down to the
@@ -55,15 +69,32 @@ beside the executable elsewhere. Their licences are in the repository's
   A line wider than `max_line_width` is cut off there.
 - `FontStack::layout` gives each character's font and pen without drawing,
   and `FontStack::face_for` the font a character comes from.
-  `fallback_chain` gives the faces a weight looks in, in that order.
+  `fallback_chain` gives the base faces a weight looks in.
+  `FontStack::chain` gives the faces one open stack looks in, pack faces
+  included, leaving out a face that is not open.
+- `add_face` adds a pack face. It returns false, changing nothing, when the
+  stack already holds `most_pack_faces`, or the file is missing, unreadable
+  or not scalable. `remove_pack_faces` drops every pack face and every glyph
+  drawn from one, so a face added afterwards may reuse an index without
+  drawing the glyphs of the face that left. `pack_face_count` and `has_face`
+  report what is open. `face_file_opens` tells whether FreeType opens a file
+  as a scalable font.
 - `FontStack::face_metrics` gives one face's pixel size and rows at the size
-  a style draws it at. `FontStack::metrics` is the greatest of those rows
-  over the weight's chain.
-- `related_pixel_size` gives the size Noto Sans CJK and Noto Emoji are drawn
-  at beside the DejaVu faces: 12 px beside 14 px, so ideographs stand a row
-  or two taller than DejaVu's capitals, as the game's outlined capitals do.
-  `Style::least_cjk_pixel_size` holds Noto Sans CJK to a least size, and
-  the line's rows grow to hold it: the application draws ideographs at
+  a style draws it at, and is empty when the face is not open. The sans
+  faces and letters pack faces take the style's pixel size. Noto Sans CJK
+  and ideographs pack faces take `related_pixel_size` of it, and no less
+  than the style's least size. Noto Emoji takes `related_pixel_size`.
+  `FontStack::metrics` is the greatest ascent and descent of the open base
+  faces only. A pack's faces never change the line's rows. A stack opened
+  without Noto Sans CJK has the rows of the other base faces: at 14 px bold
+  that is 13 above the baseline and 4 below, where the full stack is 14 and
+  4 because of the CJK face.
+- `related_pixel_size` gives the size Noto Sans CJK, ideographs pack faces
+  and Noto Emoji are drawn at beside the DejaVu faces: 12 px beside 14 px,
+  so ideographs stand a row or two taller than DejaVu's capitals, as the
+  game's outlined capitals do. `Style::least_cjk_pixel_size` holds Noto
+  Sans CJK and ideographs pack faces to a least size. The line's rows grow
+  to hold a base face, not a pack face: the application draws ideographs at
   `least_cjk_language_pixel_size` (12 px) at the least while a Chinese,
   Japanese or Korean language is shown, since smaller ones fill in.
   `message_log_pixel_size` (14), `status_readout_pixel_size` (11) and
@@ -108,7 +139,15 @@ and spaced lines and the glyph store (`draws_mono_and_antialiased`), a store
 that stays within its bound and forgets the glyph used longest ago
 (`keeps_the_glyphs_used_last`),
 and ideographs held to a least size while Latin letters keep theirs
-(`holds_ideographs_to_a_least_size`). `platform-text-font-pixels`
+(`holds_ideographs_to_a_least_size`), a stack opened without the CJK face,
+whose 14-px bold rows are 13 and 4 (`opens_without_the_cjk_face`), pack
+faces joining the chain, matching the full stack's drawing of an ideograph
+and refusing a fifth face or a file that is not a font
+(`pack_faces_join_the_chain`), a removed pack face leaving none of its
+glyphs for the face that reuses its index
+(`removed_faces_leave_no_glyphs`), and `face_file_opens` accepting each
+bundled file and refusing a text file and a missing path.
+`platform-text-font-pixels`
 runs the same program with `--pixels`: "Ab", a Chinese character and an emoji
 in bold at 14 px, mono, pixel for pixel as FreeType 2.14.3 draws them; it
 skips with another FreeType. `--show TEXT` prints a line as it is drawn.
