@@ -11,14 +11,16 @@
 // Cancel and Restore defaults and the preferences they leave, Developer
 // Mode's overrides in effect and kept), and the main menu
 // with its OA button and the dialog as the window shows them at several
-// sizes, the Graphics section at its top and its end, and the Developer
-// section with an area of Developer Mode's list open, off and on.
+// sizes, the dialog at the size class and scale each window gives it: the
+// Graphics section at its top and its end, and the Developer section with an
+// area of Developer Mode's list open, off and on.
 
 #include "check_host_input.hpp"
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 
 #include "oa/app/acceleration_status.hpp"
 #include "oa/app/game_directory.hpp"
@@ -29,6 +31,8 @@
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -88,14 +92,33 @@ constexpr layout::Point kMenuButtonCorner{596, 436};
 /// How far round the pointer the cursor may draw, in the picture's pixels.
 constexpr int32_t kCursorReach = 40;
 
-/// The window sizes the main menu is shown at: the picture's own, two 16:9
-/// sizes and an ultrawide one.
-constexpr std::array<std::pair<int, int>, 4> kWindowSizes{{
+/// The window sizes the main menu is shown at: the picture's own, a 4:3
+/// one, two 16:9 sizes and an ultrawide one.
+constexpr std::array<std::pair<int, int>, 5> kWindowSizes{{
     {640, 480},
+    {1024, 768},
     {1280, 720},
     {1920, 1080},
     {2560, 1080},
 }};
+
+/// The size class and the scale the OA layer lays the dialog out at and
+/// draws it at on a window.
+struct WindowLayout {
+    oa::ui::kit::SizeClass size_class{}; ///< the class of the points left over
+    int32_t scale{};                     ///< window pixels a point
+};
+
+/// The class and scale each of kWindowSizes gives, in its order: the
+/// design's table of windows.
+constexpr std::array<WindowLayout, 5> kWindowLayouts{{
+    {oa::ui::kit::SizeClass::compact, 1},
+    {oa::ui::kit::SizeClass::regular, 1},
+    {oa::ui::kit::SizeClass::large, 1},
+    {oa::ui::kit::SizeClass::regular, 2},
+    {oa::ui::kit::SizeClass::regular, 2},
+}};
+static_assert(kWindowLayouts.size() == kWindowSizes.size(), "one layout for each window size");
 
 /// The preferences keys' common start: the keys of the Open Annihilation settings.
 constexpr std::string_view kEngineKeyPrefix = "open-annihilation.";
@@ -456,12 +479,26 @@ void Runtime::check_engine_settings_dialog() {
         send_check_pointer(type, at, type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT);
     };
     const auto rest = [&] { point(SDL_EVENT_MOUSE_MOTION, kRestingPointer); };
-    // Clicks a point of the dialog, in its source pixels.
+    // Clicks a point of the dialog, in its points, at the window pixel the
+    // OA layer shows it at: the window takes another size on the way.
     const auto click_at = [&](int32_t x, int32_t y) {
-        const layout::Point at{placement().x + x, placement().y + y};
-        point(SDL_EVENT_MOUSE_MOTION, at);
-        point(SDL_EVENT_MOUSE_BUTTON_DOWN, at);
-        point(SDL_EVENT_MOUSE_BUTTON_UP, at);
+        require(
+            oa_layer().find("settings") != nullptr, "the settings screen is not on the OA layer"
+        );
+        const layout::Point pixel = layer_window_pixel(oa_layer().placement_of("settings"), {x, y});
+        for (const SDL_EventType type :
+             {SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
+            SDL_Event event = window_pointer_event(
+                sdl_.window,
+                sdl_.renderer,
+                type,
+                pixel,
+                type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+            );
+            bool running = true;
+            dispatch_event(event, running);
+            require(running, "a click in the dialog ended the run");
+        }
     };
     // Clicks the middle of the part a control with a caption draws.
     const auto click = [&](int32_t control, std::string_view text, std::string_view what) {
@@ -1569,12 +1606,12 @@ void Runtime::check_engine_settings_window_sizes() {
     std::cout << "engine settings check: the main menu as the window shows it\n";
     const auto previous_tick = fake_frontend_tick_;
     fake_frontend_tick_ = 1000U;
-    // Where the OA layer's settings screen shows on the main menu's picture,
-    // while it is open.
-    const auto placement = [this] {
-        const auto* screen = oa_layer().find("settings");
-        require(screen != nullptr, "the settings screen is not on the OA layer");
-        return screen->placement(oa_layer().view()).shown;
+    // Where the OA layer's settings screen shows in the window, while it is open.
+    const auto placed = [this] {
+        require(
+            oa_layer().find("settings") != nullptr, "the settings screen is not on the OA layer"
+        );
+        return oa_layer().placement_of("settings");
     };
     const auto point = [this](SDL_EventType type, layout::Point at) {
         send_check_pointer(type, at, type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT);
@@ -1583,6 +1620,29 @@ void Runtime::check_engine_settings_window_sizes() {
         point(SDL_EVENT_MOUSE_MOTION, at);
         point(SDL_EVENT_MOUSE_BUTTON_DOWN, at);
         point(SDL_EVENT_MOUSE_BUTTON_UP, at);
+    };
+    // Clicks a window pixel, as the pointer there would.
+    const auto click_window = [this](layout::Point pixel) {
+        for (const SDL_EventType type :
+             {SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
+            SDL_Event event = window_pointer_event(
+                sdl_.window,
+                sdl_.renderer,
+                type,
+                pixel,
+                type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+            );
+            bool running = true;
+            dispatch_event(event, running);
+            require(running, "a click in the window ended the run");
+        }
+    };
+    // Clicks the middle of one of the dialog's parts, where the window shows it.
+    const auto click_part = [&](const settings::LayoutPart* part, std::string_view what) {
+        require(part != nullptr, "the dialog shows no " + std::string(what));
+        click_window(layer_window_pixel(
+            placed(), {part->rect.x + part->rect.width / 2, part->rect.y + part->rect.height / 2}
+        ));
     };
     const auto tap = [this](SDL_Keycode code, SDL_Keymod modifiers = SDL_KMOD_NONE) {
         bool running = true;
@@ -1623,8 +1683,35 @@ void Runtime::check_engine_settings_window_sizes() {
         render();
         capture_frame_ = nullptr;
     };
+    // The window's frame alone, drawn from the same sparks.
+    const auto presented_frame = [&] {
+        renderer::Surface presented;
+        menu_sparks_ = sparks;
+        capture_frame_ = &presented;
+        render();
+        capture_frame_ = nullptr;
+        return presented;
+    };
+    // The backdrop darkens the window's frame itself, so the frame expected
+    // under the dialog is the closed one darkened.
+    require(
+        gamma_identity_,
+        "the window-size check compares frames at a display gamma that changes no colour"
+    );
 
-    for (const auto& [width, height] : kWindowSizes) {
+    // Every frame read back holds the whole window, the letterbox round the
+    // picture with it, which the dialog's backdrop darkens too.
+    struct WholeWindow {
+        OaLayer& layer;
+
+        ~WholeWindow() { layer.read_whole_window(false); }
+    } whole_window{oa_layer()};
+
+    oa_layer().read_whole_window(true);
+
+    for (std::size_t size_index = 0; size_index < kWindowSizes.size(); ++size_index) {
+        const auto [width, height] = kWindowSizes[size_index];
+        const WindowLayout& expected_layout = kWindowLayouts[size_index];
         const std::string size = std::to_string(width) + 'x' + std::to_string(height);
         const std::string on = " on the " + size + " window";
         if (!SDL_SetWindowSize(sdl_.window, width, height) || !SDL_SyncWindow(sdl_.window))
@@ -1662,71 +1749,99 @@ void Runtime::check_engine_settings_window_sizes() {
                 std::to_string(differing) + " pixels differ"
         );
         snapshot("menu-" + size);
+        // The window's frame with no OA screen open, which the dialog's
+        // backdrop darkens.
+        const renderer::Surface closed = presented;
 
-        // A click on the button where the window shows it opens the dialog;
-        // each section shows as the window shows the picture.
+        // A click on the button where the window shows it opens the dialog,
+        // laid out at the class and drawn at the scale this window gives.
         click({button.x + button.width / 2, button.y + button.height / 2});
         auto* dialog = engine_settings_dialog();
         require(
             dialog != nullptr && oa_layer().find("settings") != nullptr,
             "a click on the OA button did not open the dialog" + on
         );
+        point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+        const LayerView seen = oa_layer().view();
+        require(
+            oa_layer().size_class() == expected_layout.size_class &&
+                oa_layer().scale() == expected_layout.scale &&
+                dialog->size_class == expected_layout.size_class,
+            "the dialog is not laid out at " +
+                std::string(size_class_name(expected_layout.size_class)) + ", " +
+                std::to_string(expected_layout.scale) + "x" + on
+        );
+        {
+            // Centred in the window at the class's size times the scale.
+            const auto& sized = oa::ui::kit::metrics_of(expected_layout.size_class);
+            const LayerPlacement at = placed();
+            const int32_t shown_width = sized.dialog_width * expected_layout.scale;
+            const int32_t shown_height = sized.dialog_height * expected_layout.scale;
+            require(
+                at.points_width == sized.dialog_width && at.points_height == sized.dialog_height &&
+                    at.shown.width == shown_width && at.shown.height == shown_height &&
+                    at.shown.x == (width - shown_width) / 2 &&
+                    at.shown.y == (height - shown_height) / 2,
+                "the dialog is not centred in the window at its class's size" + on
+            );
+        }
+        // The window as it shows the dialog now: the closed frame darkened,
+        // the dialog drawn at its class and scale at its place.
+        const auto shows_dialog = [&](std::string_view what) {
+            point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+            const LayerPlacement at = placed();
+            renderer::Surface drawing;
+            drawing.width = static_cast<uint32_t>(at.shown.width);
+            drawing.height = static_cast<uint32_t>(at.shown.height);
+            drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
+            settings::draw_dialog(
+                drawing,
+                {0, 0, expected_layout.scale},
+                *engine_settings_dialog(),
+                *engine_settings_fonts(),
+                engine_settings_icon()
+            );
+            apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
+            const auto expected = expected_layer_frame(closed, drawing, at);
+            const auto shown = presented_frame();
+            const auto differing_pixels =
+                layer_differences(shown, expected, window_pointer(seen, kRestingPointer));
+            if (differing_pixels != 0 && !options_.snapshot.empty()) {
+                write_ppm(step_snapshot(options_.snapshot, "expected-" + size), expected);
+                write_ppm(step_snapshot(options_.snapshot, "presented-" + size), shown);
+            }
+            require(
+                differing_pixels == 0,
+                "the window does not show " + std::string(what) + on + ": " +
+                    std::to_string(differing_pixels) + " pixels differ"
+            );
+        };
+        // Each section, through its entry where the window shows it.
         for (const auto page : kPages) {
             const auto parts = settings::dialog_layout(*dialog);
-            const auto* entry = find_part(parts, settings::page_control(page), {});
-            require(entry != nullptr, "the dialog has no entry for a section" + on);
-            click(
-                {placement().x + entry->rect.x + entry->rect.width / 2,
-                 placement().y + entry->rect.y + entry->rect.height / 2}
+            click_part(
+                find_part(parts, settings::page_control(page), {}),
+                std::string(page_slug(page)) + "'s entry"
             );
             require(dialog->page == page, "a click on a section's entry did not show it" + on);
-            point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
-            present(presented, picture);
-            const auto shown =
-                letterbox_differences(presented, picture, area, window_width, kRestingPointer);
-            require(
-                shown == 0,
-                "the window does not show the dialog's " + std::string(page_slug(page)) + on +
-                    ": " + std::to_string(shown) + " pixels differ"
-            );
+            shows_dialog("the dialog's " + std::string(page_slug(page)));
             snapshot("menu-dialog-" + std::string(page_slug(page)) + '-' + size);
-            if (page == settings::Page::developer && width == kWindowSizes.front().first) {
+            if (page == settings::Page::developer) {
                 // Developer with the first area of Developer Mode's list
                 // open, off and then on, and with a rule hack of it open and
                 // on, as the window shows them; then closed and off again as
                 // it was.
-                // Clicks the middle of a part, in the picture's pixels.
-                const auto click_part = [&](const settings::LayoutPart* part,
-                                            std::string_view what) {
-                    require(part != nullptr, "Developer Mode shows no " + std::string(what) + on);
-                    click(
-                        {placement().x + part->rect.x + part->rect.width / 2,
-                         placement().y + part->rect.y + part->rect.height / 2}
-                    );
-                };
                 // Clicks the part that shows a text.
                 const auto click_text = [&](std::string_view text) {
-                    const auto parts = settings::dialog_layout(*engine_settings_dialog());
+                    const auto parts_now = settings::dialog_layout(*engine_settings_dialog());
                     const settings::LayoutPart* found = nullptr;
-                    for (const auto& part : parts)
+                    for (const auto& part : parts_now)
                         if (part.text == text)
                             found = &part;
                     click_part(found, text);
                 };
-                const auto shows_as_picture = [&](std::string_view what) {
-                    point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
-                    present(presented, picture);
-                    const auto differing = letterbox_differences(
-                        presented, picture, area, window_width, kRestingPointer
-                    );
-                    require(
-                        differing == 0,
-                        "the window does not show Developer Mode " + std::string(what) + on + ": " +
-                            std::to_string(differing) + " pixels differ"
-                    );
-                };
                 click_text(kFirstArea);
-                shows_as_picture("with an area open");
+                shows_dialog("Developer Mode with an area open");
                 snapshot("menu-dialog-developer-area-" + size);
                 {
                     const auto area_parts = settings::dialog_layout(*engine_settings_dialog());
@@ -1735,42 +1850,39 @@ void Runtime::check_engine_settings_window_sizes() {
                         "Enable Developer Mode's On"
                     );
                 }
-                shows_as_picture("on");
+                shows_dialog("Developer Mode on");
                 snapshot("menu-dialog-developer-on-" + size);
                 click_text(kShownHack);
                 {
                     const auto hack_parts = settings::dialog_layout(*engine_settings_dialog());
                     click_part(hack_switch(hack_parts, kShownHack, "ON"), "rule hack's switch");
                 }
-                shows_as_picture("with a rule hack open and on");
+                shows_dialog("Developer Mode with a rule hack open and on");
                 snapshot("menu-dialog-developer-hack-" + size);
                 click_text(kShownHack);
                 click_text(kFirstArea);
             }
             if (page != settings::Page::graphics)
                 continue;
-            // Graphics scrolls: at its end too, as the window shows the picture.
+            // Graphics scrolls to its end, the class's own: a larger class
+            // shows more of its rows and scrolls less.
             tap(SDLK_END);
+            const int32_t end_limit = settings::scroll_limit(*dialog);
             require(
-                dialog->scroll[static_cast<std::size_t>(page)] == 513,
+                end_limit > 0 && dialog->scroll[static_cast<std::size_t>(page)] == end_limit &&
+                    (expected_layout.size_class != oa::ui::kit::SizeClass::compact ||
+                     end_limit == 513),
                 "End did not scroll Graphics to its end" + on
             );
-            present(presented, picture);
-            const auto at_end =
-                letterbox_differences(presented, picture, area, window_width, kRestingPointer);
-            require(
-                at_end == 0,
-                "the window does not show Graphics at its end" + on + ": " +
-                    std::to_string(at_end) + " pixels differ"
-            );
+            shows_dialog("Graphics at its end");
             snapshot("menu-dialog-graphics-end-" + size);
             tap(SDLK_HOME);
         }
         tap(SDLK_ESCAPE);
         require(engine_settings_dialog() == nullptr, "Escape did not close the dialog" + on);
-        std::cout << "engine settings check: the OA button and the dialog's sections as the "
-                  << size << " window shows them, the picture at " << area.x << ',' << area.y << ' '
-                  << area.w << 'x' << area.h << '\n';
+        std::cout << "engine settings check: the dialog's sections at "
+                  << size_class_name(expected_layout.size_class) << ", " << expected_layout.scale
+                  << "x, on the " << size << " window\n";
     }
     if (!SDL_SetWindowSize(sdl_.window, kDefaultWindowWidth, kDefaultWindowHeight) ||
         !SDL_SyncWindow(sdl_.window))

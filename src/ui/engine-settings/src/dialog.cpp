@@ -1893,6 +1893,10 @@ bool dialog_contains(int32_t x, int32_t y) noexcept {
     return x >= 0 && y >= 0 && x < dialog_width && y < dialog_height;
 }
 
+int32_t scroll_limit(const Dialog& dialog) {
+    return layout::open_rows(dialog).limit;
+}
+
 bool dialog_contains(const Dialog& dialog, int32_t x, int32_t y) noexcept {
     const layout::Sizes& sized = layout::sizes_of(dialog);
     return x >= 0 && y >= 0 && x < sized.dialog_width && y < sized.dialog_height;

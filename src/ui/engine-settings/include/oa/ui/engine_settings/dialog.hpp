@@ -1081,6 +1081,14 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// @return true inside its dialog_width by dialog_height
 [[nodiscard]] bool dialog_contains(int32_t x, int32_t y) noexcept;
 
+/// Returns the most the open section scrolls at the dialog's size class, or
+/// on Developer and Mods their lists: the rows' height less their view's. A
+/// larger class shows more of the same rows, and scrolls less.
+///
+/// @param dialog the dialog
+/// @return the greatest offset, in points; 0 when the rows fit their view
+[[nodiscard]] int32_t scroll_limit(const Dialog& dialog);
+
 /// Tells whether a point lies on the dialog at its size class.
 ///
 /// @param dialog the dialog

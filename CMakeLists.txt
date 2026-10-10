@@ -994,6 +994,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
+  src/app/oa_layer_check.cpp
   src/app/runtime_engine_settings_match_check.cpp src/app/runtime_engine_settings_dialog_check.cpp
   src/app/runtime_renderer_ladder_check.cpp src/app/runtime_visual_rules_check.cpp
   src/app/runtime_touch_check.cpp src/app/game_files_check.cpp src/app/runtime_pad_check.cpp)
