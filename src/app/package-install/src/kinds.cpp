@@ -8,6 +8,7 @@
 
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
+#include "oa/app/package_install/origin.hpp"
 #include "oa/app/package_install/prompts.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
@@ -158,13 +159,23 @@ FolderHooks folder_hooks(const PackageKind& kind, const fs::path& root) {
         const auto& bound = *static_cast<const Binding*>(context);
         if (bound.kind == nullptr || bound.kind->read_installed == nullptr)
             return InstalledPackage{};
-        return bound.kind->read_installed(bound.root / detail::path_of(folder));
+        const fs::path path = bound.root / detail::path_of(folder);
+        InstalledPackage held = bound.kind->read_installed(path);
+        if (held.kind == FolderKind::package)
+            held.origin = read_origin(path);
+        return held;
     };
     hooks.backup_of = [](void* context, std::string_view folder) {
         const auto& bound = *static_cast<const Binding*>(context);
         if (bound.kind == nullptr || bound.kind->read_backup == nullptr)
             return std::optional<InstalledPackage>{};
-        return bound.kind->read_backup(bound.root / detail::path_of(folder));
+        const fs::path path = bound.root / detail::path_of(folder);
+        std::optional<InstalledPackage> held = bound.kind->read_backup(path);
+        if (held && held->kind == FolderKind::package) {
+            if (const auto kept = oa::app::entry_without_case(path, backup_folder_name))
+                held->origin = read_origin(*kept);
+        }
+        return held;
     };
     return hooks;
 }

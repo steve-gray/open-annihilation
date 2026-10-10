@@ -9,11 +9,15 @@
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install.hpp"
+#include "oa/base/sha256.hpp"
 #include "oa/platform/files.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <exception>
+#include <span>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -24,6 +28,13 @@ namespace oa::app::package_install {
 namespace fs = std::filesystem;
 namespace zip = oa::formats::zip;
 
+namespace {
+
+/// The most package bytes one read takes, so that a step's time is looked at often.
+constexpr uint64_t read_piece_bytes = uint64_t{64} << 10;
+
+} // namespace
+
 struct Unpacking::State {
     const Package* package{};
     fs::path root{};
@@ -32,6 +43,15 @@ struct Unpacking::State {
     UnpackHooks hooks{};
     RootHold hold{};
     detail::PackageFile file{};
+    Origin origin{}; ///< written into staging once the files are, its hash filled in
+    /// The SHA-256 the origin brought, checked when the file has been hashed.
+    std::optional<oa::base::sha256::Digest> expected_hash{};
+    oa::base::sha256::Hasher hasher{};
+    std::array<uint8_t, read_piece_bytes> hash_piece{};
+    bool hash_done{};             ///< the package file's SHA-256 is known
+    bool origin_written{};        ///< .oa-origin.yaml is in staging
+    uint64_t checked_bytes{};     ///< package-file bytes hashed
+    uint64_t archive_bytes{};     ///< the package file's size
     std::size_t next_folder{};    ///< the next of package->folders to make
     std::size_t next{};           ///< the next of package->files to unpack
     std::size_t next_sync{};      ///< the next folder to sync: 0 staging, then package->folders
@@ -53,9 +73,6 @@ namespace {
 
 /// The most time a step works.
 constexpr std::chrono::milliseconds time_a_step{4};
-/// The most package bytes one read of an entry takes, so that a step's time
-/// is looked at often.
-constexpr uint64_t read_piece_bytes = uint64_t{64} << 10;
 
 /// Returns a problem.
 ///
@@ -123,6 +140,7 @@ bool Unpacking::start(
     const fs::path& root,
     std::string_view target,
     const InstalledPackage& expected,
+    const Origin& origin,
     Problem& problem,
     const UnpackHooks& hooks
 ) {
@@ -140,6 +158,8 @@ bool Unpacking::start(
         state->root = root;
         state->target = std::string(target);
         state->hooks = hooks;
+        state->origin = origin;
+        state->expected_hash = origin.sha256;
         std::error_code error;
         fs::create_directories(root, error);
         if (error) {
@@ -206,6 +226,7 @@ bool Unpacking::start(
             made->hold.reset();
             return false;
         }
+        made->archive_bytes = made->file.bytes;
         return true;
     } catch (const std::exception& failure) {
         problem = problem_of(Refusal::not_placed, {}, failure.what());
@@ -240,7 +261,44 @@ zip::StreamStep Unpacking::step(uint64_t budget, Problem& problem) {
         // At least one piece of work, then on while the budget and the time last.
         while (used < allowed &&
                (used == 0 || std::chrono::steady_clock::now() - started < time_a_step)) {
-            if (state.next_folder < package.folders.size()) {
+            if (!state.hash_done) {
+                // The package file, once, in pieces: each byte counts, and
+                // the reads seek, so the entries are read afterwards as before.
+                if (state.checked_bytes >= state.archive_bytes) {
+                    const oa::base::sha256::Digest digest = oa::base::sha256::finish(state.hasher);
+                    if (state.expected_hash && *state.expected_hash != digest)
+                        return stop(
+                            problem_of(Refusal::damaged, {}, "its SHA-256 is not the catalogue's")
+                        );
+                    state.origin.sha256 = digest;
+                    state.hash_done = true;
+                    continue;
+                }
+                const uint64_t room = allowed - used;
+                const uint64_t left = state.archive_bytes - state.checked_bytes;
+                const uint64_t take = std::min(left, std::min(room, read_piece_bytes));
+                const zip::SourceHooks source = state.file.source();
+                const std::span<uint8_t> piece{
+                    state.hash_piece.data(), static_cast<std::size_t>(take)
+                };
+                if (source.read_at == nullptr ||
+                    !source.read_at(source.context, state.checked_bytes, piece))
+                    return stop(
+                        problem_of(Refusal::unreadable, {}, "the package file cannot be read")
+                    );
+                oa::base::sha256::update(state.hasher, piece);
+                state.checked_bytes += take;
+                used += take;
+                if (state.checked_bytes >= state.archive_bytes) {
+                    const oa::base::sha256::Digest digest = oa::base::sha256::finish(state.hasher);
+                    if (state.expected_hash && *state.expected_hash != digest)
+                        return stop(
+                            problem_of(Refusal::damaged, {}, "its SHA-256 is not the catalogue's")
+                        );
+                    state.origin.sha256 = digest;
+                    state.hash_done = true;
+                }
+            } else if (state.next_folder < package.folders.size()) {
                 // The folders first, each made anew: a folder whose name the
                 // file system folds to one made already is refused.
                 const std::string& name = package.folders[state.next_folder];
@@ -334,6 +392,32 @@ zip::StreamStep Unpacking::step(uint64_t budget, Problem& problem) {
                     state.entry = zip::EntryStream();
                     ++state.next;
                 }
+            } else if (!state.origin_written) {
+                // Into staging, before the first sync, so the rename that
+                // puts the folder in place carries the record with it.
+                const std::string text = origin_text(state.origin);
+                if (text.empty() || text.size() > origin_most_bytes)
+                    return stop(
+                        problem_of(Refusal::not_placed, {}, "the origin record cannot be written")
+                    );
+                const fs::path path =
+                    state.staging / detail::path_of(std::string(origin_file_name));
+                std::error_code error;
+                if (!state.out.create(path, error))
+                    return stop(problem_of(
+                        Refusal::not_placed,
+                        std::string(origin_file_name),
+                        "cannot make " + detail::utf8_of(path) + ": " + error.message()
+                    ));
+                const auto* bytes = reinterpret_cast<const uint8_t*>(text.data());
+                if (!state.out.write({bytes, text.size()}) || !state.out.finish())
+                    return stop(problem_of(
+                        Refusal::not_placed,
+                        std::string(origin_file_name),
+                        "cannot finish " + detail::utf8_of(path)
+                    ));
+                state.origin_written = true;
+                used += unpack_entry_cost;
             } else if (state.next_sync <= package.folders.size()) {
                 // Every folder reaches the disk before the files are put in
                 // place.
@@ -371,6 +455,18 @@ uint64_t Unpacking::done_bytes() const noexcept {
 
 uint64_t Unpacking::total_bytes() const noexcept {
     return state_ && state_->package != nullptr ? state_->package->unpacked_bytes : 0;
+}
+
+bool Unpacking::checking() const noexcept {
+    return state_ && !state_->failed && !state_->finished && !state_->hash_done;
+}
+
+uint64_t Unpacking::checked_bytes() const noexcept {
+    return state_ ? state_->checked_bytes : 0;
+}
+
+uint64_t Unpacking::archive_bytes() const noexcept {
+    return state_ ? state_->archive_bytes : 0;
 }
 
 fs::path Unpacking::staging() const {

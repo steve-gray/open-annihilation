@@ -5,14 +5,14 @@
 // (files.cpp), and its shared text helpers.
 #pragma once
 
+#include "oa/app/package_install.hpp"
+
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <system_error>
 
 namespace oa::app::package_install {
-
-struct PackageKind;
 
 namespace detail {
 
@@ -92,6 +92,15 @@ void flush_to_storage(const std::filesystem::path& folder) noexcept;
 ///
 /// @param line the line
 void log_line(std::string_view line);
+
+/// Takes a hold on a kind's root folder's lock when nothing in this process
+/// holds it and no other copy of the game does.
+///
+/// @param kind the kind, whose lock name the file takes
+/// @param root the root folder, which must exist
+/// @return the hold; null when this process already holds that root or the
+///         lock is taken
+[[nodiscard]] RootHold hold_root_alone(const PackageKind& kind, const std::filesystem::path& root);
 
 } // namespace detail
 } // namespace oa::app::package_install

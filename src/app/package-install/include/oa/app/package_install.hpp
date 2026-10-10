@@ -16,6 +16,7 @@
 // root folder is Mods. No function here throws: errors are values.
 #pragma once
 
+#include "oa/app/package_install/origin.hpp"
 #include "oa/data/mod_profile.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/formats/zip/stream.hpp"
@@ -124,6 +125,9 @@ struct Incoming {
     std::string name{};
     std::string version{};
     int64_t revision{};
+    /// Where the package came from, which the runtime copies from the inbox
+    /// before it plans. A plan may read it; the oamod plan does not.
+    Origin origin{};
 };
 
 /// A package, read and checked: what it installs and where its files come from.
@@ -145,6 +149,8 @@ struct Package {
     std::vector<std::string> warnings{}; ///< the manifest's warnings, formatted
     uint64_t unpacked_bytes{};           ///< its files' sizes added up
     bool backup_left_out{}; ///< it held a .backup folder of its own, which is not unpacked
+    /// It held a .oa-origin.yaml at its top, which is not unpacked.
+    bool origin_left_out{};
 };
 
 /// How a package's manifest is resolved.
@@ -217,6 +223,9 @@ struct InstalledPackage {
     std::string name{};    ///< its name
     std::string version{}; ///< its version, as written
     int64_t revision{};    ///< packaging.revision; 0 when it cannot be read
+    /// The folder's origin record; nothing when it has none. A missing
+    /// record is not an error.
+    std::optional<Origin> origin{};
 };
 
 /// Tells whether two reads of a folder found the same: kind, id, version
@@ -467,6 +476,9 @@ class Unpacking {
     /// @param root the kind's root folder
     /// @param target the folder in the root the files are for
     /// @param expected what the target held when the plan was made
+    /// @param origin where the package came from; its installed date is
+    ///        written as given, and its sha256, when set, is checked against
+    ///        the package file
     /// @param[out] problem why it cannot start
     /// @param hooks stand-ins for the file system's reads
     /// @return true when the unpacking started
@@ -475,11 +487,13 @@ class Unpacking {
         const std::filesystem::path& root,
         std::string_view target,
         const InstalledPackage& expected,
+        const Origin& origin,
         Problem& problem,
         const UnpackHooks& hooks = {}
     );
 
-    /// Unpacks on until `budget` bytes of the package are read, each folder
+    /// Unpacks on until `budget` bytes are read, first of the package file
+    /// while its SHA-256 is computed and then of its entries, each folder
     /// or file made and each folder synced counting as unpack_entry_cost
     /// bytes, or until about 4 ms have passed, or the end.
     ///
@@ -500,6 +514,21 @@ class Unpacking {
     ///
     /// @return the bytes
     [[nodiscard]] uint64_t total_bytes() const noexcept;
+
+    /// Tells whether the unpacking is still hashing the package file.
+    ///
+    /// @return true until the SHA-256 is known, and false once it failed or finished
+    [[nodiscard]] bool checking() const noexcept;
+
+    /// Returns the package-file bytes hashed so far.
+    ///
+    /// @return the bytes
+    [[nodiscard]] uint64_t checked_bytes() const noexcept;
+
+    /// Returns the package file's size, which the hash phase reads.
+    ///
+    /// @return the bytes; 0 before start
+    [[nodiscard]] uint64_t archive_bytes() const noexcept;
 
     /// Returns the staging folder.
     ///
