@@ -75,6 +75,10 @@ Every document in the repository, by what you want to do.
   format of a mod profile (`oamod.yaml`) and its rules: parameters,
   presets, settings, limits, script extensions, data keys, hashes and
   network compatibility.
+- [registries/README.md](registries/README.md): the OA Registry
+  Specification, version 1: the descriptor and `.oareg` file, the
+  catalogue and its signature, packages, the download API, running a
+  registry and mirrors.
 - [maps/README.md](maps/README.md): map packs, which add maps and what those
   maps draw, and where a pack installs.
 - [maps/oamap-standard.md](maps/oamap-standard.md): the OAMAP standard, the

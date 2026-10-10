@@ -70,20 +70,6 @@ std::span<const uint8_t> as_bytes(std::string_view text) {
     return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
 }
 
-/// The passphrase, wiped when this goes away.
-class SecretText {
-  public:
-
-    std::string text;
-
-    explicit SecretText(std::string value) : text(std::move(value)) {}
-
-    SecretText(const SecretText&) = delete;
-    SecretText& operator=(const SecretText&) = delete;
-
-    ~SecretText() { crypto_wipe(text.data(), text.size()); }
-};
-
 const std::string* required_option(
     const Arguments& parsed, Output& output, std::string_view command, std::string_view name
 ) {
@@ -413,25 +399,10 @@ int run_catalogue_sign(std::span<const std::string> arguments, Output& output) {
     if (read != signing::SealStatus::ok)
         throw Failure(std::string(signing::seal_status_text(read)));
 
-    signing::Signature signature{};
     signing::PublicKey public_key{};
     std::string key_id(info.id.data(), info.id_size);
-    {
-        SecretText passphrase(read_passphrase("Passphrase: ", pass_path));
-        signing::SecretKey secret{};
-
-        struct KeyGuard {
-            signing::SecretKey& secret;
-
-            ~KeyGuard() { crypto_wipe(secret.data(), secret.size()); }
-        } guard{secret};
-
-        const signing::SealStatus status =
-            signing::unseal_key(key_bytes, as_bytes(passphrase.text), secret, public_key);
-        if (status != signing::SealStatus::ok)
-            throw Failure(std::string(signing::seal_status_text(status)));
-        signature = signing::sign(secret, catalogue_bytes);
-    }
+    const signing::Signature signature =
+        sign_with_sealed_key(key_bytes, pass_path, catalogue_bytes, public_key);
 
     fs::path sig_path = out == nullptr ? catalogue_path : path_from(*out);
     if (out == nullptr)

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/download-response.schema.json",
+  "title": "Issued download key",
+  "description": "The 201 body. download is 1 to 128 characters of A-Z, a-z, 0-9, _ and -.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["download", "expires", "url"],
+  "properties": {
+    "download": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "expires": { "type": "string" },
+    "url": { "type": "string" }
+  }
+}

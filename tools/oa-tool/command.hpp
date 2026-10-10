@@ -206,6 +206,42 @@ class Failure : public std::runtime_error {
 /// @throws Failure when the catalogue or the signature cannot be read
 [[nodiscard]] int run_catalogue_verify(std::span<const std::string> arguments, Output& output);
 
+// The registry commands, defined in registry.cpp.
+
+/// Makes an empty direct registry and signs its catalogue.
+///
+/// FOLDER must be missing or empty. `--base-url` is the http address the
+/// registry is served at, with no trailing slash. `--id` and `--name` name
+/// it. `--key` is a sealed publisher key. `--passphrase-file` reads the
+/// passphrase from a file; otherwise the terminal asks. `--homepage` is an
+/// optional page. The descriptor and the signed catalogue are read back
+/// before the command reports success.
+///
+/// @param arguments the folder and the options
+/// @param[in,out] output receives the descriptor path and the fingerprint,
+///        and a usage line when the arguments are not the command's
+/// @return exit_done, or exit_usage when the arguments are not the command's
+/// @throws Failure when the registry cannot be made
+[[nodiscard]] int run_registry_init(std::span<const std::string> arguments, Output& output);
+
+/// Copies a registry into a folder.
+///
+/// URL is the registry descriptor. The catalogue's signature is checked, and
+/// a sequence lower than the one FOLDER already holds stops the copy. Each
+/// package and picture is checked by SHA-256. A `.part` is resumed with a
+/// Range request. A tokens registry is copied through its download API. The
+/// catalogue and its signature are written last, byte for byte.
+///
+/// @param arguments the descriptor URL, the folder and any options
+/// @param[in,out] output receives the registry's name, catalogue and
+///        fingerprints, a check's code when one is asked for, and a usage
+///        line when the arguments are not the command's
+/// @return exit_done when the folder holds the registry, exit_failed when a
+///         check stops the copy, or exit_usage when the arguments are not
+///         the command's
+/// @throws Failure when the registry cannot be read
+[[nodiscard]] int run_registry_mirror(std::span<const std::string> arguments, Output& output);
+
 /// Returns the tool's commands, in the order help lists them.
 ///
 /// @return the command table

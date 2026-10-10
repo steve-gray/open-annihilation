@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/counts.schema.json",
+  "title": "Download counts",
+  "description": "GET <api>/counts. counts is the shape version, 1. packages is sorted by kind, then id. downloads counts download records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["counts", "generated", "packages"],
+  "properties": {
+    "counts": { "type": "integer", "const": 1 },
+    "generated": { "type": "string" },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "downloads"],
+        "properties": {
+          "kind": { "enum": ["oalang", "oamap", "oamod"] },
+          "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "downloads": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

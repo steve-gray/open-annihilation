@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The download API's bodies and its one-request exchanges.
-#include "download_api.hpp"
+#include "oa/app/content/download_api.hpp"
 
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/formats/json.hpp"
@@ -247,6 +247,8 @@ std::string_view reason_text(DownloadReason reason) noexcept {
         return "repair";
     case DownloadReason::offered_in_lobby:
         return "offered-in-lobby";
+    case DownloadReason::mirror:
+        return "mirror";
     }
     return "";
 }

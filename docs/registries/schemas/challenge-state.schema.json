@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/challenge-state.schema.json",
+  "title": "Challenge poll",
+  "description": "The 200 body of GET <api>/challenges/<code>.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "state", "expires"],
+  "properties": {
+    "code": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "state": { "enum": ["pending", "solved", "expired"] },
+    "expires": { "type": "string" }
+  }
+}

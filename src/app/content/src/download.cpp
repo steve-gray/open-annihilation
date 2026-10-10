@@ -4,7 +4,7 @@
 // The download queue. One package at a time, on a worker of its own. Parts
 // are written in steps and kept across a cut, a cancel, a quit and a match.
 // The main thread only changes the queue in memory.
-#include "download_api.hpp"
+#include "oa/app/content/download_api.hpp"
 
 #include "oa/app/content/settings.hpp"
 #include "oa/base/threads.hpp"

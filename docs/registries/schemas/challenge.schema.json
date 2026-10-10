@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/open-annihilation/open-annihilation/main/docs/registries/schemas/challenge.schema.json",
+  "title": "Challenge required",
+  "description": "The 428 body. poll is optional and defaults to 3. OA keeps poll inside 2 to 30.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error", "message", "challenge"],
+  "properties": {
+    "error": { "const": "challenge_required" },
+    "message": { "type": "string", "minLength": 1 },
+    "challenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "verify", "expires"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+        "verify": { "type": "string" },
+        "expires": { "type": "string" },
+        "poll": { "type": "integer", "minimum": 2, "maximum": 30 }
+      }
+    }
+  }
+}
