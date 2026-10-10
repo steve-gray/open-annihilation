@@ -15,6 +15,9 @@ until then.
   columns, grids, splits and scroll areas, and the display list.
 - `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
   order, the arrows by where controls sit, and the wheel.
+- `looks.hpp`: how a control looks. A look owns its texts.
+- `components.hpp`: the controls, drawn on a crisp-backend canvas. One
+  button, five looks. `paint` draws a display list.
 
 ## State
 
@@ -27,7 +30,15 @@ pointer's place and the wheel's fraction in.
 - Every token's value is pinned by `ui-kit-theme`.
 - One wrap. Its rules are the only differences between its callers.
 - The kit never looks text up in the interface catalogue. Callers pass what
-  to show.
+  to show. A button's caption, a switch's OFF and ON, a strip's captions and
+  a menu's items arrive already looked up.
+- One button, five looks: accent, plain, quiet, inset, and plain while
+  disabled. The kit chooses every colour. A caller passes the style and
+  whether the pointer is over the button or holds it.
+- `paint` draws a display list's items in the list's order. A control is
+  added with its automation name.
+- The canvas is the crisp backend: whole scales and the game's fonts. U24
+  adds the smooth one.
 - The display list is the only record of what a screen drew and where its
   controls are. Hit testing reads `controls`. Drawing reads `items`.
 - Every control of a kit screen carries a unique name: words of a-z, 0-9 and
@@ -48,11 +59,13 @@ helpers, the estimated width, the stand-ins, and the wrap against copies of
 the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
 window sizes, arrangements, the scroll arithmetic and hit testing.
 `ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys, the
-wheel's fractions and the names.
+wheel's fractions and the names. `ui-kit-components` checks each control's
+pixels, that `paint` matches a direct draw, and the controls' geometry.
 
 ## Limitations
 
 Regular and Large metrics are U10's, and so is choosing a screen's layout
-from its size class. The arrows' rule is one function, its weight named, and
-is to be tuned after controller playtests (D30). The screens' colour family
-converges with U13 and U14.
+from its size class. The canvas draws at whole scales; fractional sizes are
+U24's. The arrows' rule is one function, its weight named, and is to be
+tuned after controller playtests (D30). The screens' colour family converges
+with U13 and U14.

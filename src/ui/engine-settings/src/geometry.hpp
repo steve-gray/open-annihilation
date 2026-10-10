@@ -9,6 +9,7 @@
 
 #include "oa/data/mod_profile/value.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/theme.hpp"
 
 #include <array>
@@ -134,7 +135,7 @@ inline constexpr int32_t slider_value_gap = 10;
 /// and between a lock and the switch it stands beside.
 inline constexpr int32_t label_gap = 8;
 /// An Off/On switch's width; each half is half of it, inside a 1-pixel border.
-inline constexpr int32_t switch_width = 52;
+inline constexpr int32_t switch_width = oa::ui::kit::compact_metrics.switch_width;
 /// Enhanced anti-aliasing's level strip's segment width, inside the strip's
 /// 1-pixel border.
 inline constexpr int32_t level_width = 23;
@@ -199,28 +200,28 @@ inline constexpr std::size_t hint_line_characters = 50;
 /// A lock's width: the padlock and its text, right-aligned on the label line.
 inline constexpr int32_t lock_width = 148;
 /// The padlock's width.
-inline constexpr int32_t padlock_width = 5;
+inline constexpr int32_t padlock_width = oa::ui::kit::compact_metrics.padlock_width;
 /// The padlock's height.
-inline constexpr int32_t padlock_height = 7;
+inline constexpr int32_t padlock_height = oa::ui::kit::compact_metrics.padlock_height;
 /// The columns between the padlock and its text.
-inline constexpr int32_t padlock_gap = 3;
+inline constexpr int32_t padlock_gap = oa::ui::kit::compact_metrics.padlock_gap;
 /// The columns between a control and its keyboard focus outline.
 inline constexpr int32_t focus_inset = oa::ui::kit::compact_metrics.focus_inset;
 
 /// A slider's knob: its width and height.
-inline constexpr int32_t knob_width = 7;
+inline constexpr int32_t knob_width = oa::ui::kit::compact_metrics.knob_width;
 /// A slider knob's height.
-inline constexpr int32_t knob_height = 12;
+inline constexpr int32_t knob_height = oa::ui::kit::compact_metrics.knob_height;
 /// A slider track's height and its top within the slider line.
-inline constexpr int32_t track_height = 4;
+inline constexpr int32_t track_height = oa::ui::kit::compact_metrics.track_height;
 /// A slider track's top row within the slider line.
-inline constexpr int32_t track_offset = 4;
+inline constexpr int32_t track_offset = oa::ui::kit::compact_metrics.track_offset;
 /// A stop mark's height and its top within the slider line.
-inline constexpr int32_t stop_height = 2;
+inline constexpr int32_t stop_height = oa::ui::kit::compact_metrics.stop_height;
 /// A stop mark's top row within the slider line.
-inline constexpr int32_t stop_offset = 12;
+inline constexpr int32_t stop_offset = oa::ui::kit::compact_metrics.stop_offset;
 /// Stop marks are drawn only this many columns or more apart.
-inline constexpr int32_t least_stop_spacing = 4;
+inline constexpr int32_t least_stop_spacing = oa::ui::kit::compact_metrics.least_stop_spacing;
 
 /// The footer's buttons' height and top row.
 inline constexpr int32_t button_height = oa::ui::kit::compact_metrics.button_height;
@@ -300,7 +301,7 @@ inline constexpr SourceRect view_clip{
 /// that at its end the line never meets the footer's.
 inline constexpr int32_t end_gap = row_padding;
 /// The scroll bar's thumb's width.
-inline constexpr int32_t scroll_thumb_width = 5;
+inline constexpr int32_t scroll_thumb_width = oa::ui::kit::compact_metrics.scroll_thumb_width;
 /// The scroll bar's well: in the margin right of the rows, one clear column
 /// right of a focus outline, as high as the view; the thumb runs inside its
 /// one-pixel border.
@@ -310,7 +311,7 @@ inline constexpr SourceRect scroll_well{
 /// Where a press holds the scroll bar: the whole margin right of the rows.
 inline constexpr SourceRect scroll_hit{content_right, view.y, padding, view.height};
 /// The scroll bar's thumb's least height.
-inline constexpr int32_t least_thumb_height = 16;
+inline constexpr int32_t least_thumb_height = oa::ui::kit::compact_metrics.least_thumb_height;
 /// The rows a notch of the mouse wheel scrolls: two hint lines.
 inline constexpr int32_t wheel_step = 2 * hint_line_height;
 /// The rows Page Up and Page Down scroll: the view less three hint lines,
@@ -506,21 +507,22 @@ inline constexpr int32_t wide_choice_width = 248;
 /// A drop-down field's height.
 inline constexpr int32_t choice_line_height = label_line_height;
 /// The columns between a drop-down field's left edge and its text.
-inline constexpr int32_t choice_text_inset = 6;
+inline constexpr int32_t choice_text_inset = oa::ui::kit::compact_metrics.choice_text_inset;
 /// The columns a drop-down field keeps at its right for its arrow.
-inline constexpr int32_t choice_arrow_room = 16;
+inline constexpr int32_t choice_arrow_room = oa::ui::kit::compact_metrics.choice_arrow_room;
 /// The drop-down's arrow's width.
-inline constexpr int32_t choice_arrow_width = 7;
+inline constexpr int32_t choice_arrow_width = oa::ui::kit::compact_metrics.choice_arrow_width;
 /// The drop-down's arrow's height.
-inline constexpr int32_t choice_arrow_height = 4;
+inline constexpr int32_t choice_arrow_height = oa::ui::kit::compact_metrics.choice_arrow_height;
 /// An open drop-down list's item's height.
-inline constexpr int32_t choice_item_height = 16;
+inline constexpr int32_t choice_item_height = oa::ui::kit::compact_metrics.choice_item_height;
 /// The most items an open drop-down list shows at once; a longer list
 /// scrolls.
-inline constexpr int32_t most_shown_choices = 8;
+inline constexpr int32_t most_shown_choices = oa::ui::kit::compact_metrics.most_shown_choices;
 /// The columns between an open list item's left edge and its text, right of
 /// the marker the chosen item shows.
-inline constexpr int32_t choice_item_text_inset = 12;
+inline constexpr int32_t choice_item_text_inset =
+    oa::ui::kit::compact_metrics.choice_item_text_inset;
 /// The columns a drop-down field gives its choice's text.
 inline constexpr int32_t choice_field_text_room =
     choice_width - choice_text_inset - choice_arrow_room;
@@ -964,20 +966,26 @@ void set_choice(Dialog& dialog, Setting setting, std::size_t index);
 /// @param field the drop-down's field
 /// @param choices the choices it offers
 /// @return the list's rectangle
-[[nodiscard]] SourceRect choice_list(const SourceRect& field, std::size_t choices) noexcept;
+[[nodiscard]] inline SourceRect choice_list(const SourceRect& field, std::size_t choices) noexcept {
+    return oa::ui::kit::choice_menu(field, choices);
+}
 
 /// Returns how many items an open list shows at once.
 ///
 /// @param choices the choices it offers
 /// @return at most most_shown_choices
-[[nodiscard]] int32_t shown_choices(std::size_t choices) noexcept;
+[[nodiscard]] inline int32_t shown_choices(std::size_t choices) noexcept {
+    return oa::ui::kit::shown_choices(choices);
+}
 
 /// Returns one shown item's rectangle in an open list.
 ///
 /// @param list the list (choice_list)
 /// @param shown the item's place among those shown, from 0
 /// @return the item's rectangle, inside the list's border
-[[nodiscard]] SourceRect choice_item(const SourceRect& list, int32_t shown) noexcept;
+[[nodiscard]] inline SourceRect choice_item(const SourceRect& list, int32_t shown) noexcept {
+    return oa::ui::kit::choice_item(list, shown);
+}
 
 /// Tells whether a setting's row has a button on its label line that asks
 /// the host to act: Game files' summary row and its MANAGE….
@@ -1342,7 +1350,10 @@ inline constexpr std::string_view items_text = "Items";
 /// @param stop the stop
 /// @param stops the slider's stops
 /// @return the column
-[[nodiscard]] int32_t knob_column(const SourceRect& track, int32_t stop, int32_t stops) noexcept;
+[[nodiscard]] inline int32_t
+knob_column(const SourceRect& track, int32_t stop, int32_t stops) noexcept {
+    return oa::ui::kit::knob_column(track, stop, stops);
+}
 
 /// Returns the stop nearest a column on a slider.
 ///
@@ -1350,7 +1361,10 @@ inline constexpr std::string_view items_text = "Items";
 /// @param column the column
 /// @param stops the slider's stops
 /// @return the stop, 0 to stops - 1
-[[nodiscard]] int32_t stop_at(const SourceRect& track, int32_t column, int32_t stops) noexcept;
+[[nodiscard]] inline int32_t
+stop_at(const SourceRect& track, int32_t column, int32_t stops) noexcept {
+    return oa::ui::kit::stop_at(track, column, stops);
+}
 
 /// Returns the level of a strip under a column.
 ///
@@ -1359,8 +1373,10 @@ inline constexpr std::string_view items_text = "Items";
 /// @param column the column
 /// @return the level's index, from 0 at the strip's left to its last; the
 ///     nearest end for a column outside it
-[[nodiscard]] std::size_t
-level_at(const SourceRect& area, const Strip& strip, int32_t column) noexcept;
+[[nodiscard]] inline std::size_t
+level_at(const SourceRect& area, const Strip& strip, int32_t column) noexcept {
+    return oa::ui::kit::level_at(area, strip.levels, strip.level_width, column);
+}
 
 /// Returns the index of a level in anti_aliasing_levels.
 ///

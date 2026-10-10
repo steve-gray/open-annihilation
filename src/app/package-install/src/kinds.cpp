@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The kinds of package the game installs, and the names and folder reads
-// each kind shares. One kind today: oamod.
+// each kind shares: oamod and oamap.
 
 #include "files.hpp"
 
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oamap.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/origin.hpp"
 #include "oa/app/package_install/prompts.hpp"
@@ -52,6 +53,15 @@ constexpr KindPrompts kModPrompts{
     .refused = &oamod::refused_prompt,
 };
 
+constexpr KindPrompts kMapPrompts{
+    .installing = &oamap::installing_prompt,
+    .question = &oamap::question_prompt,
+    .installed = &oamap::installed_prompt,
+    .updated = &oamap::updated_prompt,
+    .refusal_text = &oamap::refusal_text,
+    .refused = &oamap::refused_prompt,
+};
+
 constexpr PackageKind kKinds[] = {
     {
         .name = "oamod",
@@ -66,6 +76,20 @@ constexpr PackageKind kKinds[] = {
         .plan = &oamod::plan_install,
         .check_staged = nullptr,
         .prompts = &kModPrompts,
+    },
+    {
+        .name = "oamap",
+        .extension = oamap::oamap_extension,
+        .manifest = "oamap.yaml",
+        .manifest_most_bytes = oa::formats::oamod::max_input_bytes,
+        .root_folder = oamap::maps_folder_name,
+        .prefix = ".oamap-",
+        .read_manifest = &oamap::read_manifest,
+        .read_installed = &oamap::read_installed,
+        .read_backup = &oamap::read_backup,
+        .plan = &oamap::plan_install,
+        .check_staged = &oamap::check_staged,
+        .prompts = &kMapPrompts,
     },
 };
 

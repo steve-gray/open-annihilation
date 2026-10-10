@@ -12,8 +12,9 @@
 // at any point leaves folders that the next start settles to the state
 // before the change or after it (recover_changes), and the folders a change
 // drops are deleted a little at a time (Discarder). One table of kinds says
-// what differs: today the oamod kind, whose manifest is oamod.yaml and whose
-// root folder is Mods. No function here throws: errors are values.
+// what differs: the oamod kind, whose manifest is oamod.yaml and whose root
+// folder is Mods, and the oamap kind, whose manifest is oamap.yaml and whose
+// root folder is Maps. No function here throws: errors are values.
 #pragma once
 
 #include "oa/app/package_install/origin.hpp"
@@ -95,6 +96,14 @@ enum class Refusal : uint8_t {
     changed,            ///< the root folder changed while it was being installed
     busy,               ///< another copy of the game is changing the root folder
     unknown_kind,       ///< it is not a kind of package this game installs
+    missing_entry,      ///< a map pack lists a file it does not hold
+    stray_file,         ///< a map pack holds a file no map uses
+    outside_folder,     ///< a map pack holds a file outside the folders it may
+    preview_unreadable, ///< a map's preview is not a PNG
+    preview_too_big,    ///< a map's preview is larger than 2 MiB or 1024 pixels
+    engine_unmet,       ///< requires.engine is not met by this build
+    unfit,              ///< a map does not fit the base game
+    not_a_pack,         ///< the folder does not hold this map pack
 };
 
 /// What went wrong, for the player's text and the log.
@@ -128,6 +137,9 @@ struct Incoming {
     /// Where the package came from, which the runtime copies from the inbox
     /// before it plans. A plan may read it; the oamod plan does not.
     Origin origin{};
+    /// How many maps an oamap pack lists, for its install question. 0 for
+    /// every other kind.
+    uint32_t maps{};
 };
 
 /// A package, read and checked: what it installs and where its files come from.
@@ -164,7 +176,8 @@ struct PackageOptions {
     /// profile's settings come from when the package holds none; empty for none.
     std::filesystem::path game_folder{};
     /// What a kind's hooks need from the app, which the runtime sets per kind
-    /// (Runtime::package_options); null for oamod.
+    /// (Runtime::package_options). Null for oamod. A map pack's points at
+    /// oamap::FitHooks.
     void* context{};
 };
 
@@ -269,7 +282,8 @@ enum class PlanKind : uint8_t {
     ask_reinstall, ///< the same version and revision: Reinstall | Cancel
     ask_version,   ///< another version installed: Replace | Install alongside | Cancel
     ask_alongside, ///< the folder holds something else: Install alongside | Cancel
-    refuse,        ///< no folder is free alongside (Refusal::no_free_folder)
+    refuse,        ///< refused: no folder is free, or the kind's own reason
+    ask_install,   ///< a new map pack the player opened: Install | Cancel
 };
 
 /// Where an install goes and what it asks.
@@ -280,6 +294,11 @@ struct InstallPlan {
     InstalledPackage installed{};             ///< what `target` holds now
     std::optional<InstalledPackage> backup{}; ///< what target/.backup holds now
     bool older{}; ///< ask_update: the incoming revision is below the installed one
+    /// install: the target already holds this pack and is replaced, keeping
+    /// one .backup. A kind that leaves this false installs into an empty target.
+    bool replacing{};
+    /// refuse: why. no_free_folder when the kind does not set another.
+    Refusal refusal{Refusal::no_free_folder};
 };
 
 /// What the folders of a kind's root hold, for the planner.
@@ -348,7 +367,7 @@ struct PackageKind {
 
 /// Returns every kind the game installs, in table order.
 ///
-/// @return the kinds; one today, oamod
+/// @return the kinds; oamod, then oamap
 [[nodiscard]] std::span<const PackageKind> package_kinds() noexcept;
 
 /// Returns the kind whose extension a file's name ends with, matched without case.
