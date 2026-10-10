@@ -5,8 +5,10 @@
 // session-backed LobbyNet: the description a host publishes from the
 // moment it creates the session, who each record leaves from and how they
 // are batched, pings and their echoes, probes and pings heard from their
-// sender, and a joiner the host refuses.
+// sender, a joiner the host refuses, and presence records: whole to a reader
+// of them, and lost alone to a reader without them, as on OA 0.7.
 
+#include "oa/netgame/match/packet_layer.hpp"
 #include "oa/netgame/match/session_lobby.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/netgame/records.hpp"
@@ -547,6 +549,73 @@ void a_presence_record_arrives_whole() {
     teardown();
 }
 
+// A machine that does not read presence records, as OA 0.7 does not, loses
+// one sent alone in its frame and nothing else: the chat record in the next
+// frame arrives whole, and the session stays up.
+void a_reader_without_presence_records_ignores_one() {
+    current_test = "a reader without presence records ignores one";
+    auto host = std::make_unique<Machine>();
+    auto client = std::make_unique<Machine>();
+    setup(*host, 0, "hoster", "", 0x65);
+    setup(*client, 1, "joiner", "", 0x8b);
+    host_and_join(*host, *client);
+    const auto host_id = host->connection.local_id;
+    const auto client_id = client->connection.local_id;
+    // start_session set it; the client now splits frames as OA 0.7 does.
+    CHECK(client->connection.packets->receiver.presence_records);
+    client->connection.packets->receiver.presence_records = false;
+
+    host->net.flush(host->net.context);
+    pump_all(2);
+    drain(*host);
+    drain(*client);
+    client->heard.clear();
+
+    PresenceRecord record;
+    record.engine = PresenceEngine{"0.8.0-dev", "macOS", "arm64"};
+    record.sim_hash = PresenceDigest{};
+    uint8_t presence[presence_record_max_bytes];
+    std::size_t presence_bytes = 0;
+    CHECK(encode_presence(record, presence, sizeof presence, &presence_bytes) == WireError::ok);
+    host->net.flush(host->net.context);
+    host->net.send_from(host->net.context, host_id, client_id, presence, presence_bytes, false);
+    host->net.flush(host->net.context);
+
+    ChatRecord chat{};
+    std::snprintf(chat.text, sizeof chat.text, "%s", "<hoster> after the record");
+    uint8_t chat_bytes[80];
+    std::size_t chat_written = 0;
+    CHECK(encode_record(chat, chat_bytes, sizeof chat_bytes, &chat_written) == WireError::ok);
+    host->net.send_from(host->net.context, host_id, client_id, chat_bytes, chat_written, false);
+    host->net.flush(host->net.context);
+
+    const auto chat_heard = [&] {
+        for (const auto& event : client->heard)
+            if (event.kind == mp::LobbyEventKind::record && event.size == chat_written &&
+                std::memcmp(event.data, chat_bytes, chat_written) == 0)
+                return true;
+        return false;
+    };
+    CHECK(wait_until(chat_heard));
+    bool presence_heard = false;
+    bool left = false;
+    for (const auto& event : client->heard) {
+        presence_heard =
+            presence_heard || (event.kind == mp::LobbyEventKind::record && event.size != 0 &&
+                               event.data[0] == presence_record_type);
+        left = left || event.kind == mp::LobbyEventKind::player_left ||
+               event.kind == mp::LobbyEventKind::session_lost;
+    }
+    CHECK(!presence_heard);
+    CHECK(!left);
+    CHECK(client->connection.in_session && seated(*client, host_id) && seated(*host, client_id));
+    CHECK(
+        mp::lobby_presence_record(*client->lobby, mp::slot_for_player_id(*client->lobby, host_id))
+            .empty()
+    );
+    teardown();
+}
+
 } // namespace
 
 int main() {
@@ -557,6 +626,7 @@ int main() {
     a_refused_joiner_leaves_by_itself();
     a_launched_host_admits_joiners_to_a_closed_game();
     a_presence_record_arrives_whole();
+    a_reader_without_presence_records_ignores_one();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;
