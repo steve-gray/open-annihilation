@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The Open Annihilation settings: read at start, put in effect, saved, and
-// the dialog's session that both hosts share.
+// the dialog's session, which the OA layer's settings screen shows on the
+// main menu and in a match.
 
 #include "engine_settings_state.hpp"
 #include "oa_layer.hpp"
