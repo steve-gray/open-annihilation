@@ -12,6 +12,7 @@
 // it, the program checks the table.
 
 #include "oa/base/sha256.hpp"
+#include "oa/data/languages.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/test/game_assets.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -336,7 +337,29 @@ void add(std::vector<Picture>& pictures, std::string name, renderer::Surface sur
     pictures.push_back(Picture{std::move(name), std::move(surface)});
 }
 
+/// Installs Simplified Chinese for the pictures, then puts the compiled
+/// available entry back. The open Language list keeps its 简体中文 row.
+struct InstalledSimplifiedChinese {
+    InstalledSimplifiedChinese() {
+        oa::data::languages::LanguageEntry entry;
+        entry.tag = "zh-Hans";
+        entry.endonym = "\347\256\200\344\275\223\344\270\255\346\226\207";
+        entry.english_name = "Chinese (Simplified)";
+        entry.word = "Chinese";
+        entry.locales = {"zh-Hans", "zh-CN", "zh-SG", "zh-MY", "zh"};
+        entry.needs = oa::data::languages::TextNeeds::modern_fonts;
+        const std::array<oa::data::languages::LanguageEntry, 1> installed{entry};
+        oa::data::languages::set_pack_languages(installed, {});
+    }
+
+    ~InstalledSimplifiedChinese() { oa::data::languages::set_pack_languages({}, {}); }
+
+    InstalledSimplifiedChinese(const InstalledSimplifiedChinese&) = delete;
+    InstalledSimplifiedChinese& operator=(const InstalledSimplifiedChinese&) = delete;
+};
+
 std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
+    [[maybe_unused]] const InstalledSimplifiedChinese chinese;
     std::vector<Picture> pictures;
     const renderer::RgbaPicture no_icon{};
     const auto game = settings::settings_locks(settings::GameState{true, false, false, false});
