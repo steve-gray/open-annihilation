@@ -6,7 +6,8 @@
 # player's edits to the registries, the download settings kept in
 # preferences, and the download queue. No SDL.
 add_library(oa-app-content src/service.cpp src/worker.cpp src/refresh.cpp src/cache.cpp
-  src/updates.cpp src/registries_edit.cpp src/settings.cpp src/download_api.cpp)
+  src/updates.cpp src/registries_edit.cpp src/settings.cpp src/download_api.cpp
+  src/download.cpp)
 add_library(oa::app::content ALIAS oa-app-content)
 target_include_directories(oa-app-content PUBLIC include)
 target_include_directories(oa-app-content PRIVATE src)
