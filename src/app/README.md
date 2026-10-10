@@ -3032,6 +3032,15 @@ may control the game (`Options::remote_controlled`, read through
 `runtime_options`), which the battle room says as the local player's chat
 line as it is entered and again each time the line changes there, a
 deliberate difference from 3.1c.
+The setup block's spare bytes carry this machine's presence: a revision,
+this build's version, and flags for Developer Mode, rules that differ from
+3.1c, and view hacks that are on. 3.1c carries those bytes unchanged.
+`follow_presence` binds them while the multiplayer screens are showing, and
+on the first frame either way, and tells the battle room again when they
+change; other machines read them from the next setup block, at most about
+two seconds later. A development build is one whose `OA_VERSION_LABEL` is
+not empty, and it sends patch 255. `OA_VERSION_LABEL` is set in the root
+`CMakeLists.txt`.
 [docs/development/testing.md](../../docs/development/testing.md#network-play)
 lists its tests.
 

@@ -3,6 +3,7 @@
 
 // The simulation hash the run plays under, for an extension, and the check
 // that the hash follows the profile and a Developer Mode override.
+#include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
 
 #include "engine_settings_state.hpp"
@@ -11,10 +12,12 @@
 #include "oa/data/mod_profile/overrides.hpp"
 #include "oa/data/mod_profile/value.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace oa::app {
@@ -79,6 +82,20 @@ void Runtime::check_simulation_hash() {
             throw std::runtime_error("a mod that changes the simulation kept the base game's hash");
     }
 
+    const auto lists = [](const std::vector<std::string>& names, std::string_view id) {
+        return std::find(names.begin(), names.end(), id) != names.end();
+    };
+    const auto before = presence_facts(*this);
+    if (before.developer_mode || !before.overrides.empty())
+        throw std::runtime_error("presence facts started in Developer Mode");
+    if (static_cast<bool>(options_.mod_profile) != before.rules_differ_from_base)
+        throw std::runtime_error(
+            options_.mod_profile ? "a changed mod did not differ from 3.1c in the presence facts"
+                                 : "with no mod the presence facts said the rules differ from 3.1c"
+        );
+    if (profiles::digest_text(before.sim_hash) != played)
+        throw std::runtime_error("the presence simulation hash is not the one the game plays");
+
     const auto original = engine_settings();
     auto settings = original;
     settings.developer_mode = true;
@@ -91,14 +108,32 @@ void Runtime::check_simulation_hash() {
         throw std::runtime_error(
             "a simulation-changing Developer Mode override left the simulation hash unchanged"
         );
+    const auto overridden = presence_facts(*this);
+    if (!overridden.developer_mode || overridden.overrides.size() != 1 ||
+        overridden.overrides[0].hack != "ai.attack-wave-size" || !overridden.overrides[0].on ||
+        !lists(overridden.game_hacks, "ai.attack-wave-size") || !overridden.rules_differ_from_base)
+        throw std::runtime_error("the attack-wave override did not reach the presence facts");
+
+    settings.hack_overrides.push_back(profiles::HackOverride{"ui.megamap", true, {}});
+    apply_engine_settings(settings);
+    if (simulation_hash(*this) != changed)
+        throw std::runtime_error("a view hack changed the simulation hash");
+    const auto viewed = presence_facts(*this);
+    if (!lists(viewed.view_hacks, "ui.megamap") || lists(viewed.game_hacks, "ui.megamap"))
+        throw std::runtime_error("the megamap override was not a view hack in the presence facts");
 
     // Putting the settings back plays the profile the run started with, and
     // the kept baseline still agrees with a fresh resolve.
     apply_engine_settings(original);
     if (simulation_hash(*this) != played)
         throw std::runtime_error("turning Developer Mode off did not bring the hash back");
+    if (presence_facts(*this) != before)
+        throw std::runtime_error(
+            "turning Developer Mode off did not bring the presence facts back"
+        );
     if (baseline_hash() != resolve_baseline_hash())
         throw std::runtime_error("the kept baseline hash differs from a fresh resolve");
+    std::cout << "presence facts check: passed\n";
     std::cout << "simulation hash check: passed\n";
 }
 
