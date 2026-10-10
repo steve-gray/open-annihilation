@@ -46,6 +46,25 @@ until then.
 
   Each has a draw function and an `add_*` that puts it in a display list
   with its name, kind and Tab place; `paint` draws them.
+- `rows.hpp`: declared rows. A settings page is a table of `RowSpec`s,
+  each made by a factory that takes the row's id first: `toggle`, `choice`,
+  `slider`, `levels`, `value_and_button`, `buttons`, `text_field`, `link`
+  and `text`, bound to a model's fields or to its get and set functions:
+
+  ```cpp
+  constexpr std::array<kit::RowSpec<Downloads>, 3> kDownloadsRows{
+      kit::choice("check-updates", "Check for content updates", &Downloads::check, kCheckCaptions),
+      kit::toggle("install-id-on", "Install ID", &Downloads::install_id_on, {"A random number."}),
+      kit::value_and_button("install-id", "", install_id_text, "RESET", "reset", kResetId),
+  };
+  ```
+
+  `view_of` reads a row's `RowView` from its spec and the model through the
+  caller's text function; `place_rows` places a column of views,
+  `rows_scroll` and `scroll` scroll it, and `add_rows` lists what the rows
+  draw and their controls, named `<prefix>.<id>`. `step`, `activate`,
+  `press`, `drag`, `choose`, `type` and `edit` change the model as a row's
+  control is used.
 
 ## State
 
@@ -101,6 +120,14 @@ its hover card's timer in its own state.
 - Every control of a kit screen carries a unique name: words of a-z, 0-9 and
   hyphens joined by dots, at most 100 bytes. The automation endpoint adds its
   own prefix; the name here has none.
+- A column of rows is placed exactly as the settings dialog places a
+  section's rows: `ui-kit-rows` holds rows shaped as Controls', Graphics' and
+  Developer's to the dialog's own placement, and U08 proves it on every page.
+- A row's kind is its spec's `kind`, and nothing else decides it. A spec
+  has an id, one word of a-z, 0-9 and hyphens; a table built at compile time
+  with a malformed id does not compile.
+- A `RowView` and the display list own their texts: they keep nothing of
+  the spec or the model.
 
 The arrows move by where controls sit. A control's own scroll area is searched
 first, including rows the area does not show. The focus leaves that area only
@@ -131,6 +158,13 @@ their grid at three widths and at 3, 4 and 6 columns, the arrows through a
 grid of cards, the hover card with an arrow on each side, its place in a
 frame and its delay, and links; and that every `add_*` names its controls
 and `paint` matches the direct draws.
+`ui-kit-rows` lays out, draws, focuses and changes a page of every row
+kind from a table: the placement of rows shaped as the settings dialog's
+Controls, Graphics and Developer sections, with the game's fonts and the
+modern fonts' taller hints, locked and not, against values computed with
+the dialog's own placement, and the scroll against the dialog's; the names,
+kinds, Tab order and drawing order of the display list; rows of two models
+in one column; every event on every kind; and the page painted.
 
 ## Limitations
 
@@ -143,3 +177,7 @@ hover cards and links follows the design's components mockup in the kit's
 tokens; it is reviewed in the gallery (U12) and pinned by golden frames
 (U17). A field takes typed text and the editing keys; it has no selection,
 no clipboard and no press that places the caret.
+A row of buttons takes up to three, with Your files' widths. A link is as
+wide as its line unless its spec gives a width. The rows do not draw a
+drop-down's open menu, a scroll bar or the rule a scrolled view keeps at
+its top: the screen draws them, as the settings dialog does.
