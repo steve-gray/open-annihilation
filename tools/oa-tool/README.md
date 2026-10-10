@@ -1,9 +1,10 @@
 # oa-tool
 
 `oa-tool` reads archives and images from a game directory, and prints or
-writes what a script asks for. Mod authors run it by hand. The checks under
-`tools/` run `list` and `extract` and match their output. Packs, checks,
-catalogues and registries are further commands on the same table.
+writes what a script asks for. Mod authors and translators run it by hand.
+The checks under `tools/` run `list` and `extract` and match their output.
+`pack` writes a mod or language package. Checks, catalogues and registries
+are further commands on the same table.
 
 ## How to run it
 
@@ -41,6 +42,7 @@ same. `--` ends options. A command takes its options through
 | `asset-extract ROOT ENTRY OUTPUT [ARCHIVE...]` | Writes ENTRY from loose files under ROOT, or from the named archives, and prints where it was read. A loose file wins. |
 | `preview ARCHIVE PCX_ENTRY OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX image from an archive as a PPM file, or a PNG file when the path ends in `.png`, and prints its size. |
 | `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
+| `pack FOLDER [--out FILE] [--force]` | Packs FOLDER as a `.oamod` or a `.oalang`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--force` replaces an existing file. |
 
 ## Entry points
 
@@ -65,6 +67,9 @@ capture every line.
 - `list`, `extract`, `asset-extract`, `preview` and `decode-pcx` print the
   same bytes on a successful run as they did before the command table, and
   that run exits 0.
+- `pack` writes the manifest first and the other files in byte order of
+  their paths, stored or deflated by the rule in its help, and the same
+  files give the same bytes.
 - The exit code is 0, 1 or 2.
 - Help lists commands in the table's order, and a group's subcommands under
   the group.
@@ -89,11 +94,17 @@ capture every line.
 ## Tests
 
 `tools-oa-tool` (`oa-tool-test`) builds an archive in memory, runs every
-command, checks help and the usage failures, checks `parse_arguments`, and
-dispatches a group through `run_tool`'s table overload.
+archive command, checks help and the usage failures, checks `parse_arguments`,
+and dispatches a group through `run_tool`'s table overload.
+
+`tools-oa-tool-pack` (`oa-tool-pack-test`) packs a made-up mod and the pseudo
+language pack, checks the order and the methods, packs again after the
+files' times change, and checks the refusals. Its argument is the pseudo
+pack's folder.
 
 ## Limitations
 
-The five archive commands take no options. Catalogues, packs, checks and
-registries are further commands, not part of this table yet. The macOS
-package does not ship `oa-tool`.
+The archive commands take no options. `pack` takes `--out` and `--force`.
+It does not pack a map. Catalogues, checks and registries are further
+commands, not part of this table yet. The macOS package does not ship
+`oa-tool`.
