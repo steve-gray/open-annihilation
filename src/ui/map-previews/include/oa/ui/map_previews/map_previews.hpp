@@ -115,12 +115,12 @@ class PreviewCache {
     struct Cached {
         std::string key;
         Thumbnail thumbnail;
-        std::uint64_t asked{};
+        uint64_t asked{};
     };
 
     struct Waiting {
         PreviewRequest request;
-        std::uint64_t asked{};
+        uint64_t asked{};
     };
 
     /// Drops the least recently asked thumbnail.
@@ -131,11 +131,11 @@ class PreviewCache {
     /// @param key the request's key
     /// @param thumbnail the decoded pixels
     /// @param asked how recently the row asked, larger asked more recently
-    void store(std::string key, Thumbnail thumbnail, std::uint64_t asked);
+    void store(std::string key, Thumbnail thumbnail, uint64_t asked);
 
     std::size_t most_entries_;
     int32_t side_;
-    std::uint64_t stamp_ = 0;
+    uint64_t stamp_ = 0;
     // Front is not special: asked says which thumbnail is oldest.
     std::list<Cached> cached_;
     std::unordered_map<std::string, std::list<Cached>::iterator> by_key_;

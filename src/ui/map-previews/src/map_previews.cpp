@@ -171,20 +171,20 @@ bool decode_png(std::span<const uint8_t> file, int32_t side, Thumbnail* thumbnai
     int32_t dst_h = side;
     if (src_w >= src_h)
         dst_h = static_cast<int32_t>(
-            std::max<std::int64_t>(1, static_cast<std::int64_t>(src_h) * side / src_w)
+            std::max<int64_t>(1, static_cast<int64_t>(src_h) * side / src_w)
         );
     else
         dst_w = static_cast<int32_t>(
-            std::max<std::int64_t>(1, static_cast<std::int64_t>(src_w) * side / src_h)
+            std::max<int64_t>(1, static_cast<int64_t>(src_w) * side / src_h)
         );
     Thumbnail decoded;
     decoded.width = dst_w;
     decoded.height = dst_h;
     decoded.rgba.resize(static_cast<std::size_t>(dst_w) * static_cast<std::size_t>(dst_h) * 4U);
     for (int32_t y = 0; y < dst_h; ++y) {
-        const auto src_y = static_cast<int32_t>(static_cast<std::int64_t>(y) * src_h / dst_h);
+        const auto src_y = static_cast<int32_t>(static_cast<int64_t>(y) * src_h / dst_h);
         for (int32_t x = 0; x < dst_w; ++x) {
-            const auto src_x = static_cast<int32_t>(static_cast<std::int64_t>(x) * src_w / dst_w);
+            const auto src_x = static_cast<int32_t>(static_cast<int64_t>(x) * src_w / dst_w);
             paint(
                 info,
                 rows,
@@ -265,7 +265,7 @@ void PreviewCache::drop_oldest() {
     cached_.erase(oldest);
 }
 
-void PreviewCache::store(std::string key, Thumbnail thumbnail, std::uint64_t asked) {
+void PreviewCache::store(std::string key, Thumbnail thumbnail, uint64_t asked) {
     if (most_entries_ == 0)
         return;
     if (const auto found = by_key_.find(key); found != by_key_.end()) {
