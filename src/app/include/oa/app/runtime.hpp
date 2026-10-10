@@ -3971,6 +3971,18 @@ class Runtime final : public menu::Host,
     /// @return the service
     [[nodiscard]] content::Service& content_service();
 
+    /// Returns one registry's install ID for a download, making it when none is stored.
+    ///
+    /// This is the only way a registry's ID is made for a download. The
+    /// player's RESET in Settings › Downloads (M07), through reset_install_id,
+    /// is the only other way an ID is made. Nothing is made when that
+    /// registry's ID is off, or when the system's generator cannot be read.
+    /// A new ID is written to the preferences before this returns.
+    ///
+    /// @param registry the registry id
+    /// @return the ID, or nothing when it is off or the generator cannot be read
+    [[nodiscard]] std::optional<std::string> content_install_id(std::string_view registry);
+
     /// Registers the prompt of the installs over the main menu, over the
     /// notices' overlay.
     void register_mod_install_overlay();
