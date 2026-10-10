@@ -8,10 +8,13 @@
 
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/base/threads.hpp"
+#include "oa/platform/file_types.hpp"
 
 #include <algorithm>
 #include <deque>
 #include <exception>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -24,8 +27,9 @@ namespace {
 /// What the process keeps between runs.
 struct Kept {
     base::threads::Mutex lock{};
-    std::deque<fs::path> files{};      ///< waiting, oldest first
-    std::optional<fs::path> current{}; ///< the one being installed
+    std::deque<fs::path> files{};      ///< packages waiting, oldest first
+    std::deque<fs::path> registries{}; ///< .oareg files waiting, oldest first
+    std::optional<fs::path> current{}; ///< the package being installed
     std::optional<PendingChange> pending{};
     std::optional<ChangeOutcome> outcome{};
     std::vector<fs::path> discards{};
@@ -52,6 +56,26 @@ fs::path compared(const fs::path& file) {
         return form;
     form = fs::absolute(file, error);
     return (error ? file : form).lexically_normal();
+}
+
+/// Returns a file's extension without its dot, with ASCII letters lowered.
+///
+/// @param file the file
+/// @return the extension; empty when the name has none
+std::string extension_of(const fs::path& file) {
+    std::string extension = detail::folded(detail::utf8_of(file.extension()));
+    if (!extension.empty() && extension.front() == '.')
+        extension.erase(extension.begin());
+    return extension;
+}
+
+/// Tells whether `file`'s extension is `extension`, without case.
+///
+/// @param file the file
+/// @param extension the extension, without its dot
+/// @return true when they are the same
+bool extension_is(const fs::path& file, std::string_view extension) {
+    return extension_of(file) == detail::folded(extension);
 }
 
 } // namespace
@@ -96,6 +120,51 @@ bool package_files_waiting() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
     return !state.files.empty();
+}
+
+bool opens_file(const fs::path& file) {
+    const std::string extension = extension_of(file);
+    for (const oa::platform::file_types::FileType& type : oa::platform::file_types::file_types)
+        if (extension == type.extension)
+            return true;
+    return false;
+}
+
+void post_registry_file(const fs::path& file) {
+    const fs::path form = compared(file);
+    {
+        Kept& state = kept();
+        const base::threads::LockGuard guard(state.lock);
+        if (std::find(state.registries.begin(), state.registries.end(), form) !=
+            state.registries.end())
+            return;
+        state.registries.push_back(form);
+    }
+    // A .oareg file waits here until M08 takes it, and the log says so.
+    detail::log_line("a .oareg file waits: " + detail::utf8_of(form));
+}
+
+std::optional<fs::path> take_registry_file() {
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    if (state.registries.empty())
+        return std::nullopt;
+    fs::path file = std::move(state.registries.front());
+    state.registries.pop_front();
+    return file;
+}
+
+bool registry_files_waiting() {
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    return !state.registries.empty();
+}
+
+void post_opened_file(const fs::path& file) {
+    if (extension_is(file, oa::platform::file_types::registry_extension))
+        post_registry_file(file);
+    else
+        post_package_file(file);
 }
 
 void set_pending_change(PendingChange change) {

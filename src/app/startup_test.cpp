@@ -384,24 +384,42 @@ void check_help_at_exit() {
 
 } // namespace
 
-// --install-mod, a bare .oamod argument, macOS's process serial number and
-// --check-mod-install.
+// --open, --install-mod, bare files of the four types, macOS's process
+// serial number and --check-mod-install.
 void mod_install_options() {
     namespace fs = std::filesystem;
-    const auto opened = parse({"--install-mod", "a.oamod", "B.OAMOD", "-psn_0_123", "german"});
-    expect(opened.install_mods.size() == 2, "--install-mod and a bare .oamod are both packages");
-    expect(
-        opened.install_mods.size() == 2 && opened.install_mods[0].is_absolute() &&
-            opened.install_mods[0].filename() == "a.oamod" &&
-            opened.install_mods[1].filename() == "B.OAMOD",
-        "the packages are absolute, in the order given"
+    const auto opened = parse(
+        {"a.oalang",
+         "B.OAMAP",
+         "c.oareg",
+         "--open",
+         "d.oamod",
+         "--install-mod",
+         "e.oamod",
+         "-psn_0_123",
+         "german"}
     );
-    expect(opened.skip_intro, "a package opened with the game skips the movies");
+    expect(opened.open_files.size() == 5, "--open, --install-mod and bare files are all opened");
+    expect(
+        opened.open_files.size() == 5 && opened.open_files[0].is_absolute() &&
+            opened.open_files[0].filename() == "a.oalang" &&
+            opened.open_files[1].filename() == "B.OAMAP" &&
+            opened.open_files[2].filename() == "c.oareg" &&
+            opened.open_files[3].filename() == "d.oamod" &&
+            opened.open_files[4].filename() == "e.oamod",
+        "the files are absolute, in the order given, and --install-mod still opens one"
+    );
+    expect(opened.skip_intro, "a file opened with the game skips the movies");
     expect(
         std::string_view(opened.launch.language) == "german",
-        "a bare word is still the language, and neither -psn_ nor a package joins it"
+        "a bare word is still the language, and neither -psn_ nor a file joins it"
     );
-    expect(!opened.check_mod_install && !opened.unattended, "a package opened is played");
+    expect(!opened.check_mod_install && !opened.unattended, "a file opened is played");
+    expect(
+        rejection({"--open", "a.oamod", "--headless-check"}).find("needs the game's window") !=
+            std::string::npos,
+        "--open needs the window"
+    );
     expect(
         rejection({"--install-mod", "a.oamod", "--headless-check"})
                 .find("needs the game's window") != std::string::npos,
@@ -409,19 +427,25 @@ void mod_install_options() {
     );
     expect(
         rejection({"x.oamod", "--headless-check"})
-                .find("a .oamod file to install, after --install-mod or on its own,") !=
-            std::string::npos,
-        "a bare package's refusal names both ways of giving it"
+                .find(
+                    "a file to open (.oamod, .oalang, .oamap or .oareg), after --open or on "
+                    "its own,"
+                ) != std::string::npos,
+        "a bare file's refusal names both ways of giving it"
     );
     expect(
         rejection({"x.oamod", "--frames", "10"}).find("is asked about before it installs") !=
             std::string::npos,
-        "a package in a run nobody watches is refused"
+        "a file in a run nobody watches is refused"
+    );
+    expect(
+        rejection({"--open", "a.oalang", "--check-game-files"}).find("--open") != std::string::npos,
+        "the options that refuse each other name --open"
     );
     const auto check = parse({"--check-mod-install", "--install-mod", "missing.oamod"});
     expect(
         check.check_mod_install && check.fixed_clock && check.unattended &&
-            check.install_mods.size() == 1,
+            check.open_files.size() == 1,
         "--check-mod-install answers the questions itself"
     );
     expect(

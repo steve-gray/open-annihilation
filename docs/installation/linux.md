@@ -229,10 +229,13 @@ command, still takes the screenshots and films.
 - **To remove:** delete the game's folder. To remove your settings and logs
   too, delete the two folders above; your saved games, screenshots, films,
   recordings and mods are in the Open Annihilation folder in Documents. To make your
-  desktop forget the game as the opener of `.oamod` files, delete
+  desktop forget the game as the opener of `.oamod`, `.oalang`, `.oamap` and
+  `.oareg` files, delete
   `~/.local/share/mime/packages/net.coreprime.open-annihilation.xml`,
   `~/.local/share/applications/net.coreprime.open-annihilation.desktop`,
-  the two `net.coreprime.open-annihilation.png` and `application-x-oamod.png`
-  icons under `~/.local/share/icons/hicolor/256x256`, and the hidden empty
+  the five icon files `apps/net.coreprime.open-annihilation.png`,
+  `mimetypes/application-x-oamod.png`, `mimetypes/application-x-oalang.png`,
+  `mimetypes/application-x-oamap.png` and `mimetypes/application-x-oareg.png`
+  under `~/.local/share/icons/hicolor/256x256`, and the hidden empty
   `.net.coreprime.open-annihilation.updated` files in the `mime`,
   `applications` and `icons/hicolor` folders there.
