@@ -88,19 +88,26 @@ const Command command_table[] = {
     },
     {
         "check",
-        "FILE [--game-dir DIR] [--accept-unimplemented-hacks] [--json]",
+        "FILE [--game-dir DIR] [--mod FOLDER[=KEY]]... [--accept-unimplemented-hacks] [--json]",
         "Check a package and report the facts a catalogue lists.",
         "Opens FILE through the same checks an install runs before it writes, and reports "
         "whether that install would accept it. The report's keys, in order, are check, ok, "
         "problems, warnings, file, kind, id, name, version, revision, size, sha256, "
         "unpacked_size, files, and then the kind's own facts: for a mod, summary, homepage, "
         "tags, author, requires, sim_hash, full_hash, hacks and packaging; for a language pack, "
-        "language in place of those. A key the package does not have is left out, and revision "
-        "is null when a language pack has no packaging revision. --json prints one JSON object; "
-        "otherwise each fact is a key: value line and the last line is result: ok or result: "
-        "refused. --game-dir DIR is the game folder an install would read settings from. "
-        "--accept-unimplemented-hacks accepts a hack this build does not carry out yet. Exit 0 "
-        "when the package would be installed, 1 when it would be refused.",
+        "language in place of those; for a map pack, summary, author, homepage, tags, requires "
+        "and packaging, then maps. A key the package does not have is left out, and revision "
+        "is null when a language pack has no packaging revision. A map pack needs --game-dir, "
+        "the game folder. The check builds each target the way the game would. Each --mod "
+        "FOLDER[=KEY] is one more target, after the base game ta-3.1c. The key is the text "
+        "after the last =, or the folder's catalogue origin as id@release, or the profile's id "
+        "when that folder has no release. maps lists each map. compatible holds ta-3.1c and "
+        "then each mod, and failures holds the targets that do not fit. --json prints one JSON "
+        "object; otherwise each fact is a key: value line, then one line per map and target, "
+        "and the last line is result: ok or result: refused. --accept-unimplemented-hacks "
+        "accepts a hack this build does not carry out yet. Exit 0 when the package would be "
+        "installed, 1 when it would be refused or a map does not fit ta-3.1c. A mod that does "
+        "not fit leaves that exit code unchanged.",
         1,
         any_count,
         run_check,
