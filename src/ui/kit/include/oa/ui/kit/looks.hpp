@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -32,6 +33,7 @@ enum class Mark : uint8_t {
     arrow_closed, ///< an arrow pointing right, 5 by 5
     arrow_open,   ///< an arrow pointing down, 5 by 5
     choice_arrow, ///< a drop-down's arrow, 7 by 4
+    magnifier,    ///< a search field's magnifier, 7 by 7
 };
 
 /// Which of the five button looks a button is drawn in.
@@ -133,6 +135,127 @@ struct FocusRingLook {
     bool around{true}; ///< false draws it on the control's own edge
 };
 
+/// The text a player types into a field, and where the caret stands.
+///
+/// The text is UTF-8. The caret counts bytes from the text's start and stands
+/// on a character's first byte or at the text's end. insert_text and
+/// edit_text (input.hpp) keep both so.
+struct TextField {
+    std::string text{};  ///< the player's own text, in UTF-8; never looked up
+    std::size_t caret{}; ///< the caret, in bytes from the start, on a character boundary
+};
+
+/// What a chip says, which chooses its colours.
+enum class ChipState : uint8_t {
+    get,       ///< can be fetched: the hint on the hover border
+    installed, ///< is in place: the accent
+    update,    ///< has an update: the lock colour
+    playing,   ///< is in use: filled with the accent
+    online,    ///< is on the network: the online colour
+    problem,   ///< something is wrong: the danger colour
+    filter,    ///< a filter the player turns on and off: the list's selected face while on
+};
+
+/// A chip: a short text in a box, in the colours of its state. The text is
+/// drawn as given, already looked up and in the case the caller wants.
+struct ChipLook {
+    std::string text{};              ///< the words
+    ChipState state{ChipState::get}; ///< which colours
+    bool selected{};                 ///< a filter that is on
+    bool hovered{};                  ///< the pointer is over it, or holds it
+    bool disabled{};                 ///< it cannot act: drawn in the idle colour whatever its state
+};
+
+/// A row of a list, in its full or its short form, which its rectangle's
+/// height chooses. Every text is already looked up.
+struct ListRowLook {
+    /// The badge's letters, drawn on badge_colour when there is no picture.
+    std::string badge_text{};
+    Colour badge_colour{}; ///< the badge's face behind its letters
+    /// The badge's picture. It refers to pixels the screen keeps, which must
+    /// outlive the display list. Empty, the letters or a blank badge show.
+    oa::ui::frontend_renderer::RgbaPicture badge{};
+    std::string title{};              ///< the title, in the regular font
+    std::string by{};                 ///< the byline after the title, in the small font
+    std::vector<std::string> lines{}; ///< the lines under the title, top to bottom
+    std::vector<std::string> aside{}; ///< the entries at the right, one a line from the top
+    std::optional<ChipLook> chip{};   ///< the chip at the right; none when unset
+    std::vector<ChipLook> tags{};     ///< chips on the line after the last line
+    bool selected{};                  ///< the row is the chosen one: the accent tint and outline
+    bool hovered{};                   ///< the pointer is over it, or holds it
+};
+
+/// A text field: the plain one, or with the magnifier the search field.
+struct SearchLook {
+    /// Shown in the hint colour while the text is empty, already looked up.
+    std::string placeholder{};
+    TextField field{};    ///< the text and the caret
+    bool focused{};       ///< the field takes the keys: its caret shows
+    bool hovered{};       ///< the pointer is over it
+    bool magnifier{true}; ///< the magnifier before the text, as the search field has
+};
+
+/// A strip of tabs, left to right. Captions are already looked up.
+struct TabsLook {
+    std::vector<std::string> captions{};  ///< each tab's words
+    std::vector<int32_t> counts{};        ///< each tab's count; 0, or none given, draws no count
+    std::size_t selected{};               ///< the open tab's index
+    std::optional<std::size_t> hovered{}; ///< the tab under the pointer; none when unset
+};
+
+/// A card of a grid: a square preview, its chips, a title and a subtitle.
+struct CardLook {
+    /// The preview's picture. It refers to pixels the screen keeps, which
+    /// must outlive the display list. Empty, the placeholder shows.
+    oa::ui::frontend_renderer::RgbaPicture picture{};
+    std::string placeholder{};     ///< the words on the empty preview, already looked up
+    std::string title{};           ///< the title, already looked up
+    std::string subtitle{};        ///< the line under it, already looked up
+    std::vector<ChipLook> chips{}; ///< chips at the preview's bottom left, left to right
+    bool selected{};               ///< the chosen card: an accent outline
+    bool hovered{};                ///< the pointer is over it: a lighter outline
+    /// Faded into the panel, as a locked row is. It still takes a press.
+    bool greyed{};
+};
+
+/// An edge of a rectangle.
+enum class Side : uint8_t {
+    none,   ///< no edge
+    left,   ///< the left edge
+    right,  ///< the right edge
+    top,    ///< the top edge
+    bottom, ///< the bottom edge
+};
+
+/// One line of a hover card: a label and its value.
+struct HoverCardRow {
+    /// The label, already looked up. Empty, the value is drawn from the left.
+    std::string label{};
+    std::string value{};               ///< the value, already looked up
+    Colour value_colour{colour::text}; ///< the value's colour
+};
+
+/// A hover card: a header, label and value rows, a block of lines and an
+/// arrow pointing at what it describes. Every text is already looked up.
+struct HoverCardLook {
+    int32_t width{};                  ///< the card's width, in points; 0 fits its widest line
+    bool mark{};                      ///< the small OA mark starts the header
+    std::string title{};              ///< the header's title
+    std::string aside{};              ///< the header's words at the right
+    std::vector<HoverCardRow> rows{}; ///< the rows under the header
+    std::vector<std::string> block{}; ///< the quiet lines under the rows
+    Side arrow{Side::none};           ///< the edge the arrow leaves from; none draws no arrow
+    /// The arrow's point, in points along that edge from its start.
+    int32_t arrow_at{};
+};
+
+/// A link: a caption that acts when pressed.
+struct LinkLook {
+    std::string caption{}; ///< the words, already looked up
+    bool hovered{};        ///< the pointer is over it, or holds it
+    bool enabled{true};    ///< false draws it in the idle colour, and it takes no press
+};
+
 /// What a component item draws. Empty for a generic role. Later components
 /// append looks. A locked fade has no look of its own: its rectangle is the
 /// item's.
@@ -153,6 +276,13 @@ using Look = std::variant<
     FooterBandLook,
     NavLook,
     HeadingLook,
-    RowFrame>;
+    RowFrame,
+    ListRowLook,
+    ChipLook,
+    SearchLook,
+    TabsLook,
+    CardLook,
+    HoverCardLook,
+    LinkLook>;
 
 } // namespace oa::ui::kit
