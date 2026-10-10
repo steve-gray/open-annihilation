@@ -104,6 +104,9 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-condenser-golden-test PRIVATE oa-netgame)
   add_test(NAME net-condenser-golden COMMAND oa-netgame-condenser-golden-test)
   set_tests_properties(net-condenser-golden PROPERTIES TIMEOUT 30)
+
+  # The HTTP fixture is test-only. Its library and tool are not part of the game.
+  add_subdirectory(http-fixture)
 endif()
 
 if(WIN32)

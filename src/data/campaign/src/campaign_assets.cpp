@@ -58,6 +58,33 @@ void asset_find(
         visit(user, {entry.directory ? kFindDirectory : 0U, 0, entry.size, entry.name.c_str()});
 }
 
+/// Writes where a file comes from, for the lobby's map check.
+///
+/// The text is the provider's identity: a loose file, an archive, or a pack
+/// layer with its serial. A second release of a pack, or a remount, names a
+/// different provider, so a hash cached for the first is not reused.
+///
+/// @param context the asset store
+/// @param path the file, as the store names it
+/// @param[out] out receives the text, ending in NUL, cut so it fits
+/// @param capacity bytes of `out`, including the NUL
+/// @return the text's length, or -1 when nothing provides the file
+int32_t asset_source(void* context, const char* path, char* out, uint32_t capacity) {
+    if (out == nullptr || capacity == 0)
+        return -1;
+    const auto found = store(context).provider(path);
+    if (found.identity.empty())
+        return -1;
+    const auto full = found.identity.size();
+    std::size_t written = full;
+    if (written >= capacity)
+        written = static_cast<std::size_t>(capacity - 1);
+    for (std::size_t index = 0; index < written; ++index)
+        out[index] = found.identity[index];
+    out[written] = '\0';
+    return static_cast<int32_t>(full);
+}
+
 } // namespace
 
 CampaignFiles campaign_asset_files(const oa::AssetStore& assets) noexcept {
@@ -72,7 +99,8 @@ CampaignFiles campaign_asset_files(const oa::AssetStore& assets) noexcept {
         nullptr,
         oa::data::languages::installed_word(),
         asset_count,
-        asset_find
+        asset_find,
+        asset_source
     };
 }
 

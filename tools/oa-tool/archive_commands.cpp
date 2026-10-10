@@ -7,6 +7,8 @@
 #include "oa/formats/hpi.hpp"
 #include "oa/ui/decoded.hpp"
 
+#include <ostream>
+
 namespace oa::tool {
 
 int run_list(std::span<const std::string> arguments, Output& output) {

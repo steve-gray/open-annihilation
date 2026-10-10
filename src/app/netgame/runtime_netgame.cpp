@@ -13,6 +13,8 @@
 #include "oa/netgame/match/net_match.hpp"
 #include "oa/formats/ota.hpp"
 #include "oa/present/raster.hpp"
+#include "oa/data/map_pack/map_name.hpp"
+#include "oa/ui/frontend_multiplayer/lobby.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -20,6 +22,12 @@
 #include <string_view>
 
 namespace oa::app {
+
+// A pack map name that does not fit is cut short in the setup block, and
+// every machine then looks for a map that does not exist.
+// clang-format off
+static_assert(oa::data::map_pack::most_map_name_bytes < sizeof(oa::ui::frontend_multiplayer::PlayerSetupInfo{}.map_name), "a name cut short in the setup block names no map");
+// clang-format on
 
 namespace {
 
@@ -29,11 +37,16 @@ constexpr std::size_t kLoadPlayerBarColor = 4;
 
 } // namespace
 
+// A name with a package suffix is one map. It is selected when that map is
+// installed, and never by matching another map's title: the title search
+// would start a different map from the one the lobby named.
 bool NetworkPlay::select_map_named(std::string_view name) {
     if (name.empty())
         return false;
     if (runtime_.select_map(name) != 0)
         return true;
+    if (oa::data::map_pack::split_pack_map_name(name))
+        return false;
     const auto same = [](std::string_view left, std::string_view right) {
         return left.size() == right.size() &&
                std::equal(
