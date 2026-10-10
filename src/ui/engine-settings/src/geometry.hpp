@@ -9,6 +9,7 @@
 
 #include "oa/data/mod_profile/value.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <array>
 #include <cstddef>
@@ -27,11 +28,11 @@ using oa::data::mod_profile::Value;
 using oa::ui::frontend_renderer::SourceRect;
 
 /// The width of the dialog's raised edge.
-inline constexpr int32_t edge = 1;
+inline constexpr int32_t edge = oa::ui::kit::compact_metrics.edge;
 /// The header's height, under the top edge.
-inline constexpr int32_t header_height = 26;
+inline constexpr int32_t header_height = oa::ui::kit::compact_metrics.header_height;
 /// The footer's height, over the bottom edge.
-inline constexpr int32_t footer_height = 32;
+inline constexpr int32_t footer_height = oa::ui::kit::compact_metrics.footer_height;
 /// The header's first row.
 inline constexpr int32_t header_top = edge;
 /// The row of the line between the header and the body.
@@ -47,7 +48,7 @@ inline constexpr int32_t list_width = 144;
 /// The column of the line between the section list and the open section.
 inline constexpr int32_t list_rule_column = edge + list_width;
 /// The space between a panel's edge and what it holds.
-inline constexpr int32_t padding = 12;
+inline constexpr int32_t padding = oa::ui::kit::compact_metrics.padding;
 /// The open section's first column.
 inline constexpr int32_t content_left = list_rule_column + 1 + padding;
 /// The column just right of the open section and the header's version.
@@ -57,14 +58,19 @@ inline constexpr int32_t content_width = content_right - content_left;
 
 /// The header's Open Annihilation icon, in the header's middle rows; or,
 /// without the icon, the OA mark's outlined square in its middle.
-inline constexpr SourceRect header_mark{padding, 4, 20, 20};
+inline constexpr SourceRect header_mark{
+    padding,
+    oa::ui::kit::compact_metrics.mark_top,
+    oa::ui::kit::compact_metrics.mark_side,
+    oa::ui::kit::compact_metrics.mark_side
+};
 /// The side of the OA mark's outlined square, which stands in for the icon.
-inline constexpr int32_t header_mark_square = 13;
+inline constexpr int32_t header_mark_square = oa::ui::kit::compact_metrics.mark_square;
 /// The space between the header's mark and the title, and between the
 /// title's two words.
-inline constexpr int32_t header_gap = 6;
+inline constexpr int32_t header_gap = oa::ui::kit::compact_metrics.header_gap;
 /// Extra columns after each glyph of the title and the section heading.
-inline constexpr int32_t heading_tracking = 1;
+inline constexpr int32_t heading_tracking = oa::ui::kit::compact_metrics.heading_tracking;
 
 /// A section's entry in the list: its left column and width.
 inline constexpr int32_t list_item_left = edge + 6;
@@ -98,11 +104,11 @@ inline constexpr int32_t first_row_top = heading.y + heading.height + 4;
 /// The rows between a row's line and its label, and under its last part.
 inline constexpr int32_t row_padding = 8;
 /// A row's label line: the label, and a switch, a level strip or a lock.
-inline constexpr int32_t label_line_height = 16;
+inline constexpr int32_t label_line_height = oa::ui::kit::compact_metrics.regular_line;
 /// The rows between the label line and the first hint line.
 inline constexpr int32_t hint_gap = 2;
 /// A hint line's height.
-inline constexpr int32_t hint_line_height = 12;
+inline constexpr int32_t hint_line_height = oa::ui::kit::compact_metrics.small_line;
 /// The rows added between two lines of a hint, or of a notice, while the
 /// dialog's words are drawn in the modern fonts, whose ideographs stand as
 /// tall as a hint line: one line's letters, outline and shadow then keep
@@ -199,7 +205,7 @@ inline constexpr int32_t padlock_height = 7;
 /// The columns between the padlock and its text.
 inline constexpr int32_t padlock_gap = 3;
 /// The columns between a control and its keyboard focus outline.
-inline constexpr int32_t focus_inset = 2;
+inline constexpr int32_t focus_inset = oa::ui::kit::compact_metrics.focus_inset;
 
 /// A slider's knob: its width and height.
 inline constexpr int32_t knob_width = 7;
@@ -217,15 +223,26 @@ inline constexpr int32_t stop_offset = 12;
 inline constexpr int32_t least_stop_spacing = 4;
 
 /// The footer's buttons' height and top row.
-inline constexpr int32_t button_height = 17;
+inline constexpr int32_t button_height = oa::ui::kit::compact_metrics.button_height;
 /// The footer's buttons' top row.
 inline constexpr int32_t button_top = footer_top + (footer_height - button_height) / 2;
 /// Restore defaults, at the footer's left.
 inline constexpr SourceRect restore_button{padding, button_top, 110, button_height};
 /// OK, at the footer's right.
-inline constexpr SourceRect ok_button{content_right - 52, button_top, 52, button_height};
+inline constexpr SourceRect ok_button{
+    content_right - oa::ui::kit::compact_metrics.button_width,
+    button_top,
+    oa::ui::kit::compact_metrics.button_width,
+    button_height
+};
 /// Cancel, left of OK.
-inline constexpr SourceRect cancel_button{ok_button.x - 5 - 52, button_top, 52, button_height};
+inline constexpr SourceRect cancel_button{
+    ok_button.x - oa::ui::kit::compact_metrics.button_gap -
+        oa::ui::kit::compact_metrics.button_width,
+    button_top,
+    oa::ui::kit::compact_metrics.button_width,
+    button_height
+};
 
 /// The Switch Mod question (Dialog::switch_question): a box over the middle
 /// of the dialog's body.
@@ -735,19 +752,6 @@ struct ModRowText {
 /// @param text_width a text's width in the font it is drawn in
 /// @return the text, or as much of it as fits before "..."
 [[nodiscard]] std::string cut_text(
-    std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-);
-
-/// Breaks a text into lines of a width, at its spaces. A text with
-/// Chinese, Japanese or Korean characters also breaks between them, and
-/// never starts a line with a closing mark or ends one with an opening mark
-/// (oa::base::text::first_row).
-///
-/// @param text the text, in UTF-8
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the font it is drawn in
-/// @return the lines; a word wider than the room is cut with "..."
-[[nodiscard]] std::vector<std::string> wrap_text(
     std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
 );
 

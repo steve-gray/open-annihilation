@@ -11,7 +11,6 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,32 +84,6 @@ enum class NoticeAction : uint8_t {
 /// @return the parts, in source pixels from the notice's top left corner
 [[nodiscard]] std::vector<LayoutPart>
 notice_layout(const Notice& notice, const DialogFonts* fonts = nullptr);
-
-/// Returns a text broken between words into lines no wider than a width; a
-/// word wider than a line is broken between its characters. A text with
-/// Chinese, Japanese or Korean characters also breaks between them, and
-/// never starts a line with a closing mark or ends one with an opening mark
-/// (oa::base::text::first_row).
-///
-/// @param text the text, UTF-8
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the font it is drawn in
-/// @return the lines; none for an empty text
-[[nodiscard]] std::vector<std::string> wrap_text(
-    std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-);
-
-/// Returns a folder's path broken into lines no wider than a width: after a
-/// separator ('/' or '\\'), each line as many whole components as fit, a
-/// component wider than a line broken between its characters.
-///
-/// @param path the path, UTF-8
-/// @param width the room, in source pixels
-/// @param text_width a text's width in the font it is drawn in
-/// @return the lines, which put together give the path
-[[nodiscard]] std::vector<std::string> wrap_path(
-    std::string_view path, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-);
 
 /// Moves the pointer: the button under it lights.
 ///

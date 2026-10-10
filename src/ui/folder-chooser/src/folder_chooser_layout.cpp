@@ -12,6 +12,7 @@
 #include "oa/ui/folder_chooser.hpp"
 
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -28,11 +29,6 @@ using gf::Glyph;
 using gf::Item;
 using gf::ItemRole;
 using gf::TextRole;
-
-/// The main button's text: dark ink on the green fill.
-constexpr Colour ink_colour{0x10, 0x12, 0x0d};
-/// A plain button's text.
-constexpr Colour button_text_colour{0xc9, 0xcd, 0xbf};
 
 /// The sizes of one form, in points.
 struct Metrics {
@@ -298,65 +294,6 @@ struct Context {
         return best;
     }
 
-    /// Breaks text into lines no wider than a width, at spaces (and after a path's separators
-    /// when a word is wider than a line); '\n' starts a new line.
-    ///
-    /// @param text the text
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @param most_lines the most lines (0: no limit); the last is shortened with an ellipsis
-    /// @return the lines
-    [[nodiscard]] std::vector<std::string>
-    wrap(std::string_view text, int size, bool bold, int room, int most_lines) const {
-        std::vector<std::string> lines;
-        if (room <= 0 || text.empty())
-            return lines;
-        std::size_t start = 0;
-        while (start <= text.size()) {
-            const std::size_t end = std::min(text.find('\n', start), text.size());
-            const std::string_view paragraph = text.substr(start, end - start);
-            std::string current;
-            std::size_t at = 0;
-            while (at < paragraph.size()) {
-                const std::size_t space = std::min(paragraph.find(' ', at), paragraph.size());
-                std::string_view word = paragraph.substr(at, space - at);
-                at = space + 1;
-                if (word.empty())
-                    continue;
-                if (!current.empty()) {
-                    std::string joined = current + " " + std::string(word);
-                    if (width(joined, size, bold) <= room) {
-                        current = std::move(joined);
-                        continue;
-                    }
-                    lines.push_back(std::move(current));
-                    current.clear();
-                }
-                while (width(word, size, bold) > room) {
-                    const std::size_t piece = breaking_point(word, size, bold, room);
-                    lines.emplace_back(word.substr(0, piece));
-                    word.remove_prefix(piece);
-                }
-                current = std::string(word);
-            }
-            if (!current.empty())
-                lines.push_back(std::move(current));
-            if (end >= text.size())
-                break;
-            start = end + 1;
-        }
-        if (most_lines > 0 && lines.size() > static_cast<std::size_t>(most_lines)) {
-            std::string rest = lines[static_cast<std::size_t>(most_lines) - 1];
-            for (std::size_t index = static_cast<std::size_t>(most_lines); index < lines.size();
-                 ++index)
-                rest += " " + lines[index];
-            lines.resize(static_cast<std::size_t>(most_lines));
-            lines.back() = fit(rest + std::string(ellipsis), size, bold, room);
-        }
-        return lines;
-    }
-
     /// Finds where to break a word wider than a line: after the last path separator that
     /// fits, else after the last character that fits, at least one character.
     ///
@@ -410,7 +347,20 @@ int add_text(
     if (text.empty() || room <= 0)
         return 0;
     const int size = context.font(style.points);
-    std::vector<std::string> lines = context.wrap(text, size, style.bold, room, most_lines);
+    const auto measure = [&](std::string_view shown) {
+        return context.width(shown, size, style.bold);
+    };
+    oa::ui::kit::WrapRules rules;
+    rules.newlines = true;
+    rules.wide_scripts = false;
+    rules.most_lines = most_lines > 0 ? static_cast<std::size_t>(most_lines) : 0;
+    rules.break_word = [&](std::string_view word) {
+        return context.breaking_point(word, size, style.bold, room);
+    };
+    rules.shorten_last = [&](std::string_view joined) {
+        return context.fit(std::string(joined) + std::string(ellipsis), size, style.bold, room);
+    };
+    std::vector<std::string> lines = oa::ui::kit::wrap(text, room, measure, rules);
     lines.erase(
         std::remove_if(
             lines.begin(), lines.end(), [](const std::string& line) { return line.empty(); }
@@ -573,7 +523,8 @@ void add_button(
     item.text = TextRole::button;
     item.pixel_size = context.font(context.metrics.button_text);
     item.bold = true;
-    item.colour = button.role == ItemRole::button_main ? ink_colour : button_text_colour;
+    item.colour = button.role == ItemRole::button_main ? oa::ui::kit::screen_colour::ink
+                                                       : oa::ui::kit::screen_colour::button_text;
     item.glyph = button.glyph;
     item.on = button.role == ItemRole::button_main;
     const int glyph =

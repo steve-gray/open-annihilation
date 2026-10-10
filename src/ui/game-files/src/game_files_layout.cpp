@@ -13,6 +13,8 @@
 // backdrop that makes everything under it inert.
 #include "game_files_internal.hpp"
 
+#include "oa/ui/kit/text.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -25,11 +27,6 @@ using detail::Action;
 using detail::BannerContent;
 using detail::fill;
 using detail::tr;
-
-/// The main button's text: dark ink on the green fill.
-constexpr Colour ink_colour{0x10, 0x12, 0x0d};
-/// A plain button's text.
-constexpr Colour button_text_colour{0xc9, 0xcd, 0xbf};
 
 /// The sizes of one form, in points.
 struct Metrics {
@@ -387,67 +384,6 @@ struct Context {
         }
         return fits;
     }
-
-    /// Breaks text into lines no wider than a width, at spaces; '\n' starts a new line; a
-    /// word wider than the width is broken between characters.
-    ///
-    /// @param text the text
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @param most_lines the most lines (0: no limit); the last is shortened with an ellipsis
-    /// @return the lines
-    [[nodiscard]] std::vector<std::string>
-    wrap(std::string_view text, int size, bool bold, int room, int most_lines) const {
-        std::vector<std::string> lines;
-        if (room <= 0 || text.empty())
-            return lines;
-        std::size_t start = 0;
-        while (start <= text.size()) {
-            const std::size_t end = std::min(text.find('\n', start), text.size());
-            const std::string_view paragraph = text.substr(start, end - start);
-            std::string current;
-            std::size_t at = 0;
-            while (at < paragraph.size()) {
-                const std::size_t space = std::min(paragraph.find(' ', at), paragraph.size());
-                std::string_view word = paragraph.substr(at, space - at);
-                at = space + 1;
-                if (word.empty())
-                    continue;
-                if (!current.empty()) {
-                    const std::string joined = current + " " + std::string(word);
-                    if (width(joined, size, bold) <= room) {
-                        current = joined;
-                        continue;
-                    }
-                    lines.push_back(current);
-                    current.clear();
-                }
-                while (width(word, size, bold) > room) {
-                    const std::size_t piece = fitting_start(word, size, bold, room);
-                    lines.emplace_back(word.substr(0, piece));
-                    word.remove_prefix(piece);
-                }
-                current = std::string(word);
-            }
-            if (!current.empty())
-                lines.push_back(current);
-            if (end >= text.size())
-                break;
-            start = end + 1;
-        }
-        if (most_lines > 0 && lines.size() > static_cast<std::size_t>(most_lines)) {
-            std::string rest = lines[static_cast<std::size_t>(most_lines) - 1];
-            for (std::size_t index = static_cast<std::size_t>(most_lines); index < lines.size();
-                 ++index)
-                rest += " " + lines[index];
-            lines.resize(static_cast<std::size_t>(most_lines));
-            // The last line keeps what fits and ends with the ellipsis.
-            std::string cut = fit(rest + std::string(ellipsis), size, bold, room);
-            lines.back() = cut;
-        }
-        return lines;
-    }
 };
 
 /// Items laid out in a column, with boxes relative to the block's top.
@@ -484,7 +420,17 @@ int add_text(
     if (text.empty() || room <= 0)
         return 0;
     const int size = context.font(style.points);
-    std::vector<std::string> lines = context.wrap(text, size, style.bold, room, most_lines);
+    const auto measure = [&](std::string_view shown) {
+        return context.width(shown, size, style.bold);
+    };
+    oa::ui::kit::WrapRules rules;
+    rules.newlines = true;
+    rules.wide_scripts = false;
+    rules.most_lines = most_lines > 0 ? static_cast<std::size_t>(most_lines) : 0;
+    rules.shorten_last = [&](std::string_view joined) {
+        return context.fit(std::string(joined) + std::string(ellipsis), size, style.bold, room);
+    };
+    std::vector<std::string> lines = oa::ui::kit::wrap(text, room, measure, rules);
     lines.erase(
         std::remove_if(
             lines.begin(), lines.end(), [](const std::string& line) { return line.empty(); }
@@ -611,9 +557,10 @@ void add_button(
     item.text = TextRole::button;
     item.pixel_size = context.font(text_points);
     item.bold = true;
-    item.colour = action.role == ItemRole::button_main     ? ink_colour
-                  : action.role == ItemRole::button_danger ? red_colour
-                                                           : button_text_colour;
+    item.colour = action.role == ItemRole::button_main ? oa::ui::kit::screen_colour::ink
+                  : action.role == ItemRole::button_danger
+                      ? red_colour
+                      : oa::ui::kit::screen_colour::button_text;
     item.glyph = action.glyph;
     if (action.glyph != Glyph::none && action.glyph_points > 0.0f)
         item.glyph_size = glyph_side(context, action, item.pixel_size);
@@ -1279,7 +1226,9 @@ int add_part_row(
         right -= width + gap;
     }
     const std::string size = detail::part_size(row);
-    const Style size_style{metrics.row_size, false, button_text_colour, TextRole::row_detail};
+    const Style size_style{
+        metrics.row_size, false, oa::ui::kit::screen_colour::button_text, TextRole::row_detail
+    };
     const int size_room = std::max(
         context.px(metrics.row_size_min), context.width(size, context.font(metrics.row_size), false)
     );

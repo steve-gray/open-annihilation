@@ -4490,14 +4490,6 @@ bool path_separator(char character) noexcept {
     return character == '/' || character == '\\';
 }
 
-/// Tells whether a byte continues a UTF-8 character rather than starting one.
-///
-/// @param byte the byte
-/// @return true for 10xxxxxx
-bool continuation_byte(char byte) noexcept {
-    return (static_cast<unsigned char>(byte) & 0xC0U) == 0x80U;
-}
-
 } // namespace
 
 std::string path_tail(
@@ -4521,7 +4513,7 @@ std::string path_tail(
     while (last > 0 && !path_separator(path[last - 1]))
         --last;
     for (std::size_t at = last; at < path.size(); ++at) {
-        if (continuation_byte(path[at]))
+        if ((static_cast<unsigned char>(path[at]) & 0xC0U) == 0x80U)
             continue;
         std::string tail = ellipsis + std::string(path.substr(at));
         if (text_width(tail) <= width)
@@ -4662,13 +4654,18 @@ void mods_layout(
     if (dialog.locks.mod != Lock::none) {
         // The reason, beside the padlock, over as many of its two lines as
         // it needs.
-        const auto lines = layout::wrap_text(
+        oa::ui::kit::WrapRules rules;
+        rules.shorten_word = [&](std::string_view word) {
+            return layout::cut_text(word, layout::mods_lock_text.width, small_text_width);
+        };
+        const auto lines = oa::ui::kit::wrap(
             layout::shown_text(
                 dialog.locks.mod == Lock::command_line ? layout::mod_from_command_line_text
                                                        : layout::mod_in_game_text
             ),
             layout::mods_lock_text.width,
-            small_text_width
+            small_text_width,
+            rules
         );
         for (std::size_t line = 0; line < lines.size() && line < 2; ++line) {
             layout::SourceRect rect = layout::mods_lock_text;
@@ -4736,21 +4733,13 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
     const auto text_width = [fonts](std::string_view text) {
         if (fonts != nullptr)
             return dialog_text_width(*fonts, DialogFont::regular, text);
-        int32_t characters = 0;
-        for (const char byte : text)
-            if (!continuation_byte(byte))
-                ++characters;
-        return characters * estimated_character_width;
+        return static_cast<int32_t>(oa::ui::kit::character_count(text)) * estimated_character_width;
     };
     // Your files' path is shortened to its hint line in the small font.
     const auto small_text_width = [fonts](std::string_view text) {
         if (fonts != nullptr)
             return dialog_text_width(*fonts, DialogFont::small, text);
-        int32_t characters = 0;
-        for (const char byte : text)
-            if (!continuation_byte(byte))
-                ++characters;
-        return characters * estimated_character_width;
+        return static_cast<int32_t>(oa::ui::kit::character_count(text)) * estimated_character_width;
     };
     // Each text as the dialog shows it, the interface's words in the
     // language shown (layout::shown_text).

@@ -1,0 +1,116 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// Every colour token equals the value it was copied from, written here as
+// hex, and Compact metrics equal the settings dialog's sizes.
+
+#include "oa/test/check.hpp"
+#include "oa/ui/kit/theme.hpp"
+
+#include <array>
+#include <stdint.h>
+
+namespace {
+
+namespace kit = oa::ui::kit;
+
+/// Checks one token against a colour written out in the test.
+///
+/// @param token the token
+/// @param red red, 0 to 255
+/// @param green green, 0 to 255
+/// @param blue blue, 0 to 255
+/// @param opacity opacity, 0 to 255
+void equals(kit::Colour token, uint8_t red, uint8_t green, uint8_t blue, uint8_t opacity = 255) {
+    OA_CHECK(token == (kit::Colour{red, green, blue, opacity}));
+}
+
+/// Checks the settings dialog's colours, the Game files colours and the touch
+/// controls' colours, each against its own literal.
+void every_token_keeps_its_value() {
+    equals(kit::colour::panel, 0x1b, 0x1e, 0x19);
+    equals(kit::colour::band, 0x14, 0x16, 0x12);
+    equals(kit::colour::list, 0x17, 0x1a, 0x15);
+    equals(kit::colour::list_selected, 0x26, 0x2b, 0x21);
+    equals(kit::colour::hover, 0x20, 0x24, 0x1c);
+    equals(kit::colour::rule, 0x2b, 0x30, 0x27);
+    equals(kit::colour::edge_light, 0x4a, 0x51, 0x43);
+    equals(kit::colour::edge_dark, 0x08, 0x09, 0x07);
+    equals(kit::colour::text, 0xe7, 0xe8, 0xdf);
+    equals(kit::colour::hint, 0x9a, 0xa1, 0x90);
+    equals(kit::colour::quiet, 0x8a, 0x91, 0x80);
+    equals(kit::colour::list_text, 0xa3, 0xaa, 0x98);
+    equals(kit::colour::accent, 0x9c, 0xcc, 0x3c);
+    equals(kit::colour::accent_light, 0xb6, 0xe0, 0x5a);
+    equals(kit::colour::accent_held, 0x8a, 0xb8, 0x30);
+    equals(kit::colour::on_accent, 0x10, 0x12, 0x0d);
+    equals(kit::colour::well, 0x12, 0x14, 0x10);
+    equals(kit::colour::control_border, 0x3a, 0x40, 0x34);
+    equals(kit::colour::control_hover, 0x5b, 0x63, 0x52);
+    equals(kit::colour::off_selected, 0x2c, 0x32, 0x26);
+    equals(kit::colour::switch_idle, 0x7d, 0x84, 0x74);
+    equals(kit::colour::button_text, 0xc9, 0xcd, 0xbf);
+    equals(kit::colour::lock, 0xe0, 0xb0, 0x4f);
+    equals(kit::colour::backdrop, 5, 6, 4);
+
+    equals(kit::screen_colour::background, 0x1b, 0x1e, 0x19);
+    equals(kit::screen_colour::panel, 0x23, 0x27, 0x21);
+    equals(kit::screen_colour::line, 0x3a, 0x40, 0x37);
+    equals(kit::screen_colour::text, 0xe8, 0xea, 0xe4);
+    equals(kit::screen_colour::dim, 0x9a, 0xa0, 0x94);
+    equals(kit::screen_colour::green, 0x9c, 0xcc, 0x3c);
+    equals(kit::screen_colour::amber, 0xe8, 0xb4, 0x4c);
+    equals(kit::screen_colour::red, 0xe0, 0x6c, 0x5c);
+    equals(kit::screen_colour::ink, 0x10, 0x12, 0x0d);
+    equals(kit::screen_colour::button_text, 0xc9, 0xcd, 0xbf);
+
+    equals(kit::hud_colour::panel, 0x1b, 0x1e, 0x19, 217);
+    equals(kit::hud_colour::sheet, 0x14, 0x16, 0x12, 248);
+    equals(kit::hud_colour::cell, 0x24, 0x28, 0x20, 230);
+    equals(kit::hud_colour::pressed, 0x3b, 0x42, 0x35, 240);
+    equals(kit::hud_colour::edge, 0xff, 0xff, 0xff, 34);
+    equals(kit::hud_colour::lit, 0x9c, 0xcc, 0x3c);
+    equals(kit::hud_colour::lit_pressed, 0xb8, 0xde, 0x66);
+    equals(kit::hud_colour::ink, 0x1b, 0x1e, 0x19);
+    equals(kit::hud_colour::label, 0xf2, 0xf4, 0xee);
+    equals(kit::hud_colour::quiet, 0xb4, 0xb9, 0xae);
+    equals(kit::hud_colour::danger, 0xc0, 0x39, 0x2b);
+    equals(kit::hud_colour::danger_panel, 0x2a, 0x15, 0x12, 235);
+    equals(kit::hud_colour::danger_label, 0xf0, 0x8c, 0x80);
+    equals(kit::hud_colour::wedge_gap, 0x08, 0x09, 0x07);
+    OA_CHECK(kit::hud_colour::greyed_opacity == 0.4F);
+
+    OA_CHECK(kit::menu_backdrop_opacity == 159);
+    OA_CHECK(kit::ingame_backdrop_opacity == 128);
+    OA_CHECK(kit::locked_fade == 115);
+
+    constexpr kit::Colour with_opacity{1, 2, 3, 4};
+    OA_CHECK(kit::rgb(with_opacity) == (std::array<uint8_t, 3>{1, 2, 3}));
+}
+
+/// Checks Compact metrics against the settings dialog's sizes.
+void compact_metrics_match_the_dialog() {
+    OA_CHECK(kit::compact_metrics.edge == 1);
+    OA_CHECK(kit::compact_metrics.header_height == 26);
+    OA_CHECK(kit::compact_metrics.footer_height == 32);
+    OA_CHECK(kit::compact_metrics.padding == 12);
+    OA_CHECK(kit::compact_metrics.mark_top == 4);
+    OA_CHECK(kit::compact_metrics.mark_side == 20);
+    OA_CHECK(kit::compact_metrics.mark_square == 13);
+    OA_CHECK(kit::compact_metrics.header_gap == 6);
+    OA_CHECK(kit::compact_metrics.heading_tracking == 1);
+    OA_CHECK(kit::compact_metrics.button_height == 17);
+    OA_CHECK(kit::compact_metrics.button_width == 52);
+    OA_CHECK(kit::compact_metrics.button_gap == 5);
+    OA_CHECK(kit::compact_metrics.focus_inset == 2);
+    OA_CHECK(kit::compact_metrics.small_line == 12);
+    OA_CHECK(kit::compact_metrics.regular_line == 16);
+}
+
+} // namespace
+
+int main() {
+    every_token_keeps_its_value();
+    compact_metrics_match_the_dialog();
+    return oa::test::check_exit_status();
+}

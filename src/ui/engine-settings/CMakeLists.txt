@@ -13,8 +13,8 @@ add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-data-languages oa-data-limits
-  oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi PRIVATE oa-sim-session
-  oa-ui-decoded oa-options oa-base-text)
+  oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi
+  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-options oa-base-text)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-engine-settings-test tests/engine_settings_test.cpp)
@@ -35,4 +35,14 @@ if(BUILD_TESTING)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)
   # The dialog's fonts from the installed game, and its texts in them.
   oa_add_game_data_test(ui-engine-settings-dialog-data oa-ui-engine-settings-dialog-test --data)
+
+  # SHA-256 pictures of the dialog, its notices, its prompts and the OA button.
+  add_executable(oa-ui-engine-settings-pixels-test tests/pixels_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-pixels-test PRIVATE oa-ui-engine-settings
+    oa-platform-text-font oa-base-sha256 oa-test-support oa-test-game-data oa-options)
+  add_test(NAME ui-engine-settings-pixels COMMAND oa-ui-engine-settings-pixels-test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pixels.txt)
+  oa_add_game_data_test(ui-engine-settings-pixels-data oa-ui-engine-settings-pixels-test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pixels.txt --data)
+  set_tests_properties(ui-engine-settings-pixels ui-engine-settings-pixels-data PROPERTIES TIMEOUT 60)
 endif()

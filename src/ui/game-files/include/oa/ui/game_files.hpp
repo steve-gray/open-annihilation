@@ -9,6 +9,7 @@
 #pragma once
 
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 #include "oa/ui/touch_hud.hpp"
 #include <array>
 #include <cstddef>
@@ -26,21 +27,19 @@ using oa::ui::display_layout::Rect;
 using oa::ui::touch_hud::DeviceClass;
 
 /// A colour, 0 to 255 a channel.
-struct Colour {
-    uint8_t r{};    ///< red
-    uint8_t g{};    ///< green
-    uint8_t b{};    ///< blue
-    uint8_t a{255}; ///< opacity
-};
+using Colour = oa::ui::kit::Colour;
 
-inline constexpr Colour background_colour{0x1b, 0x1e, 0x19}; ///< the screen behind everything
-inline constexpr Colour panel_colour{0x23, 0x27, 0x21};      ///< cards, rows and sheets
-inline constexpr Colour line_colour{0x3a, 0x40, 0x37};       ///< outlines and dividers
-inline constexpr Colour text_colour{0xe8, 0xea, 0xe4};       ///< text
-inline constexpr Colour dim_colour{0x9a, 0xa0, 0x94};        ///< secondary text
-inline constexpr Colour green_colour{0x9c, 0xcc, 0x3c};      ///< the main button, found, done
-inline constexpr Colour amber_colour{0xe8, 0xb4, 0x4c};      ///< warnings
-inline constexpr Colour red_colour{0xe0, 0x6c, 0x5c};        ///< problems and removals
+inline constexpr Colour background_colour =
+    oa::ui::kit::screen_colour::background; ///< the screen behind everything
+inline constexpr Colour panel_colour =
+    oa::ui::kit::screen_colour::panel;                                  ///< cards, rows and sheets
+inline constexpr Colour line_colour = oa::ui::kit::screen_colour::line; ///< outlines and dividers
+inline constexpr Colour text_colour = oa::ui::kit::screen_colour::text; ///< text
+inline constexpr Colour dim_colour = oa::ui::kit::screen_colour::dim;   ///< secondary text
+inline constexpr Colour green_colour =
+    oa::ui::kit::screen_colour::green; ///< the main button, found, done
+inline constexpr Colour amber_colour = oa::ui::kit::screen_colour::amber; ///< warnings
+inline constexpr Colour red_colour = oa::ui::kit::screen_colour::red;     ///< problems and removals
 
 inline constexpr float min_button_points = 44.0f; ///< every button is at least this high
 inline constexpr float pick_reach_points = oa::ui::touch_hud::gadget_pick_points; ///< 22 pt

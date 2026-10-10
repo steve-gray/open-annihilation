@@ -727,8 +727,8 @@ dialog open; Left and Right move the mark along the buttons.
 `notice.hpp` is a notice of Open Annihilation's own in the dialog's look,
 which the main menu shows over itself: a raised panel 400 pixels wide, a
 header with the icon (or the OA mark) and a title, its text in white in
-the small font, wrapped between words (`wrap_text`), a folder's path in the
-regular font broken after its separators (`wrap_path`), why its folder
+the small font, wrapped between words, a folder's path in the
+regular font broken after its separators, why its folder
 could not be opened in amber, and a footer with a button that opens the
 folder, drawn as Cancel is, and OK; it grows with its text from 150 to 440
 pixels (`notice_height`, `notice_layout`, `draw_notice`). A click released
@@ -752,7 +752,17 @@ its primary one; Left, Up and Shift+Tab mark the one before, Right, Down
 and Tab the one after; a finger's press takes the nearest button within
 reach (`prompt_pointer_*`, `prompt_finger_down`, `prompt_key`).
 
+## Dependencies
+
+The dialog, its notices and its prompts draw through the OA UI kit
+(`oa-ui-kit`): its colours, its Compact metrics and its text.
+
 ## Tests
+
+`ui-engine-settings-pixels` and `ui-engine-settings-pixels-data` hold the
+dialog, its notices, its prompts and the OA button to the pictures they
+drew when the kit was taken out of the dialog: a SHA-256 of each scene,
+with a stand-in font and with the installed game's fonts.
 
 The dialog's tests cover ROLL BACK: shown only on a row whose folder keeps
 a version, its control and focus, its question by pointer and keys, and

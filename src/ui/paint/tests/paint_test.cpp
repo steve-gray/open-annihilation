@@ -332,12 +332,6 @@ void text_paints_in_its_colour() {
     OA_CHECK(fitted.size() >= 3 && fitted.substr(fitted.size() - 3) == "\xE2\x80\xA6");
     OA_CHECK(paint::fit_text(*fonts, "STOP", 20, true, 500) == "STOP");
     OA_CHECK(paint::fit_text(*fonts, "STOP", 20, true, 1).empty());
-    const auto lines =
-        paint::wrap_text(*fonts, "Hold to self-destruct the selected units", 16, true, 120);
-    OA_CHECK(lines.size() >= 2);
-    for (const auto& wrapped : lines)
-        OA_CHECK(paint::text_width(*fonts, wrapped, 16, true) <= 120);
-    OA_CHECK(paint::wrap_text(*fonts, "", 16, true, 120).empty());
 }
 
 /// Checks that an RGB picture's part is drawn scaled into its area, each pixel taking the

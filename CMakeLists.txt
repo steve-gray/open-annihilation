@@ -263,6 +263,7 @@ add_subdirectory(src/present/world-renderer)
 add_subdirectory(src/present/gpu-world)
 add_subdirectory(src/present/unit-playout)
 add_subdirectory(src/ui/frontend-renderer)
+add_subdirectory(src/ui/kit)
 add_subdirectory(src/ui/engine-settings)
 add_subdirectory(src/audio)
 # The app's headers: its extension table, Runtime and the other headers an
@@ -991,7 +992,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-acceleration-status oa-formats-png oa-data-languages oa-formats-oamod oa-platform-locale
   oa-platform-display-modes oa-platform-display-modes-sdl
   oa-app-full-terrain oa-app-full-supersampling oa-app-full-fog oa-app-card-executor
-  oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-ui-paint
+  oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-ui-paint oa-ui-kit
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-ui-frontend-multiplayer)

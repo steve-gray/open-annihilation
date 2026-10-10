@@ -5638,7 +5638,7 @@ void the_notice_wraps_its_text_and_places_its_buttons() {
     // and a long text between its words.
     const auto width = [](std::string_view text) { return one_a_character(text); };
     const std::string deep = "/home/player/" + std::string(25, 'x') + "/Open Annihilation/Saves";
-    const auto lines = settings::wrap_path(deep, 20, width);
+    const auto lines = oa::ui::kit::wrap_path(deep, 20, width);
     std::string joined;
     for (const auto& line : lines) {
         CHECK(one_a_character(line) <= 20);
@@ -5646,14 +5646,14 @@ void the_notice_wraps_its_text_and_places_its_buttons() {
     }
     CHECK(joined == deep);
     CHECK(lines.size() >= 4 && lines[0] == "/home/player/");
-    const auto words = settings::wrap_text("Screenshots, films and mods now go here.", 16, width);
+    const auto words = oa::ui::kit::wrap("Screenshots, films and mods now go here.", 16, width);
     CHECK(words.size() == 3);
     CHECK(words[0] == "Screenshots," && words[1] == "films and mods" && words[2] == "now go here.");
-    CHECK(settings::wrap_text("", 16, width).empty());
-    CHECK(settings::wrap_text(std::string(40, 'w'), 16, width).size() == 3);
+    CHECK(oa::ui::kit::wrap("", 16, width).empty());
+    CHECK(oa::ui::kit::wrap(std::string(40, 'w'), 16, width).size() == 3);
     // Chinese breaks between its characters, never before a full-width comma.
     CHECK(
-        (settings::wrap_text("建造完成，单位已就绪", 4, width) ==
+        (oa::ui::kit::wrap("建造完成，单位已就绪", 4, width) ==
          std::vector<std::string>{"建造完", "成，单位", "已就绪"})
     );
 }
