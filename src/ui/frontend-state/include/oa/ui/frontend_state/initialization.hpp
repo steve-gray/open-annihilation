@@ -124,7 +124,7 @@ struct Preferences {
     int32_t interface_type{};
     uint32_t display_width{}, display_height{}, side{}, difficulty{};
     uint8_t scroll_speed{};
-    Rules single, multi, skirmish;
+    Rules single{}, multi{}, skirmish{};
     uint32_t screen_chat{};
     uint16_t graphics_flags{}, sound_flags{}, music_flags{}, display_flags{},
         campaign_unlock_flags{};
