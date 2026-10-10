@@ -18,6 +18,12 @@ set_property(SOURCE src/client.cpp APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
+  add_executable(oa-netgame-http-test tests/client_test.cpp)
+  target_link_libraries(oa-netgame-http-test
+    PRIVATE oa-netgame-http oa-netgame-http-fixture oa-test-support oa-netgame oa-base-threads)
+  add_test(NAME net-http COMMAND oa-netgame-http-test)
+  set_tests_properties(net-http PROPERTIES TIMEOUT 120)
+
   # The reader is compiled into this program so the test does not link the
   # client library, which would define the reader twice.
   add_executable(oa-netgame-http-response-test
@@ -30,9 +36,10 @@ if(BUILD_TESTING)
   set_tests_properties(net-http-response PROPERTIES TIMEOUT 30)
 
   if(WIN32)
-    add_custom_command(TARGET oa-netgame-http-response-test POST_BUILD
-      COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:oa-netgame-http-response-test>"
-        "-DDEST=$<TARGET_FILE_DIR:oa-netgame-http-response-test>"
-        -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")
+    foreach(target oa-netgame-http-test oa-netgame-http-response-test)
+      add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:${target}>"
+          "-DDEST=$<TARGET_FILE_DIR:${target}>" -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")
+    endforeach()
   endif()
 endif()
