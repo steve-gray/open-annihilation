@@ -46,6 +46,9 @@ until then.
 
   Each has a draw function and an `add_*` that puts it in a display list
   with its name, kind and Tab place; `paint` draws them.
+- `components_more.hpp`: the notice and the question (the settings
+  dialog's notice and prompt): their models, placement, display lists,
+  pointer, finger and key events and drawing, and the progress bar.
 - `rows.hpp`: declared rows. A settings page is a table of `RowSpec`s,
   each made by a factory that takes the row's id first: `toggle`, `choice`,
   `slider`, `levels`, `value_and_button`, `buttons`, `text_field`, `link`
@@ -81,7 +84,11 @@ its hover card's timer in its own state.
   to show. A button's caption, a switch's OFF and ON, a strip's captions, a
   menu's items, a header's words, a nav entry, a row's label and hints, a
   chip's, a tab's, a card's, a hover card's and a link's words arrive
-  already looked up. A text field holds the player's own text.
+  already looked up. A text field holds the player's own text. A notice's
+  title, lines and captions pass through the look-up its caller hands it,
+  when one is handed: the notice wraps the words it was given and shows
+  each line as the look-up returns it, as the settings dialog's notice
+  always has. A question's texts are drawn as given.
 - The new controls use only kit tokens, and their sizes are
   `compact_metrics` members. The design's components mockup is drawn in web
   colours; the kit draws them so:
@@ -108,6 +115,12 @@ its hover card's timer in its own state.
   keys, Backspace and Delete, follow it.
 - A hover card is due only once the pointer has rested on one control for
   `hover_card_delay_ms`. The timer is the screen's: the kit keeps none.
+- A notice and a question place their parts from the Compact metrics. A
+  question's buttons are as wide as their captions at the estimated width,
+  whatever the fonts, so a press lands where a button is drawn. Their
+  events hit and reach through `hit` and `reach` over the same controls
+  their display lists hold: a notice's OK before its open button, a
+  question's buttons left to right.
 - One button, five looks: accent, plain, quiet, inset, and plain while
   disabled. The kit chooses every colour. A caller passes the style and
   whether the pointer is over the button or holds it.
@@ -158,6 +171,11 @@ their grid at three widths and at 3, 4 and 6 columns, the arrows through a
 grid of cards, the hover card with an arrow on each side, its place in a
 frame and its delay, and links; and that every `add_*` names its controls
 and `paint` matches the direct draws.
+`ui-kit-notices` checks where six notices and six questions place their
+parts against the settings dialog's own placement, their display lists'
+names, kinds and Tab order, where a finger lands, every key (the editing
+keys, which do nothing, among them), that `paint` matches `draw_notice` and
+`draw_question`, and the progress bar's fill.
 `ui-kit-rows` lays out, draws, focuses and changes a page of every row
 kind from a table: the placement of rows shaped as the settings dialog's
 Controls, Graphics and Developer sections, with the game's fonts and the

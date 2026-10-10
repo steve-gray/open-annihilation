@@ -4,8 +4,9 @@
 writes what a script asks for. Mod authors and translators run it by hand.
 The checks under `tools/` run `list` and `extract` and match their output.
 `pack` writes a mod or language package. `check` runs the installer's own
-checks on a package and reports the facts a catalogue lists. Catalogues and
-registries are further commands on the same table.
+checks on a package and reports the facts a catalogue lists. `catalogue`
+makes a publisher key and signs or checks a catalogue. Registries are
+further commands on the same table.
 
 ## How to run it
 
@@ -45,6 +46,10 @@ same. `--` ends options. A command takes its options through
 | `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
 | `pack FOLDER [--out FILE] [--force] [--game-dir DIR]` | Packs FOLDER as a `.oamod`, a `.oalang` or a `.oamap`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--game-dir` is the game's data; map packs need the game's palette for previews. `--force` replaces an existing file. |
 | `check FILE [--game-dir DIR] [--mod FOLDER[=KEY]]... [--accept-unimplemented-hacks] [--json]` | Runs the checks an install runs before it writes, and reports the facts a catalogue lists. A map pack needs `--game-dir` and may name each further target with `--mod`. `--json` prints one JSON object, and a map pack adds `maps`. Otherwise each fact is a `key: value` line, a map pack then prints one line per map and target, and the last line is `result: ok` or `result: refused`. Exit 0 when the package would be installed, 1 when it would be refused or a map does not fit `ta-3.1c`. A mod that does not fit leaves that exit code unchanged. |
+| `catalogue keygen --id ID --out FILE [--passphrase-file FILE]` | Makes a new Ed25519 key, seals its seed with a passphrase and writes FILE. The file is created only when that name is new, and on macOS and Linux its mode is 0600. The passphrase is read from the terminal with echo off, twice, and has to be at least 12 bytes. `--passphrase-file` reads the file's first line instead. Prints `key:`, `public: ed25519:` and `fingerprint:`. |
+| `catalogue public KEY_FILE` | Prints the same three lines. The passphrase is not used. |
+| `catalogue sign --key KEY_FILE CATALOGUE [--out SIG] [--passphrase-file FILE]` | Signs CATALOGUE's exact bytes and writes CATALOGUE.sig, or SIG. The line is the one a catalogue check reads: `ed25519`, the key id and the signature. A catalogue this build would refuse is refused before the key is opened. The written pair is checked before the command reports success. Prints `signed <file> with <id>`. |
+| `catalogue verify CATALOGUE [--sig SIG] (--descriptor FILE \| --registry ID --key ed25519:KEY [--key ...])` | Checks CATALOGUE against its signature, with the descriptor's id and keys, or with ID and the given keys. Each `--key` is read as the key the signature names, and the first is the one that is trusted. Prints `good signature by <id>` and the verdict, and exits 0 when the catalogue can be used. A refused catalogue prints the verdict and exits 1. |
 
 ## Entry points
 
@@ -77,6 +82,10 @@ capture every line.
   settings. A missing fact is left out; `revision` is null only when a
   language pack has no packaging revision.
 - The exit code is 0, 1 or 2.
+- `catalogue sign` writes the signature with the catalogue check's own
+  line, and reports success only after that check accepts the written pair.
+- `catalogue keygen` creates the key file only when the name is new. On
+  macOS and Linux the file's mode is 0600. The passphrase is not printed.
 - Help lists commands in the table's order, and a group's subcommands under
   the group.
 - A repeating option keeps every value, in the order given. An option that
@@ -122,12 +131,23 @@ pseudo pack's `language.yaml`.
 pack against a stand-in game and a made-up mod. `tools-oa-tool-check-map-data`
 runs the same program with `--data` against the installed game.
 
+`tools-oa-tool-catalogue` (`oa-tool-catalogue-test`) makes one publisher
+key with the real parameters, then signs and checks a catalogue with that
+key, with `--registry` and `--key` and with a descriptor. A changed
+catalogue, another key, another registry and a signature that names
+another key are refused. A short passphrase, an existing key file and a
+catalogue the check would refuse fail before the key is opened.
+
 ## Limitations
 
 The archive commands take no options. `pack` takes `--out`, `--force` and,
 for a map pack, `--game-dir`. `check` takes `--game-dir`, `--mod`,
 `--accept-unimplemented-hacks` and `--json`. A map pack needs `--game-dir`.
 Each `--mod` is one target after the base game, and exit 1 is reserved for
-a map that does not fit `ta-3.1c`. Catalogues and registries are further
-commands, not part of this table yet.
+a map that does not fit `ta-3.1c`. `catalogue keygen` does not replace a
+key file. On macOS and Linux that file's mode is 0600. The signature
+`catalogue sign` writes is the one line a catalogue check reads. A
+passphrase comes from the terminal, with echo off, or from
+`--passphrase-file`. One key is stored in one file, and this command does
+not rotate it. Registries are further commands, not part of this table yet.
 The macOS package does not ship `oa-tool`.

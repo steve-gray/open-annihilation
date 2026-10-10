@@ -3,7 +3,7 @@
 
 #include "oa/netgame/presence.hpp"
 
-#include "oa/netgame/presence_block.hpp"
+#include "oa/netgame/records.hpp"
 
 #include <cassert>
 #include <cstring>
@@ -756,7 +756,7 @@ WireError append_presence_field(
 }
 
 bool presence_peer(const uint8_t* block) noexcept {
-    return read_presence(block).has_value();
+    return sent_by_open_annihilation(block);
 }
 
 } // namespace oa::netgame

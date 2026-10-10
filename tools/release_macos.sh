@@ -294,17 +294,22 @@ if [[ "$release_build" == 1 ]]; then
     binary="$app/Contents/MacOS/$app_executable"
     [[ "$(ls -A "$app/Contents/MacOS")" == "$app_executable" ]] || fail "Contents/MacOS holds more than $app_executable"
     resources="$(ls -A "$app/Contents/Resources" | LC_ALL=C sort | tr '\n' ' ')"
-    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts languages licenses "$(plist_value "$app" CFBundleIconFile)" \
+    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts licenses "$(plist_value "$app" CFBundleIconFile)" \
         | LC_ALL=C sort | tr '\n' ' ')"
     [[ "$resources" == "$expected" ]] || fail "unexpected files in Contents/Resources: $resources"
-    # The text fonts, and nothing else, as the bootstrap made them.
+    # The fonts this version ships, read from the bootstrap's FONT_FILES.
+    # The fonts folder may hold more than that, for older checkouts.
+    shipped_fonts="$(
+        cd "$repo_dir" && python3 -c 'import sys; sys.path.insert(0, "tools"); import bootstrap_text_fonts as b; print("\n".join(b.FONT_FILES))'
+    )"
     fonts="$(ls -A "$app/Contents/Resources/fonts" | LC_ALL=C sort | tr '\n' ' ')"
-    expected_fonts="$(ls -A "$text_fonts" | grep -Ev '^build-settings\.json$' | LC_ALL=C sort | tr '\n' ' ')"
+    expected_fonts="$(printf '%s\n' "$shipped_fonts" | LC_ALL=C sort | tr '\n' ' ')"
     [[ "$fonts" == "$expected_fonts" ]] || fail "Contents/Resources/fonts holds $fonts, not $expected_fonts"
-    for font in "$text_fonts"/*.ttf "$text_fonts"/*.otf; do
-        cmp -s "$font" "$app/Contents/Resources/fonts/$(basename "$font")" \
-            || fail "Contents/Resources/fonts/$(basename "$font") differs from $font"
-    done
+    while IFS= read -r font; do
+        [[ -n "$font" ]] || continue
+        cmp -s "$text_fonts/$font" "$app/Contents/Resources/fonts/$font" \
+            || fail "Contents/Resources/fonts/$font differs from $text_fonts/$font"
+    done <<< "$shipped_fonts"
     lipo -info "$binary"
     for arch in "${architectures[@]}"; do
         lipo "$binary" -verify_arch "$arch" || fail "the game has no $arch code"

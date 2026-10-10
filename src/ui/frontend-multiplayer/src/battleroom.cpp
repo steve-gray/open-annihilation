@@ -7,7 +7,6 @@
 #include "oa/base/game_loop.hpp"
 #include "oa/netgame/player_slots.hpp"
 #include "oa/netgame/private_channel.hpp"
-#include "oa/netgame/presence_block.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/netgame/recorder_messages.hpp"
 #include "oa/netgame/unicode_chat.hpp"
@@ -24,7 +23,6 @@
 #include <cstdio>
 #include <cstring>
 #include <iterator>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -188,29 +186,15 @@ uint32_t now(Lobby& lobby) noexcept {
     return lobby.services.tick != nullptr ? lobby.services.tick(lobby.services.context) : 0;
 }
 
-/// Marks the local player's block as OA's: it holds a game disc, carries the
-/// engine signature, and carries this machine's presence. OA asks for no
-/// disc, but a 3.1c host still counts them before START, so every OA player
-/// reports one. The signature and the presence are kept in the block itself,
-/// so the blocks a match sends carry them too. A presence whose revision is
-/// 0 writes nothing.
+/// Marks the local player's block as OA's: it holds a game disc and carries
+/// the engine signature. OA asks for no disc, but a 3.1c host still counts
+/// them before START, so every OA player reports one. The signature is kept
+/// in the block itself, so the blocks a match sends carry it too.
 ///
-/// @param lobby the battle room, whose presence the block carries
 /// @param info the local player's block
-void mark_local_block(Lobby& lobby, PlayerSetupInfo& info) noexcept {
+void mark_local_block(PlayerSetupInfo& info) noexcept {
     info.status = static_cast<uint16_t>(info.status | status::has_disc);
-    auto* block = reinterpret_cast<uint8_t*>(&info);
-    netgame::mark_engine_signature(block);
-    netgame::mark_presence(block, lobby.presence);
-    // A computer player reports no disc. Its kept block still carries the
-    // presence, so the match's copy of that block does too. A revision of 0
-    // writes nothing.
-    for (int32_t slot = 0; slot < kSlotCount; ++slot) {
-        auto& player = slot_player(lobby, slot);
-        if (player.in_use == 0 || player.status != kSlotComputer)
-            continue;
-        netgame::mark_presence(reinterpret_cast<uint8_t*>(&info_of(lobby, player)), lobby.presence);
-    }
+    netgame::mark_engine_signature(reinterpret_cast<uint8_t*>(&info));
 }
 
 bool map_selected(Lobby& lobby) noexcept {
@@ -1823,7 +1807,7 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
         lobby_max_units(game) = static_cast<uint16_t>(lobby_max_units_default(game));
     info.screen_width = static_cast<uint16_t>(static_cast<int32_t>(lobby_screen_width(game)));
     info.screen_height = static_cast<uint16_t>(static_cast<int32_t>(lobby_screen_height(game)));
-    mark_local_block(lobby, info);
+    mark_local_block(info);
     if (auto* entry = panel_control(panel, "MESSAGE"))
         entry->value = 0x7f;
     int32_t energy = kDefaultResource;
@@ -2500,7 +2484,7 @@ LobbyAction lobby_tick(Lobby& lobby, Panel& panel, LobbyFront front, Panel* view
     unit_sync_tick(lobby);
     if (lobby_clock_passed(now(lobby), lobby.next_stats_tick)) {
         lobby.next_stats_tick = now(lobby) + kStatsInterval;
-        mark_local_block(lobby, local_info(lobby));
+        mark_local_block(local_info(lobby));
         send_periodic_status(lobby);
     }
     flush(lobby);
@@ -2553,23 +2537,6 @@ void lobby_leave_battleroom(Lobby& lobby) noexcept {
 // ---------------------------------------------------------------------------
 // Records
 
-std::optional<netgame::PresenceBlock> lobby_slot_presence(Lobby& lobby, int32_t slot) noexcept {
-    if (lobby.game == nullptr || slot < 0 || slot >= kSlotCount)
-        return std::nullopt;
-    const auto& player = lobby.game->players[slot];
-    if (player.in_use == 0 || player.status == kSlotOpen)
-        return std::nullopt;
-    if (local_or_computer(player)) {
-        if (lobby.presence.revision < 1)
-            return std::nullopt;
-        return lobby.presence;
-    }
-    const auto* info = slot_info(lobby, slot);
-    if (info == nullptr)
-        return std::nullopt;
-    return netgame::read_presence(reinterpret_cast<const uint8_t*>(info));
-}
-
 void lobby_send_player_info(Lobby& lobby) noexcept {
     if ((lobby.game->session_flags & kNetFlagLive) == 0)
         return;
@@ -2590,10 +2557,8 @@ void lobby_send_player_info(Lobby& lobby) noexcept {
             lobby.wire_rules.recorder_protocol;
         netgame::announce_unicode_chat(record, lobby.unicode_chat);
         // Every block OA sends says so, a computer player's too, so another OA
-        // machine can tell it from 3.1c's. The presence rides with it; a
-        // revision of 0 writes none.
+        // machine can tell it from 3.1c's.
         netgame::stamp_engine_signature(record);
-        netgame::stamp_presence(record, lobby.presence);
         uint8_t wire[kLobbyRecordBytes];
         std::size_t written = 0;
         if (netgame::encode_record(record, wire, sizeof(wire), &written) == netgame::WireError::ok)

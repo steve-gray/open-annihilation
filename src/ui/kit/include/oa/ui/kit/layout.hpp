@@ -373,6 +373,7 @@ enum class Role : uint8_t {
     card,        ///< a card of a grid; the item's CardLook
     hover_card, ///< a hover card; the item's HoverCardLook, the rectangle the card without its arrow
     link,       ///< a link; the item's LinkLook
+    progress,   ///< a progress bar; the item's ProgressLook says how far it has come
 };
 
 /// How a control looks, for the item that draws it.

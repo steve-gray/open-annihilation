@@ -37,16 +37,14 @@ constexpr int glyph_key_face_shift = 2;
 constexpr uint64_t glyph_key_face_mask = 0x3F;
 
 /// The fonts each weight looks a character up in, in order.
-constexpr std::array<Face, 5> bold_chain{
+constexpr std::array<Face, 4> bold_chain{
     Face::dejavu_sans_bold,
     Face::dejavu_sans,
-    Face::noto_sans_cjk,
     Face::endonyms,
     Face::noto_emoji,
 };
-constexpr std::array<Face, 4> regular_chain{
+constexpr std::array<Face, 3> regular_chain{
     Face::dejavu_sans,
-    Face::noto_sans_cjk,
     Face::endonyms,
     Face::noto_emoji,
 };
@@ -217,9 +215,9 @@ struct FontStack::Fonts {
 
     /// Gives the pixel size a face is drawn at in a style.
     ///
-    /// DejaVu and letters pack faces take the style's size. Noto Sans CJK,
-    /// the endonym face and ideographs pack faces take the related size and
-    /// no less than the style's least size. Noto Emoji takes the related size.
+    /// DejaVu and letters pack faces take the style's size. The endonym face
+    /// and ideographs pack faces take the related size and no less than the
+    /// style's least size. Noto Emoji takes the related size.
     int32_t face_pixel_size(Face which, const Style& style) const noexcept {
         const auto index = static_cast<std::size_t>(which);
         const bool letters = which == Face::dejavu_sans_bold || which == Face::dejavu_sans ||
@@ -251,7 +249,6 @@ struct FontStack::Fonts {
         for (std::size_t index = 0; index < pack_count; ++index)
             if (pack_roles[index] == FaceRole::ideographs)
                 push_open(pack_face(index));
-        push_open(Face::noto_sans_cjk);
         push_open(Face::endonyms);
         push_open(Face::noto_emoji);
         return found;
@@ -442,14 +439,9 @@ std::unique_ptr<FontStack> FontStack::open(const std::filesystem::path& director
         return nullptr;
     FT_Add_Default_Modules(fonts->library);
     for (std::size_t index = 0; index < face_count; ++index) {
-        const auto which = static_cast<Face>(index);
         std::FILE* file = open_file(directory / std::filesystem::path(face_files[index]));
-        if (file == nullptr) {
-            // Noto Sans CJK may be absent. Every other base face is required.
-            if (face_required(which))
-                return nullptr;
-            continue;
-        }
+        if (file == nullptr)
+            return nullptr;
         if (!fonts->open_slot(index, file))
             return nullptr;
     }
@@ -566,8 +558,7 @@ std::optional<LineMetrics> FontStack::metrics(const Style& style) {
     if (!in_range(style))
         return std::nullopt;
     LineMetrics line;
-    // Pack faces never change the line's rows. A closed base face, such as
-    // Noto Sans CJK when its file was missing, is left out.
+    // Pack faces never change the line's rows. A closed base face is left out.
     for (std::size_t index = 0; index < face_count; ++index) {
         const auto which = static_cast<Face>(index);
         if (fonts_->faces[index] == nullptr)

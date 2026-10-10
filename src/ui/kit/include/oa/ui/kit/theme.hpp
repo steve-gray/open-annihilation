@@ -158,7 +158,8 @@ inline constexpr uint32_t locked_fade = 115;
 /// How far the accent tints a selected list row's face, in 256ths.
 inline constexpr uint32_t selected_tint = 15;
 
-/// The Compact metrics, in points: the settings dialog's sizes at 0.7.3.
+/// The Compact metrics, in points: the settings dialog's, its notices' and its
+/// prompts' sizes at 0.7.3, and the sizes of the controls it does not have.
 struct Metrics {
     /// The raised edge's width.
     int32_t edge{};
@@ -298,6 +299,19 @@ struct Metrics {
     int32_t hover_card_padding{};
     /// How far a hover card's arrow reaches out of its edge.
     int32_t hover_card_arrow{};
+    /// A notice's or a question's first row of text: under the header, its
+    /// rule and ten rows more.
+    int32_t text_top{};
+    /// The rows between two paragraphs of a notice or a question.
+    int32_t paragraph_gap{};
+    /// The rows between a notice's last line of text and the footer's rule.
+    int32_t text_bottom_gap{};
+    /// The width of a notice's button that opens its folder.
+    int32_t open_width{};
+    /// The columns a question button's caption keeps clear on its two sides together.
+    int32_t prompt_button_padding{};
+    /// A progress bar's height.
+    int32_t progress_bar_height{};
     /// The rows between a settings row's rule and its label line, and under
     /// its last part. Developer's own rows keep half of it.
     int32_t row_padding{};
@@ -410,6 +424,12 @@ inline constexpr Metrics compact_metrics{
     .card_inset = 4,
     .hover_card_padding = 6,
     .hover_card_arrow = 5,
+    .text_top = 38,
+    .paragraph_gap = 6,
+    .text_bottom_gap = 10,
+    .open_width = 96,
+    .prompt_button_padding = 16,
+    .progress_bar_height = 8,
     .row_padding = 8,
     .label_gap = 8,
     .hint_gap = 2,

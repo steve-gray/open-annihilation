@@ -12,7 +12,6 @@
 #pragma once
 
 #include "oa/app/runtime.hpp"
-#include "oa/netgame/presence_block.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -104,12 +103,9 @@ class NetworkPlay {
     /// setup block. Run every frame.
     void follow_unicode_chat();
 
-    /// Passes this machine's presence to the battle room: revision 1, this
-    /// build's version, and the flags for Developer Mode, rules that differ
-    /// from 3.1c, and view hacks. Bits past those stay clear. Run every
-    /// frame. The facts are read while the multiplayer screens are showing,
-    /// and on the first call. The battle room is told only when the presence
-    /// differs from the one already bound.
+    /// Passes this machine's presence to the battle room. Run every frame.
+    /// It binds nothing yet: the setup block carries no presence, which
+    /// travels only in the presence record between OA machines.
     void follow_presence();
 
     /// Runs one frame of the network match; nothing without an active match.
@@ -486,10 +482,6 @@ class NetworkPlay {
     const oa::data::mod_profile::ModProfile* bound_profile_ = nullptr;
     oa::base::sha256::Digest bound_sim_hash_{};
     uint8_t bound_lobby_buttons_ = 0;
-    // The presence bound to the battle room (follow_presence), and whether
-    // its facts have been read once.
-    oa::netgame::PresenceBlock bound_presence_{};
-    bool presence_taken_ = false;
 };
 
 } // namespace oa::app
