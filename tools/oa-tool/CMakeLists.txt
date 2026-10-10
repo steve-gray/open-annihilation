@@ -4,14 +4,17 @@
 # oa-tool's commands. The executable stays in the root CMakeLists.txt, where
 # the Windows DLL copy and the packaged notices attach to it.
 add_library(oa-tool-commands STATIC commands.cpp arguments.cpp files.cpp archive_commands.cpp
-  pack.cpp pack_map.cpp check.cpp check_map.cpp)
+  pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp)
 add_library(oa::tool::commands ALIAS oa-tool-commands)
 target_include_directories(oa-tool-commands PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(oa-tool-commands SYSTEM PRIVATE
+  ${PROJECT_SOURCE_DIR}/third_party/monocypher)
 target_compile_features(oa-tool-commands PUBLIC cxx_std_20)
 target_link_libraries(oa-tool-commands
   PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-languages
     oa-data-map-pack oa-data-map-fit oa-formats-oamod oa-formats-json oa-formats-ota oa-formats-tnt
-    oa-formats-zip oa-base-sha256 oa-base-text oa-platform-shims
+    oa-formats-zip oa-base-sha256 oa-base-text oa-platform-shims oa-base-signing oa-data-catalogue
+    oa-data-registry oa-platform-random
   PUBLIC oa-formats-hpi oa-formats-png oa-ui-decoded)
 
 if(BUILD_TESTING)
@@ -56,4 +59,12 @@ if(BUILD_TESTING)
   set_tests_properties(tools-oa-tool-check-map PROPERTIES TIMEOUT 120)
   oa_add_game_data_test(tools-oa-tool-check-map-data oa-tool-check-map-test --data)
   set_tests_properties(tools-oa-tool-check-map-data PROPERTIES TIMEOUT 120)
+
+  # catalogue: one real keygen, then sign and verify against that key. The
+  # Argon2id parameters are the ones a publisher key uses, so the test is
+  # the slow one.
+  add_executable(oa-tool-catalogue-test tests/catalogue_test.cpp)
+  target_link_libraries(oa-tool-catalogue-test PRIVATE oa-tool-commands oa-test-support oa-options)
+  add_test(NAME tools-oa-tool-catalogue COMMAND oa-tool-catalogue-test)
+  set_tests_properties(tools-oa-tool-catalogue PROPERTIES TIMEOUT 120)
 endif()

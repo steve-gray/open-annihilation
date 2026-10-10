@@ -291,8 +291,9 @@ presence_sim_hash(const uint8_t* record, std::size_t size) noexcept;
 
 /// Tells whether a peer may receive a presence record.
 ///
-/// This is the one rule: the setup block carries the engine signature and a
-/// presence revision of 1 or more, as read_presence reads it.
+/// This is the one rule: the peer's setup block carries the 'OA' engine
+/// signature that 0.7 already sends (sent_by_open_annihilation). That is how
+/// OA machines find each other; the setup block itself carries no presence.
 ///
 /// @param block the 0xb9-byte setup block; null is no
 /// @return true when the peer may receive a presence record

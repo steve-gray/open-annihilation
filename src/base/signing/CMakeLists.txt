@@ -18,7 +18,7 @@ else()
   target_compile_options(oa-base-signing-monocypher PRIVATE -w)
 endif()
 
-add_library(oa-base-signing src/ed25519.cpp src/base64.cpp)
+add_library(oa-base-signing src/ed25519.cpp src/base64.cpp src/sealed_key.cpp)
 add_library(oa::base::signing ALIAS oa-base-signing)
 target_include_directories(oa-base-signing PUBLIC include)
 target_include_directories(oa-base-signing SYSTEM PRIVATE ${oa_monocypher_dir})
@@ -30,4 +30,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-base-signing-test PRIVATE oa-base-signing oa-test-support oa-options)
   add_test(NAME base-signing COMMAND oa-base-signing-test)
   set_tests_properties(base-signing PROPERTIES TIMEOUT 30)
+
+  # The sealed key calls valid_key_id, which the registry defines. This test
+  # links the registry after signing so that reference resolves. The signing
+  # library itself does not link the registry: the registry already links
+  # signing, and a base library does not link data.
+  add_executable(oa-base-signing-sealed-key-test tests/sealed_key_test.cpp)
+  target_include_directories(oa-base-signing-sealed-key-test SYSTEM PRIVATE ${oa_monocypher_dir})
+  target_link_libraries(oa-base-signing-sealed-key-test PRIVATE oa-base-signing oa-data-registry
+    oa-test-support oa-options)
+  add_test(NAME base-signing-sealed-key COMMAND oa-base-signing-sealed-key-test)
+  set_tests_properties(base-signing-sealed-key PROPERTIES TIMEOUT 60)
 endif()
