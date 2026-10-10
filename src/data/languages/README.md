@@ -7,8 +7,12 @@ describes the whole for players and for adding a language.
 
 ## The registry
 
-`oa/data/languages.hpp` (namespace `oa::data::languages`) holds one
-`Language` for each language the game knows, in `src/registry.inc`:
+`oa/data/languages.hpp` (namespace `oa::data::languages`) holds every
+language the game can show, and every language a pack exists for that is
+not installed yet.
+
+- **Built in.** `src/registry.inc` lists a language 3.1c's data holds, so
+  the game knows it without a pack. English comes first.
 
 | Tag | Name in itself | 3.1c's word | Draws in |
 |---|---|---|---|
@@ -19,32 +23,65 @@ describes the whole for players and for adding a language.
 | `it` | Italiano | `Italian` | the game's fonts |
 | `zh-Hans` | 简体中文 | `Chinese` | the modern fonts |
 
-English comes first, then the others in the order of their names, which is
-the order the settings list them in. Each entry has its BCP-47 tag, its
-name in itself (`endonym`, UTF-8) and in English, 3.1c's word for it
-(`game_name`: Translate.tdf's key, the start of a unit file's
-`<Language>Name` and `<Language>Description` keys, the end of its folders'
-names such as `bitmaps-German`), the system locales that choose it, the
-tags its text falls back to before English, and what drawing it needs
-(`TextNeeds`). English has 3.1c's word too, which the game runs in by
-default; its data holds no English entries, but a mod's may.
+Each entry has its BCP-47 tag, its name in itself (`endonym`, UTF-8) and
+in English, 3.1c's word for it (`game_name`: Translate.tdf's key, the
+start of a unit file's `<Language>Name` and `<Language>Description` keys,
+the end of its folders' names such as `bitmaps-German`), the system
+locales that choose it, the tags its text falls back to before English,
+and what drawing it needs (`TextNeeds`). English has 3.1c's word too,
+which the game runs in by default; its data holds no English entries, but
+a mod's may.
 
-- `known_languages()`, `english()`, `find_by_tag()` (any case, `_` read as
-  `-`) and `find_by_game_name()` (3.1c's command-line word, any case).
+- **Installed.** One entry for each language pack in the player's
+  `Languages` folder and in the `languages` folder beside the game, taken
+  from the pack's manifest. A pack whose tag is one of the built-in
+  languages adds its text to that language and does not change its name,
+  its word or what drawing it needs. A mod's pack adds text only and adds
+  no entry.
+- **Available.** A language a pack exists for that is not installed.
+  `kOfferedLanguages`, after the built-in languages, lists the ones the engine knows
+  of before any catalogue is read. Each entry is written with
+  `Source::available`. The table is empty. An installed pack for one of
+  those tags takes its place among the languages the game shows, and an
+  available entry passed for the same tag is dropped. An available
+  language can be listed and matched. It is never the language the game
+  shows, the operating system never chooses it, and 3.1c's word does not
+  find it.
+
+`known_languages()` returns a pointer to each live language: English
+first, then every built-in and installed language in the order of their
+names' UTF-8 bytes, a tie broken by tag, then the available languages in
+that same order. The built-ins are already in that order, so with no
+packs installed the list is the table above and nothing moves. An entry
+stays readable for the whole run, including one a later change has
+replaced and left off the list. The list itself lasts until the next
+change. The registry is changed and read only by the thread that draws
+the interface.
+
+- `english()`, `find_by_tag()` (any live language, any case, `_` read as
+  `-`) and `find_by_game_name()` (a language the game can show, by 3.1c's
+  word, any case).
 - `fallback_chain()`: the language, its known fallbacks, then English, each
   once.
 - `normalised_locale()` writes a system locale (`de_DE.UTF-8@euro`) as a
   tag (`de-DE`); `C` and `POSIX` are none. `match_locale()` finds the
   language one of whose locales is the tag or its leading subtags (`de`
-  for `de-AT`), the longest winning. The locales of languages not offered
-  yet (Traditional Chinese's `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO`) take
-  part in that match and choose none, so `zh-TW` never falls to `zh` and
-  Simplified Chinese. `preferred_language()` takes the first locale, in
-  order, that chooses one, else English.
+  for `de-AT`), the longest winning, among the languages the game can
+  show. Passed a second argument that is true, it finds an available
+  language too. The locales of languages not offered yet (Traditional
+  Chinese's `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO`) take part in that
+  match and choose none, so `zh-TW` never falls to `zh` and Simplified
+  Chinese. `preferred_language()` takes the first locale, in order, that
+  chooses a language the game can show, else English.
 - `chosen_language()` reads the setting: `system_choice` (`"system"`) or a
-  tag; anything else is the system's.
+  tag of a language the game can show; anything else, including a language
+  that is not installed, is the system's.
+- `playable()`: the language is not available, and this build draws it.
 - `drawable()`: the needs this build meets, `game_fonts` and
   `modern_fonts`. A language that needs more is kept but not offered.
+- `set_pack_languages()` publishes the installed packs and the available
+  languages. `registry_generation()` changes when the live list's entries
+  do.
 
 ## Texts for what players see
 
@@ -97,10 +134,12 @@ first, the game data, the player's pack, the engine's pack, an empty value
 and a text no pack holds falling through, and a unit text written for
 other English skipped.
 
-`data-languages` checks the registry and its order, the needs that are
-drawable, tags and 3.1c's words found in any case, fallback chains, locales
-normalised and matched alone and in lists, the settings' choice, the
-catalogue read from small built files, malformed and oversized ones
-included, the words a language is looked up by, and the units' texts with
-their fallbacks, installed and not. `defs` checks that a unit file's
-language keys reach the sink, cut to their fields.
+`data-languages` checks the registry and its order, languages an installed
+pack adds, languages that are not installed, an entry that stays readable
+after a later change replaces it, the needs that are drawable, tags and
+3.1c's words found in any case, fallback chains, locales normalised and
+matched alone and in lists, the settings' choice, the catalogue read from
+small built files, malformed and oversized ones included, the words a
+language is looked up by, and the units' texts with their fallbacks,
+installed and not. `defs` checks that a unit file's language keys reach
+the sink, cut to their fields.

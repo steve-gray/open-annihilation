@@ -216,13 +216,14 @@ void test_commands(const Scratch& scratch) {
 
 void test_help() {
     const auto table = oa::tool::commands();
-    OA_CHECK(table.size() == 6);
+    OA_CHECK(table.size() == 7);
     OA_CHECK(table[0].name == "list");
     OA_CHECK(table[1].name == "extract");
     OA_CHECK(table[2].name == "asset-extract");
     OA_CHECK(table[3].name == "preview");
     OA_CHECK(table[4].name == "decode-pcx");
     OA_CHECK(table[5].name == "pack");
+    OA_CHECK(table[6].name == "check");
 
     const auto bare = run({});
     OA_CHECK(bare.status == oa::tool::exit_usage);
@@ -237,7 +238,8 @@ void test_help() {
           "oa-tool asset-extract ROOT ENTRY OUTPUT [ARCHIVE...]\n",
           "oa-tool preview ARCHIVE PCX_ENTRY OUTPUT.ppm|OUTPUT.png\n",
           "oa-tool decode-pcx INPUT.pcx OUTPUT.ppm|OUTPUT.png\n",
-          "oa-tool pack FOLDER [--out FILE] [--force] [--game-dir DIR]\n"}) {
+          "oa-tool pack FOLDER [--out FILE] [--force] [--game-dir DIR]\n",
+          "oa-tool check FILE [--game-dir DIR] [--accept-unimplemented-hacks] [--json]\n"}) {
         OA_CHECK(contains(listed.out, line));
     }
 

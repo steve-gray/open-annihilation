@@ -610,6 +610,7 @@ bool run_game_files_until_resolved(
         request.mod.preferences = &start.values;
         request.version = std::string("v") + OA_ENGINE_VERSION;
         request.preferences_file = options.preferences_file;
+        request.user_folder = options.user_folder;
         request.players_own_profile = !options.preferences_file.has_value();
         if constexpr (self_checks_built)
             if (options.check_game_files)

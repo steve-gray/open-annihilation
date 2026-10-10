@@ -285,6 +285,7 @@ void check_game_files_options(Options& options) {
         {options.check_simulation_hash, "--check-simulation-hash"},
         {!options.check_unit_language.empty(), "--check-unit-language"},
         {options.check_language_switch, "--check-language-switch"},
+        {options.check_language_registry, "--check-language-registry"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
         {options.check_build_preview, "--check-build-preview"},
@@ -495,6 +496,7 @@ void check_director_options(Options& options) {
         {options.check_simulation_hash, "--check-simulation-hash"},
         {!options.check_unit_language.empty(), "--check-unit-language"},
         {options.check_language_switch, "--check-language-switch"},
+        {options.check_language_registry, "--check-language-registry"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
         {options.check_build_preview, "--check-build-preview"},
@@ -556,6 +558,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_simulation_hash, "--check-simulation-hash"},
             {!options.check_unit_language.empty(), "--check-unit-language"},
             {options.check_language_switch, "--check-language-switch"},
+            {options.check_language_registry, "--check-language-registry"},
             {options.check_patrol_reclaim, "--check-patrol-reclaim"},
             {options.check_reclaim_cursor, "--check-reclaim-cursor"},
             {options.check_build_preview, "--check-build-preview"},
@@ -909,6 +912,8 @@ namespace {
             result.check_unit_language = value(argument);
         else if (argument == "--check-language-switch")
             result.check_language_switch = true;
+        else if (argument == "--check-language-registry")
+            result.check_language_registry = true;
         else if (argument == "--check-patrol-reclaim")
             result.check_patrol_reclaim = true;
         else if (argument == "--check-reclaim-cursor")
@@ -1006,6 +1011,7 @@ namespace {
                    "[--check-kill-board] [--check-simulation-hash] "
                    "[--check-unit-language TAG] "
                    "[--check-language-switch] "
+                   "[--check-language-registry] "
                    "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
                    "[--check-megamap-clicks] [--check-radar-orders] "
                    "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
@@ -1185,7 +1191,8 @@ namespace {
         result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||
         !result.check_unit_pages.empty() || result.check_kill_board ||
         !result.check_unit_language.empty() || result.check_language_switch ||
-        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
+        result.check_language_registry || result.check_patrol_reclaim ||
+        result.check_reclaim_cursor || result.check_build_preview ||
         result.check_pointer_interfaces || result.check_megamap_clicks ||
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||

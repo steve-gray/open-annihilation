@@ -110,6 +110,19 @@ void pseudo_pack_reads_whole() {
     OA_CHECK(manifest.homepage == "https://example.org/pseudo");
     OA_CHECK(manifest.tags == std::vector<std::string>{"test"});
     OA_CHECK(manifest.requires_engine == ">= 0.0.1");
+    const languages::LanguageEntry entry = languages::entry_of(manifest);
+    OA_CHECK(entry.tag == "en-XA");
+    OA_CHECK(entry.endonym == manifest.name);
+    OA_CHECK(
+        entry.endonym == "\xEF\xBC\xBB\xE6\xB5\x8B"
+                         "Pseudo"
+                         "\xE8\xAF\x95\xEF\xBC\xBD"
+    );
+    OA_CHECK(entry.english_name == "Pseudo");
+    OA_CHECK(entry.word == "Pseudo");
+    OA_CHECK(entry.locales == std::vector<std::string>({"en-XA"}));
+    OA_CHECK(entry.fallbacks.empty());
+    OA_CHECK(entry.needs == languages::TextNeeds::modern_fonts);
     // A caption and a message, keyed by their English; an empty value adds
     // nothing.
     OA_CHECK(pack.translations().size() == 2);

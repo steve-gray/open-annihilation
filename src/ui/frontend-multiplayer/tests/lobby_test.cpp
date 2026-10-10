@@ -7,6 +7,7 @@
 #include "oa/formats/gaf.hpp"
 #include "oa/netgame/private_channel.hpp"
 #include "oa/netgame/records.hpp"
+#include "oa/netgame/presence_block.hpp"
 #include "oa/netgame/unicode_chat.hpp"
 #include "oa/ui/frontend_multiplayer/connect.hpp"
 #include "oa/ui/frontend_multiplayer/dialogs.hpp"
@@ -4152,6 +4153,95 @@ void test_recorder_in_the_battle_room() {
     );
 }
 
+// The blocks this machine sends carry its presence, and a guest's block is
+// read only when it says Open Annihilation sent it and names a revision.
+// The 3.1c version bytes and the disc bit travel with the block as before.
+void test_presence_in_the_battle_room() {
+    using oa::netgame::RecordType;
+    Room host(true);
+    auto& local = mp::local_info(host.lobby);
+    auto* computer = mp::slot_info(host.lobby, 2);
+    local.status = static_cast<uint16_t>(local.status | mp::status::has_disc);
+    computer->status = static_cast<uint16_t>(computer->status | mp::status::has_disc);
+    host.lobby.presence = oa::netgame::presence_version("0.8.0", "dev");
+    host.lobby.presence.flags = 0x05;
+    mp::lobby_send_player_info(host.lobby);
+    const auto infos = host.sent(RecordType::player_info);
+    const mp::PlayerSetupInfo* sources[] = {&local, computer};
+    expect(infos.size() == 2, "a block for the host and the computer player");
+    bool carried = infos.size() == 2;
+    for (std::size_t index = 0; index < infos.size() && index < 2; ++index) {
+        const auto* block = host.loopback.sent[infos[index]] + 1;
+        const auto& source = *sources[index];
+        carried = carried && block[0xaf] == 1 && block[0xb0] == 0 && block[0xb1] == 8 &&
+                  block[0xb2] == 255 && block[0xb3] == 0x05 &&
+                  block[0xa7] == source.version_major && block[0xa8] == source.version_minor &&
+                  (block[0x9d] & mp::status::has_disc) != 0;
+    }
+    expect(carried, "every block carries the presence, the version and the disc");
+
+    host.lobby.presence = {};
+    host.loopback.sent_count = 0;
+    mp::lobby_send_player_info(host.lobby);
+    bool clear = host.sent(RecordType::player_info).size() == 2;
+    for (const auto index : host.sent(RecordType::player_info)) {
+        const auto* block = host.loopback.sent[index] + 1;
+        clear = clear && block[0xaf] == 0 && block[0xb0] == 0 && block[0xb1] == 0 &&
+                block[0xb2] == 0 && block[0xb3] == 0;
+    }
+    expect(clear, "an unbound presence writes none of the five bytes");
+
+    host.lobby.presence = oa::netgame::presence_version("0.8.0", "dev");
+    host.lobby.presence.flags = 0x05;
+    mp::lobby_enter_battleroom(host.lobby, host.panel);
+    const auto* kept = reinterpret_cast<const uint8_t*>(&mp::local_info(host.lobby));
+    expect(
+        kept[0xaf] == 1 && kept[0xb0] == 0 && kept[0xb1] == 8 && kept[0xb2] == 255 &&
+            kept[0xb3] == 0x05 && (mp::local_info(host.lobby).status & mp::status::has_disc) != 0,
+        "entering the battle room keeps the presence in the local block"
+    );
+
+    const auto guest_slot = mp::slot_for_player_id(host.lobby, kRoomGuest);
+    auto* guest = mp::slot_info(host.lobby, guest_slot);
+    expect(
+        guest_slot >= 0 && guest != nullptr && !mp::lobby_slot_presence(host.lobby, guest_slot),
+        "a guest block without the signature says no presence"
+    );
+    oa::netgame::mark_engine_signature(reinterpret_cast<uint8_t*>(guest));
+    guest->presence_revision = 0;
+    expect(
+        !mp::lobby_slot_presence(host.lobby, guest_slot),
+        "a signature with revision 0 says no presence"
+    );
+    guest->presence_revision = 1;
+    guest->oa_version_major = 1;
+    guest->oa_version_minor = 2;
+    guest->oa_version_patch = 3;
+    guest->presence_flags = 0x05;
+    const auto guest_presence = mp::lobby_slot_presence(host.lobby, guest_slot);
+    expect(
+        guest_presence && guest_presence->revision == 1 && guest_presence->major == 1 &&
+            guest_presence->minor == 2 && guest_presence->patch == 3 &&
+            guest_presence->flags == 0x05,
+        "a guest with revision 1 answers with its bytes"
+    );
+    expect(!mp::lobby_slot_presence(host.lobby, -1), "a slot outside the room answers nothing");
+    expect(!mp::lobby_slot_presence(host.lobby, 3), "an empty slot answers nothing");
+    const auto ours = mp::lobby_slot_presence(host.lobby, 0);
+    expect(
+        ours && ours->patch == 255 && ours->flags == 0x05,
+        "a slot this machine plays answers with the presence it bound"
+    );
+
+    host.lobby.presence.flags = 0x01;
+    host.loopback.sent_count = 0;
+    mp::lobby_send_player_info(host.lobby);
+    bool changed = host.sent(RecordType::player_info).size() == 2;
+    for (const auto index : host.sent(RecordType::player_info))
+        changed = changed && host.loopback.sent[index][1 + 0xb3] == 0x01;
+    expect(changed, "the next block carries the presence as it changed");
+}
+
 // The battle room with Unicode chat on: the blocks it sends say so, and a
 // line goes to the machine whose block says UTF-8 in UTF-8 and to the one
 // whose block does not in the code page, '?' for each hanzi. A line from a
@@ -5540,6 +5630,7 @@ int main(int argc, char** argv) {
         test_session_description();
         test_versioned_rules();
         test_recorder_in_the_battle_room();
+        test_presence_in_the_battle_room();
         test_unicode_chat_in_the_battle_room();
         test_recorder_commands_in_the_battle_room();
         test_recorder_prebuilt_base_in_the_battle_room();

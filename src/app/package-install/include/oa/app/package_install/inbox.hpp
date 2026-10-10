@@ -9,7 +9,9 @@
 #pragma once
 
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/origin.hpp"
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -17,23 +19,58 @@
 
 namespace oa::app::package_install {
 
+/// A package waiting to be installed, and where it came from.
+struct OpenedPackage {
+    std::filesystem::path file{}; ///< the package
+    Origin origin{};              ///< where it came from; a file when none was given
+};
+
 /// Queues a package to be installed once the main menu shows. A path already
 /// queued, or the one being installed now, is not queued again: paths are
-/// compared as std::filesystem::weakly_canonical gives them.
+/// compared after the path is made absolute, then canonical as far as it
+/// exists, then lexically normal. A path posted twice keeps the origin of the
+/// first post.
 ///
 /// @param file the package
-void post_package_file(const std::filesystem::path& file);
+/// @param origin where it came from; a file the player opened when omitted
+void post_package_file(const std::filesystem::path& file, const Origin& origin = {});
 
 /// Takes the next package, oldest first, and notes it as the one being
 /// installed until finish_package_file.
 ///
 /// @return the package; nothing when none waits
-[[nodiscard]] std::optional<std::filesystem::path> take_package_file();
+[[nodiscard]] std::optional<OpenedPackage> take_package_file();
 
 /// Puts a package back at the front, as when its question was set aside.
 ///
-/// @param file the package
-void return_package_file(const std::filesystem::path& file);
+/// @param package the package
+void return_package_file(const OpenedPackage& package);
+
+/// What became of a package that came from a catalogue.
+enum class OutcomeResult : uint8_t {
+    installed, ///< the change is in place
+    refused,   ///< refused before a change
+    failed,    ///< a change was refused or undone
+    set_aside, ///< the player answered CANCEL, or cancelled the unpacking
+};
+
+/// What became of one package, for the download queue.
+struct PackageOutcome {
+    std::filesystem::path file{}; ///< the package
+    OutcomeResult result{};       ///< what became of it
+    std::string reason{};         ///< why it was refused or failed; empty otherwise
+};
+
+/// Keeps what became of a package whose origin is a catalogue. A file origin
+/// is dropped. At most 256 are kept; the oldest is dropped first.
+///
+/// @param outcome what became of it
+void report_package_outcome(PackageOutcome outcome);
+
+/// Takes what became of catalogue packages, oldest first, once each.
+///
+/// @return the outcomes
+[[nodiscard]] std::vector<PackageOutcome> take_package_outcomes();
 
 /// Notes that the package take_package_file gave is done with.
 void finish_package_file();
@@ -50,9 +87,10 @@ void finish_package_file();
 /// @return true when the extension is one of those
 [[nodiscard]] bool opens_file(const std::filesystem::path& file);
 
-/// Queues a .oareg file to be added once the main menu shows. A path already queued is not
-/// queued again: paths are compared as std::filesystem::weakly_canonical gives them. The file
-/// waits on the add-registry queue, and is logged.
+/// Queues a .oareg file to be added once the main menu shows. A path already
+/// queued is not queued again: it is made absolute, then canonical as far as
+/// it exists, then lexically normal, before it is compared. The file waits on
+/// the add-registry queue, and is logged.
 ///
 /// @param file the .oareg file
 void post_registry_file(const std::filesystem::path& file);
@@ -84,6 +122,11 @@ struct PendingChange {
     Incoming incoming{};         ///< what it installs; for a roll back, the kept version
     InstalledPackage replaced{}; ///< what the target holds now, which it must still hold
     std::string file_name{};     ///< the package's name; empty for a roll back
+    /// Where the package came from, so a change that waited can be reported.
+    Origin origin{};
+    /// The package file the outcome names; empty for a roll back, which is
+    /// not reported.
+    std::filesystem::path file{};
     /// The hold on the root folder's lock the unpacking took, kept until the
     /// change is in place; null for a roll back, which takes its own.
     RootHold hold{};

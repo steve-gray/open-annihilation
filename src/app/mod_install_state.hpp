@@ -33,6 +33,8 @@ struct Runtime::ModInstallState {
     std::optional<package_install::PackagePrompt> shown;
     /// The package taken from the inbox, as it was opened.
     std::filesystem::path file;
+    /// Where that package came from. installed is set when unpacking starts.
+    package_install::Origin origin{};
     /// The copy the platform made of it, which it releases once the install
     /// is done with it; empty when the game reads the file where it is.
     std::filesystem::path opened_copy;

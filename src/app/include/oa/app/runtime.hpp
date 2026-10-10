@@ -137,6 +137,8 @@ struct EngineView;
 
 namespace oa::app {
 
+struct PresenceFacts;
+
 /// Loads the session palette, PALETTE.PAL, through the palette file loader.
 ///
 /// Throws std::runtime_error naming palettes/PALETTE.PAL when it cannot be
@@ -1856,6 +1858,13 @@ class Runtime final : public menu::Host,
     /// @param runtime the running app
     /// @return the hash, 64 lower-case hexadecimal digits
     friend std::string simulation_hash(const Runtime& runtime);
+    /// Reads what this machine is playing (presence_facts in
+    /// presence_facts.hpp): Developer Mode, the simulation hash, whether the
+    /// rules differ from 3.1c, the mod and which standard hacks are on.
+    ///
+    /// @param runtime the running app
+    /// @return those facts
+    friend PresenceFacts presence_facts(const Runtime& runtime);
 
     // ---- Touch controls (docs/touch-controls.md) --------------------------------------
 
@@ -3501,7 +3510,8 @@ class Runtime final : public menu::Host,
     /// With no mod it is the plain baseline's. With a mod that changes the
     /// simulation it is that profile's, and not the baseline's. Turning a
     /// simulation-changing Developer Mode override on then changes it, with
-    /// no new start. Throws std::runtime_error at the first failure.
+    /// no new start. The same run checks the presence facts that follow
+    /// those settings. Throws std::runtime_error at the first failure.
     void check_simulation_hash();
 
     /// Checks the services and hooks the screens and the extension reach the
@@ -10396,6 +10406,13 @@ class Runtime final : public menu::Host,
     /// --snapshot when one is named; throws std::runtime_error naming what
     /// differed.
     void check_language_switch();
+
+    /// Lists every live language and the one the run shows, and checks that
+    /// English is first, the built-in languages follow in their order, the
+    /// pseudo language is installed with the word Pseudo, and the run shows
+    /// it, as the preferences file chooses. Throws std::runtime_error
+    /// naming what differed.
+    void check_language_registry();
 
     /// Checks the commander's build pages against the side column on windows of several sizes.
     ///

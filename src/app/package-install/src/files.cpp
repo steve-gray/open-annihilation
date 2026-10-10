@@ -261,21 +261,62 @@ FileLock::~FileLock() {
 #endif
 }
 
+namespace {
+
+/// The holds this process has taken, one lock shared by every hold on a root.
+struct RootLocks {
+    base::threads::Mutex guard{};
+    std::map<fs::path, std::weak_ptr<const FileLock>> held{};
+};
+
+/// Returns the process's holds.
+///
+/// @return the holds
+RootLocks& root_locks() {
+    static RootLocks locks;
+    return locks;
+}
+
+/// Returns the key a root is held under: absolute and normal, else normal.
+///
+/// @param root the root folder
+/// @return the key
+fs::path root_key(const fs::path& root) {
+    std::error_code error;
+    const fs::path absolute = fs::absolute(root, error).lexically_normal();
+    return error ? root.lexically_normal() : absolute;
+}
+
+} // namespace
+
 RootHold hold_root(const PackageKind& kind, const fs::path& root) {
     // Every hold this process takes on one folder shares one lock.
     detail::note_kind(kind);
-    static base::threads::Mutex guard;
-    static std::map<fs::path, std::weak_ptr<const FileLock>> held;
-    std::error_code error;
-    const fs::path absolute = fs::absolute(root, error).lexically_normal();
-    const fs::path key = error ? root.lexically_normal() : absolute;
-    const base::threads::LockGuard locked(guard);
-    if (auto shared = held[key].lock())
+    RootLocks& locks = root_locks();
+    const fs::path key = root_key(root);
+    const base::threads::LockGuard locked(locks.guard);
+    if (auto shared = locks.held[key].lock())
         return shared;
     std::shared_ptr<const FileLock> taken = FileLock::take(key / folder_names(kind).lock);
     if (!taken)
         return nullptr;
-    held[key] = taken;
+    locks.held[key] = taken;
+    return taken;
+}
+
+RootHold detail::hold_root_alone(const PackageKind& kind, const fs::path& root) {
+    detail::note_kind(kind);
+    RootLocks& locks = root_locks();
+    const fs::path key = root_key(root);
+    const base::threads::LockGuard locked(locks.guard);
+    // This process already holds it, or another copy does: either way the
+    // caller writes nothing.
+    if (locks.held[key].lock())
+        return nullptr;
+    std::shared_ptr<const FileLock> taken = FileLock::take(key / folder_names(kind).lock);
+    if (!taken)
+        return nullptr;
+    locks.held[key] = taken;
     return taken;
 }
 

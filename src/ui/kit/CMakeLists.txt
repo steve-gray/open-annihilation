@@ -3,8 +3,9 @@
 
 # The OA UI kit: one look, one text measure and one layout for every OA screen
 # (include/oa/ui/kit/theme.hpp, include/oa/ui/kit/text.hpp,
-# include/oa/ui/kit/layout.hpp). Provisional until the kit is declared stable.
-add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp)
+# include/oa/ui/kit/layout.hpp, include/oa/ui/kit/input.hpp). Provisional until
+# the kit is declared stable.
+add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp)
 add_library(oa::ui::kit ALIAS oa-ui-kit)
 target_include_directories(oa-ui-kit PUBLIC include)
 target_compile_features(oa-ui-kit PUBLIC cxx_std_20)
@@ -29,4 +30,9 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-kit-layout-test PRIVATE oa-ui-kit oa-test-support oa-options)
   add_test(NAME ui-kit-layout COMMAND oa-ui-kit-layout-test)
   set_tests_properties(ui-kit-layout PROPERTIES TIMEOUT 30)
+
+  add_executable(oa-ui-kit-input-test tests/input_test.cpp)
+  target_link_libraries(oa-ui-kit-input-test PRIVATE oa-ui-kit oa-test-support oa-options)
+  add_test(NAME ui-kit-input COMMAND oa-ui-kit-input-test)
+  set_tests_properties(ui-kit-input PROPERTIES TIMEOUT 30)
 endif()
