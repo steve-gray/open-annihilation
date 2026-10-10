@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The main menu's notice of where the game folder was found, shown once: in
-// the look of the saved games' notice, over the darkened main menu, after
-// that notice and never over another, with a button that shows the folder.
+// the look of the saved games' notice, a notice screen of the OA layer over
+// the darkened main menu, after that notice and never over another, with a
+// button that shows the folder.
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -57,7 +58,7 @@ void Runtime::tell_found_install() {
     if (saves_notice_due_in(preference_values_))
         return;
     auto& state = user_folder_state();
-    if (state.notice) {
+    if (UserFolderState::notice_pending(*this)) {
         state.main_menu_frames = 0;
         return;
     }
@@ -80,12 +81,15 @@ void Runtime::tell_found_install() {
     }
     const std::string words = std::move(options_.found_install_notice);
     options_.found_install_notice.clear();
-    state.notice = found_notice(words);
     const std::size_t line_end = words.find('\n');
-    state.notice_folder = line_end == std::string::npos
-                              ? options_.remember_game_dir
-                              : path_from_utf8(std::string_view(words).substr(line_end + 1));
-    state.notice_screen = Screen::main_menu;
+    UserFolderState::show_notice(
+        *this,
+        found_notice(words),
+        line_end == std::string::npos
+            ? options_.remember_game_dir
+            : path_from_utf8(std::string_view(words).substr(line_end + 1)),
+        Screen::main_menu
+    );
     ++state.notices_shown;
 }
 

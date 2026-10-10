@@ -165,10 +165,12 @@ logs it.
 `oa_layer.hpp` and `oa_layer.cpp` are one host for Open Annihilation's own
 screens over every screen of the game: `OaLayer`, which every screen
 reaches through `Runtime::oa_layer()`. It holds the settings dialog on the
-main menu and in a match (`Runtime::SettingsScreen`), and the in-game
-menu's OA button. It replaces the main menu's and the match's own hosts of
-the dialog, which each mapped the pointer, told a finger from a mouse,
-mapped the keys, latched the closing key and drew a backdrop.
+main menu and in a match (`Runtime::SettingsScreen`), the in-game menu's OA
+button, and the notices and questions of the engine's own (`NoticeScreen`,
+`QuestionScreen`). It replaces the main menu's and the match's own hosts of
+the dialog, and the notices' and the installs' prompts' own overlays, which
+each mapped the pointer, told a finger from a mouse, mapped the keys,
+latched the closing key and drew a backdrop.
 
 - **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
   and darkens what lies under it, a drawing at 1× from its own top left
@@ -176,9 +178,43 @@ mapped the keys, latched the closing key and drew a backdrop.
   text field, its display list and interaction (what automation lists), a
   tick and a revision. No call of it names an SDL type. A screen joins with
   `oa_layer().push(std::make_unique<...>())` and leaves when it answers
-  `close`, or by `close_top` and `close_above(name)`; `close` tells it it
-  leaves, and a screen whose own model is still open closes it there as its
-  Cancel would.
+  `close`, by `oa_layer().close(screen)`, or by `close_top` and
+  `close_above(name)`; `close` tells it it leaves, and a screen whose own
+  model is still open closes it there as its Cancel would. A host may close
+  a screen while that screen takes an input or its tick: it leaves once the
+  call is done, as if it had answered `close`.
+- **Pushed or queued.** A screen somebody asked for at that moment joins at
+  once with `push`: Settings, or a question a screen asks of its own over
+  that screen (the Mods page's refused ROLL BACK over Settings). One nobody
+  asked for at that moment, such as a notice or an install's question,
+  joins with `show_when_free`: the screens wait first in, first out, and the
+  first is pushed while no modal screen shows, at once, after an input or a
+  tick, or when a screen is closed, so that two never show at once and none
+  opens over Settings. A screen waiting is ticked too, and leaves the queue
+  when its tick closes it. `find(name)` finds a screen on the stack and
+  `waiting(name)` one in the queue.
+- **Notices and questions.** `NoticeScreen` (name `notice`) holds a
+  `kit::Notice`, and `QuestionScreen` (name `prompt`) a `kit::Question`,
+  with the callbacks of their host (`NoticeScreen::Host`,
+  `QuestionScreen::Host`). Each shows over one screen of the game, centred
+  on the front end's picture at 1× (`(640 − 400) / 2`, `(480 − height) / 2`,
+  the height from `notice_height` or `prompt_height`), modal over a backdrop,
+  and is drawn with `draw_notice` or `draw_prompt`; its events go through
+  the kit's notice and question functions with the layer's point, reach and
+  key, and its display list and interaction are the kit's
+  (`notice_list`, `question_list`) with its hover, press and mark. A
+  notice's host says what its open button does (the failure it returns is
+  shown in amber), what OK does besides closing it, and, each tick, whether
+  it must close. A question's host takes each answer (the key that answered
+  is latched, `latch_key`, whether the question closes or stays) and says
+  whether the answer was its last; the host may change the question
+  meanwhile (`question`, `changed`) or close it, and is told when it leaves
+  for any reason (`closed`). To show one: make the screen with the layer,
+  the screen of the game it shows over, the notice or question and the
+  host's callbacks, then `show_when_free` it, or `push` it when the screen
+  under it asked. The saves notice, the mod warning and the found folder's
+  notice are made by `UserFolderState::show_notice`, and the installs'
+  prompts by `ModInstallState::show`.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
   the coordinates input arrives in: the picture's pixels on the front end,
   the window's in a match, and how many points it has. Every screen is
@@ -208,9 +244,11 @@ mapped the keys, latched the closing key and drew a backdrop.
   screen reports a `text_field` the system's text input stays started over
   the field, mapped back to the coordinates input arrives in
   (`Runtime::start_text_input`); it stops once no screen has one.
-- **On the front end** a modal screen with a backdrop darkens the frame
+- **On the front end** each modal screen with a backdrop darkens the frame
   itself, a blend in 256ths (`darken_front_end`), so the picture the window
-  shows is the same at every size. The screens are drawn at 1× and stamped
+  shows is the same at every size, and every screen under it, as its
+  drawing is darkened before it is stamped: a question over Settings darkens
+  the menu twice and Settings once. The screens are drawn at 1× and stamped
   into the window over the picture's rectangle
   (`SDL_GetRenderLogicalPresentationRect`) in the window's own pixels
   (`RenderState::use_window_pixels`), each window pixel taking the screen's
@@ -223,7 +261,8 @@ mapped the keys, latched the closing key and drew a backdrop.
   player sees.
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
-  under a modal screen, and the screens stamped at their places
+  under a modal screen, and the screens stamped at their places, each
+  under a modal screen with a backdrop darkened as the button is
   (`refresh_match`), drawn again only when what it shows changes. It goes
   over the composed frame (`compose_match`) and is presented after the
   match's other layers and before the frontend dialogs' and the cursor
@@ -2172,14 +2211,17 @@ effect:
   (`move_recordings_once`, `move_earlier_recordings`,
   `record_recordings_move`); no notice follows it.
 - **The notice:** `tell_saves_moved` shows it over the darkened main menu
-  once, as the renderer records' notice is shown: in the settings dialog's
-  look (`oa/ui/engine_settings/notice.hpp`), with the count of the moves
+  once, as the renderer records' notice is shown: a notice screen of the
+  OA layer ([The OA layer](#the-oa-layer)) in the settings dialog's look
+  (`oa/ui/engine_settings/notice.hpp`), with the count of the moves
   whose notice is due (`moves_to_tell`), the `Saves/default` path wrapped
   at its separators, and that screenshots, films and mods now go in the
   same folder, or that each mod's go in a folder of its own; **Open
   folder** shows `Saves/default` and **OK**, Enter and
-  Escape close it (`UserFolderState`). Showing it records it `told`. A run
-  nobody watches leaves it due.
+  Escape close it (`UserFolderState::show_notice`). It waits for the layer
+  behind an install's prompt, and none of these notices is made while
+  another shows or waits. Showing it records it `told`. A run nobody
+  watches leaves it due.
 - **Opening folders:** the settings' Your files buttons and the notice show
   a folder through `system_folder_opener` (`user_folder_open.cpp`): the
   platform's own `PlatformHooks::show_folder` where it has one (the Files
@@ -2395,7 +2437,11 @@ in place, and how what a stop leaves is settled). The runtime's part:
   read, by the kind its extension names; a plan that asks nothing unpacks at
   once, and the others show their
   question in a `Prompt` (`oa/ui/engine_settings/prompt.hpp`) over the
-  darkened menu, at z 102. The unpacking runs steps of a 256 KiB budget,
+  darkened menu, a question screen of the OA layer
+  (`ModInstallState::show`, `QuestionScreen`) that waits for the layer to be
+  free; the same screen then shows the progress and what came of it, and
+  another screen replacing the main menu sets a question aside and ends a
+  telling. The unpacking runs steps of a 256 KiB budget,
   each folder or file made costing 16 KiB of it and each step ending after
   about 4 ms, for up to 15 ms a frame under the progress prompt; then the
   prompt says
@@ -2421,7 +2467,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
   version is checked again first; then the folder is swapped at once, or,
   for the mod played, as the run ends. A roll back refused, the kept
   version changed since the page listed it or the swap undone, is told in
-  a prompt over the dialog (MOD NOT ROLLED BACK) whose OK returns to it.
+  a prompt over the dialog (MOD NOT ROLLED BACK), pushed over it at once
+  with Settings darkened under it, whose OK returns to it.
 - **Registering the file type.** A start someone plays makes the game the
   opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files for the player
   where the system registers at run

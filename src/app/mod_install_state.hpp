@@ -3,8 +3,9 @@
 
 // The mod packages a run installs (Runtime::ModInstallState): the package
 // being installed, what its plan asks, its unpacking, the prompt over the
-// main menu that asks and tells, and the folders left to delete, which
-// runtime_mod_install.cpp drives and draws as an overlay.
+// main menu that asks and tells, a question screen of the OA layer
+// (QuestionScreen, oa_layer.hpp), and the folders left to delete, which
+// runtime_mod_install.cpp drives.
 #pragma once
 
 #include "oa/app/package_install.hpp"
@@ -16,8 +17,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace oa::app {
+
+class QuestionScreen;
 
 struct Runtime::ModInstallState {
     /// Where the install of the package taken is.
@@ -28,9 +32,11 @@ struct Runtime::ModInstallState {
         telling,   ///< what came of it shows
     };
     Stage stage{Stage::idle};
-    /// The prompt over the main menu and what its buttons answer; empty
-    /// while none shows.
-    std::optional<package_install::PackagePrompt> shown;
+    /// The prompt over the main menu: its screen on the OA layer, or waiting
+    /// for it; null while none shows.
+    QuestionScreen* prompt{};
+    /// What the prompt's buttons answer, left to right.
+    std::vector<package_install::Answer> answers;
     /// The package taken from the inbox, as it was opened.
     std::filesystem::path file;
     /// Where that package came from. installed is set when unpacking starts.
@@ -59,8 +65,6 @@ struct Runtime::ModInstallState {
     package_install::Discarder discarder;
     /// Frames in a row the main menu has shown as itself.
     uint32_t settled_frames{};
-    /// The key whose press closed the prompt, until it is released; 0 for none.
-    uint32_t latched_key{};
     /// --check-mod-install shows the prompts although nobody watches the run.
     bool check_shows_prompts{};
     /// Prompts this run has shown.
@@ -75,11 +79,12 @@ struct Runtime::ModInstallState {
 
     /// Ends a quiet install: no prompt, and idle for the next package.
     ///
+    /// @param runtime the runtime, whose OA layer holds any prompt
     /// @return true when the install was quiet
-    bool finish_quietly() {
+    bool finish_quietly(Runtime& runtime) {
         if (!quiet)
             return false;
-        shown.reset();
+        hide(runtime);
         quiet = false;
         stage = Stage::idle;
         return true;
@@ -88,10 +93,32 @@ struct Runtime::ModInstallState {
     /// When the hand-off folder is looked in next, in SDL ticks.
     uint64_t next_handoff_ms{};
 
-    /// Shows a prompt over the main menu.
+    /// Shows a prompt over the main menu, counted among those shown: in the
+    /// prompt that shows, or in a new one the OA layer shows once it is free
+    /// (OaLayer::show_when_free), or at once over the screen that asked.
     ///
-    /// @param made the prompt
-    void show(package_install::PackagePrompt made);
+    /// @param runtime the runtime
+    /// @param made the prompt and what its buttons answer
+    /// @param at_once a screen asked it of its own: it shows over that
+    ///     screen at once (OaLayer::push)
+    void show(Runtime& runtime, package_install::PackagePrompt made, bool at_once = false);
+
+    /// Shows the prompt again with what it says now, such as an unpacking's
+    /// progress, as show does but not counted.
+    ///
+    /// @param runtime the runtime
+    /// @param made the prompt and what its buttons answer
+    void update(Runtime& runtime, package_install::PackagePrompt made);
+
+    /// Takes the prompt off the OA layer, or out of its queue.
+    ///
+    /// @param runtime the runtime
+    void hide(Runtime& runtime);
+
+    /// Sets a question aside once its prompt goes for any reason but the
+    /// install's own: its package waits again in the inbox, and a telling
+    /// ends. An unpacking runs on, and its next progress shows a new prompt.
+    void set_aside();
 
     /// Gives the copy the platform made of the package back to it to remove.
     void release_opened_copy();
@@ -99,35 +126,6 @@ struct Runtime::ModInstallState {
     /// Ends the install of the package taken: its copy released and the
     /// inbox told.
     void finish_package();
-
-    /// Returns where the prompt's top left corner stands on the main menu,
-    /// which centres it on the picture.
-    ///
-    /// @param height the prompt's height
-    /// @return the corner, at the picture's scale
-    [[nodiscard]] static oa::ui::frontend_renderer::Placement prompt_placement(int32_t height);
-
-    /// The prompt overlay's input: while the prompt shows over the main menu
-    /// it takes every input; its buttons answer, and the key that answered
-    /// is latched.
-    ///
-    /// @param context the screen context, with the input
-    /// @param state unused
-    /// @return 1 when the input was taken
-    static int prompt_event(oa::app::ScreenContext* context, void* state);
-
-    /// Sets a question aside once a screen other than the main menu shows:
-    /// its package waits again in the inbox.
-    ///
-    /// @param context the screen context
-    /// @param state unused
-    static void prompt_tick(oa::app::ScreenContext* context, void* state);
-
-    /// Darkens the main menu and draws the prompt over it.
-    ///
-    /// @param context the screen context, with the frame
-    /// @param state unused
-    static void prompt_draw(oa::app::ScreenContext* context, void* state);
 };
 
 } // namespace oa::app

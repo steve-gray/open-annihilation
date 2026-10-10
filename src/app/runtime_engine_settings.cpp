@@ -6,7 +6,6 @@
 // main menu and in a match.
 
 #include "engine_settings_state.hpp"
-#include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/prompts.hpp"
@@ -1304,11 +1303,6 @@ oa::ui::frontend_renderer::RgbaPicture Runtime::engine_settings_icon() {
     if (!state.icon)
         return {};
     return {state.icon->width, state.icon->height, state.icon->pixels};
-}
-
-std::optional<settings::DialogKey>
-Runtime::engine_settings_dialog_key(uint32_t key, uint16_t modifiers) noexcept {
-    return layer_key(key, modifiers);
 }
 
 void Runtime::release_unsaved_unit_limit() {

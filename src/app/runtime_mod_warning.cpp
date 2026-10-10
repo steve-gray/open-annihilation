@@ -8,8 +8,9 @@
 // still plays its menus; the main menu shows the warning once from each
 // start, and a start of a skirmish, a shared game, a campaign mission or a
 // saved game that cannot start shows it in place of the game, on the screen
-// the start was asked from. It is the notice of the player's own folder
-// (runtime_user_folder.cpp), whose button shows the mod's folder.
+// the start was asked from. It is a notice of the player's own folder
+// (UserFolderState::show_notice, runtime_user_folder.cpp) on the OA layer,
+// whose button shows the mod's folder.
 
 #include "user_folder_state.hpp"
 
@@ -229,15 +230,12 @@ void Runtime::show_mod_warning(const ModStartGaps& gaps) {
     ++state.mod_warnings_shown;
     // Without the dialog's fonts the warning is the game's message box.
     if (engine_settings_fonts() == nullptr) {
-        state.notice.reset();
         show_frontend_message(
             message_text(notice), kMessageWidth, entry::message_show_ok, entry::message_fit_width
         );
         return;
     }
-    state.notice = std::move(notice);
-    state.notice_folder = folder;
-    state.notice_screen = screen_;
+    UserFolderState::show_notice(*this, std::move(notice), folder, screen_);
 }
 
 bool Runtime::refuse_incomplete_mod_start(bool later) {
@@ -265,8 +263,8 @@ bool Runtime::refuse_incomplete_mod_start(bool later) {
 
 void Runtime::tell_incomplete_mod() {
     // Most frames have nothing to tell, and cost no more than this.
-    if (!plays_mod() || (user_folder_state_ &&
-                         (!user_folder_state_->mod_warning_due || user_folder_state_->notice)))
+    if (!plays_mod() || (user_folder_state_ && (!user_folder_state_->mod_warning_due ||
+                                                UserFolderState::notice_pending(*this))))
         return;
     auto& state = user_folder_state();
     namespace frontend_state = oa::ui::frontend_state;

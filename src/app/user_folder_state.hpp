@@ -1,21 +1,20 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The player's own folder's opener and the notice of the engine's own that
-// shows over a screen (Runtime::UserFolderState): the main menu's notice of
-// the saved games' move, and the warning that the mod's games cannot start
-// (runtime_mod_warning.cpp), which runtime_user_folder.cpp draws and drives
-// as an overlay.
+// The player's own folder's opener and the notices of the engine's own that
+// show over a screen (Runtime::UserFolderState): the main menu's notice of
+// the saved games' move, the notice of where the game folder was found
+// (runtime_found_install.cpp), and the warning that the mod's games cannot
+// start (runtime_mod_warning.cpp). Each is a notice screen of the OA layer
+// (NoticeScreen, oa_layer.hpp), which shows them one at a time.
 #pragma once
 
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
-#include "oa/ui/frontend_renderer/artless.hpp"
 
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <vector>
 
 namespace oa::app {
@@ -26,15 +25,6 @@ struct Runtime::UserFolderState {
     FolderOpenerHooks opener{};
     /// The folders a run nobody watches asked to show, in order.
     std::vector<fs::path> opened;
-    /// The notice while it shows: the move's, or the mod's warning; empty
-    /// while none shows.
-    std::optional<oa::ui::engine_settings::Notice> notice;
-    /// The folder the notice's button shows: Saves/default in the player's
-    /// own folder, or the mod's folder.
-    fs::path notice_folder;
-    /// The screen the notice shows over, which it closes on leaving: the
-    /// main menu, or the screen whose start the mod's warning refused.
-    Screen notice_screen{Screen::main_menu};
     /// Frames in a row the main menu has shown as itself.
     uint32_t main_menu_frames{};
     /// The main menu's warning that the mod's games cannot start waits to be
@@ -46,22 +36,11 @@ struct Runtime::UserFolderState {
     uint32_t mod_warning_frames{};
     /// Warnings that the mod's games cannot start this run has shown.
     uint32_t mod_warnings_shown{};
-    /// The key whose press closed the notice (Escape or Enter), until it is
-    /// released; 0 for none. Its presses do nothing until then, so that a
-    /// held key never reaches the main menu.
-    uint32_t latched_key{};
     /// --check-user-folder and --check-mod-warning show the main menu's
     /// notices although nobody watches the run.
     bool check_shows_notice{};
     /// Notices this run has shown.
     uint32_t notices_shown{};
-
-    /// Returns where the notice's top left corner stands on the main menu,
-    /// which centres it on the picture.
-    ///
-    /// @param height the notice's height
-    /// @return the corner, at the picture's scale
-    [[nodiscard]] static oa::ui::frontend_renderer::Placement notice_placement(int32_t height);
 
     /// Tells whether the run is one nobody watches: unattended, on CI, or on
     /// a video driver that shows no window.
@@ -70,26 +49,26 @@ struct Runtime::UserFolderState {
     /// @return true when nobody watches
     [[nodiscard]] static bool unwatched(bool unattended);
 
-    /// The notice overlay's input: while the notice shows over its screen
-    /// it takes every input; OK, Enter and Escape close it, and its button
-    /// shows its folder. The key that closed it is latched.
+    /// Shows a notice over a screen of the front end once the OA layer is
+    /// free (OaLayer::show_when_free): darkening that screen, its open button
+    /// showing a folder through the player's opener (open_player_folder),
+    /// its failure said in amber, and OK, Enter and Escape closing it with
+    /// the closing sound; it closes when that screen goes.
     ///
-    /// @param context the screen context, with the input
-    /// @param state unused
-    /// @return 1 when the input was taken
-    static int notice_event(oa::app::ScreenContext* context, void* state);
+    /// @param runtime the runtime
+    /// @param told the notice
+    /// @param folder_shown the folder its open button shows
+    /// @param over the screen of the game it shows over
+    static void show_notice(
+        Runtime& runtime, oa::ui::engine_settings::Notice told, fs::path folder_shown, Screen over
+    );
 
-    /// Closes the notice once a screen other than its own shows.
+    /// Tells whether a notice shows on the OA layer or waits for it, so that
+    /// another of these notices waits until it is closed.
     ///
-    /// @param context the screen context
-    /// @param state unused
-    static void notice_tick(oa::app::ScreenContext* context, void* state);
-
-    /// Darkens the notice's screen and draws the notice over it.
-    ///
-    /// @param context the screen context, with the frame
-    /// @param state unused
-    static void notice_draw(oa::app::ScreenContext* context, void* state);
+    /// @param runtime the runtime
+    /// @return true while one does
+    [[nodiscard]] static bool notice_pending(const Runtime& runtime) noexcept;
 };
 
 } // namespace oa::app

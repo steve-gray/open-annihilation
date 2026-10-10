@@ -3820,16 +3820,6 @@ class Runtime final : public menu::Host,
     ///         empty picture, which draws the OA mark, when it cannot be decoded
     [[nodiscard]] oa::ui::frontend_renderer::RgbaPicture engine_settings_icon();
 
-    /// Returns the meaning a key has in the dialog's notices and prompts: the
-    /// OA layer's (layer_key), for the notices and prompts that map their
-    /// own keys.
-    ///
-    /// @param key SDL keycode
-    /// @param modifiers SDL_Keymod bits
-    /// @return the dialog's key; nothing for a key it does not answer to
-    [[nodiscard]] static std::optional<oa::ui::engine_settings::DialogKey>
-    engine_settings_dialog_key(uint32_t key, uint16_t modifiers) noexcept;
-
     /// Checks that each setting takes effect, in step with its console
     /// command and the command line (part of --check-engine-settings).
     void check_engine_settings_wiring();
@@ -3860,8 +3850,9 @@ class Runtime final : public menu::Host,
     /// recorded in the preferences, which are written; no notice follows.
     void move_recordings_once();
 
-    /// The player's own folder's opener and the main menu's notice of the
-    /// move (user_folder_state.hpp, runtime_user_folder.cpp).
+    /// The player's own folder's opener and the notices of the engine's own
+    /// over a screen, the main menu's notice of the move among them
+    /// (user_folder_state.hpp, runtime_user_folder.cpp).
     struct UserFolderState;
 
     /// Frees the user folder's state.
@@ -3882,14 +3873,11 @@ class Runtime final : public menu::Host,
     /// @return what came of it
     oa::app::FolderOpening open_player_folder(const fs::path& folder);
 
-    /// Registers the main menu's notice of the move, over the settings
-    /// dialog's overlay.
-    void register_saves_notice_overlay();
-
-    /// Tells whether the notice of the saved games' move shows over the
-    /// main menu, which nothing else opens over.
+    /// Tells whether a notice of the engine's own, such as the saved games'
+    /// move, is on the OA layer (NoticeScreen), which Settings does not open
+    /// over.
     ///
-    /// @return true while it shows
+    /// @return true while one is
     [[nodiscard]] bool saves_notice_shown() const noexcept;
 
     /// Shows the notice of the saved games' moves over the main menu, once:
@@ -4171,13 +4159,10 @@ class Runtime final : public menu::Host,
     /// @return what was removed, and how many files were left in use
     oa::app::content::EmptyResult empty_content_downloads();
 
-    /// Registers the prompt of the installs over the main menu, over the
-    /// notices' overlay.
-    void register_mod_install_overlay();
-
-    /// Tells whether a prompt of the installs shows over the main menu.
+    /// Tells whether the prompt of the installs is on the OA layer
+    /// (QuestionScreen), over the main menu.
     ///
-    /// @return true while one shows
+    /// @return true while it is
     [[nodiscard]] bool mod_install_prompt_shown() const noexcept;
 
     /// Installs the packages opened in the game, one at a time, once the

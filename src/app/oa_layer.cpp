@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The OA layer (oa_layer.hpp): its stack of screens, their input and ticks,
-// its drawing over the front end's picture and over a match, the overlay
-// that hands it the game's input and frames, and the settings dialog as one
-// of its screens (Runtime::SettingsScreen), on the main menu and in a match.
+// The OA layer (oa_layer.hpp): its stack of screens and the queue of those
+// waiting for it, their input and ticks, its drawing over the front end's
+// picture and over a match, the overlay that hands it the game's input and
+// frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
+// on the main menu and in a match, and the screens of a notice and a
+// question (NoticeScreen, QuestionScreen).
 
 #include "oa_layer.hpp"
 
@@ -12,10 +14,14 @@
 #include "render_state.hpp"
 
 #include "oa/app/runtime.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -28,6 +34,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -227,6 +234,39 @@ void stamp_rgb(
 /// @return true when their sizes and pixels are the same
 bool same_picture(const renderer::Surface& first, const renderer::Surface& second) {
     return first.width == second.width && first.height == second.height && first.rgb == second.rgb;
+}
+
+/// Darkens a picture once for each modal screen with a backdrop over it:
+/// each pass blends the whole picture with the backdrop's colour.
+///
+/// @param[in,out] picture the picture
+/// @param passes how many times it is darkened
+/// @param opacity the backdrop's share of each pixel, in 256ths
+void darken(renderer::Surface& picture, uint32_t passes, uint32_t opacity) {
+    for (uint32_t pass = 0; pass < passes; ++pass)
+        artless::blend_source_rect(
+            picture,
+            {0, 0, 1},
+            {0, 0, static_cast<int32_t>(picture.width), static_cast<int32_t>(picture.height)},
+            kit::rgb(kit::colour::backdrop),
+            opacity
+        );
+}
+
+/// Returns where a notice or a question of a height shows: centred on the
+/// front end's picture at 1×.
+///
+/// @param box_height its height, in points
+/// @return its place
+LayerPlacement centred_box(int32_t box_height) noexcept {
+    return {
+        {(kCanvasWidth - kit::notice_width) / 2,
+         (kCanvasHeight - box_height) / 2,
+         kit::notice_width,
+         box_height},
+        kit::notice_width,
+        box_height
+    };
 }
 
 } // namespace
@@ -477,6 +517,191 @@ void Runtime::take_settings_screen_action(settings::DialogAction action) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// A notice as a screen of the layer
+
+NoticeScreen::NoticeScreen(OaLayer& layer, Screen shown_over, kit::Notice told, Host answers)
+    : layer_(layer), over_(shown_over), notice_(std::move(told)), host_(std::move(answers)) {
+}
+
+int32_t NoticeScreen::shown_height() const {
+    return settings::notice_height(notice_, layer_.screen_fonts());
+}
+
+LayerPlacement NoticeScreen::placement(const LayerView& view) const {
+    if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
+        return {};
+    return centred_box(shown_height());
+}
+
+void NoticeScreen::draw(const kit::Canvas& canvas) const {
+    if (canvas.surface == nullptr || canvas.fonts == nullptr)
+        return;
+    settings::draw_notice(*canvas.surface, canvas.placement, notice_, *canvas.fonts, canvas.icon);
+}
+
+LayerAnswer
+NoticeScreen::pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) {
+    const int32_t tall = shown_height();
+    auto action = kit::NoticeAction::none;
+    switch (kind) {
+    case ScreenInputKind::pointer_move:
+        action = kit::notice_pointer_move(notice_, at, tall);
+        break;
+    case ScreenInputKind::pointer_down:
+        // A finger's press takes the nearer button within reach.
+        if (button == SDL_BUTTON_LEFT)
+            action = finger_reach > 0 ? kit::notice_finger_down(notice_, at, tall, finger_reach)
+                                      : kit::notice_pointer_down(notice_, at, tall);
+        break;
+    case ScreenInputKind::pointer_up:
+        if (button == SDL_BUTTON_LEFT)
+            action = kit::notice_pointer_up(notice_, at, tall);
+        break;
+    default:
+        break;
+    }
+    return take(action);
+}
+
+LayerAnswer NoticeScreen::key(kit::Key pressed, uint32_t /*sdl_key*/) {
+    return take(kit::notice_key(notice_, pressed));
+}
+
+kit::DisplayList NoticeScreen::display_list() const {
+    return kit::notice_list(notice_, layer_.screen_fonts(), oa::data::languages::interface_text);
+}
+
+kit::Interaction NoticeScreen::interaction() const {
+    kit::Interaction shown{};
+    shown.hovered = notice_.hovered;
+    shown.pressed = notice_.pressed;
+    shown.focused = notice_.marked;
+    shown.focus_shown = notice_.marked != kit::no_control;
+    shown.finger_shift = {notice_.finger_shift_x, notice_.finger_shift_y};
+    return shown;
+}
+
+LayerAnswer NoticeScreen::tick() {
+    return host_.tick && host_.tick() ? LayerAnswer::close : LayerAnswer::none;
+}
+
+LayerAnswer NoticeScreen::take(kit::NoticeAction action) {
+    switch (action) {
+    case kit::NoticeAction::open_folder:
+        // The notice stays, saying why the folder could not be shown.
+        notice_.failure = host_.open ? host_.open() : std::string();
+        ++revision_;
+        return LayerAnswer::redraw;
+    case kit::NoticeAction::closed:
+        if (host_.ok)
+            host_.ok();
+        ++revision_;
+        return LayerAnswer::close;
+    case kit::NoticeAction::redraw:
+        ++revision_;
+        return LayerAnswer::redraw;
+    case kit::NoticeAction::none:
+        break;
+    }
+    return LayerAnswer::none;
+}
+
+// ---------------------------------------------------------------------------------------------
+// A question as a screen of the layer
+
+QuestionScreen::QuestionScreen(OaLayer& layer, Screen shown_over, kit::Question asked, Host answers)
+    : layer_(layer), over_(shown_over), question_(std::move(asked)), host_(std::move(answers)) {
+}
+
+int32_t QuestionScreen::shown_height() const {
+    return settings::prompt_height(question_, layer_.screen_fonts());
+}
+
+LayerPlacement QuestionScreen::placement(const LayerView& view) const {
+    if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
+        return {};
+    return centred_box(shown_height());
+}
+
+void QuestionScreen::draw(const kit::Canvas& canvas) const {
+    if (canvas.surface == nullptr || canvas.fonts == nullptr)
+        return;
+    settings::draw_prompt(*canvas.surface, canvas.placement, question_, *canvas.fonts, canvas.icon);
+}
+
+LayerAnswer
+QuestionScreen::pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) {
+    const int32_t tall = shown_height();
+    kit::QuestionAnswer outcome{};
+    switch (kind) {
+    case ScreenInputKind::pointer_move:
+        outcome = kit::question_pointer_move(question_, at, tall);
+        break;
+    case ScreenInputKind::pointer_down:
+        // A finger's press takes the nearest button within reach.
+        if (button == SDL_BUTTON_LEFT)
+            outcome = finger_reach > 0
+                          ? kit::question_finger_down(question_, at, tall, finger_reach)
+                          : kit::question_pointer_down(question_, at, tall);
+        break;
+    case ScreenInputKind::pointer_up:
+        if (button == SDL_BUTTON_LEFT)
+            outcome = kit::question_pointer_up(question_, at, tall);
+        break;
+    default:
+        break;
+    }
+    return take(outcome, 0);
+}
+
+LayerAnswer QuestionScreen::key(kit::Key pressed, uint32_t sdl_key) {
+    return take(kit::question_key(question_, pressed), sdl_key);
+}
+
+kit::DisplayList QuestionScreen::display_list() const {
+    return kit::question_list(question_, layer_.screen_fonts());
+}
+
+kit::Interaction QuestionScreen::interaction() const {
+    kit::Interaction shown{};
+    shown.hovered = question_.hovered;
+    shown.pressed = question_.pressed;
+    shown.focused = question_.marked;
+    shown.focus_shown = question_.marked != kit::no_control;
+    shown.finger_shift = {question_.finger_shift_x, question_.finger_shift_y};
+    return shown;
+}
+
+LayerAnswer QuestionScreen::tick() {
+    return host_.tick && host_.tick() ? LayerAnswer::close : LayerAnswer::none;
+}
+
+void QuestionScreen::close(bool /*by_key*/) {
+    if (host_.closed)
+        host_.closed(*this);
+}
+
+LayerAnswer QuestionScreen::take(kit::QuestionAnswer outcome, uint32_t sdl_key) {
+    switch (outcome.action) {
+    case kit::QuestionAction::answered: {
+        // The key that answered does nothing more until it is released,
+        // whether the question closes or stays with what its host shows next.
+        if (sdl_key != 0)
+            layer_.latch_key(sdl_key);
+        ++revision_;
+        const bool last = !host_.answer || host_.answer(outcome.button);
+        return last ? LayerAnswer::close : LayerAnswer::redraw;
+    }
+    case kit::QuestionAction::redraw:
+        ++revision_;
+        return LayerAnswer::redraw;
+    case kit::QuestionAction::none:
+        break;
+    }
+    return LayerAnswer::none;
+}
+
+// ---------------------------------------------------------------------------------------------
 // The layer
 
 kit::Point layer_point(const LayerPlacement& placement, float x, float y) noexcept {
@@ -603,6 +828,28 @@ void OaLayer::push(std::unique_ptr<LayerScreen> screen) {
     sync_text_input();
 }
 
+void OaLayer::show_when_free(std::unique_ptr<LayerScreen> screen) {
+    if (!screen)
+        return;
+    queue_.push_back(std::move(screen));
+    show_waiting();
+}
+
+void OaLayer::close(const LayerScreen* screen) {
+    if (screen == nullptr)
+        return;
+    // A screen that is taking an input or its tick leaves once that is done.
+    if (screen == calling_) {
+        close_asked_ = true;
+        return;
+    }
+    if (holds(screen))
+        remove(screen, false);
+    else
+        drop_waiting(screen);
+    show_waiting();
+}
+
 void OaLayer::close_top() {
     if (!screens_.empty())
         remove(screens_.back().get(), false);
@@ -628,9 +875,21 @@ LayerScreen* OaLayer::find(std::string_view name) const noexcept {
     return nullptr;
 }
 
+LayerScreen* OaLayer::waiting(std::string_view name) const noexcept {
+    for (const auto& screen : queue_)
+        if (screen->name() == name)
+            return screen.get();
+    return nullptr;
+}
+
+const kit::Fonts* OaLayer::screen_fonts() const {
+    return runtime_.engine_settings_fonts();
+}
+
 LayerView OaLayer::view() const {
     LayerView seen{};
     seen.match = runtime_.screen_ == Screen::match;
+    seen.game_screen = runtime_.screen_;
     if (seen.match) {
         seen.match_layout = &runtime_.match_layout_;
         seen.fit_safe_area = match_fits_safe_area(runtime_);
@@ -676,6 +935,24 @@ bool OaLayer::holds(const LayerScreen* screen) const noexcept {
     });
 }
 
+bool OaLayer::queued(const LayerScreen* screen) const noexcept {
+    return std::any_of(queue_.begin(), queue_.end(), [screen](const auto& waiting_screen) {
+        return waiting_screen.get() == screen;
+    });
+}
+
+std::vector<uint32_t> OaLayer::backdrops_above(const LayerView& seen) const {
+    std::vector<uint32_t> above(screens_.size(), 0U);
+    uint32_t darkening = 0;
+    for (std::size_t index = screens_.size(); index > 0; --index) {
+        above[index - 1] = darkening;
+        const auto& screen = *screens_[index - 1];
+        if (screen.modal() && screen.backdrop() && !empty_rect(screen.placement(seen).shown))
+            ++darkening;
+    }
+    return above;
+}
+
 bool OaLayer::take_input(const ScreenInput& input) {
     // The key that closed a screen does nothing more until it is released,
     // so that a held key never reaches what lies under the layer.
@@ -713,11 +990,23 @@ bool OaLayer::take_input(const ScreenInput& input) {
         if (!taken && seen.match)
             taken = take_match_button(input);
     }
+    // A screen that closed may free the layer for the next one waiting.
+    show_waiting();
     sync_text_input();
     return taken;
 }
 
 LayerAnswer OaLayer::deliver(LayerScreen& screen, const LayerView& seen, const ScreenInput& input) {
+    calling_ = &screen;
+    close_asked_ = false;
+    const LayerAnswer answer = hand_input(screen, seen, input);
+    calling_ = nullptr;
+    // A screen whose host closed it while it took the input leaves now.
+    return std::exchange(close_asked_, false) ? LayerAnswer::close : answer;
+}
+
+LayerAnswer
+OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInput& input) {
     const LayerPlacement placed = screen.placement(seen);
     switch (input.kind) {
     case ScreenInputKind::pointer_move:
@@ -757,6 +1046,7 @@ void OaLayer::take_answer(LayerScreen& screen, LayerAnswer answer, uint32_t key_
     if (key_down != 0)
         latched_key_ = key_down;
     remove(&screen, key_down != 0);
+    show_waiting();
 }
 
 void OaLayer::remove(const LayerScreen* screen, bool by_key) {
@@ -774,18 +1064,52 @@ void OaLayer::remove(const LayerScreen* screen, bool by_key) {
     sync_text_input();
 }
 
+void OaLayer::drop_waiting(const LayerScreen* screen) {
+    const auto it = std::find_if(queue_.begin(), queue_.end(), [screen](const auto& held) {
+        return held.get() == screen;
+    });
+    if (it == queue_.end())
+        return;
+    std::unique_ptr<LayerScreen> leaving = std::move(*it);
+    queue_.erase(it);
+    leaving->close(false);
+}
+
+void OaLayer::show_waiting() {
+    // One at a time: the first waiting is pushed while no modal screen
+    // shows, and the next waits while it shows.
+    while (!queue_.empty() && top_modal(view()) == nullptr) {
+        std::unique_ptr<LayerScreen> next = std::move(queue_.front());
+        queue_.erase(queue_.begin());
+        push(std::move(next));
+    }
+}
+
 void OaLayer::tick() {
-    // A tick may close a screen, or open another.
+    // A tick may close a screen, or open another. The screens waiting are
+    // ticked too, so that one whose screen of the game goes leaves the queue.
     std::vector<LayerScreen*> ticking;
-    ticking.reserve(screens_.size());
+    ticking.reserve(screens_.size() + queue_.size());
     for (const auto& screen : screens_)
         ticking.push_back(screen.get());
+    for (const auto& screen : queue_)
+        ticking.push_back(screen.get());
     for (LayerScreen* screen : ticking) {
-        if (!holds(screen))
+        const bool on_stack = holds(screen);
+        if (!on_stack && !queued(screen))
             continue;
-        if (screen->tick() == LayerAnswer::close)
+        calling_ = screen;
+        close_asked_ = false;
+        const LayerAnswer answer = screen->tick();
+        calling_ = nullptr;
+        if (answer != LayerAnswer::close && !std::exchange(close_asked_, false))
+            continue;
+        if (holds(screen))
             remove(screen, false);
+        else
+            drop_waiting(screen);
     }
+    show_waiting();
     sync_text_input();
 }
 
@@ -903,33 +1227,31 @@ void OaLayer::darken_front_end(renderer::Surface& frame) const {
     const LayerView seen = view();
     if (seen.match)
         return;
-    const bool darkened =
-        std::any_of(screens_.begin(), screens_.end(), [&seen](const auto& screen) {
+    const auto darkenings =
+        std::count_if(screens_.begin(), screens_.end(), [&seen](const auto& screen) {
             return screen->modal() && screen->backdrop() &&
                    !empty_rect(screen->placement(seen).shown);
         });
-    if (!darkened)
-        return;
-    // A blend of the frame itself, in 256ths: the same picture the window
-    // shows at every size.
-    artless::blend_source_rect(
-        frame,
-        {0, 0, 1},
-        {0, 0, static_cast<int32_t>(frame.width), static_cast<int32_t>(frame.height)},
-        kit::rgb(kit::colour::backdrop),
-        kit::menu_backdrop_opacity
-    );
+    // A blend of the frame itself, in 256ths, for each: the same picture the
+    // window shows at every size.
+    darken(frame, static_cast<uint32_t>(darkenings), kit::menu_backdrop_opacity);
 }
 
 void OaLayer::compose_front_end(renderer::Surface& frame) const {
     const LayerView seen = view();
     if (seen.match)
         return;
-    for (const auto& screen : screens_) {
-        const LayerPlacement placed = screen->placement(seen);
+    const std::vector<uint32_t> above = backdrops_above(seen);
+    for (std::size_t index = 0; index < screens_.size(); ++index) {
+        const auto& screen = *screens_[index];
+        const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown))
             continue;
-        stamp_rgb(frame, draw_screen(*screen, placed), placed.shown);
+        // A screen under a modal screen with a backdrop darkens with what
+        // lies under it.
+        renderer::Surface drawn = draw_screen(screen, placed);
+        darken(drawn, above[index], kit::menu_backdrop_opacity);
+        stamp_rgb(frame, drawn, placed.shown);
     }
 }
 
@@ -973,8 +1295,10 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
     look.picture_height = picture_height;
     look.area = {area.x, area.y, area.w, area.h};
     layout::Rect bounds{};
-    for (const auto& screen : screens_) {
-        const LayerPlacement placed = screen->placement(seen);
+    const std::vector<uint32_t> above = backdrops_above(seen);
+    for (std::size_t index = 0; index < screens_.size(); ++index) {
+        const auto& screen = *screens_[index];
+        const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
             continue;
         // The window pixels whose centres fall on the screen's place on the
@@ -992,7 +1316,8 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         FrontPiece piece{};
         piece.window = {left, first_row, right - left, bottom - first_row};
         piece.shown = placed.shown;
-        piece.drawn = draw_screen(*screen, placed);
+        piece.drawn = draw_screen(screen, placed);
+        darken(piece.drawn, above[index], kit::menu_backdrop_opacity);
         bounds = union_rect(bounds, piece.window);
         look.pieces.push_back(std::move(piece));
     }
@@ -1264,18 +1589,29 @@ bool OaLayer::refresh_match() {
     look.revision = revision_;
     if (!look.button_shown || look.width <= 0 || look.height <= 0 || !seen.match)
         return false;
-    std::vector<std::pair<const LayerScreen*, LayerPlacement>> shown_screens;
-    for (const auto& screen : screens_) {
-        const LayerPlacement placed = screen->placement(seen);
+
+    // Each screen that shows, where, and how many modal screens with a
+    // backdrop show above it.
+    struct ShownScreen {
+        const LayerScreen* screen{};
+        LayerPlacement placed{};
+        uint32_t darkenings{};
+    };
+
+    std::vector<ShownScreen> shown_screens;
+    const std::vector<uint32_t> above = backdrops_above(seen);
+    for (std::size_t index = 0; index < screens_.size(); ++index) {
+        const auto& screen = *screens_[index];
+        const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown))
             continue;
-        shown_screens.emplace_back(screen.get(), placed);
+        shown_screens.push_back({&screen, placed, above[index]});
         look.placed.insert(
             look.placed.end(),
             {placed.shown.x, placed.shown.y, placed.shown.width, placed.shown.height}
         );
-        look.revisions.push_back(screen->revision());
-        look.darkened = look.darkened || (screen->modal() && screen->backdrop());
+        look.revisions.push_back(screen.revision());
+        look.darkened = look.darkened || (screen.modal() && screen.backdrop());
     }
     if (drawn_ == look)
         return true;
@@ -1303,9 +1639,13 @@ bool OaLayer::refresh_match() {
         bounds_ = {0, 0, look.width, look.height};
     }
     stamp(rgba_, look.width, look.height, button, button_at);
-    for (const auto& [screen, placed] : shown_screens) {
-        stamp(rgba_, look.width, look.height, draw_screen(*screen, placed), placed.shown);
-        bounds_ = union_rect(bounds_, placed.shown);
+    for (const auto& shown : shown_screens) {
+        // A screen under a modal screen with a backdrop darkens as the
+        // button does.
+        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed);
+        darken(drawn, shown.darkenings, settings::ingame_backdrop_opacity);
+        stamp(rgba_, look.width, look.height, drawn, shown.placed.shown);
+        bounds_ = union_rect(bounds_, shown.placed.shown);
     }
     drawn_ = look;
     uploaded_.reset();

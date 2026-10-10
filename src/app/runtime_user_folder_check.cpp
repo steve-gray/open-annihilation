@@ -5,9 +5,10 @@
 // preferences file, the saved games moved into it once, those loose in Saves
 // into Saves/default once, the recordings into Recordings once, the paths
 // the game names placed in it, a save, a screenshot and a film in the folders
-// of the mod played, the main menu's notice of the moves shown once and
-// closed, and the settings' Your files buttons, all through a recorded
-// opener, so that no file manager opens.
+// of the mod played, the main menu's notice of the moves shown once on the OA
+// layer and closed, notices and a question waiting for the layer one at a
+// time, a question over Settings, and the settings' Your files buttons, all
+// through a recorded opener, so that no file manager opens.
 
 #include "engine_settings_state.hpp"
 #include "oa_layer.hpp"
@@ -20,8 +21,10 @@
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/components_more.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -49,6 +52,9 @@ namespace {
 /// A point of the main menu's picture over none of its buttons, where the
 /// pointer rests between the check's steps.
 constexpr oa::ui::display_layout::Point kRestingPointer{4, 240};
+
+/// How far round the pointer the cursor may draw, in the picture's pixels.
+constexpr int32_t kCursorReach = 40;
 
 /// Stops the check with a reason unless a condition holds.
 ///
@@ -78,21 +84,65 @@ std::string read_file(const fs::path& file) {
     return std::string(std::istreambuf_iterator<char>(input), {});
 }
 
-/// Counts the pixels in which two frames of one size differ.
+/// Counts the pixels in which two frames of one size differ, leaving out a
+/// rectangle.
 ///
 /// @param first one frame
 /// @param second the other frame
+/// @param left_out the pixels not compared; empty for none
 /// @return the differing pixels; every pixel and one more when the sizes differ
-std::size_t differing_pixels(const renderer::Surface& first, const renderer::Surface& second) {
+std::size_t differing_pixels(
+    const renderer::Surface& first,
+    const renderer::Surface& second,
+    const artless::SourceRect& left_out = {}
+) {
     if (first.width != second.width || first.height != second.height ||
         first.rgb.size() != second.rgb.size())
         return static_cast<std::size_t>(first.width) * first.height + 1U;
     std::size_t differing = 0;
-    for (std::size_t at = 0; at + 2 < first.rgb.size(); at += 3)
-        if (first.rgb[at] != second.rgb[at] || first.rgb[at + 1] != second.rgb[at + 1] ||
-            first.rgb[at + 2] != second.rgb[at + 2])
-            ++differing;
+    for (uint32_t y = 0; y < first.height; ++y)
+        for (uint32_t x = 0; x < first.width; ++x) {
+            const auto column = static_cast<int32_t>(x);
+            const auto row = static_cast<int32_t>(y);
+            if (column >= left_out.x && row >= left_out.y && column < left_out.x + left_out.width &&
+                row < left_out.y + left_out.height)
+                continue;
+            const auto at = (static_cast<std::size_t>(y) * first.width + x) * 3U;
+            if (first.rgb[at] != second.rgb[at] || first.rgb[at + 1] != second.rgb[at + 1] ||
+                first.rgb[at + 2] != second.rgb[at + 2])
+                ++differing;
+        }
     return differing;
+}
+
+/// Returns a made-up notice of the check's, with a folder's path.
+///
+/// @param title its title
+/// @param folder the folder it names
+/// @return the notice
+settings::Notice check_notice(std::string_view title, const fs::path& folder) {
+    settings::Notice made;
+    made.title = std::string(title);
+    made.open_caption = "OPEN FOLDER";
+    made.paragraphs.push_back({"A notice of the check's, which waits for the layer:", false});
+    made.paragraphs.push_back({path_to_utf8(folder), true});
+    return made;
+}
+
+/// Returns a made-up question of the check's, with two buttons.
+///
+/// @param title its title
+/// @return the question
+oa::ui::kit::Question check_question(std::string_view title) {
+    oa::ui::kit::Question made;
+    made.title = std::string(title);
+    made.paragraphs.push_back({"A question of the check's.", false});
+    made.buttons.push_back({"CANCEL", false, "cancel"});
+    made.buttons.push_back({"OK", true, "ok"});
+    made.cancel_button = 0;
+    made.primary_button = 1;
+    made.marked = 1;
+    return made;
 }
 
 /// Writes one step's snapshot, <stem>-<step>.ppm beside --snapshot, when
@@ -348,7 +398,13 @@ void Runtime::check_user_folder() {
             told_now.at(std::string(loose_saves_notice_preference)) == saves_notice_told,
         "the notice shown was not recorded told"
     );
-    const auto& notice = *state.notice;
+    const auto* notice_screen =
+        dynamic_cast<const NoticeScreen*>(oa_layer().find(NoticeScreen::screen_name));
+    require(
+        notice_screen != nullptr && notice_screen->over() == Screen::main_menu,
+        "the notice is not a notice screen of the OA layer over the main menu"
+    );
+    const auto& notice = notice_screen->notice();
     require(
         notice.title == "SAVED GAMES MOVED" && notice.paragraphs.size() == 4 &&
             notice.paragraphs[0].text == "5 saved games have moved to:" &&
@@ -357,7 +413,54 @@ void Runtime::check_user_folder() {
     );
     // Over the darkened main menu, centred, in the settings dialog's look.
     const int32_t height = settings::notice_height(notice, fonts);
-    const auto placement = UserFolderState::notice_placement(height);
+    const artless::Placement placement{
+        (kCanvasWidth - settings::notice_width) / 2, (kCanvasHeight - height) / 2, 1
+    };
+    const auto placed = notice_screen->placement(oa_layer().view());
+    require(
+        placed.shown.x == placement.x && placed.shown.y == placement.y &&
+            placed.shown.width == settings::notice_width && placed.shown.height == height &&
+            placed.points_width == settings::notice_width && placed.points_height == height,
+        "the notice is not centred on the main menu at 1x"
+    );
+    // The 640x480 window shows a picture: the frame under the layer in it,
+    // the layer's screens over it in the window's own pixels and the cursor
+    // above both, its square left out.
+    const auto window_shows = [&](const renderer::Surface& picture, std::string_view step) {
+        int kept_width = 0;
+        int kept_height = 0;
+        SDL_GetWindowSize(sdl_.window, &kept_width, &kept_height);
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) &&
+                SDL_SyncWindow(sdl_.window),
+            "the window did not take 640x480"
+        );
+        apply_output_mode();
+        renderer::Surface presented;
+        menu_sparks_ = sparks;
+        capture_frame_ = &presented;
+        render();
+        capture_frame_ = nullptr;
+        auto corrected = picture;
+        apply_gamma_rgb(corrected.rgb.data(), corrected.rgb.size() / 3U, 3);
+        const artless::SourceRect cursor{
+            kRestingPointer.x - kCursorReach,
+            kRestingPointer.y - kCursorReach,
+            2 * kCursorReach,
+            2 * kCursorReach
+        };
+        const auto differing = differing_pixels(presented, corrected, cursor);
+        if (differing != 0) {
+            step_snapshot(options_.snapshot, std::string(step) + "-presented", presented);
+            step_snapshot(options_.snapshot, std::string(step) + "-picture", corrected);
+        }
+        require(
+            SDL_SetWindowSize(sdl_.window, kept_width, kept_height) && SDL_SyncWindow(sdl_.window),
+            "the window did not take its size back"
+        );
+        apply_output_mode();
+        return differing;
+    };
     {
         auto expected = menu;
         artless::blend_source_rect(
@@ -374,16 +477,22 @@ void Runtime::check_user_folder() {
             differing_pixels(shown, expected) == 0,
             "the notice is not drawn centred over the darkened main menu"
         );
+        const auto differing_shown = window_shows(expected, "notice");
+        require(
+            differing_shown == 0,
+            "the 640x480 window does not show the notice over the darkened main menu: " +
+                std::to_string(differing_shown) + " pixels differ"
+        );
     }
-    // Its buttons: Open folder shows Saves and the notice stays; one that
-    // fails says why in it.
+    // Its buttons, where the OA layer shows it: Open folder shows Saves and
+    // the notice stays; one that fails says why in it.
     const auto parts = settings::notice_layout(notice, fonts);
     const auto button = [&](int32_t control) {
         for (const auto& part : parts)
             if (part.control == control)
                 return oa::ui::display_layout::Point{
-                    placement.x + part.rect.x + part.rect.width / 2,
-                    placement.y + part.rect.y + part.rect.height / 2
+                    placed.shown.x + part.rect.x + part.rect.width / 2,
+                    placed.shown.y + part.rect.y + part.rect.height / 2
                 };
         throw std::runtime_error("user folder check: the notice has no such button");
     };
@@ -395,7 +504,8 @@ void Runtime::check_user_folder() {
     state.opened.clear();
     click(button(settings::notice_open_control));
     require(
-        saves_notice_shown() && state.opened == std::vector<fs::path>{saves},
+        saves_notice_shown() && oa_layer().find(NoticeScreen::screen_name) == notice_screen &&
+            state.opened == std::vector<fs::path>{saves},
         "Open folder did not show Saves, or closed the notice"
     );
     const FolderOpenerHooks recording = state.opener;
@@ -403,7 +513,7 @@ void Runtime::check_user_folder() {
     click(button(settings::notice_open_control));
     state.opener = recording;
     require(
-        saves_notice_shown() && state.notice->failure == no_file_manager_text,
+        saves_notice_shown() && notice_screen->notice().failure == no_file_manager_text,
         "the notice does not say why the folder could not be shown"
     );
     // Enter closes it, and its release never reaches the main menu.
@@ -430,6 +540,167 @@ void Runtime::check_user_folder() {
               << ',' << placement.y
               << ", showed Saves, said why one could not be shown and "
                  "closed on Enter\n";
+
+    // Notices and questions nobody asked for wait for the OA layer, first
+    // in, first out, and show one at a time: none over Settings, none over
+    // another. A question Settings asks of its own shows over it at once,
+    // Settings darkened under it with the menu.
+    {
+        send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
+        const auto closed = frame();
+        open_engine_settings_from_menu();
+        const auto* dialog = engine_settings_dialog();
+        require(
+            dialog != nullptr && oa_layer().top() != nullptr &&
+                oa_layer().top()->name() == "settings",
+            "the settings dialog did not open on the OA layer"
+        );
+        auto answered = std::make_shared<std::vector<int32_t>>();
+        const auto check_host = [answered] {
+            QuestionScreen::Host host;
+            host.answer = [answered](int32_t pressed) {
+                answered->push_back(pressed);
+                return true;
+            };
+            return host;
+        };
+        UserFolderState::show_notice(
+            *this, check_notice("CHECK NOTICE ONE", saves), saves, Screen::main_menu
+        );
+        oa_layer().show_when_free(
+            std::make_unique<QuestionScreen>(
+                oa_layer(), Screen::main_menu, check_question("CHECK QUESTION"), check_host()
+            )
+        );
+        UserFolderState::show_notice(
+            *this, check_notice("CHECK NOTICE TWO", saves), saves, Screen::main_menu
+        );
+        tick_screen_packages();
+        require(
+            !saves_notice_shown() && oa_layer().find(QuestionScreen::screen_name) == nullptr &&
+                oa_layer().top()->name() == "settings" &&
+                oa_layer().waiting(NoticeScreen::screen_name) != nullptr &&
+                oa_layer().waiting(QuestionScreen::screen_name) != nullptr,
+            "a notice or a question nobody asked for opened over Settings"
+        );
+        // The question Settings asks, over it at once.
+        oa_layer().push(
+            std::make_unique<QuestionScreen>(
+                oa_layer(), Screen::main_menu, check_question("SETTINGS ASKS"), check_host()
+            )
+        );
+        const auto* asked = oa_layer().top();
+        require(
+            asked != nullptr && asked->name() == QuestionScreen::screen_name,
+            "the question Settings asks is not over it"
+        );
+        const auto& question = static_cast<const QuestionScreen*>(asked)->question();
+        const int32_t question_height = settings::prompt_height(question, fonts);
+        const artless::Placement question_at{
+            (kCanvasWidth - settings::notice_width) / 2, (kCanvasHeight - question_height) / 2, 1
+        };
+        const auto question_placed = asked->placement(oa_layer().view());
+        require(
+            question_placed.shown.x == question_at.x && question_placed.shown.y == question_at.y &&
+                question_placed.shown.height == question_height,
+            "the question is not centred on the main menu at 1x"
+        );
+        {
+            // The menu darkened under Settings and again under the
+            // question, Settings darkened under the question, and the
+            // question over both.
+            auto expected = closed;
+            const auto darken_whole = [&expected] {
+                artless::blend_source_rect(
+                    expected,
+                    {0, 0, 1},
+                    {0,
+                     0,
+                     static_cast<int32_t>(expected.width),
+                     static_cast<int32_t>(expected.height)},
+                    settings::backdrop_color,
+                    settings::menu_backdrop_opacity
+                );
+            };
+            darken_whole();
+            settings::draw_dialog(
+                expected,
+                {(kCanvasWidth - settings::dialog_width) / 2,
+                 (kCanvasHeight - settings::dialog_height) / 2,
+                 1},
+                *dialog,
+                *fonts,
+                engine_settings_icon()
+            );
+            darken_whole();
+            settings::draw_prompt(expected, question_at, question, *fonts, engine_settings_icon());
+            const auto shown = frame();
+            step_snapshot(options_.snapshot, "question-over-settings", shown);
+            require(
+                differing_pixels(shown, expected) == 0,
+                "the question is not drawn over Settings darkened under it"
+            );
+            const auto differing_shown = window_shows(expected, "question-over-settings");
+            require(
+                differing_shown == 0,
+                "the 640x480 window does not show the question over Settings darkened under it: " +
+                    std::to_string(differing_shown) + " pixels differ"
+            );
+        }
+        // Escape answers it, and Settings is on top again; the others wait.
+        require(key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE), "Escape on the question ended the run");
+        require(key(SDL_EVENT_KEY_UP, SDLK_ESCAPE), "Escape's release ended the run");
+        require(
+            *answered == std::vector<int32_t>{0} && engine_settings_dialog() != nullptr &&
+                oa_layer().top() != nullptr && oa_layer().top()->name() == "settings" &&
+                !saves_notice_shown(),
+            "Escape did not answer the question over Settings, or reached Settings"
+        );
+        // Settings closes: the first notice shows, and the others wait.
+        const auto shown_title = [this] {
+            const auto* shown_notice =
+                dynamic_cast<const NoticeScreen*>(oa_layer().find(NoticeScreen::screen_name));
+            return shown_notice != nullptr ? shown_notice->notice().title : std::string();
+        };
+        require(key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE), "Escape in Settings ended the run");
+        require(key(SDL_EVENT_KEY_UP, SDLK_ESCAPE), "Escape's release ended the run");
+        require(
+            engine_settings_dialog() == nullptr && shown_title() == "CHECK NOTICE ONE" &&
+                oa_layer().find(QuestionScreen::screen_name) == nullptr &&
+                oa_layer().waiting(QuestionScreen::screen_name) != nullptr &&
+                oa_layer().waiting(NoticeScreen::screen_name) != nullptr,
+            "closing Settings did not show the first notice alone"
+        );
+        // Each closed shows the next, alone.
+        require(key(SDL_EVENT_KEY_DOWN, SDLK_RETURN), "Enter on the notice ended the run");
+        require(key(SDL_EVENT_KEY_UP, SDLK_RETURN), "Enter's release ended the run");
+        const auto* waited =
+            dynamic_cast<const QuestionScreen*>(oa_layer().find(QuestionScreen::screen_name));
+        require(
+            !saves_notice_shown() && waited != nullptr &&
+                waited->question().title == "CHECK QUESTION" &&
+                oa_layer().waiting(NoticeScreen::screen_name) != nullptr,
+            "closing the first notice did not show the question alone"
+        );
+        require(key(SDL_EVENT_KEY_DOWN, SDLK_RETURN), "Enter on the question ended the run");
+        require(key(SDL_EVENT_KEY_UP, SDLK_RETURN), "Enter's release ended the run");
+        require(
+            *answered == std::vector<int32_t>{0, 1} && shown_title() == "CHECK NOTICE TWO" &&
+                oa_layer().find(QuestionScreen::screen_name) == nullptr &&
+                oa_layer().waiting(NoticeScreen::screen_name) == nullptr,
+            "answering the question did not show the last notice alone"
+        );
+        require(key(SDL_EVENT_KEY_DOWN, SDLK_RETURN), "Enter on the notice ended the run");
+        require(key(SDL_EVENT_KEY_UP, SDLK_RETURN), "Enter's release ended the run");
+        require(
+            oa_layer().top() == nullptr &&
+                oa_layer().waiting(NoticeScreen::screen_name) == nullptr &&
+                screen_ == Screen::main_menu && engine_settings_dialog() == nullptr,
+            "the last notice did not close, or a key reached the main menu"
+        );
+        std::cout << "user folder check: two notices and a question waited for Settings and "
+                     "showed one at a time, first in first; a question over Settings darkened it\n";
+    }
 
     // A save, a screenshot and a film land in the folders of the mod
     // played: default without a mod, and the mod's id with a made-up one,

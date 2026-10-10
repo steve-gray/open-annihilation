@@ -3,8 +3,9 @@
 
 // The packages opened in the game, installed over the main menu: each taken
 // from the inbox once the menu has settled, read, its question asked in a
-// prompt in the settings dialog's look, its files unpacked a budget a frame
-// with the progress shown, put in place, and what came of it told; a change
+// prompt in the settings dialog's look, a question screen of the OA layer,
+// its files unpacked a budget a frame with the progress shown, put in place,
+// and what came of it told; a change
 // to the mod played waits for the run to end. A catalogue map pack, and a
 // catalogue language pack, ask nothing and show nothing, including while
 // Settings or a notice show and in a run nobody watches. PLAY NOW switches
@@ -13,6 +14,7 @@
 
 #include "engine_settings_state.hpp"
 #include "mod_install_state.hpp"
+#include "oa_layer.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -31,30 +33,27 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
-#include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <chrono>
-#include <cmath>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
-namespace artless = oa::ui::frontend_renderer;
 namespace install = oa::app::package_install;
 
 namespace {
 
-/// The prompt overlay's z: over the notices' overlay, which never shows with it.
-constexpr int16_t kPromptOverlayZ = 102;
 /// Frames in a row the main menu shows before a prompt.
 constexpr uint32_t kPromptMenuFrames = 2;
 /// The package bytes an unpacking step reads.
@@ -88,16 +87,6 @@ void wait_pumping(void*, uint32_t milliseconds) {
     }
 }
 
-/// Returns the source pixel an input's pointer is over.
-///
-/// @param input the input
-/// @param[out] x the pixel's column
-/// @param[out] y the pixel's row
-void pointer_pixel(const ScreenInput& input, int32_t& x, int32_t& y) {
-    x = static_cast<int32_t>(std::floor(input.x));
-    y = static_cast<int32_t>(std::floor(input.y));
-}
-
 } // namespace
 
 void Runtime::destroy_mod_install_state(ModInstallState* state) noexcept {
@@ -118,130 +107,75 @@ Runtime::ModInstallState& Runtime::mod_install_state() {
 }
 
 bool Runtime::mod_install_prompt_shown() const noexcept {
-    return mod_install_state_ && mod_install_state_->shown.has_value();
+    return oa_layer_ && mod_install_state_ && mod_install_state_->prompt != nullptr &&
+           oa_layer_->holds(mod_install_state_->prompt);
 }
 
-artless::Placement Runtime::ModInstallState::prompt_placement(int32_t height) {
-    return {(kCanvasWidth - settings::notice_width) / 2, (kCanvasHeight - height) / 2, 1};
-}
-
-int Runtime::ModInstallState::prompt_event(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (!runtime.mod_install_state_)
-        return 0;
-    auto& state = *runtime.mod_install_state_;
-    const auto& input = *context->input;
-    if (state.latched_key != 0 && input.key == state.latched_key) {
-        if (input.kind == ScreenInputKind::key_up)
-            state.latched_key = 0;
-        if (input.kind == ScreenInputKind::key_down || input.kind == ScreenInputKind::key_up)
-            return 1;
-    }
-    if (!state.shown || runtime.screen_ != Screen::main_menu)
-        return 0;
-    auto& prompt = state.shown->prompt;
-    const auto* fonts = runtime.engine_settings_fonts();
-    const int32_t height = settings::prompt_height(prompt, fonts);
-    const auto placement = prompt_placement(height);
-    int32_t x = 0;
-    int32_t y = 0;
-    pointer_pixel(input, x, y);
-    x -= placement.x;
-    y -= placement.y;
-    settings::PromptAnswer answer{};
-    uint32_t key_down = 0;
-    switch (input.kind) {
-    case ScreenInputKind::pointer_move:
-        answer = settings::prompt_pointer_move(prompt, x, y, height);
-        break;
-    case ScreenInputKind::pointer_down:
-        if (input.button == SDL_BUTTON_LEFT)
-            answer = runtime.engine_settings_state().finger_pointer
-                         ? settings::prompt_finger_down(
-                               prompt, x, y, height, EngineSettingsState::finger_reach(runtime, 1.0)
-                           )
-                         : settings::prompt_pointer_down(prompt, x, y, height);
-        break;
-    case ScreenInputKind::pointer_up:
-        if (input.button == SDL_BUTTON_LEFT)
-            answer = settings::prompt_pointer_up(prompt, x, y, height);
-        break;
-    case ScreenInputKind::key_down:
-        if (const auto key = engine_settings_dialog_key(input.key, input.modifiers)) {
-            answer = settings::prompt_key(prompt, *key);
-            key_down = input.key;
-        }
-        break;
-    default:
-        break;
-    }
-    if (answer.action == settings::PromptAction::answered) {
-        state.latched_key = key_down;
-        runtime.answer_mod_install_prompt(answer.button);
-    }
-    // The prompt is modal: nothing under it sees any input while it shows.
-    return 1;
-}
-
-void Runtime::ModInstallState::prompt_tick(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (!runtime.mod_install_state_ || runtime.screen_ == Screen::main_menu)
-        return;
-    auto& state = *runtime.mod_install_state_;
-    // A question set aside by another screen waits again for the main menu.
-    if (state.stage == Stage::asking) {
-        install::return_package_file({state.file, state.origin});
-        state.stage = Stage::idle;
-        state.shown.reset();
-        state.package.reset();
-    } else if (state.stage == Stage::telling || state.stage == Stage::idle) {
-        state.shown.reset();
-        state.stage = Stage::idle;
-    }
-}
-
-void Runtime::ModInstallState::prompt_draw(ScreenContext* context, void*) {
-    auto& runtime = *static_cast<Runtime*>(context->host);
-    if (!runtime.mod_install_state_ || !runtime.mod_install_state_->shown ||
-        runtime.screen_ != Screen::main_menu || context->surface == nullptr)
-        return;
-    const auto* fonts = runtime.engine_settings_fonts();
-    if (fonts == nullptr)
-        return;
-    const auto& prompt = runtime.mod_install_state_->shown->prompt;
-    auto& frame = *context->surface;
-    artless::blend_source_rect(
-        frame,
-        {0, 0, 1},
-        {0, 0, static_cast<int32_t>(frame.width), static_cast<int32_t>(frame.height)},
-        settings::backdrop_color,
-        settings::menu_backdrop_opacity
-    );
-    settings::draw_prompt(
-        frame,
-        prompt_placement(settings::prompt_height(prompt, fonts)),
-        prompt,
-        *fonts,
-        runtime.engine_settings_icon()
-    );
-}
-
-void Runtime::register_mod_install_overlay() {
-    // On every screen, so that its tick sets a question aside when another
-    // screen replaces the main menu; it takes input and draws there only.
-    OverlayDesc prompt{};
-    prompt.name = "mod_install_prompt";
-    prompt.screen = kScreenAny;
-    prompt.z = kPromptOverlayZ;
-    prompt.event = ModInstallState::prompt_event;
-    prompt.tick = ModInstallState::prompt_tick;
-    prompt.draw = ModInstallState::prompt_draw;
-    overlay_register(&screens_, &prompt);
-}
-
-void Runtime::ModInstallState::show(install::PackagePrompt made) {
-    shown = std::move(made);
+void Runtime::ModInstallState::show(Runtime& runtime, install::PackagePrompt made, bool at_once) {
     ++prompts_shown;
+    answers = std::move(made.answers);
+    if (prompt != nullptr) {
+        prompt->question() = std::move(made.prompt);
+        prompt->changed();
+        return;
+    }
+    QuestionScreen::Host host;
+    // The answer goes to the install, which takes the prompt off itself
+    // once it is done with it (hide).
+    host.answer = [&runtime](int32_t button) {
+        runtime.answer_mod_install_prompt(button);
+        return false;
+    };
+    // A question is set aside, and a telling ends, once another screen
+    // replaces the main menu; an unpacking runs on under its prompt, which
+    // shows again over the main menu.
+    host.tick = [&runtime] {
+        return runtime.screen_ != Screen::main_menu &&
+               runtime.mod_install_state().stage != Stage::unpacking;
+    };
+    host.closed = [&runtime](const QuestionScreen& leaving) {
+        auto& state = runtime.mod_install_state();
+        if (state.prompt != &leaving)
+            return;
+        state.prompt = nullptr;
+        state.answers.clear();
+        state.set_aside();
+    };
+    auto& layer = runtime.oa_layer();
+    auto screen = std::make_unique<QuestionScreen>(
+        layer, Screen::main_menu, std::move(made.prompt), std::move(host)
+    );
+    prompt = screen.get();
+    if (at_once)
+        layer.push(std::move(screen));
+    else
+        layer.show_when_free(std::move(screen));
+}
+
+void Runtime::ModInstallState::update(Runtime& runtime, install::PackagePrompt made) {
+    const uint32_t counted = prompts_shown;
+    show(runtime, std::move(made));
+    prompts_shown = counted;
+}
+
+void Runtime::ModInstallState::hide(Runtime& runtime) {
+    answers.clear();
+    if (prompt == nullptr)
+        return;
+    // Let go first, so that its leaving sets nothing aside.
+    const QuestionScreen* leaving = prompt;
+    prompt = nullptr;
+    runtime.oa_layer().close(leaving);
+}
+
+void Runtime::ModInstallState::set_aside() {
+    if (stage == Stage::asking) {
+        install::return_package_file({file, origin});
+        stage = Stage::idle;
+        package.reset();
+    } else if (stage == Stage::telling || stage == Stage::idle) {
+        stage = Stage::idle;
+    }
 }
 
 void Runtime::ModInstallState::release_opened_copy() {
@@ -308,9 +242,10 @@ void Runtime::tell_mod_installs() {
                     .result = install::OutcomeResult::failed,
                     .reason = install::refusal_text(kind, problem),
                 });
-                if (!state.finish_quietly()) {
+                if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
+                        *this,
                         install::refused_prompt(kind, state.package->file_name, problem, true)
                     );
                 }
@@ -323,10 +258,11 @@ void Runtime::tell_mod_installs() {
                 state.told_folder = folder;
                 state.play_folder = folder;
                 package_changed(kind, folder);
-                if (!state.finish_quietly()) {
+                if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     const bool play_now = package_offers_play(kind);
                     state.show(
+                        *this,
                         state.change == install::Change::install
                             ? install::installed_prompt(kind, state.incoming, folder, play_now)
                             : install::updated_prompt(
@@ -361,16 +297,18 @@ void Runtime::tell_mod_installs() {
                 .result = install::OutcomeResult::refused,
                 .reason = install::refusal_text(kind, problem),
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
-                state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
+                state.show(
+                    *this, install::refused_prompt(kind, state.package->file_name, problem, false)
+                );
             }
             state.finish_package();
             return;
         }
         if (step == oa::formats::zip::StreamStep::more) {
             if (state.quiet) {
-                state.shown.reset();
+                state.hide(*this);
                 return;
             }
             const bool checking = state.unpacking->checking();
@@ -382,9 +320,11 @@ void Runtime::tell_mod_installs() {
                 checking ? install::InstallingPhase::checking : install::InstallingPhase::unpacking,
                 state.package->file_name
             );
-            made.prompt.hovered = state.shown ? state.shown->prompt.hovered : settings::no_control;
-            made.prompt.pressed = state.shown ? state.shown->prompt.pressed : settings::no_control;
-            state.shown = std::move(made);
+            made.prompt.hovered =
+                state.prompt != nullptr ? state.prompt->question().hovered : settings::no_control;
+            made.prompt.pressed =
+                state.prompt != nullptr ? state.prompt->question().pressed : settings::no_control;
+            state.update(*this, std::move(made));
             return;
         }
         // Unpacked whole. A kind that checks the staged files does so before
@@ -412,9 +352,10 @@ void Runtime::tell_mod_installs() {
                     .result = install::OutcomeResult::refused,
                     .reason = install::refusal_text(kind, staged),
                 });
-                if (!state.finish_quietly()) {
+                if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
+                        *this,
                         install::refused_prompt(kind, state.package->file_name, staged, false)
                     );
                 }
@@ -443,9 +384,10 @@ void Runtime::tell_mod_installs() {
                     .result = install::OutcomeResult::refused,
                     .reason = install::refusal_text(kind, refused),
                 });
-                if (!state.finish_quietly()) {
+                if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
+                        *this,
                         install::refused_prompt(kind, state.package->file_name, refused, false)
                     );
                 }
@@ -456,16 +398,19 @@ void Runtime::tell_mod_installs() {
         if (!state.target_played) {
             state.placing = true;
             if (state.quiet) {
-                state.shown.reset();
+                state.hide(*this);
                 return;
             }
-            state.shown = install::installing_prompt(
-                kind,
-                state.incoming,
-                state.unpacking->total_bytes(),
-                state.unpacking->total_bytes(),
-                install::InstallingPhase::placing,
-                state.package->file_name
+            state.update(
+                *this,
+                install::installing_prompt(
+                    kind,
+                    state.incoming,
+                    state.unpacking->total_bytes(),
+                    state.unpacking->total_bytes(),
+                    install::InstallingPhase::placing,
+                    state.package->file_name
+                )
             );
             return;
         }
@@ -483,7 +428,7 @@ void Runtime::tell_mod_installs() {
         install::set_pending_change(std::move(pending));
         log_line(state.package->file_name + ": put in place as the run ends");
         state.unpacking.reset();
-        state.shown.reset();
+        state.hide(*this);
         state.stage = ModInstallState::Stage::idle;
         state.finish_package();
         request_soft_restart();
@@ -512,9 +457,9 @@ void Runtime::tell_mod_installs() {
                 .result = install::OutcomeResult::refused,
                 .reason = "It is not a kind of package this game installs.",
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
-                state.show(install::unknown_kind_prompt(name));
+                state.show(*this, install::unknown_kind_prompt(name));
             }
             install::finish_package_file();
             return;
@@ -538,9 +483,11 @@ void Runtime::tell_mod_installs() {
                         .result = install::OutcomeResult::refused,
                         .reason = install::refusal_text(*state.kind, problem),
                     });
-                    if (!state.finish_quietly()) {
+                    if (!state.finish_quietly(*this)) {
                         state.stage = ModInstallState::Stage::telling;
-                        state.show(install::refused_prompt(*state.kind, name, problem, false));
+                        state.show(
+                            *this, install::refused_prompt(*state.kind, name, problem, false)
+                        );
                     }
                     state.kind = nullptr;
                     install::finish_package_file();
@@ -570,9 +517,10 @@ void Runtime::tell_mod_installs() {
                               ? std::string("It is not a kind of package this game installs.")
                               : install::refusal_text(*state.kind, opened.problem),
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(
+                    *this,
                     opened.problem.refusal == install::Refusal::unknown_kind
                         ? install::unknown_kind_prompt(name)
                         : install::refused_prompt(*state.kind, name, opened.problem, false)
@@ -598,9 +546,9 @@ void Runtime::tell_mod_installs() {
                 .result = install::OutcomeResult::refused,
                 .reason = "It is not a kind of package this game installs.",
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
-                state.show(install::unknown_kind_prompt(name));
+                state.show(*this, install::unknown_kind_prompt(name));
             }
             state.finish_package();
             return;
@@ -631,9 +579,11 @@ void Runtime::tell_mod_installs() {
                 .result = install::OutcomeResult::refused,
                 .reason = install::refusal_text(kind, problem),
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
-                state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
+                state.show(
+                    *this, install::refused_prompt(kind, state.package->file_name, problem, false)
+                );
             }
             state.finish_package();
             return;
@@ -645,13 +595,14 @@ void Runtime::tell_mod_installs() {
                 state.release_opened_copy();
                 state.package.reset();
                 state.kind = nullptr;
-                state.shown.reset();
+                state.hide(*this);
                 state.quiet = false;
                 state.stage = ModInstallState::Stage::idle;
                 return;
             }
             state.stage = ModInstallState::Stage::asking;
             state.show(
+                *this,
                 install::question_prompt(
                     kind,
                     state.plan,
@@ -669,7 +620,7 @@ void Runtime::tell_mod_installs() {
     // while Settings or a notice show, and in a run nobody watches. A match
     // still waits. Any other package is left in the inbox.
     const auto take_catalogue_language = [&]() -> bool {
-        if (state.stage != ModInstallState::Stage::idle || state.shown)
+        if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
             return false;
         const auto next = install::next_package_file();
         if (!next)
@@ -692,7 +643,7 @@ void Runtime::tell_mod_installs() {
         // other package waits.
         if (match_ != nullptr || screen_ == Screen::loading || screen_ == Screen::match)
             return;
-        if (state.stage != ModInstallState::Stage::idle || state.shown)
+        if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
             return;
         if (take_catalogue_language())
             return;
@@ -724,7 +675,7 @@ void Runtime::tell_mod_installs() {
     }
     if (state.discarder.busy())
         std::ignore = state.discarder.step();
-    if (state.stage != ModInstallState::Stage::idle || state.shown)
+    if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
         return;
     // What a change that waited for the last run did.
     if (auto outcome = install::take_change_outcome()) {
@@ -736,16 +687,17 @@ void Runtime::tell_mod_installs() {
             outcome->change.file_name.empty() ? outcome->change.target : outcome->change.file_name;
         if (kind == nullptr) {
             log_line(std::string(told) + ": a change waited with no kind");
-            state.show(install::unknown_kind_prompt(told));
+            state.show(*this, install::unknown_kind_prompt(told));
             return;
         }
         if (!outcome->result.changed) {
             install::Problem problem{};
             problem.refusal = outcome->result.refusal;
             problem.detail = outcome->result.detail;
-            state.show(install::refused_prompt(*kind, told, problem, true));
+            state.show(*this, install::refused_prompt(*kind, told, problem, true));
         } else {
             state.show(
+                *this,
                 install::updated_prompt(
                     *kind,
                     outcome->change.change,
@@ -777,9 +729,9 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
     auto& state = mod_install_state();
     install::Answer answer = install::Answer::ok;
     if (button >= 0) {
-        if (!state.shown || static_cast<std::size_t>(button) >= state.shown->answers.size())
+        if (state.prompt == nullptr || static_cast<std::size_t>(button) >= state.answers.size())
             return;
-        answer = state.shown->answers[static_cast<std::size_t>(button)];
+        answer = state.answers[static_cast<std::size_t>(button)];
     }
     const auto start_unpacking = [&] {
         if (state.kind == nullptr || !state.package)
@@ -807,9 +759,11 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
                 .result = install::OutcomeResult::refused,
                 .reason = install::refusal_text(kind, problem),
             });
-            if (!state.finish_quietly()) {
+            if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
-                state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
+                state.show(
+                    *this, install::refused_prompt(kind, state.package->file_name, problem, false)
+                );
             }
             state.finish_package();
             return;
@@ -821,10 +775,11 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         state.stage = ModInstallState::Stage::unpacking;
         state.placing = false;
         if (state.quiet) {
-            state.shown.reset();
+            state.hide(*this);
             return;
         }
         state.show(
+            *this,
             install::installing_prompt(
                 kind,
                 state.incoming,
@@ -868,7 +823,7 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
                 .result = install::OutcomeResult::set_aside,
             });
             play_ui_sound(kCloseSound, 0);
-            state.shown.reset();
+            state.hide(*this);
             state.stage = ModInstallState::Stage::idle;
             state.finish_package();
             return;
@@ -886,7 +841,7 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
             .result = install::OutcomeResult::set_aside,
         });
         play_ui_sound(kCloseSound, 0);
-        state.shown.reset();
+        state.hide(*this);
         state.stage = ModInstallState::Stage::idle;
         state.finish_package();
         return;
@@ -894,25 +849,29 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         switch (answer) {
         case install::Answer::open_folder: {
             const FolderOpening opening = open_player_folder(state.told_folder);
-            if (state.shown)
-                state.shown->prompt.failure = opening.opened ? std::string() : opening.reason;
+            if (state.prompt != nullptr) {
+                state.prompt->question().failure = opening.opened ? std::string() : opening.reason;
+                state.prompt->changed();
+            }
             return;
         }
         case install::Answer::play_now: {
             std::string refusal;
             if (!switch_to_mod_folder(state.play_folder, refusal)) {
-                if (state.shown)
-                    state.shown->prompt.failure =
+                if (state.prompt != nullptr) {
+                    state.prompt->question().failure =
                         std::string(oa::data::languages::interface_text(refusal));
+                    state.prompt->changed();
+                }
                 return;
             }
-            state.shown.reset();
+            state.hide(*this);
             state.stage = ModInstallState::Stage::idle;
             return;
         }
         default:
             play_ui_sound(kCloseSound, 0);
-            state.shown.reset();
+            state.hide(*this);
             state.stage = ModInstallState::Stage::idle;
             return;
         }
@@ -968,11 +927,12 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
     const auto refuse = [&](install::PackagePrompt made, std::string_view why) {
         log_line(path_to_utf8(folder) + ": not rolled back: " + std::string(why));
         auto& install_state = mod_install_state();
-        if (!install_state.shown && install_state.stage == ModInstallState::Stage::idle) {
+        if (install_state.prompt == nullptr &&
+            install_state.stage == ModInstallState::Stage::idle) {
             install_state.told_folder.clear();
             install_state.play_folder.clear();
             install_state.stage = ModInstallState::Stage::telling;
-            install_state.show(std::move(made));
+            install_state.show(*this, std::move(made), true);
         }
         std::ignore = settings::set_folder_notice(dialog, {});
         return false;

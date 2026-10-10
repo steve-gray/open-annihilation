@@ -3,18 +3,21 @@
 
 // The OA layer (OaLayer): one host for Open Annihilation's own screens on
 // every screen of the game. It keeps a stack of screens (LayerScreen) above
-// the game's picture, maps the input to each by its placement, tells a
-// finger from a mouse, maps the keys to the kit's, latches the key that
-// closed a screen, lets the top modal screen take every input, darkens what
-// lies under it, and draws the screens in the window's own pixels before the
-// software cursor. oa_layer.cpp holds it and the settings' screen
-// (Runtime::SettingsScreen).
+// the game's picture, and a queue of those nobody asked for at that moment
+// that wait for it to be free; maps the input to each by its placement,
+// tells a finger from a mouse, maps the keys to the kit's, latches the key
+// that closed a screen, lets the top modal screen take every input, darkens
+// what lies under each modal screen, and draws the screens in the window's
+// own pixels before the software cursor. oa_layer.cpp holds it, the
+// settings' screen (Runtime::SettingsScreen) and the screens of a notice
+// (NoticeScreen) and a question (QuestionScreen).
 #pragma once
 
 #include "oa/app/runtime.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/screen_registry.hpp"
@@ -23,18 +26,24 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace oa::app {
+
+class OaLayer;
 
 /// What a screen of the OA layer needs to place itself.
 struct LayerView {
     /// The layer shows over a match, its screens in the window's pixels;
     /// otherwise over the front end's picture, in the picture's pixels.
     bool match{};
+    /// The screen of the game the layer shows over now.
+    Screen game_screen{};
     /// The match's layout; null on the front end.
     const oa::ui::display_layout::MatchLayout* match_layout{};
     /// In a match, the screens fit the window's safe area rather than the
@@ -160,7 +169,9 @@ class LayerScreen {
     /// @return the interaction
     [[nodiscard]] virtual oa::ui::kit::Interaction interaction() const = 0;
 
-    /// Brings the screen up to date once a frame.
+    /// Brings the screen up to date once a frame. A screen waiting in the
+    /// layer's queue (OaLayer::show_when_free) is ticked too, and leaves the
+    /// queue when it answers close.
     ///
     /// @return close when the screen closes; otherwise none or redraw
     virtual LayerAnswer tick() = 0;
@@ -207,13 +218,19 @@ layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept;
 /// it; in a match the in-game OA button then takes its own; what nobody
 /// takes goes on to the overlays and screens under the layer.
 ///
-/// On the front end, a modal screen with a backdrop darkens the frame itself
-/// (darken_front_end), and the screens are drawn at 1× and stamped into the
-/// window over the picture's rectangle (present), before the software
-/// cursor; without a renderer, and for frame_without_cursor, they are
-/// composed into the frame instead (compose_front_end). In a match the layer
-/// is one picture of the window's size: the in-game OA button, the backdrop
-/// and the screens, drawn again when what it shows changes (refresh_match).
+/// A screen somebody asked for joins at once (push); one nobody asked for
+/// at that moment, such as a notice or an install's question, waits in a
+/// queue, first in, first out, until no modal screen shows
+/// (show_when_free), so that two never show at once.
+///
+/// On the front end, each modal screen with a backdrop darkens the frame
+/// itself and every screen under it (darken_front_end), and the screens are
+/// drawn at 1× and stamped into the window over the picture's rectangle
+/// (present), before the software cursor; without a renderer, and for
+/// frame_without_cursor, they are composed into the frame instead
+/// (compose_front_end). In a match the layer is one picture of the window's
+/// size: the in-game OA button, the backdrop and the screens, drawn again
+/// when what it shows changes (refresh_match).
 class OaLayer {
   public:
 
@@ -228,16 +245,36 @@ class OaLayer {
     /// @param runtime the runtime it hosts screens for
     explicit OaLayer(Runtime& runtime) noexcept;
 
-    /// Lets the screens go without closing them, and destroys the textures.
+    /// Lets the screens, and those waiting, go without closing them, and
+    /// destroys the textures.
     ~OaLayer();
 
     OaLayer(const OaLayer&) = delete;
     OaLayer& operator=(const OaLayer&) = delete;
 
-    /// Puts a screen on top of the stack.
+    /// Puts a screen on top of the stack at once: a screen somebody asked
+    /// for, such as Settings, or a question a screen asks of its own over
+    /// that screen.
     ///
     /// @param screen the screen; null is ignored
     void push(std::unique_ptr<LayerScreen> screen);
+
+    /// Shows a screen nobody asked for at this moment, such as a notice or an
+    /// install's question, once the layer is free: the screens wait first in,
+    /// first out, and the first is pushed while no modal screen shows, at
+    /// once, after an input or a tick, or when a screen is closed
+    /// (close); one at a time while each shows.
+    ///
+    /// @param screen the screen; null is ignored
+    void show_when_free(std::unique_ptr<LayerScreen> screen);
+
+    /// Takes a screen off the stack, or out of the queue, telling it it
+    /// closes, and pushes the next waiting screen if the layer is then free.
+    /// A screen asked while it takes an input or its tick leaves once that
+    /// is done, as if it had answered close.
+    ///
+    /// @param screen the screen; one the layer does not hold is ignored
+    void close(const LayerScreen* screen);
 
     /// Takes the top screen off, telling it it closes.
     void close_top();
@@ -253,11 +290,29 @@ class OaLayer {
     /// @return the screen; null while the stack is empty
     [[nodiscard]] LayerScreen* top() const noexcept;
 
-    /// Returns the topmost screen of a name.
+    /// Returns the topmost screen of a name on the stack.
     ///
     /// @param name the screen's name
     /// @return the screen; null when none has the name
     [[nodiscard]] LayerScreen* find(std::string_view name) const noexcept;
+
+    /// Returns the first screen of a name that waits in the queue.
+    ///
+    /// @param name the screen's name
+    /// @return the screen; null when none waits
+    [[nodiscard]] LayerScreen* waiting(std::string_view name) const noexcept;
+
+    /// Tells whether a screen is on the stack.
+    ///
+    /// @param screen the screen
+    /// @return true while it is
+    [[nodiscard]] bool holds(const LayerScreen* screen) const noexcept;
+
+    /// Returns the fonts the layer's screens are drawn in: the settings
+    /// dialog's (Runtime::engine_settings_fonts).
+    ///
+    /// @return the fonts; null when they cannot be loaded
+    [[nodiscard]] const oa::ui::kit::Fonts* screen_fonts() const;
 
     /// Returns what the screens are placed on now: the front end's picture
     /// or the match's canvas.
@@ -303,6 +358,13 @@ class OaLayer {
     /// @return the SDL keycode; 0 for none
     [[nodiscard]] uint32_t latched_key() const noexcept { return latched_key_; }
 
+    /// Latches a key as closing a screen does: its presses do nothing until
+    /// it is released. A question whose answer to a key leaves it on the
+    /// layer latches that key, so that the key held answers nothing more.
+    ///
+    /// @param sdl_key the SDL keycode
+    void latch_key(uint32_t sdl_key) noexcept { latched_key_ = sdl_key; }
+
     /// Forgets the latched key, as its release would.
     void forget_latched_key() noexcept { latched_key_ = 0; }
 
@@ -310,14 +372,16 @@ class OaLayer {
     /// to a screen's model from outside its events.
     void redraw() noexcept { ++revision_; }
 
-    /// Darkens the front end's frame under a modal screen with a backdrop:
-    /// the frame blended with the backdrop's colour at the menu's opacity.
+    /// Darkens the front end's frame under the modal screens with a
+    /// backdrop: the frame blended with the backdrop's colour at the menu's
+    /// opacity once for each that shows.
     ///
     /// @param[in,out] frame the composed frame
     void darken_front_end(renderer::Surface& frame) const;
 
     /// Draws each screen that shows on the front end into the frame at 1×,
-    /// at its place: the picture the player sees, for checks and runs
+    /// at its place, darkened once for each modal screen with a backdrop
+    /// that shows above it: the picture the player sees, for checks and runs
     /// without a renderer.
     ///
     /// @param[in,out] frame the composed frame
@@ -325,7 +389,8 @@ class OaLayer {
 
     /// Draws the match's layer again when what it shows changed: the
     /// in-game OA button while the in-game menu's column shows, the backdrop
-    /// under a modal screen, and the screens that show.
+    /// under a modal screen, and the screens that show, each darkened as
+    /// the button is once for each modal screen with a backdrop above it.
     ///
     /// @return true when the layer shows anything
     bool refresh_match();
@@ -508,13 +573,21 @@ class OaLayer {
     /// @return the screen; null when none shows
     [[nodiscard]] LayerScreen* top_modal(const LayerView& seen) const;
 
-    /// Tells whether a screen is still on the layer.
+    /// Tells whether a screen waits in the queue.
     ///
     /// @param screen the screen
-    /// @return true while it is
-    [[nodiscard]] bool holds(const LayerScreen* screen) const noexcept;
+    /// @return true while it does
+    [[nodiscard]] bool queued(const LayerScreen* screen) const noexcept;
 
-    /// Hands one input to a screen at its place.
+    /// Returns, for each screen of the stack, bottom first, how many modal
+    /// screens with a backdrop show above it: each darkens it once.
+    ///
+    /// @param seen what the screens are placed on
+    /// @return the counts, one for each screen of the stack
+    [[nodiscard]] std::vector<uint32_t> backdrops_above(const LayerView& seen) const;
+
+    /// Hands one input to a screen at its place; a screen that asked to be
+    /// closed while it took the input (close) answers close.
     ///
     /// @param screen the screen
     /// @param seen what the screen is placed on
@@ -522,11 +595,29 @@ class OaLayer {
     /// @return what the screen answered
     LayerAnswer deliver(LayerScreen& screen, const LayerView& seen, const ScreenInput& input);
 
+    /// Hands one input to a screen at its place, as deliver does, without
+    /// looking for a close asked meanwhile.
+    ///
+    /// @param screen the screen
+    /// @param seen what the screen is placed on
+    /// @param input the input
+    /// @return what the screen answered
+    LayerAnswer hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInput& input);
+
     /// Takes a screen off, telling it it closes.
     ///
     /// @param screen the screen
     /// @param by_key a key's press closed it
     void remove(const LayerScreen* screen, bool by_key);
+
+    /// Takes a screen out of the queue, telling it it closes.
+    ///
+    /// @param screen the screen
+    void drop_waiting(const LayerScreen* screen);
+
+    /// Pushes the waiting screens, first in first, while no modal screen
+    /// shows.
+    void show_waiting();
 
     /// Takes the input the in-game OA button answers to: the shortcut,
     /// Ctrl+F2 while the profile offers the mod options, and the pointer
@@ -561,6 +652,13 @@ class OaLayer {
     Runtime& runtime_; ///< the runtime it hosts screens for
     /// The screens, bottom first.
     std::vector<std::unique_ptr<LayerScreen>> screens_{};
+    /// The screens waiting for the layer to be free, first in first.
+    std::vector<std::unique_ptr<LayerScreen>> queue_{};
+    /// The screen an input or its tick is handed to now; null between.
+    const LayerScreen* calling_{};
+    /// close asked for calling_ while it was called: it leaves once the
+    /// call is done.
+    bool close_asked_{};
     /// The key whose press closed a screen, until it is released; 0 for
     /// none. Its presses do nothing until then, so that a held key never
     /// reaches what lies under the layer.
@@ -588,6 +686,309 @@ class OaLayer {
     /// The layer's texture, in tiles beyond the renderer's limit; none
     /// before the first present.
     TiledTexture texture_;
+};
+
+/// A notice of Open Annihilation's own (kit::Notice) as a screen of the OA
+/// layer: modal over a backdrop, centred on the front end's picture at 1×
+/// over one screen of the game, its open button and OK answered as its
+/// host says. A host that tells the player something nobody asked for at
+/// that moment shows it with OaLayer::show_when_free.
+class NoticeScreen final : public LayerScreen {
+  public:
+
+    /// The name every notice has on the layer.
+    static constexpr std::string_view screen_name = "notice";
+
+    /// What the notice's host does.
+    struct Host {
+        /// Opens the notice's folder when its open button is pressed, and
+        /// returns why it could not, which the notice shows in amber under
+        /// its text; empty when it opened. Unset, the button opens nothing.
+        std::function<std::string()> open{};
+        /// What OK, Enter or Escape closing the notice does besides, such as
+        /// its sound; may be unset.
+        std::function<void()> ok{};
+        /// Tells, once a frame, whether the notice must close, as when the
+        /// screen it shows over goes; unset, it never must.
+        std::function<bool()> tick{};
+    };
+
+    /// Makes the screen of a notice.
+    ///
+    /// @param layer the layer it shows on, whose fonts it is drawn in
+    /// @param shown_over the screen of the game it shows over; it shows on no other
+    /// @param told the notice
+    /// @param answers what its host does
+    NoticeScreen(OaLayer& layer, Screen shown_over, oa::ui::kit::Notice told, Host answers);
+
+    /// Returns the notice as it shows.
+    ///
+    /// @return the notice
+    [[nodiscard]] const oa::ui::kit::Notice& notice() const noexcept { return notice_; }
+
+    /// Returns the screen of the game the notice shows over.
+    ///
+    /// @return the screen
+    [[nodiscard]] Screen over() const noexcept { return over_; }
+
+    /// Returns "notice".
+    ///
+    /// @return the name
+    [[nodiscard]] std::string_view name() const override { return screen_name; }
+
+    /// Returns where the notice shows: centred on the front end's picture at
+    /// 1×, kit::notice_width wide and as tall as its text makes it, over its
+    /// own screen of the game.
+    ///
+    /// @param view what the screen is placed on
+    /// @return its place; empty in a match, over another screen, or without fonts
+    [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Tells that the notice takes every input.
+    ///
+    /// @return true
+    [[nodiscard]] bool modal() const override { return true; }
+
+    /// Tells that what lies under the notice darkens.
+    ///
+    /// @return true
+    [[nodiscard]] bool backdrop() const override { return true; }
+
+    /// Draws the notice in the settings dialog's look, its texts in the
+    /// language shown (oa::ui::engine_settings::draw_notice).
+    ///
+    /// @param canvas where it draws
+    void draw(const oa::ui::kit::Canvas& canvas) const override;
+
+    /// Takes a pointer's move, press or release: a finger's press takes the
+    /// nearer button within reach.
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button
+    /// @param at the pointer, in the notice's points
+    /// @param finger_reach a finger's reach in the notice's points; 0 for a mouse
+    /// @return close when OK closed it; otherwise none or redraw
+    LayerAnswer pointer(
+        ScreenInputKind kind, uint8_t button, oa::ui::kit::Point at, int32_t finger_reach
+    ) override;
+
+    /// Takes a key's press: Enter and Escape close the notice, Space presses
+    /// the marked button, and the arrows and Tab move the mark.
+    ///
+    /// @param pressed the key
+    /// @return close when the key closed it; otherwise none or redraw
+    LayerAnswer key(oa::ui::kit::Key pressed, uint32_t /*sdl_key*/) override;
+
+    /// Takes a turn of the wheel, which does nothing under the notice.
+    ///
+    /// @return none
+    LayerAnswer wheel(oa::ui::kit::Point /*at*/, float /*notches*/) override {
+        return LayerAnswer::none;
+    }
+
+    /// Returns the notice's display list (kit::notice_list), its texts in
+    /// the language shown.
+    ///
+    /// @return the list
+    [[nodiscard]] oa::ui::kit::DisplayList display_list() const override;
+
+    /// Returns the notice's hover, press and mark.
+    ///
+    /// @return the interaction
+    [[nodiscard]] oa::ui::kit::Interaction interaction() const override;
+
+    /// Asks the host whether the notice must close.
+    ///
+    /// @return close when it must; otherwise none
+    LayerAnswer tick() override;
+
+    /// Returns the notice's revision, which counts the changes to its look.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return revision_; }
+
+    /// Has nothing of its own to close.
+    void close(bool /*by_key*/) override {}
+
+  private:
+
+    /// Returns the notice's height in its fonts.
+    ///
+    /// @return the height, in points
+    [[nodiscard]] int32_t shown_height() const;
+
+    /// Carries out what an event on the notice asks: the open button's
+    /// folder, OK's closing.
+    ///
+    /// @param action what the event asked
+    /// @return what the screen answers
+    LayerAnswer take(oa::ui::kit::NoticeAction action);
+
+    OaLayer& layer_;             ///< the layer it shows on
+    Screen over_{};              ///< the screen of the game it shows over
+    oa::ui::kit::Notice notice_; ///< the notice
+    Host host_;                  ///< what its host does
+    uint64_t revision_{};        ///< counts the changes to its look
+};
+
+/// A question of Open Annihilation's own (kit::Question) as a screen of the
+/// OA layer: modal over a backdrop, centred on the front end's picture at 1×
+/// over one screen of the game, its answers handed to its host. A question
+/// nobody asked for at that moment, such as an install's, is shown with
+/// OaLayer::show_when_free; one a screen asks of its own is pushed over it at
+/// once (OaLayer::push). Its host may change the question while it shows
+/// (question, changed).
+class QuestionScreen final : public LayerScreen {
+  public:
+
+    /// The name every question has on the layer.
+    static constexpr std::string_view screen_name = "prompt";
+
+    /// What the question's host does.
+    struct Host {
+        /// Takes an answer: the button pressed, from 0. The host may change
+        /// the question, or close it (OaLayer::close), meanwhile. Unset, every
+        /// answer closes the question.
+        ///
+        /// Returns true when the answer is the question's last and it
+        /// closes; false keeps it, as the host left it.
+        std::function<bool(int32_t button)> answer{};
+        /// Tells, once a frame, whether the question must close or be set
+        /// aside, as when the screen it shows over goes; unset, it never must.
+        std::function<bool()> tick{};
+        /// What the question's leaving the layer, or its queue, does,
+        /// whatever took it off; may be unset.
+        std::function<void(const QuestionScreen& leaving)> closed{};
+    };
+
+    /// Makes the screen of a question.
+    ///
+    /// @param layer the layer it shows on, whose fonts it is drawn in, and
+    ///     which latches the key that answered it
+    /// @param shown_over the screen of the game it shows over; it shows on no other
+    /// @param asked the question
+    /// @param answers what its host does
+    QuestionScreen(OaLayer& layer, Screen shown_over, oa::ui::kit::Question asked, Host answers);
+
+    /// Returns the question, which its host may change; it then calls changed.
+    ///
+    /// @return the question
+    [[nodiscard]] oa::ui::kit::Question& question() noexcept { return question_; }
+
+    /// Returns the question as it shows.
+    ///
+    /// @return the question
+    [[nodiscard]] const oa::ui::kit::Question& question() const noexcept { return question_; }
+
+    /// Tells the screen its host changed the question.
+    void changed() noexcept { ++revision_; }
+
+    /// Returns the screen of the game the question shows over.
+    ///
+    /// @return the screen
+    [[nodiscard]] Screen over() const noexcept { return over_; }
+
+    /// Returns "prompt".
+    ///
+    /// @return the name
+    [[nodiscard]] std::string_view name() const override { return screen_name; }
+
+    /// Returns where the question shows: centred on the front end's picture
+    /// at 1×, kit::notice_width wide and as tall as its text makes it, over
+    /// its own screen of the game.
+    ///
+    /// @param view what the screen is placed on
+    /// @return its place; empty in a match, over another screen, or without fonts
+    [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Tells that the question takes every input.
+    ///
+    /// @return true
+    [[nodiscard]] bool modal() const override { return true; }
+
+    /// Tells that what lies under the question darkens.
+    ///
+    /// @return true
+    [[nodiscard]] bool backdrop() const override { return true; }
+
+    /// Draws the question in a notice's look
+    /// (oa::ui::engine_settings::draw_prompt).
+    ///
+    /// @param canvas where it draws
+    void draw(const oa::ui::kit::Canvas& canvas) const override;
+
+    /// Takes a pointer's move, press or release: a finger's press takes the
+    /// nearest button within reach, and a release over the button pressed
+    /// answers it.
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button
+    /// @param at the pointer, in the question's points
+    /// @param finger_reach a finger's reach in the question's points; 0 for a mouse
+    /// @return close when an answer closed it; otherwise none or redraw
+    LayerAnswer pointer(
+        ScreenInputKind kind, uint8_t button, oa::ui::kit::Point at, int32_t finger_reach
+    ) override;
+
+    /// Takes a key's press: Enter and Space answer the marked button, Escape
+    /// and N the cancel button, Y the primary one; the arrows and Tab move
+    /// the mark. The key that answered is latched (OaLayer::latch_key).
+    ///
+    /// @param pressed the key
+    /// @param sdl_key the key's SDL keycode
+    /// @return close when the answer closed it; otherwise none or redraw
+    LayerAnswer key(oa::ui::kit::Key pressed, uint32_t sdl_key) override;
+
+    /// Takes a turn of the wheel, which does nothing under the question.
+    ///
+    /// @return none
+    LayerAnswer wheel(oa::ui::kit::Point /*at*/, float /*notches*/) override {
+        return LayerAnswer::none;
+    }
+
+    /// Returns the question's display list (kit::question_list).
+    ///
+    /// @return the list
+    [[nodiscard]] oa::ui::kit::DisplayList display_list() const override;
+
+    /// Returns the question's hover, press and mark.
+    ///
+    /// @return the interaction
+    [[nodiscard]] oa::ui::kit::Interaction interaction() const override;
+
+    /// Asks the host whether the question must close or be set aside.
+    ///
+    /// @return close when it must; otherwise none
+    LayerAnswer tick() override;
+
+    /// Returns the question's revision, which counts the changes to its look.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return revision_; }
+
+    /// Tells the host the question leaves (Host::closed).
+    void close(bool /*by_key*/) override;
+
+  private:
+
+    /// Returns the question's height in its fonts.
+    ///
+    /// @return the height, in points
+    [[nodiscard]] int32_t shown_height() const;
+
+    /// Carries out what an event on the question asks: an answer goes to
+    /// the host, and the key that gave it is latched.
+    ///
+    /// @param outcome what the event did
+    /// @param sdl_key the key whose press it was; 0 for a pointer
+    /// @return what the screen answers
+    LayerAnswer take(oa::ui::kit::QuestionAnswer outcome, uint32_t sdl_key);
+
+    OaLayer& layer_;                 ///< the layer it shows on
+    Screen over_{};                  ///< the screen of the game it shows over
+    oa::ui::kit::Question question_; ///< the question
+    Host host_;                      ///< what its host does
+    uint64_t revision_{};            ///< counts the changes to its look
 };
 
 } // namespace oa::app
