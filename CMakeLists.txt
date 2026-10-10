@@ -144,6 +144,7 @@ endif()
 add_subdirectory(src/base/bytes)
 add_subdirectory(src/base/game-loop)
 add_subdirectory(src/platform/preferences)
+add_subdirectory(src/platform/random)
 add_subdirectory(src/app/command-line)
 add_subdirectory(src/app/card)
 add_subdirectory(src/app/package-install)
@@ -250,6 +251,8 @@ add_subdirectory(src/ui/touch-hud)
 add_subdirectory(src/ui/game-files)
 # The in-engine game folder chooser's model.
 add_subdirectory(src/ui/folder-chooser)
+# The Library's model: packages to get and installed, search and queue lines.
+add_subdirectory(src/ui/library)
 add_subdirectory(src/ui/screen-registry)
 add_subdirectory(src/sim/session)
 if(TARGET oa-media-intro-player)
@@ -935,6 +938,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
+  src/app/runtime_pack_maps.cpp
   src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
@@ -982,7 +986,9 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_briefing_narration_check.cpp src/app/runtime_build_site_check.cpp
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
+  src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
+  src/app/runtime_language_install_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1514,6 +1520,21 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-mod-switch PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_switch_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Two map packs written into the player's own Maps folder: one whose
+      # map fits, listed after the base maps, mounted alone when it is chosen,
+      # unmounted for a base map, played for 30 ticks with its files readable
+      # and unmounted when the match ends; and one whose feature the game
+      # already defines, refused, the map picker showing why and keeping the
+      # earlier map.
+      set(oa_map_packs_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-packs")
+      file(MAKE_DIRECTORY "${oa_map_packs_dir}")
+      add_test(NAME native-map-packs COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-map-packs
+        --preferences-file "${oa_map_packs_dir}/map-packs.conf"
+        --user-folder "${oa_map_packs_dir}/Open Annihilation")
+      set_tests_properties(native-map-packs PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_map_packs_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three
@@ -1534,6 +1555,32 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-mod-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_install_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The pseudo language pack installed through the game: a dropped file
+      # asked and installed, the same package declined, then a catalogue
+      # revision installed while Settings stay open and no prompt shows.
+      # The pack's sources sit beside the player's folder, never in Languages
+      # until the check installs them.
+      set(oa_language_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-install")
+      file(MAKE_DIRECTORY "${oa_language_install_dir}")
+      file(WRITE "${oa_language_install_dir}/language-install.conf"
+        "open-annihilation-preferences 1\n\"open-annihilation.language\" \"en-XA\"\n")
+      add_test(NAME language-install-pack COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests/pseudo-pack"
+        "${oa_language_install_dir}/pseudo-pack")
+      set_tests_properties(language-install-pack PROPERTIES FIXTURES_SETUP language-install-pack)
+      # A previous run's pack would already be shown. Clear it before the
+      # process starts, which is when packs are read.
+      add_test(NAME language-install-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_language_install_dir}/Open Annihilation/Languages")
+      set_tests_properties(language-install-clean PROPERTIES FIXTURES_SETUP language-install-clean)
+      add_test(NAME native-language-install COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-language-install
+        --preferences-file "${oa_language_install_dir}/language-install.conf"
+        --user-folder "${oa_language_install_dir}/Open Annihilation")
+      set_tests_properties(native-language-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_language_install_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED "language-install-pack;language-install-clean")
       # A folder without a profile whose second side lacks its LOGO: the
       # Mods page refuses it. A folder without a profile, and a profile,
       # whose second side's intgaf and font name files no folder holds: the

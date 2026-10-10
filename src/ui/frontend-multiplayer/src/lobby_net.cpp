@@ -4,12 +4,16 @@
 // Offline loopback binding of the lobby network boundary.
 #include "oa/ui/frontend_multiplayer/lobby_net.hpp"
 
+#include "oa/netgame/presence.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
 namespace oa::ui::frontend_multiplayer {
+
+static_assert(kLobbyEventBytes == oa::netgame::presence_record_max_bytes);
 
 const uint8_t kProviderGuidIpx[16] = {
     0x00, 0xc4, 0x5b, 0x68, 0x2c, 0x9d, 0xcf, 0x11, 0xa9, 0xcd, 0x00, 0xaa, 0x00, 0x68, 0x86, 0xe3
@@ -139,7 +143,7 @@ void record_sent(
         shift(loopback.sent_flush);
         --loopback.sent_count;
     }
-    const auto length = std::min(size, kLobbyRecordBytes);
+    const auto length = std::min(size, kLobbyEventBytes);
     const auto at = loopback.sent_count++;
     std::memcpy(loopback.sent[at], data, length);
     loopback.sent_size[at] = static_cast<uint16_t>(length);

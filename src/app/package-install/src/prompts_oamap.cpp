@@ -452,8 +452,9 @@ std::string refusal_text(const Problem& problem) {
         return fill(
             "The folder {name} does not hold this map pack. It is left as it is.", {{"name", name}}
         );
+    default:
+        return fill("It cannot be read.", {});
     }
-    return fill("It cannot be read.", {});
 }
 
 PackagePrompt

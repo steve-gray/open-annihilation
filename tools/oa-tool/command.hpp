@@ -128,16 +128,22 @@ class Failure : public std::runtime_error {
 /// Checks a package and reports the facts a catalogue lists.
 ///
 /// One positional argument is the package file. `--game-dir DIR` is the game
-/// folder an install would read settings from. `--accept-unimplemented-hacks`
+/// folder an install would read settings from, and a map pack requires it.
+/// Each `--mod FOLDER[=KEY]` is a further target for a map pack. The key is
+/// the text after the last `=`, or the folder's catalogue origin, or the
+/// profile's id when that folder has no release. `--accept-unimplemented-hacks`
 /// accepts a hack this build does not carry out yet. `--json` prints one JSON
-/// object; otherwise each fact is a `key: value` line. Options may be written
-/// before or after the file.
+/// object; otherwise each fact is a `key: value` line, and a map pack then
+/// prints one line per map and target. Options may be written before or
+/// after the file. A map that does not fit the base game is refused. A mod
+/// that does not fit is only recorded.
 ///
 /// @param arguments the package and any options
 /// @param[in,out] output receives the report, and a usage line when the
 ///        arguments are not the command's
 /// @return exit_done when the package would be installed, exit_failed when it
-///         would be refused, or exit_usage when the arguments are not the command's
+///         would be refused or a map does not fit the base game, or exit_usage
+///         when the arguments are not the command's
 [[nodiscard]] int run_check(std::span<const std::string> arguments, Output& output);
 
 /// Returns the tool's commands, in the order help lists them.

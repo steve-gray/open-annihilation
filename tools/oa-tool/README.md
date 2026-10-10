@@ -44,7 +44,7 @@ same. `--` ends options. A command takes its options through
 | `preview ARCHIVE PCX_ENTRY OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX image from an archive as a PPM file, or a PNG file when the path ends in `.png`, and prints its size. |
 | `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
 | `pack FOLDER [--out FILE] [--force] [--game-dir DIR]` | Packs FOLDER as a `.oamod`, a `.oalang` or a `.oamap`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--game-dir` is the game's data; map packs need the game's palette for previews. `--force` replaces an existing file. |
-| `check FILE [--game-dir DIR] [--accept-unimplemented-hacks] [--json]` | Runs the checks an install runs before it writes, and reports the facts a catalogue lists. `--json` prints one JSON object. Otherwise each fact is a `key: value` line and the last line is `result: ok` or `result: refused`. Exit 0 when the package would be installed, 1 when it would be refused. |
+| `check FILE [--game-dir DIR] [--mod FOLDER[=KEY]]... [--accept-unimplemented-hacks] [--json]` | Runs the checks an install runs before it writes, and reports the facts a catalogue lists. A map pack needs `--game-dir` and may name each further target with `--mod`. `--json` prints one JSON object, and a map pack adds `maps`. Otherwise each fact is a `key: value` line, a map pack then prints one line per map and target, and the last line is `result: ok` or `result: refused`. Exit 0 when the package would be installed, 1 when it would be refused or a map does not fit `ta-3.1c`. A mod that does not fit leaves that exit code unchanged. |
 
 ## Entry points
 
@@ -118,10 +118,16 @@ pack's folder.
 its refusals, and a language manifest read on its own. Its argument is the
 pseudo pack's `language.yaml`.
 
+`tools-oa-tool-check-map` (`oa-tool-check-map-test`) checks a made-up map
+pack against a stand-in game and a made-up mod. `tools-oa-tool-check-map-data`
+runs the same program with `--data` against the installed game.
+
 ## Limitations
 
 The archive commands take no options. `pack` takes `--out`, `--force` and,
-for a map pack, `--game-dir`. `check` takes `--game-dir`,
-`--accept-unimplemented-hacks` and `--json`. It does not describe a map.
-Catalogues and registries are further commands, not part of this table yet.
+for a map pack, `--game-dir`. `check` takes `--game-dir`, `--mod`,
+`--accept-unimplemented-hacks` and `--json`. A map pack needs `--game-dir`.
+Each `--mod` is one target after the base game, and exit 1 is reserved for
+a map that does not fit `ta-3.1c`. Catalogues and registries are further
+commands, not part of this table yet.
 The macOS package does not ship `oa-tool`.

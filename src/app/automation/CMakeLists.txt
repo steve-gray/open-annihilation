@@ -24,7 +24,7 @@ target_include_directories(oa-app-automation-options PUBLIC "${CMAKE_CURRENT_SOU
 # libraries it uses.
 target_link_libraries(oa-app-automation-options PUBLIC oa-app-headers oa-app-command-line
   oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
-  PRIVATE oa-options)
+  PRIVATE oa-options oa-platform-random)
 
 # The device events of an input request, read from its JSON, which their
 # check reads without a running game.

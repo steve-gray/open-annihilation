@@ -13,8 +13,9 @@
 // before the change or after it (recover_changes), and the folders a change
 // drops are deleted a little at a time (Discarder). One table of kinds says
 // what differs: the oamod kind, whose manifest is oamod.yaml and whose root
-// folder is Mods, and the oamap kind, whose manifest is oamap.yaml and whose
-// root folder is Maps. No function here throws: errors are values.
+// folder is Mods, the oamap kind, whose manifest is oamap.yaml and whose
+// root folder is Maps, and the oalang kind, whose manifest is language.yaml
+// and whose root folder is Languages. No function here throws: errors are values.
 #pragma once
 
 #include "oa/app/package_install/origin.hpp"
@@ -104,6 +105,10 @@ enum class Refusal : uint8_t {
     engine_unmet,       ///< requires.engine is not met by this build
     unfit,              ///< a map does not fit the base game
     not_a_pack,         ///< the folder does not hold this map pack
+    font_missing,       ///< a language pack lists a font it does not hold
+    font_unreadable,    ///< a language pack's font file does not open
+    warmup_invalid,     ///< a language pack's warm-up text is missing, too large or not UTF-8
+    table_errors,       ///< a language pack's table or interface.tdf does not parse
 };
 
 /// What went wrong, for the player's text and the log.
@@ -140,6 +145,9 @@ struct Incoming {
     /// How many maps an oamap pack lists, for its install question. 0 for
     /// every other kind.
     uint32_t maps{};
+    /// A language pack's name in English, for its install question. Empty
+    /// for every other kind.
+    std::string english_name{};
 };
 
 /// A package, read and checked: what it installs and where its files come from.
@@ -297,6 +305,9 @@ struct InstallPlan {
     /// install: the target already holds this pack and is replaced, keeping
     /// one .backup. A kind that leaves this false installs into an empty target.
     bool replacing{};
+    /// install: the target holds this pack at the same version and revision,
+    /// and the files are installed again. The kept version stays.
+    bool reinstalling{};
     /// refuse: why. no_free_folder when the kind does not set another.
     Refusal refusal{Refusal::no_free_folder};
 };
@@ -367,7 +378,7 @@ struct PackageKind {
 
 /// Returns every kind the game installs, in table order.
 ///
-/// @return the kinds; oamod, then oamap
+/// @return the kinds; oamod, then oamap, then oalang
 [[nodiscard]] std::span<const PackageKind> package_kinds() noexcept;
 
 /// Returns the kind whose extension a file's name ends with, matched without case.
