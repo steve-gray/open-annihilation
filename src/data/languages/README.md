@@ -11,8 +11,8 @@ describes the whole for players and for adding a language.
 language the game can show, and every language a pack exists for that is
 not installed yet.
 
-- **Built in.** `src/registry.inc` (`kLanguages`) lists a language 3.1c's
-  data holds, so the game knows it without a pack. English comes first.
+- **Built in.** `src/registry.inc` lists a language 3.1c's data holds, so
+  the game knows it without a pack. English comes first.
 
 | Tag | Name in itself | 3.1c's word | Draws in |
 |---|---|---|---|
@@ -39,7 +39,7 @@ a mod's may.
   its word or what drawing it needs. A mod's pack adds text only and adds
   no entry.
 - **Available.** A language a pack exists for that is not installed.
-  `kOfferedLanguages`, after `kLanguages`, lists the ones the engine knows
+  `kOfferedLanguages`, after the built-in languages, lists the ones the engine knows
   of before any catalogue is read. Each entry is written with
   `Source::available`. The table is empty. An installed pack for one of
   those tags takes its place among the languages the game shows, and an
