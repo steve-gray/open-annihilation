@@ -1,7 +1,8 @@
-# Mod packages
+# Packages
 
-This module installs mod packages (`.oamod`) into the player's own Mods
-folder. A package is a zip archive of a mod's folder, the one that holds its
+This module installs packages into a folder of the player's own folder. One
+table of kinds says what differs; today it holds the mod kind, `oamod`. A
+mod package is a zip archive of a mod's folder, the one that holds its
 `oamod.yaml`; it installs into `Mods/<id>`, by the id its profile gives,
 whatever the file is called. The module has no SDL: the game's runtime
 shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
@@ -17,8 +18,8 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
   unpacks, its sizes, and its profile, resolved twice as a load of the mod
   resolves it (the second time with its packaged INI file, or the game
   folder's, and the registry values).
-- `plan_install` decides, from what each folder of Mods holds
-  (`ModsFolderHooks`), where a package goes and what it asks.
+- `plan_install`, the oamod kind's plan, decides, from what each folder of
+  Mods holds (`FolderHooks`), where a package goes and what it asks.
 - `Unpacking` unpacks a package's files into a staging folder inside Mods,
   a budget of bytes a step: its folders, then its files, then a sync of
   each folder and, on macOS, one flush of the drive's cache to storage.
@@ -28,12 +29,12 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
 - `commit_change` puts a change in place with renames on one volume.
 - `recover_changes` settles what a stop left, and `Discarder` deletes the
   folders a change drops a little at a time.
-- `read_installed_mod` and `read_backup` read what a folder and its
-  `.backup` hold, for the plan and the Mods page's ROLL BACK.
+- `read_installed_mod` and `read_backup`, the oamod kind's, read what a
+  folder and its `.backup` hold, for the plan and the Mods page's ROLL BACK.
 
 `oa/app/package_install/inbox.hpp` keeps what outlives each run of the game in
-one process: the packages waiting for the main menu (`post_mod_file`,
-`take_mod_file`), the change that waits for the run playing its target to
+one process: the packages waiting for the main menu (`post_package_file`,
+`take_package_file`), the change that waits for the run playing its target to
 end (`set_pending_change`, `finish_pending_change`) and its outcome, and the
 discard folders the start's recovery found.
 
@@ -44,6 +45,45 @@ catalogue, its buttons and what each answers.
 `oa/app/package_install/handoff.hpp` has the instance lock and the hand-off
 folder a second start writes its packages into for the copy already
 running.
+
+## Kinds
+
+`kKinds` in `src/kinds.cpp` is the table. Today it holds one entry, `oamod`:
+the extension `.oamod`, the manifest `oamod.yaml` (at most 256 KiB), the
+root folder `Mods` and the prefix `.oamod-` on the installer's own folders
+and on the lock. `package_kinds`, `kind_for_file` and `find_kind` read the
+table; `mod_kind` is that entry. A file whose extension is none of them is
+refused as `unknown_kind`, and nothing is read.
+
+Reading the container, unpacking, the renames, recovery, the lock,
+discarding, the inbox and the hand-off are the same for every kind. They
+take the kind and build the seven folder names from its prefix
+(`folder_names`). A kind supplies those names and the hooks: `read_manifest`
+fills what the package installs and the kind's own fields, `read_installed`
+and `read_backup` say what a folder holds, `plan` decides where it goes,
+`check_staged` checks the unpacked files before they are put in place (null
+checks nothing) and `prompts` words every prompt. The oamod hooks are
+`src/plan_oamod.cpp` and `src/prompts_oamod.cpp`
+(`oa/app/package_install/oamod.hpp`): the profile resolved twice, where a
+mod goes, and the words a mod install shows. `Package::profile` is that
+resolved profile, and null for every other kind.
+
+### Adding a kind
+
+A new kind is wired in five places, and nowhere in the generic files:
+
+- `src/plan_<kind>.cpp`, implementing the hooks (`read_manifest`,
+  `read_installed`, `read_backup`, `plan`, and `check_staged` when the
+  staged files need a check of their own).
+- Its line in `add_library` in this module's `CMakeLists.txt`.
+- Its entry in `kKinds` in `src/kinds.cpp`.
+- Its branch in each function of `src/app/runtime_package_kinds.cpp`.
+  `package_options` is where the runtime hands the hooks their `context`,
+  and `package_changed` is where the app takes in what a change put in place.
+- Its test `app-package-install-<kind>`.
+
+A kind's own refusals go at the end of `Refusal`, worded by its
+`KindPrompts::refusal_text`.
 
 ## What a package holds
 
@@ -173,6 +213,11 @@ takes it. A reparse point whose tag cannot be read counts as a link.
   anew only; a target that changed; the lock; the room and path checks;
   the files a step makes held to its budget.
 - `app-mod-install-handoff`: the instance lock and the hand-off folder.
+- `app-package-install-kinds`: the kind table holds exactly `oamod`, a file
+  is a package only by that extension, the seven `.oamod-` names, and a
+  made-up kind built in the test installs, replaces, rolls back, recovers
+  and discards through the generic code, including a staged check that
+  refuses.
 
 The native check `native-mod-install` (`docs/development/testing.md`)
 installs packages in the game itself.

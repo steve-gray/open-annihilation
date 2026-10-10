@@ -2308,7 +2308,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
 - **At the main menu** (`runtime_mod_install.cpp`,
   `Runtime::tell_mod_installs`): once the menu has settled for two frames,
   with no dialog, notice or settings dialog over it, the next package is
-  read; a plan that asks nothing unpacks at once, and the others show their
+  read, by the kind its extension names; a plan that asks nothing unpacks at
+  once, and the others show their
   question in a `Prompt` (`oa/ui/engine_settings/prompt.hpp`) over the
   darkened menu, at z 102. The unpacking runs steps of a 256 KiB budget,
   each folder or file made costing 16 KiB of it and each step ending after
@@ -2325,9 +2326,10 @@ in place, and how what a stop leaves is settled). The runtime's part:
   `set_pending_change`, holding the Mods folder's lock, and the run ends
   (`request_soft_restart`); `main()` makes the change between runs, once
   the runtime and its archives are gone, and the next run tells it. Every
-  run starts with `recover_changes` on the player's Mods folder, before the
-  mod folder is resolved, so that a stop mid-change never drops the Mod
-  setting.
+  run starts with `recover_package_installs`, which runs `recover_changes`
+  for each kind's root folder (today the Mods folder), before the mod
+  folder is resolved, so that a stop mid-change never drops the Mod
+  setting. A file of no known kind is told NOT INSTALLED and is not read.
 - **ROLL BACK** on the Mods page (`Runtime::roll_back_mod_folder`): a folder
   of the player's own Mods folder whose `.backup` keeps an earlier version
   of its mod, one a pick would accept, offers it
