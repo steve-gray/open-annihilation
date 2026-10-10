@@ -711,8 +711,6 @@ void Runtime::register_screens() {
     // on the main menu and in a match with the in-game menu's OA button.
     register_engine_settings_button();
     register_oa_layer();
-    // The notice of the saved games' move, over the main menu.
-    register_saves_notice_overlay();
     register_mod_install_overlay();
     // Without screens of the extension's for them, the multiplayer unit
     // headers and a main-menu overlay's steps have nothing to do. The registry

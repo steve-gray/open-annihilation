@@ -3860,8 +3860,9 @@ class Runtime final : public menu::Host,
     /// recorded in the preferences, which are written; no notice follows.
     void move_recordings_once();
 
-    /// The player's own folder's opener and the main menu's notice of the
-    /// move (user_folder_state.hpp, runtime_user_folder.cpp).
+    /// The player's own folder's opener and the notices of the engine's own
+    /// over a screen, the main menu's notice of the move among them
+    /// (user_folder_state.hpp, runtime_user_folder.cpp).
     struct UserFolderState;
 
     /// Frees the user folder's state.
@@ -3882,14 +3883,11 @@ class Runtime final : public menu::Host,
     /// @return what came of it
     oa::app::FolderOpening open_player_folder(const fs::path& folder);
 
-    /// Registers the main menu's notice of the move, over the settings
-    /// dialog's overlay.
-    void register_saves_notice_overlay();
-
-    /// Tells whether the notice of the saved games' move shows over the
-    /// main menu, which nothing else opens over.
+    /// Tells whether a notice of the engine's own, such as the saved games'
+    /// move, is on the OA layer (NoticeScreen), which Settings does not open
+    /// over.
     ///
-    /// @return true while it shows
+    /// @return true while one is
     [[nodiscard]] bool saves_notice_shown() const noexcept;
 
     /// Shows the notice of the saved games' moves over the main menu, once:
