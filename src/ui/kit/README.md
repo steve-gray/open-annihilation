@@ -20,6 +20,9 @@ until then.
   button, five looks. `paint` draws a display list.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
   the nav list, and a section's heading, row, rule and locked fade.
+- `components_more.hpp`: the notice and the question (the settings
+  dialog's notice and prompt): their models, placement, display lists,
+  pointer, finger and key events and drawing, and the progress bar.
 
 ## State
 
@@ -34,7 +37,17 @@ pointer's place and the wheel's fraction in.
 - The kit never looks text up in the interface catalogue. Callers pass what
   to show. A button's caption, a switch's OFF and ON, a strip's captions, a
   menu's items, a header's words, a nav entry and a row's label and hints
-  arrive already looked up.
+  arrive already looked up. A notice's title, lines and captions pass
+  through the look-up its caller hands it, when one is handed: the notice
+  wraps the words it was given and shows each line as the look-up returns
+  it, as the settings dialog's notice always has. A question's texts are
+  drawn as given.
+- A notice and a question place their parts from the Compact metrics. A
+  question's buttons are as wide as their captions at the estimated width,
+  whatever the fonts, so a press lands where a button is drawn. Their
+  events hit and reach through `hit` and `reach` over the same controls
+  their display lists hold: a notice's OK before its open button, a
+  question's buttons left to right.
 - One button, five looks: accent, plain, quiet, inset, and plain while
   disabled. The kit chooses every colour. A caller passes the style and
   whether the pointer is over the button or holds it.
@@ -66,6 +79,10 @@ wheel's fractions and the names. `ui-kit-components` checks each control's
 pixels, that `paint` matches a direct draw, and the controls' geometry.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
+`ui-kit-notices` checks where six notices and six questions place their
+parts against the settings dialog's own placement, their display lists'
+names, kinds and Tab order, where a finger lands, every key, that `paint`
+matches `draw_notice` and `draw_question`, and the progress bar's fill.
 
 ## Limitations
 

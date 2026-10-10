@@ -7,6 +7,7 @@
 #include "oa/ui/kit/components.hpp"
 
 #include "oa/ui/kit/chrome.hpp"
+#include "oa/ui/kit/components_more.hpp"
 
 #include "oa/ui/frontend_renderer/artless.hpp"
 
@@ -334,6 +335,10 @@ void paint_item(const Canvas& canvas, const Item& item) {
         break;
     case Role::locked_fade:
         draw_locked_fade(drawn, item.rect);
+        break;
+    case Role::progress:
+        if (const auto* look = std::get_if<ProgressLook>(&item.look))
+            draw_progress(drawn, item.rect, look->done, look->whole);
         break;
     }
 }

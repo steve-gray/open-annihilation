@@ -366,6 +366,7 @@ enum class Role : uint8_t {
     heading,     ///< a section heading; the words are the item's HeadingLook
     row_frame,   ///< a row's rule, label and hints; the item's RowFrame
     locked_fade, ///< a locked row's fade; the rectangle is the item's
+    progress,    ///< a progress bar; the item's ProgressLook says how far it has come
 };
 
 /// How a control looks, for the item that draws it.

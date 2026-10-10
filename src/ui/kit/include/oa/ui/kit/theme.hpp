@@ -152,7 +152,8 @@ inline constexpr uint32_t ingame_backdrop_opacity = 128;
 /// How far a locked row is faded into the panel, in 256ths.
 inline constexpr uint32_t locked_fade = 115;
 
-/// The Compact metrics, in points: the settings dialog's sizes at 0.7.3.
+/// The Compact metrics, in points: the settings dialog's, its notices' and its
+/// prompts' sizes at 0.7.3.
 struct Metrics {
     /// The raised edge's width.
     int32_t edge{};
@@ -234,6 +235,19 @@ struct Metrics {
     int32_t button_square_denominator{};
     /// The least columns between the large OA mark and its square's outline.
     int32_t large_mark_margin{};
+    /// A notice's or a question's first row of text: under the header, its
+    /// rule and ten rows more.
+    int32_t text_top{};
+    /// The rows between two paragraphs of a notice or a question.
+    int32_t paragraph_gap{};
+    /// The rows between a notice's last line of text and the footer's rule.
+    int32_t text_bottom_gap{};
+    /// The width of a notice's button that opens its folder.
+    int32_t open_width{};
+    /// The columns a question button's caption keeps clear on its two sides together.
+    int32_t prompt_button_padding{};
+    /// A progress bar's height.
+    int32_t progress_bar_height{};
 };
 
 /// Compact metrics: the settings dialog's sizes at 0.7.3, exactly.
@@ -278,6 +292,12 @@ inline constexpr Metrics compact_metrics{
     .button_square_numerator = 20,
     .button_square_denominator = 32,
     .large_mark_margin = 2,
+    .text_top = 38,
+    .paragraph_gap = 6,
+    .text_bottom_gap = 10,
+    .open_width = 96,
+    .prompt_button_padding = 16,
+    .progress_bar_height = 8,
 };
 
 } // namespace oa::ui::kit

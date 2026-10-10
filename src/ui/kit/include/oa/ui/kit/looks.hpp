@@ -133,6 +133,12 @@ struct FocusRingLook {
     bool around{true}; ///< false draws it on the control's own edge
 };
 
+/// A progress bar: a well with the accent filled as far as it has come.
+struct ProgressLook {
+    int32_t done{};  ///< how far it has come, from 0 to whole
+    int32_t whole{}; ///< the whole; 0 or less fills nothing
+};
+
 /// What a component item draws. Empty for a generic role. Later components
 /// append looks. A locked fade has no look of its own: its rectangle is the
 /// item's.
@@ -153,6 +159,7 @@ using Look = std::variant<
     FooterBandLook,
     NavLook,
     HeadingLook,
-    RowFrame>;
+    RowFrame,
+    ProgressLook>;
 
 } // namespace oa::ui::kit
