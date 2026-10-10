@@ -80,7 +80,7 @@ PromptAnswer prompt_pointer_up(Prompt& prompt, int32_t x, int32_t y, int32_t hei
 }
 
 PromptAnswer prompt_key(Prompt& prompt, DialogKey key) {
-    return kit::question_key(prompt, static_cast<kit::Key>(key));
+    return kit::question_key(prompt, key);
 }
 
 void draw_prompt(

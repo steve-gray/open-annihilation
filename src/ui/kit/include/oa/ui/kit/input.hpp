@@ -166,7 +166,9 @@ next_in_tab_order(const DisplayList& list, ControlId from, bool forward) noexcep
 /// centre lies strictly past the other's in the direction. The focused
 /// control's own scroll area is searched first, including controls it shows
 /// none of. Only when that finds nothing are controls outside it searched,
-/// and a control whose own scroll area shows none of it is left out. Of the
+/// and a control whose own scroll area shows none of it is left out. A
+/// control in no scroll area (group -1) has none of its own: every control
+/// is outside it, those in no scroll area among them. Of the
 /// candidates, those in line with the focused control win; among them the
 /// smallest gap in the direction, then the smallest distance between centres
 /// across it, then the earlier in the declared order. With none in line, the

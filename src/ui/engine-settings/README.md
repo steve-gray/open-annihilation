@@ -493,7 +493,8 @@ first section, Mods. Its three rows:
   caption, drawn "MANAGE...", centred inside it. MANAGE… is a button: a click on it, or
   Space while it has the focus, returns `DialogAction::manage_game_files`,
   and the host opens the Game files screen with the dialog left open under
-  it. Left and Right do nothing to it.
+  it. It takes no steps: Left moves the focus to the section's entry at its
+  height, and Right finds nothing.
 - Include in device backups: a switch, Off by default, whose hint names
   the device ("After restoring this tablet from a backup, add the game
   files again.", from `Dialog::game_files_device`, "device" without one).
@@ -520,8 +521,10 @@ at the game fonts' size.
 
 A finger's press (`dialog_finger_down`) that lands on no control takes the
 nearest control within a reach the host gives, in the dialog's own pixels,
-pressed at its pixel nearest the finger; while a drop-down's list is open,
-the nearest of its items. The press's moves and its release are moved as
+pressed at its pixel nearest the finger: the kit's reach (`kit::reach`) over
+the dialog's display list. While a drop-down's list is open it reaches the
+list's items alone, and while the Switch Mod question shows, its two
+buttons alone. The press's moves and its release are moved as
 far as the press was (`Dialog::finger_shift_x`, `finger_shift_y`), so that
 a release where the finger landed acts on the control it took: a switch's
 nearer half, a strip's nearer level, a slider dragged along its track. A
@@ -574,13 +577,19 @@ player's requests to have the graphics card tried afresh; Restore defaults
 reports a change every time, even when no setting moved, so that the host
 acts on it.
 
+The dialog's keys are the kit's (`DialogKey` is `oa::ui::kit::Key`), so a
+host passes one through as the other. Backspace and Delete, which edit a
+kit screen's text, do nothing in the dialog, its drop-down lists, its
+question, its notices and its prompts.
+
 | Key | Does |
 |---|---|
 | Enter | OK |
 | Escape | Cancel |
-| Tab, Down | the focus to the next control: the section's rows, Restore defaults, Cancel, OK, then the sections |
-| Shift+Tab, Up | the focus to the previous control |
-| Left, Right | a switch Off or On, a slider, a level strip or a drop-down one step; along the footer's buttons |
+| Tab | the focus to the next control in the declared order: the section's rows, Restore defaults, Cancel, OK, then the sections, and round to the first |
+| Shift+Tab | the focus to the previous control in that order |
+| Up, Down | the focus to the control above or below |
+| Left, Right | a switch Off or On, a slider, a level strip or a drop-down one step, Your files' mark along its buttons, a row of Developer's list, Show Active Only; from any other control, the focus to the control on that side |
 | Space | flips a switch, presses a button, opens a section or a drop-down's list |
 | Page Down, Page Up | scroll the section 200 pixels down or up |
 | End, Home | scroll the section to its end or its top |
@@ -590,6 +599,21 @@ the item above or below, Page Up and Page Down a list's height of items
 away, Home and End the first and the last; Enter and Space choose the
 marked item and close the list; Escape closes it unchanged, leaving the
 dialog open; Tab and Shift+Tab close it and move the focus.
+
+The arrows move the focus by where the controls lie, by the kit's rule
+(`kit::focus_toward`; see [the kit](../kit/README.md)): a control in line
+with the focused one comes first, then the nearest. The open section's rows,
+Developer's list and Mods' list are each a scroll area, searched first from
+a control inside it, rows it does not show included; a move from outside it
+never lands on a row it hides. The sections' entries and the footer lie in
+no scroll area. A row's control lies across the section at its control's
+line, so Up and Down walk the rows in order wherever on its line each
+control sits, Down from the last row reaches the footer (Cancel, whose
+middle is nearer the row's), and Right from a section's entry reaches the
+row at its height. An arrow that finds no control that way leaves the focus
+where it is. From no focus, Up shows the focus on the last control in Tab's
+order and the other arrows on the first. Tab and Shift+Tab never follow
+where controls lie.
 
 The focus shows once a key moves it; the first key to the dialog only shows
 it. Page Up, Page Down, Home and End scroll whatever has the focus, and
@@ -650,8 +674,22 @@ question), and its controls, in the order a press tries them, each named
 for automation. The rows are the kit's `add_rows` with the prefix
 `settings`, each row's control in the section's scroll group; Mods' list,
 Developer's list and its footer are generic items and the kit's
-components. A mod's badge is a picture item. Tab follows the dialog's
-focus order (`geometry::focus_order`).
+components. A mod's badge is a picture item. Tab follows the declared order
+the list holds (`DisplayList::tab_order`), which `dialog_list` builds as it
+adds the controls.
+
+The dialog's input reads this list through the kit: the control under a
+point is `kit::hit`'s, a finger's `kit::reach`'s, Tab's next control
+`kit::next_in_tab_order`'s, an arrow's `kit::focus_toward`'s, and the wheel
+carries its fraction with `kit::wheel_offset`. A row's control lies across
+the section at its control's line, and its clip, the view narrowed to the
+control's columns, keeps a press to the control where the view shows it.
+The controls that take Left and Right as steps say so (`Control::steps`):
+the rows' switches, strips, sliders and drop-downs, Your files, Developer's
+list's rows and Show Active Only. The scroll groups are the section's rows
+(`section_group`), Developer's list (`developer_list_group`) and Mods' rows
+with their ROLL BACK (`mods_list_group`); the entries, the footer, OPEN MODS
+FOLDER, Show Active Only and Restore profile values are in none.
 
 The names: the section entries `settings.nav.<page>` (`mods`, `controls`,
 `common-tweaks`, `language`, `graphics`, `touch`, `controller`,
@@ -751,10 +789,11 @@ closes an area or a hack and flips a switch; Left and Right close and open
 an area, turn a hack or a switch Off and On, and move a slider a stop.
 Page Up, Page Down, Home and End scroll the list, as they scroll a long
 section, the wheel over the dialog too; the two rows over it and its
-footer stay where they are. The focus moves through Enable Developer Mode,
-Show performance statistics, the list's rows, Show Active Only and, while
-Developer Mode is on, Restore profile values, then the footer's buttons
-and the sections.
+footer stay where they are. Tab moves the focus through Enable Developer
+Mode, Show performance statistics, the list's rows, Show Active Only and,
+while Developer Mode is on, Restore profile values, then the footer's
+buttons and the sections. Down from the list's last row reaches Show Active
+Only, and Down from there OK, under it.
 
 ## Mod options
 
@@ -786,8 +825,9 @@ A row of Mods whose folder keeps an earlier version of its mod
 (`ModDetails::roll_back_from` and `roll_back_to`, which the host fills for
 the player's own Mods folder) shows a ROLL BACK button at the right of its
 description line, which is cut shorter for it. Its control is OPEN MODS
-FOLDER's and one more for each row before it and itself; the focus walks a
-row, then its ROLL BACK. A press, or Space, asks the Roll Back Mod question
+FOLDER's and one more for each row before it and itself; Tab walks a row,
+then its ROLL BACK, and Right from a row reaches its ROLL BACK, Left coming
+back. A press, or Space, asks the Roll Back Mod question
 in the Switch Mod question's box (`Dialog::mod_question`): its heading, the
 row's badge and title, the versions "from to to" and what it does, CANCEL
 and ROLL BACK, ROLL BACK marked. ROLL BACK names the folder
@@ -867,7 +907,8 @@ Controller and Game files, with and without the Steam Input notice and a
 Steam Deck's rate, a mod's options and Language alone), at its top and its
 scroll end, unlocked and under a game's locks, it finds every control of
 the display list named once, every control `dialog_layout` lists in the
-list where the layout has it, and Tab in the dialog's focus order; and
+list where the layout has it, and Tab stopping only on the list's
+focusable, enabled controls, each once; and
 Developer with every hack open, an open drop-down's items, the question's
 buttons, Mods' names for folders of one word, and the Tab orders of
 Controls, Graphics, Developer with an area open and Mods with two mods as
@@ -913,7 +954,11 @@ trip and Restore defaults;
 `ui-engine-settings-dialog` the dialog's layout (every part inside the
 panel and none overlapping), its sections, switches and their one table,
 slider stops, both level strips, keys, footer buttons, locks and the faces
-it draws; the OA button's icon at its size in both buttons, at rest, under
+it draws; the arrows by geometry (`the_arrows_move_by_geometry`: down a
+section's rows to the footer and back, from a section's entry to the row
+at its height, from MANAGE… to the entry at its height and back, from Developer's entry
+to Restore defaults, down Graphics past its view, to a row's ROLL BACK and
+back, from no focus, and Tab's order on every section); the OA button's icon at its size in both buttons, at rest, under
 the pointer, held and twice as large, and the mark without it; with the
 installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
@@ -1024,11 +1069,17 @@ through the question, each a soft restart.
 
 ## Limitations
 
-The dialog's input still uses its own hit test, focus order, finger reach
-and wheel (`control_at`, `focus_order`, `finger_target`), with Up and Down
-doing what Tab does, until U21 moves it onto the kit's over the display
-list; the list's controls, groups and Tab order are what that input will
-read. The names are the dialog's own; listing them to automation, with
+The arrows' scoring rule is the kit's (`kit::focus_toward`), to be
+revisited after controller playtests (D30). Because a row's control lies
+across its row, Down from a section's last row reaches Cancel even under a
+switch in OK's column, and Down from Show Active Only reaches OK, passing
+Restore profile values, which lies off to its left. Each pointer event and
+arrow builds the display list afresh to read its controls; with every area
+and hack of Developer's list open, a pointer move costs about a quarter of
+a millisecond. A row's control rectangle spans its row's line, and only
+the part within its clip, the control itself, takes a press; automation
+that presses a row by its rectangle must press that part. The names are the
+dialog's own; listing them to automation, with
 `oa.` before each and the parts of a switch, a strip, an open drop-down and
 Your files' buttons, is U11's, which also gives a drop-down's items ids of
 their own in place of their numbers.

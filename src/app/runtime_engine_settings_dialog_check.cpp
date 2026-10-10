@@ -491,9 +491,10 @@ void Runtime::check_engine_settings_dialog() {
         rest();
         return dialog;
     };
-    // Moves the keyboard focus onto a control with Down, at most once round
-    // the focus order: the section's rows, the footer's buttons and the
-    // sections' entries, and one more press to show the focus.
+    // Moves the keyboard focus onto a control with Tab, at most once round
+    // the declared order: the section's rows, the footer's buttons and the
+    // sections' entries, and one more press to show the focus. The arrows
+    // move by where the controls lie and stop at the dialog's edges.
     const auto focus = [&](int32_t control, std::string_view what) {
         const auto order =
             settings::page_settings(engine_settings_dialog()->page).size() +
@@ -502,9 +503,9 @@ void Runtime::check_engine_settings_dialog() {
         for (std::size_t presses = 0; presses <= order; ++presses) {
             if (engine_settings_dialog()->focused == control)
                 return;
-            tap(SDLK_DOWN);
+            tap(SDLK_TAB);
         }
-        require(false, "Down never reached " + std::string(what));
+        require(false, "Tab never reached " + std::string(what));
     };
     const auto sparks = menu_sparks_;
     const auto frame = [&] {

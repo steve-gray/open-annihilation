@@ -16,6 +16,7 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -302,24 +303,12 @@ static_assert(
     return first_page_control + (index >= first_mod ? index - first_mod : index);
 }
 
-/// The keys the dialog answers to; a host gives the platform's keys these meanings.
-enum class DialogKey : uint8_t {
-    enter,     ///< OK
-    escape,    ///< Cancel
-    up,        ///< the focus to the control above
-    down,      ///< the focus to the control below
-    left,      ///< the focused control one step down: Off, a lower value
-    right,     ///< the focused control one step up: On, a higher value
-    space,     ///< presses the focused button or flips the focused switch
-    tab,       ///< the focus to the next control
-    back_tab,  ///< the focus to the previous control
-    page_up,   ///< scrolls the open section up by most of its view
-    page_down, ///< scrolls the open section down by most of its view
-    home,      ///< scrolls the open section to its top
-    end,       ///< scrolls the open section to its end
-    yes,       ///< Y: answers the Switch Mod question SWITCH; nothing while it does not show
-    no,        ///< N: answers the Switch Mod question CANCEL; nothing while it does not show
-};
+/// The keys the dialog answers to: the kit's keys, which a host gives the
+/// platform's keys the meanings of. dialog_key says what each does in the
+/// dialog; Backspace and Delete, which edit a kit screen's text, do nothing
+/// here, nor in the dialog's drop-down lists, its question, notices and
+/// prompts.
+using DialogKey = oa::ui::kit::Key;
 
 /// The buttons of the Your files row, left to right: each opens a folder of
 /// the player's own folder.
@@ -1017,6 +1006,24 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 [[nodiscard]] DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y);
 
 /// Takes a key.
+///
+/// Enter is OK and Escape Cancel, whatever has the focus. Tab and Shift+Tab
+/// move the focus to the next and the previous control in the declared
+/// order, round from one end to the other: the open section's rows that
+/// take a change (on Developer, then its list's rows, Show Active Only and,
+/// while Developer Mode is on, Restore profile values; on Mods, each row
+/// followed by its ROLL BACK, then OPEN MODS FOLDER), the footer's buttons,
+/// then the sections' entries. Up and Down move the focus to the control
+/// above or below, by where the controls lie (oa::ui::kit::focus_toward):
+/// the open section's rows, Developer's list and Mods' list are each
+/// searched first from within, rows they do not show included. Left and
+/// Right step a focused control that takes steps: a switch, a strip, a
+/// slider or a drop-down, Your files' mark, a row of Developer's list, Show
+/// Active Only. From any other control they move the focus to the control
+/// on that side, as Up and Down do. A row's control lies across its row
+/// for the arrows. An arrow that finds no control that way leaves the focus
+/// where it is. From no focus, Up shows the focus on the last control in
+/// the declared order; Down, Left, Right, Tab and Space on the first.
 ///
 /// Page Up, Page Down, Home and End scroll the open section whatever has
 /// the focus, and never move or show it. A key that moves the focus onto a

@@ -1737,7 +1737,7 @@ void the_focus_moves_round_every_control() {
         CHECK(dialog.focused == control);
     }
     CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
-    CHECK(dialog.focused == expected.front());
+    CHECK(dialog.focused == settings::restore_control); // 2D focus (D30)
     CHECK(settings::dialog_key(dialog, DialogKey::up) == DialogAction::redraw);
     CHECK(dialog.focused == expected.back());
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
@@ -2364,7 +2364,7 @@ void the_focus_scrolls_its_row_into_view() {
         CHECK(five.scroll() == expected);
     }
     CHECK(settings::dialog_key(five.dialog, DialogKey::up) == DialogAction::redraw);
-    CHECK(five.dialog.focused == settings::page_control(Page::developer));
+    CHECK(five.dialog.focused == settings::page_control(Page::controls)); // 2D focus (D30)
     CHECK(five.scroll() == 0);
 
     // Scrolling never moves the focus; a key that acts on the focused row
@@ -4487,9 +4487,9 @@ void the_list_scrolls_and_shows_the_focused_row() {
     CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
     CHECK(dialog.focused == settings::active_only_control);
     CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
-    CHECK(dialog.focused == settings::restore_profile_control);
-    CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
-    CHECK(dialog.focused == settings::restore_control);
+    CHECK(dialog.focused == settings::ok_control);                              // 2D focus (D30)
+    CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::none); // 2D focus (D30)
+    CHECK(dialog.focused == settings::ok_control);                              // 2D focus (D30)
     dialog.focused = settings::first_hack_list_control;
     CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::redraw);
     CHECK(geometry::open_rows(dialog).scroll == 0);
@@ -6664,7 +6664,10 @@ void manage_asks_the_host_and_the_backups_switch_changes_at_once() {
     CHECK(keys.focused == settings::first_row_control);
     CHECK(settings::dialog_key(keys, DialogKey::space) == DialogAction::manage_game_files);
     CHECK(settings::dialog_key(keys, DialogKey::right) == DialogAction::none);
-    CHECK(settings::dialog_key(keys, DialogKey::left) == DialogAction::none);
+    CHECK(settings::dialog_key(keys, DialogKey::left) == DialogAction::redraw);  // 2D focus (D30)
+    CHECK(keys.focused == settings::page_control(Page::controls));               // 2D focus (D30)
+    CHECK(settings::dialog_key(keys, DialogKey::right) == DialogAction::redraw); // 2D focus (D30)
+    CHECK(keys.focused == settings::first_row_control);                          // 2D focus (D30)
     CHECK(keys.chosen == before);
     CHECK(settings::dialog_key(keys, DialogKey::tab) == DialogAction::redraw);
     CHECK(keys.focused == settings::first_row_control + 1);
@@ -8141,6 +8144,170 @@ std::vector<int32_t> columns_of(const Canvas& canvas, int32_t y, renderer::Rgb c
     return columns;
 }
 
+/// Returns the controls Tab moves through from no focus, once round, at
+/// most 200.
+///
+/// @param dialog the dialog, its focus not shown
+/// @return each control the focus stops on, in order
+std::vector<int32_t> tab_round(settings::Dialog dialog) {
+    std::vector<int32_t> order;
+    for (int32_t press = 0; press < 200; ++press) {
+        if (settings::dialog_key(dialog, DialogKey::tab) != DialogAction::redraw)
+            break;
+        if (!order.empty() && dialog.focused == order.front())
+            break;
+        order.push_back(dialog.focused);
+    }
+    return order;
+}
+
+void the_arrows_move_by_geometry() {
+    // Controls: Down walks its six rows, and from the last, which it brings
+    // into view, reaches the footer under it. A row lies across the
+    // section, so Cancel and OK both lie in line with it; Cancel's middle
+    // is nearer the row's. Up comes back to the last row.
+    settings::Dialog controls = opened(Page::controls);
+    for (int32_t row = 0; row < 6; ++row) {
+        CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
+        CHECK(controls.focused == settings::first_row_control + row);
+    }
+    CHECK(inside(geometry::open_rows(controls).rows.rows[5].control_area, geometry::view));
+    CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
+    CHECK(controls.focused == settings::cancel_control);
+    CHECK(settings::dialog_key(controls, DialogKey::up) == DialogAction::redraw);
+    CHECK(controls.focused == settings::first_row_control + 5);
+    // Down from the footer finds nothing: the focus stays.
+    controls.focused = settings::ok_control;
+    CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::none);
+    CHECK(controls.focused == settings::ok_control);
+    // Right from a section's entry reaches the row at its height: at the
+    // section's top, Controls' entry, Use the wheel to zoom.
+    controls = opened(Page::controls);
+    controls.focused = settings::page_control(Page::controls);
+    CHECK(settings::dialog_key(controls, DialogKey::right) == DialogAction::redraw);
+    CHECK(controls.focused == settings::first_row_control);
+    // Down from Developer's entry, at the foot of the list, reaches Restore
+    // defaults under it.
+    controls.focused = settings::page_control(Page::developer);
+    CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
+    CHECK(controls.focused == settings::restore_control);
+    // Left from Restore defaults finds nothing; Right walks the footer.
+    CHECK(settings::dialog_key(controls, DialogKey::left) == DialogAction::none);
+    CHECK(settings::dialog_key(controls, DialogKey::right) == DialogAction::redraw);
+    CHECK(controls.focused == settings::cancel_control);
+
+    // Game files: MANAGE… takes no steps, so Left goes to the entry at its
+    // height, Controls', and Right comes back.
+    settings::Dialog files = opened_with_game_files(Page::game_files);
+    CHECK(settings::dialog_key(files, DialogKey::tab) == DialogAction::redraw);
+    CHECK(files.focused == settings::first_row_control);
+    CHECK(settings::dialog_key(files, DialogKey::left) == DialogAction::redraw);
+    CHECK(files.focused == settings::page_control(Page::controls));
+    CHECK(settings::dialog_key(files, DialogKey::right) == DialogAction::redraw);
+    CHECK(files.focused == settings::first_row_control);
+    CHECK(files.chosen == files.opened);
+
+    // Graphics: Screen size is the last row the view shows whole. Down from
+    // it reaches Hardware acceleration, which the view cuts, and scrolls the
+    // least that shows it whole; Down again reaches Vertical sync under the
+    // view.
+    settings::Dialog graphics = graphics_page();
+    for (int32_t row = 0; row < 3; ++row)
+        CHECK(settings::dialog_key(graphics, DialogKey::down) == DialogAction::redraw);
+    CHECK(graphics.focused == settings::first_row_control + 2);
+    CHECK(graphics_scroll(graphics) == 0);
+    CHECK(settings::dialog_key(graphics, DialogKey::down) == DialogAction::redraw);
+    CHECK(graphics.focused == settings::first_row_control + 3);
+    CHECK(graphics_scroll(graphics) == 25);
+    CHECK(settings::dialog_key(graphics, DialogKey::down) == DialogAction::redraw);
+    CHECK(graphics.focused == settings::first_row_control + 4);
+    CHECK(graphics_scroll(graphics) == 72);
+    CHECK(inside(geometry::open_rows(graphics).rows.rows[4].control_area, geometry::view));
+    // A slider takes Left and Right as steps, and keeps the focus.
+    graphics.focused = settings::first_row_control;
+    CHECK(settings::dialog_key(graphics, DialogKey::left) == DialogAction::changed);
+    CHECK(graphics.focused == settings::first_row_control);
+
+    // Mods: a row that offers ROLL BACK reaches it with Right, and Left
+    // comes back to the row.
+    settings::Dialog mods = roll_back_dialog(kModFolders[0]);
+    const auto open = geometry::open_rows(mods);
+    const std::size_t alpha = listed_at(mods, 1);
+    const int32_t roll_back = geometry::roll_back_control(open.rows, alpha);
+    mods.focused = mod_control(mods, 1);
+    CHECK(settings::dialog_key(mods, DialogKey::right) == DialogAction::redraw);
+    CHECK(mods.focused == roll_back);
+    CHECK(settings::dialog_key(mods, DialogKey::left) == DialogAction::redraw);
+    CHECK(mods.focused == mod_control(mods, 1));
+    CHECK(mods.switch_question == settings::no_question);
+
+    // From no focus, Up shows it on the last control in Tab's order and the
+    // other arrows on the first.
+    for (const auto& [key, expected] :
+         {std::pair{DialogKey::up, settings::page_control(Page::developer)},
+          std::pair{DialogKey::down, settings::first_row_control},
+          std::pair{DialogKey::left, settings::first_row_control},
+          std::pair{DialogKey::right, settings::first_row_control}}) {
+        settings::Dialog fresh = opened(Page::controls);
+        CHECK(settings::dialog_key(fresh, key) == DialogAction::redraw);
+        CHECK(fresh.focused == expected);
+    }
+
+    // Tab keeps the declared order on every section: the rows that take a
+    // change, the footer, then the sections' entries.
+    const int32_t row = settings::first_row_control;
+    const std::vector<int32_t> rest{
+        settings::restore_control,
+        settings::cancel_control,
+        settings::ok_control,
+        settings::page_control(Page::mods),
+        settings::page_control(Page::controls),
+        settings::page_control(Page::common_tweaks),
+        settings::page_control(Page::language),
+        settings::page_control(Page::graphics),
+        settings::page_control(Page::developer),
+    };
+    const auto then_rest = [&rest](std::vector<int32_t> order) {
+        order.insert(order.end(), rest.begin(), rest.end());
+        return order;
+    };
+    // Mods with no mod offered: No Mod's row and OPEN MODS FOLDER.
+    CHECK(tab_round(opened(Page::mods)) == then_rest({row, row + 1}));
+    CHECK(
+        tab_round(opened(Page::controls)) ==
+        then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5})
+    );
+    CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1, row + 2}));
+    // Language: Text size waits for the modern fonts.
+    CHECK(
+        tab_round(opened(Page::language)) ==
+        then_rest({row, row + 1, row + 3, row + 4, row + 5, row + 6})
+    );
+    // Graphics: After zoom waits for Dots.
+    CHECK(
+        tab_round(opened(Page::graphics)) == then_rest(
+                                                 {row,
+                                                  row + 1,
+                                                  row + 2,
+                                                  row + 3,
+                                                  row + 4,
+                                                  row + 5,
+                                                  row + 6,
+                                                  row + 7,
+                                                  row + 8,
+                                                  row + 10,
+                                                  row + 11}
+                                             )
+    );
+    // Developer, Developer Mode off: its two rows, every area of its list,
+    // then Show Active Only.
+    std::vector<int32_t> developer{row, row + 1};
+    for (std::size_t area = 0; area < settings::developer_areas().size(); ++area)
+        developer.push_back(settings::first_hack_list_control + static_cast<int32_t>(area));
+    developer.push_back(settings::active_only_control);
+    CHECK(tab_round(opened(Page::developer)) == then_rest(developer));
+}
+
 void the_oa_button_shows_the_icon_or_the_mark() {
     const settings::DialogFonts fonts{};
     const IconPicture icon = solid_icon();
@@ -8275,6 +8442,7 @@ int main(int argc, char** argv) {
         enter_keeps_and_escape_cancels();
         the_footer_buttons_restore_cancel_and_keep();
         the_focus_moves_round_every_control();
+        the_arrows_move_by_geometry();
         locks_show_their_text_and_hold_their_settings();
         the_view_and_the_scroll_bar_keep_their_places();
         sections_that_fit_do_not_scroll();
