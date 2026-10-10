@@ -17,6 +17,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -1247,14 +1248,19 @@ int32_t choice_field_width(Setting setting) noexcept {
 }
 
 std::span<const oa::data::languages::Language* const> offered_languages() {
-    static const std::vector<const oa::data::languages::Language*> offered = [] {
-        std::vector<const oa::data::languages::Language*> languages;
+    static std::vector<const oa::data::languages::Language*> offered;
+    static uint64_t built_at = 0;
+    static bool built = false;
+    const uint64_t generation = oa::data::languages::registry_generation();
+    if (!built || built_at != generation) {
+        offered.clear();
         for (const oa::data::languages::Language* language : oa::data::languages::known_languages())
-            if (oa::data::languages::drawable(*language))
-                languages.push_back(language);
-        return languages;
-    }();
-    return offered;
+            if (oa::data::languages::playable(*language))
+                offered.push_back(language);
+        built_at = generation;
+        built = true;
+    }
+    return {offered.data(), offered.size()};
 }
 
 std::size_t choice_count(const Dialog& dialog, Setting setting) {

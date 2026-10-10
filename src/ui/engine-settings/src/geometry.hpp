@@ -882,7 +882,8 @@ void set_strip_level(EngineSettings& settings, Setting setting, std::size_t leve
 [[nodiscard]] bool is_choice(Setting setting) noexcept;
 
 /// Returns the languages the Language drop-down offers after System
-/// default: the known languages this build draws, in the registry's order.
+/// default: the playable languages, a built-in or an installed pack, in
+/// the registry's order. A language that is not installed is not offered.
 ///
 /// @return the languages
 [[nodiscard]] std::span<const oa::data::languages::Language* const> offered_languages();

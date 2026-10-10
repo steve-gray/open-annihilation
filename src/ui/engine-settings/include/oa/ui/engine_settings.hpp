@@ -975,8 +975,10 @@ void write_settings(
 
 /// Returns the language the preferences choose: the language key's value
 /// when it is oa::data::languages::system_choice or the tag of a language
-/// this build draws, matched without regard to case; else, a file without
-/// the key or with any other value, the default.
+/// this build draws, matched without regard to case. A language that is
+/// not installed yet is kept too, when this build can draw it, so a choice
+/// of one stays until the pack is there. Anything else, a file without the
+/// key included, is the default. "pt" is not the tag "pt-BR".
 ///
 /// @param values the preferences
 /// @param players_own_profile the preferences file is the player's own

@@ -9,10 +9,12 @@
 
 #pragma once
 
+#include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/languages/language_pack.hpp"
 
 #include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -47,11 +49,33 @@ struct LoadedLanguagePack {
 /// @param[in,out] packs the packs read are added at the end, in the order
 ///     of their folders' names
 /// @param[in,out] catalogue each pack's interface.tdf is added to it; null
-///     reads none
+///     checks that the file is one the catalogue reads and adds nothing
 void read_language_packs(
     const std::filesystem::path& root,
     std::vector<std::unique_ptr<LoadedLanguagePack>>& packs,
     oa::data::languages::InterfaceText* catalogue
+);
+
+/// Returns the registry entries of the packs, in the order of the groups
+/// and of the packs in each group.
+///
+/// @param packs the groups; a null group is skipped
+/// @return one entry per pack, as its manifest describes it
+[[nodiscard]] std::vector<oa::data::languages::LanguageEntry> installed_entries(
+    std::initializer_list<const std::vector<std::unique_ptr<LoadedLanguagePack>>*> packs
+);
+
+/// Adds each pack's interface.tdf to a catalogue, in the packs' order.
+///
+/// A file that does not read is reported and skipped. read_language_packs
+/// has already left out a pack whose interface.tdf the catalogue refuses,
+/// so this adds the texts after the catalogue's own files.
+///
+/// @param packs the packs, in the order their texts replace earlier ones
+/// @param catalogue the catalogue
+void add_pack_interface_texts(
+    const std::vector<std::unique_ptr<LoadedLanguagePack>>& packs,
+    oa::data::languages::InterfaceText& catalogue
 );
 
 /// Reads a file of a pack's files folder, of at most the bytes the TDF

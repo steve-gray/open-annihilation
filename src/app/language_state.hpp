@@ -32,16 +32,18 @@ struct Runtime::LanguageState {
     /// The language the game shows its text in.
     const oa::data::languages::Language* shown{&oa::data::languages::english()};
     /// The word the game data's lookups use: 3.1c's command-line word as
-    /// typed when no known language has it, else the shown language's
-    /// game_name. It points into the registry or the command line, which
-    /// live as long as the game runs, so a copy of it never dangles.
+    /// typed when no playable language has it, else the shown language's
+    /// game_name. Either stays for the whole run, so a copy of it never
+    /// dangles.
     const char* data_word{"English"};
     /// The words a unit's name and description are looked up by, in order
     /// (oa::data::languages::data_words).
     std::vector<std::string> words;
-    /// The words the unit loaders read each unit's texts in: every known
-    /// language's, and the command line's word when no known language has
-    /// it. They are set once, so that the loaders' pointers to them hold.
+    /// The words the unit loaders read each unit's texts in: every live
+    /// language's, one that is not installed included, and the command
+    /// line's word when no playable language has it and the list does not
+    /// already hold it. They are set once, so that the loaders' pointers
+    /// to them hold.
     std::vector<std::string> sink_words;
     /// sink_words as the loaders take them.
     std::vector<const char*> sink_word_pointers;
