@@ -2678,6 +2678,9 @@ endif()
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
 add_subdirectory(src/netgame)
+# Catalogues are fetched with the HTTP client src/netgame adds, so this
+# library follows that directory.
+add_subdirectory(src/app/content)
 add_subdirectory(src/session/demo)
 add_subdirectory(src/app/netgame)
 if(TARGET oa-app-netgame)
