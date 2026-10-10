@@ -165,26 +165,26 @@ RowContext row_context(const Dialog& dialog) noexcept {
 kit::RowView row_view(
     const Dialog& dialog, Setting setting, Lock lock, bool status, const TextWidth& small_width
 ) {
-    kit::RowView view =
+    kit::RowView shown =
         kit::view_of(row_spec(setting), reading(dialog.chosen, dialog), &shown_text);
     // The lock the dialog puts on the row, looked up as the dialog has
     // always drawn it, and a switch a language sets showing On.
-    view.lock =
+    shown.lock =
         lock == Lock::none ? std::string() : std::string(shown_text(shown_text(lock_text(lock))));
-    view.hint_is_status = status;
+    shown.hint_is_status = status;
     if (lock == Lock::set_by_language)
-        view.on = true;
-    for (std::size_t line = 0; line < view.hints.size(); ++line) {
+        shown.on = true;
+    for (std::size_t line = 0; line < shown.hints.size(); ++line) {
         if (line == 0 && hint_is_path(setting)) {
             const std::string path = row_hint(dialog, setting, 0).text;
-            view.hints[line] =
+            shown.hints[line] =
                 path.empty() ? std::string()
                              : std::string(shown_text(path_tail(path, content_width, small_width)));
             continue;
         }
-        view.hints[line] = std::string(shown_text(view.hints[line]));
+        shown.hints[line] = std::string(shown_text(shown.hints[line]));
     }
-    return view;
+    return shown;
 }
 
 Rows place_section(
