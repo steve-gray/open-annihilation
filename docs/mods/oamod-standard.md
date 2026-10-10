@@ -30,7 +30,8 @@ The standard hacks themselves are listed in the
     [4.3 Command-line options](#43-command-line-options) ·
     [4.4 Saves and settings](#44-saves-and-settings) ·
     [4.5 The badge](#45-the-badge) ·
-    [4.6 The .oamod package](#46-the-oamod-package)
+    [4.6 The .oamod package](#46-the-oamod-package) ·
+    [4.7 Catalogue releases](#47-catalogue-releases)
 - [5. Parameters, defaults and presets](#5-parameters-defaults-and-presets)
   - [5.1 What the registry declares](#51-what-the-registry-declares) ·
     [5.2 Ways to write a limit or hack](#52-ways-to-write-a-limit-or-hack) ·
@@ -153,7 +154,9 @@ optional.
 | `name` | The mod's display name, a string | `name: Example Mod` |
 | `version` | The mod's version, a string | `version: "2.1"` |
 | `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. The Mods page of the Open Annihilation settings shows it under the mod's name and version. | `description: "Larger armies and renamed data directories."` |
-| `requires` | The base game and registry catalogue the profile is written for: `base` must be `ta-3.1c` and `catalogue` must be `1` | `requires: {base: ta-3.1c, catalogue: 1}` |
+| `homepage` | The mod's site: an `http` or `https` address of 1 to 256 bytes, the scheme in either case, with no space or control character. The Library links to it. | `homepage: "https://example.org/example-mod"` |
+| `tags` | One to eight tags the Library files the mod under. Each is 1 to 32 bytes of lower-case words of `a`-`z` and `0`-`9` joined by single hyphens, and none is repeated. An empty list is refused: leave the key out instead. | `tags: [balance, ai]` |
+| `requires` | The base game, the registry catalogue and the Open Annihilation the profile runs on. `base` must be `ta-3.1c` and `catalogue` must be `1`. `engine` is a requirement such as `">= 0.8.0"`, quoted. | `requires: {base: ta-3.1c, catalogue: 1, engine: ">= 0.8.0"}` |
 | `author` | Who made the mod: `name`, and optionally `email` | `author: {name: A. Modder}` |
 | `packaging` | Who packaged the profile and the mod's files, when, and how often since: `revision`, `date` and `packager` | `packaging: {revision: 1, date: 2026-10-04, packager: P. Packer}` |
 | `identity` | Display version, network version bytes, settings file, registry root, side names | `network-version: [20, 1]` |
@@ -180,7 +183,8 @@ optional.
 | `packaging.packager` | Who made the package, a string of 1 to 128 bytes | yes |
 
 They describe the package, not the rules: they enter the full hash, never
-the sim hash ([11](#11-the-resolved-profile-and-its-hashes)). A date written
+the sim hash ([11](#11-the-resolved-profile-and-its-hashes)). `homepage`,
+`tags` and `requires`, including `requires.engine`, do the same. A date written
 plainly, `date: 2026-10-04`, is a string, as [3.3](#33-strict-yaml-rules)
 says.
 
@@ -253,7 +257,9 @@ refused with the rule and the line and column where it is broken.
   as the game matches them.
 - **Quoting.** A string that starts with a YAML indicator (`*`, `%`, `&`,
   `!`, `@`) or holds `: ` or ` #` is quoted. Single quotes keep backslashes
-  as written (`'Software\Example Mod'`).
+  as written (`'Software\Example Mod'`). A value that starts with `>` is a
+  block scalar unless it is quoted, so an engine requirement is written
+  `engine: ">= 0.8.0"`.
 - **Comments.** `#` comments start a line or follow white space, may appear
   anywhere, and are the place to explain a value. They are not part of the
   ruleset and never reach the hashes.
@@ -276,6 +282,12 @@ that names a catalogue in `requires` must name this one. A hack whose
 meaning changes gets a new id, and the old id keeps its meaning, so an
 existing profile never changes how it plays.
 
+`requires.engine`, when a profile gives one, is checked when the profile
+is resolved. A player whose Open Annihilation does not meet it is told the
+version the mod needs, and the mod is not played. The text of `version`
+stays free text: Open Annihilation never orders version strings. Only
+`requires.engine` is a range.
+
 ### 3.6 Validation and diagnostics
 
 The engine checks the whole profile against the registry before it plays.
@@ -288,7 +300,12 @@ on:
 - a value of the wrong type, out of range, not a multiple of what it must
   be, too long, not matching its pattern, of the wrong length, repeated or
   not in ascending order where the parameter requires it;
-- `requires` naming another base game or catalogue;
+- `requires` naming another base game or catalogue, a `requires.engine`
+  that is not a requirement, or an engine requirement this Open
+  Annihilation does not meet;
+- a `homepage` that is not an http or https address of 1 to 256 bytes, or
+  a `tags` list that is empty, longer than eight, or holds a tag that is
+  not lower-case kebab-case or that repeats;
 - a missing `author` or `packaging` block, a missing `author.name`,
   `packaging.revision`, `packaging.date` or `packaging.packager`, a
   malformed e-mail address, or a date that is not a calendar day;
@@ -518,6 +535,19 @@ before the change or after it; a change to the mod the game plays is made
 between two runs, once its archives are closed. The folders an install
 keeps in `Mods` while it works start with `.oamod-`; `Mods/.oamod-lock`
 keeps a second copy of the game from changing the folder at the same time.
+
+### 4.7 Catalogue releases
+
+A registry's catalogue numbers every release of a package key (`release`)
+and never orders version strings. An update is a higher release of the same
+key from the same registry. `packaging.revision` rises with every package
+of the same version, so a file install still sees an update when the
+catalogue is not involved. A publisher never reuses a version and revision
+with different bytes: the content-library publish script refuses it.
+
+A mod whose engine requirement is not met, or whose hacks this Open
+Annihilation does not implement, is listed and cannot be installed. The
+Library shows the mod's homepage and files the mod under its tags.
 
 ## 5. Parameters, defaults and presets
 
@@ -986,8 +1016,8 @@ window in eight and the second on the others, each named as below the
 
 Resolution gives the **effective profile**: every value the profile sets,
 resolved in the order of [5.3](#53-resolution-order). It holds `oamod`,
-`id`, `name`, `version`, `description`, `requires`, `author` and
-`packaging` as written; every identity, layout,
+`id`, `name`, `version`, `description`, `homepage`, `tags`, `requires`,
+`author` and `packaging` as written; every identity, layout,
 string and media value, written or at its baseline; every limit, with each
 parameter; every hack that is on, with each parameter; the script
 extensions with their fidelity; the data-key bindings; and the settings
@@ -1004,7 +1034,7 @@ change it, so two profiles that mean the same thing hash the same.
   values, every limit and every hack whose entry is sim scope with its
   sim-scope parameters, the script extensions and their fidelity, and the
   sim-scope data keys. It leaves out `id`, `name`, `version`,
-  `description`, `requires`, `author`, `packaging`, the settings block,
+  `description`, `homepage`, `tags`, `requires`, `author`, `packaging`, the settings block,
   strings, media, the visual
   hacks and every view value.
 

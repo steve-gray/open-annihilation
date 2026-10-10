@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Shared cases for an engine requirement, a version, a homepage and a tag.
+# One case a line: KIND ok|bad TEXT. KIND is range, version, homepage or tag.
+# An ok range continues " :: MEET :: MISS", and MEET and MISS are
+# comma-separated versions that do and do not meet it. A line with no TEXT
+# is the empty string. Blank lines and lines starting with # are skipped.
+range ok >= 0.8.0 :: 0.8.0,0.8.1,1.0.0 :: 0.7.9
+range ok >0.8.0 :: 0.8.1,1.0.0 :: 0.8.0,0.7.9
+range ok <= 0.9.0 :: 0.9.0,0.0.0,0.8.9 :: 0.9.1
+range ok <0.9.0 :: 0.8.9,0.0.0 :: 0.9.0
+range ok = 0.8.0 :: 0.8.0 :: 0.8.1,0.7.9
+range ok >= 0.8.0, < 0.9.0 :: 0.8.0,0.8.9 :: 0.7.9,0.9.0
+range ok >=0.8.0,<0.9.0 :: 0.8.5 :: 0.7.9,0.9.0
+range ok > 1.2.3 , <= 4.5.6 :: 1.2.4,4.5.6 :: 1.2.3,4.5.7
+range ok =0.0.0 :: 0.0.0 :: 0.0.1
+range ok >= 65535.65535.65535 :: 65535.65535.65535 :: 65535.65535.65534
+range ok > 0.0.0, < 0.0.2 :: 0.0.1 :: 0.0.0,0.0.2
+range ok <=0.0.1, >= 0.0.1 :: 0.0.1 :: 0.0.0,0.0.2
+range bad >= 0.0.1, >= 0.0.1, >= 0.0.1, >= 0.0.1, >= 0.0.1
+range bad >= 01.0.0
+range bad >= 65536.0.0
+range bad >= 1.2
+range bad >= 0.0.1,
+range bad
+range bad xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+range bad >=
+range bad >
+range bad <
+range bad =
+range bad == 0.8.0
+range bad >= 0.8.0.1
+range bad >= 0.01.0
+range bad >= 1.2.
+range bad >= 0.0.0 
+range bad  >= 0.8.0
+version ok 0.0.0
+version ok 0.8.0
+version ok 65535.65535.65535
+version ok 10.0.1
+version bad 01.0.0
+version bad 65536.0.0
+version bad 1.2
+version bad 1.2.3.4
+version bad
+version bad 0.8.0 
+version bad v0.8.0
+homepage ok https://example.org
+homepage ok http://a
+homepage ok HTTPS://example.org/path
+homepage ok HTTP://example.org/Pseudo
+homepage ok https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+homepage bad javascript:alert(1)
+homepage bad https://example.org/a b
+homepage bad https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+homepage bad https://
+homepage bad http://
+homepage bad ftp://example.org
+homepage bad
+homepage bad https://example.org/a	b
+tag ok a
+tag ok balance
+tag ok a-b-c
+tag ok 0
+tag ok aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+tag bad aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+tag bad Balance
+tag bad a--b
+tag bad -ab
+tag bad ab-
+tag bad
+tag bad a_b
+tag bad a b

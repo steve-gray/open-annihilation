@@ -49,7 +49,7 @@ LICENCE = "SPDX-License-Identifier: GPL-3.0-only"
 
 MANIFEST_KEYS = {
     "oalang", "tag", "name", "english-name", "word", "version", "locales",
-    "fallbacks", "text", "unicode",
+    "fallbacks", "text", "unicode", "homepage", "tags", "requires",
 }
 """The keys a manifest may hold."""
 
@@ -150,6 +150,16 @@ def check_manifest(pack: Path, report: Report) -> dict:
             report.fail(f"language.yaml names no {key}")
     if pack.name != values.get("tag"):
         report.note(f"the folder {pack.name} is not named by the tag {values.get('tag')}")
+    requires = values.get("requires")
+    if "requires" in values and not isinstance(requires, dict):
+        report.fail("language.yaml's requires is not a mapping")
+        requires = None
+    elif isinstance(requires, dict):
+        for key in requires:
+            if key != "engine":
+                report.fail("language.yaml's requires takes engine only")
+    for problem in oamod_yaml.package_key_problems(values, requires if isinstance(requires, dict) else None):
+        report.fail(f"language.yaml {problem}")
     return values
 
 

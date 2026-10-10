@@ -9,6 +9,12 @@
 
 #include "oa/data/mod_profile.hpp"
 #include "oa/data/mod_profile/registry.hpp"
+#include "oa/formats/oamod/package_keys.hpp"
+
+#ifndef OA_ENGINE_VERSION
+#error                                                                                             \
+    "OA_ENGINE_VERSION names this build's version, which a profile's engine requirement is checked against"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -73,29 +79,24 @@ using registry::ValueSpec;
 using registry::ValueType;
 
 /// The top-level keys a profile may hold.
-constexpr std::array<std::string_view, 17> top_keys{
+constexpr std::array<std::string_view, 19> top_keys{
+    "oamod",     "id",     "name",      "version",  "description", "homepage", "tags",
+    "requires",  "author", "packaging", "identity", "layout",      "limits",   "script-extensions",
+    "data-keys", "hacks",  "strings",   "media",    "settings",
+};
+/// The top-level keys whose values the effective profile carries as written.
+/// None of them enters the sim hash except oamod.
+constexpr std::array<std::string_view, 10> meta_keys{
     "oamod",
     "id",
     "name",
     "version",
     "description",
+    "homepage",
+    "tags",
     "requires",
     "author",
-    "packaging",
-    "identity",
-    "layout",
-    "limits",
-    "script-extensions",
-    "data-keys",
-    "hacks",
-    "strings",
-    "media",
-    "settings",
-};
-/// The top-level keys whose values the effective profile carries as written.
-/// None of them enters the sim hash except oamod.
-constexpr std::array<std::string_view, 8> meta_keys{
-    "oamod", "id", "name", "version", "description", "requires", "author", "packaging"
+    "packaging"
 };
 /// The keys of the author block; name is required.
 constexpr std::array<std::string_view, 2> author_keys{"name", "email"};
@@ -363,6 +364,19 @@ struct WrittenBinding {
     TextPosition position{};
 };
 
+/// The release this build is, parsed once from OA_ENGINE_VERSION.
+///
+/// @return that release; 0.0.0 when the macro is not a version
+formats::oamod::EngineVersion this_build_version() {
+    static const formats::oamod::EngineVersion version = [] {
+        if (const std::optional<formats::oamod::EngineVersion> parsed =
+                formats::oamod::parse_engine_version(OA_ENGINE_VERSION))
+            return *parsed;
+        return formats::oamod::EngineVersion{};
+    }();
+    return version;
+}
+
 /// A limit or hack being resolved.
 struct ResolvedEntry {
     const Entry* entry{};
@@ -452,6 +466,7 @@ class Resolver {
         }
         check_description(root);
         check_requires(root);
+        check_package_keys(root);
         check_author(root);
         check_packaging(root);
         for (const Node& entry : root.children) {
@@ -514,10 +529,11 @@ class Resolver {
         bool shape = requires_node->kind == NodeKind::mapping;
         for (const Node& entry : requires_node->children) {
             shape = shape && entry.key.kind == KeyKind::string &&
-                    (entry.key.text == "base" || entry.key.text == "catalogue");
+                    (entry.key.text == "base" || entry.key.text == "catalogue" ||
+                     entry.key.text == "engine");
         }
         if (!shape) {
-            error(requires_node->position, "requires", "requires takes base and catalogue");
+            error(requires_node->position, "requires", "requires takes base, catalogue and engine");
             return;
         }
         const Node* base = formats::oamod::find_entry(*requires_node, "base");
@@ -538,6 +554,38 @@ class Resolver {
                     " does not match base " + std::string{base_game} + ", catalogue " +
                     std::to_string(registry::table().catalogue)
             );
+    }
+
+    /// Checks homepage, tags and requires.engine, and refuses an engine
+    /// requirement this build does not meet.
+    ///
+    /// @param root the profile's top-level mapping
+    void check_package_keys(const Node& root) {
+        formats::oamod::PackageKeys keys;
+        std::vector<formats::oamod::KeyProblem> problems;
+        const Node* requires_node = formats::oamod::find_entry(root, "requires");
+        const Node* requires_block =
+            requires_node != nullptr && requires_node->kind == NodeKind::mapping ? requires_node
+                                                                                 : nullptr;
+        formats::oamod::read_package_keys(root, requires_block, keys, problems);
+        for (const formats::oamod::KeyProblem& problem : problems)
+            error(problem.position, problem.path, problem.message);
+        if (keys.requires_engine.empty())
+            return;
+        const std::optional<formats::oamod::EngineRange> range =
+            formats::oamod::parse_engine_range(keys.requires_engine);
+        if (!range || formats::oamod::engine_range_met(*range, this_build_version()))
+            return;
+        const Node* engine = requires_block != nullptr
+                                 ? formats::oamod::find_entry(*requires_block, "engine")
+                                 : nullptr;
+        error(
+            engine != nullptr ? engine->position : TextPosition{},
+            "requires.engine",
+            "needs Open Annihilation " + formats::oamod::describe_engine_range(*range) +
+                "; this is Open Annihilation " +
+                formats::oamod::engine_version_text(this_build_version())
+        );
     }
 
     /// Checks that a block is a mapping of known keys, and reports each other key.
@@ -1770,6 +1818,21 @@ class Resolver {
         if (const Value* description = find_member(effective, "description");
             description != nullptr)
             resolution.profile.description = description->text;
+        if (const Value* homepage = find_member(effective, "homepage");
+            homepage != nullptr && homepage->kind == ValueKind::string)
+            resolution.profile.homepage = homepage->text;
+        if (const Value* tags = find_member(effective, "tags");
+            tags != nullptr && tags->kind == ValueKind::list) {
+            for (const Value& item : tags->items)
+                if (item.kind == ValueKind::string)
+                    resolution.profile.tags.push_back(item.text);
+        }
+        if (const Value* requires_block = find_member(effective, "requires");
+            requires_block != nullptr && requires_block->kind == ValueKind::map) {
+            if (const Value* engine = find_member(*requires_block, "engine");
+                engine != nullptr && engine->kind == ValueKind::string)
+                resolution.profile.requires_engine = engine->text;
+        }
         resolution.profile.registry_seeds = seeds_;
         fill_records(effective, resolution.profile);
         // The registry's ranges and constraints keep every limit in the range
