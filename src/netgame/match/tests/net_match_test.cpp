@@ -3852,9 +3852,31 @@ void whiteboard_marks_reach_allies() {
     CHECK(whiteboard_frames(plain.link).empty());
 }
 
+/// Installs Simplified Chinese for one test, then puts the compiled
+/// available entry back.
+struct InstalledSimplifiedChinese {
+    InstalledSimplifiedChinese() {
+        oa::data::languages::LanguageEntry entry;
+        entry.tag = "zh-Hans";
+        entry.endonym = "\347\256\200\344\275\223\344\270\255\346\226\207";
+        entry.english_name = "Chinese (Simplified)";
+        entry.word = "Chinese";
+        entry.locales = {"zh-Hans", "zh-CN", "zh-SG", "zh-MY", "zh"};
+        entry.needs = oa::data::languages::TextNeeds::modern_fonts;
+        const std::array<oa::data::languages::LanguageEntry, 1> installed{entry};
+        oa::data::languages::set_pack_languages(installed, {});
+    }
+
+    ~InstalledSimplifiedChinese() { oa::data::languages::set_pack_languages({}, {}); }
+
+    InstalledSimplifiedChinese(const InstalledSimplifiedChinese&) = delete;
+    InstalledSimplifiedChinese& operator=(const InstalledSimplifiedChinese&) = delete;
+};
+
 // Under autopause only the host's unpause starts the game: another's is
 // undone with a notice, here and from another machine.
 void autopause_holds_for_the_host() {
+    [[maybe_unused]] const InstalledSimplifiedChinese chinese_pack;
     start_case("autopause_holds_for_the_host");
     constexpr uint32_t kHost = 7, kB = 9, kC = 11;
     const Seat b_view[4] = {

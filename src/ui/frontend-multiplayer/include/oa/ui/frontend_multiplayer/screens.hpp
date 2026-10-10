@@ -149,6 +149,50 @@ void multiplayer_bind_map_pack(
 /// @param link The launch block and the launch's answers; a null block reads as empty.
 void multiplayer_bind_launch_link(const LaunchLink& link) noexcept;
 
+/// One installed pack map, as the battle room's map list shows it.
+///
+/// The pointers stay valid until the next call of the source that wrote them.
+struct LobbyPackMap {
+    const char* name{};        ///< `<stem>@<id>`, the name the list shows
+    const char* description{}; ///< one line about the map; empty when unwritten
+    const char* size{};        ///< the map's width and height, as the list shows it
+    int32_t memory_mb{};       ///< memory the map needs, in MB
+};
+
+/// Where the battle room reads installed pack maps, and mounts the one it plays.
+///
+/// A null member does nothing. The binding survives multiplayer_reset.
+struct LobbyMapSource {
+    void* context{};
+    /// Returns how many pack maps are installed.
+    int32_t (*count)(void* context){};
+    /// Writes the pack map at `index`.
+    ///
+    /// @param context the source's context
+    /// @param index the map's place, from 0
+    /// @param[out] out the map; left unchanged when `index` is out of range
+    /// @return true when `out` was written
+    bool (*at)(void* context, int32_t index, LobbyPackMap* out){};
+    /// Mounts the named pack map's files, and no other pack map's.
+    ///
+    /// @param context the source's context
+    /// @param name the map's name, `<stem>@<id>`
+    /// @param[out] reason receives why the map was refused, when not null
+    /// @param capacity bytes of `reason`, counting the terminating NUL
+    /// @return true when the map's files are mounted
+    bool (*prepare)(void* context, const char* name, char* reason, std::size_t capacity){};
+    /// Unmounts the pack map whose files are mounted.
+    void (*release)(void* context){};
+};
+
+/// Binds the pack maps the battle room lists beside the base maps.
+///
+/// The binding survives multiplayer_reset. A null member does nothing. The
+/// list is read again the next time the battle room opens.
+///
+/// @param source the pack maps; a null member keeps that part unused
+void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept;
+
 /// A TCP/IP game the multiplayer screens host or join at once, as a player
 /// would through them: the address typed into TCP.GUI and accepted, the
 /// names and password typed into the game list and NEWMULTI, and OK or the

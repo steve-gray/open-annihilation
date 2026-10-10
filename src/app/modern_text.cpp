@@ -36,15 +36,11 @@ static_assert(
     static_cast<uint8_t>(ModernTextFace::sans) == static_cast<uint8_t>(text_font::Face::dejavu_sans)
 );
 static_assert(
-    static_cast<uint8_t>(ModernTextFace::cjk) ==
-    static_cast<uint8_t>(text_font::Face::noto_sans_cjk)
+    static_cast<uint8_t>(ModernTextFace::endonyms) ==
+    static_cast<uint8_t>(text_font::Face::endonyms)
 );
 static_assert(
     static_cast<uint8_t>(ModernTextFace::emoji) == static_cast<uint8_t>(text_font::Face::noto_emoji)
-);
-static_assert(
-    static_cast<uint8_t>(ModernTextFace::endonyms) ==
-    static_cast<uint8_t>(text_font::Face::endonyms)
 );
 
 /// The lock every use of the faces holds, from opening them to the last read.
@@ -87,12 +83,10 @@ ModernTextFace modern_face(text_font::Face face) noexcept {
         return ModernTextFace::sans_bold;
     case text_font::Face::dejavu_sans:
         return ModernTextFace::sans;
-    case text_font::Face::noto_sans_cjk:
-        return ModernTextFace::cjk;
-    case text_font::Face::noto_emoji:
-        return ModernTextFace::emoji;
     case text_font::Face::endonyms:
         return ModernTextFace::endonyms;
+    case text_font::Face::noto_emoji:
+        return ModernTextFace::emoji;
     }
     return ModernTextFace::sans_bold;
 }

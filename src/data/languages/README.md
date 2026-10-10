@@ -21,7 +21,6 @@ not installed yet.
 | `es` | Español | `Spanish` | the game's fonts |
 | `fr` | Français | `French` | the game's fonts |
 | `it` | Italiano | `Italian` | the game's fonts |
-| `zh-Hans` | 简体中文 | `Chinese` | the modern fonts |
 
 Each entry has its BCP-47 tag, its name in itself (`endonym`, UTF-8) and
 in English, 3.1c's word for it (`game_name`: Translate.tdf's key, the
@@ -41,18 +40,24 @@ a mod's may.
 - **Available.** A language a pack exists for that is not installed.
   `kOfferedLanguages`, after the built-in languages, lists the ones the engine knows
   of before any catalogue is read. Each entry is written with
-  `Source::available`. The table is empty. An installed pack for one of
-  those tags takes its place among the languages the game shows, and an
-  available entry passed for the same tag is dropped. An available
-  language can be listed and matched. It is never the language the game
-  shows, the operating system never chooses it, and 3.1c's word does not
-  find it.
+  `Source::available`. Simplified Chinese is the one:
+
+| Tag | Name in itself | 3.1c's word | Draws in |
+|---|---|---|---|
+| `zh-Hans` | 简体中文 | `Chinese` | the modern fonts |
+
+  An installed pack for one of those tags takes its place among the
+  languages the game shows, and an available entry passed for the same tag
+  is dropped. An available language can be listed and matched. It is never
+  the language the game shows, the operating system never chooses it, and
+  3.1c's word does not find it.
 
 `known_languages()` returns a pointer to each live language: English
 first, then every built-in and installed language in the order of their
 names' UTF-8 bytes, a tie broken by tag, then the available languages in
 that same order. The built-ins are already in that order, so with no
-packs installed the list is the table above and nothing moves. An entry
+packs installed the list is the built-in table above, then the available
+language, and nothing moves. An entry
 stays readable for the whole run, including one a later change has
 replaced and left off the list. The list itself lasts until the next
 change. The registry is changed and read only by the thread that draws

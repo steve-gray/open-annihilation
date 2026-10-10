@@ -1778,9 +1778,25 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
             const auto* context = lobby.maps.map_context != nullptr
                                       ? lobby.maps.map_context(lobby.maps.context)
                                       : nullptr;
-            const char* name = context != nullptr ? data::campaign::campaign_localized_name(context)
-                                                  : map_name(lobby);
-            const bool changed = control_text(*map_label) != std::string_view(name);
+            const char* localized = context != nullptr
+                                        ? data::campaign::campaign_localized_name(context)
+                                        : map_name(lobby);
+            // A joiner who lacks the host's map sees the name the host sent.
+            // A machine that has the map keeps the name the map file gives.
+            std::string host_map;
+            const char* name = localized;
+            if (!host_is_local(lobby) && !lobby_has_host_map(lobby)) {
+                const auto host = lobby_host_slot(lobby);
+                if (host != kNoSlot) {
+                    const auto& host_info = info_of(lobby, slot_player(lobby, host));
+                    host_map.assign(
+                        host_info.map_name, ::strnlen(host_info.map_name, sizeof host_info.map_name)
+                    );
+                    name = host_map.c_str();
+                }
+            }
+            const bool changed =
+                control_text(*map_label) != std::string_view(name != nullptr ? name : "");
             if (!lobby_has_host_map(lobby)) {
                 map_label->color = ((now(lobby) / 30) & 1U) != 0 ? kWarningColor : 0;
                 if (changed) {

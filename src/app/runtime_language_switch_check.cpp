@@ -91,7 +91,10 @@ void Runtime::check_language_switch() {
             std::string(kStartTag) + ": its preferences file chooses the language"
         );
     if (language_pack_folders().empty())
-        fail("no language pack beside the game holds " + std::string(kStartTag));
+        fail("no installed language pack holds " + std::string(kStartTag));
+    // The Chinese on screen comes from the pack's own face.
+    if (modern_font_pack_faces() != 1)
+        fail("the modern font stack does not hold the pack's face");
 
     // However the check ends, its preferences file chooses the language the
     // run started in again, for the next run.
@@ -142,6 +145,8 @@ void Runtime::check_language_switch() {
                 "the settings chose " + std::string(tag) + ", but the run shows " +
                 std::string(shown_language().tag)
             );
+        if (tag == kStartTag && modern_font_pack_faces() != 1)
+            fail("the modern font stack does not hold the pack's face");
     };
     // Requires a frame shown after a change to be the one the screen shows
     // opened again, and to differ from the frame of the language before.

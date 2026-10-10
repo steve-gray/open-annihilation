@@ -173,6 +173,12 @@ struct Ui {
     std::vector<MapInfo> maps;
     int32_t map = -1;
     bool maps_loaded = false;
+    // The pack map whose choice was refused, and why. Empty when the last
+    // choice was accepted.
+    std::string pack_refused_name;
+    std::string pack_refusal;
+    // A pack map's files are mounted for the battle room.
+    bool pack_prepared = false;
     // The map context (Game.game_options) the content hash is computed from.
     data::campaign::CampaignFile map_context{};
     data::campaign::MapList map_list{};
@@ -248,6 +254,80 @@ struct DirectGameState {
 };
 
 DirectGameState g_direct{};
+
+// The pack maps the battle room lists beside the base maps. A null member
+// does nothing. The binding survives multiplayer_reset.
+LobbyMapSource g_map_source{};
+
+/// Tells whether the bound source lists a map by this exact name.
+///
+/// @param name the map's name
+/// @return true when the source lists it
+bool source_lists(const char* name) {
+    if (name == nullptr || g_map_source.count == nullptr || g_map_source.at == nullptr)
+        return false;
+    const int32_t count = g_map_source.count(g_map_source.context);
+    for (int32_t index = 0; index < count; ++index) {
+        LobbyPackMap pack{};
+        if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr)
+            continue;
+        if (std::strcmp(pack.name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+/// Forgets the last refused pack map.
+void clear_pack_refusal() {
+    auto& state = ui();
+    state.pack_refused_name.clear();
+    state.pack_refusal.clear();
+}
+
+/// Remembers why a pack map was refused.
+///
+/// @param name the map's name
+/// @param reason the reason; null is an empty reason
+void remember_pack_refusal(const std::string& name, const char* reason) {
+    auto& state = ui();
+    state.pack_refused_name = name;
+    state.pack_refusal = reason != nullptr ? reason : "";
+}
+
+/// Unmounts the pack map whose files are mounted. A second call does nothing.
+void release_pack_source() {
+    auto& state = ui();
+    if (!state.pack_prepared)
+        return;
+    state.pack_prepared = false;
+    if (g_map_source.release != nullptr)
+        g_map_source.release(g_map_source.context);
+}
+
+/// Mounts a listed pack map's files.
+///
+/// A source with no prepare leaves the files as they are and accepts the map.
+/// A refusal keeps the reason and mounts nothing.
+///
+/// @param name the map's name
+/// @return true when the map may be chosen
+bool prepare_listed(const std::string& name) {
+    auto& state = ui();
+    if (g_map_source.prepare == nullptr) {
+        clear_pack_refusal();
+        state.pack_prepared = false;
+        return true;
+    }
+    char reason[1024]{};
+    if (!g_map_source.prepare(g_map_source.context, name.c_str(), reason, sizeof reason)) {
+        state.pack_prepared = false;
+        remember_pack_refusal(name, reason);
+        return false;
+    }
+    clear_pack_refusal();
+    state.pack_prepared = true;
+    return true;
+}
 
 uint32_t elapsed_ms() {
     if (g_clock.now_ms != nullptr)
@@ -393,6 +473,29 @@ void load_maps() {
         }
     }
     std::free(names);
+    // Installed pack maps join the list from the source's own fields. Their
+    // map files are read when one is chosen, not while the list is built.
+    if (g_map_source.count != nullptr && g_map_source.at != nullptr) {
+        const int32_t extra = g_map_source.count(g_map_source.context);
+        for (int32_t index = 0; index < extra; ++index) {
+            LobbyPackMap pack{};
+            if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr ||
+                pack.name[0] == '\0')
+                continue;
+            const bool listed =
+                std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
+                    return info.name == pack.name;
+                });
+            if (listed)
+                continue;
+            MapInfo info;
+            info.name = pack.name;
+            info.description = pack.description != nullptr ? pack.description : "";
+            info.size = pack.size != nullptr ? pack.size : "";
+            info.memory = pack.memory_mb;
+            state.maps.push_back(std::move(info));
+        }
+    }
     std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
         return a.name < b.name;
     });
@@ -437,12 +540,33 @@ const char* maps_name(void*) {
 bool maps_select(void*, const char* name) {
     auto& state = ui();
     load_maps();
-    for (std::size_t index = 0; index < state.maps.size(); ++index)
-        if (name != nullptr && state.maps[index].name == name) {
-            state.map = static_cast<int32_t>(index);
-            return true;
+    if (name == nullptr)
+        return false;
+    for (std::size_t index = 0; index < state.maps.size(); ++index) {
+        if (state.maps[index].name != name)
+            continue;
+        if (source_lists(name)) {
+            if (!prepare_listed(state.maps[index].name))
+                return false;
+        } else if (state.pack_prepared) {
+            release_pack_source();
+            clear_pack_refusal();
         }
+        state.map = static_cast<int32_t>(index);
+        return true;
+    }
     return false;
+}
+
+/// Returns why the named map was refused the last time it was chosen.
+///
+/// @param name the map's name
+/// @return the reason, valid until the next choice; null when there is none
+const char* maps_refusal(void*, const char* name) {
+    const auto& state = ui();
+    if (name == nullptr || state.pack_refusal.empty() || state.pack_refused_name != name)
+        return nullptr;
+    return state.pack_refusal.c_str();
 }
 
 uint32_t maps_hash(void*) {
@@ -739,6 +863,9 @@ void bind_boundaries() {
         [](void*) -> const data::campaign::CampaignFile* { return bound_map_context(); },
         maps_read
     };
+    // Set by name. LobbyMaps gains members at its end, and a positional
+    // list would assign the next one to refusal.
+    lobby.maps.refusal = maps_refusal;
     // The map packs' answer, bound by name; the battle room asks it again.
     lobby.maps.pack_context = state.pack_context;
     lobby.maps.pack = state.pack;
@@ -2118,6 +2245,7 @@ bool click(ScreenContext* ctx, int32_t index, int32_t x, int32_t y, uint8_t butt
 ///
 /// @param ctx Screen context of the running frontend.
 void return_to_main_menu(ScreenContext* ctx) {
+    release_pack_source();
     const auto& link = ui().launch_link;
     if (link.request_app_mode != nullptr)
         link.request_app_mode(link.context, kAppModeFrontend);
@@ -2441,6 +2569,7 @@ void dispatch(ScreenContext* ctx) {
     case kScreenProviders: {
         const auto action = providers_handle_event(lobby, connect, panel);
         if (action == ConnectAction::main_menu) {
+            release_pack_source();
             app::screen_request(ctx, kScreenMainMenu);
         } else if (action == ConnectAction::options) {
             app::screen_request(ctx, kScreenOptions);
@@ -2609,6 +2738,12 @@ void enter_battleroom(ScreenContext* ctx, void*) {
     if (!load(state.base, ctx, "lounge2.gui", "bitmaps/battleroom.pcx", "anims/lounge2.gaf"))
         return;
     load_maps();
+    // A screen left on the way here unmounted the pack map. Mount it again
+    // before the battle room hashes the map it plays.
+    if (state.map >= 0 && static_cast<std::size_t>(state.map) < state.maps.size()) {
+        const std::string selected = state.maps[static_cast<std::size_t>(state.map)].name;
+        (void)maps_select(nullptr, selected.c_str());
+    }
     load_units();
     local_info(state.lobby).memory_mb = kMachineMemoryMb;
     lobby_enter_battleroom(state.lobby, state.base.panel);
@@ -2640,6 +2775,7 @@ void enter_battleroom(ScreenContext* ctx, void*) {
 void leave_screen(ScreenContext* ctx, void* /*state*/) {
     close_modal();
     set_text_input(ctx, false);
+    release_pack_source();
     ui().showing = false;
     ui().exit_confirm_requested = false;
 }
@@ -3192,7 +3328,19 @@ void multiplayer_bind_display_modes(const LobbyDisplayModes& display_modes) noex
     g_display_modes = display_modes;
 }
 
+void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
+    release_pack_source();
+    g_map_source = source;
+    auto& state = ui();
+    state.maps.clear();
+    state.maps_loaded = false;
+    state.map = -1;
+    clear_pack_refusal();
+    state.pack_prepared = false;
+}
+
 void multiplayer_reset() noexcept {
+    release_pack_source();
     auto& state = ui();
     const bool custom = state.custom_net;
     const auto net = state.bound_net;

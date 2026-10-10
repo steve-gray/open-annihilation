@@ -143,6 +143,10 @@ namespace oa::platform::text_font {
 class FontStack;
 } // namespace oa::platform::text_font
 
+namespace oa::ui::frontend_multiplayer {
+struct LobbyMapSource;
+} // namespace oa::ui::frontend_multiplayer
+
 namespace oa::app {
 
 struct PresenceFacts;
@@ -1909,6 +1913,16 @@ class Runtime final : public menu::Host,
     /// @param runtime the running app
     /// @return those facts
     friend PresenceFacts presence_facts(const Runtime& runtime);
+    /// Returns the battle room's source of installed pack maps
+    /// (pack_map_source in pack_map_source.hpp).
+    ///
+    /// The names point into the installed packs, which live as long as the
+    /// runtime does. Choosing a map mounts its files; releasing them
+    /// unmounts that layer.
+    ///
+    /// @param runtime the running app
+    /// @return the source the multiplayer screens bind
+    friend oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime);
 
     // ---- Touch controls (docs/touch-controls.md) --------------------------------------
 

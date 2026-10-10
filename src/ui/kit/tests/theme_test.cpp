@@ -179,11 +179,33 @@ void compact_metrics_of_the_new_controls() {
     OA_CHECK(kit::compact_metrics.hover_card_arrow == 5);
 }
 
+/// Checks the Compact sizes of a settings section's rows against the
+/// settings dialog's.
+void compact_metrics_of_the_rows() {
+    OA_CHECK(kit::compact_metrics.row_padding == 8);
+    OA_CHECK(kit::compact_metrics.label_gap == 8);
+    OA_CHECK(kit::compact_metrics.hint_gap == 2);
+    OA_CHECK(kit::compact_metrics.tall_hint_line_gap == 3);
+    OA_CHECK(kit::compact_metrics.most_hint_lines == 2);
+    OA_CHECK(kit::compact_metrics.most_notice_lines == 4);
+    OA_CHECK(kit::compact_metrics.slider_gap == 4);
+    OA_CHECK(kit::compact_metrics.slider_line_height == 14);
+    OA_CHECK(kit::compact_metrics.slider_value_width == 110);
+    OA_CHECK(kit::compact_metrics.slider_value_gap == 10);
+    OA_CHECK(kit::compact_metrics.lock_width == 148);
+    OA_CHECK(kit::compact_metrics.choice_width == 200);
+    OA_CHECK(kit::compact_metrics.wide_choice_width == 248);
+    OA_CHECK(kit::compact_metrics.button_row_width == 76);
+    OA_CHECK(kit::compact_metrics.folder_button_widths == (std::array<int32_t, 3>{46, 82, 44}));
+    OA_CHECK(kit::compact_metrics.folder_button_gap == 4);
+}
+
 } // namespace
 
 int main() {
     every_token_keeps_its_value();
     compact_metrics_match_the_dialog();
     compact_metrics_of_the_new_controls();
+    compact_metrics_of_the_rows();
     return oa::test::check_exit_status();
 }

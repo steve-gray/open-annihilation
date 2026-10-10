@@ -15,6 +15,15 @@ if(BUILD_TESTING)
   add_executable(oa-platform-text-font-test tests/text_font_test.cpp)
   target_link_libraries(oa-platform-text-font-test PRIVATE oa-platform-text-font oa-options oa-test-support)
   oa_copy_text_fonts(oa-platform-text-font-test "$<TARGET_FILE_DIR:oa-platform-text-font-test>")
+  # The fixture face sits beside the test, not in fonts/, where the pack-face
+  # cases open it. A missing file leaves the configuration able to run.
+  if(EXISTS "${OA_TEXT_FONT_TESTS_DIR}/NotoSansCJKsc-Bold-Fixture.otf")
+    add_custom_command(TARGET oa-platform-text-font-test POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OA_TEXT_FONT_TESTS_DIR}/NotoSansCJKsc-Bold-Fixture.otf"
+        "$<TARGET_FILE_DIR:oa-platform-text-font-test>/NotoSansCJKsc-Bold-Fixture.otf"
+      VERBATIM)
+  endif()
   add_test(NAME platform-text-font COMMAND oa-platform-text-font-test)
   # A short mixed line pixel for pixel, as the pinned FreeType draws it; it
   # skips with another FreeType.

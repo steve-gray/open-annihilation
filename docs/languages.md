@@ -18,7 +18,7 @@ the setting changes:
 2. **The setting.** Language, the first control of the Language section of
    the OA settings, offers System default and each language the game can
    show, named in itself. With no language pack installed those are
-   English, Deutsch, Español, Français, Italiano and 简体中文, in that
+   English, Deutsch, Español, Français and Italiano, in that
    order. An installed pack adds its language among them, by its own name.
    A language that is not installed is not offered. It is kept as
    `open-annihilation.language`: `system`, or the language's BCP-47 tag
@@ -28,9 +28,11 @@ the setting changes:
    languages on macOS, the user's interface languages on Windows (the
    user's locale on Windows XP), and `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` or
    `LANG` on Linux. A region does not matter: `de-AT` and `de-CH` choose
-   German. `zh-Hans`, `zh-CN`, `zh-SG`, `zh-MY` and a bare `zh` choose
-   Simplified Chinese; Traditional Chinese (`zh-Hant`, `zh-TW`, `zh-HK`,
-   `zh-MO`) is not offered yet and chooses none, never Simplified. When
+   German. `zh-Hans`, `zh-CN`, `zh-SG`, `zh-MY` and a bare `zh` are
+   Simplified Chinese: once that pack is installed they choose it, and
+   before then the game shows English, having recognised the locale as
+   wanting that language. Traditional Chinese (`zh-Hant`, `zh-TW`, `zh-HK`,
+   `zh-MO`) is not offered and chooses none, never Simplified. When
    none is known, English.
 
 A preferences file named with `--preferences-file` starts in English, the
@@ -46,8 +48,8 @@ are drawn before that pack is installed. The endonym face,
 holds those names and the notice's lines. It travels with the game, so the
 list can show 简体中文, and the names the catalogue may grow into, while
 the language's own pack is absent. The sans faces draw the Latin and
-Cyrillic names. The face is sized as the CJK face is, and it keeps that
-face's rows, so a line does not move.
+Cyrillic names. The face is sized as an ideograph face is, and it keeps
+those rows, so a line does not move.
 
 To add a name, add its line to `tools/text-fonts/endonyms.txt`, run
 `python3 tools/bootstrap_text_fonts.py --fonts-only`, and put the SHA-256
@@ -171,10 +173,9 @@ language is shown. `letters` is drawn at the sans faces' size. The faces
 are added while the font stack is open and never change a line's rows.
 `warmup` names a UTF-8 text file in the pack's folder, of at most 4,096
 bytes. When the language is shown, that text is laid out in each face, so
-the first screen draws few new glyphs. The engine's Simplified Chinese
-pack's `warmup.txt` holds the characters its screens use most; that pack
-lists no `fonts`, and those characters come from the CJK face the build
-ships. `packaging` records a release of the pack, as a mod's does: a
+the first screen draws few new glyphs. The Simplified Chinese pack's
+`warmup.txt` holds the characters its screens use most, and its font
+travels in the pack. `packaging` records a release of the pack, as a mod's does: a
 `revision` from 1 to 65535, the `date` it was made (`YYYY-MM-DD`) and the
 `packager`, 1 to 128 bytes.
 
@@ -236,8 +237,9 @@ For a text in a language, the game tries, in order:
 
 1. a mod's pack, `languages/<tag>/` in the mod;
 2. the game data in the language's word, read as 3.1c reads it;
-3. the player's pack, in `Languages/<tag>/` of their own folder, then the
-   engine's, in the `languages` folder beside the game's `fonts`;
+3. the player's pack, in `Languages/<tag>/` of their own folder, then a
+   packager's, in the `languages` folder beside the game's `fonts` (the
+   engine ships no packs);
 4. the same for each of the language's fallbacks, then English.
 
 An absent or empty value falls through to the next, so the player never
@@ -268,27 +270,28 @@ data holds in the language's own folder (`bitmaps-<word>`,
 
 ## Simplified Chinese
 
-Simplified Chinese (`zh-Hans`, the game data's word `Chinese`) is drawn
-only in the bundled modern fonts, so choosing it turns Use modern fonts for
-game text on and keeps it on while it is shown; its text is UTF-8. Its
-pack, in the engine's `languages/zh-Hans/`, asks for Unicode multiplayer
-chat. A mission's briefing, a unit's name and the game's texts come from
-the pack wherever the game data has none in Chinese. Names of companies
-are left out of the pack, so they show as the game data writes them; the
-game itself is named by its Chinese title, 横扫千军.
+Simplified Chinese (`zh-Hans`, the game data's word `Chinese`) is a
+download, `zh-Hans.oalang`, from Settings or the
+open-annihilation/languages releases. It is not in the game. At the first
+start a notice says the pack is not installed yet. The pack brings its
+own font, and its warm-up text is the pack's `warmup.txt`.
 
-Chinese, Japanese and Korean text is drawn in the bundled Noto Sans CJK SC
-Bold, cut to about 15,300 characters: GB 2312, the 8,105 characters of the
-Table of General Standard Chinese Characters, the common characters of
-Big5, JIS X 0208 and KS X 1001's Hangul, and the CJK punctuation and
-full-width forms. While such a language is shown, ideographs are drawn at
-12 px at the least, whatever the Text size, and the pack's warm-up text
-is drawn ahead when the language is chosen. Lines break at spaces and
-between any two of those characters, never starting a row with a closing
-mark, comma or full stop, and never ending one with an opening mark; a
-Latin word or a number stays whole. Mission briefings in those languages
-wrap the same way and are drawn in the modern fonts. A character the fonts
-lack draws as a box.
+Once the pack is installed, the language is drawn only in the modern
+fonts, so choosing it turns Use modern fonts for game text on and keeps
+it on while it is shown; its text is UTF-8. The pack asks for Unicode
+multiplayer chat. A mission's briefing, a unit's name and the game's
+texts come from the pack wherever the game data has none in Chinese.
+Names of companies are left out of the pack, so they show as the game
+data writes them; the game itself is named by its Chinese title, 横扫千军.
+
+While Simplified Chinese is shown, ideographs are drawn from the pack's
+face, at 12 px at the least, whatever the Text size, and the pack's
+warm-up text is drawn ahead when the language is chosen. Lines break at
+spaces and between any two of those characters, never starting a row with
+a closing mark, comma or full stop, and never ending one with an opening
+mark; a Latin word or a number stays whole. Mission briefings in that
+language wrap the same way and are drawn in the modern fonts. A character
+the fonts lack draws as a box.
 
 Text is typed in Chinese through the operating system's input method;
 [Typing](typing.md) says how, and how saves and recordings are named in
@@ -370,8 +373,8 @@ and each key a language's tag:
 ```
 
 The Simplified Chinese pack's `interface.tdf` translates them for
-`zh-Hans`; the player's packs replace the engine's words, and a mod's
-replace both. These are the words: the dialog's
+`zh-Hans`; the player's packs replace a packager's words, and a mod's
+replace both. The engine ships no packs. These are the words: the dialog's
 section names and headings, its labels, hints, values (`per player`,
 `fps`, `Desktop`, `None`, `cells`), switch and level captions, lock texts,
 Hardware acceleration's status lines, the footer's buttons, `System default`
@@ -418,11 +421,10 @@ A language whose letters are all in the game's 8-bit code page
 (Windows-1252), as Portuguese's or Dutch's are, needs nothing more. Others
 need drawing the game has in part or not yet:
 
-- **Traditional Chinese and Japanese** need the Noto Sans CJK TC and JP
-  faces: the SC face draws their characters in Chinese forms, and the cut
-  keeps only Big5's common characters and JIS X 0208.
-- **Korean** needs the whole face: the cut keeps KS X 1001's 2,350 Hangul
-  syllables of 11,172.
+- **Traditional Chinese and Japanese** need their own faces: a Simplified
+  Chinese face draws their characters in Chinese forms.
+- **Korean** needs a face that holds Hangul. The faces that travel with
+  the game hold the Korean language's own name and no more of it.
 - **Hindi** needs a Devanagari face and complex text shaping (HarfBuzz),
   since its letters join and change order; the FreeType-only drawing lays
   characters side by side.
