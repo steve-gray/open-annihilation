@@ -219,10 +219,21 @@ void test_prompts() {
     OA_CHECK(made.answers[made.prompt.marked] == install::Answer::alongside);
     OA_CHECK(oa::ui::engine_settings::prompt_fits(made.prompt));
 
-    made = install::oamod::installing_prompt(incoming, 500, 1000, false);
+    made = install::oamod::installing_prompt(
+        incoming, 500, 1000, install::InstallingPhase::unpacking, "example-mod-1.0.oamod"
+    );
     OA_CHECK(made.prompt.title == "INSTALLING MOD" && made.prompt.progress == 500);
     OA_CHECK(says(made, "Unpacking Example Mod 1.0...") && says(made, "500 bytes of"));
     OA_CHECK((captions_of(made) == std::vector<std::string>{"CANCEL"}));
+
+    made = install::oamod::installing_prompt(
+        incoming, 500, 1000, install::InstallingPhase::checking, "example-mod-1.0.oamod"
+    );
+    OA_CHECK(made.prompt.title == "INSTALLING MOD");
+    OA_CHECK(made.answers[made.prompt.marked] == install::Answer::cancel);
+    OA_CHECK(says(made, "Checking example-mod-1.0.oamod..."));
+    OA_CHECK(says(made, "500 bytes of"));
+    OA_CHECK(oa::ui::engine_settings::prompt_fits(made.prompt));
 
     made = install::oamod::installed_prompt(incoming, mods / "example-mod", true);
     OA_CHECK(made.prompt.title == "MOD INSTALLED");

@@ -34,10 +34,11 @@ PackagePrompt installing_prompt(
     const Incoming& incoming,
     uint64_t done_bytes,
     uint64_t total_bytes,
-    bool placing
+    InstallingPhase phase,
+    std::string_view file_name
 ) {
     return from_kind(
-        kind.prompts, &KindPrompts::installing, incoming, done_bytes, total_bytes, placing
+        kind.prompts, &KindPrompts::installing, incoming, done_bytes, total_bytes, phase, file_name
     );
 }
 

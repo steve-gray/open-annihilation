@@ -22,6 +22,10 @@ std::string file_name(const std::optional<std::filesystem::path>& file) {
     return file ? file->filename().string() : std::string{};
 }
 
+std::string file_name(const std::optional<install::OpenedPackage>& opened) {
+    return opened ? opened->file.filename().string() : std::string{};
+}
+
 } // namespace
 
 int main() {

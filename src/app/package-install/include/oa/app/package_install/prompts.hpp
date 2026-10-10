@@ -38,10 +38,21 @@ struct PackagePrompt {
     std::vector<Answer> answers{}; ///< one for each button, left to right
 };
 
+/// What an installing prompt is showing.
+enum class InstallingPhase : uint8_t {
+    checking,  ///< the package file's SHA-256
+    unpacking, ///< the package's files
+    placing,   ///< the files being put in place
+};
+
 /// The words one kind shows. Null asks nothing of that kind.
 struct KindPrompts {
     PackagePrompt (*installing)(
-        const Incoming& incoming, uint64_t done_bytes, uint64_t total_bytes, bool placing
+        const Incoming& incoming,
+        uint64_t done_bytes,
+        uint64_t total_bytes,
+        InstallingPhase phase,
+        std::string_view file_name
     ){};
     PackagePrompt (*question)(
         const InstallPlan& plan,
@@ -67,20 +78,23 @@ struct KindPrompts {
     ){};
 };
 
-/// Returns the prompt shown while a package unpacks, from the kind's words.
+/// Returns the prompt shown while a package is checked, unpacked or put in
+/// place, from the kind's words.
 ///
 /// @param kind the kind
 /// @param incoming what it installs
-/// @param done_bytes the bytes unpacked so far
-/// @param total_bytes the bytes it unpacks to
-/// @param placing its files are being put in place
+/// @param done_bytes the bytes hashed or unpacked so far
+/// @param total_bytes the package file's size, or the bytes it unpacks to
+/// @param phase what the prompt says
+/// @param file_name the package's name, which the checking phase names
 /// @return the prompt; empty when the kind has none
 [[nodiscard]] PackagePrompt installing_prompt(
     const PackageKind& kind,
     const Incoming& incoming,
     uint64_t done_bytes,
     uint64_t total_bytes,
-    bool placing
+    InstallingPhase phase,
+    std::string_view file_name
 );
 
 /// Returns the question a plan asks, from the kind's words.
