@@ -54,18 +54,21 @@ Kept& kept() {
     return state;
 }
 
-/// Returns the form a path is compared in: weakly canonical, else absolute
-/// and normal.
+/// Returns the form a path is compared in. The path is made absolute first,
+/// then canonical as far as it exists, then lexically normal, so two
+/// spellings of one path match.
 ///
 /// @param file the path
 /// @return its form
 fs::path compared(const fs::path& file) {
     std::error_code error;
-    fs::path form = fs::weakly_canonical(file, error);
+    fs::path form = fs::absolute(file, error);
+    if (error)
+        form = file;
+    fs::path canonical = fs::weakly_canonical(form, error);
     if (!error)
-        return form;
-    form = fs::absolute(file, error);
-    return (error ? file : form).lexically_normal();
+        form = std::move(canonical);
+    return form.lexically_normal();
 }
 
 /// Returns a file's extension without its dot, with ASCII letters lowered.
