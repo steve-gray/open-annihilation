@@ -251,6 +251,8 @@ add_subdirectory(src/ui/touch-hud)
 add_subdirectory(src/ui/game-files)
 # The in-engine game folder chooser's model.
 add_subdirectory(src/ui/folder-chooser)
+# The Library's model: packages to get and installed, search and queue lines.
+add_subdirectory(src/ui/library)
 add_subdirectory(src/ui/screen-registry)
 add_subdirectory(src/sim/session)
 if(TARGET oa-media-intro-player)

@@ -730,6 +730,16 @@ button the keys mark, asks the host to show that folder
 (`DialogAction::open_folder`, `Dialog::folder_to_open`) and leaves the
 dialog open; Left and Right move the mark along the buttons.
 
+Notices and prompts are the OA UI kit's notice and question
+(`oa/ui/kit/components_more.hpp`) under their old names: `Notice`,
+`NoticeParagraph`, `NoticeAction`, `Prompt`, `PromptButton`,
+`PromptAction` and `PromptAnswer` are the kit's, and so are their sizes,
+their buttons' numbers and the prompt's limits; `prompt_bar_control`, the
+bar's part in `prompt_layout`, stays the dialog's. Each function here calls
+the kit's, passing the dialog's look-up of the interface's words for a
+notice. `notice_layout` and `prompt_layout` list the parts the kit places,
+as the dialog's layout lists its own.
+
 `notice.hpp` is a notice of Open Annihilation's own in the dialog's look,
 which the main menu shows over itself: a raised panel 400 pixels wide, a
 header with the icon (or the OA mark) and a title, its text in white in
@@ -747,7 +757,7 @@ Shift+Tab move the mark (`notice_pointer_*`, `notice_key`).
 `prompt.hpp` is a prompt in the notice's look that asks with one to three
 buttons of its own captions, as a mod package's install does: its text,
 given finished in the language shown and drawn as given, is placed as a
-notice's (`place_text` in `notice_geometry.hpp`), and an optional progress
+notice's (`kit::place_question`), and an optional progress
 bar lies under it. Its buttons stand right-aligned in the footer, five
 columns apart, each as wide as its caption at the estimated character
 width and 16 more, at least 52, so that a press lands where a button is
