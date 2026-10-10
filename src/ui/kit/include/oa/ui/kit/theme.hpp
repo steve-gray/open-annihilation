@@ -184,9 +184,100 @@ struct Metrics {
     int32_t small_line{};
     /// A line's height in the regular font.
     int32_t regular_line{};
+    /// An Off/On switch's width. Each half is half of it, inside a 1-pixel border.
+    int32_t switch_width{};
+    /// A slider knob's width.
+    int32_t knob_width{};
+    /// A slider knob's height.
+    int32_t knob_height{};
+    /// A slider track's height.
+    int32_t track_height{};
+    /// A slider track's top row within the slider's area.
+    int32_t track_offset{};
+    /// A stop mark's height.
+    int32_t stop_height{};
+    /// A stop mark's top row within the slider's area.
+    int32_t stop_offset{};
+    /// Stop marks are drawn only this many columns or more apart.
+    int32_t least_stop_spacing{};
+    /// The columns between a drop-down field's left edge and its text.
+    int32_t choice_text_inset{};
+    /// The columns a drop-down field keeps at its right for its arrow.
+    int32_t choice_arrow_room{};
+    /// The drop-down's arrow's width.
+    int32_t choice_arrow_width{};
+    /// The drop-down's arrow's height.
+    int32_t choice_arrow_height{};
+    /// An open drop-down list's item's height.
+    int32_t choice_item_height{};
+    /// The most items an open drop-down list shows at once.
+    int32_t most_shown_choices{};
+    /// The columns between an open list item's left edge and its text.
+    int32_t choice_item_text_inset{};
+    /// The padlock's width.
+    int32_t padlock_width{};
+    /// The padlock's height.
+    int32_t padlock_height{};
+    /// The columns between the padlock and its text.
+    int32_t padlock_gap{};
+    /// A scroll bar's thumb's width.
+    int32_t scroll_thumb_width{};
+    /// A scroll bar's thumb's least height.
+    int32_t least_thumb_height{};
+    /// The columns and rows between the OA button's sides and its icon.
+    int32_t button_icon_inset{};
+    /// How far a held OA button's icon moves right and down.
+    int32_t button_icon_press{};
+    /// The OA button's outlined square, as this share of its side.
+    int32_t button_square_numerator{};
+    /// The denominator of the OA button's outlined square's share.
+    int32_t button_square_denominator{};
+    /// The least columns between the large OA mark and its square's outline.
+    int32_t large_mark_margin{};
 };
 
 /// Compact metrics: the settings dialog's sizes at 0.7.3, exactly.
-inline constexpr Metrics compact_metrics{1, 26, 32, 12, 4, 20, 13, 6, 1, 17, 52, 5, 2, 12, 16};
+inline constexpr Metrics compact_metrics{
+    .edge = 1,
+    .header_height = 26,
+    .footer_height = 32,
+    .padding = 12,
+    .mark_top = 4,
+    .mark_side = 20,
+    .mark_square = 13,
+    .header_gap = 6,
+    .heading_tracking = 1,
+    .button_height = 17,
+    .button_width = 52,
+    .button_gap = 5,
+    .focus_inset = 2,
+    .small_line = 12,
+    .regular_line = 16,
+    .switch_width = 52,
+    .knob_width = 7,
+    .knob_height = 12,
+    .track_height = 4,
+    .track_offset = 4,
+    .stop_height = 2,
+    .stop_offset = 12,
+    .least_stop_spacing = 4,
+    .choice_text_inset = 6,
+    .choice_arrow_room = 16,
+    .choice_arrow_width = 7,
+    .choice_arrow_height = 4,
+    .choice_item_height = 16,
+    .most_shown_choices = 8,
+    .choice_item_text_inset = 12,
+    .padlock_width = 5,
+    .padlock_height = 7,
+    .padlock_gap = 3,
+    .scroll_thumb_width = 5,
+    .least_thumb_height = 16,
+    .button_icon_inset = 3,
+    .button_icon_press = 1,
+    .button_square_numerator = 20,
+    .button_square_denominator = 32,
+    .large_mark_margin = 2,
+};
 
 } // namespace oa::ui::kit
