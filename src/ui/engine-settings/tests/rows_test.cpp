@@ -7,6 +7,10 @@
 // strip's level width or a drop-down's field width, the levels a strip lets
 // a player choose, whether its hint lines are its status, its lock while a
 // game is in progress, and the field of the dialog's locks that locks it.
+// Then the dialog's display list, on every section of every kind of dialog,
+// at its top and its scroll end, unlocked and under a game's locks: every
+// control named once, every control the dialog's layout lists there, and
+// Tab in the dialog's focus order.
 
 #include "geometry.hpp"
 
@@ -18,7 +22,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <set>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -280,10 +288,276 @@ void each_row_reads_its_own_lock() {
     }
 }
 
+/// The mods a dialog of the engine's settings offers: Alpha, played, and
+/// Beta, whose folder keeps an earlier version.
+struct TwoMods {
+    std::vector<std::string> names{"Alpha", "Beta"};               ///< their titles
+    std::vector<std::string> folders{"/mods/alpha", "/mods/beta"}; ///< their folders
+    std::vector<settings::ModDetails> details{2};                  ///< what Mods shows of each
+
+    TwoMods() {
+        details[1].roll_back_from = "1.0";
+        details[1].roll_back_to = "0.9";
+    }
+
+    /// Returns them as a dialog is offered them.
+    ///
+    /// @return the offer
+    [[nodiscard]] settings::ModOffer offer() const {
+        return {names, folders, details, folders.front()};
+    }
+};
+
+/// Returns a dialog of the engine's settings over two mods.
+///
+/// @param mods the mods
+/// @param locks what cannot be changed now
+/// @param page the section shown
+/// @param touch Touch is listed
+/// @param game_files Game files is listed
+/// @param controller Controller is listed
+/// @return the dialog
+settings::Dialog engine_dialog_of(
+    const TwoMods& mods,
+    const Locks& locks,
+    settings::Page page,
+    bool touch,
+    bool game_files,
+    bool controller
+) {
+    settings::Dialog dialog;
+    settings::open_dialog(
+        dialog,
+        {},
+        {},
+        locks,
+        "v0.8.0",
+        page,
+        {},
+        settings::highest_unit_limit,
+        mods.offer(),
+        {},
+        nullptr,
+        touch,
+        game_files,
+        controller
+    );
+    dialog.user_folder = "/Users/player/Documents/Open Annihilation";
+    return dialog;
+}
+
+/// Checks a dialog's display list: every control named once, by words of a
+/// to z, 0 to 9 and hyphens; every control the dialog's layout lists is a
+/// control of the same number in the list, the part lying in the control's
+/// rectangle (a switch's halves, a strip's levels, Your files' buttons, an
+/// entry's words and the scroll bar's well lie inside theirs, and every other
+/// part is its whole control); and Tab follows the dialog's focus order.
+///
+/// @param dialog the dialog
+/// @param what what the dialog shows, for a failure's message
+void check_list(const settings::Dialog& dialog, const std::string& what) {
+    const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    const std::string problem = kit::name_problem(list);
+    if (!problem.empty())
+        std::cerr << what << ": " << problem << '\n';
+    OA_CHECK(problem.empty());
+    std::set<int32_t> numbers;
+    for (const kit::Control& control : list.controls)
+        OA_CHECK(numbers.insert(control.id).second);
+    for (const settings::LayoutPart& part : settings::dialog_layout(dialog)) {
+        if (part.control == settings::no_control)
+            continue;
+        const kit::Control* control = kit::control_of(list, part.control);
+        const bool listed = control != nullptr && kit::wholly_in(part.rect, control->rect);
+        if (!listed)
+            std::cerr << what << ": control " << part.control << " (" << part.text
+                      << ") is not in the list where the layout has it\n";
+        OA_CHECK(listed);
+    }
+    OA_CHECK(list.tab_order == geometry::focus_order(dialog, geometry::open_rows(dialog)));
+}
+
+/// Checks a dialog's every section at its top and at its scroll end.
+///
+/// @param dialog the dialog, its kind and its offers set
+/// @param what what the dialog is, for a failure's message
+void check_every_section(settings::Dialog dialog, const std::string& what) {
+    const auto pages =
+        settings::dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller);
+    for (const settings::Page page : pages) {
+        dialog.page = page;
+        const auto scroll = static_cast<std::size_t>(page);
+        const std::string section = what + " section " + std::to_string(scroll);
+        dialog.scroll[scroll] = 0;
+        check_list(dialog, section + " at its top");
+        // The section scrolls no further than its end.
+        dialog.scroll[scroll] = 100000;
+        check_list(dialog, section + " at its end");
+        dialog.scroll[scroll] = 0;
+    }
+}
+
+void every_section_names_its_controls_and_keeps_their_order() {
+    const TwoMods mods;
+    const Locks game = settings::settings_locks(settings::GameState{true, false, false, false});
+    for (const bool locked : {false, true}) {
+        const Locks locks = locked ? game : Locks{};
+        const std::string under = locked ? " under a game's locks" : "";
+        for (int listed = 0; listed < 8; ++listed) {
+            const bool touch = (listed & 1) != 0;
+            const bool game_files = (listed & 2) != 0;
+            const bool controller = (listed & 4) != 0;
+            settings::Dialog dialog = engine_dialog_of(
+                mods, locks, settings::Page::controls, touch, game_files, controller
+            );
+            check_every_section(dialog, "engine " + std::to_string(listed) + under);
+            // The Steam Input notice and a Steam Deck's rate add lines.
+            dialog.steam_input = true;
+            dialog.steam_deck_panel_hz = 90;
+            check_every_section(dialog, "steam deck " + std::to_string(listed) + under);
+        }
+        settings::Dialog options;
+        settings::open_mod_options_dialog(
+            options, {}, {}, locks, "v0.8.0", settings::Page::mod_keys
+        );
+        check_every_section(options, "mod options" + under);
+        settings::Dialog language;
+        settings::open_language_text_dialog(language, {}, {}, locks, "v0.8.0");
+        check_every_section(language, "language alone" + under);
+    }
+}
+
+void developer_names_every_hack_and_parameter() {
+    // Every area and every hack open, Developer Mode on: an area, a hack, a
+    // parameter, a set's value and a list's item and length each have a name.
+    const TwoMods mods;
+    settings::Dialog dialog =
+        engine_dialog_of(mods, {}, settings::Page::developer, true, true, true);
+    dialog.chosen.developer_mode = true;
+    for (uint8_t& open : dialog.developer.areas_open)
+        open = 1;
+    for (uint8_t& open : dialog.developer.hacks_open)
+        open = 1;
+    check_list(dialog, "developer, every hack open");
+    const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    OA_CHECK(kit::control_named(list, "settings.hack-area.ai") != settings::no_control);
+    OA_CHECK(kit::control_named(list, "settings.active-only") == settings::active_only_control);
+    OA_CHECK(
+        kit::control_named(list, "settings.restore-profile-values") ==
+        settings::restore_profile_control
+    );
+    dialog.scroll[static_cast<std::size_t>(settings::Page::developer)] = 100000;
+    check_list(dialog, "developer, every hack open, at its end");
+}
+
+void an_open_list_and_a_question_name_their_controls() {
+    // An open drop-down's items are controls of their own while it is open,
+    // counted from 1.
+    const TwoMods mods;
+    settings::Dialog dialog =
+        engine_dialog_of(mods, {}, settings::Page::language, true, true, true);
+    static_cast<void>(settings::dialog_key(dialog, settings::DialogKey::tab));
+    static_cast<void>(settings::dialog_key(dialog, settings::DialogKey::space));
+    OA_CHECK(dialog.open_list == settings::first_row_control);
+    check_list(dialog, "language, its list open");
+    const kit::DisplayList open = geometry::dialog_list(dialog, nullptr);
+    OA_CHECK(
+        kit::control_named(open, "settings.language.item-1") == geometry::menu_item_control(0)
+    );
+    OA_CHECK(
+        kit::hit(open, {open.controls.front().rect.x + 1, open.controls.front().rect.y + 1}) ==
+        open.controls.front().id
+    );
+    // The Switch Mod question's two buttons, tried before what lies under them.
+    settings::Dialog asking = engine_dialog_of(mods, {}, settings::Page::mods, true, true, true);
+    for (const auto key :
+         {settings::DialogKey::tab, settings::DialogKey::tab, settings::DialogKey::space})
+        static_cast<void>(settings::dialog_key(asking, key));
+    OA_CHECK(asking.switch_question != settings::no_question);
+    check_list(asking, "mods, the question showing");
+    const kit::DisplayList question = geometry::dialog_list(asking, nullptr);
+    OA_CHECK(question.controls.size() > 2);
+    OA_CHECK(question.controls[0].name == "settings.question.yes");
+    OA_CHECK(question.controls[1].name == "settings.question.no");
+}
+
+void mods_name_each_folder_once() {
+    // Two folders of the same last component, a third of the same words in
+    // other characters, and a folder named as No Mod's word.
+    TwoMods mods;
+    mods.names = {"Ridge", "Ridge again", "Ridge, too", "Plain"};
+    mods.folders = {"/mods/ridge", "/other/ridge/", "/more/Ridge", "/mods/no mod"};
+    mods.details.assign(4, {});
+    mods.details[2].roll_back_from = "2.0";
+    mods.details[2].roll_back_to = "1.0";
+    settings::Dialog dialog = engine_dialog_of(mods, {}, settings::Page::mods, true, true, true);
+    check_list(dialog, "mods of one word");
+    const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    for (const std::string_view name :
+         {"settings.mod.ridge.switch",
+          "settings.mod.no-mod.switch",
+          "settings.mod.ridge-2.switch",
+          "settings.mod.ridge-3.switch",
+          "settings.mod.ridge-3.roll-back",
+          "settings.mod.no-mod-2.switch",
+          "settings.open-mods-folder"})
+        OA_CHECK(kit::control_named(list, name) != settings::no_control);
+}
+
+/// Returns a dialog's Tab order as its display list has it.
+///
+/// @param dialog the dialog
+/// @return the controls Tab moves through, in order
+std::vector<int32_t> tab_order(const settings::Dialog& dialog) {
+    return geometry::dialog_list(dialog, nullptr).tab_order;
+}
+
+void tab_follows_the_dialogs_focus_order() {
+    // Controls: its rows, the footer, then the sections' entries, Game files
+    // listed before Developer.
+    const TwoMods mods;
+    const settings::Dialog controls =
+        engine_dialog_of(mods, {}, settings::Page::controls, true, true, true);
+    OA_CHECK(
+        tab_order(controls) ==
+        (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 8, 7})
+    );
+    // Graphics: After zoom, locked while units are drawn whole, takes none.
+    settings::Dialog graphics = controls;
+    graphics.page = settings::Page::graphics;
+    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 19, 20,
+                                                          21, 23, 24, 9,  10, 11, 0,  1,
+                                                          2,  3,  4,  5,  6,  8,  7}));
+    // Developer with its first area open: its rows, its list's headers,
+    // Show Active Only and Restore profile values, then the rest.
+    settings::Dialog developer = controls;
+    developer.page = settings::Page::developer;
+    developer.chosen.developer_mode = true;
+    developer.developer.areas_open[0] = 1;
+    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{13, 14, 17, 18, 19, 20, 21, 22, 23,
+                                                           24, 25, 26, 27, 28, 29, 30, 31, 32,
+                                                           33, 34, 35, 36, 37, 38, 39, 40, 41,
+                                                           42, 43, 15, 16, 9,  10, 11, 0,  1,
+                                                           2,  3,  4,  5,  6,  8,  7}));
+    // Mods with two mods: each row, Beta's ROLL BACK after Beta, then OPEN
+    // MODS FOLDER.
+    settings::Dialog two_mods = controls;
+    two_mods.page = settings::Page::mods;
+    OA_CHECK(
+        tab_order(two_mods) ==
+        (std::vector<int32_t>{13, 14, 15, 19, 16, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 8, 7})
+    );
+}
+
 } // namespace
 
 int main() {
     every_setting_has_its_row();
     each_row_reads_its_own_lock();
+    every_section_names_its_controls_and_keeps_their_order();
+    developer_names_every_hack_and_parameter();
+    an_open_list_and_a_question_name_their_controls();
+    mods_name_each_folder_once();
+    tab_follows_the_dialogs_focus_order();
     return oa::test::check_exit_status();
 }
