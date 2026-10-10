@@ -2378,6 +2378,60 @@ key changes. The key is the SHA-256 in the pack's origin record, or the
 SHA-256 of its `oamap.yaml` when it has no record. A terrain's size is the
 size of the map's TNT file. The index does not open a map.
 
+### Map packs in the game
+
+The skirmish map list (`discover_first_map`) lists the base maps as the
+scan of `Maps/*.ota` finds them, then every installed pack map by its name,
+`<stem>@<id>`, in the index's order. The pack maps come from the packs'
+manifests, read once when the list is first made: no pack map's OTA or TNT
+is opened to list it. The first base map stays the default selection. The
+map picker (SELMAP) sorts the base maps as before and the pack maps after
+them, so a base map keeps its row.
+
+Only one map's files are ever mounted (`runtime_pack_maps.cpp`). Choosing a
+pack map (`select_map`, from the picker, the skirmish setup, a saved game,
+a recording or the network load) mounts that map's files alone as the
+asset store's pack layer, under every archive and loose file, labelled
+with the pack's id and the first 8 hex digits of its SHA-256. Before that
+the map is checked against the game and the mod played
+(`oa::data::map_fit::check_map`, over the files in the pack's folder); the
+game's names are collected once for the run, whose archives never change,
+and the result is kept for each pack's SHA-256 and map stem. Once mounted,
+the files are checked again as the store shows them, whatever the kept
+check found, since the pack's folder may have changed on disk; a failure
+there unmounts them. A map that fails either check is refused: it stays in
+the list, highlighting it shows its title, its size and players and
+"Doesn't fit {game}: {reason}", where the game is the mod played or Total
+Annihilation 3.1c and the reason is the first failure, with no picture,
+and choosing it says why in a message box and keeps the earlier map. A
+start on a refused map fails as other loads do. The layer stays while that
+map is selected and through its match. It is unmounted when another map is
+chosen, at the end of the match (`leave_match`) and whenever the main menu
+shows (`Runtime::load`). Mounting and unmounting happen on the main thread,
+never while a match loads or runs: the match's start mounts its map, if a
+refused highlight released it, before it reads anything.
+
+The log says what happened, one line each:
+
+```
+open-annihilation: map pack <id>: mounted <name> (<n> files)
+open-annihilation: map pack <id>: unmounted <name>
+open-annihilation: map <name> does not fit: <rule>: <why>
+```
+
+A map that does not fit logs one line per failure, each time it is refused.
+
+`native-map-packs` (`--check-map-packs`, `runtime_map_packs_check.cpp`)
+writes two packs into the Maps folder of the run's own `--user-folder`: one
+whose map, made in code with one feature of its own drawn with a model of
+the game, fits, and one whose feature file also defines a feature the game
+has. It requires both listed after every base map, in the list and in the
+picker; nothing mounted before a map is chosen; the first mounted alone when
+chosen and unmounted for a base map; a skirmish on it playing 30 ticks with
+its terrain readable, and its end unmounting it and leaving the archives as
+they were; the second refused for New names, the picker showing that reason
+and LOAD keeping the earlier map; and nothing mounted at the main menu.
+
 ### Developer Mode
 
 Developer Mode, in the settings' Developer section
@@ -3063,15 +3117,18 @@ may control the game (`Options::remote_controlled`, read through
 `runtime_options`), which the battle room says as the local player's chat
 line as it is entered and again each time the line changes there, a
 deliberate difference from 3.1c.
-The setup block's spare bytes carry this machine's presence: a revision,
-this build's version, and flags for Developer Mode, rules that differ from
-3.1c, and view hacks that are on. 3.1c carries those bytes unchanged.
-`follow_presence` binds them while the multiplayer screens are showing, and
-on the first frame either way, and tells the battle room again when they
-change; other machines read them from the next setup block, at most about
-two seconds later. A development build is one whose `OA_VERSION_LABEL` is
-not empty, and it sends patch 255. `OA_VERSION_LABEL` is set in the root
-`CMakeLists.txt`.
+The setup blocks OA sends carry no presence: the five bytes after the
+engine signature stay zero, as 0.7 sent them, in the battle room's blocks, a
+computer player's and the match's. OA machines know each other by the
+signature, 'O' and 'A', which 0.7 already sends. What a machine plays (its
+version, Developer Mode, the rules, its mod and hacks) travels only in the
+presence record, which OA machines send to each other and never to a 3.1c
+machine (`oa/netgame/presence.hpp`); `follow_presence`, run every frame, is
+where it is bound, and binds nothing yet. The presence facts it will send
+come from `presence_facts` (`oa/app/presence_facts.hpp`), which
+`--check-simulation-hash` checks. `--net-loopback-check` prints how many of
+the setup blocks each machine holds of the other's players carry no presence
+bytes.
 [docs/development/testing.md](../../docs/development/testing.md#network-play)
 lists its tests.
 

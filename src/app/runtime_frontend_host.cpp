@@ -4,6 +4,7 @@
 // Frontend dispatcher, preferences, map list and main-menu host services.
 #include "oa/app/runtime.hpp"
 #include "device_state.hpp"
+#include "map_packs.hpp"
 #include "oa/app/mod_profile_loader.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/ui/decoded.hpp"
@@ -420,8 +421,19 @@ void Runtime::discover_first_map() {
         eligible_map_names_.emplace_back(name);
     std::free(names);
     oa::data::campaign::map_clear_list_cache(list, nullptr);
+    // The scan finds a mounted pack map's OTA too, under its own name; it is
+    // listed with the other pack maps, so that every base map comes first.
+    std::erase_if(eligible_map_names_, [this](const std::string& listed) {
+        return pack_map(listed) != nullptr;
+    });
     if (!eligible_map_names_.empty())
         first_map_name_ = eligible_map_names_.front();
+    // The installed pack maps, from their packs' manifests: none of their
+    // files is opened until one is chosen.
+    for (const PackMap& map : map_packs().maps())
+        if (std::find(eligible_map_names_.begin(), eligible_map_names_.end(), map.name) ==
+            eligible_map_names_.end())
+            eligible_map_names_.push_back(map.name);
 }
 
 void Runtime::save_preferences() {

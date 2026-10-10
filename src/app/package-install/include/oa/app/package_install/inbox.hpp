@@ -41,6 +41,12 @@ void post_package_file(const std::filesystem::path& file, const Origin& origin =
 /// @return the package; nothing when none waits
 [[nodiscard]] std::optional<OpenedPackage> take_package_file();
 
+/// Returns the next package, oldest first, without taking it or noting it
+/// as the one being installed.
+///
+/// @return the package; nothing when none waits
+[[nodiscard]] std::optional<OpenedPackage> next_package_file();
+
 /// Puts a package back at the front, as when its question was set aside.
 ///
 /// @param package the package

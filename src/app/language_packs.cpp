@@ -169,9 +169,17 @@ void read_language_packs(
         return;
     std::vector<fs::path> folders;
     for (fs::directory_iterator entry(root, error), end; !error && entry != end;
-         entry.increment(error))
-        if (entry->is_directory(error))
-            folders.push_back(entry->path());
+         entry.increment(error)) {
+        if (!entry->is_directory(error))
+            continue;
+        // The installer's own folders (.oalang-staging-…, .oalang-discard-…)
+        // can hold a language.yaml while a pack is put in place. They are
+        // not packs.
+        const std::string name = path_to_utf8(entry->path().filename());
+        if (!name.empty() && name.front() == '.')
+            continue;
+        folders.push_back(entry->path());
+    }
     std::sort(folders.begin(), folders.end());
     for (const fs::path& folder : folders) {
         std::error_code missing;
