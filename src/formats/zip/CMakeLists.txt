@@ -5,7 +5,7 @@
 # with, the writer that makes them, and the streamed reader mod packages
 # (.oamod) are unpacked with.
 add_library(oa-formats-zip src/common.cpp src/read.cpp src/write.cpp src/inflater.cpp
-  src/stream.cpp)
+  src/stream.cpp src/writer.cpp)
 add_library(oa::formats::zip ALIAS oa-formats-zip)
 target_include_directories(oa-formats-zip PUBLIC include)
 target_link_libraries(oa-formats-zip PRIVATE oa-base-bytes ZLIB::ZLIB oa-options)
@@ -21,4 +21,11 @@ if(BUILD_TESTING)
   target_link_libraries(oa-formats-zip-stream-test PRIVATE oa-formats-zip oa-test-support ZLIB::ZLIB
     oa-options)
   add_test(NAME formats-zip-stream COMMAND oa-formats-zip-stream-test)
+  # The streaming writer: stored and deflated entries, the 64-bit extension,
+  # a sparse entry past 4 GiB, every refusal, and a fixed stored archive.
+  add_executable(oa-formats-zip-writer-test tests/writer_test.cpp)
+  target_link_libraries(oa-formats-zip-writer-test PRIVATE oa-formats-zip oa-base-sha256
+    oa-test-support ZLIB::ZLIB oa-options)
+  add_test(NAME formats-zip-writer COMMAND oa-formats-zip-writer-test)
+  set_tests_properties(formats-zip-writer PROPERTIES TIMEOUT 120)
 endif()
