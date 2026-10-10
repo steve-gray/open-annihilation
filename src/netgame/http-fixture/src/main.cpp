@@ -7,6 +7,7 @@
 #include "oa/netgame/http_fixture/server.hpp"
 
 #include "oa/base/threads.hpp"
+#include "oa/platform/files.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -131,7 +132,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (port_file != nullptr) {
-        std::FILE* file = std::fopen(port_file, "w");
+        std::FILE* file = oa::platform::open_file(port_file, "w");
         if (file == nullptr) {
             std::fprintf(stderr, "oa-http-fixture: could not write %s\n", port_file);
             return 1;
@@ -141,7 +142,7 @@ int main(int argc, char** argv) {
     }
     std::FILE* log = nullptr;
     if (log_file != nullptr) {
-        log = std::fopen(log_file, "w");
+        log = oa::platform::open_file(log_file, "w");
         if (log == nullptr) {
             std::fprintf(stderr, "oa-http-fixture: could not write %s\n", log_file);
             return 1;
