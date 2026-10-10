@@ -3,10 +3,10 @@
 
 # Registries in effect, their cached catalogues and the worker that refreshes
 # them, which installed packages a catalogue has a newer release of, the
-# player's edits to the registries, and the download settings kept in
-# preferences. No SDL.
+# player's edits to the registries, the download settings kept in
+# preferences, and the download queue. No SDL.
 add_library(oa-app-content src/service.cpp src/worker.cpp src/refresh.cpp src/cache.cpp
-  src/updates.cpp src/registries_edit.cpp src/settings.cpp)
+  src/updates.cpp src/registries_edit.cpp src/settings.cpp src/download_api.cpp)
 add_library(oa::app::content ALIAS oa-app-content)
 target_include_directories(oa-app-content PUBLIC include)
 target_include_directories(oa-app-content PRIVATE src)
@@ -14,9 +14,9 @@ target_compile_features(oa-app-content PUBLIC cxx_std_20)
 target_link_libraries(oa-app-content
   PUBLIC oa-data-registry oa-data-catalogue oa-netgame-http oa-formats-url oa-options
     oa-app-package-install oa-platform-preferences
-  PRIVATE oa-formats-oamod oa-platform-shims oa-base-sha256 oa-base-threads oa-app-user-folder
-    oa-data-mod-profile oa-platform-random)
-set_property(SOURCE src/updates.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+  PRIVATE oa-formats-oamod oa-formats-json oa-platform-shims oa-base-sha256 oa-base-threads
+    oa-app-user-folder oa-data-mod-profile oa-platform-random)
+set_property(SOURCE src/updates.cpp src/download_api.cpp APPEND PROPERTY COMPILE_DEFINITIONS
   "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
