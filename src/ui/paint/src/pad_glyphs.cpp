@@ -5,19 +5,18 @@
 // project's own drawing, made of the touch painter's discs, rounded
 // rectangles and strokes, with letters from the bundled fonts. Sizes are
 // shares of the glyph's height, so a glyph reads the same at any size.
-#include "pad_glyphs.hpp"
+#include "oa/ui/paint/pad_glyphs.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <string_view>
 
-namespace oa::app::pad_glyphs {
+namespace oa::ui::paint::pad_glyphs {
 
 namespace {
 
 namespace pad = oa::ui::pad_controls;
-namespace paint = touch_paint;
 
 /// A pill's width at a height: this share, and this share again for each letter it shows.
 constexpr float pill_base_share = 0.55f;
@@ -378,4 +377,4 @@ void draw_chord(
     );
 }
 
-} // namespace oa::app::pad_glyphs
+} // namespace oa::ui::paint::pad_glyphs

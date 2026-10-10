@@ -38,6 +38,7 @@ namespace oa::app {
 
 namespace {
 
+namespace paint = oa::ui::paint;
 namespace languages = oa::data::languages;
 namespace settings = oa::ui::engine_settings;
 namespace renderer = oa::ui::frontend_renderer;
@@ -305,13 +306,13 @@ struct DialogPlace {
 /// @param place where the dialog lies
 /// @param dialog the dialog
 /// @return the frame
-[[nodiscard]] touch_paint::Canvas compose_frame(
-    const touch_paint::Canvas* under,
+[[nodiscard]] paint::Canvas compose_frame(
+    const paint::Canvas* under,
     const oa::ui::game_files::Viewport& viewport,
     const DialogPlace& place,
     const settings::Dialog& dialog
 ) {
-    touch_paint::Canvas canvas = touch_paint::make_canvas(viewport.width, viewport.height);
+    paint::Canvas canvas = paint::make_canvas(viewport.width, viewport.height);
     const auto back = oa::ui::game_files::background_colour;
     const bool same = under != nullptr && under->width == canvas.width &&
                       under->height == canvas.height && under->rgba.size() == canvas.rgba.size();
