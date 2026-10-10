@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 cmake_minimum_required(VERSION 3.24)
-project(open_annihilation VERSION 0.7.4 LANGUAGES C CXX)
+project(open_annihilation VERSION 0.8.0 LANGUAGES C CXX)
+# The version's label. A build of a tree whose label is not empty is a
+# development build. The label is empty only in a release's version commit;
+# the commit after a release sets it back to "dev" and raises the version.
+set(OA_VERSION_LABEL "dev")
 # A target that links one static library both directly and through
 # another library gets it once on its link line, in dependency order, rather
 # than once for each path that reaches it. The linker then has nothing to
