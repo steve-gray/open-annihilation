@@ -3,7 +3,8 @@
 
 // Every colour token equals the value it was copied from, or the value the
 // design gives a new one, written here as hex, and Compact metrics equal the
-// settings dialog's sizes and the sizes the design gives the new controls.
+// settings dialog's, its notices' and its prompts' sizes and the sizes the
+// design gives the new controls.
 
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -92,7 +93,8 @@ void every_token_keeps_its_value() {
     OA_CHECK(kit::rgb(with_opacity) == (std::array<uint8_t, 3>{1, 2, 3}));
 }
 
-/// Checks Compact metrics against the settings dialog's sizes.
+/// Checks Compact metrics against the settings dialog's, its notices' and its
+/// prompts' sizes.
 void compact_metrics_match_the_dialog() {
     OA_CHECK(kit::compact_metrics.edge == 1);
     OA_CHECK(kit::compact_metrics.header_height == 26);
@@ -134,6 +136,13 @@ void compact_metrics_match_the_dialog() {
     OA_CHECK(kit::compact_metrics.button_square_numerator == 20);
     OA_CHECK(kit::compact_metrics.button_square_denominator == 32);
     OA_CHECK(kit::compact_metrics.large_mark_margin == 2);
+    // The notice's and the prompt's own sizes.
+    OA_CHECK(kit::compact_metrics.text_top == 38);
+    OA_CHECK(kit::compact_metrics.paragraph_gap == 6);
+    OA_CHECK(kit::compact_metrics.text_bottom_gap == 10);
+    OA_CHECK(kit::compact_metrics.open_width == 96);
+    OA_CHECK(kit::compact_metrics.prompt_button_padding == 16);
+    OA_CHECK(kit::compact_metrics.progress_bar_height == 8);
 }
 
 /// Checks the Compact sizes of the list rows, chips, tabs, text fields,
