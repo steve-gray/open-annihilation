@@ -32,16 +32,6 @@
 /* Bits of PlayerSetupInfo.chat_flags. */
 #define OA_SETUP_CHAT_UTF8 0x01u /* the sender sends and reads chat as UTF-8 */
 
-/* The presence bytes after the engine signature. 3.1c carries them unchanged. */
-#define OA_SETUP_PRESENCE_REVISION 1u
-#define OA_SETUP_PRESENCE_DEV_PATCH 0xffu /* patch of a development build */
-/* Bits of PlayerSetupInfo.presence_flags. Bits past these are ignored. */
-#define OA_SETUP_PRESENCE_DEVELOPER_MODE 0x01u  /* Developer Mode is on */
-#define OA_SETUP_PRESENCE_RULES_DIFFER 0x02u    /* the rules differ from 3.1c */
-#define OA_SETUP_PRESENCE_VIEW_HACKS 0x04u      /* a view hack is on */
-#define OA_SETUP_PRESENCE_SENDS_RECORDS 0x08u   /* the sender sends presence records */
-#define OA_SETUP_PRESENCE_FETCHES_CONTENT 0x10u /* the sender can fetch content */
-
 OA_CORE_BEGIN
 
 #pragma pack(push, 1)
@@ -70,12 +60,7 @@ typedef struct PlayerSetupInfo {
     uint8_t version_minor;
     uint32_t map_hash;
     uint8_t engine_signature[2]; /* 'O', 'A' when Open Annihilation sent it; 3.1c never reads it */
-    uint8_t presence_revision;   /* presence revision, 0 for none; 3.1c never reads it */
-    uint8_t oa_version_major;    /* OA version major; 3.1c never reads it */
-    uint8_t oa_version_minor;    /* OA version minor; 3.1c never reads it */
-    uint8_t
-        oa_version_patch;   /* OA version patch, 255 for a development build; 3.1c never reads it */
-    uint8_t presence_flags; /* OA_SETUP_PRESENCE_*; 3.1c never reads it */
+    uint8_t reserved_after_signature[0x5]; /* copied with the block; the engine never reads it */
     uint8_t recorder_protocol; /* the sender's recorder version, 0 for none; 3.1c never reads it */
     uint8_t chat_signature[2]; /* 'U', '8' when chat_flags holds the sender's chat */
     uint8_t chat_flags;        /* OA_SETUP_CHAT_*, read only after chat_signature */
@@ -107,11 +92,7 @@ OA_ASSERT_OFFSET(PlayerSetupInfo, version_major, 0xa7);
 OA_ASSERT_OFFSET(PlayerSetupInfo, version_minor, 0xa8);
 OA_ASSERT_OFFSET(PlayerSetupInfo, map_hash, 0xa9);
 OA_ASSERT_OFFSET(PlayerSetupInfo, engine_signature, 0xad);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_revision, 0xaf);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_major, 0xb0);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_minor, 0xb1);
-OA_ASSERT_OFFSET(PlayerSetupInfo, oa_version_patch, 0xb2);
-OA_ASSERT_OFFSET(PlayerSetupInfo, presence_flags, 0xb3);
+OA_ASSERT_OFFSET(PlayerSetupInfo, reserved_after_signature, 0xaf);
 OA_ASSERT_OFFSET(PlayerSetupInfo, recorder_protocol, 0xb4);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_signature, 0xb5);
 OA_ASSERT_OFFSET(PlayerSetupInfo, chat_flags, 0xb7);

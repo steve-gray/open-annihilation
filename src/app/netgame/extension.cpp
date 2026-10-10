@@ -962,9 +962,8 @@ struct RuntimeExtension {
     /// @param stage pump follows the game into its close handler (and runs
     ///              --check-host-not-found's part of the frame and the part
     ///              that follows --host's and --join's game), binds the
-    ///              profile's rules again once Developer Mode changes them,
-    ///              Unicode chat as it is now and this machine's presence,
-    ///              then runs the network
+    ///              profile's rules again once Developer Mode changes them
+    ///              and Unicode chat as it is now, then runs the network
     ///              match's frame; after_pump applies
     ///              the demo's recorded speed; presented does nothing.
     static void frame(void* /*context*/, Runtime& runtime, FrameStage stage) {
@@ -973,8 +972,8 @@ struct RuntimeExtension {
             if (net_options().check_host_not_found)
                 host_not_found_frame();
             direct_game_frame();
-            // The rules Developer Mode lays over the profile, Unicode chat
-            // and this machine's presence reach the multiplayer screens.
+            // The rules Developer Mode lays over the profile reach the
+            // multiplayer screens and the session.
             NetworkPlay::of(runtime).follow_profile_rules();
             NetworkPlay::of(runtime).follow_unicode_chat();
             NetworkPlay::of(runtime).follow_presence();

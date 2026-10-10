@@ -117,15 +117,6 @@ void multiplayer_bind_wire_rules(const netgame::WireRules& rules, const char* pr
 /// @param on Unicode chat is on.
 void multiplayer_bind_unicode_chat(bool on) noexcept;
 
-/// Binds what this machine says of itself in the setup block's presence bytes
-/// (Lobby::presence).
-///
-/// The binding survives multiplayer_reset. It reaches the other machines
-/// with the next block the battle room sends, at most about two seconds later.
-///
-/// @param presence the presence; a revision of 0 writes nothing.
-void multiplayer_bind_presence(const netgame::PresenceBlock& presence) noexcept;
-
 /// Binds the launch the connection screens, the battle room and the session read.
 ///
 /// The binding survives multiplayer_reset.
