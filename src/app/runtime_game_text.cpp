@@ -196,6 +196,14 @@ bool Runtime::modern_fonts_open() {
     return opened_stack(fonts) != nullptr;
 }
 
+std::size_t Runtime::modern_font_pack_faces() {
+    auto& fonts = modern_fonts();
+    const base::threads::LockGuard lock(fonts.mutex);
+    if (fonts.stack == nullptr)
+        return 0;
+    return fonts.stack->pack_face_count();
+}
+
 void Runtime::warm_game_text() {
     const int32_t size = oa::present::game_text_size();
     auto& fonts = modern_fonts();

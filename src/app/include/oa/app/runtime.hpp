@@ -591,6 +591,11 @@ class Runtime final : public menu::Host,
     /// @return true once they have opened
     [[nodiscard]] static bool modern_fonts_open();
 
+    /// Returns how many pack faces the open modern font stack holds.
+    ///
+    /// @return the count; 0 when the stack is not open
+    [[nodiscard]] static std::size_t modern_font_pack_faces();
+
     /// Tells whether the language shown draws its text in the modern fonts,
     /// which are then on whatever the setting (Simplified Chinese).
     ///
@@ -4080,6 +4085,11 @@ class Runtime final : public menu::Host,
     /// across soft restarts, checking the player's Mods folder after each
     /// (--check-mod-install). Each run is one turn.
     void check_mod_install();
+
+    /// Installs the pseudo language pack through the main menu's question,
+    /// declines installing it again, then installs a catalogue revision while
+    /// Settings stay open and no prompt shows (--check-language-install).
+    void check_language_install();
 
     /// The main menu's OA button and dialog (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;

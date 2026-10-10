@@ -389,6 +389,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_language_install) {
+            check_language_install();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_renderer_ladder) {
             const int status = check_renderer_ladder();
             flush_preferences();
