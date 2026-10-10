@@ -296,6 +296,7 @@ bool narrow_path(char* narrow, size_t capacity, const wchar_t* wide) noexcept {
 #undef _wopen
 #undef _wfopen
 #undef _wfreopen
+#undef _wfsopen
 
 extern "C" int __cdecl
 wide_open(const wchar_t* path, int flags, ...) __asm__(OA_XP_LIBRARY_SYMBOL(_wopen));
@@ -380,6 +381,35 @@ FILE* __cdecl wide_freopen(const wchar_t* path, const wchar_t* mode, FILE* strea
 }
 
 OA_XP_DEFINE_LIBRARY(wide_freopen, _wfreopen);
+
+extern "C" FILE* __cdecl wide_fsopen(const wchar_t* path, const wchar_t* mode, int share) __asm__(
+    OA_XP_LIBRARY_SYMBOL(_wfsopen)
+);
+
+/// Opens a stream with sharing, as _wfsopen does, through the narrow _fsopen.
+///
+/// Windows 95's _wfsopen fails for every path, as its other wide file calls do,
+/// while _fsopen opens the same file. A copy that writes a package through the
+/// wide call is told the file could not be written, and then refuses the
+/// package, even though the bytes arrived and the narrow call would have kept
+/// them. The sharing mode is the one the caller asked for.
+///
+/// @param path the file to open
+/// @param mode the mode to open it with, widened by the caller
+/// @param share the sharing mode, as _fsopen takes it
+/// @return the stream, or null with errno set as _fsopen sets it
+FILE* __cdecl wide_fsopen(const wchar_t* path, const wchar_t* mode, int share) {
+    char narrow[1024]{};
+    char narrow_mode[16]{};
+    if (!narrow_path(narrow, sizeof(narrow), path) ||
+        !narrow_path(narrow_mode, sizeof(narrow_mode), mode)) {
+        errno = ENOENT;
+        return nullptr;
+    }
+    return _fsopen(narrow, narrow_mode, share);
+}
+
+OA_XP_DEFINE_LIBRARY(wide_fsopen, _wfsopen);
 
 // The wide directory and timestamp calls, which Windows 95 refuses outright.
 // Its narrow twins answer, so each of these narrows the path and asks the
