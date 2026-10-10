@@ -188,7 +188,7 @@ void Runtime::ModInstallState::prompt_tick(ScreenContext* context, void*) {
     auto& state = *runtime.mod_install_state_;
     // A question set aside by another screen waits again for the main menu.
     if (state.stage == Stage::asking) {
-        install::return_package_file(state.file);
+        install::return_package_file({state.file, state.origin});
         state.stage = Stage::idle;
         state.shown.reset();
         state.package.reset();
@@ -302,9 +302,18 @@ void Runtime::tell_mod_installs() {
                 problem.refusal = result.refusal;
                 problem.detail = result.detail;
                 log_line(state.package->file_name + ": not put in place: " + result.detail);
+                install::report_package_outcome({
+                    .file = state.file,
+                    .result = install::OutcomeResult::failed,
+                    .reason = install::refusal_text(kind, problem),
+                });
                 state.show(install::refused_prompt(kind, state.package->file_name, problem, true));
             } else {
                 log_line(state.package->file_name + ": installed in " + path_to_utf8(folder));
+                install::report_package_outcome({
+                    .file = state.file,
+                    .result = install::OutcomeResult::installed,
+                });
                 state.told_folder = folder;
                 state.play_folder = folder;
                 const bool play_now = package_offers_play(kind);
@@ -338,18 +347,25 @@ void Runtime::tell_mod_installs() {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             log_line(state.package->file_name + ": " + install::refusal_text(kind, problem));
+            install::report_package_outcome({
+                .file = state.file,
+                .result = install::OutcomeResult::refused,
+                .reason = install::refusal_text(kind, problem),
+            });
             state.stage = ModInstallState::Stage::telling;
             state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
             state.finish_package();
             return;
         }
         if (step == oa::formats::zip::StreamStep::more) {
+            const bool checking = state.unpacking->checking();
             auto made = install::installing_prompt(
                 kind,
                 state.incoming,
-                state.unpacking->done_bytes(),
-                state.unpacking->total_bytes(),
-                false
+                checking ? state.unpacking->checked_bytes() : state.unpacking->done_bytes(),
+                checking ? state.unpacking->archive_bytes() : state.unpacking->total_bytes(),
+                checking ? install::InstallingPhase::checking : install::InstallingPhase::unpacking,
+                state.package->file_name
             );
             made.prompt.hovered = state.shown ? state.shown->prompt.hovered : settings::no_control;
             made.prompt.pressed = state.shown ? state.shown->prompt.pressed : settings::no_control;
@@ -376,6 +392,11 @@ void Runtime::tell_mod_installs() {
                 state.unpacking->cancel();
                 state.discarder.add(state.unpacking->discards());
                 state.unpacking.reset();
+                install::report_package_outcome({
+                    .file = state.file,
+                    .result = install::OutcomeResult::refused,
+                    .reason = install::refusal_text(kind, staged),
+                });
                 state.stage = ModInstallState::Stage::telling;
                 state.show(install::refused_prompt(kind, state.package->file_name, staged, false));
                 state.finish_package();
@@ -398,6 +419,11 @@ void Runtime::tell_mod_installs() {
                 install::Problem refused{};
                 refused.refusal = install::Refusal::manifest_errors;
                 refused.lines = check.errors;
+                install::report_package_outcome({
+                    .file = state.file,
+                    .result = install::OutcomeResult::refused,
+                    .reason = install::refusal_text(kind, refused),
+                });
                 state.stage = ModInstallState::Stage::telling;
                 state.show(install::refused_prompt(kind, state.package->file_name, refused, false));
                 state.finish_package();
@@ -411,7 +437,8 @@ void Runtime::tell_mod_installs() {
                 state.incoming,
                 state.unpacking->total_bytes(),
                 state.unpacking->total_bytes(),
-                true
+                install::InstallingPhase::placing,
+                state.package->file_name
             );
             return;
         }
@@ -423,6 +450,8 @@ void Runtime::tell_mod_installs() {
         pending.incoming = state.incoming;
         pending.replaced = state.expected;
         pending.file_name = state.package->file_name;
+        pending.origin = state.origin;
+        pending.file = state.file;
         pending.hold = state.unpacking->take_hold();
         install::set_pending_change(std::move(pending));
         log_line(state.package->file_name + ": put in place as the run ends");
@@ -490,41 +519,57 @@ void Runtime::tell_mod_installs() {
         state.next_handoff_ms = now + kHandoffPollMs;
         take_handed_mod_files();
     }
-    const auto file = install::take_package_file();
-    if (!file)
+    const auto opened_file = install::take_package_file();
+    if (!opened_file)
         return;
-    state.file = *file;
+    state.file = opened_file->file;
+    state.origin = opened_file->origin;
     state.told_folder.clear();
     state.play_folder.clear();
-    state.kind = install::kind_for_file(*file);
-    log_line("opening " + path_to_utf8(*file));
-    const std::string name = path_to_utf8(file->filename());
+    state.kind = install::kind_for_file(state.file);
+    log_line("opening " + path_to_utf8(state.file));
+    const std::string name = path_to_utf8(state.file.filename());
     if (state.kind == nullptr) {
         log_line(name + ": it is not a kind of package this game installs");
+        install::report_package_outcome({
+            .file = state.file,
+            .result = install::OutcomeResult::refused,
+            .reason = "It is not a kind of package this game installs.",
+        });
         state.stage = ModInstallState::Stage::telling;
         state.show(install::unknown_kind_prompt(name));
         install::finish_package_file();
         return;
     }
-    // The platform may bring a file it opened into the game's own storage first.
-    fs::path readable = *file;
-    if (const PlatformHooks& hooks = platform_hooks(); hooks.take_opened_file != nullptr) {
-        std::string copy;
-        std::string why;
-        if (!hooks.take_opened_file(hooks.context, path_to_utf8(*file).c_str(), &copy, &why)) {
-            install::Problem problem{};
-            problem.refusal = install::Refusal::unreadable;
-            problem.detail = why;
-            log_line(path_to_utf8(*file) + ": " + why);
-            state.stage = ModInstallState::Stage::telling;
-            state.show(install::refused_prompt(*state.kind, name, problem, false));
-            state.kind = nullptr;
-            install::finish_package_file();
-            return;
-        }
-        if (!copy.empty() && copy != path_to_utf8(*file)) {
-            readable = path_from_utf8(copy);
-            state.opened_copy = readable;
+    // The platform may bring a file the system opened into the game's own
+    // storage first. A catalogue package was not opened that way.
+    fs::path readable = state.file;
+    if (state.origin.kind != install::OriginKind::catalogue) {
+        if (const PlatformHooks& hooks = platform_hooks(); hooks.take_opened_file != nullptr) {
+            std::string copy;
+            std::string why;
+            if (!hooks.take_opened_file(
+                    hooks.context, path_to_utf8(state.file).c_str(), &copy, &why
+                )) {
+                install::Problem problem{};
+                problem.refusal = install::Refusal::unreadable;
+                problem.detail = why;
+                log_line(path_to_utf8(state.file) + ": " + why);
+                install::report_package_outcome({
+                    .file = state.file,
+                    .result = install::OutcomeResult::refused,
+                    .reason = install::refusal_text(*state.kind, problem),
+                });
+                state.stage = ModInstallState::Stage::telling;
+                state.show(install::refused_prompt(*state.kind, name, problem, false));
+                state.kind = nullptr;
+                install::finish_package_file();
+                return;
+            }
+            if (!copy.empty() && copy != path_to_utf8(state.file)) {
+                readable = path_from_utf8(copy);
+                state.opened_copy = readable;
+            }
         }
     }
     auto opened = install::open_package(readable, package_options(*state.kind));
@@ -538,6 +583,13 @@ void Runtime::tell_mod_installs() {
         );
         for (const auto& line : opened.problem.lines)
             log_line(name + ": " + line);
+        install::report_package_outcome({
+            .file = state.file,
+            .result = install::OutcomeResult::refused,
+            .reason = opened.problem.refusal == install::Refusal::unknown_kind
+                          ? std::string("It is not a kind of package this game installs.")
+                          : install::refusal_text(*state.kind, opened.problem),
+        });
         state.stage = ModInstallState::Stage::telling;
         state.show(
             opened.problem.refusal == install::Refusal::unknown_kind
@@ -555,8 +607,15 @@ void Runtime::tell_mod_installs() {
         log_line(state.package->file_name + ": " + warning);
     if (state.package->backup_left_out)
         log_line(state.package->file_name + ": its own .backup folder is left out");
+    if (state.package->origin_left_out)
+        log_line(state.package->file_name + ": its own .oa-origin.yaml is left out");
     if (state.kind == nullptr || state.kind->plan == nullptr) {
         log_line(name + ": it is not a kind of package this game installs");
+        install::report_package_outcome({
+            .file = state.file,
+            .result = install::OutcomeResult::refused,
+            .reason = "It is not a kind of package this game installs.",
+        });
         state.stage = ModInstallState::Stage::telling;
         state.show(install::unknown_kind_prompt(name));
         state.finish_package();
@@ -565,6 +624,7 @@ void Runtime::tell_mod_installs() {
     const install::PackageKind& kind = *state.kind;
     const fs::path root = user_folder_ / std::string(kind.root_folder);
     state.incoming = state.package->incoming;
+    state.incoming.origin = state.origin;
     state.plan = kind.plan(state.incoming, install::folder_hooks(kind, root));
     switch (state.plan.kind) {
     case install::PlanKind::install:
@@ -577,6 +637,11 @@ void Runtime::tell_mod_installs() {
     case install::PlanKind::refuse: {
         install::Problem problem{};
         problem.refusal = install::Refusal::no_free_folder;
+        install::report_package_outcome({
+            .file = state.file,
+            .result = install::OutcomeResult::refused,
+            .reason = install::refusal_text(kind, problem),
+        });
         state.stage = ModInstallState::Stage::telling;
         state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
         state.finish_package();
@@ -615,14 +680,24 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         const fs::path folder = root / path_from_utf8(state.target);
         state.target_played = package_target_in_use(kind, folder);
         state.unpacking = std::make_unique<install::Unpacking>();
+        state.origin.installed = options_.fixed_clock
+                                     ? "2000-01-01"
+                                     : install::utc_date_text(std::chrono::system_clock::now());
         install::Problem problem{};
-        if (!state.unpacking->start(*state.package, root, state.target, state.expected, problem)) {
+        if (!state.unpacking->start(
+                *state.package, root, state.target, state.expected, state.origin, problem
+            )) {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             log_line(
                 state.package->file_name + ": " + install::refusal_text(kind, problem) +
                 (problem.detail.empty() ? "" : " (" + problem.detail + ")")
             );
+            install::report_package_outcome({
+                .file = state.file,
+                .result = install::OutcomeResult::refused,
+                .reason = install::refusal_text(kind, problem),
+            });
             state.stage = ModInstallState::Stage::telling;
             state.show(install::refused_prompt(kind, state.package->file_name, problem, false));
             state.finish_package();
@@ -636,7 +711,12 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         state.placing = false;
         state.show(
             install::installing_prompt(
-                kind, state.incoming, 0, state.unpacking->total_bytes(), false
+                kind,
+                state.incoming,
+                0,
+                state.unpacking->archive_bytes(),
+                install::InstallingPhase::checking,
+                state.package->file_name
             )
         );
     };
@@ -668,6 +748,10 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
             return;
         default:
             log_line(state.package ? state.package->file_name + ": cancelled" : "cancelled");
+            install::report_package_outcome({
+                .file = state.file,
+                .result = install::OutcomeResult::set_aside,
+            });
             play_ui_sound(kCloseSound, 0);
             state.shown.reset();
             state.stage = ModInstallState::Stage::idle;
@@ -682,6 +766,10 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         state.discarder.add(state.unpacking->discards());
         state.unpacking.reset();
         log_line(state.package ? state.package->file_name + ": unpacking cancelled" : "cancelled");
+        install::report_package_outcome({
+            .file = state.file,
+            .result = install::OutcomeResult::set_aside,
+        });
         play_ui_sound(kCloseSound, 0);
         state.shown.reset();
         state.stage = ModInstallState::Stage::idle;

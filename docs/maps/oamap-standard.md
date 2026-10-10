@@ -88,6 +88,24 @@ packed manifest every entry is complete, and `files` is required. It is not
 optional. The game lists a pack's maps from this index and does not open the
 maps to do it.
 
+`oa-tool pack FOLDER --game-dir DIR [--out FILE] [--force]` packs a folder
+that holds this header. `--game-dir` is the game's data. A map pack reads
+`palettes/palette.pal` from it so each preview uses the game's colours, and
+stops when `--game-dir` is missing. The palette file itself is not packed.
+`--out` names the package; without it the name is
+`<id>-<version>-r<revision>.oamap` in the current folder. `--force` replaces
+a package that is already there.
+
+The command writes each map's entry from that map's OTA and TNT. It does not
+keep an index the folder already held. `files` lists the map's OTA and TNT,
+then the feature files the map uses, in order of their paths. A feature file
+two maps use is one file in the package and a line in each map's `files`. A
+preview is `previews/<stem>.png`, drawn from the TNT's minimap and cropped to
+the share the game's map pictures show, and it is not listed in `files`. The
+manifest is the first file in the package. Sounds, units, weapons and the
+palette are never packed. A file a map names that the folder does not hold
+is reported as needed from the game and left out of the package.
+
 | Key | In a packed entry | Rule |
 | --- | --- | --- |
 | `stem` | required | 1 to 40 bytes of ASCII letters, digits, space, `_`, `-`, `.`, `'`, `(` and `)`. It does not start or end with a space or a dot, and it never contains `@`. Stems are unique in the pack, ignoring the case of ASCII letters |

@@ -69,16 +69,18 @@ const Command command_table[] = {
     },
     {
         "pack",
-        "FOLDER [--out FILE] [--force]",
-        "Pack a folder as a mod or a language package.",
-        "Reads FOLDER and writes a .oamod or a .oalang. The folder's top holds one manifest, "
-        "oamod.yaml or language.yaml. The manifest is written first, then every other file in "
-        "byte order of its path, with fixed times. A file whose extension, without case, is "
-        "png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an "
-        "empty file, is stored; every other file is deflated. The same files give the same "
-        "bytes on any machine with the same zlib. --out names the package file; without it the "
-        "name comes from the manifest and is written in the current folder. --force replaces "
-        "an existing file. A folder the installer would refuse is not packed.",
+        "FOLDER [--out FILE] [--force] [--game-dir DIR]",
+        "Pack a folder as a mod, a language package or a map pack.",
+        "Reads FOLDER and writes a .oamod, a .oalang or a .oamap. The folder's top holds one "
+        "manifest, oamod.yaml, language.yaml or oamap.yaml. The manifest is written first, then "
+        "every other file in byte order of its path, with fixed times. A file whose extension, "
+        "without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or "
+        "oamap, and an empty file, is stored; every other file is deflated. The same files give "
+        "the same bytes on any machine with the same zlib. --out names the package file; without "
+        "it the name comes from the manifest and is written in the current folder. --force "
+        "replaces an existing file. A folder the installer would refuse is not packed. A map "
+        "pack reads the game's palette from --game-dir: map packs need the game's palette for "
+        "previews. --game-dir on a mod or a language pack is a usage error.",
         1,
         any_count,
         run_pack,

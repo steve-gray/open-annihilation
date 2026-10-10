@@ -13,10 +13,13 @@ until then.
   boxed line, and the one wrap.
 - `layout.hpp`: points, the Auto scale and the three size classes, rows,
   columns, grids, splits and scroll areas, and the display list.
+- `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
+  order, the arrows by where controls sit, and the wheel.
 
 ## State
 
-None. `load_game_fonts` reads the game's font files.
+None. `load_game_fonts` reads the game's font files. A screen passes the
+pointer's place and the wheel's fraction in.
 
 ## Invariants
 
@@ -27,6 +30,15 @@ None. `load_game_fonts` reads the game's font files.
   to show.
 - The display list is the only record of what a screen drew and where its
   controls are. Hit testing reads `controls`. Drawing reads `items`.
+- Every control of a kit screen carries a unique name: words of a-z, 0-9 and
+  hyphens joined by dots, at most 100 bytes. The automation endpoint adds its
+  own prefix; the name here has none.
+
+The arrows move by where controls sit. A control's own scroll area is searched
+first, including rows the area does not show. The focus leaves that area only
+when nothing in it lies that way, and a move from outside never lands on a
+row the area hides. Tab follows the declared order and wraps. Up and Down
+never follow that order.
 
 ## Tests
 
@@ -35,9 +47,12 @@ Compact metrics against 0.7.3's numbers. `ui-kit-text` checks the UTF-8
 helpers, the estimated width, the stand-ins, and the wrap against copies of
 the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
 window sizes, arrangements, the scroll arithmetic and hit testing.
+`ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys, the
+wheel's fractions and the names.
 
 ## Limitations
 
 Regular and Large metrics are U10's, and so is choosing a screen's layout
-from its size class. Input over the display list is U04's. The screens'
-colour family converges with U13 and U14.
+from its size class. The arrows' rule is one function, its weight named, and
+is to be tuned after controller playtests (D30). The screens' colour family
+converges with U13 and U14.

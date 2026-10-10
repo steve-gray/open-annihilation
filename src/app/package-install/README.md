@@ -21,11 +21,13 @@ shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
 - `plan_install`, the oamod kind's plan, decides, from what each folder of
   Mods holds (`FolderHooks`), where a package goes and what it asks.
 - `Unpacking` unpacks a package's files into a staging folder inside Mods,
-  a budget of bytes a step: its folders, then its files, then a sync of
-  each folder and, on macOS, one flush of the drive's cache to storage.
-  Each folder or file made and each folder synced costs
-  `unpack_entry_cost` (16 KiB) of the budget, and a step ends after about
-  4 ms, so that a package of many small files never holds a frame long.
+  a budget of bytes a step. It first hashes the package file, a piece at a
+  time, each byte of the budget, and the prompt reads `Checking {file}...`.
+  Then its folders, its files, the origin record, and a sync of each folder
+  and, on macOS, one flush of the drive's cache to storage. Each folder or
+  file made and each folder synced costs `unpack_entry_cost` (16 KiB) of
+  the budget, and a step ends after about 4 ms, so that a package of many
+  small files never holds a frame long.
 - `commit_change` puts a change in place with renames on one volume.
 - `recover_changes` settles what a stop left, and `Discarder` deletes the
   folders a change drops a little at a time.
@@ -159,6 +161,9 @@ holds the files. The folders it uses lie in Mods, named after the target
 | reinstall | T to X; S to T; X's `.backup` to `T/.backup`; X to D |
 | roll back | `T/.backup` to R; T to O; R to T; O to `T/.backup` |
 
+Every rename moves a folder whole, so the origin record inside it goes with
+the folder. A roll back writes no record of its own.
+
 So three installs keep one version back: after revisions 1, 2 and 3 the
 folder holds 3, its `.backup` 2, and 1 is deleted. A roll back swaps the
 two, so a second undoes the first. A failure before the new files are in
@@ -195,6 +200,40 @@ as the sync of Documents does on many Windows machines: the plan reads it
 as a mod, recovery settles it, the `Discarder` enters it and ROLL BACK
 takes it. A reparse point whose tag cannot be read counts as a link.
 
+## Origin records
+
+An install writes `.oa-origin.yaml` into the staging folder after the
+package's last file and before the folders are synced, so the rename that
+puts the folder in place carries the record with it. The record says
+whether the package came from a file or one release of a registry's
+catalogue, and the SHA-256 of the package file, which the unpacking
+computes. A folder with no record, such as one installed by an earlier
+version or made by hand, is not an error and is never matched to a release.
+
+```yaml
+# Written by Open Annihilation when it installed this folder; not part of the package.
+oa-origin: 1
+origin: catalogue
+registry: coreprime
+catalogue-id: example-mod
+release: 27
+sha256: <64 lowercase hex digits>
+installed: 2026-11-02
+```
+
+A file the player opened is `origin: file` and omits `registry`,
+`catalogue-id` and `release`; it still holds the file's SHA-256. When the
+origin brings a SHA-256 and the package file's differs, the install stops
+as damaged and the target is left as it was. A package's own
+`.oa-origin.yaml` at its top is left out, as its `.backup` is.
+
+A replace keeps the old record in `.backup`. A reinstall replaces the
+target's record and leaves the kept version's. A roll back swaps the two
+folders, records included, and writes nothing. Recovery moves folders
+whole and never edits a record. Replacing the record of a folder that
+already holds a package refuses while the root folder's lock is held, and
+a replace that fails leaves the previous record as it was.
+
 ## Tests
 
 - `app-mod-install-package`: a Finder-made package, a package with its
@@ -220,6 +259,14 @@ takes it. A reparse point whose tag cannot be read counts as a link.
 - `app-package-install-inbox`: `post_opened_file` routes each extension in
   any case, the registry queue keeps order and drops a repeat, and a
   `.oareg` file leaves the package queue untouched.
+- `app-package-install-origin`: the origin record's text and the texts it
+  refuses; an install, replace, roll back, reinstall and recovery in a
+  scratch Mods folder, each record moving with its folder; a package's own
+  origin file left out; a catalogue hash that differs refused; the hash
+  phase held to its budget; `write_origin` replacing a record and refusing
+  a missing folder, a link and a lock that is held; the folder hooks'
+  records; catalogue outcomes kept, capped and taken once, including one a
+  pending change reports.
 - `app-package-install-kinds`: the kind table holds exactly `oamod`, a file
   is a package only by that extension, the seven `.oamod-` names, and a
   made-up kind built in the test installs, replaces, rolls back, recovers

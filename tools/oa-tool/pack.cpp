@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// pack: a folder with one manifest becomes a .oamod or a .oalang. The
+// pack: a folder with one manifest becomes a .oamod, a .oalang or a .oamap.
+// A mod or a language is written here. A map is handed to pack_map. The
 // manifest is written first, then every other file in byte order of its
 // path, stored or deflated by a fixed rule, with the writer's fixed times.
 // The same files therefore give the same bytes. The package is written to
@@ -10,6 +11,7 @@
 
 #include "arguments.hpp"
 #include "command.hpp"
+#include "pack_map.hpp"
 #include "pack_names.hpp"
 
 #include "oa/app/package_install.hpp"
@@ -658,17 +660,31 @@ bool ends_with_extension(std::string_view name, std::string_view extension) {
     return name.size() > extension.size() && folded(name).ends_with(extension);
 }
 
+/// Prints a usage failure the way the dispatcher does.
+///
+/// @param output where it is printed
+/// @param problem what is wrong
+void report_usage(Output& output, std::string_view problem);
+
 /// Packs one folder.
 ///
 /// @param folder the folder
 /// @param out_path the --out path; empty for the default name
 /// @param force an existing output may be replaced
+/// @param game_dir the game's data; only a map pack reads it
 /// @param output where the result and the diagnostics are printed
-/// @return exit_done
-int pack_folder(const fs::path& folder, const std::string& out_path, bool force, Output& output) {
+/// @return exit_done, or exit_usage when --game-dir is given for another kind
+int pack_folder(
+    const fs::path& folder,
+    const std::string& out_path,
+    bool force,
+    const std::optional<std::string>& game_dir,
+    Output& output
+) {
     std::vector<Item> items = collect(folder);
     std::string mod_name;
     std::string language_name;
+    std::string map_name;
     for (const Item& item : items) {
         if (item.folder || item.name.find('/') != std::string::npos)
             continue;
@@ -676,11 +692,36 @@ int pack_folder(const fs::path& folder, const std::string& out_path, bool force,
             mod_name = item.name;
         else if (same_ascii(item.name, languages::pack_manifest_file))
             language_name = item.name;
+        else if (same_ascii(item.name, "oamap.yaml"))
+            map_name = item.name;
     }
-    if (mod_name.empty() && language_name.empty())
-        throw Failure("the folder holds no oamod.yaml or language.yaml");
-    if (!mod_name.empty() && !language_name.empty())
-        throw Failure("the folder holds both oamod.yaml and language.yaml");
+    const int manifests =
+        (mod_name.empty() ? 0 : 1) + (language_name.empty() ? 0 : 1) + (map_name.empty() ? 0 : 1);
+    if (manifests == 0)
+        throw Failure("the folder holds no oamod.yaml or language.yaml or oamap.yaml");
+    if (manifests > 1) {
+        if (!mod_name.empty() && !language_name.empty() && map_name.empty())
+            throw Failure("the folder holds both oamod.yaml and language.yaml");
+        if (!mod_name.empty() && language_name.empty() && !map_name.empty())
+            throw Failure("the folder holds both oamod.yaml and oamap.yaml");
+        if (mod_name.empty() && !language_name.empty() && !map_name.empty())
+            throw Failure("the folder holds both language.yaml and oamap.yaml");
+        throw Failure("the folder holds oamod.yaml, language.yaml and oamap.yaml");
+    }
+    if (!map_name.empty()) {
+        PackMapRequest request;
+        request.folder = folder;
+        if (!out_path.empty())
+            request.out = fs::path(std::u8string(out_path.begin(), out_path.end()));
+        request.force = force;
+        if (game_dir.has_value())
+            request.game_dir = fs::path(std::u8string(game_dir->begin(), game_dir->end()));
+        return pack_map(request, output);
+    }
+    if (game_dir.has_value()) {
+        report_usage(output, "--game-dir is only for a map pack");
+        return exit_usage;
+    }
     const Kind kind = mod_name.empty() ? Kind::language : Kind::mod;
     const std::string& manifest_name = kind == Kind::mod ? mod_name : language_name;
     std::sort(items.begin(), items.end(), [&](const Item& left, const Item& right) {
@@ -777,10 +818,6 @@ int pack_folder(const fs::path& folder, const std::string& out_path, bool force,
     return exit_done;
 }
 
-/// Prints a usage failure the way the dispatcher does.
-///
-/// @param output where it is printed
-/// @param problem what is wrong
 void report_usage(Output& output, std::string_view problem) {
     output.err << "oa-tool pack: " << problem << '\n';
     output.err << "run 'oa-tool help pack'\n";
@@ -792,6 +829,7 @@ int run_pack(std::span<const std::string> arguments, Output& output) {
     static constexpr OptionSpec options[] = {
         {"out", true, false},
         {"force", false, false},
+        {"game-dir", true, false},
     };
     std::string problem;
     const std::optional<Arguments> parsed = parse_arguments(arguments, options, problem);
@@ -810,10 +848,19 @@ int run_pack(std::span<const std::string> arguments, Output& output) {
         report_usage(output, "option '--out' needs a value");
         return exit_usage;
     }
+    const std::string* const game_dir = parsed->value("game-dir");
+    if (game_dir != nullptr && game_dir->empty()) {
+        report_usage(output, "option '--game-dir' needs a value");
+        return exit_usage;
+    }
+    std::optional<std::string> game;
+    if (game_dir != nullptr)
+        game = *game_dir;
     return pack_folder(
         fs::path(std::u8string(parsed->positional[0].begin(), parsed->positional[0].end())),
         out == nullptr ? std::string{} : *out,
         parsed->flags.contains("force"),
+        game,
         output
     );
 }
