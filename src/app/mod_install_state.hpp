@@ -65,6 +65,25 @@ struct Runtime::ModInstallState {
     bool check_shows_prompts{};
     /// Prompts this run has shown.
     uint32_t prompts_shown{};
+    /// A catalogue map pack installing off the main menu: nothing is shown,
+    /// and a finished install returns to idle instead of telling.
+    bool quiet{};
+    /// A catalogue map pack whose plan asks, put back until the main menu
+    /// settles, so it is not opened again on every frame off the menu.
+    std::filesystem::path catalogue_question{};
+
+    /// Ends a quiet install: no prompt, and idle for the next package.
+    ///
+    /// @return true when the install was quiet
+    bool finish_quietly() {
+        if (!quiet)
+            return false;
+        shown.reset();
+        quiet = false;
+        stage = Stage::idle;
+        return true;
+    }
+
     /// When the hand-off folder is looked in next, in SDL ticks.
     uint64_t next_handoff_ms{};
 

@@ -5,8 +5,10 @@
 // each question answered through the prompt's overlay by keys and the
 // pointer, and the player's Mods folder checked after each. Each run of
 // the check is one turn. The first: the command line's missing package
-// refused; a package the Finder made installed with no question from a
-// dropped file; an update asked and cancelled, then replaced; a third
+// refused; a catalogue map pack installed from the skirmish setup with no
+// prompt, and a catalogue mod left waiting until the main menu; a package
+// the Finder made installed with no question from a dropped file; an update
+// asked and cancelled, then replaced; a third
 // revision replacing, keeping one .backup; a reinstall dropping a file
 // added since; an older revision declined; another version installed
 // alongside; a folder that holds another mod left as it is; a profile that
@@ -31,6 +33,9 @@
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/sha256.hpp"
+#include "oa/data/map_pack/manifest.hpp"
+#include "oa/formats/hpi.hpp"
+#include "oa/formats/tnt.hpp"
 #include "oa/formats/zip.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
@@ -38,6 +43,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -190,6 +196,176 @@ bool reserved_left(const fs::path& mods) {
             return true;
     }
     return false;
+}
+
+/// Writes a little-endian 32-bit word.
+///
+/// @param bytes the buffer
+/// @param at the offset
+/// @param value the word
+void put32(std::vector<uint8_t>& bytes, std::size_t at, uint32_t value) {
+    bytes[at] = static_cast<uint8_t>(value);
+    bytes[at + 1] = static_cast<uint8_t>(value >> 8U);
+    bytes[at + 2] = static_cast<uint8_t>(value >> 16U);
+    bytes[at + 3] = static_cast<uint8_t>(value >> 24U);
+}
+
+/// Writes a little-endian 16-bit word.
+///
+/// @param bytes the buffer
+/// @param at the offset
+/// @param value the word
+void put16(std::vector<uint8_t>& bytes, std::size_t at, uint16_t value) {
+    bytes[at] = static_cast<uint8_t>(value);
+    bytes[at + 1] = static_cast<uint8_t>(value >> 8U);
+}
+
+/// Builds a 4 by 4 map whose one feature record carries a name.
+///
+/// @param name the feature name
+/// @return the map bytes
+std::vector<uint8_t> tnt_named(std::string_view name) {
+    namespace tnt = oa::formats::tnt;
+    constexpr std::size_t tile_map_at = 64;
+    constexpr std::size_t attributes_at = 72;
+    constexpr std::size_t tiles_at = 136;
+    const auto features_at = tiles_at + 2 * tnt::layout::tile_bytes;
+    std::vector<uint8_t> bytes(features_at + tnt::layout::feature_record_bytes);
+    put32(bytes, 0, static_cast<uint32_t>(tnt::Version::total_annihilation));
+    put32(bytes, 4, 4);
+    put32(bytes, 8, 4);
+    put32(bytes, 12, static_cast<uint32_t>(tile_map_at));
+    put32(bytes, 16, static_cast<uint32_t>(attributes_at));
+    put32(bytes, 20, static_cast<uint32_t>(tiles_at));
+    put32(bytes, 24, 2);
+    put32(bytes, 28, 1);
+    put32(bytes, 32, static_cast<uint32_t>(features_at));
+    put32(bytes, 36, 17);
+    put32(bytes, 40, 0);
+    put32(bytes, 44, 0);
+    put16(bytes, tile_map_at, 0);
+    put16(bytes, tile_map_at + 2, 1);
+    put16(bytes, tile_map_at + 4, 1);
+    put16(bytes, tile_map_at + 6, 0);
+    const auto at = features_at + offsetof(tnt::FeatureDiskRecord, name);
+    const auto count = std::min(name.size(), std::size_t{127});
+    for (std::size_t character = 0; character < count; ++character)
+        bytes[at + character] = static_cast<uint8_t>(name[character]);
+    return bytes;
+}
+
+/// The stem of a listed GAF.
+///
+/// @param path the listed path
+/// @return the stem
+std::string gaf_stem(std::string_view path) {
+    const auto slash = path.find_last_of('/');
+    auto file = slash == std::string_view::npos ? path : path.substr(slash + 1);
+    constexpr std::string_view suffix = ".gaf";
+    if (file.size() > suffix.size() && file.ends_with(suffix))
+        file.remove_suffix(suffix.size());
+    return std::string(file);
+}
+
+/// Tells whether a stem is letters, digits, '_' or '-'.
+///
+/// @param stem the stem
+/// @return true when every character is one of those
+bool plain_stem(std::string_view stem) {
+    if (stem.empty())
+        return false;
+    for (const unsigned char byte : stem) {
+        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+                        byte == '_' || byte == '-';
+        if (!ok)
+            return false;
+    }
+    return true;
+}
+
+/// A feature TDF whose animation is a GAF the base game already holds.
+///
+/// @param game_dir the base game's folder
+/// @return the TDF text
+std::string ridge_marker_tdf(const fs::path& game_dir) {
+    const GameInstall install = inspect_game_install(game_dir);
+    require(usable(install), "the base game cannot be read");
+    oa::AssetStore store(install.folders);
+    for (const fs::path& archive : install.archives) {
+        std::string error;
+        require(store.try_mount(archive, &error), "an archive of the base game cannot be read");
+    }
+    std::string stem;
+    for (const std::string& path : store.list_effective("anims", ".gaf", false)) {
+        const std::string candidate = gaf_stem(path);
+        if (plain_stem(candidate)) {
+            stem = candidate;
+            break;
+        }
+    }
+    require(!stem.empty(), "the base game has no animation a map can name");
+    return "[zz ridge marker]\n{\nfilename=" + stem + ";\n}\n";
+}
+
+/// Writes a two-map pack that places only its own feature.
+///
+/// @param file the package
+/// @param game_dir the base game's folder
+void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
+    constexpr std::string_view feature = "zz ridge marker";
+    const std::string tdf = ridge_marker_tdf(game_dir);
+    const std::string ota = "[GlobalHeader]\n"
+                            "{\n"
+                            "[Schema 0]\n"
+                            "{\n"
+                            "Type=Network 1;\n"
+                            "[features]\n"
+                            "{\n"
+                            "[feature0]\n"
+                            "{\n"
+                            "Featurename=" +
+                            std::string(feature) +
+                            ";\n"
+                            "XPos=1;\n"
+                            "ZPos=1;\n"
+                            "}\n"
+                            "}\n"
+                            "}\n"
+                            "}\n";
+    const std::vector<uint8_t> terrain = tnt_named(feature);
+    const std::string terrain_text(terrain.begin(), terrain.end());
+    oa::data::map_pack::Manifest manifest;
+    manifest.format = oa::data::map_pack::format_version;
+    manifest.id = "ridge-pack";
+    manifest.name = "Ridge Pack";
+    manifest.version = "1.0";
+    manifest.author = {"Ridge", {}};
+    manifest.packaging = {1, "2026-10-11", "Open Annihilation"};
+    manifest.requires_base = "ta-3.1c";
+    const auto add = [&](std::string stem, std::string title) {
+        oa::data::map_pack::MapEntry map;
+        map.stem = std::move(stem);
+        map.title = std::move(title);
+        map.players = 2;
+        map.size = "4x4";
+        map.files = {
+            "maps/" + map.stem + ".ota",
+            "maps/" + map.stem + ".tnt",
+            "features/ridgepack/marker.tdf",
+        };
+        manifest.maps.push_back(std::move(map));
+    };
+    add("north", "North");
+    add("south", "South");
+    write_package(
+        file,
+        {{"oamap.yaml", oa::data::map_pack::write_manifest(manifest)},
+         {"maps/north.ota", ota},
+         {"maps/north.tnt", terrain_text},
+         {"maps/south.ota", ota},
+         {"maps/south.tnt", terrain_text},
+         {"features/ridgepack/marker.tdf", tdf}}
+    );
 }
 
 /// Returns a folder's path as the settings keep it: absolute, normal, in UTF-8.
@@ -372,6 +548,85 @@ void Runtime::check_mod_install() {
         );
         key(SDLK_RETURN);
         require(!state.shown, "Enter did not close the refusal");
+
+        // A catalogue map pack installs from the skirmish setup, with no
+        // prompt. A catalogue mod posted the same way waits for the main menu.
+        exercise_click(menu::resource_name(menu::Button::single_player));
+        exercise_click(entry::resource_name(entry::Button::skirmish));
+        require(
+            screen_ == Screen::skirmish && match_ == nullptr, "Skirmish did not open its setup"
+        );
+        const fs::path pack_file = packages / "ridge-pack.oamap";
+        write_ridge_pack(pack_file, options_.game_dir);
+        install::Origin pack_origin{};
+        pack_origin.kind = install::OriginKind::catalogue;
+        pack_origin.registry = "ridge";
+        pack_origin.catalogue_id = "ridge-pack";
+        pack_origin.release = 1;
+        pack_origin.sha256 = file_hash(pack_file);
+        pack_origin.installed = "2000-01-01";
+        install::post_package_file(pack_file, pack_origin);
+        std::vector<install::PackageOutcome> pack_outcomes;
+        for (int frame = 0; frame < kMostFrames; ++frame) {
+            tell_mod_installs();
+            require(!state.shown, "a catalogue map pack showed a prompt off the main menu");
+            require(
+                screen_ == Screen::skirmish && match_ == nullptr,
+                "a catalogue map pack left the skirmish setup"
+            );
+            pack_outcomes = install::take_package_outcomes();
+            if (!pack_outcomes.empty())
+                break;
+        }
+        std::string pack_why = "a catalogue map pack was not installed";
+        if (!pack_outcomes.empty())
+            pack_why += ": " + pack_outcomes[0].reason;
+        require(
+            pack_outcomes.size() == 1 &&
+                pack_outcomes[0].result == install::OutcomeResult::installed,
+            pack_why
+        );
+        const fs::path pack_folder = user_folder_ / "Maps" / "ridge-pack";
+        require(
+            fs::exists(pack_folder / "oamap.yaml") &&
+                fs::exists(pack_folder / "maps" / "north.ota") &&
+                fs::exists(pack_folder / "maps" / "south.ota"),
+            "the map pack is not in Maps"
+        );
+        const fs::path waiting_mod = packages / "ridge-mod.oamod";
+        write_package(
+            waiting_mod,
+            {{"oamod.yaml", profile_text("ridge-mod", "Ridge Mod", "1.0", 1)},
+             {"units/readme.txt", "revision 1"}}
+        );
+        install::Origin mod_origin{};
+        mod_origin.kind = install::OriginKind::catalogue;
+        mod_origin.registry = "ridge";
+        mod_origin.catalogue_id = "ridge-mod";
+        mod_origin.release = 1;
+        mod_origin.sha256 = file_hash(waiting_mod);
+        mod_origin.installed = "2000-01-01";
+        install::post_package_file(waiting_mod, mod_origin);
+        for (int frame = 0; frame < 8; ++frame) {
+            tell_mod_installs();
+            require(!state.shown, "a catalogue mod showed a prompt off the main menu");
+            require(
+                screen_ == Screen::skirmish && match_ == nullptr,
+                "a catalogue mod left the skirmish setup"
+            );
+        }
+        require(install::package_files_waiting(), "the catalogue mod did not wait");
+        require(
+            revision_in(mods / "ridge-mod") == -1, "the catalogue mod installed off the main menu"
+        );
+        exercise_click(skirmish::resource_name(skirmish::Button::previous_menu));
+        require(screen_ == Screen::single_player, "PrevMenu did not leave the skirmish setup");
+        exercise_click(entry::resource_name(entry::Button::previous_menu));
+        require(screen_ == Screen::main_menu, "PrevMenu did not return to the main menu");
+        until_prompt("the catalogue mod");
+        require(titled("MOD INSTALLED"), "the catalogue mod was not installed on the main menu");
+        key(SDLK_RETURN);
+        require(!state.shown, "Enter did not close the catalogue mod's notice");
 
         // A package the Finder made, dropped on the window: installed with
         // no question.

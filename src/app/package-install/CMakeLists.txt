@@ -9,17 +9,19 @@
 # folders a change drops; the packages waiting for the main menu and the
 # change waiting for its run to end; the prompts' texts; and the hand-off
 # of a second start's packages to the copy already running. No SDL.
-add_library(oa-app-package-install src/package.cpp src/names.cpp src/plan_oamod.cpp src/change.cpp
-  src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp src/handoff.cpp
-  src/kinds.cpp src/prompts_oamod.cpp src/origin.cpp)
+add_library(oa-app-package-install src/package.cpp src/names.cpp src/plan_oamod.cpp src/plan_oamap.cpp
+  src/change.cpp src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp src/handoff.cpp
+  src/kinds.cpp src/prompts_oamod.cpp src/prompts_oamap.cpp src/origin.cpp)
 add_library(oa::app::package_install ALIAS oa-app-package-install)
 target_include_directories(oa-app-package-install PUBLIC include)
 target_compile_features(oa-app-package-install PUBLIC cxx_std_20)
 target_link_libraries(oa-app-package-install PUBLIC oa-formats-zip oa-formats-hpi oa-data-mod-profile
-  oa-platform-preferences oa-ui-engine-settings oa-base-sha256
-  PRIVATE oa-formats-oamod oa-data-languages oa-data-registry oa-app-mod-profile oa-app-user-folder
-  oa-app-game-directory oa-ui-game-files oa-platform-shims oa-platform-file-types oa-base-threads
-  oa-options)
+  oa-data-map-pack oa-data-map-fit oa-platform-preferences oa-ui-engine-settings oa-base-sha256
+  PRIVATE oa-formats-oamod oa-formats-png oa-data-languages oa-data-registry oa-app-mod-profile
+  oa-app-user-folder oa-app-game-directory oa-ui-game-files oa-platform-shims oa-platform-file-types
+  oa-base-threads oa-options)
+set_property(SOURCE src/plan_oamap.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+  "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
   # Packages read and checked: a Finder-made package with its top folder
@@ -66,4 +68,12 @@ if(BUILD_TESTING)
     oa-formats-zip oa-base-sha256 oa-platform-shims ZLIB::ZLIB oa-test-support oa-options)
   add_test(NAME app-package-install-origin COMMAND oa-app-package-install-origin-test)
   set_tests_properties(app-package-install-origin PROPERTIES TIMEOUT 60)
+  # A map pack: its manifest, the files it may hold, its previews, the engine
+  # it needs, a catalogue replace and a question, and a fit check through hooks.
+  add_executable(oa-app-package-install-oamap-test tests/oamap_test.cpp)
+  target_link_libraries(oa-app-package-install-oamap-test PRIVATE oa-app-package-install
+    oa-formats-zip oa-formats-png oa-base-sha256 oa-data-map-pack oa-data-map-fit
+    ZLIB::ZLIB oa-test-support oa-options)
+  add_test(NAME app-package-install-oamap COMMAND oa-app-package-install-oamap-test)
+  set_tests_properties(app-package-install-oamap PROPERTIES TIMEOUT 30)
 endif()
