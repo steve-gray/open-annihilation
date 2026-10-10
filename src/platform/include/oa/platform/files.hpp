@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <span>
+#include <string>
 
 namespace oa::platform {
 
@@ -91,5 +93,21 @@ int log_message(const char* format, ...) noexcept
     __attribute__((format(printf, 1, 2)))
 #endif
     ;
+
+/// Replaces a file by writing a temporary file beside it and renaming it over.
+///
+/// The temporary name is the file's name, then .tmp-, the process and a
+/// count. The folder is made when it is missing. The temporary file is
+/// flushed to the disk, renamed over the file, and the folder is synced
+/// where the system allows. On any failure the temporary file is removed,
+/// the old file is left as it was, and the function says why.
+///
+/// @param file the file to replace
+/// @param bytes the bytes the file should hold
+/// @param[out] error why the file was not replaced; may be null
+/// @return true when the file holds these bytes
+[[nodiscard]] bool replace_file(
+    const std::filesystem::path& file, std::span<const uint8_t> bytes, std::string* error
+) noexcept;
 
 } // namespace oa::platform

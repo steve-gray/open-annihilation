@@ -585,51 +585,62 @@ void refusals() {
 struct RaceState {
     oa::AssetStore* store = nullptr;
     std::string failure;
+    std::atomic<bool> stop{false};
+    std::atomic<bool> failed{false};
 };
+
+// The reader writes `failure` and then stores `failed`. The main thread reads
+// `failure` only after join_thread, which happens after that store.
+void note_failure(RaceState* state, std::string message) {
+    state->failure = std::move(message);
+    state->failed.store(true);
+}
 
 void read_during_mount(void* argument) {
     auto* state = static_cast<RaceState*>(argument);
-    for (int round = 0; round < 20000; ++round) {
+    // At least 200 rounds, and keep going until the mounts stop, so the reader
+    // overlaps the mounts on every system.
+    for (int round = 0; !state->stop.load() || round < 200; ++round) {
         try {
             const auto data = state->store->read("maps/isle@isles.ota");
             if (data.bytes != kPackOta) {
-                state->failure = "the pack ota bytes changed";
+                note_failure(state, "the pack ota bytes changed");
                 return;
             }
         } catch (const std::exception& error) {
             const std::string message = error.what();
             if (message.find("asset not found") == std::string::npos) {
-                state->failure = "ota read failed: " + message;
+                note_failure(state, "ota read failed: " + message);
                 return;
             }
         } catch (...) {
-            state->failure = "ota read failed with an unknown exception";
+            note_failure(state, "ota read failed with an unknown exception");
             return;
         }
         try {
             const auto unit = state->store->read("units/u.fbi");
             if (unit.bytes != kLooseUnit) {
-                state->failure = "the game unit bytes changed";
+                note_failure(state, "the game unit bytes changed");
                 return;
             }
         } catch (const std::exception& error) {
-            state->failure = std::string("unit read failed: ") + error.what();
+            note_failure(state, std::string("unit read failed: ") + error.what());
             return;
         } catch (...) {
-            state->failure = "unit read failed with an unknown exception";
+            note_failure(state, "unit read failed with an unknown exception");
             return;
         }
         try {
             const auto found = state->store->find("anims\\*");
             if (found.empty() || found.front().name != "tree.gaf" || found.front().pack_layer) {
-                state->failure = "the archive's tree.gaf was not first";
+                note_failure(state, "the archive's tree.gaf was not first");
                 return;
             }
         } catch (const std::exception& error) {
-            state->failure = std::string("find failed: ") + error.what();
+            note_failure(state, std::string("find failed: ") + error.what());
             return;
         } catch (...) {
-            state->failure = "find failed with an unknown exception";
+            note_failure(state, "find failed with an unknown exception");
             return;
         }
         oa::ResourceFile* file = nullptr;
@@ -639,18 +650,18 @@ void read_during_mount(void* argument) {
                 Bytes bytes(oa::AssetStore::length(file));
                 const auto count = oa::AssetStore::read(file, bytes);
                 if (count < 0 || bytes != kPackTdf) {
-                    state->failure = "the open tdf did not read the pack";
                     oa::AssetStore::close(file);
+                    note_failure(state, "the open tdf did not read the pack");
                     return;
                 }
             }
         } catch (const std::exception& error) {
             oa::AssetStore::close(file);
-            state->failure = std::string("tdf handle failed: ") + error.what();
+            note_failure(state, std::string("tdf handle failed: ") + error.what());
             return;
         } catch (...) {
             oa::AssetStore::close(file);
-            state->failure = "tdf handle failed with an unknown exception";
+            note_failure(state, "tdf handle failed with an unknown exception");
             return;
         }
         oa::AssetStore::close(file);
@@ -677,18 +688,24 @@ void readers_survive_unmount() {
     state.store = &store;
     oa::base::threads::Thread thread;
     check(oa::base::threads::start_thread(thread, read_during_mount, &state), "the reader starts");
-    for (int round = 0; round < 2000 && state.failure.empty(); ++round) {
+    std::string mount_failure;
+    for (int round = 0; round < 200 && !state.failed.load(); ++round) {
         if (!store.mount_pack_layer(spec, &error)) {
-            state.failure = "mount failed: " + error;
+            mount_failure = "mount failed: " + error;
             break;
         }
         if (!store.unmount_pack_layer()) {
-            state.failure = "unmount failed";
+            mount_failure = "unmount failed";
             break;
         }
     }
+    state.stop.store(true);
     oa::base::threads::join_thread(thread);
-    check(state.failure.empty(), state.failure.empty() ? "the reader finished" : state.failure);
+    if (!mount_failure.empty()) {
+        check(false, mount_failure);
+    } else {
+        check(state.failure.empty(), state.failure.empty() ? "the reader finished" : state.failure);
+    }
 }
 
 void discover_keeps_layer() {

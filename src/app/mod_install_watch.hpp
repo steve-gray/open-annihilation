@@ -5,7 +5,7 @@
 // .oamod file double-clicked in the Finder, opened from the iOS Files app
 // or dropped on the window arrives as a drop event, which whatever polls
 // SDL's queue at that moment might drop. A watch on SDL's events copies
-// each into the mod packages' inbox (oa/app/mod_install/inbox.hpp) as it
+// each into the mod packages' inbox (oa/app/package_install/inbox.hpp) as it
 // is queued.
 #pragma once
 

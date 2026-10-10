@@ -5,8 +5,9 @@
 // the dialog's session that both hosts share.
 
 #include "engine_settings_state.hpp"
-#include "oa/app/mod_install.hpp"
-#include "oa/app/mod_install/prompts.hpp"
+#include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oamod.hpp"
+#include "oa/app/package_install/prompts.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/mod_profile_loader.hpp"
@@ -538,16 +539,19 @@ void Runtime::list_offered_mods() {
         details.badge_height = summary.badge.height;
         details.badge_pixels = std::move(summary.badge.pixels);
         if (!own_mods.empty() && path_from_utf8(path).parent_path() == own_mods)
-            if (const auto backup = mod_install::read_backup(folder);
-                backup && backup->kind == mod_install::FolderKind::mod &&
-                playable(entry_without_case(folder, mod_install::backup_folder_name)
-                             .value_or(folder / std::string(mod_install::backup_folder_name)))) {
-                const auto now = mod_install::read_installed_mod(folder);
+            if (const auto backup = package_install::oamod::read_backup(folder);
+                backup && backup->kind == package_install::FolderKind::package &&
+                playable(
+                    entry_without_case(folder, package_install::backup_folder_name)
+                        .value_or(folder / std::string(package_install::backup_folder_name))
+                )) {
+                const auto now = package_install::oamod::read_installed_mod(folder);
                 const bool same_version = now.version == backup->version;
                 details.roll_back_from =
-                    mod_install::version_label(now.version, now.revision, same_version);
-                details.roll_back_to =
-                    mod_install::version_label(backup->version, backup->revision, same_version);
+                    package_install::oamod::version_label(now.version, now.revision, same_version);
+                details.roll_back_to = package_install::oamod::version_label(
+                    backup->version, backup->revision, same_version
+                );
             }
         state.mod_folders.push_back(path);
         state.mod_names.push_back(std::move(summary.title));
