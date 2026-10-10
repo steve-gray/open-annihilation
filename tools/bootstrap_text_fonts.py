@@ -18,7 +18,8 @@ the one licenses/ holds, and builds:
       pins another FreeType in the same local/deps keeps its own
   local/deps/text-fonts
       the fonts the build copies beside the game: DejaVu Sans Bold and
-      DejaVu Sans 2.37, Noto Sans CJK SC Bold and Noto Emoji
+      DejaVu Sans 2.37, Noto Sans CJK SC Bold, the endonym face cut from
+      it, and Noto Emoji
 
 Noto Sans CJK SC Bold is cut down to the characters of GB 2312, of the
 Table of General Standard Chinese Characters (the 8,105 hanzi of 2013), of
@@ -32,8 +33,23 @@ fontTools that tools/text-fonts/requirements.txt pins, installed in a
 virtual environment of its own (local/deps/fonttools-venv), and must give
 the pinned SHA-256. --full-cjk ships the whole face instead.
 
-A part whose folder records the settings of this run (build-settings.json)
-is not made again. --self-test checks the pins and the character set and
+The endonym face, NotoSansCJKsc-Bold-Endonyms.otf, is that same face cut
+to the characters of tools/text-fonts/endonyms.txt that neither DejaVu
+Sans Bold nor DejaVu Sans holds: the languages' own names and the lines
+of the notice shown before a language pack is installed. It is at most
+64 KiB and its SHA-256 is pinned. Its record is
+local/deps/text-fonts.records.json, beside the fonts folder.
+
+The fonts folder is shared by every version of the engine, so this script
+only adds to it. It makes a font of its own list that is missing or whose
+record differs, writing the file to a temporary name and renaming it into
+place, and it never deletes or rewrites any other file. The four fonts an
+earlier bootstrap made are current when they are present and
+build-settings.json holds their record unchanged. That file is written
+only when this script makes those four, so an earlier bootstrap finds
+them current and leaves the folder alone.
+
+--self-test checks the pins, the character set and the endonym list, and
 downloads nothing. tools/bootstrap_macos_deps.py and
 tools/bootstrap_windows_deps.py build the same FreeType for the release and
 the Windows targets.
@@ -102,9 +118,15 @@ DOWNLOADS = {
 UNIHAN_GENERAL_STANDARD_FILE = "Unihan_OtherMappings.txt"
 # How many characters the Table of General Standard Chinese Characters holds.
 GENERAL_STANDARD_CHARACTERS = 8105
-# The fonts the game ships, in the order the engine falls back through them
-# (oa::platform::text_font::Face).
-FONT_FILES = ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "NotoSansCJKsc-Bold.otf", "NotoEmoji.ttf")
+# The fonts the game ships. The names are the engine's face_files
+# (oa/platform/text_font.hpp). That array follows the Face values, with
+# the endonym face last so the earlier faces keep their values; this tuple
+# lists the endonym face beside the CJK face.
+FONT_FILES = ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "NotoSansCJKsc-Bold.otf",
+              "NotoSansCJKsc-Bold-Endonyms.otf", "NotoEmoji.ttf")
+# The four fonts an earlier bootstrap recorded in build-settings.json.
+LEGACY_FONT_FILES = ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "NotoSansCJKsc-Bold.otf",
+                     "NotoEmoji.ttf")
 # The face of the CJK collection the game ships: Noto Sans CJK SC Bold, whose
 # character map gives the Simplified Chinese forms.
 CJK_FACE_INDEX = 2
@@ -113,6 +135,14 @@ CJK_FACE_NAME = "Noto Sans CJK SC Bold"
 CJK_SUBSET_SHA256 = "1bff16d425a0bc5048fddb7d33d2a59e08647d4a29380a348ccaabcbd89a29f2"
 # How many characters the cut keeps: those of CJK_CHARACTERS the face holds.
 CJK_SUBSET_CHARACTERS = 15309
+# The endonym face: SC Bold cut to tools/text-fonts/endonyms.txt.
+ENDONYM_LIST = ROOT / "tools" / "text-fonts" / "endonyms.txt"
+ENDONYM_FONT = "NotoSansCJKsc-Bold-Endonyms.otf"
+# The SHA-256 and character count of the cut the pinned fontTools makes.
+ENDONYM_SUBSET_SHA256 = "98c6b1f26c100411670f568efab9cd347633ccaf76875725d0b0043a2b05e41d"
+ENDONYM_SUBSET_CHARACTERS = 41
+# The endonym face's record, beside the fonts folder, never inside it.
+ENDONYM_RECORDS = "text-fonts.records.json"
 # Each licence text in licenses/ and the file of a download, or a member of
 # an archive, that must hold the same text.
 LICENCES = {
@@ -257,63 +287,234 @@ def fonttools_python(deps):
     return python
 
 
-def cut_cjk_face(collection, unihan, face, out, full):
-    """Writes one face of the CJK collection to out: whole when full, else cut to cjk_characters(),
-    the general standard characters of the Unihan archive among them.
+def cut_face(collection, face, unicodes, out):
+    """Writes one face of a collection to out, cut to unicodes.
 
-    Runs in the fontTools environment (--cut-cjk-face). Layout tables are
-    dropped, since the engine shapes nothing, and the hinting kept; the
-    font's modification time is left as it was, so the output depends only
-    on its input.
+    Layout tables are dropped, since the engine shapes nothing, and the
+    hinting kept; the font's modification time is left as it was, so the
+    output depends only on its input. The vertical metrics are kept, so a
+    cut of Noto Sans CJK SC Bold has the same rows as the face.
     """
     from fontTools import subset
     from fontTools.ttLib import TTFont
 
     font = TTFont(collection, fontNumber=face, recalcTimestamp=False, lazy=False)
-    if not full:
-        options = subset.Options()
-        options.layout_features = []
-        options.name_IDs = ["*"]
-        options.name_languages = ["*"]
-        options.notdef_outline = True
-        options.recalc_timestamp = False
-        held = font.getBestCmap()
-        kept = [c for c in cjk_characters(general_standard_characters(unihan)) if c in held]
-        if len(kept) != CJK_SUBSET_CHARACTERS:
-            raise RuntimeError(f"the face holds {len(kept)} of the characters, not {CJK_SUBSET_CHARACTERS}")
-        subsetter = subset.Subsetter(options)
-        subsetter.populate(unicodes=kept)
-        subsetter.subset(font)
+    options = subset.Options()
+    options.layout_features = []
+    options.name_IDs = ["*"]
+    options.name_languages = ["*"]
+    options.notdef_outline = True
+    options.recalc_timestamp = False
+    subsetter = subset.Subsetter(options)
+    subsetter.populate(unicodes=list(unicodes))
+    subsetter.subset(font)
     font.save(out)
 
 
-def make_fonts(deps, full_cjk):
-    """Puts the game's fonts in deps/text-fonts unless they are current."""
-    fonts = deps / "text-fonts"
-    wanted = {"downloads": {key: sha256 for key, (_, _, sha256) in DOWNLOADS.items()},
-              "cjk_face": CJK_FACE_INDEX, "full_cjk": full_cjk,
-              "fonttools": FONTTOOLS_REQUIREMENTS.read_text()}
-    if is_current(fonts, FONT_FILES, wanted):
-        return fonts
-    shutil.rmtree(fonts, ignore_errors=True)
-    fonts.mkdir(parents=True)
+def cut_cjk_face(collection, unihan, face, out, full):
+    """Writes one face of the CJK collection to out: whole when full, else cut to cjk_characters(),
+    the general standard characters of the Unihan archive among them.
+
+    Runs in the fontTools environment (--cut-cjk-face).
+    """
+    from fontTools.ttLib import TTFont
+
+    if full:
+        font = TTFont(collection, fontNumber=face, recalcTimestamp=False, lazy=False)
+        font.save(out)
+        return
+    font = TTFont(collection, fontNumber=face, recalcTimestamp=False, lazy=False)
+    held = font.getBestCmap()
+    font.close()
+    kept = [c for c in cjk_characters(general_standard_characters(unihan)) if c in held]
+    if len(kept) != CJK_SUBSET_CHARACTERS:
+        raise RuntimeError(f"the face holds {len(kept)} of the characters, not {CJK_SUBSET_CHARACTERS}")
+    cut_face(collection, face, kept, out)
+
+
+def endonym_lines(path=None):
+    """The strings of the endonym list: comments and blank lines left out.
+
+    The file must be UTF-8 and hold no tab.
+    """
+    path = ENDONYM_LIST if path is None else path
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise RuntimeError(f"{path} is not UTF-8") from error
+    if b"\t" in raw:
+        raise RuntimeError(f"{path} holds a tab")
+    lines = []
+    for line in text.splitlines():
+        if line.startswith("#") or line.strip() == "":
+            continue
+        lines.append(line)
+    return lines
+
+
+def endonym_characters(lines, sans_cmaps, cjk_cmap):
+    """The code points the endonym face keeps, sorted.
+
+    Each non-ASCII character of lines that neither DejaVu Sans Bold nor
+    DejaVu Sans holds. The sans faces come first in the chain, so a
+    character either of them holds needs no place in the cut. A character
+    no face holds is named in the error, every such character in one.
+    """
+    held_by_sans = set()
+    for cmap in sans_cmaps:
+        held_by_sans.update(cmap)
+    missing = []
+    seen = set()
+    kept = set()
+    for line in lines:
+        for character in line:
+            code = ord(character)
+            if code < 128 or code in held_by_sans:
+                continue
+            if code in cjk_cmap:
+                kept.add(code)
+                continue
+            if code not in seen:
+                seen.add(code)
+                missing.append(character)
+    if missing:
+        named = ", ".join(f"U+{ord(character):04X} ({character})" for character in missing)
+        raise RuntimeError(f"no face holds {named}")
+    return sorted(kept)
+
+
+def best_cmap(path, face=0):
+    """The font's best character map, as code point to glyph id."""
+    from fontTools.ttLib import TTFont
+
+    font = TTFont(path, fontNumber=face, recalcTimestamp=False, lazy=False)
+    try:
+        return font.getBestCmap() or {}
+    finally:
+        font.close()
+
+
+def cut_endonym_face(collection, dejavu_bold, dejavu, out):
+    """Writes the endonym face to out, cut from SC Bold of the collection.
+
+    Reads the endonym list, the two sans fonts' character maps and the
+    collection's face 2. Runs where fontTools is installed
+    (--cut-endonym-face).
+    """
+    kept = endonym_characters(endonym_lines(),
+                              (best_cmap(dejavu_bold), best_cmap(dejavu)),
+                              best_cmap(collection, CJK_FACE_INDEX))
+    if len(kept) != ENDONYM_SUBSET_CHARACTERS:
+        raise RuntimeError(f"the endonym face keeps {len(kept)} characters, "
+                           f"not {ENDONYM_SUBSET_CHARACTERS}")
+    cut_face(collection, CJK_FACE_INDEX, kept, out)
+    print(f"{pathlib.Path(out).name}: {len(kept)} characters", flush=True)
+
+
+def write_over(path, data):
+    """Writes data to path by renaming a temporary file over it."""
+    part = path.with_name(path.name + ".part")
+    part.write_bytes(data)
+    part.replace(path)
+
+
+def legacy_settings(full_cjk):
+    """The build-settings.json dictionary the four earlier fonts were recorded with."""
+    return {"downloads": {key: sha256 for key, (_, _, sha256) in DOWNLOADS.items()},
+            "cjk_face": CJK_FACE_INDEX, "full_cjk": full_cjk,
+            "fonttools": FONTTOOLS_REQUIREMENTS.read_text()}
+
+
+def endonym_record():
+    """The endonym face's settings: the collection, fontTools and the list."""
+    return {"collection": DOWNLOADS["noto-cjk"][2],
+            "fonttools": FONTTOOLS_REQUIREMENTS.read_text(),
+            "list": hashlib.sha256(ENDONYM_LIST.read_bytes()).hexdigest()}
+
+
+def read_records(deps):
+    """The font records beside the fonts folder, or none when the file is absent or unreadable."""
+    path = deps / ENDONYM_RECORDS
+    try:
+        found = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def write_records(deps, records):
+    """Writes the font records beside the fonts folder, renaming a temporary file over."""
+    path = deps / ENDONYM_RECORDS
+    part = path.with_name(path.name + ".part")
+    part.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n")
+    part.replace(path)
+
+
+def make_legacy_fonts(deps, fonts, full_cjk):
+    """Makes the four earlier fonts, each renamed into place, and records their settings."""
+    fonts.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(fetch(deps, "dejavu")) as archive:
         for name in ("DejaVuSans-Bold.ttf", "DejaVuSans.ttf"):
-            (fonts / name).write_bytes(archive.read(f"dejavu-fonts-ttf-2.37/ttf/{name}"))
-    shutil.copyfile(fetch(deps, "noto-emoji"), fonts / "NotoEmoji.ttf")
-    cjk = fonts / "NotoSansCJKsc-Bold.otf"
-    print(f"Writing {cjk.name} ({'the whole face' if full_cjk else 'cut to the common characters'})", flush=True)
+            write_over(fonts / name, archive.read(f"dejavu-fonts-ttf-2.37/ttf/{name}"))
+    write_over(fonts / "NotoEmoji.ttf", fetch(deps, "noto-emoji").read_bytes())
+    part = fonts / "NotoSansCJKsc-Bold.otf.part"
+    print(f"Writing NotoSansCJKsc-Bold.otf "
+          f"({'the whole face' if full_cjk else 'cut to the common characters'})", flush=True)
     command = [str(fonttools_python(deps)), str(pathlib.Path(__file__).resolve()), "--cut-cjk-face",
-               str(fetch(deps, "noto-cjk")), str(fetch(deps, "unihan")), str(cjk)]
+               str(fetch(deps, "noto-cjk")), str(fetch(deps, "unihan")), str(part)]
     if full_cjk:
         command.append("--full-cjk")
     subprocess.run(command, check=True)
     if not full_cjk:
-        digest = hashlib.sha256(cjk.read_bytes()).hexdigest()
+        digest = hashlib.sha256(part.read_bytes()).hexdigest()
         if digest != CJK_SUBSET_SHA256:
-            cjk.unlink()
+            part.unlink()
             raise RuntimeError(f"the cut CJK face has SHA-256 {digest}, not the pinned {CJK_SUBSET_SHA256}")
-    record(fonts, wanted)
+    part.replace(fonts / "NotoSansCJKsc-Bold.otf")
+    record(fonts, legacy_settings(full_cjk))
+
+
+def make_endonym_font(deps, fonts):
+    """Makes the endonym face when it is missing or its record differs."""
+    wanted = endonym_record()
+    records = read_records(deps)
+    path = fonts / ENDONYM_FONT
+    if path.is_file() and records.get(ENDONYM_FONT) == wanted:
+        return
+    part = fonts / f"{ENDONYM_FONT}.part"
+    print(f"Writing {ENDONYM_FONT} (cut to the languages' own names and the notice)", flush=True)
+    command = [str(fonttools_python(deps)), str(pathlib.Path(__file__).resolve()), "--cut-endonym-face",
+               str(fetch(deps, "noto-cjk")), str(fonts / "DejaVuSans-Bold.ttf"),
+               str(fonts / "DejaVuSans.ttf"), str(part)]
+    subprocess.run(command, check=True)
+    data = part.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    print(f"  {ENDONYM_FONT}: SHA-256 {digest}, {len(data)} bytes", flush=True)
+    if digest != ENDONYM_SUBSET_SHA256:
+        part.unlink()
+        raise RuntimeError(f"the endonym face has SHA-256 {digest}, not the pinned {ENDONYM_SUBSET_SHA256}")
+    if len(data) > 65536:
+        part.unlink()
+        raise RuntimeError(f"the endonym face is {len(data)} bytes, over 64 KiB")
+    part.replace(path)
+    records[ENDONYM_FONT] = wanted
+    write_records(deps, records)
+
+
+def make_fonts(deps, full_cjk):
+    """Puts the game's fonts in deps/text-fonts, adding a font that is missing or out of date.
+
+    The four earlier fonts are made only when one is missing or
+    build-settings.json differs, and that file is written only then. The
+    endonym face is made when it is missing or its record differs. Nothing
+    else in the folder is deleted or rewritten.
+    """
+    fonts = deps / "text-fonts"
+    fonts.mkdir(parents=True, exist_ok=True)
+    if not is_current(fonts, LEGACY_FONT_FILES, legacy_settings(full_cjk)):
+        make_legacy_fonts(deps, fonts, full_cjk)
+    make_endonym_font(deps, fonts)
     return fonts
 
 
@@ -323,6 +524,7 @@ def self_test():
     pins = [("FreeType", FREETYPE_SHA256, FREETYPE_URL)]
     pins += [(key, sha256, url) for key, (_, url, sha256) in DOWNLOADS.items()]
     pins += [("the CJK cut", CJK_SUBSET_SHA256, "https://")]
+    pins += [("the endonym cut", ENDONYM_SUBSET_SHA256, "https://")]
     for what, sha256, url in pins:
         if not bootstrap_sdl.SHA256_RE.fullmatch(sha256) or not url.startswith("https://"):
             failures.append(f"the pin of {what} is malformed")
@@ -337,6 +539,28 @@ def self_test():
     for sample in ("中", "國", "日本", "한국어", "ア", "，"):
         if any(ord(c) not in characters for c in sample):
             failures.append(f"the CJK character set lacks {sample}")
+    try:
+        raw = ENDONYM_LIST.read_bytes()
+    except OSError:
+        failures.append("the endonym list is missing")
+        raw = b""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        failures.append("the endonym list is not UTF-8")
+        text = ""
+    if b"\t" in raw:
+        failures.append("the endonym list holds a tab")
+    non_ascii = set()
+    for line in text.splitlines():
+        if line.startswith("#") or line.strip() == "":
+            continue
+        for character in line:
+            if ord(character) >= 128:
+                non_ascii.add(ord(character))
+    if len(non_ascii) < ENDONYM_SUBSET_CHARACTERS:
+        failures.append(f"the endonym list holds {len(non_ascii)} non-ASCII characters, "
+                        f"fewer than {ENDONYM_SUBSET_CHARACTERS}")
     for failure in failures:
         print(f"bootstrap_text_fonts self-test: {failure}")
     if failures:
@@ -355,14 +579,20 @@ def main(argv=None):
                         help="ship the whole Noto Sans CJK SC Bold face (16 MB), not the cut")
     parser.add_argument("--fonts-only", action="store_true",
                         help="make the fonts and build no FreeType (for builds that bring their own)")
-    parser.add_argument("--self-test", action="store_true", help="check the pins and the character set, and exit")
+    parser.add_argument("--self-test", action="store_true",
+                        help="check the pins, the character set and the endonym list, and exit")
     parser.add_argument("--cut-cjk-face", nargs=3, metavar=("COLLECTION", "UNIHAN", "OUT"), help=argparse.SUPPRESS)
+    parser.add_argument("--cut-endonym-face", nargs=4,
+                        metavar=("COLLECTION", "DEJAVU_BOLD", "DEJAVU", "OUT"), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
     if args.cut_cjk_face:
         cut_cjk_face(args.cut_cjk_face[0], args.cut_cjk_face[1], CJK_FACE_INDEX, args.cut_cjk_face[2],
                      args.full_cjk)
+        return 0
+    if args.cut_endonym_face:
+        cut_endonym_face(*args.cut_endonym_face)
         return 0
     deps = args.deps.resolve()
     deps.mkdir(parents=True, exist_ok=True)
