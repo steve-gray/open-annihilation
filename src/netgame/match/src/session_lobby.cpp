@@ -117,6 +117,9 @@ void start_session(NetConnection* c, bool hosting, uint32_t local_id, const Play
     c->local_id = local_id;
     packet_layer_start(c->packets, session::session_transport(&c->session));
     c->packets->receiver.players = players;
+    // An OA machine always reads presence records; only OA sends them,
+    // each alone in its frame.
+    c->packets->receiver.presence_records = true;
     // Battle-room traffic is guaranteed.
     (void)session::session_set_guaranteed(&c->session, true);
     c->packets->guaranteed = true;
