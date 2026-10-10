@@ -1,12 +1,14 @@
 # Packages
 
 This module installs packages into a folder of the player's own folder. One
-table of kinds says what differs; today it holds the mod kind, `oamod`. A
-mod package is a zip archive of a mod's folder, the one that holds its
-`oamod.yaml`; it installs into `Mods/<id>`, by the id its profile gives,
-whatever the file is called. The module has no SDL: the game's runtime
-shows what it asks and answers (`src/app/runtime_mod_install.cpp`, and
-"Mod packages" in [src/app](../README.md#mod-packages-oamod)).
+table of kinds says what differs; it holds the mod kind, `oamod`, and the
+map pack kind, `oamap`. A mod package is a zip archive of a mod's folder,
+the one that holds its `oamod.yaml`; it installs into `Mods/<id>`, by the id
+its profile gives, whatever the file is called. A map pack installs into
+`Maps/<id>`. The module has no SDL: the game's runtime shows what it asks
+and answers (`src/app/runtime_mod_install.cpp`,
+"Mod packages" in [src/app](../README.md#mod-packages-oamod) and
+"Map packs" in [src/app](../README.md#map-packs-oamap)).
 
 ## Entry points
 
@@ -53,12 +55,14 @@ running. The folder's name stays `opened-mods`.
 
 ## Kinds
 
-`kKinds` in `src/kinds.cpp` is the table. Today it holds one entry, `oamod`:
-the extension `.oamod`, the manifest `oamod.yaml` (at most 256 KiB), the
-root folder `Mods` and the prefix `.oamod-` on the installer's own folders
-and on the lock. `package_kinds`, `kind_for_file` and `find_kind` read the
-table; `mod_kind` is that entry. A file whose extension is none of them is
-refused as `unknown_kind`, and nothing is read.
+`kKinds` in `src/kinds.cpp` is the table. It holds `oamod`, then `oamap`.
+A mod uses the extension `.oamod`, the manifest `oamod.yaml` (at most
+256 KiB), the root folder `Mods` and the prefix `.oamod-` on the installer's
+own folders and on the lock. A map pack uses `.oamap`, `oamap.yaml` (the
+same limit), the root folder `Maps` and the prefix `.oamap-`.
+`package_kinds`, `kind_for_file` and `find_kind` read the table; `mod_kind`
+is the mod entry. A file whose extension is none of them is refused as
+`unknown_kind`, and nothing is read.
 
 Reading the container, unpacking, the renames, recovery, the lock,
 discarding, the inbox and the hand-off are the same for every kind. They
@@ -89,6 +93,45 @@ A new kind is wired in five places, and nowhere in the generic files:
 
 A kind's own refusals go at the end of `Refusal`, worded by its
 `KindPrompts::refusal_text`.
+
+### Map packs (.oamap)
+
+The hooks are `src/plan_oamap.cpp` and `src/prompts_oamap.cpp`
+(`oa/app/package_install/oamap.hpp`). The shared reading, unpacking and
+renames are the ones above. Before a pack is put in place the kind checks,
+and refuses with every problem named:
+
+- `oamap.yaml` reads in package use. Every diagnostic is kept; the prompt
+  shows the first three and the log has them all.
+- Every file a map lists, and every preview, is in the package. Names match
+  ignoring ASCII case.
+- Every other file is one a map lists. A file outside `maps`, `features`,
+  `anims`, `objects3d` and `previews` is refused as outside those folders,
+  and one inside them that no map lists is refused as unused.
+- A preview is a PNG of at most 2 MiB and at most 1024 pixels on a side.
+- `requires.engine`, when the manifest writes one, is met by this build.
+  The range is read with the shared engine-range rules, and the sentence
+  names the range and this build's version.
+- Every map fits the base game. `check_staged` calls the `FitHooks` that
+  `PackageOptions::context` points to, once per map, and the runtime's hook
+  builds the base store. No hooks, which only a test gives, skips the check.
+  The kind does not build that store itself. A clash with a mod is not a
+  reason to refuse.
+
+A file the player opened asks "Install the map pack {name} {version}
+({n} maps)?" before a new folder is made, and asks to update, reinstall or
+replace as a mod does. Nothing is installed alongside. A catalogue package
+whose target's origin record names the same registry replaces that folder
+with no question and keeps one `.backup`. The same id from another registry
+asks to replace, and the question names both registries. A folder that does
+not hold this pack's `oamap.yaml` is left as it is.
+
+A catalogue map pack also installs when the main menu is not showing, on
+any screen except while a match loads or runs, and it shows no prompt. A
+plan that needs a question goes back to the inbox and is asked on the
+settled main menu. A refusal is reported, with its sentence, and not shown
+off that menu. A file the player opened, of any kind, and a package of
+another kind, still wait for the settled main menu.
 
 ## What a package holds
 
