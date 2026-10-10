@@ -8,7 +8,7 @@
 
 #include "oa/app/game_files_import.hpp"
 #include "oa/ui/game_files.hpp"
-#include "touch_paint.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <SDL3/SDL.h>
 #include <cstddef>
@@ -18,6 +18,12 @@
 #include <vector>
 
 namespace oa::app {
+
+// Named once, whichever app header that draws with the painter is included first.
+#ifndef OA_APP_UI_PAINT
+#define OA_APP_UI_PAINT
+namespace paint = oa::ui::paint;
+#endif
 
 class GameFilesScreen;
 class RendererHost;
@@ -72,7 +78,7 @@ inline constexpr SDL_FingerID game_files_check_finger_id = 1;
 struct GameFilesDialogHooks {
     void* context{}; ///< passed back to every hook
     /// Shows a canvas of the window's render output size on the window, as the screen's frame.
-    void (*present)(void* context, const touch_paint::Canvas& canvas){};
+    void (*present)(void* context, const paint::Canvas& canvas){};
     /// Returns the viewport as it is now: the window may change while the dialog is up.
     oa::ui::game_files::Viewport (*viewport)(void* context){};
     /// Runs after each pass's events while the dialog is up (the check's hook). Null: none.
@@ -81,7 +87,7 @@ struct GameFilesDialogHooks {
 
 /// What the Language dialog over the Game files screen needs.
 struct GameFilesLanguageRequest {
-    const touch_paint::Canvas* under{};          ///< the screen's frame the dialog lies over
+    const paint::Canvas* under{};                ///< the screen's frame the dialog lies over
     oa::platform::text_font::FontStack* fonts{}; ///< the bundled fonts the dialog's text uses
     std::string version{};                       ///< the dialog header's version text
     std::optional<fs::path> preferences_file{};  ///< --preferences-file; empty: the player's own
@@ -137,7 +143,7 @@ class GameFilesScreen {
     /// The canvas last painted (the window's frame).
     ///
     /// @return the canvas
-    [[nodiscard]] const touch_paint::Canvas& canvas() const noexcept;
+    [[nodiscard]] const paint::Canvas& canvas() const noexcept;
     /// The bundled fonts.
     ///
     /// @return the fonts; null when they could not be opened

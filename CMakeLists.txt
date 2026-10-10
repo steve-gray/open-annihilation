@@ -235,6 +235,8 @@ add_subdirectory(src/ui)
 add_subdirectory(src/ui/display-layout)
 # The gamepad controls' model (docs/controllers.md).
 add_subdirectory(src/ui/pad-controls)
+# Anti-aliased painting into an RGBA canvas, and the gamepad's glyphs.
+add_subdirectory(src/ui/paint)
 # The touch controls' gesture recogniser and model (docs/touch-controls.md).
 add_subdirectory(src/ui/touch-gestures)
 add_subdirectory(src/ui/touch-hud)
@@ -437,22 +439,6 @@ add_library(oa-app-acceleration-status src/app/acceleration_status.cpp)
 add_library(oa::app::acceleration_status ALIAS oa-app-acceleration-status)
 target_link_libraries(oa-app-acceleration-status PUBLIC oa-app-headers oa-ui-engine-settings
   oa-app-render-policy PRIVATE oa-options)
-# Painting for the touch controls' layer: RGBA rectangles, the controls'
-# icon marks and their text (touch_paint.hpp, docs/touch-controls.md), and
-# the gamepad's button glyphs (pad_glyphs.hpp, docs/controllers.md).
-add_library(oa-app-touch-paint src/app/touch_paint.cpp src/app/pad_glyphs.cpp)
-add_library(oa::app::touch_paint ALIAS oa-app-touch-paint)
-target_compile_features(oa-app-touch-paint PUBLIC cxx_std_20)
-# The text is drawn with the fonts that travel with the game.
-target_link_libraries(oa-app-touch-paint PUBLIC oa-platform-text-font oa-ui-pad-controls PRIVATE oa-options)
-if(BUILD_TESTING)
-  # Rectangles clipped to the canvas, the icon marks and the text.
-  add_executable(oa-app-touch-paint-test src/app/touch_paint_test.cpp)
-  target_link_libraries(oa-app-touch-paint-test PRIVATE oa-app-touch-paint oa-test-support oa-options)
-  # The text checks read the bundled fonts beside the test, as the game does.
-  oa_copy_text_fonts(oa-app-touch-paint-test "$<TARGET_FILE_DIR:oa-app-touch-paint-test>")
-  add_test(NAME app-touch-paint COMMAND oa-app-touch-paint-test)
-endif()
 if(OA_BUILD_PLATFORM)
   # What the platform the game runs on provides beyond SDL (haptics, the
   # default game folder and its advice, the window's opening, and bringing
@@ -999,7 +985,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-acceleration-status oa-formats-png oa-data-languages oa-formats-oamod oa-platform-locale
   oa-platform-display-modes oa-platform-display-modes-sdl
   oa-app-full-terrain oa-app-full-supersampling oa-app-full-fog oa-app-card-executor
-  oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-app-touch-paint
+  oa-present-gpu-world oa-app-full-models oa-app-platform-hooks oa-ui-paint
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-mod-install
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-ui-frontend-multiplayer)
