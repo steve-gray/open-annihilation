@@ -267,6 +267,7 @@ void check_game_files_options(Options& options) {
         {options.check_map_packs, "--check-map-packs"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
+        {options.check_language_install, "--check-language-install"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
         {options.check_briefing_narration, "--check-briefing-narration"},
@@ -518,6 +519,7 @@ void check_director_options(Options& options) {
         {options.check_map_packs, "--check-map-packs"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
+        {options.check_language_install, "--check-language-install"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
     };
@@ -582,6 +584,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_map_packs, "--check-map-packs"},
             {options.check_mod_warning, "--check-mod-warning"},
             {options.check_mod_install, "--check-mod-install"},
+            {options.check_language_install, "--check-language-install"},
             {options.check_renderer_ladder, "--check-renderer-ladder"},
         };
         for (const auto& [given, name] : checks)
@@ -877,6 +880,8 @@ namespace {
             result.check_mod_warning = true;
         else if (argument == "--check-mod-install")
             result.check_mod_install = true;
+        else if (argument == "--check-language-install")
+            result.check_language_install = true;
         else if (argument == "--open" || argument == "--install-mod")
             result.open_files.push_back(opened_file_path(value(argument)));
         else if (argument == "--check-renderer-ladder")
@@ -1026,7 +1031,7 @@ namespace {
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
                    "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
                    "[--check-mod-warning] "
-                   "[--check-mod-install] "
+                   "[--check-mod-install] [--check-language-install] "
                    "[--check-renderer-ladder [--render-fault POINT[@FRAME]]] "
                    "[--check-briefing-narration] [--check-director-view] "
                    "[--check-director-render] [--check-interpolation] "
@@ -1192,8 +1197,9 @@ namespace {
         result.check_match_dialogs || result.check_load_save || result.check_frontend_controls ||
         result.check_scroll_bars || result.check_engine_settings || result.check_user_folder ||
         result.check_mod_switch || result.check_mod_warning || result.check_mod_install ||
-        result.check_renderer_ladder || result.check_match_orders || result.check_factory_orders ||
-        result.check_unit_speech || result.check_download_builds || result.check_stockpile_builds ||
+        result.check_language_install || result.check_renderer_ladder ||
+        result.check_match_orders || result.check_factory_orders || result.check_unit_speech ||
+        result.check_download_builds || result.check_stockpile_builds ||
         result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||
         !result.check_unit_pages.empty() || result.check_kill_board ||
         !result.check_unit_language.empty() || result.check_language_switch ||

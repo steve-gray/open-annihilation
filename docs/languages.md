@@ -178,6 +178,27 @@ ships. `packaging` records a release of the pack, as a mod's does: a
 `revision` from 1 to 65535, the `date` it was made (`YYYY-MM-DD`) and the
 `packager`, 1 to 128 bytes.
 
+### Installing a language pack
+
+Open, drop, or Open With a `.oalang`. The system registration of that type
+is a separate step; this is the install once the game has the file. The
+pack goes in the player's folder, `Documents/Open Annihilation/Languages/<tag>`,
+named by the tag in `language.yaml`. A file the player opened asks before
+anything is written: Install for a language that is not there, Replace for
+another version or for a folder that is not this pack, and Reinstall for
+the same version and revision. The old folder is kept as `.backup` on a
+replace. Install alongside is not offered. `requires.engine` must be a
+range this build meets; the question that refuses names the range and this
+version. Quote a requirement that starts with `>`.
+
+When the pack is the language chosen, including a choice that read as
+System default until the pack was installed, the running game switches to
+it at once. The registry, the interface catalogue, the pack layers and the
+font faces are read again; the game does not ask for a restart. A pack from
+a catalogue asks nothing and shows nothing. It installs while Settings or a
+notice show, and in a run nobody watches, and it does not install while a
+match loads or runs.
+
 The tables are UTF-8 TDF files, each starting with its licence in `//`
 comments. TDF has no escapes, so a value never holds `;`: write the
 full-width `；`.

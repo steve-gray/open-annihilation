@@ -10,8 +10,9 @@
 # change waiting for its run to end; the prompts' texts; and the hand-off
 # of a second start's packages to the copy already running. No SDL.
 add_library(oa-app-package-install src/package.cpp src/names.cpp src/plan_oamod.cpp src/plan_oamap.cpp
-  src/change.cpp src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp src/handoff.cpp
-  src/kinds.cpp src/prompts_oamod.cpp src/prompts_oamap.cpp src/origin.cpp)
+  src/plan_oalang.cpp src/change.cpp src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp
+  src/handoff.cpp src/kinds.cpp src/prompts_oamod.cpp src/prompts_oamap.cpp src/prompts_oalang.cpp
+  src/origin.cpp)
 add_library(oa::app::package_install ALIAS oa-app-package-install)
 target_include_directories(oa-app-package-install PUBLIC include)
 target_compile_features(oa-app-package-install PUBLIC cxx_std_20)
@@ -19,8 +20,10 @@ target_link_libraries(oa-app-package-install PUBLIC oa-formats-zip oa-formats-hp
   oa-data-map-pack oa-data-map-fit oa-platform-preferences oa-ui-engine-settings oa-base-sha256
   PRIVATE oa-formats-oamod oa-formats-png oa-data-languages oa-data-registry oa-app-mod-profile
   oa-app-user-folder oa-app-game-directory oa-ui-game-files oa-platform-shims oa-platform-file-types
-  oa-base-threads oa-options)
+  oa-platform-text-font oa-base-threads oa-options)
 set_property(SOURCE src/plan_oamap.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+  "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
+set_property(SOURCE src/plan_oalang.cpp APPEND PROPERTY COMPILE_DEFINITIONS
   "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
@@ -76,4 +79,18 @@ if(BUILD_TESTING)
     ZLIB::ZLIB oa-test-support oa-options)
   add_test(NAME app-package-install-oamap COMMAND oa-app-package-install-oamap-test)
   set_tests_properties(app-package-install-oamap PROPERTIES TIMEOUT 30)
+  # A language pack: its manifest, the engine it needs, its tables, fonts and
+  # warm-up, a question, a replace that keeps .backup, and a font that does
+  # not open after unpacking.
+  add_executable(oa-app-package-install-oalang-test tests/oalang_test.cpp)
+  target_link_libraries(oa-app-package-install-oalang-test PRIVATE oa-app-package-install
+    oa-formats-zip oa-data-languages oa-platform-text-font oa-base-sha256 ZLIB::ZLIB
+    oa-test-support oa-options)
+  oa_copy_text_fonts(oa-app-package-install-oalang-test
+    "$<TARGET_FILE_DIR:oa-app-package-install-oalang-test>")
+  get_filename_component(oa_pseudo_pack
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../data/languages/tests/pseudo-pack" ABSOLUTE)
+  add_test(NAME app-package-install-oalang COMMAND oa-app-package-install-oalang-test
+    "${oa_pseudo_pack}")
+  set_tests_properties(app-package-install-oalang PROPERTIES TIMEOUT 60)
 endif()

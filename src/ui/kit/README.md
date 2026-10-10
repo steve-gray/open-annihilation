@@ -18,6 +18,8 @@ until then.
 - `looks.hpp`: how a control looks. A look owns its texts.
 - `components.hpp`: the controls, drawn on a crisp-backend canvas. One
   button, five looks. `paint` draws a display list.
+- `chrome.hpp`: the window's face and edge, its header and footer band,
+  the nav list, and a section's heading, row, rule and locked fade.
 
 ## State
 
@@ -30,8 +32,9 @@ pointer's place and the wheel's fraction in.
 - Every token's value is pinned by `ui-kit-theme`.
 - One wrap. Its rules are the only differences between its callers.
 - The kit never looks text up in the interface catalogue. Callers pass what
-  to show. A button's caption, a switch's OFF and ON, a strip's captions and
-  a menu's items arrive already looked up.
+  to show. A button's caption, a switch's OFF and ON, a strip's captions, a
+  menu's items, a header's words, a nav entry and a row's label and hints
+  arrive already looked up.
 - One button, five looks: accent, plain, quiet, inset, and plain while
   disabled. The kit chooses every colour. A caller passes the style and
   whether the pointer is over the button or holds it.
@@ -61,6 +64,8 @@ window sizes, arrangements, the scroll arithmetic and hit testing.
 `ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys, the
 wheel's fractions and the names. `ui-kit-components` checks each control's
 pixels, that `paint` matches a direct draw, and the controls' geometry.
+`ui-kit-chrome` checks the header, the footer band, the nav list, a row's
+frame and the locked fade, and that `paint` matches those direct draws.
 
 ## Limitations
 

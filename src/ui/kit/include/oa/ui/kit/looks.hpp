@@ -9,6 +9,7 @@
 #pragma once
 
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/theme.hpp"
 
 #include <cstddef>
@@ -133,7 +134,8 @@ struct FocusRingLook {
 };
 
 /// What a component item draws. Empty for a generic role. Later components
-/// append looks.
+/// append looks. A locked fade has no look of its own: its rectangle is the
+/// item's.
 using Look = std::variant<
     std::monostate,
     ButtonLook,
@@ -146,6 +148,11 @@ using Look = std::variant<
     ScrollBarLook,
     MarkLook,
     OaButtonLook,
-    FocusRingLook>;
+    FocusRingLook,
+    HeaderLook,
+    FooterBandLook,
+    NavLook,
+    HeadingLook,
+    RowFrame>;
 
 } // namespace oa::ui::kit

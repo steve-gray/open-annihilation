@@ -120,6 +120,16 @@ A mod whose profile names a registry root of its own keeps the game's
 instead, as the mod keeps them under its own registry key, and its first run
 seeds the values its profile names there.
 
+`open-annihilation.install-id.<registry id>` holds that registry's install
+ID: 32 lower-case hexadecimal digits in groups of 8, 4, 4, 4 and 12, such
+as `7f3a90d2-4c18-4b0e-9a77-1d6e5ab0c91e`. It is a random 128-bit value, a
+different one for each registry, so no two registries can tell that they
+serve the same player. It is made the first time a download from that
+registry needs one, not when the game starts, and it is sent only with
+download requests. The value `off` turns that registry's ID off: the ID
+that was stored is gone, and none is made while the key says `off`.
+Absent, or any other text, means none has been made yet.
+
 The Open Annihilation settings (`oa/ui/engine_settings.hpp`) keep these keys,
 written when the player changes a setting and erased again by the settings
 dialog's Restore defaults. Values are decimal, but for the screen size's; a
@@ -155,6 +165,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.text-background` | 0 or 1 | 0 |
 | `open-annihilation.text-size` | percent of the game fonts' sizes, 50 to 300 | 80 |
 | `open-annihilation.language` | `system`, or a language's BCP-47 tag (`en`, `de`, `es`, `fr`, `it`) | `system` with the player's own file, else `en` |
+| `open-annihilation.content-updates` | `automatically`, `library` (only when the Library opens) or `never`; any other text reads as `automatically` | `automatically` |
 
 The settings dialog's Select groups without Alt is the game's own
 `Total Annihilation|SwitchAlt`, which `+switchalt` also sets. `+stats`

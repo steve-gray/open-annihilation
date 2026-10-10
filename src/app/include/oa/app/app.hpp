@@ -576,6 +576,10 @@ struct Options {
     // the Mods page, and replaces and rolls back the mod played across soft
     // restarts, checking the player's Mods folder after each.
     bool check_mod_install = false;
+    // Installs the pseudo language pack from a dropped file, declines
+    // installing it again, then installs a catalogue revision while Settings
+    // stay open and no prompt shows.
+    bool check_language_install = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

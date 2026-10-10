@@ -3,11 +3,14 @@
 
 // check: the installer's own reading of a package, then the facts a
 // catalogue lists, as text or as one JSON object. The file is hashed in
-// pieces. Nothing here decides a package is installable except open_package.
+// pieces. A map pack is also checked against the game and the mods named
+// for the run. Nothing else here decides a package is installable except
+// open_package.
 
 #include "check.hpp"
 
 #include "arguments.hpp"
+#include "check_map.hpp"
 #include "command.hpp"
 
 #include "oa/app/package_install/oamod.hpp"
@@ -25,6 +28,7 @@
 #include <optional>
 #include <ostream>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -536,12 +540,57 @@ void report_usage(Output& output, std::string_view problem) {
     output.err << "run 'oa-tool help check'\n";
 }
 
+/// Tells whether one `--mod` value names a folder, and a key when it has `=`.
+///
+/// The split is the last `=`. A value with no `=` is a folder. An empty
+/// folder, or an empty key after that `=`, is not a target.
+///
+/// @param text the option's value
+/// @return true when the folder is not empty, and the key is not empty if `=` was written
+bool mod_value_ok(std::string_view text) {
+    const auto split = text.rfind('=');
+    if (split == std::string_view::npos)
+        return !text.empty();
+    return split != 0 && split + 1 < text.size();
+}
+
+/// Splits one `--mod` value into a folder and an optional key.
+///
+/// @param text a value mod_value_ok accepted
+/// @return the folder, and the key after the last `=`; the key is empty when there is no `=`
+MapTarget mod_target(std::string_view text) {
+    const auto split = text.rfind('=');
+    if (split == std::string_view::npos)
+        return MapTarget{path_of(text), {}};
+    return MapTarget{path_of(text.substr(0, split)), std::string(text.substr(split + 1))};
+}
+
+/// Copies an object's members onto a writer, in the object's order.
+///
+/// @param[in,out] writer the object the members are written into
+/// @param text a JSON object
+void copy_object_members(json::JsonWriter& writer, std::string_view text) {
+    json::JsonError error{};
+    const std::optional<json::Json> parsed = json::parse_json(text, error);
+    if (!parsed || parsed->type() != json::JsonType::object)
+        return;
+    const std::span<const std::string> names = parsed->names();
+    const std::span<const json::Json> values = parsed->values();
+    const std::size_t count = names.size() < values.size() ? names.size() : values.size();
+    for (std::size_t index = 0; index < count; ++index) {
+        writer.key(names[index]);
+        write_json_value(writer, values[index]);
+    }
+}
+
 /// Writes the report and returns the exit code.
 ///
 /// @param file the package's path
 /// @param hashed the file's size and SHA-256; nothing when it could not be read
 /// @param opened what open_package returned
 /// @param as_json print one JSON object
+/// @param map_request the game and the mods a map pack is checked against; null
+///        when the file is not an accepted map pack
 /// @param[in,out] output receives the report
 /// @return exit_done when there is no problem, otherwise exit_failed
 int report(
@@ -549,6 +598,7 @@ int report(
     const std::optional<FileHash>& hashed,
     const install::PackageResult& opened,
     bool as_json,
+    const MapCheckRequest* map_request,
     Output& output
 ) {
     const install::PackageKind* kind = install::kind_for_file(file);
@@ -571,6 +621,33 @@ int report(
     const bool oalang = package != nullptr && kind != nullptr && kind->name == "oalang";
     if (oalang)
         language = read_language(read_packaged_manifest(*package));
+
+    // A map pack's facts and its fit are known before ok is written. Text
+    // keeps the fit lines out of the object, so they are not printed as facts.
+    json::JsonWriter facts;
+    std::string fit_lines;
+    const bool oamap = package != nullptr && kind != nullptr && kind->name == "oamap";
+    if (oamap) {
+        facts.begin_object();
+        const std::vector<uint8_t> manifest = read_packaged_manifest(*package);
+        std::ostringstream discarded;
+        Output describe_output{discarded, output.err};
+        const bool described = describe_oamap(manifest, &facts, describe_output, problems);
+        if (described && map_request != nullptr) {
+            if (as_json) {
+                Output fit_output{discarded, output.err};
+                const bool fitted = check_map_fit(*map_request, &facts, fit_output, problems);
+                static_cast<void>(fitted);
+            } else {
+                std::ostringstream lines;
+                Output fit_output{lines, output.err};
+                const bool fitted = check_map_fit(*map_request, nullptr, fit_output, problems);
+                static_cast<void>(fitted);
+                fit_lines = lines.str();
+            }
+        }
+        facts.end_object();
+    }
 
     json::JsonWriter writer;
     writer.begin_object();
@@ -609,6 +686,8 @@ int report(
             describe_oamod(*package, writer);
         else if (oalang && language.read)
             write_oalang_language(language, writer);
+        else if (oamap)
+            copy_object_members(writer, facts.text());
     }
     writer.end_object();
 
@@ -621,6 +700,8 @@ int report(
             output.out << writer.text() << '\n';
         else
             print_fact(output.out, {}, *parsed);
+        if (!fit_lines.empty())
+            output.out << fit_lines;
         output.out << "result: " << (problems.empty() ? "ok" : "refused") << '\n';
     }
     return problems.empty() ? exit_done : exit_failed;
@@ -685,6 +766,7 @@ void describe_oalang(std::span<const uint8_t> manifest, json::JsonWriter& writer
 int run_check(std::span<const std::string> arguments, Output& output) {
     static constexpr OptionSpec options[] = {
         {"game-dir", true, false},
+        {"mod", true, true},
         {"accept-unimplemented-hacks", false, false},
         {"json", false, false},
     };
@@ -705,6 +787,17 @@ int run_check(std::span<const std::string> arguments, Output& output) {
         report_usage(output, "option '--game-dir' needs a value");
         return exit_usage;
     }
+    const auto mods = parsed->values.find("mod");
+    if (mods != parsed->values.end()) {
+        for (const std::string& text : mods->second) {
+            if (!mod_value_ok(text)) {
+                report_usage(
+                    output, "option '--mod' needs a folder, and a key after '=' when '=' is written"
+                );
+                return exit_usage;
+            }
+        }
+    }
 
     const fs::path file = path_of(parsed->positional[0]);
     const std::optional<FileHash> hashed = hash_file(file);
@@ -714,7 +807,36 @@ int run_check(std::span<const std::string> arguments, Output& output) {
     if (game_dir != nullptr)
         package_options.game_folder = path_of(*game_dir);
     const install::PackageResult opened = install::open_package(file, package_options);
-    return report(file, hashed, opened, parsed->flags.contains("json"), output);
+
+    const install::Package* package = opened.package ? &*opened.package : nullptr;
+    const install::PackageKind* kind = install::kind_for_file(file);
+    if (package != nullptr && package->kind != nullptr)
+        kind = package->kind;
+    const bool accepted_map = package != nullptr && kind != nullptr && kind->name == "oamap";
+    if (accepted_map && game_dir == nullptr) {
+        report_usage(output, "option '--game-dir' is required for a map pack");
+        return exit_usage;
+    }
+    std::optional<MapCheckRequest> map_request;
+    if (accepted_map) {
+        MapCheckRequest request;
+        request.pack = file;
+        request.game_dir = path_of(*game_dir);
+        if (mods != parsed->values.end()) {
+            request.mods.reserve(mods->second.size());
+            for (const std::string& text : mods->second)
+                request.mods.push_back(mod_target(text));
+        }
+        map_request = std::move(request);
+    }
+    return report(
+        file,
+        hashed,
+        opened,
+        parsed->flags.contains("json"),
+        map_request ? &*map_request : nullptr,
+        output
+    );
 }
 
 } // namespace oa::tool

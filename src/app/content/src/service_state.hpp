@@ -41,6 +41,23 @@ struct RegistryRecord {
     bool refreshing = false;
     bool refresh_failed = false;
     std::string last_error{};
+    bool retired = false; ///< removed from the list; the slot stays so a refresh keeps its index
+};
+
+/// One registry or mirror check kept until the player adds it or the service stops.
+struct StoredCheck {
+    uint64_t request = 0; ///< the id returned to the caller
+    bool done = false;    ///< true once the worker has stored the outcome
+    bool used = false;    ///< true once an add consumed this check
+    bool mirror = false;  ///< true when check_mirror queued it
+    bool expired = false; ///< the catalogue is past expires; it was still usable
+    RegistryCheck result{};
+    std::vector<uint8_t> catalogue_bytes{}; ///< the exact bytes the check accepted
+    std::vector<uint8_t> signature{};       ///< the signature file; empty when there was none
+    base::sha256::Digest digest{};          ///< the SHA-256 of the catalogue bytes
+    bool have_digest = false;               ///< true when digest was computed
+    std::optional<formats::url::Url> served_from{}; ///< the catalogue address that verified
+    formats::url::Url mirror_url{};                 ///< the mirror, when this check is one
 };
 
 /// A refresh or a posted job, in the order it was queued.
@@ -77,6 +94,8 @@ struct ServiceState {
     std::vector<RefreshListener> listeners{};
     std::shared_ptr<const Snapshot> snapshot{};
     uint64_t generation = 0;
+    uint64_t next_check = 0;           ///< the last request id handed out
+    std::vector<StoredCheck> checks{}; ///< checks, including ones still running
 };
 
 /// Returns the clock the service was given, or the system clock.
@@ -125,8 +144,21 @@ void log_line(const ServiceState& state, std::string_view line);
 
 /// Publishes a new snapshot. The caller holds the service's mutex.
 ///
+/// A registry that has been removed is left out.
+///
 /// @param state the service
 void publish(ServiceState& state);
+
+/// Queues one registry when the rules say so. The caller holds the mutex.
+///
+/// A removed registry is not queued.
+///
+/// @param state the service
+/// @param index the registry
+/// @param reason why the refresh was asked for
+/// @param now the clock, seconds since 1970
+/// @return true when a refresh was queued
+bool queue_refresh(ServiceState& state, std::size_t index, RefreshReason reason, int64_t now);
 
 /// Reads one registry's cache into the record when the cached bytes are usable.
 ///
@@ -185,5 +217,11 @@ void clear_refreshing(ServiceState& state, std::size_t index, bool publish_chang
 ///
 /// @param argument the service state
 void worker_entry(void* argument);
+
+/// The service object's state. Defined here so each part of the service can
+/// reach the lock, the registries and the cache.
+struct Service::Impl : ServiceState {
+    using ServiceState::ServiceState;
+};
 
 } // namespace oa::app::content
