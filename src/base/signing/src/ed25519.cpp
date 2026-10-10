@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Standard Ed25519 (RFC 8032, SHA-512) over Monocypher's crypto_ed25519
-// functions, and the text form of a key, a signature and a fingerprint.
+// Standard Ed25519 (RFC 8032, SHA-512) over Monocypher's
+// crypto_ed25519_check, crypto_ed25519_sign and crypto_ed25519_key_pair,
+// and the text form of a key, a signature and a fingerprint.
 #include "oa/base/signing/ed25519.hpp"
 
 #include "base64.hpp"
