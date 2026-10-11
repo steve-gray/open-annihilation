@@ -36,12 +36,11 @@
 // buttons, the Switch Mod question by pointer and keys, ROLL BACK on a row
 // whose folder keeps an earlier version and its question, the locks during
 // a game and by the command line, and OPEN MODS FOLDER. The names the
-// automation endpoint lists every control and part by, on every section,
-// at each size class.
-// At Regular and Large: every section inside the dialog with its parts
-// apart, hints kept to their lines, Graphics showing more whole rows, the
-// footer's buttons at their Compact sizes, and each control pressed where it
-// is drawn.
+// automation endpoint lists every control and part by, on every section.
+// Those names at each size class, and at Regular and Large: every section
+// inside the dialog with its parts apart, hints kept to their lines,
+// Graphics showing more whole rows, the footer's buttons at their Compact
+// sizes, and each control pressed where it is drawn.
 // With --data, its fonts from the installed game and every text fitting its
 // place.
 
