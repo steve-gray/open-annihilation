@@ -276,7 +276,8 @@ bool designed_name(const std::string& name) {
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
         "+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
-        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
+        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|uninstall|open-folder|"
+        "homepage)|"
         "details|back|settings|close|status|queue|note|from|rules|"
         "active\\.(mod|language|map\\.[1-9][0-9]*))"
     );
@@ -424,6 +425,8 @@ std::string_view word_of(lib::Action action) {
         return "roll-back";
     case lib::Action::play_now:
         return "play-now";
+    case lib::Action::uninstall:
+        return "uninstall";
     case lib::Action::open_folder:
         return "open-folder";
     case lib::Action::homepage:
@@ -461,7 +464,7 @@ void check_frame(const fixture::NamedFrame& named) {
     if (ridge == nullptr)
         return;
     const std::vector<lib::ActionButton> actions = lib::entry_actions(library, *ridge);
-    OA_CHECK(actions.size() == 5);
+    OA_CHECK(actions.size() == 6);
     if (!compact) {
         for (const lib::ActionButton& action : actions)
             OA_CHECK(
@@ -907,6 +910,7 @@ void tab_follows_the_declared_order() {
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
+        "library.action.uninstall",
         "library.action.open-folder",
         "library.action.homepage",
         "library.settings",

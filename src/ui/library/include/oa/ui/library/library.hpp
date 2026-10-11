@@ -109,9 +109,12 @@ struct Installed {
     int64_t release{};                           ///< the release it matched; 0 for the player's own
     std::optional<base::sha256::Digest> rules{}; ///< a mod's rules hash, when it resolves
     bool playing{};                              ///< the mod being played
-    std::optional<Kept> kept{};                  ///< the copy ROLL BACK restores
-    std::optional<Badge> badge{};                ///< the badge, when the app has it
-    std::string author{}; ///< the manifest's author's name; empty when it names none
+    /// A language pack the game shows its words from now: the language
+    /// chosen's, or one of its fallbacks'. False for every other kind.
+    bool in_use{};
+    std::optional<Kept> kept{};   ///< the copy ROLL BACK restores
+    std::optional<Badge> badge{}; ///< the badge, when the app has it
+    std::string author{};         ///< the manifest's author's name; empty when it names none
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -537,6 +540,9 @@ enum class Action : uint8_t {
     back,
     settings,
     close,
+    /// An installed package's: asks first, then removes its folder and the
+    /// copy ROLL BACK keeps (uninstall.hpp).
+    uninstall,
 };
 
 /// One button of an entry's details.
@@ -550,8 +556,9 @@ struct ActionButton {
 ///
 /// GET or UPDATE first, or CANCEL while it is queued, or RETRY when its
 /// download failed and can be tried again; then PLAY NOW for an installed mod
-/// that is not being played, ROLL BACK when a copy is kept, OPEN FOLDER when
-/// installed, and HOMEPAGE when the listing has one.
+/// that is not being played, ROLL BACK when a copy is kept, UNINSTALL and
+/// OPEN FOLDER when installed, and HOMEPAGE when the listing has one.
+/// UNINSTALL is off while uninstall_off_reason gives a reason.
 ///
 /// @param library the Library
 /// @param entry one of its entries
