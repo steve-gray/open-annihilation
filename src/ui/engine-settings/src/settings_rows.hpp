@@ -47,9 +47,9 @@ inline constexpr oa::ui::kit::ActionId manage_game_files_action = 0;
 /// in FolderButton's order.
 inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
 /// What MORE IN THE LIBRARY…, Language's link, asks for: the Library on
-/// Languages. It follows Your files' buttons.
-inline constexpr oa::ui::kit::ActionId open_library_action =
-    first_folder_action + static_cast<oa::ui::kit::ActionId>(folder_button_count);
+/// Languages. It follows Your files' buttons and Downloads' RESET and EMPTY
+/// (downloads_page.hpp).
+inline constexpr oa::ui::kit::ActionId open_library_action = 6;
 
 /// Returns a setting's row spec.
 ///
