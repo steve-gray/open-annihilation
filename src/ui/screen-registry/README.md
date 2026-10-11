@@ -39,8 +39,10 @@ application owns them.
 
 ## Invariants
 
-- A refused registration leaves the tables as they were and sets `rejected`
-  to the reason. A taken one clears `rejected`.
+- A refused registration leaves the tables as they were. The first one a
+  registry refuses sets its `rejected`, and a later registration, taken or
+  refused, leaves it as it is, so that the application can stop the start
+  on any refusal once the registrations are in.
 - A page id and a screen name are dotted words of a to z, 0 to 9 and
   hyphens, at most 48 bytes. A page id is none of the engine's section
   words, including `registered`.

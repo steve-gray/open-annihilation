@@ -20,7 +20,8 @@
 // before it. When several extensions fill a hook, the combined table calls
 // them by these rules:
 // - every extension, in list order: check_options, startup,
-//   register_screens, ready, check_multiplayer_menu, frame, match_game,
+//   register_screens, register_settings_pages, ready,
+//   check_multiplayer_menu, frame, match_game,
 //   match_event, check_console, draw_loading, draw_match_hud,
 //   draw_match_overlay, pause_changed, load_progress, speed_changed and
 //   app_mode_set; also message_hooks, console_host and team_panel_host,
@@ -103,6 +104,10 @@
 // docs/development/conventions.md states this rule for the extension table
 // beside the rules of each layer.
 #pragma once
+
+#include "oa/ui/kit/looks.hpp"
+#include "oa/ui/kit/text.hpp"
+#include "oa/ui/screen_registry/kit.hpp"
 
 #include <array>
 #include <cstddef>
@@ -511,6 +516,23 @@ struct Extension {
     /// @param[in,out] registry the runtime's registry; the state a
     ///        registration names must live as long as the runtime
     void (*register_screens)(void* context, ScreenRegistry* registry){};
+
+    /// Registers the extension's Settings pages.
+    ///
+    /// Called once while each runtime is built, right after register_screens.
+    /// Each page the extension takes into the registry
+    /// (settings_page_register) is listed in Settings' nav after the
+    /// engine's own sections, under a divider with its owner's name, and is
+    /// drawn, scaled, focused, saved and restored to its defaults as the
+    /// engine's own pages are. A page the registry refuses stops the start
+    /// once this hook returns, with "settings page registration rejected:
+    /// <reason>".
+    ///
+    /// @param context Extension::context
+    /// @param[in,out] registry the runtime's Settings pages; it lives as long
+    ///        as the runtime, and so must the rows of every page taken and
+    ///        what each page's state names
+    void (*register_settings_pages)(void* context, SettingsRegistry* registry){};
 
     /// Finishes the extension's start once every screen exists.
     ///

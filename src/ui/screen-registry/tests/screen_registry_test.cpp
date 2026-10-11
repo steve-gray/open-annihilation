@@ -109,6 +109,15 @@ void test_kit_registrations() {
     static const kit::PreferenceRow choice =
         kit::preference_choice("mode", "Mode", "check.mode", "quiet", choice_ids, choice_captions);
 
+    // The reason an empty registry gives for refusing a page; empty when it
+    // takes the page or gives none.
+    const auto refusal = [](const SettingsPageDesc& refused) -> std::string {
+        SettingsRegistry fresh{};
+        if (settings_page_register(&fresh, refused) != 0 || fresh.rejected == nullptr)
+            return {};
+        return fresh.rejected;
+    };
+
     SettingsRegistry registry{};
     SettingsPageDesc page{};
     page.id = "check.page";
@@ -130,46 +139,39 @@ void test_kit_registrations() {
     );
     expect(registry.page_count == 1, "a rejected page takes no entry");
 
+    page.rows = &choice;
+    page.id = "choice.page";
+    expect(settings_page_register(&registry, page) == 1, "a choice page is taken");
+    expect(
+        registry.rejected != nullptr && std::strcmp(registry.rejected, "a page id is taken") == 0,
+        "a page taken after a refusal keeps the first refusal"
+    );
+    page.rows = rows;
+
     page.id = "Developer";
-    expect(settings_page_register(&registry, page) == 0, "a bad id is rejected");
-    expect(registry.rejected != nullptr, "rejected names the bad id");
+    expect(refusal(page) == "an id is malformed", "a bad id is rejected");
 
     page.id = "developer";
-    expect(settings_page_register(&registry, page) == 0, "an engine section word is rejected");
-    expect(
-        registry.rejected != nullptr &&
-            std::strcmp(registry.rejected, "a page id is an engine section") == 0,
-        "rejected names the engine section"
-    );
+    expect(refusal(page) == "a page id is an engine section", "an engine section word is rejected");
 
     page.id = "registered";
-    expect(settings_page_register(&registry, page) == 0, "the registered word is rejected");
+    expect(refusal(page) == "a page id is an engine section", "the registered word is rejected");
 
     static const kit::PreferenceRow engine_key =
         kit::preference_toggle("toggle", "Toggle", "open-annihilation.language", "1");
     page.id = "other.page";
     page.rows = &engine_key;
     page.row_count = 1;
-    expect(settings_page_register(&registry, page) == 0, "an engine key is rejected");
-    expect(registry.rejected != nullptr, "rejected names the engine key");
+    expect(!refusal(page).empty(), "an engine key is rejected");
 
     static const kit::PreferenceRow pipe_key =
         kit::preference_toggle("toggle", "Toggle", "section|key", "1");
     page.rows = &pipe_key;
-    expect(settings_page_register(&registry, page) == 0, "a section|key key is rejected");
-    expect(registry.rejected != nullptr, "rejected names the malformed key");
+    expect(!refusal(page).empty(), "a section|key key is rejected");
 
     static const kit::PreferenceRow unbound = kit::preference_toggle("toggle", "Toggle", "", "1");
     page.rows = &unbound;
-    expect(settings_page_register(&registry, page) == 0, "a row with no binding is rejected");
-    expect(
-        registry.rejected != nullptr && std::strcmp(registry.rejected, "a row has no binding") == 0,
-        "rejected names the missing binding"
-    );
-
-    page.rows = &choice;
-    page.id = "choice.page";
-    expect(settings_page_register(&registry, page) == 1, "a choice page is taken");
+    expect(refusal(page) == "a row has no binding", "a row with no binding is rejected");
 
     SettingsRegistry full{};
     page.rows = rows;

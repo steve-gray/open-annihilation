@@ -71,8 +71,8 @@ HOOK_RE = re.compile(r"\(\*(\w+)\)\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\s*
 
 # Every hook of src/app/include/oa/app/extension.hpp, as the recorder names them.
 HOOKS = [
-    "take_option", "check_options", "switch_handler", "text", "startup", "register_screens", "ready",
-    "frontend_entry", "frontend_states", "run_mode", "start_scene", "shutdown", "select_multiplayer",
+    "take_option", "check_options", "switch_handler", "text", "startup", "register_screens",
+    "register_settings_pages", "ready", "frontend_entry", "frontend_states", "run_mode", "start_scene", "shutdown", "select_multiplayer",
     "frontend_game", "keep_stored_password", "check_multiplayer_menu", "state", "frame",
     "simulation_step", "outcome_ready", "match_game", "match_event", "disconnect_text",
     "give_resources", "message_hooks", "player_gone", "console_host", "check_console", "draw_loading",
@@ -144,7 +144,8 @@ RUNS = {
     "game": [
         Run("headless-skirmish",
             ["--game-dir", "{game}", "--skip-intro", "--mute", "--headless-check", "--match-ticks", "60"],
-            ["startup", "runtime_member", "register_screens", "ready", "frontend_entry", "run_mode start",
+            ["startup", "runtime_member", "register_screens", "register_settings_pages", "ready",
+             "frontend_entry", "run_mode start",
              "run_mode headless_first", "run_mode headless", "match_game", "match_event torn_down",
              "draw_loading", "draw_match_hud", "draw_match_overlay", "state", "load_progress",
              "team_panel_host", "return_label", "keep_stored_password", "release_runtime",

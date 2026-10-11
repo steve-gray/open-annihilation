@@ -8,6 +8,7 @@
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/mod_profile.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend/main_menu.hpp"
@@ -703,6 +704,14 @@ void Runtime::register_screens() {
         screens_.overlays, screens_.overlays + screens_.overlay_count
     );
     call_hook_or_raise<&Extension::register_screens>(extension_, &screens_);
+    // Then the extensions' Settings pages, which Settings lists after the
+    // engine's own sections. A page the registry refused stops the start.
+    SettingsRegistry& pages = oa_layer().registered_settings();
+    call_hook_or_raise<&Extension::register_settings_pages>(extension_, &pages);
+    if (pages.rejected != nullptr)
+        throw std::runtime_error(
+            std::string("settings page registration rejected: ") + pages.rejected
+        );
     extension_overlays_.clear();
     for (uint32_t index = 0; index < screens_.overlay_count; ++index)
         if (!holds_overlay(built_in, screens_.overlays[index]))

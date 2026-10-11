@@ -123,8 +123,11 @@ const char* rows_problem(const SettingsPageDesc& page) noexcept {
 int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& page) {
     if (registry == nullptr)
         return 0;
+    // The first refusal is kept, as ScreenRegistry keeps its first, so that
+    // a page taken after it does not hide it.
     const auto refuse = [registry](const char* reason) {
-        registry->rejected = reason;
+        if (registry->rejected == nullptr)
+            registry->rejected = reason;
         return 0;
     };
     if (registry->page_count >= kMaxSettingsPages)
@@ -153,7 +156,6 @@ int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& p
     stored.owner = registry->owners[index].c_str();
     registry->pages[index] = stored;
     ++registry->page_count;
-    registry->rejected = nullptr;
     return 1;
 }
 

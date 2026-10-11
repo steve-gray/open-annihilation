@@ -51,7 +51,8 @@ struct SettingsRegistry {
     SettingsPageDesc pages[kMaxSettingsPages]{};
     /// How many pages were taken.
     uint32_t page_count{};
-    /// Why the last registration was refused; null when the last one was taken.
+    /// Why the first registration the registry refused was refused; null
+    /// while it has refused none. A page taken later leaves it as it is.
     const char* rejected{};
     /// Copies of the pages' ids, which pages[i].id points at.
     std::string ids[kMaxSettingsPages]{};
@@ -63,10 +64,16 @@ struct SettingsRegistry {
 
 /// Takes a settings page into a registry.
 ///
+/// The page's id, title and owner are copied; its rows and state are kept
+/// by the caller for the runtime's life. A malformed or taken id, an engine
+/// section's word, a missing title or owner, a row with no binding or a full
+/// registry refuses the page.
+///
 /// @param registry the registry; null refuses the page
 /// @param page the page
-/// @return 1 when the page is taken; 0 when it is refused, and registry->rejected
-///     then names the reason when registry is not null
+/// @return 1 when the page is taken; 0 when it is refused, and
+///     registry->rejected then names the reason when registry is not null
+///     and refused nothing before
 int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& page);
 
 /// What a kit screen's host tells its act: a press on a control, or a key
