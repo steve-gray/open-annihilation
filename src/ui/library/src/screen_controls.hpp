@@ -132,10 +132,10 @@ struct Extent {
 ///
 /// @param display the display list
 /// @param view the pane's view, which clips its parts
-/// @param from the first item to look at
+/// @param first_item the first item to look at
 /// @return the rows; none when no item from there is clipped by the view
 [[nodiscard]] std::optional<Extent>
-clipped_extent(const kit::DisplayList& display, const kit::Rect& view, std::size_t from);
+clipped_extent(const kit::DisplayList& display, const kit::Rect& view, std::size_t first_item);
 
 /// Tells, for each tag of the tab, whether a display list holds its own chip
 /// or nav entry.

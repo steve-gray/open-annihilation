@@ -274,8 +274,8 @@ std::vector<std::string> wrapped(
     std::size_t most_lines
 ) {
     const kit::Fonts* fonts = building.fonts;
-    const kit::Measure measure = [fonts, role](std::string_view piece) {
-        return kit::text_width(*fonts, role, piece);
+    const kit::Measure measure = [fonts, role](std::string_view measured) {
+        return kit::text_width(*fonts, role, measured);
     };
     kit::WrapRules rules;
     rules.newlines = true;
@@ -1796,22 +1796,22 @@ void add_focus_ring(Building& building) {
 void add_open_menu(Building& building, int32_t footer_line) {
     if (!building.open)
         return;
-    const OpenMenu& open = *building.open;
+    const OpenMenu& menu_open = *building.open;
     const kit::Metrics& metrics = *building.metrics;
-    const auto count = static_cast<int32_t>(open.items.size());
-    const kit::Rect menu = kit::choice_menu(open.field, open.items.size(), footer_line);
-    const int32_t shown_count = kit::shown_choices(open.items.size());
+    const auto count = static_cast<int32_t>(menu_open.items.size());
+    const kit::Rect menu = kit::choice_menu(menu_open.field, menu_open.items.size(), footer_line);
+    const int32_t shown_count = kit::shown_choices(menu_open.items.size());
     const int32_t first = std::clamp(
         building.state->menu_first, int32_t{0}, std::max(count - shown_count, int32_t{0})
     );
     kit::ChoiceMenuLook look;
     look.first = first;
     look.total = count;
-    look.chosen = open.chosen;
+    look.chosen = menu_open.chosen;
     look.marked = building.state->menu_marked;
     look.focus_shown = building.state->interaction.focus_shown;
     for (int32_t place = 0; place < shown_count && first + place < count; ++place) {
-        const controls::MenuItem& item = open.items[static_cast<std::size_t>(first + place)];
+        const controls::MenuItem& item = menu_open.items[static_cast<std::size_t>(first + place)];
         const kit::Rect box = kit::choice_item(menu, place);
         look.shown.push_back(
             cut(building,
@@ -1822,10 +1822,10 @@ void add_open_menu(Building& building, int32_t footer_line) {
         kit::Control control;
         control.id = controls::first_menu_item + first + place;
         control.rect = box;
-        control.name = unique_name(building, open.name + "." + item.word);
+        control.name = unique_name(building, menu_open.name + "." + item.word);
         control.kind = kit::ControlKind::list_item;
         control.focusable = false;
-        control.checked = first + place == open.chosen;
+        control.checked = first + place == menu_open.chosen;
         control.text = look.shown.back();
         building.menu.push_back(std::move(control));
     }
@@ -1967,9 +1967,9 @@ int32_t chosen_item(const Library& library, Menu menu, const std::vector<MenuIte
 }
 
 std::optional<Extent>
-clipped_extent(const kit::DisplayList& display, const kit::Rect& view, std::size_t from) {
+clipped_extent(const kit::DisplayList& display, const kit::Rect& view, std::size_t first_item) {
     std::optional<Extent> extent;
-    for (std::size_t index = from; index < display.items.size(); ++index) {
+    for (std::size_t index = first_item; index < display.items.size(); ++index) {
         const kit::Item& item = display.items[index];
         const bool same_clip = item.clip.x == view.x && item.clip.y == view.y &&
                                item.clip.width == view.width && item.clip.height == view.height;
