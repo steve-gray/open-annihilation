@@ -17,11 +17,13 @@ if(BUILD_TESTING)
   # Every step and sheet at 1194x834, 852x393 with its safe area and
   # 640x480: button heights, the safe area, text inside its box as the
   # bundled fonts measure it, hit tests, focus, presses, switches, scrolling
-  # and the texts with neutral and platform words.
+  # and the texts with neutral and platform words, and every layout against
+  # the digest tests/layout-digests.txt records for it.
   add_executable(oa-ui-game-files-test tests/game_files_test.cpp)
   target_link_libraries(oa-ui-game-files-test PRIVATE oa-ui-game-files oa-platform-text-font
-    oa-test-support oa-options)
+    oa-base-sha256 oa-test-support oa-options)
   # The text checks read the bundled fonts beside the test, as the game does.
   oa_copy_text_fonts(oa-ui-game-files-test "$<TARGET_FILE_DIR:oa-ui-game-files-test>")
-  add_test(NAME ui-game-files COMMAND oa-ui-game-files-test)
+  add_test(NAME ui-game-files COMMAND oa-ui-game-files-test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/layout-digests.txt)
 endif()

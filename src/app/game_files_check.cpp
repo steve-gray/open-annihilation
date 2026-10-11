@@ -334,29 +334,37 @@ void snap(GameFilesScreen& screen, std::string_view extra = {}) {
     }
 }
 
+/// Returns the topmost part that draws a control: a sheet's lies above what it covers.
+///
+/// @param layout the layout
+/// @param control the control
+/// @return the part; null when none draws it
+[[nodiscard]] const oa::ui::kit::Item*
+topmost_part(const view::Layout& layout, view::Control control) {
+    const auto& parts = layout.list.items;
+    for (auto part = parts.rbegin(); part != parts.rend(); ++part)
+        if (view::screen_control(part->control) == control)
+            return &*part;
+    return nullptr;
+}
+
 /// Tells whether the layout holds a control.
 ///
 /// @param screen the screen
 /// @param control the control
-/// @return true when an item has it
+/// @return true when a part draws it
 [[nodiscard]] bool has_control(const GameFilesScreen& screen, view::Control control) {
-    const auto& items = screen.layout().items;
-    return std::any_of(items.begin(), items.end(), [&](const view::Item& item) {
-        return item.control == control;
-    });
+    return topmost_part(screen.layout(), control) != nullptr;
 }
 
 /// Tells whether a control is on the layout and can be pressed.
 ///
 /// @param screen the screen
 /// @param control the control
-/// @return true when its topmost item is enabled
+/// @return true when its topmost part is enabled
 [[nodiscard]] bool control_enabled(const GameFilesScreen& screen, view::Control control) {
-    const auto& items = screen.layout().items;
-    for (auto item = items.rbegin(); item != items.rend(); ++item)
-        if (item->control == control)
-            return item->enabled;
-    return false;
+    const oa::ui::kit::Item* part = topmost_part(screen.layout(), control);
+    return part != nullptr && !part->state.disabled;
 }
 
 /// Taps a control, failing the check when it is not on the layout.
@@ -622,11 +630,11 @@ void deliver_picker() {
 /// Tells whether the layout shows the focus ring on a control.
 ///
 /// @param screen the screen
-/// @return true when an item is focused
+/// @return true when a part is focused
 [[nodiscard]] bool any_focused(const GameFilesScreen& screen) {
-    const auto& items = screen.layout().items;
-    return std::any_of(items.begin(), items.end(), [](const view::Item& item) {
-        return item.focused;
+    const auto& parts = screen.layout().list.items;
+    return std::any_of(parts.begin(), parts.end(), [](const oa::ui::kit::Item& part) {
+        return part.state.focused;
     });
 }
 
@@ -674,23 +682,17 @@ void drag_rows(const GameFilesScreen& screen) {
 /// @param wanted the control
 /// @param name its name, for the verdict
 void click(const GameFilesScreen& screen, view::Control wanted, std::string_view name) {
-    const auto& items = screen.layout().items;
-    const view::Item* found = nullptr;
-    for (auto item = items.rbegin(); item != items.rend(); ++item)
-        if (item->control == wanted) {
-            found = &*item;
-            break;
-        }
+    const oa::ui::kit::Item* found = topmost_part(screen.layout(), wanted);
     const float px_per_point = std::max(screen.viewport().px_per_point, 0.01F);
     if (found == nullptr) {
         fail("the screen shows no " + std::string(name) + " on " + step_slug(screen.model().step));
         return;
     }
     const float x =
-        (static_cast<float>(found->box.x) + static_cast<float>(found->box.width) * 0.5F) /
+        (static_cast<float>(found->rect.x) + static_cast<float>(found->rect.width) * 0.5F) /
         px_per_point;
     const float y =
-        (static_cast<float>(found->box.y) + static_cast<float>(found->box.height) * 0.5F) /
+        (static_cast<float>(found->rect.y) + static_cast<float>(found->rect.height) * 0.5F) /
         px_per_point;
     for (const SDL_EventType type : {SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
         SDL_Event event{};
@@ -1341,16 +1343,11 @@ void notice(GameFilesScreen& screen) {
 /// @return true when a tap at its centre reaches it, or scrolling cannot help
 bool bring_into_view(GameFilesScreen& screen, view::Control wanted) {
     const view::Layout& layout = screen.layout();
-    const view::Item* found = nullptr;
-    for (auto item = layout.items.rbegin(); item != layout.items.rend(); ++item)
-        if (item->control == wanted) {
-            found = &*item;
-            break;
-        }
+    const oa::ui::kit::Item* found = topmost_part(layout, wanted);
     if (found == nullptr || found->clip.width <= 0 || found->clip.height <= 0)
         return true;
     const view::Point centre{
-        found->box.x + found->box.width / 2, found->box.y + found->box.height / 2
+        found->rect.x + found->rect.width / 2, found->rect.y + found->rect.height / 2
     };
     const float px_per_point = std::max(screen.viewport().px_per_point, 0.01F);
     if (view::hit_test(layout, centre, view::pick_reach_points * px_per_point) == wanted)

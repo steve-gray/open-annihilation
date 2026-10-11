@@ -27,32 +27,6 @@ std::size_t one_character(std::string_view text) noexcept {
     return bytes > text.size() ? text.size() : bytes;
 }
 
-/// Takes the longest start of a word that fits a width, at least one character.
-///
-/// A character wider than the width still takes its place: the next line starts
-/// after it.
-///
-/// @param word the word
-/// @param width the room
-/// @param measure a text's width
-/// @return the bytes of the start
-std::size_t fitting_start(std::string_view word, int32_t width, const Measure& measure) {
-    const std::size_t first = one_character(word);
-    if (first == 0)
-        return 0;
-    std::size_t fits = first;
-    for (std::size_t at = fits; at < word.size();) {
-        const std::size_t next = at + one_character(word.substr(at));
-        if (next <= at)
-            break;
-        if (measure(word.substr(0, next)) > width)
-            break;
-        fits = next;
-        at = next;
-    }
-    return fits;
-}
-
 /// Breaks a text that is wider than a line between its characters.
 ///
 /// @param text the text
@@ -174,6 +148,23 @@ void keep_most_lines(const WrapRules& rules, std::vector<std::string>& lines) {
 }
 
 } // namespace
+
+std::size_t fitting_start(std::string_view word, int32_t width, const Measure& measure) {
+    const std::size_t first = one_character(word);
+    if (first == 0)
+        return 0;
+    std::size_t fits = first;
+    for (std::size_t at = fits; at < word.size();) {
+        const std::size_t next = at + one_character(word.substr(at));
+        if (next <= at)
+            break;
+        if (measure(word.substr(0, next)) > width)
+            break;
+        fits = next;
+        at = next;
+    }
+    return fits;
+}
 
 std::vector<std::string>
 wrap(std::string_view text, int32_t width, const Measure& measure, const WrapRules& rules) {

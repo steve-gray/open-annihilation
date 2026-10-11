@@ -105,6 +105,54 @@ void a_covered_point_is_passed_over() {
     OA_CHECK(landed(kit::reach(list, {5, 50}, 30), 1, 5, 39));
 }
 
+/// A reach of a fraction of a point counts the fraction: the corner of the button is 11.40
+/// from the finger, within 11.5 and not within 11.25.
+void a_reach_may_be_a_fraction() {
+    kit::DisplayList list;
+    list.controls.push_back(placed(1, {0, 0, 10, 10}));
+    OA_CHECK(landed(kit::reach(list, {12, 20}, 11.5F), 1, 9, 9));
+    OA_CHECK(landed(kit::reach(list, {12, 20}, 11.25F), kit::no_control, 12, 20));
+    OA_CHECK(landed(kit::reach(list, {12, 20}, 11), kit::no_control, 12, 20));
+    OA_CHECK(landed(kit::reach(list, {12, 20}, 12), 1, 9, 9));
+    OA_CHECK(landed(kit::reach(list, {5, 5}, 11.5F), 1, 5, 5));
+    OA_CHECK(landed(kit::reach(list, {12, 5}, 0.0F), kit::no_control, 12, 5));
+    OA_CHECK(landed(kit::reach(list, {12, 5}, -2.5F), kit::no_control, 12, 5));
+    // Equal distances still take the first control, and a disabled one is passed over.
+    kit::DisplayList two;
+    two.controls.push_back(placed(1, {0, 0, 21, 10}));
+    two.controls.push_back(placed(2, {40, 0, 21, 10}));
+    OA_CHECK(landed(kit::reach(two, {30, 5}, 10.5F), 1, 20, 5));
+    two.controls.front().enabled = false;
+    OA_CHECK(landed(kit::reach(two, {30, 5}, 10.5F), 2, 40, 5));
+}
+
+/// The parts that draw the focused control show the focus once a key has shown it, the
+/// parts of the held control show the press, and a part with no control shows neither.
+void the_states_show_the_focus_and_the_press() {
+    kit::DisplayList list;
+    for (const kit::ControlId control : {1, 2, kit::no_control, 1}) {
+        kit::Item part{};
+        part.control = control;
+        part.state.focused = true;
+        part.state.pressed = true;
+        list.items.push_back(part);
+    }
+    kit::Interaction interaction{};
+    interaction.focused = 1;
+    interaction.focus_shown = true;
+    interaction.pressed = 2;
+    kit::mark_states(list, interaction);
+    OA_CHECK(list.items[0].state.focused && !list.items[0].state.pressed);
+    OA_CHECK(!list.items[1].state.focused && list.items[1].state.pressed);
+    OA_CHECK(!list.items[2].state.focused && !list.items[2].state.pressed);
+    OA_CHECK(list.items[3].state.focused && !list.items[3].state.pressed);
+    interaction.focus_shown = false;
+    interaction.pressed = kit::no_control;
+    kit::mark_states(list, interaction);
+    for (const kit::Item& part : list.items)
+        OA_CHECK(!part.state.focused && !part.state.pressed);
+}
+
 /// A finger already on a control keeps its own point.
 void a_finger_on_a_control_lands_unshifted() {
     kit::DisplayList list;
@@ -1282,6 +1330,7 @@ int main() {
     a_finger_out_of_reach_takes_nothing();
     a_covered_point_is_passed_over();
     a_finger_on_a_control_lands_unshifted();
+    a_reach_may_be_a_fraction();
     a_clip_hides_the_part_a_press_cannot_reach();
     the_notice_buttons_take_the_notices_finger();
     the_pointer_hovers_presses_and_releases();
@@ -1314,5 +1363,6 @@ int main() {
     a_stray_caret_settles_on_a_boundary();
     editing_takes_whole_characters();
     a_text_field_and_a_tab_take_their_keys();
+    the_states_show_the_focus_and_the_press();
     return oa::test::check_exit_status();
 }

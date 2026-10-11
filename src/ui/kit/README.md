@@ -13,16 +13,45 @@ until then.
   `large_metrics`, which give the settings dialog, its notices and its
   prompts more room (their sizes, the padding, the nav list's width and the
   characters a host's line under a row holds) and keep every other size.
+  The Game files screen's and the folder chooser's tokens (`screen_colour`)
+  are one family with the dialog's. Three that nearly matched the dialog's
+  are now the dialog's: `text` is `colour::text` (e7e8df, was e8eae4),
+  `line` is `colour::control_border` (3a4034, was 3a4037) and `amber` is
+  `colour::lock` (e0b04f, was e8b44c). `background`, `green`, `ink` and
+  `button_text` were the dialog's already; `panel` (232721), `dim` (9aa094)
+  and `red` (e06c5c, the kit's `colour::danger`) are the screens' own.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
-  boxed line, and the one wrap.
+  boxed line, and the one wrap; `fitting_start`, where the wrap breaks a word
+  wider than a line; `fit`, a line shortened to a width with the `ellipsis`;
+  and, for a screen drawn in the modern fonts, `TextMeasureHooks` (the app
+  measures with the bundled fonts) with `measured_width` and
+  `measured_line`, which estimate what a null hook leaves out.
 - `layout.hpp`: points, the Auto scale and the three size classes,
   `layer_viewport` (the scale an Interface size gives a canvas, held to
   what fits Compact's dialog), `metrics_of` (a class's metrics, which a screen takes its window's sizes
   from), rows, columns, grids, splits and scroll areas, and the display
-  list.
-- `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
-  order, the arrows by where controls sit, the wheel, and a text field's
-  editing: `insert_text` for typed text and `edit_text` for Backspace,
+  list. A screen drawn in the modern fonts (the Game files screen and the
+  folder chooser) lays its parts out in canvas pixels at a scale that may
+  be a fraction (`Typesetter`, `canvas_pixels`, `canvas_font`) with:
+  - `text_part`, a text wrapped to a room in a `Lettering` (size, weight,
+    colour and `TextStyle`), at most so many lines, the last ending with an
+    ellipsis, as wide as the room or its widest line (`TextFit`);
+  - `line_part`, one line fitted to a room and centred on a row;
+  - `button_span` and `button_part`, a button of a `ButtonSpec` (its label,
+    look, `Glyph` and control), and `button_row`, its left and right groups
+    on one line or wrapped from the left (`ButtonRowSizes`);
+  - `icon_part` and `plain_part`, a glyph in a box and a part with no text;
+  - `move_parts`, parts moved down and appended, clipped or not;
+  - `scroll_column`, a column of a fixed top, a body and a fixed bottom
+    placed in an area: one after another, else the body scrolling between
+    the others, else the whole column scrolling, as a `ScrollArea`;
+  - `first_live_part` and `list_part_controls`, the controls of the parts
+    above the last backdrop, the top one first, and the Tab order.
+- `input.hpp`: a pointer and a finger's reach (in whole points, or in a
+  fraction of a point for a screen at a fractional scale), `mark_states`
+  (the focused and held parts of an `Interaction`), the keys, Tab in a
+  declared order, the arrows by where controls sit, the wheel, and a text
+  field's editing: `insert_text` for typed text and `edit_text` for Backspace,
   Delete, Left, Right, Home and End. For automation, `automation_entries`
   lists the named controls, and `automation_parts` lists each control
   followed by the parts of it that take a press of their own (an
@@ -98,6 +127,25 @@ until then.
   words, which automation names its parts by. `step`, `activate`,
   `press`, `drag`, `choose`, `type` and `edit` change the model as a row's
   control is used.
+
+### The parts of a screen drawn in the modern fonts
+
+The display list's `Item` has what such a screen draws besides the crisp
+canvas's fields: `lines` (its text, already wrapped), `pixel_size` and
+`bold`, `style` (a `TextStyle`: header, title, subtitle, lead, body, small,
+row title, row detail, button or mark text), `glyph` (a `Glyph`: folder,
+device, disk, clock, warning, check, cross, dash, info, stop, play, trash,
+refresh, plus, file or the OA mark) and `glyph_size`, and `fraction` (a
+progress fill's share). Its colour is one of the screen's tokens
+(`screen_colour`), and its clip the scrolled view. The roles such a screen
+draws besides `text`, `button` and `toggle`, from those fields rather than a
+look, are `header_bar`, `badge`, `header_text`, `version`, `title`, `panel`
+(a card or a panel of rows; the kit's `card` is a grid's card, drawn from its
+`CardLook`), `icon`, `banner`, `row`, `divider`, `button_main`,
+`button_danger`, `progress_track`, `progress_fill` (the kit's `progress` is a
+whole bar drawn from its `ProgressLook`), `progress_busy`, `backdrop` and
+`sheet`. Their painter is the screen's own; `paint` on the crisp canvas
+draws nothing for them.
 
 ## State
 
@@ -192,16 +240,26 @@ focused button, link, list row or tab.
 
 ## Tests
 
-`ui-kit-theme` checks every token against the value it replaces, the
-Compact metrics against 0.7.3's numbers, Regular's and Large's against the
+`ui-kit-theme` checks every token against the value it replaces (the
+screen's text, line and amber against the dialog's text, control border and
+lock), the Compact metrics against 0.7.3's numbers, Regular's and Large's against the
 design's table of sizes and that they differ from Compact's in nothing
 else, and that each class's dialog and notices fit the least window of their
 class. `ui-kit-text` checks the UTF-8
-helpers, the estimated width, the stand-ins, and the wrap against copies of
-the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
-window sizes, the Interface size's examples and Auto at each window, that `metrics_of` gives each class its metrics, arrangements,
-the scroll arithmetic and hit testing.
-`ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys and
+helpers, the estimated width, the stand-ins, the wrap against copies of
+the six wraps it replaces, `fit` and `fitting_start` against the Game files
+screen's copies, and the modern fonts' measure through its hooks and
+without them. `ui-kit-layout` checks the Auto scale, the design's
+window sizes, the Interface size's examples and Auto at each window, that
+`metrics_of` gives each class its metrics, arrangements, the scroll
+arithmetic and hit testing, and each helper of a screen drawn in the modern
+fonts with a made-up measure: points to canvas pixels, a text part's wrap,
+line limit and fit, a line part, a button's span, label and look, a row of
+buttons on one line and wrapped, icons, plain parts and moved parts, the
+three ways a column is placed, and the controls listed from parts under and
+above a backdrop.
+`ui-kit-input` checks reach (with a reach of a fraction of a point too),
+`mark_states`, the pointer, Tab, the arrows, the keys and
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item
@@ -242,8 +300,7 @@ Library's and the map browser's are theirs to add. A drop-down's open menu
 keeps above the footer line it is given (`choice_menu`), the Compact
 settings dialog's unless a larger dialog gives its own. The canvas draws at
 whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
-tuned after controller playtests (D30). The screens' colour family converges
-with U13 and U14. The look of the list rows, chips, fields, tabs, cards,
+tuned after controller playtests (D30). The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's
 tokens; it is reviewed in the gallery (U12) and pinned by golden frames
 (U17). A field takes typed text and the editing keys; it has no selection,

@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Painting the Game files screen (game_files_paint.hpp): the background, then
-// each item of the layout in order, with the touch controls' painter. Boxes,
-// panels and buttons have small rounded corners and hairline outlines in the
-// settings dialog's colours, text is antialiased in the bundled fonts, and the
-// screen's marks are drawn as strokes on a 24-unit square, but for the OA mark:
-// the Open Annihilation icon, which the settings dialog's own drawing draws.
+// each of the kit's parts in order, by its role, with the touch controls'
+// painter. Boxes, panels and buttons have small rounded corners and hairline
+// outlines in the settings dialog's colours, text is antialiased in the
+// bundled fonts, and the screen's marks are drawn as strokes on a 24-unit
+// square, but for the OA mark: the Open Annihilation icon, which the settings
+// dialog's own drawing draws.
 #include "game_files_paint.hpp"
 
 #include "oa/app/window_icon.hpp"
@@ -30,6 +31,7 @@ namespace {
 
 namespace paint = oa::ui::paint;
 namespace gf = oa::ui::game_files;
+namespace kit = oa::ui::kit;
 namespace text_font = oa::platform::text_font;
 namespace renderer = oa::ui::frontend_renderer;
 using paint::Area;
@@ -136,19 +138,19 @@ class LayoutPainter {
     )
         : painter_(canvas), fonts_(fonts), scale_(std::max(px_per_point, 0.25F)), icon_(icon) {}
 
-    /// Paints the background and every item, in order.
+    /// Paints the background and every part, in order.
     ///
-    /// @param layout the layout
-    void paint(const gf::Layout& layout) {
+    /// @param parts the parts
+    void paint(const kit::DisplayList& parts) {
         auto& canvas = painter_.canvas();
         const Box whole{0, 0, canvas.width, canvas.height};
         painter_.reset_clip();
         painter_.clear_box(whole);
         painter_.fill_rect(whole, game_files_rgba(gf::background_colour));
-        for (const gf::Item& item : layout.items) {
+        for (const kit::Item& item : parts.items) {
             set_item_clip(item);
             paint_item(item);
-            if (item.focused)
+            if (item.state.focused)
                 paint_focus(item);
         }
         painter_.reset_clip();
@@ -179,7 +181,7 @@ class LayoutPainter {
     /// Limits painting to an item's clip, when it has one.
     ///
     /// @param item the item
-    void set_item_clip(const gf::Item& item) noexcept {
+    void set_item_clip(const kit::Item& item) noexcept {
         if (item.clip.width > 0 && item.clip.height > 0)
             painter_.set_clip(box_of(item.clip));
         else
@@ -190,8 +192,8 @@ class LayoutPainter {
     ///
     /// @param item the item
     /// @param area its box
-    void paint_pressed(const gf::Item& item, Area area) {
-        if (item.pressed && item.enabled)
+    void paint_pressed(const kit::Item& item, Area area) {
+        if (item.state.pressed && !item.state.disabled)
             painter_.fill_rounded_rect(
                 area,
                 px(corner_points),
@@ -199,37 +201,37 @@ class LayoutPainter {
             );
     }
 
-    /// Paints one item by its role.
+    /// Paints one part by its role. A role the screen does not lay out draws nothing.
     ///
-    /// @param item the item
-    void paint_item(const gf::Item& item) {
-        const Area area = area_of(item.box);
+    /// @param item the part
+    void paint_item(const kit::Item& item) {
+        const Area area = area_of(item.rect);
         switch (item.role) {
-        case gf::ItemRole::header_bar:
-            painter_.fill_rect(box_of(item.box), game_files_rgba(header_colour));
+        case kit::Role::header_bar:
+            painter_.fill_rect(box_of(item.rect), game_files_rgba(header_colour));
             painter_.fill_rect(
-                Box{item.box.x,
-                    item.box.y + item.box.height - whole_px(hairline_points),
-                    item.box.width,
+                Box{item.rect.x,
+                    item.rect.y + item.rect.height - whole_px(hairline_points),
+                    item.rect.width,
                     whole_px(hairline_points)},
                 game_files_rgba(gf::line_colour)
             );
             paint_text(item, Align::left);
             return;
-        case gf::ItemRole::badge:
+        case kit::Role::badge:
             paint_badge(area);
             return;
-        case gf::ItemRole::header_text:
-        case gf::ItemRole::version:
-        case gf::ItemRole::title:
-        case gf::ItemRole::text:
+        case kit::Role::header_text:
+        case kit::Role::version:
+        case kit::Role::title:
+        case kit::Role::text:
             if (item.glyph != gf::Glyph::none && item.lines.empty()) {
                 paint_mark(item.glyph, area, game_files_rgba(item.colour));
                 return;
             }
             paint_text(item, Align::left);
             return;
-        case gf::ItemRole::card:
+        case kit::Role::panel:
             painter_.fill_rounded_rect(area, px(corner_points), game_files_rgba(gf::panel_colour));
             painter_.outline_rounded_rect(
                 area, px(corner_points), px(hairline_points), game_files_rgba(gf::line_colour)
@@ -237,50 +239,52 @@ class LayoutPainter {
             paint_pressed(item, area);
             paint_text(item, Align::left);
             return;
-        case gf::ItemRole::icon:
+        case kit::Role::icon:
             paint_icon(item, area);
             return;
-        case gf::ItemRole::banner:
+        case kit::Role::banner:
             paint_banner(item, area);
             return;
-        case gf::ItemRole::row:
-            painter_.fill_rect(box_of(item.box), game_files_rgba(gf::panel_colour));
+        case kit::Role::row:
+            painter_.fill_rect(box_of(item.rect), game_files_rgba(gf::panel_colour));
             paint_pressed(item, area);
             paint_text(item, Align::left);
             return;
-        case gf::ItemRole::divider:
-            painter_.fill_rect(box_of(item.box), game_files_rgba(gf::line_colour));
+        case kit::Role::divider:
+            painter_.fill_rect(box_of(item.rect), game_files_rgba(gf::line_colour));
             return;
-        case gf::ItemRole::switch_off_on:
+        case kit::Role::toggle:
             paint_switch(item, area);
             return;
-        case gf::ItemRole::button_main:
-        case gf::ItemRole::button:
-        case gf::ItemRole::button_danger:
+        case kit::Role::button_main:
+        case kit::Role::button:
+        case kit::Role::button_danger:
             paint_button(item, area);
             return;
-        case gf::ItemRole::progress_track:
-            painter_.fill_rect(box_of(item.box), game_files_rgba(track_colour));
+        case kit::Role::progress_track:
+            painter_.fill_rect(box_of(item.rect), game_files_rgba(track_colour));
             painter_.outline_rect(
-                box_of(item.box), whole_px(hairline_points), game_files_rgba(gf::line_colour)
+                box_of(item.rect), whole_px(hairline_points), game_files_rgba(gf::line_colour)
             );
             return;
-        case gf::ItemRole::progress_fill:
+        case kit::Role::progress_fill:
             // The layout sizes the fill's box from its fraction.
-            if (item.box.width > 0 && item.box.height > 0)
-                painter_.fill_rect(box_of(item.box), game_files_rgba(gf::green_colour));
+            if (item.rect.width > 0 && item.rect.height > 0)
+                painter_.fill_rect(box_of(item.rect), game_files_rgba(gf::green_colour));
             return;
-        case gf::ItemRole::progress_busy:
+        case kit::Role::progress_busy:
             paint_busy(item, area);
             return;
-        case gf::ItemRole::backdrop:
+        case kit::Role::backdrop:
             painter_.fill_rect(
-                box_of(item.box),
+                box_of(item.rect),
                 Rgba{0, 0, 0, static_cast<uint8_t>(std::lround(255.0F * backdrop_opacity))}
             );
             return;
-        case gf::ItemRole::sheet:
+        case kit::Role::sheet:
             paint_sheet(item, area);
+            return;
+        default:
             return;
         }
     }
@@ -305,7 +309,7 @@ class LayoutPainter {
     /// @param box where the lines go
     /// @param centred_down centre the block of lines down the box
     void paint_lines(
-        const gf::Item& item, Rgba colour, Align align, const gf::Rect& box, bool centred_down
+        const kit::Item& item, Rgba colour, Align align, const gf::Rect& box, bool centred_down
     ) {
         if (fonts_ == nullptr || item.lines.empty() || item.pixel_size <= 0)
             return;
@@ -330,8 +334,8 @@ class LayoutPainter {
     ///
     /// @param item the item
     /// @param align across the box
-    void paint_text(const gf::Item& item, Align align) {
-        paint_lines(item, game_files_rgba(item.colour), align, item.box, false);
+    void paint_text(const kit::Item& item, Align align) {
+        paint_lines(item, game_files_rgba(item.colour), align, item.rect, false);
     }
 
     /// Paints a mark: the OA mark as the icon, every other one as strokes.
@@ -355,8 +359,8 @@ class LayoutPainter {
     ///
     /// @param item the icon item
     /// @param area its box
-    void paint_icon(const gf::Item& item, Area area) {
-        if (item.on)
+    void paint_icon(const kit::Item& item, Area area) {
+        if (item.state.on)
             painter_.outline_rounded_rect(
                 area, px(corner_points), px(hairline_points), game_files_rgba(gf::line_colour)
             );
@@ -378,14 +382,14 @@ class LayoutPainter {
     ///
     /// @param item the banner
     /// @param area its box
-    void paint_banner(const gf::Item& item, Area area) {
+    void paint_banner(const kit::Item& item, Area area) {
         const Rgba accent = game_files_rgba(item.colour);
-        painter_.fill_rect(box_of(item.box), game_files_rgba(banner_fill_colour));
+        painter_.fill_rect(box_of(item.rect), game_files_rgba(banner_fill_colour));
         painter_.outline_rect(
-            box_of(item.box), whole_px(hairline_points), game_files_rgba(banner_outline_colour)
+            box_of(item.rect), whole_px(hairline_points), game_files_rgba(banner_outline_colour)
         );
         painter_.fill_rect(
-            Box{item.box.x, item.box.y, whole_px(banner_bar_points), item.box.height}, accent
+            Box{item.rect.x, item.rect.y, whole_px(banner_bar_points), item.rect.height}, accent
         );
         if (item.glyph != gf::Glyph::none) {
             const float side = std::min(px(banner_mark_points), area.height);
@@ -406,7 +410,7 @@ class LayoutPainter {
     ///
     /// @param item the sheet
     /// @param area its box
-    void paint_sheet(const gf::Item& item, Area area) {
+    void paint_sheet(const kit::Item& item, Area area) {
         const float shadow = px(sheet_shadow_points);
         constexpr int shadow_steps = 4;
         constexpr uint8_t shadow_step_alpha = 22;
@@ -435,19 +439,19 @@ class LayoutPainter {
     ///
     /// @param item the button
     /// @param area its box
-    void paint_button(const gf::Item& item, Area area) {
+    void paint_button(const kit::Item& item, Area area) {
         const float corner = px(corner_points);
         const float hairline = px(hairline_points);
-        const float opacity = item.enabled ? 1.0F : disabled_opacity;
+        const float opacity = item.state.disabled ? disabled_opacity : 1.0F;
         Rgba label = game_files_rgba(item.colour);
-        if (item.role == gf::ItemRole::button_main) {
+        if (item.role == kit::Role::button_main) {
             painter_.fill_rounded_rect(
                 area, corner, paint::with_opacity(game_files_rgba(gf::green_colour), opacity)
             );
             label = game_files_rgba(gf::background_colour);
-            if (!item.enabled)
+            if (item.state.disabled)
                 label = game_files_rgba(gf::text_colour);
-        } else if (item.role == gf::ItemRole::button_danger) {
+        } else if (item.role == kit::Role::button_danger) {
             painter_.outline_rounded_rect(
                 area,
                 corner,
@@ -471,9 +475,9 @@ class LayoutPainter {
     ///
     /// @param item the button
     /// @param colour the label's colour
-    void paint_label(const gf::Item& item, Rgba colour) {
+    void paint_label(const kit::Item& item, Rgba colour) {
         if (item.glyph == gf::Glyph::none || item.pixel_size <= 0) {
-            paint_lines(item, colour, Align::centre, item.box, true);
+            paint_lines(item, colour, Align::centre, item.rect, true);
             return;
         }
         const int mark = item.glyph_size > 0 ? item.glyph_size : item.pixel_size;
@@ -485,19 +489,20 @@ class LayoutPainter {
                 widest =
                     std::max(widest, paint::text_width(*fonts_, text, item.pixel_size, item.bold));
         const int group = mark + (widest > 0 ? gap + widest : 0);
-        const int left = item.box.x + (item.box.width - group) / 2;
+        const int left = item.rect.x + (item.rect.width - group) / 2;
         paint_mark(
             item.glyph,
             Area{
                 static_cast<float>(left),
-                static_cast<float>(item.box.y) + static_cast<float>(item.box.height - mark) * 0.5F,
+                static_cast<float>(item.rect.y) +
+                    static_cast<float>(item.rect.height - mark) * 0.5F,
                 static_cast<float>(mark),
                 static_cast<float>(mark)
             },
             colour
         );
         if (widest > 0) {
-            gf::Rect text_box = item.box;
+            gf::Rect text_box = item.rect;
             text_box.x = left + mark + gap;
             text_box.width = widest;
             paint_lines(item, colour, Align::left, text_box, true);
@@ -508,19 +513,19 @@ class LayoutPainter {
     ///
     /// @param item the switch
     /// @param area its box
-    void paint_switch(const gf::Item& item, Area area) {
-        const int half = item.box.width / 2;
-        const gf::Rect off_box{item.box.x, item.box.y, half, item.box.height};
+    void paint_switch(const kit::Item& item, Area area) {
+        const int half = item.rect.width / 2;
+        const gf::Rect off_box{item.rect.x, item.rect.y, half, item.rect.height};
         const gf::Rect on_box{
-            item.box.x + half, item.box.y, item.box.width - half, item.box.height
+            item.rect.x + half, item.rect.y, item.rect.width - half, item.rect.height
         };
-        const float opacity = item.enabled ? 1.0F : disabled_opacity;
-        const gf::Rect& lit = item.on ? on_box : off_box;
+        const float opacity = item.state.disabled ? disabled_opacity : 1.0F;
+        const gf::Rect& lit = item.state.on ? on_box : off_box;
         const Rgba lit_fill =
-            item.on ? game_files_rgba(gf::green_colour) : game_files_rgba(gf::line_colour);
+            item.state.on ? game_files_rgba(gf::green_colour) : game_files_rgba(gf::line_colour);
         painter_.fill_rect(box_of(lit), paint::with_opacity(lit_fill, opacity));
         painter_.outline_rect(
-            box_of(item.box),
+            box_of(item.rect),
             whole_px(hairline_points),
             paint::with_opacity(game_files_rgba(gf::line_colour), opacity)
         );
@@ -528,25 +533,26 @@ class LayoutPainter {
         if (item.lines.size() < 2 || fonts_ == nullptr)
             return;
         const Rgba lit_text = paint::with_opacity(
-            item.on ? game_files_rgba(gf::background_colour) : game_files_rgba(gf::text_colour),
+            item.state.on ? game_files_rgba(gf::background_colour)
+                          : game_files_rgba(gf::text_colour),
             opacity
         );
         const Rgba unlit_text = paint::with_opacity(game_files_rgba(gf::dim_colour), opacity);
-        gf::Item label = item;
+        kit::Item label = item;
         label.lines = {item.lines[0]};
-        paint_lines(label, item.on ? unlit_text : lit_text, Align::centre, off_box, true);
+        paint_lines(label, item.state.on ? unlit_text : lit_text, Align::centre, off_box, true);
         label.lines = {item.lines[1]};
-        paint_lines(label, item.on ? lit_text : unlit_text, Align::centre, on_box, true);
+        paint_lines(label, item.state.on ? lit_text : unlit_text, Align::centre, on_box, true);
     }
 
     /// Paints a busy bar: the track with green stripes at 45 degrees.
     ///
     /// @param item the bar
     /// @param area its box
-    void paint_busy(const gf::Item& item, Area area) {
-        painter_.fill_rect(box_of(item.box), game_files_rgba(track_colour));
+    void paint_busy(const kit::Item& item, Area area) {
+        painter_.fill_rect(box_of(item.rect), game_files_rgba(track_colour));
         const Box kept = painter_.clip();
-        painter_.set_clip(paint::intersect(kept, box_of(item.box)));
+        painter_.set_clip(paint::intersect(kept, box_of(item.rect)));
         const float spacing = std::max(px(busy_stripe_spacing_points), 4.0F);
         const Rgba stripe =
             paint::with_opacity(game_files_rgba(gf::green_colour), busy_stripe_opacity);
@@ -559,16 +565,16 @@ class LayoutPainter {
             );
         painter_.set_clip(kept);
         painter_.outline_rect(
-            box_of(item.box), whole_px(hairline_points), game_files_rgba(gf::line_colour)
+            box_of(item.rect), whole_px(hairline_points), game_files_rgba(gf::line_colour)
         );
     }
 
     /// Paints the focus ring outside an item.
     ///
     /// @param item the focused item
-    void paint_focus(const gf::Item& item) {
+    void paint_focus(const kit::Item& item) {
         painter_.reset_clip();
-        const Area ring = grown(area_of(item.box), px(focus_gap_points) + px(focus_ring_points));
+        const Area ring = grown(area_of(item.rect), px(focus_gap_points) + px(focus_ring_points));
         painter_.outline_rounded_rect(
             ring, px(focus_corner_points), px(focus_ring_points), game_files_rgba(gf::green_colour)
         );
@@ -603,11 +609,11 @@ int measure_line_height(void* context, int pixel_size, bool bold) {
 /// @return canvas pixels per point; 1 without buttons
 [[nodiscard]] float estimated_density(const gf::Layout& layout) noexcept {
     int smallest = std::numeric_limits<int>::max();
-    for (const gf::Item& item : layout.items)
-        if ((item.role == gf::ItemRole::button || item.role == gf::ItemRole::button_main ||
-             item.role == gf::ItemRole::button_danger) &&
-            item.box.height > 0)
-            smallest = std::min(smallest, item.box.height);
+    for (const kit::Item& item : layout.list.items)
+        if ((item.role == kit::Role::button || item.role == kit::Role::button_main ||
+             item.role == kit::Role::button_danger) &&
+            item.rect.height > 0)
+            smallest = std::min(smallest, item.rect.height);
     if (smallest == std::numeric_limits<int>::max())
         return 1.0F;
     return std::max(1.0F, std::floor(static_cast<float>(smallest) / smallest_button_points));
@@ -660,9 +666,19 @@ void paint_game_files(
     float px_per_point,
     const renderer::RgbaPicture& icon
 ) {
+    paint_game_files(canvas, layout.list, fonts, px_per_point, icon);
+}
+
+void paint_game_files(
+    paint::Canvas& canvas,
+    const kit::DisplayList& parts,
+    text_font::FontStack* fonts,
+    float px_per_point,
+    const renderer::RgbaPicture& icon
+) {
     if (canvas.width <= 0 || canvas.height <= 0)
         return;
-    LayoutPainter(canvas, fonts, px_per_point, icon).paint(layout);
+    LayoutPainter(canvas, fonts, px_per_point, icon).paint(parts);
 }
 
 void paint_game_files_oa_mark(Painter& painter, Area area, const renderer::RgbaPicture& icon) {

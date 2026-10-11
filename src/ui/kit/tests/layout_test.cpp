@@ -4,13 +4,18 @@
 // The kit's points, Auto scale, the Interface size's scale rule, size
 // classes, arrangements, scroll areas and display list. The scroll numbers were computed with geometry::scroll_thumb,
 // geometry::scroll_at and geometry::scroll_showing at c5e005df, the start of
-// this branch, by a throwaway program that was not committed.
+// this branch, by a throwaway program that was not committed. The parts of a
+// screen drawn in the modern fonts are measured with a made-up measure: 6
+// pixels a character, 7 in bold, and lines 2 pixels taller than their size.
 
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/layout.hpp"
 
+#include <array>
 #include <cstddef>
 #include <stdint.h>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -443,6 +448,338 @@ void a_point_hits_the_first_enabled_control() {
     OA_CHECK(kit::control_of(drawn, 9) == nullptr);
 }
 
+/// Measures a line as the made-up font draws it: 6 pixels a character, 7 in bold.
+///
+/// @param text the line
+/// @param bold the weight
+/// @return pixels
+int made_up_width(void*, std::string_view text, int, bool bold) {
+    return static_cast<int>(kit::character_count(text)) * (bold ? 7 : 6);
+}
+
+/// Gives a line's height in the made-up font: 2 pixels more than its size.
+///
+/// @param pixel_size the size
+/// @return pixels
+int made_up_line(void*, int pixel_size, bool) {
+    return pixel_size + 2;
+}
+
+/// Returns a typesetter with the made-up font at a scale.
+///
+/// @param px_per_point canvas pixels per point
+/// @return the typesetter
+kit::Typesetter made_up_type(float px_per_point) {
+    kit::Typesetter type{};
+    type.measure.width = made_up_width;
+    type.measure.line_height = made_up_line;
+    type.px_per_point = px_per_point;
+    return type;
+}
+
+/// Points become whole canvas pixels, a half rounded away from zero, and a text's size at
+/// least one pixel.
+void points_round_to_canvas_pixels() {
+    const kit::Typesetter twice = made_up_type(2.0F);
+    OA_CHECK(kit::canvas_pixels(twice, 10.25F) == 21);
+    OA_CHECK(kit::canvas_pixels(twice, -1.25F) == -3);
+    OA_CHECK(kit::canvas_pixels(made_up_type(1.5F), 3.0F) == 5);
+    OA_CHECK(kit::canvas_pixels(twice, 0.1F) == 0);
+    OA_CHECK(kit::canvas_font(twice, 0.1F) == 1);
+    OA_CHECK(kit::canvas_font(twice, 11.0F) == 22);
+}
+
+/// A text part wraps to its room, drops empty lines, keeps at most its lines with an
+/// ellipsis, and sits in its room as asked.
+void a_text_part_wraps_to_its_room() {
+    const kit::Typesetter type = made_up_type(1.0F);
+    const kit::Lettering look{10.0F, false, kit::screen_colour::dim, kit::TextStyle::lead};
+    std::vector<kit::Item> parts;
+    const int32_t height =
+        kit::text_part(parts, type, kit::Role::text, {5, 7}, 40, "one two three four", look);
+    OA_CHECK(height == 48);
+    OA_CHECK(parts.size() == 1);
+    const kit::Item& part = parts.front();
+    OA_CHECK(part.role == kit::Role::text);
+    OA_CHECK((part.lines == std::vector<std::string>{"one", "two", "three", "four"}));
+    OA_CHECK(rect_is(part.rect, 5, 7, 40, 48));
+    OA_CHECK(part.pixel_size == 10 && !part.bold);
+    OA_CHECK(part.colour == kit::screen_colour::dim);
+    OA_CHECK(part.style == kit::TextStyle::lead);
+    OA_CHECK(part.control == kit::no_control);
+
+    // At most two lines: the second takes the rest, shortened with an ellipsis.
+    parts.clear();
+    OA_CHECK(
+        kit::text_part(
+            parts,
+            type,
+            kit::Role::title,
+            {0, 0},
+            40,
+            "one two three four",
+            look,
+            kit::TextFit::column,
+            2
+        ) == 24
+    );
+    OA_CHECK((parts.front().lines == std::vector<std::string>{"one", "two t\xE2\x80\xA6"}));
+    OA_CHECK(parts.front().role == kit::Role::title);
+
+    // Tight to the left or the right: as wide as its widest line.
+    parts.clear();
+    kit::text_part(
+        parts, type, kit::Role::text, {5, 0}, 40, "one two three", look, kit::TextFit::tight_left
+    );
+    kit::text_part(
+        parts, type, kit::Role::text, {5, 0}, 40, "one two three", look, kit::TextFit::tight_right
+    );
+    OA_CHECK(rect_is(parts[0].rect, 5, 0, 30, 36));
+    OA_CHECK(rect_is(parts[1].rect, 15, 0, 30, 36));
+
+    // A new line starts a paragraph, and an empty paragraph adds no line.
+    parts.clear();
+    kit::text_part(parts, type, kit::Role::text, {0, 0}, 40, "a\n\nb", look);
+    OA_CHECK((parts.front().lines == std::vector<std::string>{"a", "b"}));
+
+    // No text, or no room, adds nothing.
+    parts.clear();
+    OA_CHECK(kit::text_part(parts, type, kit::Role::text, {0, 0}, 40, "", look) == 0);
+    OA_CHECK(kit::text_part(parts, type, kit::Role::text, {0, 0}, 0, "one", look) == 0);
+    OA_CHECK(parts.empty());
+}
+
+/// A line part is shortened to its room with an ellipsis and centred on its row.
+void a_line_part_is_shortened_to_its_room() {
+    const kit::Typesetter type = made_up_type(1.0F);
+    const kit::Lettering look{10.0F, false, kit::screen_colour::text, kit::TextStyle::row_title};
+    std::vector<kit::Item> parts;
+    OA_CHECK(kit::line_part(parts, type, 100, 50, 40, "abcdefghij", look) == 36);
+    OA_CHECK(parts.size() == 1);
+    OA_CHECK((parts.front().lines == std::vector<std::string>{"abcde\xE2\x80\xA6"}));
+    OA_CHECK(rect_is(parts.front().rect, 100, 44, 36, 12));
+    OA_CHECK(parts.front().role == kit::Role::text);
+    OA_CHECK(parts.front().style == kit::TextStyle::row_title);
+    // Ending at x, as a version or a size does; a role of the caller's.
+    OA_CHECK(
+        kit::line_part(
+            parts, type, 100, 50, 40, "v0.6", look, kit::TextFit::tight_right, kit::Role::version
+        ) == 24
+    );
+    OA_CHECK(rect_is(parts.back().rect, 76, 44, 24, 12));
+    OA_CHECK(parts.back().role == kit::Role::version);
+    // No text, no room, or a room too narrow for the ellipsis adds nothing.
+    OA_CHECK(kit::line_part(parts, type, 0, 0, 40, "", look) == 0);
+    OA_CHECK(kit::line_part(parts, type, 0, 0, 0, "abc", look) == 0);
+    OA_CHECK(kit::line_part(parts, type, 0, 0, 4, "abc", look) == 0);
+    OA_CHECK(parts.size() == 2);
+}
+
+/// A button's width counts its bold label, its mark and the gap after it, and its padding,
+/// and is at least its least width.
+void a_button_spans_its_label_mark_and_padding() {
+    const kit::Typesetter type = made_up_type(1.0F);
+    kit::ButtonSpec ok{};
+    ok.label = "OK";
+    OA_CHECK(kit::button_span(type, ok, 10.0F, 3.0F, 0.0F) == 20);
+    OA_CHECK(kit::button_span(type, ok, 10.0F, 3.0F, 30.0F) == 30);
+    // A mark the label's size, and half that size after it.
+    ok.glyph = kit::Glyph::check;
+    OA_CHECK(kit::button_span(type, ok, 10.0F, 3.0F, 0.0F) == 35);
+    // A mark of its own size.
+    ok.glyph_points = 4.0F;
+    OA_CHECK(kit::button_span(type, ok, 10.0F, 3.0F, 0.0F) == 29);
+    OA_CHECK(kit::button_span(made_up_type(2.0F), ok, 10.0F, 3.0F, 0.0F) == 14 + 8 + 10 + 12);
+}
+
+/// A button part's label is fitted to what its mark and margins leave, in the colour of its
+/// look, and its state says whether it is the main one and whether a press reaches it.
+void a_button_part_fits_its_label() {
+    const kit::Typesetter type = made_up_type(1.0F);
+    kit::ButtonSpec remove{};
+    remove.label = "REMOVE ALL";
+    remove.role = kit::Role::button_danger;
+    remove.glyph = kit::Glyph::trash;
+    remove.control = 7;
+    remove.enabled = false;
+    std::vector<kit::Item> parts;
+    kit::button_part(parts, type, {0, 0, 50, 44}, remove, 10.0F);
+    OA_CHECK(parts.size() == 1);
+    const kit::Item& danger = parts.back();
+    OA_CHECK(danger.role == kit::Role::button_danger);
+    OA_CHECK(rect_is(danger.rect, 0, 0, 50, 44));
+    OA_CHECK((danger.lines == std::vector<std::string>{"RE\xE2\x80\xA6"}));
+    OA_CHECK(danger.colour == kit::screen_colour::red);
+    OA_CHECK(danger.glyph == kit::Glyph::trash && danger.glyph_size == 0);
+    OA_CHECK(danger.control == 7 && danger.state.disabled && !danger.state.on);
+    OA_CHECK(danger.style == kit::TextStyle::button && danger.bold && danger.pixel_size == 10);
+
+    kit::ButtonSpec play{};
+    play.label = "PLAY";
+    play.role = kit::Role::button_main;
+    play.glyph = kit::Glyph::play;
+    play.glyph_points = 6.0F;
+    play.control = 8;
+    kit::button_part(parts, made_up_type(2.0F), {0, 0, 200, 88}, play, 10.0F);
+    const kit::Item& main = parts.back();
+    OA_CHECK((main.lines == std::vector<std::string>{"PLAY"}));
+    OA_CHECK(main.colour == kit::screen_colour::ink);
+    OA_CHECK(main.glyph_size == 12 && main.pixel_size == 20);
+    OA_CHECK(main.state.on && !main.state.disabled);
+
+    kit::ButtonSpec plain{};
+    plain.label = "BACK";
+    kit::button_part(parts, type, {0, 0, 4, 44}, plain, 10.0F);
+    OA_CHECK(parts.back().colour == kit::screen_colour::button_text);
+    // Too narrow for even the ellipsis: a button with no label.
+    OA_CHECK(parts.back().lines.empty());
+}
+
+/// A row of buttons keeps its groups at the room's two sides, or wraps every button from the
+/// left when they do not fit one line.
+void a_button_row_places_its_groups() {
+    const kit::Typesetter type = made_up_type(1.0F);
+    const kit::ButtonRowSizes sizes{10.0F, 2.0F, 30.0F, 4.0F, 20.0F};
+    kit::ButtonSpec left{};
+    left.label = "AB";
+    left.control = 1;
+    kit::ButtonSpec right{};
+    right.label = "CD";
+    right.role = kit::Role::button_main;
+    right.control = 2;
+    const std::array<kit::ButtonSpec, 1> lefts{left};
+    const std::array<kit::ButtonSpec, 1> rights{right};
+    std::vector<kit::Item> parts;
+    OA_CHECK(kit::button_row(parts, type, {10, 5}, 100, lefts, rights, sizes) == 20);
+    OA_CHECK(parts.size() == 2);
+    OA_CHECK(rect_is(parts[0].rect, 10, 5, 18, 20));
+    OA_CHECK(rect_is(parts[1].rect, 80, 5, 30, 20));
+    OA_CHECK(parts[0].control == 1 && parts[1].control == 2);
+
+    parts.clear();
+    OA_CHECK(kit::button_row(parts, type, {10, 5}, 40, lefts, rights, sizes) == 44);
+    OA_CHECK(rect_is(parts[0].rect, 10, 5, 18, 20));
+    OA_CHECK(rect_is(parts[1].rect, 10, 29, 30, 20));
+
+    // A button wider than the room takes the room.
+    parts.clear();
+    OA_CHECK(kit::button_row(parts, type, {0, 0}, 25, rights, {}, sizes) == 20);
+    OA_CHECK(rect_is(parts[0].rect, 0, 0, 25, 20));
+
+    parts.clear();
+    OA_CHECK(kit::button_row(parts, type, {0, 0}, 100, {}, {}, sizes) == 0);
+    OA_CHECK(parts.empty());
+}
+
+/// Icons, plain parts and parts moved from one list to another.
+void icons_plain_parts_and_moves() {
+    std::vector<kit::Item> parts;
+    kit::icon_part(parts, {0, 0, 10, 10}, kit::Glyph::none, kit::screen_colour::green, false);
+    OA_CHECK(parts.empty());
+    kit::icon_part(parts, {1, 2, 10, 10}, kit::Glyph::none, kit::screen_colour::green, true);
+    kit::icon_part(parts, {1, 2, 10, 10}, kit::Glyph::check, kit::screen_colour::amber, false);
+    OA_CHECK(parts.size() == 2);
+    OA_CHECK(parts[0].role == kit::Role::icon && parts[0].state.on);
+    OA_CHECK(parts[1].glyph == kit::Glyph::check && !parts[1].state.on);
+    OA_CHECK(parts[1].colour == kit::screen_colour::amber);
+
+    kit::plain_part(parts, kit::Role::panel, {3, 4, 50, 60}, kit::screen_colour::line);
+    OA_CHECK(parts.back().role == kit::Role::panel);
+    OA_CHECK(rect_is(parts.back().rect, 3, 4, 50, 60));
+    OA_CHECK(parts.back().colour == kit::screen_colour::line);
+    OA_CHECK(parts.back().lines.empty() && parts.back().control == kit::no_control);
+
+    parts[0].clip = {0, 0, 5, 5};
+    std::vector<kit::Item> moved;
+    kit::move_parts(moved, parts, 10);
+    OA_CHECK(parts.empty() && moved.size() == 3);
+    OA_CHECK(moved[0].rect.y == 12 && rect_is(moved[0].clip, 0, 0, 5, 5));
+    OA_CHECK(moved[2].rect.y == 14);
+    std::vector<kit::Item> clipped;
+    kit::move_parts(clipped, moved, -2, {0, 0, 100, 100});
+    OA_CHECK(moved.empty() && clipped.size() == 3);
+    OA_CHECK(clipped[2].rect.y == 12);
+    for (const kit::Item& part : clipped)
+        OA_CHECK(rect_is(part.clip, 0, 0, 100, 100));
+}
+
+/// A column's blocks lie one after another when they fit; else the body scrolls between the
+/// fixed top and bottom; else, when that leaves the body too little room, the whole column
+/// scrolls.
+void a_column_scrolls_its_body_or_the_whole() {
+    const kit::Rect area{0, 100, 300, 200};
+    const kit::ScrollColumn fits = kit::scroll_column(area, 50, 60, 40, 10, 30, 25);
+    OA_CHECK(fits.top == 100 && fits.body == 150 && fits.bottom == 220);
+    OA_CHECK(fits.top_clip.width == 0 && fits.body_clip.width == 0 && fits.bottom_clip.width == 0);
+    OA_CHECK(fits.scroll.view.width == 0 && fits.scroll.limit == 0 && fits.scroll.offset == 0);
+
+    const kit::ScrollColumn body = kit::scroll_column(area, 50, 200, 40, 10, 30, 25);
+    OA_CHECK(rect_is(body.scroll.view, 0, 150, 300, 100));
+    OA_CHECK(body.scroll.limit == 100 && body.scroll.offset == 25);
+    OA_CHECK(body.scroll.content_height == 200);
+    OA_CHECK(body.top == 100 && body.body == 125 && body.bottom == 260);
+    OA_CHECK(rect_is(body.body_clip, 0, 150, 300, 100));
+    OA_CHECK(body.top_clip.width == 0 && body.bottom_clip.width == 0);
+    OA_CHECK(kit::scroll_column(area, 50, 200, 40, 10, 30, 500).scroll.offset == 100);
+    OA_CHECK(kit::scroll_column(area, 50, 200, 40, 10, 30, -5).scroll.offset == 0);
+
+    const kit::ScrollColumn whole = kit::scroll_column(area, 150, 200, 40, 10, 30, 25);
+    OA_CHECK(rect_is(whole.scroll.view, 0, 100, 300, 200));
+    OA_CHECK(whole.scroll.limit == 200 && whole.scroll.offset == 25);
+    OA_CHECK(whole.top == 75 && whole.body == 225 && whole.bottom == 435);
+    OA_CHECK(rect_is(whole.top_clip, 0, 100, 300, 200));
+    OA_CHECK(rect_is(whole.body_clip, 0, 100, 300, 200));
+    OA_CHECK(rect_is(whole.bottom_clip, 0, 100, 300, 200));
+
+    // No gap without a body, and an empty body never scrolls alone.
+    const kit::ScrollColumn no_body = kit::scroll_column(area, 150, 0, 80, 10, 30, 0);
+    OA_CHECK(no_body.scroll.limit == 30 && no_body.bottom == 250);
+    OA_CHECK(rect_is(no_body.body_clip, 0, 100, 300, 200));
+}
+
+/// The controls of a screen whose parts carry them: the parts after the last backdrop, the
+/// last drawn first, and the enabled ones once each in the Tab order, in drawing order.
+void parts_list_their_controls() {
+    kit::DisplayList list;
+    const auto add = [&list](kit::Role role, kit::ControlId control, kit::Rect rect) {
+        kit::Item part{};
+        part.role = role;
+        part.control = control;
+        part.rect = rect;
+        list.items.push_back(part);
+        return list.items.size() - 1;
+    };
+    add(kit::Role::button, 1, {0, 0, 10, 10});
+    OA_CHECK(kit::first_live_part(list) == 0);
+    add(kit::Role::backdrop, kit::no_control, {0, 0, 100, 100});
+    OA_CHECK(kit::first_live_part(list) == 2);
+    add(kit::Role::text, kit::no_control, {0, 0, 10, 10});
+    const std::size_t two = add(kit::Role::button, 2, {20, 0, 10, 10});
+    list.items[two].clip = {20, 0, 10, 5};
+    const std::size_t three = add(kit::Role::toggle, 3, {40, 0, 10, 10});
+    list.items[three].state.on = true;
+    list.items[three].lines = {"OFF", "ON"};
+    add(kit::Role::button_main, 2, {60, 0, 10, 10});
+    const std::size_t four = add(kit::Role::button, 4, {80, 0, 10, 10});
+    list.items[four].state.disabled = true;
+    list.controls.push_back(kit::Control{9, {}, {}, true});
+    kit::list_part_controls(list);
+    OA_CHECK(list.controls.size() == 4);
+    if (list.controls.size() == 4) {
+        OA_CHECK(list.controls[0].id == 4 && !list.controls[0].enabled);
+        OA_CHECK(list.controls[1].id == 2 && rect_is(list.controls[1].rect, 60, 0, 10, 10));
+        OA_CHECK(list.controls[2].id == 3 && list.controls[2].kind == kit::ControlKind::toggle);
+        OA_CHECK(list.controls[2].checked && list.controls[2].text == "OFF");
+        OA_CHECK(list.controls[3].id == 2 && rect_is(list.controls[3].clip, 20, 0, 10, 5));
+        OA_CHECK(list.controls[3].kind == kit::ControlKind::button);
+    }
+    OA_CHECK((list.tab_order == std::vector<kit::ControlId>{2, 3}));
+    // The part under the backdrop takes no press.
+    OA_CHECK(kit::hit(list, {5, 5}) == kit::no_control);
+    OA_CHECK(kit::hit(list, {25, 2}) == 2);
+    OA_CHECK(kit::hit(list, {25, 7}) == kit::no_control);
+}
+
 } // namespace
 
 int main() {
@@ -455,5 +792,14 @@ int main() {
     arrangements_place_the_rectangles();
     the_scroll_matches_the_settings_dialog();
     a_point_hits_the_first_enabled_control();
+    points_round_to_canvas_pixels();
+    a_text_part_wraps_to_its_room();
+    a_line_part_is_shortened_to_its_room();
+    a_button_spans_its_label_mark_and_padding();
+    a_button_part_fits_its_label();
+    a_button_row_places_its_groups();
+    icons_plain_parts_and_moves();
+    a_column_scrolls_its_body_or_the_whole();
+    parts_list_their_controls();
     return oa::test::check_exit_status();
 }

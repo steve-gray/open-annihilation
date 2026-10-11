@@ -249,4 +249,68 @@ wrap(std::string_view text, int32_t width, const Measure& measure, const WrapRul
 [[nodiscard]] std::vector<std::string>
 wrap_path(std::string_view path, int32_t width, const Measure& measure);
 
+/// Returns how many bytes of a word's start fit a width: the longest run of
+/// whole characters no wider than it, and at least the first character, so a
+/// character wider than the width still takes a line of its own. This is
+/// where wrap breaks a word wider than a line when its rules give no
+/// break_word.
+///
+/// @param word the word, in UTF-8
+/// @param width the room, in the measure's units
+/// @param measure a text's width
+/// @return the bytes of the start; 0 for an empty word
+[[nodiscard]] std::size_t
+fitting_start(std::string_view word, int32_t width, const Measure& measure);
+
+/// The ellipsis that ends a shortened line.
+inline constexpr std::string_view ellipsis = "\xE2\x80\xA6";
+
+/// Returns a line shortened to a width with an ellipsis.
+///
+/// A line that fits is returned whole. Otherwise the longest start of whole
+/// characters that, with its spaces at the end dropped and the ellipsis
+/// added, fits; the ellipsis alone when no character does. The start is found
+/// by halving, which takes a measure that grows with the text.
+///
+/// @param text the line, in UTF-8
+/// @param width the room, in the measure's units
+/// @param measure a text's width
+/// @return the line as it fits; empty when not even the ellipsis fits
+[[nodiscard]] std::string fit(std::string_view text, int32_t width, const Measure& measure);
+
+/// Measures a screen's text in the modern fonts, at a size in canvas pixels,
+/// for a screen laid out in canvas pixels (the Game files screen and the
+/// folder chooser). The app fills it from the bundled fonts; a hook left null
+/// is estimated.
+struct TextMeasureHooks {
+    void* context{}; ///< passed back to every hook
+    /// Width in pixels of a line at a pixel size; null: 0.55 em a character.
+    int (*width)(void* context, std::string_view text, int pixel_size, bool bold){};
+    /// Height of a line in pixels; null: 1.25 em.
+    int (*line_height)(void* context, int pixel_size, bool bold){};
+};
+
+/// Returns a line's width in canvas pixels as the hooks measure it.
+///
+/// An empty line is 0 wide and is not measured. Without a width hook, each
+/// character counts 0.55 of the pixel size, and the whole is rounded up.
+///
+/// @param hooks the measure
+/// @param text the line, in UTF-8
+/// @param pixel_size the text's size, in canvas pixels
+/// @param bold true for bold
+/// @return the width, in canvas pixels
+[[nodiscard]] int32_t
+measured_width(const TextMeasureHooks& hooks, std::string_view text, int32_t pixel_size, bool bold);
+
+/// Returns the height of a line in canvas pixels as the hooks measure it.
+///
+/// With a hook, at least 1. Without one, 1.25 times the pixel size, rounded up.
+///
+/// @param hooks the measure
+/// @param pixel_size the text's size, in canvas pixels
+/// @param bold true for bold
+/// @return the height, in canvas pixels
+[[nodiscard]] int32_t measured_line(const TextMeasureHooks& hooks, int32_t pixel_size, bool bold);
+
 } // namespace oa::ui::kit
