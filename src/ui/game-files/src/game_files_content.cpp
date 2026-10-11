@@ -542,8 +542,8 @@ SheetContent sheet_content(const Model& model) {
             content.paragraphs.push_back(tr("Its mod profile cannot be used:"));
         }
         content.after.push_back(
-            tr("It is still copied, so it can be fixed in your file manager; the Mods page "
-               "plays only mods that work.")
+            tr("It is still copied, so it can be fixed in your file manager; the Library's Mods "
+               "tab plays only mods that work.")
         );
         content.actions = {sheet_action("OK", 0, Command::none, Role::button_main)};
         break;

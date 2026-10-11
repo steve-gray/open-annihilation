@@ -161,16 +161,11 @@ PackagePrompt question_prompt(
             )));
         if (installed.revision == 0)
             text.push_back(text_of(fill(
-                "The version installed is kept, and ROLL BACK on Mods in the Open "
-                "Annihilation "
-                "settings brings it back.",
-                {}
+                "The version installed is kept, and ROLL BACK in the Library brings it back.", {}
             )));
         else
             text.push_back(text_of(fill(
-                "Revision {installed} is kept, and ROLL BACK on Mods in the Open "
-                "Annihilation "
-                "settings brings it back.",
+                "Revision {installed} is kept, and ROLL BACK in the Library brings it back.",
                 {{"installed", std::to_string(installed.revision)}}
             )));
         if (plan.backup)
@@ -193,9 +188,7 @@ PackagePrompt question_prompt(
             {{"title", title}, {"installed", installed.version}, {"incoming", incoming.version}}
         )));
         text.push_back(text_of(fill(
-            "Replacing keeps {installed}, and ROLL BACK on Mods in the Open Annihilation "
-            "settings "
-            "brings it back.",
+            "Replacing keeps {installed}, and ROLL BACK in the Library brings it back.",
             {{"installed", installed.version}}
         )));
         if (plan.backup)
@@ -280,11 +273,11 @@ PackagePrompt installed_prompt(const Incoming& incoming, const fs::path& folder,
     text.push_back(path_of(folder));
     text.push_back(text_of(
         play_now ? fill(
-                       "Choose PLAY NOW to play it, or choose it later on Mods in the Open "
-                       "Annihilation settings.",
+                       "Choose PLAY NOW to play it, or choose it later with PLAY NOW in the "
+                       "Library.",
                        {}
                    )
-                 : fill("Choose it on Mods in the Open Annihilation settings to play it.", {})
+                 : fill("Choose it with PLAY NOW in the Library to play it.", {})
     ));
     add_button(made, open_folder_caption, Answer::open_folder);
     if (play_now)
@@ -313,8 +306,8 @@ PackagePrompt updated_prompt(
     case Change::install:
         if (result.backup_kept)
             text.push_back(text_of(fill(
-                "{title} is now {new}. {old} is kept, and ROLL BACK on Mods in the Open "
-                "Annihilation settings brings it back.",
+                "{title} is now {new}. {old} is kept, and ROLL BACK in the Library brings it "
+                "back.",
                 {{"title", now.name}, {"new", new_label}, {"old", old_label}}
             )));
         else

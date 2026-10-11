@@ -2880,8 +2880,8 @@ A mod plays in one of two ways, which give the same game:
   `oamod.yaml` layers over the game folder with no profile, by 3.1c's own
   rules, which the start says on standard output.
 
-The **Library** chooses the mod (`runtime_library.cpp`); Settings has no
-Mods page. `list_offered_mods` (`runtime_engine_settings.cpp`) finds the
+The **Library** chooses the mod (`runtime_library.cpp`).
+`list_offered_mods` (`runtime_engine_settings.cpp`) finds the
 mod folders of the game folder's `mods` folder (`list_mod_folders`), of the
 player's own `Documents/Open Annihilation/Mods` (`list_mods_in`), the folder
 an earlier version's Pick Folder... stored

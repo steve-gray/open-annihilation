@@ -330,8 +330,8 @@ void prepare_native_host(
         !fs::is_directory(native.mod.folder, missing)) {
         const auto text = "The mod folder chosen earlier can no longer be found:\n\n" +
                           path_to_utf8(native.mod.folder) +
-                          "\n\nThe game starts without it; choose a mod again in the "
-                          "Open Annihilation settings.";
+                          "\n\nThe game starts without it; choose a mod again with "
+                          "PLAY NOW in the Library.";
         if (tell_gone_mod && unattended)
             std::cerr << "open-annihilation: " << text << '\n';
         else if (tell_gone_mod)

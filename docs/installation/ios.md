@@ -243,8 +243,8 @@ Open the **OA** settings from the main menu and choose **Game files**:
   - **ADD FILES…** adds an expansion, extra maps or a mod from a folder,
     archives (`.hpi`, `.ufo`, `.ccx` and `.gp3` files) or the demo's
     installer. Nothing already there is replaced. A folder holding a mod
-    profile (`oamod.yaml`) becomes a mod you choose on the settings' Mods
-    page.
+    profile (`oamod.yaml`) becomes a mod you choose with PLAY NOW in the
+    Library.
   - **CHECK AGAIN** runs the game's own check on the files, which also
     notices changes made in the Files app.
   - **REMOVE** next to a part removes it; **REMOVE ALL GAME FILES…** removes
