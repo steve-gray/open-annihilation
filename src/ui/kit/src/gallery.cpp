@@ -1503,7 +1503,7 @@ int32_t oa_mark(Builder& b, Point at, int32_t width, std::string_view word) {
             state = OaButtonState::pressed;
         else if (pointer_on(model, kOaButton))
             state = OaButtonState::hovered;
-        part.look = OaButtonLook{kOaSide, state};
+        part.look = OaButtonLook{kOaSide, state, false};
         Control control;
         control.id = kOaButton;
         control.rect = button;
@@ -1542,9 +1542,8 @@ int32_t oa_mark(Builder& b, Point at, int32_t width, std::string_view word) {
         );
         x += size.x + kCellGap;
     }
-    const int32_t top = line_bottom + kLineGap;
-    return top - at.y +
-           add_states(
+    int32_t top = line_bottom + kLineGap;
+    top += add_states(
                b.list,
                {at.x, top},
                width,
@@ -1557,10 +1556,24 @@ int32_t oa_mark(Builder& b, Point at, int32_t width, std::string_view word) {
                            state = OaButtonState::hovered;
                        else if (shown == Sample::pressed)
                            state = OaButtonState::pressed;
-                       add_part(b.list, Role::oa_button, rect).look = OaButtonLook{kOaSide, state};
+                       add_part(b.list, Role::oa_button, rect).look =
+                           OaButtonLook{kOaSide, state, false};
                    });
                }
-           );
+           ) +
+           kLineGap;
+    // At rest wearing the attention dot, as the main menu's does while
+    // updates wait.
+    constexpr std::array<std::string_view, 1> kDot{"With its dot"};
+    top += add_cells(
+        b.list, {at.x, top}, width, {kOaSide, kOaSide}, kDot, [&](const Rect& rect, std::size_t) {
+            add_fixed(b.list, rect, {}, Sample::idle, false, [&] {
+                add_part(b.list, Role::oa_button, rect).look =
+                    OaButtonLook{kOaSide, OaButtonState::idle, true};
+            });
+        }
+    );
+    return top - at.y;
 }
 
 /// One section of the gallery.
