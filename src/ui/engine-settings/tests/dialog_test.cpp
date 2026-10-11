@@ -8312,6 +8312,16 @@ void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
         static_cast<void>(settings::dialog_key(dropped, key));
     CHECK(dropped.open_list != settings::no_control);
     check_endpoint_names(dropped, "Controls, a drop-down open", seen);
+    // Interface size's drop-down open, Graphics' last row: Tab reaches it
+    // past After zoom, which is locked.
+    settings::Dialog sizes = engine;
+    sizes.page = Page::graphics;
+    for (int32_t press = 0; press < 12; ++press)
+        static_cast<void>(settings::dialog_key(sizes, DialogKey::tab));
+    CHECK(sizes.focused == settings::first_row_control + 12);
+    static_cast<void>(settings::dialog_key(sizes, DialogKey::space));
+    CHECK(sizes.open_list == settings::first_row_control + 12);
+    check_endpoint_names(sizes, "Graphics, Interface size open", seen);
     // Mods with three mods, and its Switch Mod question.
     settings::Dialog mods = mods_dialog(kModFolders[0]);
     mods.size_class = size_class;
@@ -8333,6 +8343,12 @@ void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
              "oa.settings.max-zoom-out",
              "oa.settings.max-zoom-out.whole-map",
              "oa.settings.menu-scaling.whole-steps",
+             "oa.settings.interface-size",
+             "oa.settings.interface-size.automatic",
+             "oa.settings.interface-size.100",
+             "oa.settings.interface-size.200",
+             "oa.settings.interface-size.300",
+             "oa.settings.interface-size.400",
              "oa.settings.user-folder.saves",
              "oa.settings.user-folder.screenshots",
              "oa.settings.user-folder.mods",
