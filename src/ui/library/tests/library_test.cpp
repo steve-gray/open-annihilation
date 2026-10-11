@@ -1012,6 +1012,19 @@ void test_status_lines_and_bylines() {
     if (own != nullptr)
         OA_CHECK_TEXT(lib::byline(*own), "");
 
+    lib::Listing counted = listing(core, Kind::mod, "counted", "Counted");
+    counted.downloads = 12400;
+    inputs.listings.push_back(counted);
+    lib::Listing counted_only = listing(core, Kind::mod, "counted-only", "Counted Only");
+    counted_only.author.clear();
+    counted_only.downloads = 1;
+    inputs.listings.push_back(counted_only);
+    lib::refresh(library, inputs);
+    if (const lib::Entry* with_count = at(library, core, Kind::mod, "counted"))
+        OA_CHECK_TEXT(lib::byline(*with_count), "by Fixture Author · 12,400 downloads");
+    if (const lib::Entry* count_only = at(library, core, Kind::mod, "counted-only"))
+        OA_CHECK_TEXT(lib::byline(*count_only), "1 download");
+
     inputs.updates[0].to_version = "4.9";
     lib::refresh(library, inputs);
     entry = at(library, core, Kind::mod, "fixture-mod");
@@ -1176,6 +1189,13 @@ void test_change_texts() {
 }
 
 void test_texts() {
+    OA_CHECK_TEXT(lib::downloads_text(0), "0 downloads");
+    OA_CHECK_TEXT(lib::downloads_text(1), "1 download");
+    OA_CHECK_TEXT(lib::downloads_text(999), "999 downloads");
+    OA_CHECK_TEXT(lib::downloads_text(1000), "1,000 downloads");
+    OA_CHECK_TEXT(lib::downloads_text(12400), "12,400 downloads");
+    OA_CHECK_TEXT(lib::downloads_text(1234567), "1,234,567 downloads");
+
     OA_CHECK_TEXT(lib::size_text(0), "1 KB");
     OA_CHECK_TEXT(lib::size_text(1), "1 KB");
     OA_CHECK_TEXT(lib::size_text(1535), "1 KB");
