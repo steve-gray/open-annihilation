@@ -220,6 +220,20 @@ latched the closing key and drew a backdrop.
   under it asked. The saves notice, the mod warning and the found folder's
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
+- **The download check.** `Runtime::tell_challenges`, once a frame beside
+  `tell_mod_installs`, reads the download queue when its generation moves.
+  While the main menu shows, including under the Library or Settings, one
+  window named `challenge` shows the registry's name, the page and the code
+  (`draw_challenge`). It joins at once, or with `show_when_free` while a
+  notice or a question is the top screen. OPEN THE CHECK calls
+  `open_web_link` with the page the queue gave and leaves the window
+  waiting; that button is absent when `web_address_available` is false. TRY
+  AGAIN asks the queue to start that download again. CANCEL cancels that
+  download and the same registry's downloads that are still waiting, then
+  closes the window. A passed check, or a download cancelled somewhere
+  else, closes it. A check that arrives during a game waits until the main
+  menu, and leaving the main menu hides the window without cancelling the
+  download. A new code refreshes the same window.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale and lays them out at the size class of the points left
   over (`LayerView`, from `view`, worked out afresh whenever the window's
@@ -3149,6 +3163,10 @@ a missing scheme, and an address whose body holds a space or an ASCII
 control, is refused and is not handed to the browser. `app-web-address`
 checks that through a stub opener
 ([testing.md](../../docs/development/testing.md#opening-a-web-address)).
+The download check asks `web_address_available` before it offers OPEN THE
+CHECK, and opens the page with `open_web_link` only when that button is
+pressed. `native-challenge` checks the window, the recorded page, the
+retry, the cancel and a check that waits out a skirmish.
 Neither is a hook, and no extension fills them.
 
 An extension calls `modern_text_chain`, `modern_text_layout` and
