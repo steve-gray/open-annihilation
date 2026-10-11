@@ -15,6 +15,7 @@ settings and exactly what a download sends and records.
 ## Contents
 
 - [Opening the Library](#opening-the-library)
+- [The Active tab](#the-active-tab)
 - [Tabs and states](#tabs-and-states)
 - [Search and filters](#search-and-filters)
 - [The details](#the-details)
@@ -35,10 +36,10 @@ settings and exactly what a download sends and records.
 The Library opens on the main menu, from:
 
 - **the OA button** at the bottom right of the main menu. It opens on the
-  Updates tab while updates wait, and on Mods otherwise. While updates you
-  can install wait, the button wears an amber dot in its top right corner,
-  from the moment OA finds them: you need not open the Library to learn of
-  them;
+  [Active](#the-active-tab) tab. While updates you can install wait, the
+  button wears an amber dot in its top right corner, from the moment OA
+  finds them: you need not open the Library to learn of them, and its
+  **Updates** tab lists them;
 - **GET MORE MODS…** in Settings › Mods, which opens it on Mods;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
   Languages.
@@ -61,11 +62,30 @@ and an entry's details are a page of their own; in the Regular and Large
 layouts the details sit beside the list, and Large adds a column of
 filters.
 
+## The Active tab
+
+**Active**, the first tab, shows what you are using now, top to bottom:
+
+- **MOD**: the mod you are playing, with its badge, name and version
+  ("Ridge 4.8 · rev 3"), or "No mod is played";
+- **LANGUAGE**: the language pack the game's words come from, with its
+  version ("Deutsch 1.2"), or the language the game holds itself
+  ("English · built in");
+- **MAPS**: each map pack you have installed, by name, with its maps under
+  it: each map's name, how many players it is for and its size ("Ridgeline
+  · 4 players · 16x16"), or "No map packs are installed."
+
+It is a list to read: nothing on it can be chosen or pressed, and it has no
+search and no filters. When it is longer than the window it scrolls with
+the mouse wheel, a finger, Page Up and Page Down, Home and End, and a
+controller's right stick. The other tabs are where packages are got,
+updated and played.
+
 ## Tabs and states
 
-The tabs are **Mods**, **Maps**, **Languages** and **Updates** ("Lang" and
-"Upd" in the Compact layout). Updates carries the number of updates you can
-install now.
+The tabs are **Active**, **Mods**, **Maps**, **Languages** and
+**Updates** ("Lang" and "Upd" in the Compact layout). Updates carries the
+number of updates you can install now.
 
 Each row shows the package's badge (its own picture, or up to three
 letters), its name, its version ("4.8 · rev 4" from its second packaging
@@ -106,12 +126,22 @@ then a tag, then the author, then the summary. Without a search the list
 shows updates first, then what is installed, then what you can get, then
 what you cannot, each by name, Core Prime's first.
 
-The filters are **All**, **Installed** (which keeps updates and the mod
-being played) and **Updates**, and each tag the packages carry, with how
-many have it. They are chips over the list in the Regular layout, with a
-TAGS menu for the tags that do not fit, a column of their own in Large, and
-one drop-down in Compact. Choosing the tag already chosen clears it. The
-Updates tab has no filters: it holds every update, and **UPDATE ALL**.
+The filters are **All**, **New**, **Installed** (which keeps updates and
+the mod being played) and **Updates**, each with how many packages it holds
+on that tab in brackets, "Installed (4)", and each tag the packages carry,
+with how many have it. A filter's count is of the whole tab: the tag and
+the search you choose do not change it. **New** holds the ten packages the
+registries published last, newest first, by the day each release came out;
+a package whose registry gives no day is never among them. The filters are
+chips over the list in the Regular layout, with a TAGS menu for the tags
+that do not fit, a column of their own in Large, and one drop-down in
+Compact. Choosing the tag already chosen clears it.
+
+Each tab keeps its own filter: choosing Installed on Mods leaves Maps and
+Updates as they were. The **Updates** tab holds every kind of package and
+has the same filters, and it opens on Updates, every update together. Over
+its list a line says how many updates it shows ("3 updates"), with **UPDATE
+ALL**.
 
 An empty list says "Nothing matches "*search*".", "No updates.", "Nothing
 to show.", or, with no registry at all, "Nothing here yet. Turn a registry
@@ -167,7 +197,7 @@ count, on its row; Compact shows them under the status line.
 |---|---|
 | Tab, Shift+Tab | the next and previous control |
 | arrow keys | move by where controls are; on the list, Up and Down choose the row |
-| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus |
+| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
 | Enter, Space | on a row: open its details page in Compact, or go to its first button |
 | Cmd+F (Ctrl+F elsewhere), or `/` | the search |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |
@@ -253,8 +283,8 @@ registry is not an update.
 An update shows:
 
 - as **UPDATE** on the package's row, and in its details with what changes;
-- on the **Updates** tab, every kind together, with **UPDATE ALL**, which
-  starts every update that can be installed;
+- on the **Updates** tab, every kind together, with **UPDATE ALL** over the
+  list, which starts every update the list shows that can be installed;
 - as the dot on the main menu's **OA** button;
 - for a mod, on its row in Settings › Mods, with an **UPDATE** button of its
   own ([settings](settings.md#mods)).

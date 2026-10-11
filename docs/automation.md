@@ -204,6 +204,9 @@ centre would land on the line between Off and On.
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
 | The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
+| The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, in that order | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; `updates`' text holds the updates that can be installed, "Updates 2" |
+| The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
+| The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label, its text the line shown: "Ridge 4.8 · rev 3" or "No mod is played"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
 `<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
