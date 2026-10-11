@@ -10,13 +10,18 @@
 // NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
 // Language's MORE IN THE LIBRARY… the Library over Settings, and never two
 // of either; the shortcut and the in-match OA button open Settings. At
-// 640x480 and 1920x1080.
+// 640x480 and 1920x1080. Then, at 640x480, a stand-in controller: Y focuses
+// the search, RB and LB change the tab and come back, X queues the selected
+// entry's UPDATE, the right stick scrolls the list, and B leaves Compact's
+// details and then closes the Library. The same buttons over Settings do
+// what they did before.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
+#include "pad_state.hpp"
 #include "user_folder_state.hpp"
 #include "web_link_state.hpp"
 
@@ -38,6 +43,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -314,6 +320,235 @@ library::Inputs fixture_inputs_of(const fs::path& mods, bool updates) {
     inputs.version_text = "v0.8.0";
     inputs.list_age_seconds = 4 * 60;
     return inputs;
+}
+
+/// How many installed mods with an update the controller step adds, so the
+/// list at 640×480 is long enough for the right stick to scroll.
+constexpr int kSpurUpdates = 24;
+
+/// Appends installed mods that each have an update, named Spur 0 onward, on
+/// the built-in registry. Their folders are not written: the step queues an
+/// update and scrolls, and does not open a folder.
+///
+/// @param[in,out] inputs the fixture's inputs
+/// @param count how many to append
+void append_spur_updates(library::Inputs& inputs, int count) {
+    for (int index = 0; index < count; ++index) {
+        const std::string key = "spur-" + std::to_string(index);
+        const std::string name = "Spur " + std::to_string(index);
+        inputs.listings.push_back(mod_listing(kBuiltIn, key, name, "1.0", 2, 2));
+
+        library::Installed installed;
+        installed.kind = library::Kind::mod;
+        installed.key = key;
+        installed.folder = "spur-unused";
+        installed.name = name;
+        installed.version = "1.0";
+        installed.revision = 1;
+        installed.registry = std::string(kBuiltIn);
+        installed.release = 1;
+        inputs.installed.push_back(std::move(installed));
+
+        library::UpdateNote note;
+        note.registry = std::string(kBuiltIn);
+        note.kind = library::Kind::mod;
+        note.key = key;
+        note.to_release = 2;
+        note.to_version = "1.0";
+        note.to_revision = 2;
+        note.size = 1024U * 1024U;
+        inputs.updates.push_back(std::move(note));
+    }
+}
+
+/// A joystick input a gamepad button or axis is bound to.
+struct PadBinding {
+    SDL_GamepadBindingType type{SDL_GAMEPAD_BINDTYPE_NONE}; ///< button, axis or hat
+    int index{-1};                                          ///< the joystick button, axis or hat
+    int hat_mask{};                                         ///< the hat's direction, for a hat
+    int input_least{};  ///< the joystick axis's value at the bound range's start
+    int input_most{};   ///< the joystick axis's value at its end
+    int output_least{}; ///< the gamepad axis's value at the start
+    int output_most{};  ///< the gamepad axis's value at the end
+};
+
+/// The largest and smallest joystick axis values.
+constexpr int kAxisMost = SDL_JOYSTICK_AXIS_MAX;
+/// The smallest joystick axis value.
+constexpr int kAxisLeast = SDL_JOYSTICK_AXIS_MIN;
+
+/// The buttons the controller step presses: the face and the shoulders.
+constexpr std::array<SDL_GamepadButton, 6> kLibraryPadButtons{
+    SDL_GAMEPAD_BUTTON_SOUTH,
+    SDL_GAMEPAD_BUTTON_EAST,
+    SDL_GAMEPAD_BUTTON_WEST,
+    SDL_GAMEPAD_BUTTON_NORTH,
+    SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,
+    SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+};
+
+/// Two touchpads, so the right stick is the wheel in the menus rather than a pointer.
+constexpr std::array<SDL_VirtualJoystickTouchpadDesc, 2> kLibraryTouchpads{{{1, {}}, {1, {}}}};
+
+/// The USB numbers of an ordinary gamepad the stand-in imitates.
+constexpr uint16_t kLibraryPadVendor = 0x045e;
+constexpr uint16_t kLibraryPadProduct = 0x02ea;
+
+/// A virtual gamepad the controller step attaches, and detaches however the step ends.
+struct LibraryPad {
+    SDL_JoystickID id{};                                        ///< 0 before it is attached
+    SDL_Joystick* joystick{};                                   ///< the check's own handle
+    std::array<PadBinding, SDL_GAMEPAD_BUTTON_COUNT> buttons{}; ///< by gamepad button
+    std::array<PadBinding, SDL_GAMEPAD_AXIS_COUNT> axes{};      ///< by gamepad axis
+
+    /// Detaches the stand-in and closes the check's handle.
+    ~LibraryPad() { detach(); }
+
+    /// Closes the handle and detaches the stand-in.
+    void detach() {
+        if (joystick != nullptr)
+            SDL_CloseJoystick(joystick);
+        joystick = nullptr;
+        if (id != 0)
+            SDL_DetachVirtualJoystick(id);
+        id = 0;
+    }
+};
+
+/// Attaches the stand-in and reads the joystick inputs SDL binds its buttons and axes to.
+///
+/// @param[in,out] stand_in the stand-in
+void attach_library_pad(LibraryPad& stand_in) {
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.vendor_id = kLibraryPadVendor;
+    desc.product_id = kLibraryPadProduct;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; ++axis)
+        desc.axis_mask |= 1U << static_cast<unsigned>(axis);
+    for (const SDL_GamepadButton button : kLibraryPadButtons)
+        desc.button_mask |= 1U << static_cast<unsigned>(button);
+    desc.nbuttons = static_cast<Uint16>(kLibraryPadButtons.size());
+    desc.ntouchpads = static_cast<Uint16>(kLibraryTouchpads.size());
+    desc.touchpads = kLibraryTouchpads.data();
+    desc.name = "the Library check's gamepad";
+    stand_in.id = SDL_AttachVirtualJoystick(&desc);
+    require(stand_in.id != 0, std::string("SDL refused the stand-in gamepad: ") + SDL_GetError());
+    stand_in.joystick = SDL_OpenJoystick(stand_in.id);
+    require(
+        stand_in.joystick != nullptr,
+        std::string("the stand-in gamepad's joystick did not open: ") + SDL_GetError()
+    );
+    SDL_Gamepad* gamepad = SDL_OpenGamepad(stand_in.id);
+    require(
+        gamepad != nullptr,
+        std::string("SDL does not take the stand-in as a gamepad: ") + SDL_GetError()
+    );
+    require(
+        SDL_GetNumGamepadTouchpads(gamepad) >= 2,
+        "the stand-in gamepad reports fewer than two touchpads, so its right stick is not the wheel"
+    );
+    int count = 0;
+    SDL_GamepadBinding** bindings = SDL_GetGamepadBindings(gamepad, &count);
+    for (int at = 0; bindings != nullptr && at < count; ++at) {
+        const SDL_GamepadBinding& binding = *bindings[at];
+        PadBinding found{};
+        found.type = binding.input_type;
+        if (binding.input_type == SDL_GAMEPAD_BINDTYPE_BUTTON) {
+            found.index = binding.input.button;
+        } else if (binding.input_type == SDL_GAMEPAD_BINDTYPE_HAT) {
+            found.index = binding.input.hat.hat;
+            found.hat_mask = binding.input.hat.hat_mask;
+        } else if (binding.input_type == SDL_GAMEPAD_BINDTYPE_AXIS) {
+            found.index = binding.input.axis.axis;
+            found.input_least = binding.input.axis.axis_min;
+            found.input_most = binding.input.axis.axis_max;
+        }
+        if (binding.output_type == SDL_GAMEPAD_BINDTYPE_BUTTON && binding.output.button >= 0 &&
+            binding.output.button < SDL_GAMEPAD_BUTTON_COUNT) {
+            stand_in.buttons[static_cast<std::size_t>(binding.output.button)] = found;
+        } else if (
+            binding.output_type == SDL_GAMEPAD_BINDTYPE_AXIS && binding.output.axis.axis >= 0 &&
+            binding.output.axis.axis < SDL_GAMEPAD_AXIS_COUNT
+        ) {
+            found.output_least = binding.output.axis.axis_min;
+            found.output_most = binding.output.axis.axis_max;
+            stand_in.axes[static_cast<std::size_t>(binding.output.axis.axis)] = found;
+        }
+    }
+    SDL_free(bindings);
+    SDL_CloseGamepad(gamepad);
+    for (const SDL_GamepadButton button : kLibraryPadButtons)
+        require(
+            stand_in.buttons[static_cast<std::size_t>(button)].type != SDL_GAMEPAD_BINDTYPE_NONE,
+            "the stand-in gamepad has no binding for a button the step presses"
+        );
+    require(
+        stand_in.axes[static_cast<std::size_t>(SDL_GAMEPAD_AXIS_RIGHTY)].type ==
+            SDL_GAMEPAD_BINDTYPE_AXIS,
+        "the stand-in gamepad has no binding for its right stick"
+    );
+}
+
+/// Sets a gamepad button of the stand-in through the joystick input it is bound to.
+///
+/// @param stand_in the stand-in
+/// @param button the gamepad button
+/// @param down whether it is down
+void set_library_button(LibraryPad& stand_in, SDL_GamepadButton button, bool down) {
+    const PadBinding& binding = stand_in.buttons[static_cast<std::size_t>(button)];
+    bool ok = false;
+    switch (binding.type) {
+    case SDL_GAMEPAD_BINDTYPE_BUTTON:
+        ok = SDL_SetJoystickVirtualButton(stand_in.joystick, binding.index, down);
+        break;
+    case SDL_GAMEPAD_BINDTYPE_HAT:
+        ok = SDL_SetJoystickVirtualHat(
+            stand_in.joystick,
+            binding.index,
+            static_cast<Uint8>(down ? binding.hat_mask : SDL_HAT_CENTERED)
+        );
+        break;
+    case SDL_GAMEPAD_BINDTYPE_AXIS:
+        ok = SDL_SetJoystickVirtualAxis(
+            stand_in.joystick,
+            binding.index,
+            static_cast<Sint16>(down ? binding.input_most : binding.input_least)
+        );
+        break;
+    case SDL_GAMEPAD_BINDTYPE_NONE:
+        require(false, "the stand-in gamepad has no binding for a button the step presses");
+        break;
+    }
+    require(ok, std::string("the stand-in gamepad's button could not be set: ") + SDL_GetError());
+}
+
+/// Sets a gamepad axis of the stand-in, in the binding's own range.
+///
+/// @param stand_in the stand-in
+/// @param axis the gamepad axis
+/// @param value -1..1, y down
+void set_library_axis(LibraryPad& stand_in, SDL_GamepadAxis axis, float value) {
+    const PadBinding& binding = stand_in.axes[static_cast<std::size_t>(axis)];
+    require(
+        binding.type == SDL_GAMEPAD_BINDTYPE_AXIS,
+        "the stand-in gamepad has no binding for an axis the step moves"
+    );
+    const double wanted = value >= 0.0F ? static_cast<double>(value) * kAxisMost
+                                        : static_cast<double>(-value) * kAxisLeast;
+    double part = 0.0;
+    if (binding.output_most != binding.output_least)
+        part = (wanted - static_cast<double>(binding.output_least)) /
+               static_cast<double>(binding.output_most - binding.output_least);
+    const double raw =
+        binding.input_least + part * static_cast<double>(binding.input_most - binding.input_least);
+    const auto clamped =
+        static_cast<Sint16>(std::clamp(static_cast<int>(std::lround(raw)), kAxisLeast, kAxisMost));
+    require(
+        SDL_SetJoystickVirtualAxis(stand_in.joystick, binding.index, clamped),
+        std::string("the stand-in gamepad's axis could not be set: ") + SDL_GetError()
+    );
 }
 
 /// Returns a folder as the settings keep it: absolute, normal, in UTF-8.
@@ -809,6 +1044,189 @@ void Runtime::check_library() {
     leave_match();
     load(Screen::main_menu);
     std::cout << "library check: the in-match OA button opens Settings\n";
+
+    // 10. At 640×480 a stand-in controller reaches the Library's own commands
+    // through the same events a gamepad sends. The same buttons over Settings
+    // do what they did before this step.
+    window_of(kCanvasWidth, kCanvasHeight);
+    settle();
+    fixture.inputs = fixture_inputs_of(mods, true);
+    append_spur_updates(fixture.inputs, kSpurUpdates);
+    ++fixture.generation;
+    run_frame(running);
+    require(running, "a frame ended the run");
+    open_library(library::Tab::updates);
+    run_frame(running);
+    require(
+        running && top_is(library_screen_name) && host.model.tab == library::Tab::updates &&
+            host.model.visible.size() > static_cast<std::size_t>(kSpurUpdates),
+        "the Library did not open on a long Updates list"
+    );
+
+    struct VirtualOnly {
+        PadState& state;
+        bool before;
+
+        explicit VirtualOnly(PadState& state) : state(state), before(state.virtual_pads_only) {
+            state.virtual_pads_only = true;
+        }
+
+        ~VirtualOnly() { state.virtual_pads_only = before; }
+    } virtual_only{pad_state()};
+
+    LibraryPad stand_in;
+    attach_library_pad(stand_in);
+    for (int frame = 0; frame < 4; ++frame)
+        run_frame(running);
+    require(running, "opening the stand-in gamepad ended the run");
+
+    const auto tap_pad = [&](SDL_GamepadButton button) {
+        set_library_button(stand_in, button, true);
+        run_frame(running);
+        set_library_button(stand_in, button, false);
+        run_frame(running);
+        require(running, "a controller button ended the run");
+    };
+    const auto stick_down = [&] {
+        set_library_axis(stand_in, SDL_GAMEPAD_AXIS_RIGHTY, 1.0F);
+        run_frame(running);
+        set_library_axis(stand_in, SDL_GAMEPAD_AXIS_RIGHTY, 0.0F);
+        run_frame(running);
+        require(running, "the right stick ended the run");
+    };
+    const auto shown_row = [&]() -> std::optional<std::string> {
+        std::vector<AutomationControl> controls;
+        oa_layer().automation_controls(controls);
+        for (const AutomationControl& control : controls) {
+            if (control.visible && control.window_width > 0 && control.window_height > 0 &&
+                control.name.compare(0, std::string("oa.library.row.").size(), "oa.library.row.") ==
+                    0)
+                return control.name;
+        }
+        return std::nullopt;
+    };
+
+    const std::optional<AutomationControl> search_before = named("oa.library.search");
+    require(
+        search_before.has_value() && !search_before->focused,
+        "the search was missing or already focused"
+    );
+    tap_pad(SDL_GAMEPAD_BUTTON_NORTH);
+    const std::optional<AutomationControl> search = named("oa.library.search");
+    require(search.has_value() && search->focused, "Y did not focus the search");
+    std::cout << "library check: pad Y focuses the search\n";
+
+    require(host.model.tab == library::Tab::updates, "Y left the Updates tab");
+    tap_pad(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    require(host.model.tab != library::Tab::updates, "RB did not change the tab");
+    tap_pad(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    require(host.model.tab == library::Tab::updates, "LB did not come back to Updates");
+    std::cout << "library check: pad RB then LB change the tab and come back\n";
+
+    const library::Entry* selected = library::selected_entry(host.model);
+    require(
+        selected != nullptr && selected->state == library::State::update,
+        "the selected entry has no UPDATE"
+    );
+    const std::string selected_key = selected->id.key;
+    const std::string selected_registry = selected->id.registry;
+    const std::size_t enqueued = fixture.enqueued.size();
+    const std::size_t cancelled = fixture.cancelled.size();
+    const std::size_t retried = fixture.retried.size();
+    tap_pad(SDL_GAMEPAD_BUTTON_WEST);
+    require(
+        fixture.enqueued.size() == enqueued + 1 && fixture.cancelled.size() == cancelled &&
+            fixture.retried.size() == retried &&
+            fixture.enqueued.back().registry == selected_registry &&
+            fixture.enqueued.back().key == selected_key &&
+            fixture.enqueued.back().reason == content::DownloadReason::update,
+        "X did not queue the selected entry's UPDATE"
+    );
+    std::cout << "library check: pad X queues the selected UPDATE\n";
+
+    const int32_t scrolled_from = host.state.list_scroll;
+    stick_down();
+    require(
+        host.state.list_scroll > scrolled_from && top_is(library_screen_name),
+        "the right stick did not scroll the list"
+    );
+    std::cout << "library check: pad right stick scrolls the list\n";
+
+    const std::optional<std::string> row = shown_row();
+    require(row.has_value(), "no row of the list is shown to open");
+    click_named(*row);
+    require(named("oa.library.back").has_value(), "the row did not open Compact's details");
+    tap_pad(SDL_GAMEPAD_BUTTON_EAST);
+    require(
+        !named("oa.library.back").has_value() && top_is(library_screen_name),
+        "B did not go back from the details to the list"
+    );
+    tap_pad(SDL_GAMEPAD_BUTTON_EAST);
+    require(
+        oa_layer().top() == nullptr && oa_layer().find(library_screen_name) == nullptr,
+        "B did not close the Library"
+    );
+    std::cout << "library check: pad B leaves the details and then closes the Library\n";
+
+    open_library(library::Tab::updates);
+    run_frame(running);
+    require(top_is(library_screen_name), "the Library did not open under Settings");
+    if (named("oa.library.back"))
+        click_named("oa.library.back");
+    click_named("oa.library.settings");
+    require(
+        engine_settings_dialog() != nullptr && top_is("settings") &&
+            oa_layer().find(library_screen_name) != nullptr,
+        "SETTINGS… did not open Settings over the Library for the controller"
+    );
+    settings::Dialog* dialog = engine_settings_dialog();
+    const int32_t focus_before = dialog->focused;
+    const library::Tab tab_before = host.model.tab;
+    const int32_t scroll_before = host.state.list_scroll;
+    const std::size_t queued_before = fixture.enqueued.size();
+    tap_pad(SDL_GAMEPAD_BUTTON_NORTH);
+    tap_pad(SDL_GAMEPAD_BUTTON_WEST);
+    require(
+        engine_settings_dialog() != nullptr && top_is("settings") &&
+            dialog->focused == focus_before && host.model.tab == tab_before &&
+            host.state.list_scroll == scroll_before && fixture.enqueued.size() == queued_before,
+        "Y or X changed something while Settings was open"
+    );
+    std::cout << "library check: pad Y and X do nothing over Settings\n";
+
+    tap_pad(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    require(
+        engine_settings_dialog() != nullptr && dialog->focused != focus_before,
+        "RB did not move the focus in Settings"
+    );
+    const int32_t focus_after_rb = dialog->focused;
+    tap_pad(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    require(
+        engine_settings_dialog() != nullptr && dialog->focused != focus_after_rb,
+        "LB did not move the focus in Settings"
+    );
+    std::cout << "library check: pad RB and LB move the focus in Settings\n";
+
+    stick_down();
+    require(
+        top_is("settings") && engine_settings_dialog() != nullptr &&
+            host.state.list_scroll == scroll_before && host.model.tab == tab_before &&
+            fixture.enqueued.size() == queued_before,
+        "the right stick changed the Library while Settings was open"
+    );
+    std::cout
+        << "library check: pad right stick leaves the Library's list while Settings is open\n";
+
+    tap_pad(SDL_GAMEPAD_BUTTON_EAST);
+    require(
+        engine_settings_dialog() == nullptr && top_is(library_screen_name),
+        "B did not close Settings back to the Library"
+    );
+    std::cout << "library check: pad B closes Settings back to the Library\n";
+
+    stand_in.detach();
+    run_frame(running);
+    require(running, "detaching the stand-in gamepad ended the run");
 }
 
 } // namespace oa::app

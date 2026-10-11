@@ -973,6 +973,48 @@ struct Runtime::LibraryScreen final : LayerScreen {
         return take(library::library_command(host.model, host.state, list_, *command));
     }
 
+    /// Takes the controller's buttons that are the Library's own: Y focuses
+    /// the search, RB and LB change tabs, B goes back and X does the selected
+    /// entry's first action. Every other action is left to become a key, as
+    /// on any other screen.
+    ///
+    /// @param action the gamepad action
+    /// @return what the Library did; pass for an action it does not take
+    LayerAnswer pad_action(oa::ui::pad_controls::Action action) override {
+        std::optional<library::ScreenCommand> command;
+        switch (action) {
+        case oa::ui::pad_controls::Action::library_search:
+            command = library::ScreenCommand::find;
+            break;
+        case oa::ui::pad_controls::Action::focus_next:
+            command = library::ScreenCommand::next_tab;
+            break;
+        case oa::ui::pad_controls::Action::focus_previous:
+            command = library::ScreenCommand::previous_tab;
+            break;
+        case oa::ui::pad_controls::Action::back:
+            command = library::ScreenCommand::back;
+            break;
+        case oa::ui::pad_controls::Action::library_action:
+            command = library::ScreenCommand::first_action;
+            break;
+        default:
+            return LayerAnswer::pass;
+        }
+        LibraryHost& host = runtime_.library_host();
+        return take(library::library_command(host.model, host.state, list_, *command));
+    }
+
+    /// Takes the controller's right stick: it scrolls the pane that has the
+    /// focus, in notches as the wheel.
+    ///
+    /// @param notches the stick's turn; positive towards the top
+    /// @return what the Library did
+    LayerAnswer pad_stick(float notches) override {
+        LibraryHost& host = runtime_.library_host();
+        return take(library::library_stick(host.model, host.state, list_, notches));
+    }
+
     /// Takes a turn of the wheel, which scrolls the pane under the pointer.
     ///
     /// @param at the pointer, in the Library's points
