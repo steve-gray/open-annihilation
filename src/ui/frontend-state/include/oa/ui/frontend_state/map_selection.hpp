@@ -206,7 +206,7 @@ class Host {
     virtual std::string permitted_player_counts_text() = 0;
 
     /// Returns the selected map's description, in the language shown when
-    /// gamedata\translate.tdf has it in lower case.
+    /// gamedata\\translate.tdf has it in lower case.
     ///
     /// @return The description.
     virtual std::string map_description() = 0;
