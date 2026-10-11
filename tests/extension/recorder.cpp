@@ -13,7 +13,9 @@
 // the follower's (follower.cpp), whose hooks start with "follower.".
 //
 // The recorder registers one Settings page, Recorder, whose one toggle is
-// bound to recorder.toggle, from register_settings_pages.
+// bound to recorder.toggle, from register_settings_pages; with
+// --record-refused-page it gives the page an id the registry refuses, and
+// the start stops.
 //
 // --check-multiplayer-menu runs network play's check of the multiplayer
 // screens first; the recorder's check_multiplayer_menu then says that it
@@ -90,6 +92,9 @@ constexpr std::string_view kRecordOption = "--record-hooks";
 constexpr std::string_view kQuitOption = "--record-quit";
 // The option that has the recorder take the headless run for the check host.
 constexpr std::string_view kCheckHostOption = "--record-check-host";
+// The option that has the recorder register a Settings page the registry
+// refuses, which stops the start.
+constexpr std::string_view kRefusedPageOption = "--record-refused-page";
 // The after_pump frames --record-quit waits before the sound and frontend
 // services, and before quit.
 constexpr uint64_t kServicesFrame = 5;
@@ -105,6 +110,7 @@ struct Recorder {
     void* host{};                             // ScreenContext::host, kept from the overlay
     const ScreenServices* services{};         // ScreenContext::services, kept likewise
     bool check_host{};                        // --record-check-host was given
+    bool refused_page{};                      // --record-refused-page was given
 };
 
 /// Returns the recorder of this process.
@@ -225,7 +231,8 @@ const char* event_name(MatchEvent event) {
 /// @param name the option as given
 /// @param values takes the arguments after it
 /// @param[out] effects option_effect bits; left 0
-/// @return true for --record-hooks, --record-quit and --record-check-host
+/// @return true for --record-hooks, --record-quit, --record-check-host and
+///         --record-refused-page
 bool take_option(
     void* /*context*/, const char* name, const OptionValues& values, uint32_t& /*effects*/
 ) {
@@ -241,6 +248,10 @@ bool take_option(
     }
     if (std::string_view(name) == kCheckHostOption) {
         recorder().check_host = true;
+        return true;
+    }
+    if (std::string_view(name) == kRefusedPageOption) {
+        recorder().refused_page = true;
         return true;
     }
     return false;
@@ -309,7 +320,8 @@ const kit::PreferenceRow* recorder_page_rows() {
 }
 
 /// Counts the registration of the Settings pages and registers the
-/// recorder's own page, whose one toggle is bound to recorder.toggle
+/// recorder's own page, whose one toggle is bound to recorder.toggle; with
+/// --record-refused-page, under an id the registry refuses
 /// (Extension::register_settings_pages).
 ///
 /// @param context Extension::context (unused)
@@ -317,7 +329,7 @@ const kit::PreferenceRow* recorder_page_rows() {
 void register_settings_pages(void* /*context*/, SettingsRegistry* registry) {
     record("register_settings_pages");
     SettingsPageDesc page{};
-    page.id = "recorder.options";
+    page.id = recorder().refused_page ? "Recorder options" : "recorder.options";
     page.title = "Recorder";
     page.owner = "Recorder";
     page.rows = recorder_page_rows();
