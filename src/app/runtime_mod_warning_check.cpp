@@ -451,6 +451,8 @@ void Runtime::check_mod_warning() {
             "the skirmish did not play its ticks"
         );
         leave_match();
+        // Back on the main menu, where the Library's PLAY NOW can be pressed.
+        load(Screen::main_menu);
         fake_frontend_tick_ = previous_tick;
         std::cout << "mod warning check: " << name
                   << " warned once of the second side's panels and font, and its skirmish on "
