@@ -604,6 +604,107 @@ std::vector<uint8_t> state_icon_coverage(StateIcon icon, int32_t columns, int32_
     return coverage;
 }
 
+/// A circular arrow: an arc of straight strokes and an arrowhead, in the
+/// state icon's quarter units. Turning it is a clockwise step of an eighth
+/// of a turn, 90 degree steps exact and 45 degree steps at 181/256.
+constexpr std::array<IconStroke, 12> kRefreshStrokes{{
+    {{68, 65}, {57, 72}},
+    {{57, 72}, {43, 74}},
+    {{43, 74}, {31, 68}},
+    {{31, 68}, {24, 57}},
+    {{24, 57}, {22, 43}},
+    {{22, 43}, {28, 31}},
+    {{28, 31}, {39, 24}},
+    {{39, 24}, {53, 22}},
+    {{53, 22}, {65, 28}},
+    {{65, 28}, {72, 39}},
+    {{83, 45}, {76, 51}},
+    {{76, 51}, {67, 51}},
+}};
+
+/// Turns a design point clockwise about the icon's centre.
+///
+/// @param point the point, in quarter units
+/// @param eighths how far, in eighths of a turn; only the low three bits count
+/// @return the turned point
+IconPoint turned_icon_point(IconPoint point, uint8_t eighths) noexcept {
+    int64_t across = point.x - kRingCentre.x;
+    int64_t down = point.y - kRingCentre.y;
+    const uint8_t step = static_cast<uint8_t>(eighths & 7u);
+    if ((step & 1u) != 0u) {
+        constexpr int64_t kCos45 = 181;
+        constexpr int64_t kScale = 256;
+        constexpr int64_t kHalf = kScale / 2;
+        const int64_t turned_across = (across * kCos45 - down * kCos45 + kHalf) / kScale;
+        const int64_t turned_down = (across * kCos45 + down * kCos45 + kHalf) / kScale;
+        across = turned_across;
+        down = turned_down;
+    }
+    const uint8_t quarters = static_cast<uint8_t>(step / 2u);
+    for (uint8_t quarter = 0; quarter < quarters; ++quarter) {
+        const int64_t turned_across = -down;
+        down = across;
+        across = turned_across;
+    }
+    return {across + kRingCentre.x, down + kRingCentre.y};
+}
+
+/// Returns how much of each pixel a refresh arrow covers.
+///
+/// The same sampling as a state icon. `eighths` turns the design clockwise
+/// before it is scaled, so every machine draws the same pixels.
+///
+/// @param columns the rectangle's pixels across, at most kMostIconPixels
+/// @param rows the rectangle's pixels down, at most kMostIconPixels
+/// @param eighths how far the arrow has turned, in eighths of a turn
+/// @return columns times rows bytes, rows top to bottom: 0 uncovered to 255 covered
+std::vector<uint8_t> refresh_icon_coverage(int32_t columns, int32_t rows, uint8_t eighths) {
+    std::vector<uint8_t> coverage(
+        static_cast<std::size_t>(std::max(columns, 0)) * static_cast<std::size_t>(std::max(rows, 0))
+    );
+    const int32_t side = std::min(columns, rows);
+    if (side <= 0)
+        return coverage;
+    const int32_t origin_x = (columns - side) / 2;
+    const int32_t origin_y = (rows - side) / 2;
+    const int64_t square = 2 * kIconSamples * side;
+    const auto scaled = [square](int64_t quarters) {
+        return (quarters * square + kIconGrid / 2) / kIconGrid;
+    };
+    const int64_t half_width = scaled(kStrokeHalf);
+    std::vector<IconStroke> strokes;
+    for (const IconStroke& stroke : kRefreshStrokes) {
+        const IconPoint from = turned_icon_point(stroke.from, eighths);
+        const IconPoint to = turned_icon_point(stroke.to, eighths);
+        strokes.push_back({{scaled(from.x), scaled(from.y)}, {scaled(to.x), scaled(to.y)}});
+    }
+    constexpr int64_t samples = kIconSamples * kIconSamples;
+    for (int32_t row = 0; row < side; ++row) {
+        for (int32_t column = 0; column < side; ++column) {
+            int64_t inside = 0;
+            for (int64_t down = 0; down < kIconSamples; ++down) {
+                for (int64_t across = 0; across < kIconSamples; ++across) {
+                    const IconPoint sample{
+                        2 * kIconSamples * column + 2 * across + 1,
+                        2 * kIconSamples * row + 2 * down + 1,
+                    };
+                    for (const IconStroke& stroke : strokes) {
+                        if (near_stroke(sample, stroke, half_width)) {
+                            ++inside;
+                            break;
+                        }
+                    }
+                }
+            }
+            const std::size_t at =
+                static_cast<std::size_t>(origin_y + row) * static_cast<std::size_t>(columns) +
+                static_cast<std::size_t>(origin_x + column);
+            coverage[at] = static_cast<uint8_t>((inside * 255 + samples / 2) / samples);
+        }
+    }
+    return coverage;
+}
+
 } // namespace
 
 Point mark_size(Mark mark) noexcept {
@@ -634,9 +735,43 @@ void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around) {
     outline_rect(canvas, ring, colour::accent);
 }
 
+/// Draws a refresh arrow in a button: the quiet look's face while the pointer
+/// is over an enabled button, the plain look's disabled face while it cannot
+/// be pressed, and the arrow in the text colour while it turns.
+///
+/// @param canvas where it is drawn
+/// @param area the button
+/// @param look the mark, how far it has turned, and its state
+void draw_refresh_button(const Canvas& canvas, const Rect& area, const ButtonLook& look) {
+    ButtonLook face = look;
+    face.style = !look.enabled && !look.turning ? ButtonStyle::plain : ButtonStyle::quiet;
+    const ButtonColours colours = button_colours(face);
+    if (colours.face)
+        fill_rect(canvas, area, *colours.face);
+    outline_rect(canvas, area, colours.border);
+    const Colour ink = look.turning ? colour::button_text : colours.caption;
+    constexpr int32_t inset = 2;
+    const Rect icon{
+        area.x + inset,
+        area.y + inset,
+        std::max(area.width - 2 * inset, int32_t{0}),
+        std::max(area.height - 2 * inset, int32_t{0}),
+    };
+    if (icon.width <= 0 || icon.height <= 0)
+        return;
+    const Point pixels = covered_pixels(canvas, icon);
+    if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
+        return;
+    blend_coverage(canvas, icon, refresh_icon_coverage(pixels.x, pixels.y, look.turn), ink);
+}
+
 void draw_button(const Canvas& canvas, const Rect& area, const ButtonLook& look) {
     if (!drawable(canvas))
         return;
+    if (look.mark == ButtonMark::refresh) {
+        draw_refresh_button(canvas, area, look);
+        return;
+    }
     const ButtonColours colours = button_colours(look);
     if (colours.face)
         fill_rect(canvas, area, *colours.face);

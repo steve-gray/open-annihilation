@@ -37,12 +37,12 @@ inline constexpr kit::ControlId list = 40;
 inline constexpr kit::ControlId details = 50;
 /// The Compact details page's way back to the list.
 inline constexpr kit::ControlId back = 51;
-/// SETTINGS….
+/// The shortcut still asks for Settings. The footer does not place this control.
 inline constexpr kit::ControlId settings = 52;
 /// CLOSE.
 inline constexpr kit::ControlId close = 53;
-/// CHECK NOW. 54 is the next footer number after CLOSE.
-inline constexpr kit::ControlId check_now = 54;
+/// The header's refresh icon.
+inline constexpr kit::ControlId refresh = 54;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
 /// The first queue line's label.

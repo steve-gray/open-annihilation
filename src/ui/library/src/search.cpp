@@ -343,4 +343,16 @@ void update_visible(Library& library) {
         library.visible.push_back(candidate.index);
 }
 
+std::size_t tab_count(const Library& library, Tab tab) {
+    if (tab == Tab::registries)
+        return library.inputs.registries.size();
+    if (tab == Tab::active)
+        return 0;
+    std::size_t count = 0;
+    for (const Entry& entry : library.entries)
+        if (tab_holds(tab, entry.id.kind))
+            ++count;
+    return count;
+}
+
 } // namespace oa::ui::library

@@ -289,7 +289,7 @@ Its rows and their state icons are listed so:
 | A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
 | The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.play-now`, `.switch-off`, `.roll-back`, `.uninstall`, `.open-folder`, `.homepage` | button, its text the button's words; SWITCH OFF stands in PLAY NOW's place on the mod being played, and both are listed disabled during a game and while the command line chose the mod |
 | SWITCH OFF's Switch Mod question, and the note PLAY NOW shows for a folder it cannot play | `oa.prompt.cancel`, `oa.prompt.switch`; the note's `oa.prompt.ok`; `oa.prompt.body` | button; label |
-| The footer's CHECK NOW | `oa.library.check-now` | button, its text "CHECK NOW"; disabled while no registry can be asked, while one is being asked and during a game |
+| The header's refresh icon | `oa.library.refresh` | button, its text "Refresh", or "Refreshing" while it turns; disabled while no registry can be asked, while one is being asked and during a game. F5 presses it |
 | The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
 
 A row's circled check, installed and up to date, is no control. A click

@@ -55,11 +55,12 @@ host's map without a detour ([map packs](maps/README.md)).
 
 The settings have a button of their own on the main menu, the gears beside
 the OA button, which opens them with no Library under them
-([settings](settings.md#opening-the-settings)). From the Library they are
-one step away: **SETTINGS…** at the foot of the list, or **Cmd+,** on macOS
-and **Ctrl+,** elsewhere, opens them over the Library. **CHECK NOW**,
-beside it, asks the registries for their lists at once
-([updates](#updates)). **CLOSE**, or Escape, goes back to the main menu.
+([settings](settings.md#opening-the-settings)). From the Library, **Cmd+,**
+on macOS and **Ctrl+,** elsewhere opens them over the Library. The header's
+top right holds a refresh icon. Pressing it, or F5, asks the registries
+for their lists at once ([updates](#updates)). While they are being asked
+the icon turns, and it cannot be pressed again until they answer. **CLOSE**,
+or Escape, goes back to the main menu.
 The Library shows only on the main menu: it closes when the menu gives way
 to another screen, and in a game the in-game menu's button, which shows the
 gears too, opens the settings, not the Library.
@@ -93,9 +94,13 @@ updated and played.
 ## Tabs and states
 
 The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
-and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout).
-Updates carries the number of updates you can install now. Registries
-is last, and it is where registries are added, checked and turned off
+and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout). Each
+tab after Active shows how many it lists under All, before a search or a
+tag: "Mods 11", "Maps 2", "Languages 2", "Updates 15", "Registries 2", and
+the short names keep the count ("Upd 15"). Updates' count is every package
+on that tab, and its digits stay amber while the count is above 0.
+Registries counts the registries listed. Registries is last, and it is
+where registries are added, checked and turned off
 ([the Registries tab](#the-registries-tab)).
 
 Each row shows the package's badge (its own picture, or up to three
@@ -275,6 +280,7 @@ where a mod's folder goes to be listed
 | Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
 | Enter, Space | on a row: open its details page in Compact, or go to its first button |
 | Cmd+F (Ctrl+F elsewhere), or `/` | the search |
+| F5 | the header's refresh icon, when a registry can be asked |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |
 | Escape | clears the search while it has the focus, else leaves the details page, else closes the Library |
 
@@ -406,9 +412,9 @@ registries isn't reviewed by the OA team. …". When a change is refused,
 the reason stands over the note ("OA could not change the registries:
 …").
 
-**ADD REGISTRY…** sits at the left of the footer, beside **SETTINGS…** and
-**CLOSE**. It opens the same Add registry window as opening an `.oareg`
-file: the address or "From *file*", the fingerprints of the keys, and
+**ADD REGISTRY…** sits in the footer, beside **CLOSE**. It opens the same
+Add registry window as opening an `.oareg` file: the address or "From
+*file*", the fingerprints of the keys, and
 "Not reviewed by the OA team"
 ([adding a registry](downloads.md#adding-a-registry)). **CLOSE** leaves a
 switch or a removal as it was stored. During a game **ADD REGISTRY…** and
@@ -590,16 +596,15 @@ A `.oamod` file you open keeps its own behaviour: it replaces the mod being
 played and reloads the game at once
 ([installing a .oamod file](mods/README.md#installing-a-oamod-file)).
 
-## Offline, and the list's age
+## Offline
 
 Nothing needs a registry to play: everything installed works with no
 network, and the game starts and plays without reaching any server. The
-Library keeps the last list each registry gave it, and says how old it is
-in its header: "list from 4 min ago", "list from 3 h ago", "list from 2
-days ago", or "no list yet" before the first. When a registry could not be
-reached the header adds "· offline", and a line over the list says, in
-amber, "Showing the list from 2 h ago. OA couldn't reach the registries."
-The list stays usable however old it is.
+Library keeps the last list each registry gave it. The header shows the
+title and this build's version. When a registry could not be reached, the
+word "offline" stands in amber beside the refresh icon, and a line over
+the list says, in amber, "Showing the list from 2 h ago. OA couldn't reach
+the registries." The list stays usable however old it is.
 
 ## Check that you're a person
 
