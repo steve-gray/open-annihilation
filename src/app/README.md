@@ -575,8 +575,16 @@ runtime goes).
   the mod being played), pushed over the Library at once, CANCEL marked,
   and its ROLL BACK rolls the folder back as the Mods page does
   (`roll_back_mod_folder`), the feed looking again afterwards. A refusal of
-  either shows in the status line. The Library's own keys are
-  Cmd+F (Ctrl+F elsewhere) and `/` outside the search for Find, and
+  either shows in the status line. UNINSTALL goes there too, to
+  `library_uninstall`: for the mod being played or the language pack in use
+  (`Installed::playing`, `Installed::in_use`, which `language_pack_in_use`
+  fills, or `package_target_in_use` and `language_pack_in_use` now) it shows
+  the notice of what comes first and removes nothing; otherwise it asks the
+  Uninstall question (`library::uninstall_question`), whose UNINSTALL looks
+  again and moves the folder in the player's Mods, Maps or Languages folder
+  aside whole (`package_install::uninstall_package`) for the installer's
+  `Discarder`, a folder anywhere else being refused. The Library's own
+  keys are Cmd+F (Ctrl+F elsewhere) and `/` outside the search for Find, and
   Ctrl+Tab and Ctrl+Shift+Tab for the tabs; Cmd+, opens Settings over it.
 - **The check.** `native-library` (`--check-library`,
   `runtime_library_check.cpp`) gives the Library a feed of made-up
@@ -671,6 +679,10 @@ runtime goes).
   and PLAY NOW from the Library, and an update to the mod played held,
   named by `pending_change_target`. CANCEL on that line drops it, the
   update is taken again and held, and it is made as the mod is switched.
+  The third run also checks UNINSTALL: off for a map pack during a game, a
+  notice for the language pack in use and for the mod being played, the
+  question for a built-in registry's mod and for one of the player's own,
+  and each folder gone, with the copy ROLL BACK keeps, once answered.
   The fourth run is one nobody watches, on the dummy video driver without
   the prompts the other runs show: a built-in registry's update waits in
   the inbox with the Library closed and installs with no prompt once the

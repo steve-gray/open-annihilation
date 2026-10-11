@@ -1,7 +1,8 @@
 # The Library
 
-The Library is where Open Annihilation finds, installs, updates and rolls
-back mods, map packs and language packs without leaving the game. It lists
+The Library is where Open Annihilation finds, installs, updates, rolls
+back and uninstalls mods, map packs and language packs without leaving the
+game. It lists
 every package that Core Prime's registry, built into the game, and any
 registry you added offer, together with what you have installed, and it
 says for each whether you have it, whether an update waits, and what it
@@ -25,6 +26,7 @@ settings and exactly what a download sends and records.
 - [Which downloads ask first](#which-downloads-ask-first)
 - [The update question](#the-update-question)
 - [Rolling back](#rolling-back)
+- [Uninstalling](#uninstalling)
 - [Finishes when you leave …](#finishes-when-you-leave-)
 - [Offline, and the list's age](#offline-and-the-lists-age)
 - [Check that you're a person](#check-that-youre-a-person)
@@ -156,12 +158,15 @@ name) back to the list.
   download queue, **RETRY** after a download that can be tried again;
   **PLAY NOW** for an installed mod you are not playing, which switches to
   it; **ROLL BACK** while an earlier copy is kept
-  ([rolling back](#rolling-back)); **OPEN FOLDER** for an installed package;
-  and **HOMEPAGE**, which opens the package's web page in your browser.
+  ([rolling back](#rolling-back)); **UNINSTALL** and **OPEN FOLDER** for an
+  installed package ([uninstalling](#uninstalling)); and **HOMEPAGE**, which
+  opens the package's web page in your browser.
 - **A note** for mods while you play one: "Finishes when you leave Ridge."
   on the mod being played, or "You are playing Ridge. Updating Cinder
   doesn't restart the game." on another
-  ([finishes when you leave …](#finishes-when-you-leave-)).
+  ([finishes when you leave …](#finishes-when-you-leave-)); and, while
+  UNINSTALL is off, why: "Map packs can't be uninstalled during a game." or
+  "It is in the download queue: CANCEL it before you uninstall it."
 
 The Regular and Large layouts show who made a package, and its download
 count, on its row; Compact shows them under the status line.
@@ -375,6 +380,50 @@ returns to the main menu."). In 0.8 only mods roll back: the button also
 shows on a map or language pack that keeps an earlier copy, but does
 nothing there.
 
+## Uninstalling
+
+**UNINSTALL**, in an installed package's details after ROLL BACK, removes a
+mod, map pack or language pack you no longer play. It asks first:
+
+> **Uninstall Ridge**
+>
+> Uninstall Ridge? Its folder, Mods/ridge, is removed, and with it the copy
+> ROLL BACK keeps.
+>
+> GET installs it again.
+>
+> **CANCEL** · **UNINSTALL**
+
+The question names the package's folder in your own Open Annihilation
+folder, `Mods/<id>`, `Maps/<id>` or `Languages/<tag>`, and says when the
+copy ROLL BACK keeps goes with it. For a package you installed yourself
+that no registry lists, it says "No registry lists it, so the Library
+cannot get it again." **CANCEL**, or Escape, removes nothing. **UNINSTALL**
+removes the folder and everything in it; the Library then shows the
+package as not installed, with GET, or drops it when no registry lists it.
+
+Some packages cannot go yet, and nothing is removed:
+
+- **the mod you are playing**: a notice says "You are playing Ridge.
+  Switch it off first with SWITCH OFF, then uninstall it.";
+- **the language pack the game is shown in**, or one its words fall back
+  to: a notice says "The game is shown in 简体中文. Choose another language
+  in Settings › Language first, then uninstall it.";
+- **a map pack during a game**: UNINSTALL is off, and the note under the
+  buttons says "Map packs can't be uninstalled during a game.";
+- **a package in the download queue**, while it downloads, is checked or
+  installed, or waits for you to leave the mod being played: UNINSTALL is
+  off until you press CANCEL.
+
+Uninstalling stays inside your Mods, Maps and Languages folders. The
+package's folder is moved aside in one step, under a hidden name the game
+never reads as a package, and then deleted a little at a time; a folder
+that is a link to somewhere else is refused, and a link inside the folder
+is removed without touching what it leads to. If OA stops while it is
+deleting, the next start finishes the job. When it cannot remove the
+folder, because another program is using it, or the folder changed since
+the Library listed it, a notice says so and the package stays as it was.
+
 ## Finishes when you leave …
 
 The mod being played cannot change under the running game, so an update to
@@ -440,6 +489,5 @@ Packages install into your own Open Annihilation folder
 say where it is), each in a folder named by its key: `Mods/<id>`,
 `Maps/<id>` and `Languages/<tag>`. Beside a package's files OA keeps
 `.oa-origin.yaml`, the record of where it came from, and `.backup`, the
-copy an update replaced. The Library has no button to remove a package:
-**OPEN FOLDER** shows its folder, which you can delete while the game is
-not playing it.
+copy an update replaced. **UNINSTALL** removes a package's folder with
+both ([uninstalling](#uninstalling)), and **OPEN FOLDER** shows it.

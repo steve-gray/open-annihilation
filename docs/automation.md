@@ -204,6 +204,7 @@ centre would land on the line between Off and On.
 | A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
+| The Library's UNINSTALL in an installed package's details, its question and its notices | `oa.library.action.uninstall`; the question's `oa.prompt.cancel` and `oa.prompt.uninstall`; a notice's `oa.prompt.ok` | button; UNINSTALL is listed disabled for a map pack during a game and while the package is in the download queue, and `oa.library.note` then says why |
 | The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
@@ -215,7 +216,11 @@ is the standard hack's id with its dots kept. `<word>` is a notice's or a
 prompt's own word: `notice` and `prompt` unless the code that raises it
 gives one, as the missing-language question does (`language-notice`). The
 installs' prompts' ids are their answers: `cancel`, `ok`, `replace`,
-`alongside`, `reinstall`, `open-folder`, `play-now`.
+`alongside`, `reinstall`, `open-folder`, `play-now`. The Library's
+Uninstall question names its buttons `cancel` and `uninstall`, as the
+update question names its `not-now` and `update`, and the notices UNINSTALL
+shows instead of it for the mod being played and the language pack in use
+name their one button `ok`.
 
 **The kinds.** Each kit control maps to one kind: a button, a link and a
 row of buttons' button are `button`; a switch, a strip and a row of
