@@ -12,9 +12,12 @@
 // ADD), then queues the host's release, which the queue checks against the
 // catalogue's SHA-256, the record's, and the installer puts in place. The
 // pack's maps are not mounted until the install ends; the battle room then
-// finds the map itself. Nothing readies the player.
+// finds the map itself. Nothing readies the player. In a run nobody watches
+// the installer takes a catalogue map pack while GET MAP shows
+// (ModInstallState::get_map_shows).
 
 #include "map_packs.hpp"
+#include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 
 #include "oa/app/content/downloads.hpp"
@@ -808,6 +811,16 @@ void Runtime::keep_get_map_screen() {
     if (layer.find(get_map_screen_name) != nullptr)
         return;
     layer.push(std::make_unique<GetMapScreen>(*this));
+}
+
+bool Runtime::ModInstallState::get_map_shows(const Runtime& runtime) {
+    // The battle room shows with no dialog over it, and GET MAP has a place
+    // there: it shows nowhere while it has nothing to say.
+    mp::BattleRoomMap room;
+    if (!runtime.oa_layer_ || !mp::multiplayer_battle_room_map(&room))
+        return false;
+    const LayerPlacement placed = runtime.oa_layer_->placement_of(get_map_screen_name);
+    return placed.shown.width > 0 && placed.shown.height > 0;
 }
 
 oa::ui::frontend_multiplayer::LocalPack

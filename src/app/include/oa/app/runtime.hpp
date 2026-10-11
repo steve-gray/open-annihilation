@@ -4259,7 +4259,8 @@ class Runtime final : public menu::Host,
     /// (catalogue_mod_may_start), asks only what its registry must, and its
     /// update to the mod played waits until the player leaves the mod. A run
     /// nobody watches, unless its check asks, leaves the packages waiting but
-    /// a catalogue language pack, and a chosen mod while the Library is on top.
+    /// a catalogue language pack, a chosen mod while the Library is on top,
+    /// and a catalogue map pack while the map browser is on top or GET MAP shows.
     void tell_mod_installs();
 
     /// Tells whether a mod the player chose in the Library may start

@@ -8,7 +8,9 @@
 // and what came of it told; a change
 // to the mod played waits for the run to end. A catalogue map pack, and a
 // catalogue language pack, ask nothing and show nothing, including while
-// Settings or a notice show and in a run nobody watches. A mod the player
+// Settings or a notice show; in a run nobody watches a language pack still
+// installs, and a map pack while the map browser is the top screen or GET
+// MAP shows over the battle room. A mod the player
 // chose in the Library also starts while the Library shows: a built-in
 // registry's asks nothing, an added registry's asks only before it replaces
 // another registry's copy or goes beside a folder of the player's own, and
@@ -42,6 +44,7 @@
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/map_browser/screen.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -1002,6 +1005,40 @@ void Runtime::tell_mod_installs() {
         const LayerScreen* top = oa_layer_ ? oa_layer_->top() : nullptr;
         return top != nullptr && top->name() == library_screen_name;
     };
+    // A map pack from a catalogue: an oamap package whose origin is one. It
+    // asks nothing, and installs with no prompt off the settled main menu.
+    const auto catalogue_map_pack = [](const install::OpenedPackage& waiting) {
+        const install::PackageKind* kind = install::kind_for_file(waiting.file);
+        return kind != nullptr && kind->name == "oamap" &&
+               waiting.origin.kind == install::OriginKind::catalogue;
+    };
+    // Takes a catalogue map pack first in the inbox and installs it with no
+    // prompt. One whose plan asked waits, as it does off the main menu, for
+    // the settled main menu of a run someone watches.
+    const auto take_catalogue_map = [&]() -> bool {
+        if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr ||
+            !state.catalogue_question.empty())
+            return false;
+        const auto next = install::next_package_file();
+        if (!next || !catalogue_map_pack(*next))
+            return false;
+        const auto opened_file = install::take_package_file();
+        if (!opened_file)
+            return false;
+        state.quiet = true;
+        begin_package(*opened_file);
+        return true;
+    };
+    // In a run nobody watches, a catalogue map pack installs only while the
+    // player is getting one: the map browser is the top screen, or GET MAP
+    // shows over the battle room. Otherwise it waits in the inbox, as a
+    // chosen mod does with the Library closed, so a run nobody drives leaves
+    // a pack an earlier run's download queue hands over for a later run.
+    const auto getting_map_pack = [this] {
+        const LayerScreen* top = oa_layer_ ? oa_layer_->top() : nullptr;
+        return (top != nullptr && top->name() == oa::ui::map_browser::screen_name) ||
+               ModInstallState::get_map_shows(*this);
+    };
     if (!settled) {
         state.settled_frames = 0;
         // Nothing starts while a match loads or runs. A catalogue map pack
@@ -1016,6 +1053,8 @@ void Runtime::tell_mod_installs() {
         if (nobody_watches) {
             if (library_on_top())
                 std::ignore = take_chosen_mod();
+            if (getting_map_pack())
+                std::ignore = take_catalogue_map();
             return;
         }
         if (take_chosen_mod())
@@ -1025,10 +1064,7 @@ void Runtime::tell_mod_installs() {
         const auto opened_file = install::take_package_file();
         if (!opened_file)
             return;
-        const install::PackageKind* kind = install::kind_for_file(opened_file->file);
-        const bool catalogue_map = kind != nullptr && kind->name == "oamap" &&
-                                   opened_file->origin.kind == install::OriginKind::catalogue;
-        if (!catalogue_map) {
+        if (!catalogue_map_pack(*opened_file)) {
             install::return_package_file(*opened_file);
             return;
         }
@@ -1039,12 +1075,17 @@ void Runtime::tell_mod_installs() {
     if (++state.settled_frames < kPromptMenuFrames || engine_settings_fonts() == nullptr)
         return;
     // A run nobody watches leaves the packages waiting for one someone does,
-    // except a catalogue language pack, which asks nothing, and a mod chosen
-    // in the Library while the Library is the top screen, which asks and
-    // installs as it does for a player watching; the folders its changes
-    // drop go a step a frame there too.
+    // except a catalogue language pack, which asks nothing; a catalogue map
+    // pack while the player is getting one, which installs with no prompt;
+    // and a mod chosen in the Library while the Library is the top screen,
+    // which asks and installs as it does for a player watching, the folders
+    // its changes drop going a step a frame there too.
     if (nobody_watches) {
-        if (take_catalogue_language() || !library_on_top())
+        if (take_catalogue_language())
+            return;
+        if (getting_map_pack() && take_catalogue_map())
+            return;
+        if (!library_on_top())
             return;
         if (state.discarder.busy())
             std::ignore = state.discarder.step();

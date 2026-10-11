@@ -69,7 +69,9 @@ struct Runtime::ModInstallState {
     uint32_t settled_frames{};
     /// --check-mod-install shows the prompts although nobody watches the run.
     /// Without it, a run nobody watches takes only a catalogue language pack,
-    /// and a mod chosen in the Library while the Library is the top screen.
+    /// a mod chosen in the Library while the Library is the top screen, and a
+    /// catalogue map pack while the map browser is the top screen or GET MAP
+    /// shows over the battle room (get_map_shows).
     bool check_shows_prompts{};
     /// Prompts this run has shown.
     uint32_t prompts_shown{};
@@ -120,6 +122,16 @@ struct Runtime::ModInstallState {
     /// @param runtime the runtime, whose OA layer may hold the Library
     /// @return true while it is
     [[nodiscard]] bool told_in_library(const Runtime& runtime) const;
+
+    /// Tells whether GET MAP shows over the battle room: its line, with its
+    /// button or the download's bar, on a joiner whose host plays a pack map
+    /// this machine lacks at the host's release (runtime_get_map.cpp). A run
+    /// nobody watches installs a catalogue map pack while it shows.
+    ///
+    /// @param runtime the runtime, whose OA layer holds GET MAP's screen
+    ///     while the multiplayer screens show
+    /// @return true while it shows
+    [[nodiscard]] static bool get_map_shows(const Runtime& runtime);
 
     /// Ends a quiet install, or the install of a chosen mod while the
     /// Library shows: no prompt, and idle for the next package.
