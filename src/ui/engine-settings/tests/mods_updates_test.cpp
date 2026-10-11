@@ -430,9 +430,9 @@ void update_and_roll_back_lie_apart() {
 
 void the_check_line_says_where_the_check_stands() {
     struct Case {
-        std::string_view text;
-        bool warning;
-        bool offered;
+        std::string_view text{};
+        bool warning{};
+        bool offered{};
     };
 
     for (const Case& each : {

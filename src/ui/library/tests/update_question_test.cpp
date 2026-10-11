@@ -95,13 +95,13 @@ const oa::base::sha256::Digest new_rules = digest(0x51, 0xd2, 0x07, 0xaa);
 
 /// One made-up package installed with an update.
 struct Made {
-    std::string_view registry; ///< its registry
-    Kind kind;                 ///< its kind
-    std::string_view key;      ///< its key
-    std::string_view name;     ///< its name
-    std::string_view version;  ///< the version installed
-    std::string_view to;       ///< the update's version
-    Rules rules;               ///< what the update does to the rules
+    std::string_view registry{}; ///< its registry
+    Kind kind{Kind::mod};        ///< its kind
+    std::string_view key{};      ///< its key
+    std::string_view name{};     ///< its name
+    std::string_view version{};  ///< the version installed
+    std::string_view to{};       ///< the update's version
+    Rules rules{Rules::same};    ///< what the update does to the rules
 };
 
 /// Builds a Library of the two registries and the packages given, each
@@ -190,10 +190,10 @@ void asks_only_for_an_added_registrys_mod_whose_rules_may_change() {
     });
 
     struct Case {
-        std::string_view registry;
-        Kind kind;
-        std::string_view key;
-        bool asks;
+        std::string_view registry{};
+        Kind kind{Kind::mod};
+        std::string_view key{};
+        bool asks{};
     };
 
     for (const Case& each : {
@@ -436,9 +436,9 @@ void settings_mods_lines_say_what_an_update_does() {
     });
 
     struct Case {
-        std::string_view registry;
-        std::string_view key;
-        std::string_view line;
+        std::string_view registry{};
+        std::string_view key{};
+        std::string_view line{};
     };
 
     for (const Case& each : {
@@ -460,9 +460,9 @@ void settings_mods_lines_say_what_an_update_does() {
     item.total_bytes = 1000;
 
     struct Progress {
-        Phase phase;
-        uint64_t done;
-        std::string_view line;
+        Phase phase{Phase::waiting};
+        uint64_t done{};
+        std::string_view line{};
     };
 
     for (const Progress& each : {
@@ -488,10 +488,10 @@ void settings_mods_lines_say_what_an_update_does() {
 
 void the_check_line_says_where_the_check_stands() {
     struct Case {
-        lib::UpdateCheck check;
-        std::string_view text;
-        bool warning;
-        bool check_now;
+        lib::UpdateCheck check{};
+        std::string_view text{};
+        bool warning{};
+        bool check_now{};
     };
 
     for (const Case& each : {
