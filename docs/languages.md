@@ -419,6 +419,28 @@ the build pages' NEXT, on the build ring and in the phone's drawer, by
 `NEXT PAGE`; and the rings' ARM, which arms the aimed order, by
 `ARM ORDER`, since 3.1c's table holds `ARM` as the side's name.
 
+A translator finds the words a pack lacks without reading the sources.
+This build lists every English text it passes to the catalogue:
+
+```
+oa-tool interface-words --json
+```
+
+That prints a JSON array of those texts, sorted, each text once. The
+languages repository compares the array with a pack:
+
+```
+python3 tools/coverage.py --oa-tool /path/to/oa-tool zh-Hans
+```
+
+A `missing:` line is an English text the pack does not translate. A
+`not in the engine:` line is a section the build no longer looks up. A
+`cannot be a section:` line is a text the table reader cannot hold,
+because the text starts or ends with a space, or holds a line break,
+`]`, `//` or `/*`. The looked-up text is the section name: a joining
+space, or the colon and space after a sentence, is written beside the
+lookup and is not part of the text.
+
 ## Adding a language
 
 A language is usually a language pack. Put the pack in the player's

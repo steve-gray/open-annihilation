@@ -237,6 +237,18 @@ const Command command_table[] = {
         nullptr,
         registry_commands,
     },
+    {
+        "interface-words",
+        "--json",
+        "List the English texts the interface catalogue is given.",
+        "Prints a JSON array of every English text this build passes to the interface "
+        "catalogue, sorted, with each text once. The texts are the lists the modules that "
+        "look them up export. A translator compares the array with a language pack.",
+        1,
+        1,
+        run_interface_words,
+        {},
+    },
 };
 
 /// Returns the command named `name`, or null when the table has none.

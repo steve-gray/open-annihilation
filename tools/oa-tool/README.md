@@ -52,6 +52,7 @@ same. `--` ends options. A command takes its options through
 | `catalogue verify CATALOGUE [--sig SIG] (--descriptor FILE \| --registry ID --key ed25519:KEY [--key ...])` | Checks CATALOGUE against its signature, with the descriptor's id and keys, or with ID and the given keys. Each `--key` is read as the key the signature names, and the first is the one that is trusted. Prints `good signature by <id>` and the verdict, and exits 0 when the catalogue can be used. A refused catalogue prints the verdict and exits 1. |
 | `registry init FOLDER --id ID --name NAME --base-url URL --key KEY_FILE [--passphrase-file FILE] [--homepage URL]` | Makes a direct registry in FOLDER: `registry.yaml`, an empty catalogue signed for 30 days, its signature, and `v1/p/` and `v1/i/`. FOLDER must be missing or empty. `--base-url` is the http address the registry is served at, with no trailing slash. Prints the descriptor's path and the key's fingerprint. |
 | `registry mirror URL FOLDER [--key ed25519:<base64>]` | Copies the registry at URL into FOLDER, laid out as on the host that served it. The signature is checked, a sequence lower than the one FOLDER holds stops the copy, and each package and picture is checked by SHA-256. A `.part` is resumed with a Range request. A tokens registry is copied through its download API. The catalogue and its signature are written last, byte for byte. |
+| `interface-words --json` | Prints a JSON array of every English text this build passes to the interface catalogue, sorted, with each text once. The texts are the lists the modules that look them up export. |
 
 ## Entry points
 
@@ -100,6 +101,9 @@ given, so a test can capture every line.
   catalogue check's own. A file is kept only after its SHA-256 matches.
 - A repeating option keeps every value, in the order given. An option that
   does not repeat, and every flag, is refused the second time.
+- `interface-words --json` prints one JSON array of the texts the modules
+  export for the interface catalogue. The array is sorted and holds each
+  text once. Any other arguments exit 2.
 
 ## Adding a command
 
@@ -154,6 +158,13 @@ fixture on 127.0.0.1. It covers a resumed download, a file that fails its
 SHA-256 check, a signature and a sequence the catalogue check refuses, and a
 tokens registry whose key requests carry reason `mirror`.
 
+`tools-oa-tool-interface-words` runs the built `oa-tool interface-words
+--json` and fails when a lookup wrapper in the sources is handed a text
+that array does not hold. The comparison reads
+`tools/oa-tool/tests/interface_words_scan.py`.
+Each module that looks a text up exports it in its `interface_words` list;
+the command only joins those lists.
+
 ## Limitations
 
 The archive commands take no options. `pack` takes `--out`, `--force` and,
@@ -170,4 +181,5 @@ catalogue for 30 days. `registry mirror` copies the origin's files and does
 not sign anything, and it posts no install result. A mirror folder is a copy
 of the registry. It is served as a direct registry: the files and signatures
 stand on their own, and the origin's key API stays the origin's policy. The
-macOS package does not ship `oa-tool`.
+macOS package does not ship `oa-tool`. `interface-words` takes only
+`--json`.

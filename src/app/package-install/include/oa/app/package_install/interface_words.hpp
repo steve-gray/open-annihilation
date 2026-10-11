@@ -1,0 +1,170 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// English texts the package prompts passes to the interface catalogue. oa-tool joins
+// this list with the other modules' lists.
+
+#pragma once
+
+#include <string_view>
+
+namespace oa::app::package_install {
+
+/// English texts this module passes to the interface catalogue
+/// (oa/data/languages/interface_text.hpp). oa-tool sorts the modules'
+/// lists together and keeps one of each text.
+inline constexpr std::string_view interface_words[] = {
+    "A font in the pack cannot be opened.",
+    "A map in the pack does not fit the base game.",
+    "A table in the pack does not parse.",
+    "ALREADY INSTALLED",
+    "ANOTHER VERSION",
+    "Alongside, {incoming} goes in a folder of its own:",
+    "And {n} more; the log has them all.",
+    "Another copy of Open Annihilation is changing your Maps folder. Try again once it has "
+    "finished.",
+    "Another copy of Open Annihilation is changing your Mods folder. Try again once it has "
+    "finished.",
+    "CANCEL",
+    "Checking {file}...",
+    "Choose PLAY NOW to play it, or choose it later on Mods in the Open Annihilation settings.",
+    "Choose it on Mods in the Open Annihilation settings to play it.",
+    "FOLDER IN USE",
+    "Files added to its folder, or changed, since it was installed are replaced or removed.",
+    "INSTALL",
+    "INSTALL ALONGSIDE",
+    "INSTALL LANGUAGE",
+    "INSTALL MAP PACK",
+    "INSTALLING LANGUAGE",
+    "INSTALLING MAP PACK",
+    "INSTALLING MOD",
+    "Install the language {endonym} ({english})?",
+    "Install the map pack {name} {version} ({n} maps)?",
+    "Install {title} {version} alongside it, in a folder of its own?",
+    "It cannot be read.",
+    "It holds a file it cannot unpack safely: {name}.",
+    "It holds a file packed in a way it cannot unpack: {name}. Pack it again with standard "
+    "(deflate) compression.",
+    "It holds a link to another file: {name}.",
+    "It holds an encrypted file: {name}.",
+    "It holds more than {limit} folders, more than a map pack may take.",
+    "It holds more than {limit} folders, more than a mod may take.",
+    "It holds no language.yaml.",
+    "It holds no oamap.yaml at its top, or in a single folder at its top.",
+    "It holds no oamod.yaml at its top, or in a single folder at its top.",
+    "It holds two names that differ only in case: {name}.",
+    "It is damaged.",
+    "It is damaged: {name} does not unpack as recorded.",
+    "It is not a kind of package this game installs.",
+    "It is not a zip archive.",
+    "It lists a font it does not hold: {name}.",
+    "It needs a different Open Annihilation.",
+    "It needs {size} free, and the disk holding your Maps folder has {free}.",
+    "It needs {size} free, and the disk holding your Mods folder has {free}.",
+    "It unpacks to {size} from {packed}, far more than a map pack's files take.",
+    "It unpacks to {size} from {packed}, far more than a mod's files take.",
+    "It unpacks to {size}, more than the {limit} a map pack may take.",
+    "It unpacks to {size}, more than the {limit} a mod may take.",
+    "Its files could not be put in place. Another program, such as a file sync or a virus scanner, "
+    "may be using its files; try again in a moment.",
+    "Its font {name} cannot be opened.",
+    "Its id, {id}, cannot name a folder on Windows.",
+    "Its language.yaml has errors.",
+    "Its oamap.yaml has errors:",
+    "Its oamap.yaml is larger than 256 KiB.",
+    "Its oamod.yaml has errors:",
+    "Its oamod.yaml is larger than 256 KiB.",
+    "Its warm-up text cannot be read.",
+    "LANGUAGE INSTALLED",
+    "LANGUAGE NOT INSTALLED",
+    "LANGUAGE UPDATED",
+    "Languages",
+    "MAP PACK INSTALLED",
+    "MAP PACK NOT INSTALLED",
+    "MAP PACK UPDATED",
+    "MOD INSTALLED",
+    "MOD NOT INSTALLED",
+    "MOD NOT ROLLED BACK",
+    "MOD UPDATED",
+    "Maps",
+    "NOT INSTALLED",
+    "Nothing was changed.",
+    "OK",
+    "OPEN FOLDER",
+    "PLAY NOW",
+    "Putting the files in place...",
+    "REINSTALL",
+    "REINSTALL LANGUAGE",
+    "REINSTALL MAP PACK",
+    "REPLACE",
+    "REPLACE LANGUAGE",
+    "REPLACE MAP PACK",
+    "Replace {name} from {old} with the one from {new}?",
+    "Replacing keeps {installed}, and ROLL BACK on Mods in the Open Annihilation settings brings "
+    "it back.",
+    "Revision {incoming} is older than the one installed.",
+    "Revision {installed} is kept, and ROLL BACK on Mods in the Open Annihilation settings brings "
+    "it back.",
+    "The files of {title} {version} were installed again.",
+    "The folder kept for ROLL BACK ({backup}) is removed.",
+    "The folder kept for ROLL BACK stays.",
+    "The folder kept for ROLL BACK, which holds no mod that can be read, is removed.",
+    "The folder {name} does not hold this map pack. It is left as it is.",
+    "The folder {tag} does not hold this language. Replace it with {endonym} ({english}) from "
+    "{file}? It is kept, and can be brought back.",
+    "The game reloads its data for the mod and returns to the main menu.",
+    "The pack holds {name}, which no map uses.",
+    "The pack holds {name}, which no map uses: it is outside the folders a map pack may hold.",
+    "The pack lists {name}, which it does not hold.",
+    "The preview {name} is larger than 2 MiB.",
+    "The preview {name} is not a PNG.",
+    "The version installed is kept, and ROLL BACK on Mods in the Open Annihilation settings brings "
+    "it back.",
+    "The version installed is kept, and can be brought back.",
+    "The version kept ({backup}) is removed.",
+    "The version kept stays.",
+    "The version kept, which cannot be read, is removed.",
+    "The version kept, {backup}, stays.",
+    "UPDATE LANGUAGE",
+    "UPDATE MAP PACK",
+    "UPDATE MOD",
+    "Unpacking {title} {version}...",
+    "Your Maps folder changed while this map pack was being installed; nothing was changed. Open "
+    "the file again.",
+    "Your Maps folder has no free folder name for it.",
+    "Your Mods folder already has a folder named {folder} that does not hold {title}. It is left "
+    "as it is.",
+    "Your Mods folder changed while this mod was being installed; nothing was changed. Open the "
+    "file again.",
+    "Your Mods folder has no free folder name for it.",
+    "installed",
+    "{done} of {total}",
+    "{endonym} ({english}) {version} is installed in your Languages folder:",
+    "{file} cannot be installed.",
+    "{file} is not a package Open Annihilation installs.",
+    "{old} could not be kept as the earlier version; it is in:",
+    "{title} could not be rolled back; nothing was changed.",
+    "{title} is back to {new}.",
+    "{title} is back to {new}. {old} is kept, and ROLL BACK brings it back.",
+    "{title} is back to {new}. {old} is kept, and can be brought back.",
+    "{title} is now {new}.",
+    "{title} is now {new}. {old} is kept, and ROLL BACK on Mods in the Open Annihilation settings "
+    "brings it back.",
+    "{title} is now {new}. {old} is kept, and can be brought back.",
+    "{title} {installed} is installed. Replace it with {incoming} from {file}?",
+    "{title} {installed} is installed. Replace it with {incoming}, or install {incoming} alongside "
+    "it?",
+    "{title} {to}, the version kept for ROLL BACK, cannot be played.",
+    "{title} {version} is installed in your Maps folder:",
+    "{title} {version} is installed in your Mods folder:",
+    "{title} {version}, an unknown revision, is installed. Replace it with revision {incoming} "
+    "from {file}?",
+    "{title} {version}, revision {installed}, is installed. Replace it with revision {incoming} "
+    "from {file}?",
+    "{title} {version}, revision {revision}, is already installed. Install its files again from "
+    "{file}?",
+    "{version} of an unknown revision",
+    "{version} revision {n}",
+};
+
+} // namespace oa::app::package_install

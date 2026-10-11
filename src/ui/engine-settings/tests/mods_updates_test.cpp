@@ -467,7 +467,7 @@ void the_check_line_says_where_the_check_stands() {
         CHECK(link->kind == kit::ControlKind::link && link->text == geometry::check_now_text);
         CHECK(inside(link->rect, line));
         CHECK(link->rect.x >= line.x + static_cast<int32_t>(kit::character_count(each.text)) * 5);
-        CHECK(texts_in(list, line, kit::colour::hint).back() == geometry::check_now_separator);
+        CHECK(texts_in(list, line, kit::colour::hint).back() == " · ");
     }
     // No text, as a host gives none: nothing shows on the line.
     settings::Dialog quiet = mods_dialog();

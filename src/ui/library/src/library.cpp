@@ -84,8 +84,10 @@ missing_hacks_text(const std::vector<std::string_view>& missing, const TextHooks
     std::string named;
     const std::size_t shown_count = std::min(missing.size(), named_missing_hacks);
     for (std::size_t index = 0; index < shown_count; ++index) {
-        if (index != 0)
+        if (index != 0) {
             named += shown(text, words::list_separator);
+            named.push_back(' ');
+        }
         named += missing[index];
     }
     if (missing.size() <= named_missing_hacks)

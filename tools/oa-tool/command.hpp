@@ -242,6 +242,19 @@ class Failure : public std::runtime_error {
 /// @throws Failure when the registry cannot be read
 [[nodiscard]] int run_registry_mirror(std::span<const std::string> arguments, Output& output);
 
+// The interface-word command, defined in interface_words.cpp.
+
+/// Prints the English texts the build passes to the interface catalogue.
+///
+/// The texts are the ones each module exports (the Library's words, the
+/// settings dialog, the map browser, and the rest). `--json` is required.
+/// The array is sorted and holds each text once.
+///
+/// @param arguments `--json`
+/// @param[in,out] output receives the JSON array, or a usage line
+/// @return exit_done, or exit_usage when the arguments are not `--json`
+[[nodiscard]] int run_interface_words(std::span<const std::string> arguments, Output& output);
+
 /// Returns the tool's commands, in the order help lists them.
 ///
 /// @return the command table

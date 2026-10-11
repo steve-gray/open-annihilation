@@ -264,7 +264,7 @@ SourceRect check_now_link(const Dialog& dialog) {
     const SourceRect& line = sized.mods_check_line;
     const int32_t width = small_width_estimate(sized, shown_text(check_now_text));
     const int32_t after = small_width_estimate(sized, dialog.mods_check_text) +
-                          small_width_estimate(sized, check_now_separator);
+                          small_width_estimate(sized, check_separator_shown());
     const int32_t left = std::min(line.x + after, line.x + line.width - width);
     return {std::max(left, line.x), line.y, width, line.height};
 }
@@ -277,8 +277,9 @@ std::pair<SourceRect, std::string> check_line_text(const Dialog& dialog) {
     // The text keeps clear of " · " and CHECK NOW after it, cut short only
     // where they would not fit.
     const SourceRect link = check_now_link(dialog);
-    place.width =
-        std::max(link.x - small_width_estimate(sized, check_now_separator) - place.x, int32_t{0});
+    place.width = std::max(
+        link.x - small_width_estimate(sized, check_separator_shown()) - place.x, int32_t{0}
+    );
     const std::size_t room = characters_in(sized, place.width);
     if (oa::ui::kit::character_count(dialog.mods_check_text) <= room)
         return {place, dialog.mods_check_text};

@@ -4,9 +4,23 @@
 # oa-tool's commands. The executable stays in the root CMakeLists.txt, where
 # the Windows DLL copy and the packaged notices attach to it.
 add_library(oa-tool-commands STATIC commands.cpp arguments.cpp files.cpp archive_commands.cpp
-  pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp registry.cpp)
+  pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp registry.cpp
+  interface_words.cpp)
 add_library(oa::tool::commands ALIAS oa-tool-commands)
 target_include_directories(oa-tool-commands PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# The interface-word lists are headers in the modules that look the texts up.
+# The command includes those headers and does not link the modules.
+target_include_directories(oa-tool-commands PRIVATE
+  ${PROJECT_SOURCE_DIR}/src/app/include
+  ${PROJECT_SOURCE_DIR}/src/app/package-install/include
+  ${PROJECT_SOURCE_DIR}/src/netgame/match/include
+  ${PROJECT_SOURCE_DIR}/src/ui/engine-settings/include
+  ${PROJECT_SOURCE_DIR}/src/ui/folder-chooser/include
+  ${PROJECT_SOURCE_DIR}/src/ui/frontend-multiplayer/include
+  ${PROJECT_SOURCE_DIR}/src/ui/game-files/include
+  ${PROJECT_SOURCE_DIR}/src/ui/library/include
+  ${PROJECT_SOURCE_DIR}/src/ui/map-browser/include
+  ${PROJECT_SOURCE_DIR}/src/ui/touch-hud/include)
 target_include_directories(oa-tool-commands SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/monocypher)
 target_compile_features(oa-tool-commands PUBLIC cxx_std_20)
@@ -76,6 +90,13 @@ if(BUILD_TESTING)
     oa-formats-json oa-test-support oa-options)
   add_test(NAME tools-oa-tool-registry COMMAND oa-tool-registry-test)
   set_tests_properties(tools-oa-tool-registry PROPERTIES TIMEOUT 120)
+
+  # interface-words: a wrapper handed a text no module lists fails this.
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME tools-oa-tool-interface-words
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interface_words_test.py
+      $<TARGET_FILE:oa-tool> ${CMAKE_SOURCE_DIR})
+  set_tests_properties(tools-oa-tool-interface-words PROPERTIES TIMEOUT 120)
   if(WIN32)
     add_custom_command(TARGET oa-tool-registry-test POST_BUILD
       COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:oa-tool-registry-test>"
