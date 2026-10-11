@@ -495,7 +495,7 @@ void Runtime::check_map_browser() {
         click_named("oa.maps-players-3");
         click_named("oa.maps-filter-all");
         click_named("oa.maps-search");
-        for (std::size_t left = foursome.size(); left > 0; --left) {
+        for (std::size_t typed = foursome.size(); typed > 0; --typed) {
             const LayerAnswer erased = shown->key(kit::Key::backspace, 0);
             oa_layer().take_answer(*shown, erased, 0);
         }
