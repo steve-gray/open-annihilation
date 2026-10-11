@@ -3452,6 +3452,9 @@ progress, the team panels' host (a tournament game withholds CONTROL),
 requests to close the window, the label a match's return names in its
 menus, whether the preferences keep the stored password, recordings to
 replay, console commands and checks. Each such library is an extension.
+The extension API's chapter for an extension's author is
+[docs/extensions/README.md](../../docs/extensions/README.md), and the OA UI
+kit's for extensions [docs/extensions/ui-kit.md](../../docs/extensions/ui-kit.md).
 The engine registers its own, network play ([below](#network-play)) and
 the automation endpoint ([below](#the-automation-endpoint)); a project
 that builds the game registers further ones after adding the engine, each

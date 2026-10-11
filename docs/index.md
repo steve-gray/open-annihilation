@@ -201,6 +201,15 @@ Platform and application:
 - [src/app](../src/app/README.md): the game application, `open-annihilation`,
   adding a screen or overlay, the extension table, and network play's
   place in the game.
+- [extensions/README.md](extensions/README.md): the extension API's chapter,
+  for the author of an extension: what an extension is, registering one,
+  the table's version and its rule, threads, ownership and errors, screens
+  and overlays, the services table, each group of hooks, the automation
+  endpoint and testing; and [extensions/ui-kit.md](extensions/ui-kit.md),
+  the OA UI kit's chapter: Settings pages, kit screens, notices and prompts,
+  drawing in a match overlay, sizes and scales, focus and touch, automation
+  names, and the [UI kit](../src/ui/kit/README.md) gallery's pictures at
+  Compact, Regular and Large.
 - [card command lists](../src/app/card/README.md): what a frame asks the
   graphics card to draw, and the executor that runs it on SDL's renderer,
   for the Full tier.
