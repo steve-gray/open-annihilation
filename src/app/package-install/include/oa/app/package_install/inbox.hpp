@@ -170,6 +170,19 @@ struct ChangeOutcome {
 /// @param options the hooks and the waits
 void finish_pending_change(const ChangeOptions& options = {});
 
+/// Drops a waiting install, replace or reinstall without putting it in place.
+///
+/// The hold on the root folder is released, then the staged files are settled
+/// away as the next start settles a change a stop left (recover_changes): the
+/// installed folder, its record and its .backup stay as they are, and the
+/// folders to delete are kept (take_discards). Nothing is reported, so a
+/// download already counted installed is not fetched again. A waiting roll
+/// back is left waiting. Nothing is done while no change waits.
+///
+/// @param options the hooks and the waits
+/// @return true when a change was dropped
+[[nodiscard]] bool discard_pending_change(const ChangeOptions& options = {});
+
 /// Takes the outcome of the change that waited, once.
 ///
 /// @return the outcome; nothing when no change waited

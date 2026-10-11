@@ -7,9 +7,11 @@
 // catalogue hash that differs refused; the hash phase held to its budget;
 // write_origin replacing a record and refusing a missing folder, a link and
 // a lock that is held; the folder hooks' records; catalogue outcomes kept,
-// capped and taken once, including one a pending change reports; and an
+// capped and taken once, including one a pending change reports; an
 // update held for the mod played, named while it waits and put in place on
-// the way out, or settled away whole by recovery after a stop.
+// the way out, or settled away whole by recovery after a stop; and a held
+// update dropped, leaving the installed version, its record and its
+// .backup, with no staged files, while a waiting roll back is left.
 
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
@@ -1027,6 +1029,72 @@ void test_held_change(const Scratch& scratch) {
     drain_inbox();
 }
 
+/// A held update dropped leaves what is installed, and a roll back is left.
+///
+/// @param scratch the scratch folder
+void test_discard_held_change(const Scratch& scratch) {
+    drain_inbox();
+    const fs::path packages = scratch.path() / "discard-held";
+    const fs::path mods = packages / "Mods";
+    const fs::path folder = mods / std::string(target);
+    fs::create_directories(mods);
+    install::ChangeOptions options{};
+    options.first_retry_ms = 0;
+
+    const fs::path first = write_package(packages, 1);
+    install::Origin origin = catalogue_origin();
+    origin.sha256 = file_hash(first);
+    OA_CHECK(install_package(first, mods, Change::install, origin).result.changed);
+    const fs::path second = write_package(packages, 2);
+    install::Origin replaced = origin;
+    replaced.release = 28;
+    replaced.sha256 = file_hash(second);
+    OA_CHECK(install_package(second, mods, Change::replace, replaced).result.changed);
+    OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 1);
+    const auto record = install::read_origin(folder);
+    OA_CHECK(record && record->release == 28);
+
+    const fs::path third = write_package(packages, 3);
+    install::Origin staged_origin = replaced;
+    staged_origin.release = 29;
+    staged_origin.sha256 = file_hash(third);
+    install::PendingChange pending = staged_change(third, mods, staged_origin);
+    OA_CHECK(pending.kind != nullptr && pending.hold != nullptr);
+    install::set_pending_change(std::move(pending));
+    OA_CHECK(install::pending_change_waiting() && reserved_in(mods));
+
+    OA_CHECK(install::discard_pending_change(options));
+    OA_CHECK(!install::pending_change_waiting());
+    OA_CHECK(!install::pending_change_target());
+    OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 1);
+    const auto kept = install::read_origin(folder);
+    OA_CHECK(
+        record && kept && kept->release == record->release && kept->registry == record->registry &&
+        kept->catalogue_id == record->catalogue_id && kept->sha256 == record->sha256
+    );
+    OA_CHECK(!install::take_change_outcome());
+    OA_CHECK(install::take_package_outcomes().empty());
+    discard_all(install::take_discards());
+    OA_CHECK(!reserved_in(mods));
+
+    // A roll back waiting for the run to end is not dropped.
+    install::PendingChange roll{};
+    roll.kind = &install::mod_kind();
+    roll.root = mods;
+    roll.target = std::string(target);
+    roll.change = Change::roll_back;
+    roll.replaced = install::oamod::read_installed_mod(folder);
+    install::set_pending_change(std::move(roll));
+    OA_CHECK(!install::discard_pending_change(options));
+    OA_CHECK(install::pending_change_waiting());
+    OA_CHECK(install::pending_change_target() == std::string(target));
+    OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 1);
+    install::finish_pending_change(options);
+    (void)install::take_change_outcome();
+    discard_all(install::take_discards());
+    drain_inbox();
+}
+
 } // namespace
 
 int main() {
@@ -1041,5 +1109,6 @@ int main() {
     test_hooks(scratch);
     test_outcomes(scratch);
     test_held_change(scratch);
+    test_discard_held_change(scratch);
     return oa::test::check_exit_status();
 }

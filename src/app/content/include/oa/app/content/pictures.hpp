@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The packages' badge pictures the Library shows: asked for on the main
-// thread, fetched and checked on a worker, kept on disk under the name of
-// their SHA-256, and handed back decoded.
+// The catalogue pictures the Library and the map browser show: asked for on
+// the main thread, fetched and checked on a worker, kept on disk under the
+// name of their SHA-256, and handed back decoded as a badge, or as the
+// checked file's bytes.
 #pragma once
 
 #include "oa/app/mod_summary.hpp"
@@ -16,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace oa::app::content {
 
@@ -36,8 +38,8 @@ inline constexpr uint64_t max_picture_bytes = max_mod_badge_bytes;
 
 /// The pictures asked for, fetched, checked and decoded.
 ///
-/// `request`, `take` and `drop_all` are for the main thread; none reads a
-/// file or the network. `fetch_waiting` is the worker's: it reads the
+/// `request`, `take`, `take_bytes`, `refused` and `drop_all` are for the
+/// main thread; none reads a file or the network. `fetch_waiting` is the worker's: it reads the
 /// folder, fetches what the folder does not hold, and writes what it
 /// fetched. A picture is used only when its bytes hash to the SHA-256 its
 /// name gives, and only when it is at most max_picture_bytes. A fetch sends
@@ -75,6 +77,27 @@ class PictureCache {
     /// @return the badge, decoded and at most mod_badge_side square; nothing
     ///     while it is not ready, and once it was taken
     [[nodiscard]] std::optional<ModBadge> take(std::string_view registry, std::string_view url);
+
+    /// Hands over the file of a picture that is ready, and forgets it, as
+    /// take does: the bytes hashed to the SHA-256 its name gives, at most
+    /// max_picture_bytes, and decoded, as read from the folder or fetched.
+    /// A map's preview is drawn from them at its own size.
+    ///
+    /// @param registry the registry it was asked for under
+    /// @param url its address, as asked for
+    /// @return the file's bytes; nothing while it is not ready, and once it
+    ///     was taken
+    [[nodiscard]] std::optional<std::vector<uint8_t>>
+    take_bytes(std::string_view registry, std::string_view url);
+
+    /// Tells whether a picture was refused while this cache lives: its name
+    /// names no SHA-256, its bytes hash to another, it is too large or it
+    /// could not be fetched. It is never asked for again.
+    ///
+    /// @param registry the registry it was asked for under
+    /// @param url its address, as asked for
+    /// @return true when it was refused
+    [[nodiscard]] bool refused(std::string_view registry, std::string_view url) const;
 
     /// Forgets every picture asked for and every one ready and not taken. The
     /// pictures refused stay refused, and the folder is left as it is.

@@ -383,6 +383,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-user-folder", &Options::check_user_folder, {}},
         {"--check-mod-switch", &Options::check_mod_switch, {}},
         {"--check-map-packs", &Options::check_map_packs, {}},
+        {"--check-map-browser", &Options::check_map_browser, {}},
         {"--check-mod-warning", &Options::check_mod_warning, {}},
         {"--check-mod-install", &Options::check_mod_install, {}},
         {"--check-language-install", &Options::check_language_install, {}},

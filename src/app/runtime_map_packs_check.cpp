@@ -9,6 +9,7 @@
 // unmounted for a base map and when the match ends, and the second refused,
 // the map picker showing why and keeping the earlier map.
 
+#include "map_pack_check_packs.hpp"
 #include "map_packs.hpp"
 #include "map_picture_state.hpp"
 
@@ -379,6 +380,11 @@ std::string gadget_text(const oa::ui::gui_layout::Gadget* gadget) {
 }
 
 } // namespace
+
+void write_map_pack_check_packs(const fs::path& maps, std::string_view model) {
+    write_pack(maps, kIslesPack, model);
+    write_pack(maps, kClashPack, model);
+}
 
 void Runtime::check_map_packs() {
     namespace dialogs = oa::ui::frontend_dialogs;

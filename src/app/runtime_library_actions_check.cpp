@@ -18,7 +18,8 @@
 // a package that does not resolve is refused in the queue; then PLAY NOW.
 // The second plays the mod: ROLL BACK's question says the game reloads, a
 // built-in update to it asks nothing and waits, held, for the player to
-// leave the mod, and PLAY NOW switches to another mod; the third finds the
+// leave the mod, CANCEL on that line drops it and the update is taken again
+// and held, and PLAY NOW switches to another mod; the third finds the
 // update put in place as the mod was switched, then asks for made-up updates:
 // an added registry's whose rules change asks the update question first,
 // from the Library and from Settings › Mods, NOT NOW leaving it and UPDATE
@@ -961,6 +962,63 @@ void Runtime::check_library_install() {
                 item && item->phase == library::QueueItem::Phase::held &&
                     lines.first == "Waiting · finishes when you leave Ridge",
                 "the Library's queue does not say the update waits until Ridge is left"
+            );
+        }
+
+        // CANCEL on the held line drops it. The catalogue still offers the
+        // update, so the Library shows UPDATE again; nothing fetches it until
+        // UPDATE is pressed.
+        {
+            library::UpdateNote offered;
+            offered.registry = std::string(kBuiltIn);
+            offered.kind = library::Kind::mod;
+            offered.key = std::string(kRidge);
+            offered.to_release = 2;
+            offered.to_version = "1.0";
+            offered.to_revision = 5;
+            fixture.inputs.updates.push_back(std::move(offered));
+            ++fixture.generation;
+            frames();
+            show_entry("oa.library.row.check-builtin.ridge");
+            require(
+                named("oa.library.action.cancel").has_value(),
+                "the held update's queue line offers no CANCEL"
+            );
+            press_action("cancel");
+            for (int count = 0; count < kMostFrames && state.discarder.busy(); ++count)
+                frame();
+            frames();
+            require(!install::pending_change_waiting(), "CANCEL left the held update waiting");
+            require(revision_in(ridge) == 4, "CANCEL changed the mod played");
+            require(
+                !fs::exists(
+                    mods /
+                    (install::folder_names(install::mod_kind()).staging + std::string(kRidge))
+                ),
+                "CANCEL left the staged folder"
+            );
+            require(!reserved_left(mods), "CANCEL left a folder an install keeps");
+            require(!queued(kBuiltIn, kRidge), "CANCEL left the held update's queue line");
+            require(
+                named("oa.library.action.update").has_value(),
+                "the Library does not offer UPDATE again"
+            );
+            std::cout << "library install check: CANCEL dropped the held update\n";
+        }
+
+        // Taken again, and held, so the next turn still finds it made.
+        post_ridge(kBuiltIn, "1.0", 5, 2);
+        installs_quietly("check-builtin's update taken again", kBuiltIn, kRidge);
+        require(
+            !soft_restart_requested() && install::pending_change_waiting() &&
+                install::pending_change_target() == std::string(kRidge) && revision_in(ridge) == 4,
+            "the update taken again did not wait, the mod left as it is"
+        );
+        {
+            const std::optional<library::QueueItem> item = queued(kBuiltIn, kRidge);
+            require(
+                item && item->phase == library::QueueItem::Phase::held,
+                "the update taken again is not held"
             );
         }
 

@@ -101,6 +101,9 @@ struct Runtime::ModInstallState {
         /// leaves the mod being played (package_install::pending_change_target);
         /// empty when nothing waits.
         std::string held_target{};
+        /// The player cancelled the held update: the queue leaves that line
+        /// out, and the catalogue's update is offered again.
+        bool cancelled{};
     };
 
     /// The notes, one for each registry and key at most.
@@ -151,7 +154,8 @@ struct Runtime::ModInstallState {
     /// registry and key, and has the Library build its model again.
     ///
     /// @param runtime the runtime, whose Library shows the note
-    /// @param note the note; one with no problem and nothing held is dropped
+    /// @param note the note; one with no problem, nothing held and not
+    ///     cancelled is dropped
     void note_for_library(Runtime& runtime, LibraryNote note);
 
     /// Shows why the last ROLL BACK was refused (roll_back_refusal) in a

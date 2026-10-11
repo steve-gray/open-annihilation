@@ -488,6 +488,42 @@ void multiplayer_type(app::ScreenContext* ctx, const char* text) noexcept;
 ///     not the chat line
 bool multiplayer_compose(const char* composition) noexcept;
 
+/// Returns where the host's open map dialog in the battle room lists the
+/// maps (its MAPNAMES list), in the 640x480 frame the battle room is drawn
+/// in, before the menu frame scales it.
+///
+/// @param[out] x the list's left column; not written when false is returned
+/// @param[out] y the list's top row
+/// @param[out] width the list's width, in pixels
+/// @param[out] height the list's height, in pixels
+/// @return false when the battle room's map dialog is not open, or this
+///     machine is not the host
+bool multiplayer_map_list_rect(int32_t* x, int32_t* y, int32_t* width, int32_t* height) noexcept;
+
+/// Shows a map in the host's open map dialog, as a click on its row
+/// highlights it: when the name is not in the screens' map list, which is
+/// built once a visit, the list is built again, so that a pack installed
+/// since is in it; then the dialog's list is filled again from the lobby's
+/// maps, the map's row is selected and the map previewed. Nothing is sent
+/// to the other players: the host chooses the map with the dialog's LOAD.
+///
+/// @param name the map's name, `<stem>@<id>` for a pack map; null shows nothing
+/// @return false when the dialog is not open, this machine is not the
+///     host, or no map has the name
+bool multiplayer_offer_map(const char* name) noexcept;
+
+/// Fills the map dialog's MAPNAMES list again from the lobby's maps, in name
+/// order, selects the row of a map and previews it (mapselect_preview), as a
+/// click on the row highlights it. Nothing is sent. A name the list lacks
+/// leaves the row highlighted before, and previews nothing.
+///
+/// @param[in,out] lobby Lobby state whose map services list and select the maps.
+/// @param[in,out] select Map selection state; its previous map is kept.
+/// @param[in,out] panel The dialog's panel.
+/// @param name the map's name
+/// @return true when the map's row is selected
+bool mapselect_offer(Lobby& lobby, MapSelect& select, Panel& panel, std::string_view name) noexcept;
+
 /// Starts a new frontend session: drops lobby, connection and dialog state and resets the loopback network.
 ///
 /// A network bound with multiplayer_bind_net is kept.
