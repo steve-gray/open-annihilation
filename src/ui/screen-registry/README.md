@@ -20,27 +20,33 @@ tables this module already kept are unchanged.
   screens take ids from `kFirstPackageScreen`.
 - `oa/ui/screen_registry/kit.hpp`: the descriptors the engine hosts.
   `settings_page_register` takes a `SettingsPageDesc` (an id, a title, an
-  owner, preference rows, and `applied`). `kit_screen_register` takes a
-  `KitScreenDesc` (a name, `lay_out`, `act` and `closed`). `NoticeRequest` and
-  `PromptRequest` describe a notice and a prompt. The OA layer reads the two
-  registries and shows the requests (`src/app/README.md`).
+  owner, preference rows, and `applied`) into a `SettingsRegistry`.
+  `kit_screen_register` (`screen_registry.hpp`) takes a `KitScreenDesc` (a
+  name, `lay_out`, `act` and `closed`) into the `ScreenRegistry`, beside its
+  screens. `NoticeRequest` and `PromptRequest` describe a notice and a
+  prompt. The OA layer reads the registries and shows the requests
+  (`src/app/README.md`). An extension reaches them through its table:
+  `register_settings_pages`, `register_screens`, and the services
+  `open_kit_screen`, `show_notice` and `ask_prompt` (`extension.hpp`,
+  version 15).
 
 ## State
 
 A `ScreenRegistry` holds up to `kMaxScreens` screens, `kMaxOverlays`
-overlays, `kMaxSteps` steps and `kMaxQueries` queries, and the name of the
-last registration it refused. A `SettingsRegistry` holds up to
-`kMaxSettingsPages` pages, in registration order, with copies of each page's
-id, title and owner. A `KitScreenRegistry` holds up to `kMaxKitScreens`
-screens, in registration order, with a copy of each screen's name. The
-caller keeps a page's rows, and a screen's model, alive for the runtime's
-life. The registries record nothing of their own between runs: the
+overlays, `kMaxSteps` steps, `kMaxQueries` queries and `kMaxKitScreens` kit
+screens, in registration order, and the name of the first registration it
+refused. A `SettingsRegistry` holds up to `kMaxSettingsPages` pages, in
+registration order, with copies of each page's id, title and owner, and the
+reason for the first page it refused. The caller keeps a page's rows, and a
+kit screen's name and model, alive for the runtime's life. The registries record nothing of their own between runs: the
 application owns them.
 
 ## Invariants
 
-- A refused registration leaves the tables as they were and sets `rejected`
-  to the reason. A taken one clears `rejected`.
+- A refused registration leaves the tables as they were. The first one a
+  registry refuses sets its `rejected`, and a later registration, taken or
+  refused, leaves it as it is, so that the application can stop the start
+  on any refusal once the registrations are in.
 - A page id and a screen name are dotted words of a to z, 0 to 9 and
   hyphens, at most 48 bytes. A page id is none of the engine's section
   words, including `registered`.
@@ -58,9 +64,12 @@ application owns them.
 
 `screen-registry` checks duplicate screen ids, overlay z order, step and
 query binding, and the null, duplicate and full-table refusals. It also
-checks that a settings page and a kit screen are taken, that a duplicate id,
-an engine section word, an engine key, a `Section|Key` key, a row with no
-binding and a full table are refused, and that `rejected` names the reason.
+checks that a settings page is taken, that a duplicate id, an engine section
+word, an engine key, a `Section|Key` key, a row with no binding and a full
+table are refused, and that `rejected` names the reason and keeps the first.
+A kit screen is taken beside the screens, and a duplicate, a malformed or
+missing name, a screen with no `act` and a full table are refused, with
+`rejected` naming the first.
 
 ## Limitations
 

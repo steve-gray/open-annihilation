@@ -12,9 +12,12 @@
 # first, then the recorder; the follower is registered before the recorder
 # and listed after it all the same. The recorder also adds one Runtime
 # member through OA_RUNTIME_EXTENSION_MEMBERS, so that the mechanism is
-# built while it exists. Added by the top-level project after network play
-# and before it applies the members header, which this directory names for
-# the recorder.
+# built while it exists. The same builds combine a third test extension,
+# the Kit fixture, which uses the OA UI kit through the table alone: a
+# Settings page, a kit screen, a prompt and the match overlay's kit calls
+# (version 15). Added by the top-level project after network play and
+# before it applies the members header, which this directory names for the
+# recorder.
 if(NOT TARGET oa-game)
   return()
 endif()
@@ -32,6 +35,15 @@ if(OA_RECORD_EXTENSION_HOOKS)
     oa-options)
   oa_add_extension(oa-extension-recorder-follower INIT oa_extension_init_recorder_follower)
   oa_add_extension(oa-extension-recorder INIT oa_extension_init_recorder)
+  # The Kit fixture (kit_fixture.cpp). oa/app/app.hpp, which names the main
+  # menu, needs the headers of the libraries it uses.
+  add_library(oa-extension-kit-fixture STATIC kit_fixture.cpp)
+  add_library(oa::extension::kit_fixture ALIAS oa-extension-kit-fixture)
+  target_compile_features(oa-extension-kit-fixture PRIVATE cxx_std_20)
+  target_link_libraries(oa-extension-kit-fixture PRIVATE oa-app-headers oa-app-command-line
+    oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry oa-ui-kit
+    oa-options)
+  oa_add_extension(oa-extension-kit-fixture INIT oa_extension_init_kit_fixture)
   if(BUILD_TESTING)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
@@ -50,6 +62,15 @@ if(OA_RECORD_EXTENSION_HOOKS)
         --skip-code ${OA_GAME_DATA_SKIP_CODE})
       set_tests_properties(extension-hooks-options PROPERTIES TIMEOUT 120)
       set_tests_properties(extension-hooks-game PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+      # The Kit fixture's Settings page, kit screen and prompt in 640x480,
+      # 1280x720 and 1920x1080 windows, driven through the automation
+      # endpoint, and its chip over a headless match's battlefield, over the
+      # installation OA_GAME_DIR names. Each run makes its own folder.
+      oa_add_game_data_test(extension-kit ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/check_kit_fixture.py"
+        --game $<TARGET_FILE:oa-game> --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/kit"
+        --skip-code ${OA_GAME_DATA_SKIP_CODE})
+      set_tests_properties(extension-kit PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
     endif()
   endif()
 endif()

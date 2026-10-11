@@ -231,9 +231,11 @@ latched the closing key and drew a backdrop.
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
 - **Registered pages, screens, notices and prompts.** Code outside the
-  engine's own screens registers them on the layer for this runtime
-  (`registered_settings`, `registered_screens`, `oa/ui/screen_registry/kit.hpp`).
-  A settings page is listed by the engine's Settings dialog, under a divider
+  engine's own screens registers them for this runtime: a settings page in
+  the layer's registry (`registered_settings`), a kit screen in the
+  runtime's `ScreenRegistry` (`kit_screen_register`), as
+  `oa/ui/screen_registry/kit.hpp` describes them. An extension registers
+  them through its table ([Extensions](#extensions), version 15). A settings page is listed by the engine's Settings dialog, under a divider
   naming its owner, after the engine's own sections, and laid out from its
   preference rows. OK writes the keys that changed and, once the preferences
   are saved, calls the page's `applied`; Cancel writes nothing, and a mod's
@@ -3360,7 +3362,7 @@ the Mouse wheel zoom setting is off and closing when it is turned on.
 
 `extension.hpp` is the table of hooks through which libraries linked into
 `oa-game` extend it: long options and game switches, start-up and
-shutdown, screens, the frontend's entry (its game name and nickname), run
+shutdown, screens, Settings pages, the frontend's entry (its game name and nickname), run
 modes, per-frame work, match events, the Pause key, the speed keys and
 the GAME slider, the frontend's application modes, the loading's
 progress, the team panels' host (a tournament game withholds CONTROL),
@@ -3558,6 +3560,36 @@ every Developer Mode override that changes the simulation, or the plain
 baseline when the game plays 3.1c. A running match keeps the hash it
 started with. It is not a hook, and no extension fills it.
 
+Version 15 adds the OA UI kit (`src/ui/kit`) to the contract, so that an
+extension's pages, screens, notices and prompts look, scale, focus and
+answer as OA's own do. `register_settings_pages`, called right after
+`register_screens` while each runtime is built, hands the extension the
+runtime's `SettingsRegistry`: each page it takes (`settings_page_register`,
+a `SettingsPageDesc` of preference rows bound to the extension's own keys)
+is listed in Settings under a divider with its owner's name, after the
+engine's sections, and saved, restored and reported to its `applied` as the
+engine's pages are; a page the registry refuses stops the start with
+"settings page registration rejected: <reason>". `register_screens` may
+also register kit screens (`kit_screen_register`, a `KitScreenDesc` with
+`lay_out`, `act` and `closed`) in the `ScreenRegistry`, beside its screens
+and overlays. Three entries appended to `ScreenServices` reach the OA layer
+from a screen's or an overlay's context: `open_kit_screen` opens a kit
+screen by name, modal over the front end; `show_notice` and `ask_prompt`
+copy a `NoticeRequest` or `PromptRequest` at once and queue it with the
+engine's own, so two never show at once, a prompt's `answered` called once
+on the main thread with the button pressed, or −1 when the runtime ends
+with it still waiting. `read_string` with a null section reads a whole
+preference key, as a page's row binds one. `MatchOverlay` gains
+`kit_text_width`, `draw_kit_text`, `draw_chip`, `draw_progress` (−1
+thousandths draws it busy) and `draw_hover_card`, which draw the kit's
+components crisp at the HUD's scale in the game's fonts, clipped to the
+battlefield. From this version the kit's public headers,
+`oa/ui/kit/*.hpp`, are part of the contract: a change to one before 0.8.0,
+the first release that carries version 15, keeps 15 and updates the
+engine's followers and the test extensions in the same change; from that
+release on, any change to one raises the version. The kit is provisional
+all the same: it changes as the engine's screens need.
+
 `app-extension-list` checks each rule of the combined table over two test
 extensions, and `tests/extension/` tests the boundary itself.
 `extension-layout-mismatch` links a unit that sees `Runtime` with members
@@ -3579,7 +3611,11 @@ key reaches `pause_changed`, its speed keys `speed_changed` and its menus
 `--check-match-dialogs`'s close requests `close_requested` and its GAME
 slider `speed_changed`, a `--generate-script` run over a file no
 extension replays `open_recording`, asking the follower first, and the
-end of a headless skirmish `release_runtime`, the follower first.
+end of a headless skirmish `release_runtime`, the follower first. The
+recorder registers a Settings page of its own from
+`register_settings_pages`; with `--record-refused-page` it gives that page
+an id the registry refuses, and the start stops with the registry's
+reason.
 With `--record-quit STATUS` the recorder keeps the screen services an
 overlay is given, stops the sounds, plays BGM on the alternate route,
 asks for a frontend pass and ends the run through `quit`, which must exit
@@ -3594,9 +3630,16 @@ hooks to check what the engine does with their answers: a close request
 answered or declined, quit's status, one frontend pass for two requests,
 a query binding, the launch's nickname, the return label kept as a match
 starts and quit leaving a match, with the preferences open over it,
-first. CI builds that configuration as a job of its own, but has no game
-installation: there `extension-hooks-game` skips, and only the option
-hooks and the hook list are checked. The rest of the hook coverage runs
+first. The same configuration registers a third test extension, the Kit
+fixture (`kit_fixture.cpp`), which uses the OA UI kit through the table
+alone: a Settings page, a kit screen, a prompt and the overlay's kit calls.
+`extension-kit` (`tests/extension/check_kit_fixture.py`) drives it through
+the automation endpoint in 640x480, 1280x720 and 1920x1080 windows, and
+finds its chip in a headless match's frame
+([testing.md](../../docs/development/testing.md#the-kit-for-an-extension)).
+CI builds that configuration as a job of its own, but has no game
+installation: there `extension-hooks-game` and `extension-kit` skip, and
+only the option hooks and the hook list are checked. The rest of the hook coverage runs
 only where `OA_GAME_DIR` is set; run it there before changing the table.
 
 A check an extension runs, from `run_mode` or `check_multiplayer_menu`,

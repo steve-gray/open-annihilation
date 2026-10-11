@@ -278,10 +278,12 @@ target_include_directories(oa-app-headers INTERFACE src/app/include)
 # OA_SELF_CHECKS is 1 when the game holds its self-checks (app.hpp).
 target_compile_definitions(oa-app-headers INTERFACE "OA_SELF_CHECKS=$<BOOL:${OA_SELF_CHECKS}>")
 # app.hpp and render_policy.hpp include the engine settings' header,
-# runtime.hpp the gamepad controls' model and game_directory.hpp the found
-# installs' header.
+# runtime.hpp the gamepad controls' model, game_directory.hpp the found
+# installs' header, and extension.hpp the UI kit's headers and the
+# registrations of Settings pages, kit screens, notices and prompts.
 target_link_libraries(oa-app-headers INTERFACE oa-base-sha256 oa-data-languages oa-data-limits
-  oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs)
+  oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs
+  oa-ui-kit oa-ui-screen-registry)
 # oa-game's command line, which the option tests parse without a running app.
 add_library(oa-app-game-options src/app/startup.cpp)
 add_library(oa::app::game_options ALIAS oa-app-game-options)
