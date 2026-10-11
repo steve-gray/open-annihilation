@@ -44,7 +44,7 @@ struct EnginePageList {
 };
 
 /// Returns the engine's sections a dialog lists, in the list's order: the
-/// four that every dialog lists, then Touch, Controller and Game files where
+/// five that every dialog lists, then Touch, Controller and Game files where
 /// each is listed, then Downloads, then Developer.
 ///
 /// @param touch the dialog lists Touch
@@ -54,7 +54,8 @@ struct EnginePageList {
 constexpr EnginePageList engine_page_list(bool touch, bool controller, bool game_files) noexcept {
     EnginePageList list{};
     const auto add = [&list](Page page) { list.pages[list.count++] = page; };
-    for (const Page page : {Page::controls, Page::common_tweaks, Page::language, Page::graphics})
+    for (const Page page : {Page::controls, Page::common_tweaks, Page::language, Page::graphics,
+                            Page::user_interface})
         add(page);
     if (touch)
         add(Page::touch);
@@ -89,7 +90,7 @@ constexpr std::array<EnginePageList, 8> kEnginePageLists{
     engine_page_list(false, true, true),
     engine_page_list(true, true, true),
 };
-static_assert(kEnginePageLists.front().count == 6, "six sections without the optional three");
+static_assert(kEnginePageLists.front().count == 7, "seven sections without the optional three");
 static_assert(
     kEnginePageLists.back().count == most_listed_pages,
     "the longest list holds the most sections a dialog lists"
@@ -108,7 +109,7 @@ constexpr bool entries_follow_the_list() noexcept {
     for (std::size_t index = 0; index + 2 < list.count; ++index)
         if (page_control(list.pages[index]) != static_cast<int32_t>(index))
             return false;
-    if (page_control(Page::downloads) != 8 || page_control(Page::developer) != 6)
+    if (page_control(Page::downloads) != 9 || page_control(Page::developer) != 7)
         return false;
     for (const EnginePageList& listed : kEnginePageLists) {
         if (listed.count < 2 || listed.pages[listed.count - 2] != Page::downloads ||

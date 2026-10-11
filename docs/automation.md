@@ -208,8 +208,11 @@ centre would land on the line between Off and On.
 | The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
 | The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label, its text the line shown: "Ridge 4.8 · rev 3" or "No mod is played"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
 
-`<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
-`<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
+`<page>` is the section's word (`controls`, `common-tweaks`, `language`,
+`graphics`, `user-interface`, `mod-keys`). Language & Text keeps the word
+`language`, so `oa.settings.nav.language` still names that section, and
+User Interface is `user-interface`. `<row>` is the setting's
+(`wheel-zoom`, `hud-scaling`), `<value>` the stored
 word (`whole-map`, `whole-steps`, `1-32`). `<hack>`
 is the standard hack's id with its dots kept. `<word>` is a notice's or a
 prompt's own word: `notice` and `prompt` unless the code that raises it

@@ -467,6 +467,9 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                      settings::dialog_pages(settings::DialogKind::engine, touch))
                     if (part.text == rest && part.control == settings::page_control(listed))
                         page = listed;
+            // Older stage files name Language & Text "Language".
+            if (!page && rest == "Language")
+                page = settings::Page::language;
             if (!page)
                 throw std::runtime_error(where + ": the settings have no section " + rest);
             engine_settings_state().last_page = *page;

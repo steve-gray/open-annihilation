@@ -578,15 +578,14 @@ void tab_follows_the_dialogs_focus_order() {
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
         tab_order(controls) ==
-        (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 9, 10, 11, 0, 1, 2, 3, 4, 5, 7, 8, 6})
+        (std::vector<int32_t>{14, 15, 16, 17, 18, 10, 11, 12, 0, 1, 2, 3, 4, 5, 6, 8, 9, 7})
     );
-    // Graphics: After zoom, locked while units are drawn whole, takes none;
-    // Interface size, the last row, does.
+    // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
-    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 19, 20,
-                                                          21, 23, 24, 25, 9,  10, 11, 0,
-                                                          1,  2,  3,  4,  5,  7,  8,  6}));
+    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 20, 21,
+                                                          10, 11, 12, 0,  1,  2,  3,  4,
+                                                          5,  6,  8,  9,  7}));
     // Developer with its first area open: its rows, UI kit gallery's SHOW
     // last of them, its list's headers, Show Active Only and Restore profile
     // values, then the rest.
@@ -594,11 +593,11 @@ void tab_follows_the_dialogs_focus_order() {
     developer.page = settings::Page::developer;
     developer.chosen.developer_mode = true;
     developer.developer.areas_open[0] = 1;
-    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{13, 14, 15, 18, 19, 20, 21, 22, 23,
-                                                           24, 25, 26, 27, 28, 29, 30, 31, 32,
-                                                           33, 34, 35, 36, 37, 38, 39, 40, 41,
-                                                           42, 43, 44, 16, 17, 9,  10, 11, 0,
-                                                           1,  2,  3,  4,  5,  7,  8,  6}));
+    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{14, 15, 16, 19, 20, 21, 22, 23, 24,
+                                                           25, 26, 27, 28, 29, 30, 31, 32, 33,
+                                                           34, 35, 36, 37, 38, 39, 40, 41, 42,
+                                                           43, 44, 45, 17, 18, 10, 11, 12, 0,
+                                                           1,  2,  3,  4,  5,  6,  8,  9,  7}));
 }
 
 } // namespace

@@ -25,8 +25,9 @@ before Downloads joined it.
 - [OK, Cancel and Restore defaults](#ok-cancel-and-restore-defaults)
 - [Controls](#controls)
 - [Common Tweaks](#common-tweaks)
-- [Language](#language)
+- [Language & Text](#language)
 - [Graphics](#graphics)
+- [User Interface](#user-interface)
 - [Touch](#touch)
 - [Controller](#controller)
 - [Game files](#game-files)
@@ -52,10 +53,10 @@ multiplayer game keeps running, and the dialog's header says so in amber:
 "Shared game - still running".
 
 The column on the left lists the sections: Controls, Common Tweaks,
-Language and Graphics, then Touch while the game has touch controls,
-Controller once a gamepad has been used, and Game files in the main menu
-on an iPhone or an iPad, then Downloads, and Developer at its foot under a
-divider. A
+Language & Text, Graphics and User Interface, then Touch while the game
+has touch controls, Controller once a gamepad has been used, and Game
+files in the main menu on an iPhone or an iPad, then Downloads, and
+Developer at its foot under a divider. A
 section taller than the dialog, such as Graphics, scrolls with the mouse
 wheel, its scroll bar, Page Up, Page Down, Home and End.
 
@@ -110,8 +111,6 @@ A setting that cannot change now is faded, with a padlock and the reason:
 ## Controls
 
 ![The top of the Controls section: Mouse wheel zoom On, Maximum zoom out at Automatic, Maximum zoom in at 4x and the top of View past the map's edge at 50%.](images/settings/controls-1.png)
-
-![The rest of the Controls section, scrolled to its end: Maximum zoom in at 4x, View past the map's edge at 50%, Escape opens the game menu On and Select groups without Alt Off.](images/settings/controls-2.png)
 
 Each of these takes effect at once.
 
@@ -168,10 +167,6 @@ Each of these takes effect at once.
   follow goes on, and the view follows the unit again as it comes back.
   Choose Off or 25% to keep the black past the map out of a view zoomed
   far out.
-- **Escape opens the game menu**, On by default on macOS and Off
-  elsewhere. The first Escape cancels an order or clears the selection, as
-  in 3.1c; the next opens the in-game menu. Turn it on if F2 is awkward to
-  reach, as on many Mac keyboards.
 - **Select groups without Alt**, Off by default, as 3.1c plays. Off, Alt
   and a number select that group of units, and a number alone turns the
   selected unit's menu to that page. On, a number alone selects its group,
@@ -213,15 +208,13 @@ Each of these takes effect at once.
 Both sliders are locked during a game, and in a multiplayer game or a
 replay they show "Set by the host".
 
-## Language
+<a id="language"></a>
 
-![The top of the Language section: Language set to System default (English), the MORE IN THE LIBRARY… link with the line "More languages are in the Library.", Use modern fonts for game text On and the Text size row.](images/settings/language-1.png)
+## Language & Text
 
-![The Language section with the Language list open: System default (English), English, Deutsch, Español, Français and Italiano, then under AVAILABLE TO DOWNLOAD 简体中文 with its size, 3.5 MB, and the download mark.](images/settings/language-list.png)
+![The top of the Language & Text section, in a game: Language set to System default (English), Use modern fonts for game text On, Text size at 80% and the top of Font outline. More in the Library… is on the main menu, under Language.](images/settings/language-1.png)
 
-![The rest of the Language section, scrolled to its end: Text size at 80%, Font outline On, Font shadow On, Game text background Off and Enable Unicode Multiplayer Chat Off.](images/settings/language-2.png)
-
-The Language section says which language the game's text is shown in and
+The Language & Text section says which language the game's text is shown in and
 how that text is drawn. None of these changes the game itself, so no game
 locks them, and players in different languages play together.
 
@@ -294,10 +287,6 @@ the game draws its text and how the modern fonts draw it.
 ## Graphics
 
 ![The top of the Graphics section: Maximum frame rate at 120 fps, Enhanced anti-aliasing Off, Screen size Desktop and Hardware acceleration at Full.](images/settings/graphics-1.png)
-
-![The middle of the Graphics section: Vertical sync Off, Menu scaling Sharp, Native pixel density Off and Explosion flash Full.](images/settings/graphics-2.png)
-
-![The rest of the Graphics section, scrolled to its end: After zoom at 1/6, Window frame Hidden in play, HUD scaling On and Interface size at Auto.](images/settings/graphics-3.png)
 
 - **Maximum frame rate**, 30 to 120 frames a second in steps of 5, 120 by
   default. It caps how many pictures the game draws a second; the game
@@ -382,18 +371,6 @@ the game draws its text and how the modern fonts draw it.
   it on if you see tearing lines when the view scrolls. It takes effect at
   once, keeps its value for the length of a multiplayer game or a replay,
   and shows "Not available here" where the renderer cannot offer it.
-- **Menu scaling**, Sharp, Whole steps or Unfiltered, Sharp by default. It
-  says how the menus, drawn at 640x480, fill the window, and how a game in
-  full screen drawn at a Screen size of its own fills the screen, and takes
-  effect at once.
-  - **Sharp**: as large as the window holds, every pixel as wide as the
-    next, where the graphics card can.
-  - **Whole steps**: the largest whole-number scale that fits; the menus
-    are smaller, with a black border, but every pixel is square.
-  - **Unfiltered**: they fill the window as the game always drew them.
-
-  Choose Whole steps for the crispest pixels, or Unfiltered for the
-  original look.
 - **Native pixel density**, Off by default; it applies from the next start.
   The window opens at the display's own pixel density, the Retina
   resolution on a Mac, in place of the window system's, so the picture can
@@ -431,6 +408,40 @@ the game draws its text and how the modern fonts draw it.
   zoom out at Automatic the view never goes farther out than 1/2, or 1/6
   with Full hardware acceleration, so choose a farther Maximum zoom out to
   see the dots.
+
+Some computers start with other defaults, which Restore defaults puts back
+and which a value you choose always replaces:
+
+- a **light computer**, one with a single processor, a processor without
+  SSE2 (a Pentium III or an Athlon XP) or less than 512 MB of memory,
+  starts at 800x600 (640x480 when its desktop is smaller), at 60 frames a
+  second, with Enhanced anti-aliasing off;
+- a **Raspberry Pi** starts at 60 frames a second;
+- a **Steam Deck** starts at its screen's rate, 60 frames a second on the
+  LCD model and 90 on the OLED, with the touch controls' Control size at
+  Larger ([Steam Deck](installation/steam-deck.md)).
+
+## User Interface
+
+![The top of the User Interface section: Menu scaling Sharp, Window frame Hidden in play, HUD scaling On and the Interface size row.](images/settings/user-interface.png)
+
+The User Interface section says how Open Annihilation's own screens, the
+window and the side panel are drawn, and whether Escape opens the game
+menu. Each setting takes effect at once, except Interface size, which
+applies when you press OK.
+
+- **Menu scaling**, Sharp, Whole steps or Unfiltered, Sharp by default. It
+  says how the menus, drawn at 640x480, fill the window, and how a game in
+  full screen drawn at a Screen size of its own fills the screen, and takes
+  effect at once.
+  - **Sharp**: as large as the window holds, every pixel as wide as the
+    next, where the graphics card can.
+  - **Whole steps**: the largest whole-number scale that fits; the menus
+    are smaller, with a black border, but every pixel is square.
+  - **Unfiltered**: they fill the window as the game always drew them.
+
+  Choose Whole steps for the crispest pixels, or Unfiltered for the
+  original look.
 - **Window frame**, Hidden in play or Always shown, Hidden in play by
   default. In a window, Hidden in play hides the window's title bar and
   borders while you play a game, so that only the battlefield shows, and
@@ -450,9 +461,9 @@ the game draws its text and how the modern fonts draw it.
   default: how large Open Annihilation's own screens are drawn. These are
   the settings, their notices and questions, the Library, the map browser,
   GET MAP in the battle room, the Add registry window, the check that you
-  are a person, the battle room's player cards and the UI kit gallery. The 3.1c screens
-  keep Menu scaling, the game's text keeps Text size and the side panel and
-  bars keep HUD scaling.
+  are a person, the battle room's player cards and the UI kit gallery. The
+  3.1c screens keep Menu scaling, the game's text keeps Text size and the
+  side panel and bars keep HUD scaling.
   - **Auto** draws them at the window's height in pixels divided by 720,
     rounded: 1x below 1080 lines, 2x at 1080 and 1440, 3x at 2160, and
     never below the display's own pixel density, so a phone keeps the
@@ -476,18 +487,10 @@ the game draws its text and how the modern fonts draw it.
   the size the dialog opened with; OK keeps the size you chose. Choose a
   larger size if OA's screens are small to read on a large display, or a
   smaller one to see more of a list at once.
-
-Some computers start with other defaults, which Restore defaults puts back
-and which a value you choose always replaces:
-
-- a **light computer**, one with a single processor, a processor without
-  SSE2 (a Pentium III or an Athlon XP) or less than 512 MB of memory,
-  starts at 800x600 (640x480 when its desktop is smaller), at 60 frames a
-  second, with Enhanced anti-aliasing off;
-- a **Raspberry Pi** starts at 60 frames a second;
-- a **Steam Deck** starts at its screen's rate, 60 frames a second on the
-  LCD model and 90 on the OLED, with the touch controls' Control size at
-  Larger ([Steam Deck](installation/steam-deck.md)).
+- **Escape opens the game menu**, On by default on macOS and Off
+  elsewhere. The first Escape cancels an order or clears the selection, as
+  in 3.1c; the next opens the in-game menu. Turn it on if F2 is awkward to
+  reach, as on many Mac keyboards.
 
 ## Touch
 

@@ -131,9 +131,11 @@ constexpr std::array<WindowLayout, 5> kWindowLayouts{{
 }};
 static_assert(kWindowLayouts.size() == kWindowSizes.size(), "one layout for each window size");
 
-/// The rows Graphics' last row, Interface size, adds to its scroll limit at
-/// Compact: a drop-down's row with two hint lines and its field under them.
-constexpr int32_t kInterfaceSizeRow = 79;
+/// Graphics' scroll limit at Compact, after Menu scaling, Window frame, HUD
+/// scaling and Interface size left for User Interface.
+constexpr int32_t kGraphicsScrollLimit = 336;
+/// Interface size's place on User Interface, from the section's first row.
+constexpr int32_t kInterfaceSizeRow = 3;
 
 /// The window the Interface size is chosen on, through its drop-down.
 constexpr std::pair<int, int> kInterfaceSizeWindow{1920, 1080};
@@ -191,6 +193,8 @@ std::string_view page_slug(settings::Page page) {
         return "tweaks";
     case settings::Page::graphics:
         return "graphics";
+    case settings::Page::user_interface:
+        return "user-interface";
     case settings::Page::language:
         return "language";
     case settings::Page::touch:
@@ -216,11 +220,12 @@ std::string_view page_slug(settings::Page page) {
 }
 
 /// The dialog's sections, in the order its list shows them.
-constexpr std::array<settings::Page, 5> kPages{
+constexpr std::array<settings::Page, 6> kPages{
     settings::Page::controls,
     settings::Page::common_tweaks,
     settings::Page::language,
     settings::Page::graphics,
+    settings::Page::user_interface,
     settings::Page::developer,
 };
 
@@ -631,8 +636,9 @@ void Runtime::check_engine_settings_dialog() {
                 shows_text(parts, label_of(rows[row])),
                 name + " does not show " + std::string(label_of(rows[row]))
             );
-        // The list of sections names Language, as its row does: only the
-        // open section's own parts count.
+        // The list names Language & Text; the row is still Language. Only
+        // the open section's own parts count, so the list's entries are
+        // dropped before the labels are compared.
         std::erase_if(parts, [](const settings::LayoutPart& part) {
             return part.control >= settings::first_page_control &&
                    part.control < settings::restore_control;
@@ -2099,7 +2105,7 @@ void Runtime::check_engine_settings_window_sizes() {
             require(
                 end_limit > 0 && dialog->scroll[static_cast<std::size_t>(page)] == end_limit &&
                     (expected_layout.size_class != oa::ui::kit::SizeClass::compact ||
-                     end_limit == 513 + kInterfaceSizeRow),
+                     end_limit == kGraphicsScrollLimit),
                 "End did not scroll Graphics to its end" + on
             );
             shows_dialog("Graphics at its end");
@@ -2120,7 +2126,7 @@ void Runtime::check_engine_settings_window_sizes() {
                 const auto parts_now = settings::dialog_layout(*engine_settings_dialog());
                 click_part(find_part(parts_now, control, text), what);
             };
-        // Interface size, chosen through its drop-down at Graphics' end: it
+        // Interface size, chosen through its drop-down on User Interface: it
         // takes effect as it is chosen, the dialog staying open at the class
         // and scale it gives. OK stores it, and the dialog opens again drawn
         // as the dialog drawn at that class and scale.
@@ -2130,15 +2136,15 @@ void Runtime::check_engine_settings_window_sizes() {
             tap(SDLK_COMMA, kShortcutModifier);
             auto* sized = engine_settings_dialog();
             require(sized != nullptr, "the shortcut did not open the dialog" + on);
-            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+            click_control(
+                settings::page_control(settings::Page::user_interface), {}, "User Interface's entry"
+            );
             require(
-                sized->page == settings::Page::graphics,
-                "a click on Graphics' entry did not show it" + on
+                sized->page == settings::Page::user_interface,
+                "a click on User Interface's entry did not show it" + on
             );
             tap(SDLK_END);
-            const int32_t row_control =
-                settings::first_row_control +
-                static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+            const int32_t row_control = settings::first_row_control + kInterfaceSizeRow;
             click_control(row_control, {}, "Interface size's field");
             require(
                 sized->open_list == row_control,
@@ -2286,12 +2292,13 @@ void Runtime::check_engine_settings_window_sizes() {
         // modern fonts Off shows 100% again, which OK puts in effect at
         // Large, 1x; then Auto goes back.
         const std::string fractional = "Interface size 150%" + on;
-        const int32_t size_row =
-            settings::first_row_control +
-            static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
-        // Opens Interface size's drop-down at Graphics' end.
+        const int32_t size_row = settings::first_row_control + kInterfaceSizeRow;
+        // Opens Interface size's drop-down on User Interface, at its end,
+        // where the field shows whole.
         const auto open_sizes = [&](settings::Dialog& shown_dialog) {
-            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+            click_control(
+                settings::page_control(settings::Page::user_interface), {}, "User Interface's entry"
+            );
             tap(SDLK_END);
             click_control(size_row, {}, "Interface size's field");
             require(
@@ -2390,7 +2397,9 @@ void Runtime::check_engine_settings_window_sizes() {
                 fraction_reopened->chosen.interface_size == settings::InterfaceSize::size_100,
             "turning the modern fonts Off did not show Interface size 100%" + on
         );
-        click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+        click_control(
+            settings::page_control(settings::Page::user_interface), {}, "User Interface's entry"
+        );
         tap(SDLK_END);
         {
             const auto parts_now = settings::dialog_layout(*fraction_reopened);

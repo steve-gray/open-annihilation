@@ -1851,7 +1851,8 @@ hosts them on the OA layer.
   `Down`), both reaching an open dialog or menu first, as the player's do,
   and `settings SECTION` opens the settings dialog beside the
   in-game menu at the section its list names so, such as
-  `settings Language`, and prints `stage: settings SECTION at X,Y WxH,
+  `settings Language & Text` or `settings User Interface`. `settings Language`
+  still opens Language & Text. The line prints `stage: settings SECTION at X,Y WxH,
   version at X,Y WxH`: where the dialog shows and the room its header keeps
   for the version text, in the match canvas's pixels, so that a golden
   frame can leave the version out. That room is the header's version part
