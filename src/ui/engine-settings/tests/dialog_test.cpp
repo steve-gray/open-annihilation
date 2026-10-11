@@ -9488,8 +9488,9 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
     CHECK(dialog.registered_values.values.at("check.mode") == "loud");
 
+    const auto toggled = settings::dialog_layout(dialog);
     const settings::LayoutPart* off = nullptr;
-    for (const auto& part : settings::dialog_layout(dialog)) {
+    for (const auto& part : toggled) {
         if (part.control != settings::first_row_control)
             continue;
         if (off == nullptr || part.rect.x < off->rect.x)
@@ -9498,7 +9499,8 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     CHECK(off != nullptr);
     CHECK(click(dialog, centre(off->rect)) == DialogAction::changed);
     CHECK(dialog.registered_values.values.at("check.toggle") == "0");
-    const auto* ok = find_part(settings::dialog_layout(dialog), {}, settings::ok_control);
+    const auto accepting = settings::dialog_layout(dialog);
+    const auto* ok = find_part(accepting, {}, settings::ok_control);
     CHECK(ok != nullptr);
     CHECK(click(dialog, centre(ok->rect)) == DialogAction::accepted);
     const auto writes = settings::registered_writes(dialog);
@@ -9515,8 +9517,9 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     settings::Dialog cancelled = opened(Page::mods);
     settings::set_registered_pages(cancelled, std::span(&sample, 1), {});
     cancelled.page = Page::registered;
+    const auto cancel_toggled = settings::dialog_layout(cancelled);
     const settings::LayoutPart* cancel_off = nullptr;
-    for (const auto& part : settings::dialog_layout(cancelled)) {
+    for (const auto& part : cancel_toggled) {
         if (part.control != settings::first_row_control)
             continue;
         if (cancel_off == nullptr || part.rect.x < cancel_off->rect.x)
@@ -9524,8 +9527,8 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     }
     CHECK(cancel_off != nullptr);
     CHECK(click(cancelled, centre(cancel_off->rect)) == DialogAction::changed);
-    const auto* cancel =
-        find_part(settings::dialog_layout(cancelled), {}, settings::cancel_control);
+    const auto cancelling = settings::dialog_layout(cancelled);
+    const auto* cancel = find_part(cancelling, {}, settings::cancel_control);
     CHECK(cancel != nullptr);
     CHECK(click(cancelled, centre(cancel->rect)) == DialogAction::cancelled);
     CHECK(settings::registered_writes(cancelled).empty());
@@ -9534,8 +9537,9 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     settings::Dialog restored = opened(Page::mods);
     settings::set_registered_pages(restored, std::span(&sample, 1), {});
     restored.page = Page::registered;
+    const auto restore_toggled = settings::dialog_layout(restored);
     const settings::LayoutPart* restore_off = nullptr;
-    for (const auto& part : settings::dialog_layout(restored)) {
+    for (const auto& part : restore_toggled) {
         if (part.control != settings::first_row_control)
             continue;
         if (restore_off == nullptr || part.rect.x < restore_off->rect.x)
