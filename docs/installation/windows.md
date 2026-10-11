@@ -83,9 +83,10 @@ Or, in a Command Prompt in the game's folder:
 open-annihilation.exe --choose-game-dir
 ```
 
-Open Annihilation's own settings open from the **OA** button at the bottom
-right of the main menu, or with **Ctrl+,**. See
-[Settings](../settings.md).
+Open Annihilation's own settings open with **Ctrl+,**, or from
+**SETTINGS…** at the foot of the Library, which the **OA** button at the
+bottom right of the main menu opens. See [Settings](../settings.md), and
+[the Library](../library.md) for mods, maps and languages to download.
 
 Each start makes this copy of the game the opener of `.oamod` files for
 your Windows account, with the game's icon on them: double-click one to
@@ -141,8 +142,8 @@ them, and the Documents folder may lie under a user name in any script:
 both work whatever the system's language for non-Unicode programs, on
 Windows XP too ([typing.md](../typing.md#saved-games-and-recordings-named-in-any-script)).
 
-The game makes each folder the first time it needs it. In the settings (the
-**OA** button on the main menu), **Common Tweaks** shows the folder under
+The game makes each folder the first time it needs it. In the settings
+(**Ctrl+,**), **Common Tweaks** shows the folder under
 **Your files**, whose buttons open Saves, Screenshots and Mods in Explorer.
 
 Your settings, the log files (in `logs`) and the unpacked demo stay in

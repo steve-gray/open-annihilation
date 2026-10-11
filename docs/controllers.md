@@ -333,7 +333,7 @@ settings dialog, the Game files screen and the folder chooser.
 | View | Information about the focused item, as F1. In the battle room it opens the focused player's card |
 | Right stick ↑ and ↓ | The wheel: steps the map and mission lists |
 | A twice quickly on a list row | Starts the campaign, mission or map, as a double click does |
-| Y, in the Library | Focuses the search. On every other screen Y does nothing |
+| Y, in the Library and the map browser | Focuses the search. On the skirmish map list and the battle room host's map list it opens the map browser, as MORE MAPS… does. On every other screen Y does nothing |
 | X, in the Library | The selected entry's first action, when it is GET, UPDATE, CANCEL or RETRY and can be pressed. On every other screen X does nothing |
 | L1 and R1, in the Library | The previous and next tab |
 | B, in the Library | From the details page back to the list; otherwise closes the Library |

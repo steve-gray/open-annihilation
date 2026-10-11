@@ -120,9 +120,10 @@ cd open-annihilation-<version>-linux-x86_64
 If the shell says `Permission denied`, the unzip tool lost the program's
 permission: run `chmod +x open-annihilation` once.
 
-Open Annihilation's own settings open from the **OA** button at the bottom
-right of the main menu, or with **Ctrl+,**. See
-[Settings](../settings.md).
+Open Annihilation's own settings open with **Ctrl+,**, or from
+**SETTINGS…** at the foot of the Library, which the **OA** button at the
+bottom right of the main menu opens. See [Settings](../settings.md), and
+[the Library](../library.md) for mods, maps and languages to download.
 
 Each start on a desktop makes this copy of the game the opener of `.oamod`
 files for your account, with the game's icon on them: open one from the
@@ -181,8 +182,8 @@ Your saved games, screenshots, films, recordings and mods are in the
 | `Recordings` | recordings of network games, which `--play-demo` plays back, in a folder for each mod as in `Saves` |
 | `Mods` | mods you add, each in a folder of its own, which the settings' Mods page lists besides the game folder's `mods` folder ([mods](../mods/README.md#installing-a-mod)) |
 
-The game makes each folder the first time it needs it. In the settings (the
-**OA** button on the main menu), **Common Tweaks** shows the folder under
+The game makes each folder the first time it needs it. In the settings
+(**Ctrl+,**), **Common Tweaks** shows the folder under
 **Your files**, whose buttons open Saves, Screenshots and Mods in your file
 manager.
 
