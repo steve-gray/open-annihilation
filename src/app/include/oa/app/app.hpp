@@ -593,6 +593,12 @@ struct Options {
     // out the Library's actions, opens Settings over it and it over
     // Settings, and keeps the in-match OA button on Settings.
     bool check_library = false;
+    // Installs made-up mod packages posted as the download queue posts them,
+    // from a built-in registry and two added ones, while the Library shows:
+    // the questions each registry asks, the refusals in its queue, ROLL BACK
+    // and PLAY NOW from it, and an update to the mod played held until the
+    // mod is switched, over soft restarts.
+    bool check_library_install = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;
