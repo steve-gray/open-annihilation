@@ -36,6 +36,10 @@ if(BUILD_TESTING)
   add_executable(oa-ui-engine-settings-language-notice-test tests/language_notice_test.cpp)
   target_link_libraries(oa-ui-engine-settings-language-notice-test PRIVATE oa-ui-engine-settings
     oa-platform-text-font oa-test-game-data oa-test-support oa-options)
+  # The fonts sit beside this program. The directory is its own, so they are
+  # not beside the pixel tests, which refuse to draw when fonts are there.
+  set_target_properties(oa-ui-engine-settings-language-notice-test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/language-notice")
   oa_copy_text_fonts(oa-ui-engine-settings-language-notice-test
     "$<TARGET_FILE_DIR:oa-ui-engine-settings-language-notice-test>")
   add_test(NAME ui-engine-settings-language-notice COMMAND oa-ui-engine-settings-language-notice-test)
