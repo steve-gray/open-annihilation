@@ -5,19 +5,29 @@
 // sizes (button heights, the safe area, text inside its box as the bundled
 // fonts measure it, no overlaps), the hit test, the focus order and keys,
 // every press's command, the switches, scrolling, and the texts with the
-// engine's neutral words and with a platform's words.
+// engine's neutral words and with a platform's words. Every layout of every
+// case at every review size keeps the digest layout-digests.txt records, the
+// file the test is given; --write-digests prints that file's content.
+#include "oa/base/sha256.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/game_files.hpp"
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
+#include <fstream>
+#include <map>
 #include <memory>
 #include <optional>
+#include <span>
+#include <stdint.h>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -1575,6 +1585,391 @@ void ready_and_summary_texts() {
     OA_CHECK(game_files::summary_text({}, 0, false) == "No game files");
 }
 
+/// Returns the name of what an item draws.
+///
+/// @param role the item's role
+/// @return its enumerator's name
+std::string_view role_name(ItemRole role) {
+    switch (role) {
+    case ItemRole::header_bar:
+        return "header_bar";
+    case ItemRole::badge:
+        return "badge";
+    case ItemRole::header_text:
+        return "header_text";
+    case ItemRole::version:
+        return "version";
+    case ItemRole::title:
+        return "title";
+    case ItemRole::text:
+        return "text";
+    case ItemRole::card:
+        return "card";
+    case ItemRole::icon:
+        return "icon";
+    case ItemRole::banner:
+        return "banner";
+    case ItemRole::row:
+        return "row";
+    case ItemRole::divider:
+        return "divider";
+    case ItemRole::switch_off_on:
+        return "switch_off_on";
+    case ItemRole::button_main:
+        return "button_main";
+    case ItemRole::button:
+        return "button";
+    case ItemRole::button_danger:
+        return "button_danger";
+    case ItemRole::progress_track:
+        return "progress_track";
+    case ItemRole::progress_fill:
+        return "progress_fill";
+    case ItemRole::progress_busy:
+        return "progress_busy";
+    case ItemRole::backdrop:
+        return "backdrop";
+    case ItemRole::sheet:
+        return "sheet";
+    }
+    return "?";
+}
+
+/// Returns the name of a text's look.
+///
+/// @param role the text's look
+/// @return its enumerator's name
+std::string_view text_role_name(game_files::TextRole role) {
+    using game_files::TextRole;
+    switch (role) {
+    case TextRole::header:
+        return "header";
+    case TextRole::title:
+        return "title";
+    case TextRole::subtitle:
+        return "subtitle";
+    case TextRole::lead:
+        return "lead";
+    case TextRole::body:
+        return "body";
+    case TextRole::small:
+        return "small";
+    case TextRole::row_title:
+        return "row_title";
+    case TextRole::row_detail:
+        return "row_detail";
+    case TextRole::button:
+        return "button";
+    case TextRole::mark_text:
+        return "mark_text";
+    }
+    return "?";
+}
+
+/// Returns the name of a mark.
+///
+/// @param glyph the mark
+/// @return its enumerator's name
+std::string_view glyph_name(game_files::Glyph glyph) {
+    using game_files::Glyph;
+    switch (glyph) {
+    case Glyph::none:
+        return "none";
+    case Glyph::folder:
+        return "folder";
+    case Glyph::device:
+        return "device";
+    case Glyph::disk:
+        return "disk";
+    case Glyph::clock:
+        return "clock";
+    case Glyph::warning:
+        return "warning";
+    case Glyph::check:
+        return "check";
+    case Glyph::cross:
+        return "cross";
+    case Glyph::dash:
+        return "dash";
+    case Glyph::info:
+        return "info";
+    case Glyph::stop:
+        return "stop";
+    case Glyph::play:
+        return "play";
+    case Glyph::trash:
+        return "trash";
+    case Glyph::refresh:
+        return "refresh";
+    case Glyph::plus:
+        return "plus";
+    case Glyph::file:
+        return "file";
+    case Glyph::oa:
+        return "oa";
+    }
+    return "?";
+}
+
+/// Returns the name of a kind of control.
+///
+/// @param kind the kind
+/// @return its enumerator's name
+std::string_view control_kind_name(ControlKind kind) {
+    switch (kind) {
+    case ControlKind::none:
+        return "none";
+    case ControlKind::language:
+        return "language";
+    case ControlKind::choose_folder:
+        return "choose_folder";
+    case ControlKind::i_have_copied:
+        return "i_have_copied";
+    case ControlKind::choose_installer:
+        return "choose_installer";
+    case ControlKind::banner_action:
+        return "banner_action";
+    case ControlKind::banner_discard:
+        return "banner_discard";
+    case ControlKind::cancel:
+        return "cancel";
+    case ControlKind::nested_choice:
+        return "nested_choice";
+    case ControlKind::check_it:
+        return "check_it";
+    case ControlKind::part_switch:
+        return "part_switch";
+    case ControlKind::part_why:
+        return "part_why";
+    case ControlKind::show_left_out:
+        return "show_left_out";
+    case ControlKind::copy:
+        return "copy";
+    case ControlKind::check_space:
+        return "check_space";
+    case ControlKind::stop:
+        return "stop";
+    case ControlKind::play:
+        return "play";
+    case ControlKind::remove_old:
+        return "remove_old";
+    case ControlKind::problem_action:
+        return "problem_action";
+    case ControlKind::back:
+        return "back";
+    case ControlKind::sheet_option:
+        return "sheet_option";
+    case ControlKind::manage_check:
+        return "manage_check";
+    case ControlKind::manage_add:
+        return "manage_add";
+    case ControlKind::manage_remove:
+        return "manage_remove";
+    case ControlKind::manage_replace:
+        return "manage_replace";
+    case ControlKind::manage_remove_all:
+        return "manage_remove_all";
+    case ControlKind::manage_cancel_pending:
+        return "manage_cancel_pending";
+    case ControlKind::manage_done:
+        return "manage_done";
+    }
+    return "?";
+}
+
+/// Returns a colour as the name of the screen's colour token whose value it is, or as
+/// #rrggbbaa when it is none of them, so that a token whose value changes keeps its name.
+///
+/// @param colour the colour
+/// @return the token's name or the hexadecimal value
+std::string colour_name(game_files::Colour colour) {
+    namespace token = oa::ui::kit::screen_colour;
+    const std::array<std::pair<std::string_view, game_files::Colour>, 10> tokens{{
+        {"background", token::background},
+        {"panel", token::panel},
+        {"line", token::line},
+        {"text", token::text},
+        {"dim", token::dim},
+        {"green", token::green},
+        {"amber", token::amber},
+        {"red", token::red},
+        {"ink", token::ink},
+        {"button_text", token::button_text},
+    }};
+    for (const auto& [name, value] : tokens)
+        if (value == colour)
+            return std::string(name);
+    constexpr std::string_view digits = "0123456789abcdef";
+    std::string hex = "#";
+    for (const uint8_t channel : {colour.r, colour.g, colour.b, colour.a}) {
+        hex += digits[channel >> 4];
+        hex += digits[channel & 0xf];
+    }
+    return hex;
+}
+
+/// Writes a rectangle as x,y,width,height.
+///
+/// @param rect the rectangle
+/// @return the text
+std::string rect_text(const game_files::Rect& rect) {
+    return std::to_string(rect.x) + "," + std::to_string(rect.y) + "," +
+           std::to_string(rect.width) + "," + std::to_string(rect.height);
+}
+
+/// Writes a control as its kind's name and its index.
+///
+/// @param control the control
+/// @return kind/index
+std::string control_text(const Control& control) {
+    return std::string(control_kind_name(control.kind)) + "/" + std::to_string(control.index);
+}
+
+/// Writes a number of single precision exactly, as the hexadecimal digits of its bits.
+///
+/// @param value the number
+/// @return eight hexadecimal digits
+std::string float_text(float value) {
+    constexpr std::string_view digits = "0123456789abcdef";
+    const auto bits = std::bit_cast<uint32_t>(value);
+    std::string text;
+    for (int shift = 28; shift >= 0; shift -= 4)
+        text += digits[(bits >> shift) & 0xfu];
+    return text;
+}
+
+/// Writes a line of text in double quotes, a quote or a backslash in it after a backslash.
+///
+/// @param line the line
+/// @return the quoted line
+std::string quoted_line(std::string_view line) {
+    std::string text = "\"";
+    for (const char character : line) {
+        if (character == '"' || character == '\\')
+            text += '\\';
+        text += character;
+    }
+    return text + "\"";
+}
+
+/// Writes a layout in a fixed text form: one line of the layout's own fields (the form, the
+/// scrolling region, how far it scrolls, the pixels a point and the focus order), then one
+/// line per item in painting order with every field of the item in a fixed order. Roles,
+/// text looks, marks and kinds of control are written as their enumerators' names, and
+/// colours as the names of the screen's colour tokens.
+///
+/// @param layout the layout
+/// @return the text
+std::string format_layout(const Layout& layout) {
+    std::string text = "layout device ";
+    text += layout.device == game_files::DeviceClass::phone ? "phone" : "tablet";
+    text += " rows " + rect_text(layout.rows);
+    text += " scroll " + std::to_string(layout.scroll_max_points);
+    text += " px " + float_text(layout.px_per_point);
+    text += " focus";
+    for (const Control& control : layout.focus_order)
+        text += " " + control_text(control);
+    text += "\n";
+    for (const Item& item : layout.items) {
+        text += role_name(item.role);
+        text += " box " + rect_text(item.box);
+        text += " lines " + std::to_string(item.lines.size());
+        for (const std::string& line : item.lines)
+            text += " " + quoted_line(line);
+        text += " text ";
+        text += text_role_name(item.text);
+        text += " size " + std::to_string(item.pixel_size);
+        text += " bold " + std::to_string(item.bold ? 1 : 0);
+        text += " colour " + colour_name(item.colour);
+        text += " glyph ";
+        text += glyph_name(item.glyph);
+        text += " glyph_size " + std::to_string(item.glyph_size);
+        text += " control " + control_text(item.control);
+        text += " enabled " + std::to_string(item.enabled ? 1 : 0);
+        text += " on " + std::to_string(item.on ? 1 : 0);
+        text += " focused " + std::to_string(item.focused ? 1 : 0);
+        text += " pressed " + std::to_string(item.pressed ? 1 : 0);
+        text += " fraction " + float_text(item.fraction);
+        text += " clip " + rect_text(item.clip);
+        text += "\n";
+    }
+    return text;
+}
+
+/// Returns the SHA-256 of a layout's text form, in hexadecimal.
+///
+/// @param layout the layout
+/// @return 64 lower-case hexadecimal digits
+std::string layout_digest(const Layout& layout) {
+    namespace sha256 = oa::base::sha256;
+    const std::string text = format_layout(layout);
+    const auto bytes = std::as_bytes(std::span<const char>(text.data(), text.size()));
+    const auto hex = sha256::to_hex(
+        sha256::digest_of(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size())
+        )
+    );
+    return std::string(hex.begin(), hex.end());
+}
+
+/// Returns the digests of every case at every review size, one line each:
+/// <case>\t<form>\t<hex>, the content of layout-digests.txt.
+///
+/// @return the lines
+std::string digest_lines() {
+    std::string lines;
+    for (const Case& test : every_case())
+        for (const Form& form : forms())
+            lines += test.name + "\t" + form.name + "\t" +
+                     layout_digest(lay_out(test.model, form)) + "\n";
+    return lines;
+}
+
+/// Every layout of every case at every review size is the one recorded: its digest is the
+/// one layout-digests.txt holds for that case and form, and the file holds no other line.
+///
+/// @param file layout-digests.txt; null when the test was given none
+void layouts_keep_their_digests(const char* file) {
+    OA_EXPECT(file != nullptr, "the test is given layout-digests.txt");
+    if (file == nullptr)
+        return;
+    std::ifstream input(file, std::ios::binary);
+    OA_EXPECT(static_cast<bool>(input), std::string("layout-digests.txt opens: ") + file);
+    std::map<std::string, std::string> recorded;
+    std::size_t lines = 0;
+    for (std::string line; std::getline(input, line);) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
+        ++lines;
+        const std::size_t tab = line.rfind('\t');
+        OA_EXPECT(tab != std::string::npos, "a digest line has its fields: " + line);
+        if (tab == std::string::npos)
+            continue;
+        recorded[line.substr(0, tab)] = line.substr(tab + 1);
+    }
+    std::size_t compared = 0;
+    for (const Case& test : every_case()) {
+        for (const Form& form : forms()) {
+            const std::string key = test.name + "\t" + form.name;
+            const auto found = recorded.find(key);
+            OA_EXPECT(found != recorded.end(), test.name + " at " + form.name + ": a digest");
+            if (found == recorded.end())
+                continue;
+            ++compared;
+            OA_EXPECT(
+                layout_digest(lay_out(test.model, form)) == found->second,
+                test.name + " at " + form.name + ": the layout differs from the one recorded"
+            );
+        }
+    }
+    OA_EXPECT(
+        lines == compared && recorded.size() == compared,
+        "layout-digests.txt holds one line for each case and form, and no other"
+    );
+}
+
 /// Prints the layouts of the cases whose names hold a text, item by item, for looking at a
 /// layout while changing it.
 ///
@@ -1610,7 +2005,14 @@ int main(int argc, char** argv) {
     }
     if (fonts() == nullptr)
         std::fprintf(stderr, "the bundled fonts are missing; text is measured roughly\n");
+    if (argc == 2 && std::string_view(argv[1]) == "--write-digests") {
+        if (fonts() == nullptr)
+            return 1;
+        std::fputs(digest_lines().c_str(), stdout);
+        return 0;
+    }
     OA_CHECK(fonts() != nullptr);
+    layouts_keep_their_digests(argc == 2 ? argv[1] : nullptr);
     review_sizes_take_their_forms();
     every_step_and_sheet_lays_out();
     hit_test_finds_the_nearest_enabled_control();
