@@ -127,15 +127,16 @@ using Place = std::pair<std::string_view, std::string>;
 
 /// One button of a problem, a sheet or a banner: its label and what pressing it does.
 struct Action {
-    std::string label{};             ///< upper-case label
-    Control control{};               ///< the control it is
-    Command command{Command::none};  ///< what it asks of the app; none: the UI's own
-    ItemRole role{ItemRole::button}; ///< main, plain or danger
-    Glyph glyph{Glyph::none};        ///< the mark beside the label
-    float glyph_points{};            ///< the mark's side in points; 0: the label's size
-    bool enabled = true;             ///< can be pressed
-    bool closes_sheet = true;        ///< a sheet's button closes the sheet when pressed
-    Sheet opens{Sheet::none};        ///< a sheet it opens instead of a command
+    std::string label{};            ///< upper-case label
+    Control control{};              ///< the control it is
+    Command command{Command::none}; ///< what it asks of the app; none: the UI's own
+    /// button, button_main or button_danger
+    oa::ui::kit::Role role{oa::ui::kit::Role::button};
+    Glyph glyph{Glyph::none}; ///< the mark beside the label
+    float glyph_points{};     ///< the mark's side in points; 0: the label's size
+    bool enabled = true;      ///< can be pressed
+    bool closes_sheet = true; ///< a sheet's button closes the sheet when pressed
+    Sheet opens{Sheet::none}; ///< a sheet it opens instead of a command
 };
 
 /// What S6 shows for the model's problem.

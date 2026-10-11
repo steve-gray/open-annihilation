@@ -5,32 +5,43 @@
 // sizes (button heights, the safe area, text inside its box as the bundled
 // fonts measure it, no overlaps), the hit test, the focus order and keys,
 // every press's command, the switches, scrolling, and the texts with the
-// engine's neutral words and with a platform's words.
+// engine's neutral words and with a platform's words. Every layout of every
+// case at every review size keeps the digest layout-digests.txt records, the
+// file the test is given; --write-digests prints that file's content.
+#include "oa/base/sha256.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/game_files.hpp"
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
+#include <fstream>
+#include <map>
 #include <memory>
 #include <optional>
+#include <span>
+#include <stdint.h>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
 
 namespace game_files = oa::ui::game_files;
+namespace kit = oa::ui::kit;
 namespace text_font = oa::platform::text_font;
 
 using game_files::Command;
 using game_files::Control;
 using game_files::ControlKind;
-using game_files::Item;
-using game_files::ItemRole;
 using game_files::Layout;
+using kit::Item;
+using kit::Role;
 using game_files::Model;
 using game_files::PartKind;
 using game_files::PartRow;
@@ -473,11 +484,11 @@ Layout lay_out(const Model& model, const Form& form) {
 /// @return the visible box; empty when none shows
 game_files::Rect visible(const Item& item) {
     if (item.clip.width <= 0 || item.clip.height <= 0)
-        return item.box;
-    const int left = std::max(item.box.x, item.clip.x);
-    const int top = std::max(item.box.y, item.clip.y);
-    const int right = std::min(item.box.x + item.box.width, item.clip.x + item.clip.width);
-    const int bottom = std::min(item.box.y + item.box.height, item.clip.y + item.clip.height);
+        return item.rect;
+    const int left = std::max(item.rect.x, item.clip.x);
+    const int top = std::max(item.rect.y, item.clip.y);
+    const int right = std::min(item.rect.x + item.rect.width, item.clip.x + item.clip.width);
+    const int bottom = std::min(item.rect.y + item.rect.height, item.clip.y + item.clip.height);
     if (right <= left || bottom <= top)
         return {};
     return {left, top, right - left, bottom - top};
@@ -508,22 +519,30 @@ bool inside(const game_files::Rect& inner, const game_files::Rect& outer) {
 ///
 /// @param role the item's role
 /// @return 0 panels, 1 rows, 2 contents, -1 not checked
-int level_of(ItemRole role) {
+int level_of(Role role) {
     switch (role) {
-    case ItemRole::header_bar:
-    case ItemRole::card:
-    case ItemRole::banner:
-    case ItemRole::sheet:
+    case Role::header_bar:
+    case Role::panel:
+    case Role::banner:
+    case Role::sheet:
         return 0;
-    case ItemRole::row:
+    case Role::row:
         return 1;
-    case ItemRole::divider:
-    case ItemRole::progress_fill:
-    case ItemRole::backdrop:
+    case Role::divider:
+    case Role::progress_fill:
+    case Role::backdrop:
         return -1;
     default:
         return 2;
     }
+}
+
+/// Tells whether an item draws a control.
+///
+/// @param item the item
+/// @return true when it carries a control's number
+bool has_control_part(const Item& item) {
+    return game_files::screen_control(item.control).kind != ControlKind::none;
 }
 
 /// Describes an item for the messages.
@@ -531,13 +550,14 @@ int level_of(ItemRole role) {
 /// @param item the item
 /// @return its role, control and first line
 std::string describe(const Item& item) {
+    const Control control = game_files::screen_control(item.control);
     std::string text = "role " + std::to_string(static_cast<int>(item.role)) + " control " +
-                       std::to_string(static_cast<int>(item.control.kind)) + "/" +
-                       std::to_string(item.control.index);
+                       std::to_string(static_cast<int>(control.kind)) + "/" +
+                       std::to_string(control.index);
     if (!item.lines.empty())
         text += " '" + item.lines.front() + "'";
-    text += " at " + std::to_string(item.box.x) + "," + std::to_string(item.box.y) + " " +
-            std::to_string(item.box.width) + "x" + std::to_string(item.box.height);
+    text += " at " + std::to_string(item.rect.x) + "," + std::to_string(item.rect.y) + " " +
+            std::to_string(item.rect.width) + "x" + std::to_string(item.rect.height);
     return text;
 }
 
@@ -565,17 +585,18 @@ void check_layout(const std::string& name, const Layout& layout, const game_file
         return hooks.line_height != nullptr ? hooks.line_height(hooks.context, size, bold)
                                             : static_cast<int>(1.25 * size + 0.99);
     };
-    OA_EXPECT(!layout.items.empty(), name + ": the layout is empty");
+    const std::vector<Item>& items = layout.list.items;
+    OA_EXPECT(!items.empty(), name + ": the layout is empty");
     std::size_t live = 0;
-    for (std::size_t index = 0; index < layout.items.size(); ++index)
-        if (layout.items[index].role == ItemRole::backdrop)
+    for (std::size_t index = 0; index < items.size(); ++index)
+        if (items[index].role == Role::backdrop)
             live = index + 1;
-    for (std::size_t index = 0; index < layout.items.size(); ++index) {
-        const Item& item = layout.items[index];
-        if (item.role == ItemRole::backdrop) {
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        const Item& item = items[index];
+        if (item.role == Role::backdrop) {
             OA_EXPECT(
-                item.box.x == 0 && item.box.y == 0 && item.box.width == view.width &&
-                    item.box.height == view.height,
+                item.rect.x == 0 && item.rect.y == 0 && item.rect.width == view.width &&
+                    item.rect.height == view.height,
                 name + ": the backdrop covers the canvas"
             );
             continue;
@@ -587,9 +608,10 @@ void check_layout(const std::string& name, const Layout& layout, const game_file
             OA_EXPECT(
                 inside(item.clip, safe), name + ": clip outside the safe area: " + describe(item)
             );
-        if (item.control.kind != ControlKind::none)
+        if (has_control_part(item))
             OA_EXPECT(
-                static_cast<float>(item.box.height) + 1.0f >= game_files::min_button_points * scale,
+                static_cast<float>(item.rect.height) + 1.0f >=
+                    game_files::min_button_points * scale,
                 name + ": control under 44 pt: " + describe(item)
             );
         for (const std::string& line : item.lines) {
@@ -600,9 +622,9 @@ void check_layout(const std::string& name, const Layout& layout, const game_file
             continue;
         const int line_height = line_of(item.pixel_size, item.bold);
         switch (item.role) {
-        case ItemRole::button_main:
-        case ItemRole::button:
-        case ItemRole::button_danger: {
+        case Role::button_main:
+        case Role::button:
+        case Role::button_danger: {
             OA_EXPECT(item.lines.size() == 1, name + ": a button has one line: " + describe(item));
             const int mark = item.glyph_size > 0 ? item.glyph_size : item.pixel_size;
             const int glyph = item.glyph == game_files::Glyph::none
@@ -613,71 +635,116 @@ void check_layout(const std::string& name, const Layout& layout, const game_file
                                                0.5f
                                            );
             OA_EXPECT(
-                mark <= item.box.height, name + ": mark taller than its button: " + describe(item)
+                mark <= item.rect.height, name + ": mark taller than its button: " + describe(item)
             );
             OA_EXPECT(
-                width_of(item.lines.front(), item.pixel_size, item.bold) + glyph <= item.box.width,
+                width_of(item.lines.front(), item.pixel_size, item.bold) + glyph <= item.rect.width,
                 name + ": label wider than its button: " + describe(item)
             );
             OA_EXPECT(
-                line_height <= item.box.height,
+                line_height <= item.rect.height,
                 name + ": label taller than its button: " + describe(item)
             );
             break;
         }
-        case ItemRole::switch_off_on:
+        case Role::toggle:
             OA_EXPECT(item.lines.size() == 2, name + ": a switch has two labels");
             for (const std::string& label : item.lines)
                 OA_EXPECT(
-                    width_of(label, item.pixel_size, item.bold) <= item.box.width / 2,
+                    width_of(label, item.pixel_size, item.bold) <= item.rect.width / 2,
                     name + ": switch label wider than its half: " + describe(item)
                 );
-            OA_EXPECT(line_height <= item.box.height, name + ": switch label too tall");
+            OA_EXPECT(line_height <= item.rect.height, name + ": switch label too tall");
             break;
         default:
             for (const std::string& line : item.lines)
                 OA_EXPECT(
-                    width_of(line, item.pixel_size, item.bold) <= item.box.width,
+                    width_of(line, item.pixel_size, item.bold) <= item.rect.width,
                     name + ": line wider than its box: " + describe(item) + " line '" + line + "'"
                 );
             OA_EXPECT(
-                line_height * static_cast<int>(item.lines.size()) <= item.box.height,
+                line_height * static_cast<int>(item.lines.size()) <= item.rect.height,
                 name + ": lines taller than their box: " + describe(item)
             );
             break;
         }
     }
-    for (std::size_t a = 0; a < layout.items.size(); ++a) {
-        const int level = level_of(layout.items[a].role);
+    for (std::size_t a = 0; a < items.size(); ++a) {
+        const int level = level_of(items[a].role);
         if (level < 0)
             continue;
         const bool a_live = a >= live;
-        for (std::size_t b = a + 1; b < layout.items.size(); ++b) {
-            if (level_of(layout.items[b].role) != level || (b >= live) != a_live)
+        for (std::size_t b = a + 1; b < items.size(); ++b) {
+            if (level_of(items[b].role) != level || (b >= live) != a_live)
                 continue;
             OA_EXPECT(
-                !overlap(visible(layout.items[a]), visible(layout.items[b])),
-                name + ": overlap: " + describe(layout.items[a]) + " / " + describe(layout.items[b])
+                !overlap(visible(items[a]), visible(items[b])),
+                name + ": overlap: " + describe(items[a]) + " / " + describe(items[b])
             );
         }
     }
     for (const Control& control : layout.focus_order) {
         bool found = false;
-        for (std::size_t index = live; index < layout.items.size(); ++index)
-            found =
-                found || (layout.items[index].control == control && layout.items[index].enabled);
+        for (std::size_t index = live; index < items.size(); ++index)
+            found = found || (game_files::screen_control(items[index].control) == control &&
+                              !items[index].state.disabled);
         OA_EXPECT(found, name + ": a focused control is not on the layout");
     }
-    for (std::size_t index = live; index < layout.items.size(); ++index) {
-        const Item& item = layout.items[index];
-        if (item.control.kind == ControlKind::none || !item.enabled)
+    for (std::size_t index = live; index < items.size(); ++index) {
+        const Item& item = items[index];
+        if (!has_control_part(item) || item.state.disabled)
             continue;
         OA_EXPECT(
-            std::find(layout.focus_order.begin(), layout.focus_order.end(), item.control) !=
+            std::find(
+                layout.focus_order.begin(),
                 layout.focus_order.end(),
+                game_files::screen_control(item.control)
+            ) != layout.focus_order.end(),
             name + ": a control is missing from the focus order: " + describe(item)
         );
     }
+    // The kit's controls are the live parts that draw one, the top one first, each where its
+    // part is; Tab follows the focus order; and no two live parts draw the same control.
+    std::vector<kit::Control> expected_controls;
+    for (std::size_t index = items.size(); index-- > live;)
+        if (has_control_part(items[index]))
+            expected_controls.push_back(
+                kit::Control{
+                    items[index].control,
+                    items[index].rect,
+                    items[index].clip,
+                    !items[index].state.disabled
+                }
+            );
+    OA_EXPECT(
+        layout.list.controls.size() == expected_controls.size(),
+        name + ": one control for each live part that draws one"
+    );
+    for (std::size_t index = 0;
+         index < std::min(layout.list.controls.size(), expected_controls.size());
+         ++index) {
+        const kit::Control& got = layout.list.controls[index];
+        const kit::Control& wanted = expected_controls[index];
+        OA_EXPECT(
+            got.id == wanted.id && inside(got.rect, wanted.rect) && inside(wanted.rect, got.rect) &&
+                got.clip.x == wanted.clip.x && got.clip.y == wanted.clip.y &&
+                got.clip.width == wanted.clip.width && got.clip.height == wanted.clip.height &&
+                got.enabled == wanted.enabled,
+            name + ": a control lies where its part is"
+        );
+        for (std::size_t other = index + 1; other < expected_controls.size(); ++other)
+            OA_EXPECT(
+                expected_controls[other].id != wanted.id, name + ": two parts draw one control"
+            );
+    }
+    OA_EXPECT(layout.list.tab_order.size() == layout.focus_order.size(), name + ": the Tab order");
+    for (std::size_t index = 0;
+         index < std::min(layout.list.tab_order.size(), layout.focus_order.size());
+         ++index)
+        OA_EXPECT(
+            game_files::screen_control(layout.list.tab_order[index]) == layout.focus_order[index],
+            name + ": the Tab order follows the focus order"
+        );
     OA_EXPECT(layout.scroll_max_points >= 0, name + ": negative scroll");
     if (layout.scroll_max_points > 0)
         OA_EXPECT(inside(layout.rows, safe), name + ": the rows lie outside the safe area");
@@ -737,12 +804,13 @@ void review_sizes_take_their_forms() {
 /// @param control the control
 /// @return true when a live item has it
 bool has_control(const Layout& layout, Control control) {
+    const std::vector<Item>& items = layout.list.items;
     std::size_t live = 0;
-    for (std::size_t index = 0; index < layout.items.size(); ++index)
-        if (layout.items[index].role == ItemRole::backdrop)
+    for (std::size_t index = 0; index < items.size(); ++index)
+        if (items[index].role == Role::backdrop)
             live = index + 1;
-    for (std::size_t index = live; index < layout.items.size(); ++index)
-        if (layout.items[index].control == control)
+    for (std::size_t index = live; index < items.size(); ++index)
+        if (game_files::screen_control(items[index].control) == control)
             return true;
     return false;
 }
@@ -754,8 +822,8 @@ bool has_control(const Layout& layout, Control control) {
 /// @return the last item with it (a sheet's over the step's); null when none
 const Item* item_of(const Layout& layout, Control control) {
     const Item* found = nullptr;
-    for (const Item& item : layout.items)
-        if (item.control == control)
+    for (const Item& item : layout.list.items)
+        if (game_files::screen_control(item.control) == control)
             found = &item;
     return found;
 }
@@ -768,11 +836,20 @@ const Item* item_of(const Layout& layout, Control control) {
 /// @return the item
 Item hit_item(game_files::Rect box, Control control, bool enabled = true) {
     Item item{};
-    item.role = ItemRole::button;
-    item.box = box;
-    item.control = control;
-    item.enabled = enabled;
+    item.role = Role::button;
+    item.rect = box;
+    item.control = game_files::control_id(control);
+    item.state.disabled = !enabled;
     return item;
+}
+
+/// Lists a hand-made layout's controls from its parts, as lay_out does.
+///
+/// @param layout the layout
+/// @return the layout with its controls and Tab order
+Layout listed(Layout layout) {
+    kit::list_part_controls(layout.list);
+    return layout;
 }
 
 /// The hit test takes the containing control, else the nearest within reach, skips
@@ -781,10 +858,11 @@ void hit_test_finds_the_nearest_enabled_control() {
     const Control a{ControlKind::choose_folder};
     const Control b{ControlKind::choose_installer};
     const Control c{ControlKind::i_have_copied};
-    Layout layout{};
-    layout.items.push_back(hit_item({100, 100, 100, 50}, a));
-    layout.items.push_back(hit_item({300, 100, 100, 50}, b));
-    layout.items.push_back(hit_item({100, 300, 100, 50}, c, false));
+    Layout made{};
+    made.list.items.push_back(hit_item({100, 100, 100, 50}, a));
+    made.list.items.push_back(hit_item({300, 100, 100, 50}, b));
+    made.list.items.push_back(hit_item({100, 300, 100, 50}, c, false));
+    const Layout layout = listed(made);
     const float reach = 22.0f;
     OA_CHECK(game_files::hit_test(layout, {150, 120}, reach) == a);
     OA_CHECK(game_files::hit_test(layout, {399, 149}, reach) == b);
@@ -798,18 +876,20 @@ void hit_test_finds_the_nearest_enabled_control() {
     OA_CHECK(game_files::hit_test(layout, {150, 320}, reach).kind == ControlKind::none);
     OA_CHECK(game_files::hit_test(layout, {150, 290}, reach).kind == ControlKind::none);
     // A clipped part does not take presses.
-    Layout clipped = layout;
-    clipped.items[0].clip = {100, 100, 100, 20};
+    Layout clipping = made;
+    clipping.list.items[0].clip = {100, 100, 100, 20};
+    const Layout clipped = listed(clipping);
     OA_CHECK(game_files::hit_test(clipped, {150, 140}, 5.0f).kind == ControlKind::none);
     OA_CHECK(game_files::hit_test(clipped, {150, 110}, 5.0f) == a);
     // A backdrop makes everything under it inert; the sheet's button above it answers.
-    Layout sheet = layout;
+    Layout covered = made;
     Item backdrop{};
-    backdrop.role = ItemRole::backdrop;
-    backdrop.box = {0, 0, 1000, 1000};
-    sheet.items.push_back(backdrop);
+    backdrop.role = Role::backdrop;
+    backdrop.rect = {0, 0, 1000, 1000};
+    covered.list.items.push_back(backdrop);
     const Control option{ControlKind::sheet_option, 0};
-    sheet.items.push_back(hit_item({500, 500, 100, 50}, option));
+    covered.list.items.push_back(hit_item({500, 500, 100, 50}, option));
+    const Layout sheet = listed(covered);
     OA_CHECK(game_files::hit_test(sheet, {150, 120}, reach).kind == ControlKind::none);
     OA_CHECK(game_files::hit_test(sheet, {510, 490}, reach) == option);
     // On a real layout: S1's main button is found at its centre and just outside it.
@@ -819,12 +899,18 @@ void hit_test_finds_the_nearest_enabled_control() {
     OA_CHECK(choose != nullptr);
     if (choose != nullptr) {
         const game_files::Point centre{
-            choose->box.x + choose->box.width / 2, choose->box.y + choose->box.height / 2
+            choose->rect.x + choose->rect.width / 2, choose->rect.y + choose->rect.height / 2
         };
         const float real_reach = game_files::pick_reach_points * tablet.view.px_per_point;
-        OA_CHECK(game_files::hit_test(first, centre, real_reach) == choose->control);
-        const game_files::Point below{centre.x, choose->box.y + choose->box.height + 20};
-        OA_CHECK(game_files::hit_test(first, below, real_reach) == choose->control);
+        OA_CHECK(
+            game_files::hit_test(first, centre, real_reach) ==
+            game_files::screen_control(choose->control)
+        );
+        const game_files::Point below{centre.x, choose->rect.y + choose->rect.height + 20};
+        OA_CHECK(
+            game_files::hit_test(first, below, real_reach) ==
+            game_files::screen_control(choose->control)
+        );
     }
 }
 
@@ -840,8 +926,8 @@ game_files::Outcome press(Model& model, const Form& form, Control control) {
     static_cast<void>(game_files::press_down(model, interaction, layout, control));
     const Item* item = item_of(layout, control);
     OA_EXPECT(
-        interaction.pressed == control || !has_control(layout, control) ||
-            (item != nullptr && !item->enabled),
+        game_files::screen_control(interaction.pressed) == control ||
+            !has_control(layout, control) || (item != nullptr && item->state.disabled),
         "the press shows on the control"
     );
     return game_files::press_up(model, interaction, layout, control);
@@ -854,13 +940,13 @@ void the_header_shows_the_icon() {
         const Layout layout = lay_out(base_model(), form);
         const float scale = form.view.px_per_point;
         int badges = 0;
-        for (const Item& item : layout.items) {
-            if (item.role != ItemRole::badge)
+        for (const Item& item : layout.list.items) {
+            if (item.role != Role::badge)
                 continue;
             ++badges;
             OA_EXPECT(item.lines.empty(), form.name + ": the badge holds text");
             OA_EXPECT(item.glyph == game_files::Glyph::oa, form.name + ": the badge's mark");
-            OA_EXPECT(item.box.width == item.box.height, form.name + ": the badge is square");
+            OA_EXPECT(item.rect.width == item.rect.height, form.name + ": the badge is square");
         }
         OA_EXPECT(badges == 1, form.name + ": one badge");
         const Item* language = item_of(layout, {ControlKind::language});
@@ -880,9 +966,11 @@ void the_header_shows_the_icon() {
     }
     // The management state has the badge but no OA · Aa.
     const Layout managing = lay_out(manage_model(), forms().front());
-    OA_CHECK(std::any_of(managing.items.begin(), managing.items.end(), [](const Item& item) {
-        return item.role == ItemRole::badge && item.lines.empty();
-    }));
+    OA_CHECK(
+        std::any_of(managing.list.items.begin(), managing.list.items.end(), [](const Item& item) {
+            return item.role == Role::badge && item.lines.empty();
+        })
+    );
 }
 
 /// Every press returns its command; the UI opens and closes its sheets itself.
@@ -931,7 +1019,7 @@ void presses_return_their_commands() {
             game_files::press_up(model, interaction, layout, {ControlKind::choose_installer})
                 .command == Command::redraw
         );
-        OA_CHECK(interaction.pressed.kind == ControlKind::none);
+        OA_CHECK(interaction.pressed == kit::no_control);
     }
     // S2.
     Model looking = base_model();
@@ -981,7 +1069,7 @@ void presses_return_their_commands() {
     OA_CHECK(press(short_space, tablet, {ControlKind::copy}).command == Command::none);
     const Layout short_layout = lay_out(short_space, tablet);
     const Item* copy = item_of(short_layout, {ControlKind::copy});
-    OA_CHECK(copy != nullptr && !copy->enabled);
+    OA_CHECK(copy != nullptr && copy->state.disabled);
     OA_CHECK(
         press(short_space, tablet, {ControlKind::check_space}).command == Command::recheck_space
     );
@@ -1119,10 +1207,11 @@ void problems_have_their_buttons() {
             const Layout layout = lay_out(model, form);
             // The buttons, left to right and top to bottom, in the layout's order.
             std::vector<Control> buttons;
-            for (const Item& item : layout.items)
-                if (item.control.kind != ControlKind::none &&
-                    item.control.kind != ControlKind::language)
-                    buttons.push_back(item.control);
+            for (const Item& item : layout.list.items) {
+                const Control control = game_files::screen_control(item.control);
+                if (control.kind != ControlKind::none && control.kind != ControlKind::language)
+                    buttons.push_back(control);
+            }
             const std::string name = "problem " +
                                      std::to_string(static_cast<int>(expected.problem)) + " at " +
                                      form.name;
@@ -1148,7 +1237,7 @@ void problems_have_their_buttons() {
             if (!buttons.empty()) {
                 const Item* first = item_of(layout, buttons.front());
                 OA_EXPECT(
-                    first != nullptr && (first->role == ItemRole::button_main ||
+                    first != nullptr && (first->role == Role::button_main ||
                                          expected.problem == Problem::too_large),
                     name + ": the first button is the main one"
                 );
@@ -1174,15 +1263,17 @@ void keys_move_focus_and_press() {
     OA_CHECK(
         game_files::key(model, interaction, layout, game_files::Key::tab).command == Command::redraw
     );
-    OA_CHECK(interaction.focus_shown && interaction.focused == expected[0]);
+    OA_CHECK(
+        interaction.focus_shown && game_files::screen_control(interaction.focused) == expected[0]
+    );
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::tab));
-    OA_CHECK(interaction.focused == expected[1]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[1]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::back_tab));
-    OA_CHECK(interaction.focused == expected[0]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[0]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::back_tab));
-    OA_CHECK(interaction.focused == expected[3]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[3]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::tab));
-    OA_CHECK(interaction.focused == expected[0]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[0]);
     OA_CHECK(
         game_files::key(model, interaction, layout, game_files::Key::enter).command ==
         Command::open_language
@@ -1194,9 +1285,9 @@ void keys_move_focus_and_press() {
         Command::check_copied
     );
     // The focus ring is marked for painting.
-    game_files::mark_interaction(layout, interaction);
+    kit::mark_states(layout.list, interaction);
     const Item* focused = item_of(layout, expected[2]);
-    OA_CHECK(focused != nullptr && focused->focused);
+    OA_CHECK(focused != nullptr && focused->state.focused);
     // Return with no focus shown presses the main button; Space does nothing.
     game_files::Interaction fresh{};
     OA_CHECK(
@@ -1265,9 +1356,9 @@ void keys_move_focus_and_press() {
         const Layout current = lay_out(rows, phone);
         static_cast<void>(game_files::key(rows, tabbing, current, game_files::Key::tab));
         const Layout after = lay_out(rows, phone);
-        const Item* item = item_of(after, tabbing.focused);
+        const Item* item = item_of(after, game_files::screen_control(tabbing.focused));
         if (item != nullptr && item->clip.height > 0) {
-            OA_CHECK(visible(*item).height == item->box.height);
+            OA_CHECK(visible(*item).height == item->rect.height);
             scrolled = scrolled || rows.scroll_points > 0;
         }
     }
@@ -1301,7 +1392,7 @@ void scrolling_is_clamped() {
     model.scroll_points = layout.scroll_max_points;
     const Layout end = lay_out(model, phone);
     const Item* last = item_of(end, {ControlKind::part_why, 8});
-    OA_CHECK(last != nullptr && visible(*last).height == last->box.height);
+    OA_CHECK(last != nullptr && visible(*last).height == last->rect.height);
     // The tablet's S1 does not scroll.
     Model first = base_model();
     const Layout tablet = lay_out(first, forms().front());
@@ -1323,7 +1414,7 @@ void scrolling_is_clamped() {
 std::string all_text(const Model& model) {
     const Form wide{"wide", viewport_of(2400, 1800, 1.0f)};
     std::string text;
-    for (const Item& item : lay_out(model, wide).items)
+    for (const Item& item : lay_out(model, wide).list.items)
         for (const std::string& line : item.lines)
             text += line + "\n";
     // Joined lines read as one sentence for the searches.
@@ -1388,7 +1479,7 @@ void texts_take_platform_words() {
     // The phone rows' one-line forms.
     const Form phone = forms()[1];
     std::string rows;
-    for (const Item& item : lay_out(with_words(base_model()), phone).items)
+    for (const Item& item : lay_out(with_words(base_model()), phone).list.items)
         for (const std::string& line : item.lines)
             rows += line + "\n";
     OA_CHECK(
@@ -1575,6 +1666,393 @@ void ready_and_summary_texts() {
     OA_CHECK(game_files::summary_text({}, 0, false) == "No game files");
 }
 
+/// Returns the name of what a part draws, as the screen's own items named it before they
+/// were the kit's parts: a panel was a card and a toggle a switch_off_on.
+///
+/// @param role the part's role
+/// @return the name; "?" for a role the screen does not draw
+std::string_view role_name(Role role) {
+    switch (role) {
+    case Role::header_bar:
+        return "header_bar";
+    case Role::badge:
+        return "badge";
+    case Role::header_text:
+        return "header_text";
+    case Role::version:
+        return "version";
+    case Role::title:
+        return "title";
+    case Role::text:
+        return "text";
+    case Role::panel:
+        return "card";
+    case Role::icon:
+        return "icon";
+    case Role::banner:
+        return "banner";
+    case Role::row:
+        return "row";
+    case Role::divider:
+        return "divider";
+    case Role::toggle:
+        return "switch_off_on";
+    case Role::button_main:
+        return "button_main";
+    case Role::button:
+        return "button";
+    case Role::button_danger:
+        return "button_danger";
+    case Role::progress_track:
+        return "progress_track";
+    case Role::progress_fill:
+        return "progress_fill";
+    case Role::progress_busy:
+        return "progress_busy";
+    case Role::backdrop:
+        return "backdrop";
+    case Role::sheet:
+        return "sheet";
+    default:
+        return "?";
+    }
+}
+
+/// Returns the name of a text's look.
+///
+/// @param role the text's look
+/// @return its enumerator's name
+std::string_view text_role_name(kit::TextStyle role) {
+    using TextRole = kit::TextStyle;
+    switch (role) {
+    case TextRole::header:
+        return "header";
+    case TextRole::title:
+        return "title";
+    case TextRole::subtitle:
+        return "subtitle";
+    case TextRole::lead:
+        return "lead";
+    case TextRole::body:
+        return "body";
+    case TextRole::small:
+        return "small";
+    case TextRole::row_title:
+        return "row_title";
+    case TextRole::row_detail:
+        return "row_detail";
+    case TextRole::button:
+        return "button";
+    case TextRole::mark_text:
+        return "mark_text";
+    }
+    return "?";
+}
+
+/// Returns the name of a mark.
+///
+/// @param glyph the mark
+/// @return its enumerator's name
+std::string_view glyph_name(game_files::Glyph glyph) {
+    using game_files::Glyph;
+    switch (glyph) {
+    case Glyph::none:
+        return "none";
+    case Glyph::folder:
+        return "folder";
+    case Glyph::device:
+        return "device";
+    case Glyph::disk:
+        return "disk";
+    case Glyph::clock:
+        return "clock";
+    case Glyph::warning:
+        return "warning";
+    case Glyph::check:
+        return "check";
+    case Glyph::cross:
+        return "cross";
+    case Glyph::dash:
+        return "dash";
+    case Glyph::info:
+        return "info";
+    case Glyph::stop:
+        return "stop";
+    case Glyph::play:
+        return "play";
+    case Glyph::trash:
+        return "trash";
+    case Glyph::refresh:
+        return "refresh";
+    case Glyph::plus:
+        return "plus";
+    case Glyph::file:
+        return "file";
+    case Glyph::oa:
+        return "oa";
+    }
+    return "?";
+}
+
+/// Returns the name of a kind of control.
+///
+/// @param kind the kind
+/// @return its enumerator's name
+std::string_view control_kind_name(ControlKind kind) {
+    switch (kind) {
+    case ControlKind::none:
+        return "none";
+    case ControlKind::language:
+        return "language";
+    case ControlKind::choose_folder:
+        return "choose_folder";
+    case ControlKind::i_have_copied:
+        return "i_have_copied";
+    case ControlKind::choose_installer:
+        return "choose_installer";
+    case ControlKind::banner_action:
+        return "banner_action";
+    case ControlKind::banner_discard:
+        return "banner_discard";
+    case ControlKind::cancel:
+        return "cancel";
+    case ControlKind::nested_choice:
+        return "nested_choice";
+    case ControlKind::check_it:
+        return "check_it";
+    case ControlKind::part_switch:
+        return "part_switch";
+    case ControlKind::part_why:
+        return "part_why";
+    case ControlKind::show_left_out:
+        return "show_left_out";
+    case ControlKind::copy:
+        return "copy";
+    case ControlKind::check_space:
+        return "check_space";
+    case ControlKind::stop:
+        return "stop";
+    case ControlKind::play:
+        return "play";
+    case ControlKind::remove_old:
+        return "remove_old";
+    case ControlKind::problem_action:
+        return "problem_action";
+    case ControlKind::back:
+        return "back";
+    case ControlKind::sheet_option:
+        return "sheet_option";
+    case ControlKind::manage_check:
+        return "manage_check";
+    case ControlKind::manage_add:
+        return "manage_add";
+    case ControlKind::manage_remove:
+        return "manage_remove";
+    case ControlKind::manage_replace:
+        return "manage_replace";
+    case ControlKind::manage_remove_all:
+        return "manage_remove_all";
+    case ControlKind::manage_cancel_pending:
+        return "manage_cancel_pending";
+    case ControlKind::manage_done:
+        return "manage_done";
+    }
+    return "?";
+}
+
+/// Returns a colour as the name of the screen's colour token whose value it is, or as
+/// #rrggbbaa when it is none of them, so that a token whose value changes keeps its name.
+///
+/// @param colour the colour
+/// @return the token's name or the hexadecimal value
+std::string colour_name(game_files::Colour colour) {
+    namespace token = oa::ui::kit::screen_colour;
+    const std::array<std::pair<std::string_view, game_files::Colour>, 10> tokens{{
+        {"background", token::background},
+        {"panel", token::panel},
+        {"line", token::line},
+        {"text", token::text},
+        {"dim", token::dim},
+        {"green", token::green},
+        {"amber", token::amber},
+        {"red", token::red},
+        {"ink", token::ink},
+        {"button_text", token::button_text},
+    }};
+    for (const auto& [name, value] : tokens)
+        if (value == colour)
+            return std::string(name);
+    constexpr std::string_view digits = "0123456789abcdef";
+    std::string hex = "#";
+    for (const uint8_t channel : {colour.r, colour.g, colour.b, colour.a}) {
+        hex += digits[channel >> 4];
+        hex += digits[channel & 0xf];
+    }
+    return hex;
+}
+
+/// Writes a rectangle as x,y,width,height.
+///
+/// @param rect the rectangle
+/// @return the text
+std::string rect_text(const game_files::Rect& rect) {
+    return std::to_string(rect.x) + "," + std::to_string(rect.y) + "," +
+           std::to_string(rect.width) + "," + std::to_string(rect.height);
+}
+
+/// Writes a control as its kind's name and its index.
+///
+/// @param control the control
+/// @return kind/index
+std::string control_text(const Control& control) {
+    return std::string(control_kind_name(control.kind)) + "/" + std::to_string(control.index);
+}
+
+/// Writes a number of single precision exactly, as the hexadecimal digits of its bits.
+///
+/// @param value the number
+/// @return eight hexadecimal digits
+std::string float_text(float value) {
+    constexpr std::string_view digits = "0123456789abcdef";
+    const auto bits = std::bit_cast<uint32_t>(value);
+    std::string text;
+    for (int shift = 28; shift >= 0; shift -= 4)
+        text += digits[(bits >> shift) & 0xfu];
+    return text;
+}
+
+/// Writes a line of text in double quotes, a quote or a backslash in it after a backslash.
+///
+/// @param line the line
+/// @return the quoted line
+std::string quoted_line(std::string_view line) {
+    std::string text = "\"";
+    for (const char character : line) {
+        if (character == '"' || character == '\\')
+            text += '\\';
+        text += character;
+    }
+    return text + "\"";
+}
+
+/// Writes a layout in a fixed text form: one line of the layout's own fields (the form, the
+/// scrolling region, how far it scrolls, the pixels a point and the focus order), then one
+/// line per item in painting order with every field of the item in a fixed order. Roles,
+/// text looks, marks and kinds of control are written as their enumerators' names, and
+/// colours as the names of the screen's colour tokens.
+///
+/// @param layout the layout
+/// @return the text
+std::string format_layout(const Layout& layout) {
+    std::string text = "layout device ";
+    text += layout.device == game_files::DeviceClass::phone ? "phone" : "tablet";
+    text += " rows " + rect_text(layout.rows);
+    text += " scroll " + std::to_string(layout.scroll_max_points);
+    text += " px " + float_text(layout.px_per_point);
+    text += " focus";
+    for (const Control& control : layout.focus_order)
+        text += " " + control_text(control);
+    text += "\n";
+    for (const Item& item : layout.list.items) {
+        text += role_name(item.role);
+        text += " box " + rect_text(item.rect);
+        text += " lines " + std::to_string(item.lines.size());
+        for (const std::string& line : item.lines)
+            text += " " + quoted_line(line);
+        text += " text ";
+        text += text_role_name(item.style);
+        text += " size " + std::to_string(item.pixel_size);
+        text += " bold " + std::to_string(item.bold ? 1 : 0);
+        text += " colour " + colour_name(item.colour);
+        text += " glyph ";
+        text += glyph_name(item.glyph);
+        text += " glyph_size " + std::to_string(item.glyph_size);
+        text += " control " + control_text(game_files::screen_control(item.control));
+        text += " enabled " + std::to_string(item.state.disabled ? 0 : 1);
+        text += " on " + std::to_string(item.state.on ? 1 : 0);
+        text += " focused " + std::to_string(item.state.focused ? 1 : 0);
+        text += " pressed " + std::to_string(item.state.pressed ? 1 : 0);
+        text += " fraction " + float_text(item.fraction);
+        text += " clip " + rect_text(item.clip);
+        text += "\n";
+    }
+    return text;
+}
+
+/// Returns the SHA-256 of a layout's text form, in hexadecimal.
+///
+/// @param layout the layout
+/// @return 64 lower-case hexadecimal digits
+std::string layout_digest(const Layout& layout) {
+    namespace sha256 = oa::base::sha256;
+    const std::string text = format_layout(layout);
+    const auto bytes = std::as_bytes(std::span<const char>(text.data(), text.size()));
+    const auto hex = sha256::to_hex(
+        sha256::digest_of(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size())
+        )
+    );
+    return std::string(hex.begin(), hex.end());
+}
+
+/// Returns the digests of every case at every review size, one line each:
+/// <case>\t<form>\t<hex>, the content of layout-digests.txt.
+///
+/// @return the lines
+std::string digest_lines() {
+    std::string lines;
+    for (const Case& test : every_case())
+        for (const Form& form : forms())
+            lines += test.name + "\t" + form.name + "\t" +
+                     layout_digest(lay_out(test.model, form)) + "\n";
+    return lines;
+}
+
+/// Every layout of every case at every review size is the one recorded: its digest is the
+/// one layout-digests.txt holds for that case and form, and the file holds no other line.
+///
+/// @param file layout-digests.txt; null when the test was given none
+void layouts_keep_their_digests(const char* file) {
+    OA_EXPECT(file != nullptr, "the test is given layout-digests.txt");
+    if (file == nullptr)
+        return;
+    std::ifstream input(file, std::ios::binary);
+    OA_EXPECT(static_cast<bool>(input), std::string("layout-digests.txt opens: ") + file);
+    std::map<std::string, std::string> recorded;
+    std::size_t lines = 0;
+    for (std::string line; std::getline(input, line);) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
+        ++lines;
+        const std::size_t tab = line.rfind('\t');
+        OA_EXPECT(tab != std::string::npos, "a digest line has its fields: " + line);
+        if (tab == std::string::npos)
+            continue;
+        recorded[line.substr(0, tab)] = line.substr(tab + 1);
+    }
+    std::size_t compared = 0;
+    for (const Case& test : every_case()) {
+        for (const Form& form : forms()) {
+            const std::string key = test.name + "\t" + form.name;
+            const auto found = recorded.find(key);
+            OA_EXPECT(found != recorded.end(), test.name + " at " + form.name + ": a digest");
+            if (found == recorded.end())
+                continue;
+            ++compared;
+            OA_EXPECT(
+                layout_digest(lay_out(test.model, form)) == found->second,
+                test.name + " at " + form.name + ": the layout differs from the one recorded"
+            );
+        }
+    }
+    OA_EXPECT(
+        lines == compared && recorded.size() == compared,
+        "layout-digests.txt holds one line for each case and form, and no other"
+    );
+}
+
 /// Prints the layouts of the cases whose names hold a text, item by item, for looking at a
 /// layout while changing it.
 ///
@@ -1595,7 +2073,7 @@ void dump(std::string_view wanted) {
                 layout.rows.height,
                 layout.scroll_max_points
             );
-            for (const Item& item : layout.items)
+            for (const Item& item : layout.list.items)
                 std::printf("  %s\n", describe(item).c_str());
         }
     }
@@ -1610,7 +2088,14 @@ int main(int argc, char** argv) {
     }
     if (fonts() == nullptr)
         std::fprintf(stderr, "the bundled fonts are missing; text is measured roughly\n");
+    if (argc == 2 && std::string_view(argv[1]) == "--write-digests") {
+        if (fonts() == nullptr)
+            return 1;
+        std::fputs(digest_lines().c_str(), stdout);
+        return 0;
+    }
     OA_CHECK(fonts() != nullptr);
+    layouts_keep_their_digests(argc == 2 ? argv[1] : nullptr);
     review_sizes_take_their_forms();
     every_step_and_sheet_lays_out();
     hit_test_finds_the_nearest_enabled_control();

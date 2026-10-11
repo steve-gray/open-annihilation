@@ -43,7 +43,8 @@ SPDX-License-Identifier = "GPL-3.0-only"
 # Data that cannot hold a comment: the checks' baselines and tables, JSON
 # anywhere in the engine's directories, the macOS bundle's Info.plist
 # template and the Windows program's manifest. The settings picture pin is
-# a table of hashes the pixel gate requires left unchanged.
+# a table of hashes the pixel gate requires left unchanged, and the Game
+# files screen's layout digests a table of hashes of its layouts.
 [[annotations]]
 path = [
     "*.json",
@@ -52,6 +53,7 @@ path = [
     "src/app/Info.plist.in",
     "src/app/open-annihilation.manifest",
     "src/ui/engine-settings/tests/pixels.txt",
+    "src/ui/game-files/tests/layout-digests.txt",
     "tests/**.json",
     "tools/**.json",
     "tools/**.txt",

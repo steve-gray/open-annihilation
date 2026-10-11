@@ -882,11 +882,11 @@ void GameFilesScreen::State::repaint() {
         return;
     layout = view::lay_out(model, viewport, game_files_measure(fonts));
     // A shown focus that left the layout moves to its first control.
-    if (interaction_.focus_shown && !layout.focus_order.empty() &&
-        std::find(layout.focus_order.begin(), layout.focus_order.end(), interaction_.focused) ==
-            layout.focus_order.end())
-        interaction_.focused = layout.focus_order.front();
-    view::mark_interaction(layout, interaction_);
+    const std::vector<oa::ui::kit::ControlId>& order = layout.list.tab_order;
+    if (interaction_.focus_shown && !order.empty() &&
+        std::find(order.begin(), order.end(), interaction_.focused) == order.end())
+        interaction_.focused = order.front();
+    oa::ui::kit::mark_states(layout.list, interaction_);
     if (canvas.width != viewport.width || canvas.height != viewport.height)
         canvas = paint::make_canvas(viewport.width, viewport.height);
     paint_game_files(canvas, layout, fonts, viewport.px_per_point);
@@ -1627,7 +1627,7 @@ void GameFilesScreen::State::take_stop() {
 void GameFilesScreen::State::set_step(view::Step step) {
     if (model.step != step) {
         model.scroll_points = 0;
-        interaction_.pressed = {};
+        interaction_.pressed = oa::ui::kit::no_control;
     }
     model.step = step;
     model.sheet = view::Sheet::none;
@@ -2108,20 +2108,20 @@ void GameFilesScreen::State::open_language() {
 }
 
 bool GameFilesScreen::State::tap(view::Control control) {
-    // The topmost item of the control: a sheet's lies above what it covers.
-    const view::Item* found = nullptr;
-    for (auto item = layout.items.rbegin(); item != layout.items.rend(); ++item)
-        if (item->control == control) {
-            found = &*item;
+    // The topmost part of the control: a sheet's lies above what it covers.
+    const oa::ui::kit::Item* found = nullptr;
+    for (auto part = layout.list.items.rbegin(); part != layout.list.items.rend(); ++part)
+        if (view::screen_control(part->control) == control) {
+            found = &*part;
             break;
         }
     if (found == nullptr || viewport.width <= 0 || viewport.height <= 0)
         return false;
     const float x =
-        (static_cast<float>(found->box.x) + static_cast<float>(found->box.width) * 0.5F) /
+        (static_cast<float>(found->rect.x) + static_cast<float>(found->rect.width) * 0.5F) /
         static_cast<float>(viewport.width);
     const float y =
-        (static_cast<float>(found->box.y) + static_cast<float>(found->box.height) * 0.5F) /
+        (static_cast<float>(found->rect.y) + static_cast<float>(found->rect.height) * 0.5F) /
         static_cast<float>(viewport.height);
     for (const SDL_EventType type : {SDL_EVENT_FINGER_DOWN, SDL_EVENT_FINGER_UP}) {
         SDL_Event event{};
