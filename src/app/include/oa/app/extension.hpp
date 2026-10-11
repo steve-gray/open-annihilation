@@ -128,7 +128,8 @@
 /// leaving it null; when or in which order the engine calls it; what it may
 /// keep or must free; its error behaviour; a type, enumerator or bit the
 /// table uses; or a function an extension calls to read a value the engine
-/// resolved. A change to wording alone keeps it. Version 2 is the first
+/// resolved. A change to wording alone keeps it. A change to the OA UI kit's
+/// public headers follows the rule version 15 states below. Version 2 is the first
 /// with the layered layout's names: this header is oa/app/extension.hpp and
 /// the types the table names are in their modules' namespaces. Version 3
 /// replaces offers_multiplayer with select_multiplayer, which MULTI calls
@@ -204,8 +205,18 @@
 /// that clock. simulation_hash reads the simulation hash the run plays
 /// under: the profile in play, with every Developer Mode override that
 /// changes the simulation, or the plain baseline when the game plays 3.1c. A
-/// running match keeps the hash it started with.
-#define OA_EXTENSION_API_VERSION 14
+/// running match keeps the hash it started with. Version 15 adds the OA UI
+/// kit to the contract: register_settings_pages; kit screens in
+/// ScreenRegistry and open_kit_screen, show_notice and ask_prompt in
+/// ScreenServices; and the kit's text, chips, progress bars and hover card in
+/// MatchOverlay. From this version the kit's public headers, oa/ui/kit/*.hpp,
+/// are part of the contract. Changes to them before the first release that
+/// carries version 15 (0.8.0) keep 15; from that release on, any change to
+/// them raises the version, while the kit is provisional too (it changes as
+/// the engine's screens need). ScreenServices::read_string also reads a whole
+/// preference key, as a Settings page's row binds one, when its section is
+/// null.
+#define OA_EXTENSION_API_VERSION 15
 
 namespace oa {
 struct Game;

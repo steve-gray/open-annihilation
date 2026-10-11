@@ -33,8 +33,9 @@
 // against a table of another version stops here until the engine's change
 // has been read and the hooks follow it. Version 14 adds functions an
 // extension calls rather than hooks (extension.hpp lists them).
-// These hooks call none of them.
-constexpr uint32_t kExtensionApiVersionFollowed = 14;
+// These hooks call none of them. Version 15 adds the OA UI kit, which these
+// hooks do not use.
+constexpr uint32_t kExtensionApiVersionFollowed = 15;
 static_assert(
     oa::app::extension_api_version == kExtensionApiVersionFollowed,
     "the engine's extension table changed: follow its change, then raise "

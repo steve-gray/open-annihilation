@@ -69,8 +69,9 @@ namespace kit = oa::ui::kit;
 // the hooks the table holds after its context at that version. A change to
 // the table raises OA_EXTENSION_API_VERSION (extension.hpp); both follow it.
 // Version 14 adds only functions an extension calls rather than hooks, so the
-// hook count is unchanged.
-constexpr uint32_t kExtensionApiVersionRecorded = 14;
+// hook count is unchanged. Version 15 adds register_settings_pages, which the
+// recorder records and registers its own page from.
+constexpr uint32_t kExtensionApiVersionRecorded = 15;
 constexpr std::size_t kHookCount = 41;
 static_assert(
     extension_api_version == kExtensionApiVersionRecorded,
