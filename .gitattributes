@@ -11,3 +11,11 @@
 # feeds and carriage returns included, so no checkout changes their line
 # endings.
 /src/app/automation/tests/vectors/*.bin -text
+
+# The registry specification's examples are signed: catalogue.json.sig covers
+# catalogue.json's bytes, so no checkout changes their line endings.
+/docs/registries/examples/** -text
+
+# The pseudo language pack's files are read back byte for byte by the pack
+# tests, its warm-up text included.
+/src/data/languages/tests/pseudo-pack/** -text
