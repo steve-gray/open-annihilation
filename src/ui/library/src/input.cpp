@@ -353,7 +353,8 @@ ScreenResult enter_list(Library& library, ScreenState& state, const kit::Display
     return redrawn();
 }
 
-/// Moves the selection through the list and keeps it in view.
+/// Moves the selection through the list and keeps it in view, the details
+/// of the entry it reaches from their top.
 ///
 /// @param[in,out] library the model
 /// @param[in,out] state the screen's state
@@ -364,7 +365,11 @@ bool move_in_list(Library& library, ScreenState& state, const kit::DisplayList& 
     const std::optional<std::size_t> before = selected_place(library);
     move_selection(library, delta);
     show_selection(library, state, list);
-    return selected_place(library) != before;
+    if (selected_place(library) == before)
+        return false;
+    // Another entry's details start at their top.
+    state.details_scroll = 0;
+    return true;
 }
 
 /// Returns how many rows the list shows.
@@ -799,8 +804,9 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
     const bool on_list = focus == controls::list;
     const bool on_drop_down = focus == controls::filter_menu || focus == controls::tags_menu ||
                               focus == controls::more_menu;
-    const bool in_details =
-        focused_pane(state, list) == Pane::details && focus != kit::no_control && !on_list;
+    // On the details page the page keys scroll its body, never the list it hides.
+    const bool in_details = page_shows(list) || (focus != kit::no_control && !on_list &&
+                                                 focused_pane(state, list) == Pane::details);
 
     switch (pressed) {
     case kit::Key::escape:

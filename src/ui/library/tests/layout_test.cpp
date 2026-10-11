@@ -992,6 +992,29 @@ void filters_and_tags() {
     OA_CHECK(wide.filter == lib::Filter::updates);
 }
 
+/// On Compact's details page the page keys and the arrows never change the
+/// entry it shows.
+void details_page_keeps_its_entry() {
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::Library library = with_ridge();
+    lib::open_details(library);
+    lib::ScreenState state;
+    state.details_page = true;
+    for (const kit::Key pressed :
+         {kit::Key::page_down,
+          kit::Key::end,
+          kit::Key::page_up,
+          kit::Key::home,
+          kit::Key::down,
+          kit::Key::down,
+          kit::Key::up}) {
+        const kit::DisplayList list = laid_out(library, state, compact);
+        static_cast<void>(lib::library_key(library, state, list, pressed));
+        OA_CHECK(library.selected == fixture::ridge_id());
+        OA_CHECK(library.details_open && state.details_page);
+    }
+}
+
 /// MORE ▾ on Compact's details page holds the actions after the first
 /// three, and choosing one asks for it.
 void more_holds_the_rest() {
@@ -1027,5 +1050,6 @@ int main() {
     typing_searches();
     filters_and_tags();
     more_holds_the_rest();
+    details_page_keeps_its_entry();
     return oa::test::check_exit_status();
 }
