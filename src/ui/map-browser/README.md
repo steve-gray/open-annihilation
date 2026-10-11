@@ -64,7 +64,8 @@ layout names, and acts on what the screen returns.
   (`PreviewHooks::ask`).
 - `draw_browser(canvas, list, size)`: the kit's window face, the display
   list and the kit's window edge.
-- `browser_pointer`, `browser_key`, `browser_text`, `browser_wheel` and
+- `browser_pointer`, `browser_key`, `browser_text`, `browser_wheel`,
+  `browser_find` (the controller's Y: the search takes the focus) and
   `focused_field`: the input. They return a `ScreenResult`: nothing, Cancel,
   or choose (the primary button on the selected card), and whether to draw
   again.

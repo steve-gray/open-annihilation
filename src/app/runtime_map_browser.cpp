@@ -318,6 +318,17 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         return take(mb::browser_key(model_, state_, list_, pressed));
     }
 
+    /// Takes the controller's Y, which gives the search the focus as it does
+    /// in the Library; every other action becomes a key, as on any screen.
+    ///
+    /// @param action the gamepad action
+    /// @return what the browser did; pass for every other action
+    LayerAnswer pad_action(oa::ui::pad_controls::Action action) override {
+        if (action != oa::ui::pad_controls::Action::library_search)
+            return LayerAnswer::pass;
+        return take(mb::browser_find(state_, list_));
+    }
+
     /// Takes the controller's right stick: it scrolls the grid.
     ///
     /// @param notches the stick's turn; positive towards the top
@@ -505,16 +516,16 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
     /// Returns a fit the catalogue's compatible table gives for a key.
     ///
     /// @param table the map's compatible table
-    /// @param key the game's key, or none when it is not known
+    /// @param game_key the game's key, or none when it is not known
     /// @return fits, does not fit, or unknown when the table has no such key
     [[nodiscard]] static mb::MapCard::Fit catalogue_fit(
         const std::vector<std::pair<std::string, bool>>& table,
-        const std::optional<std::string>& key
+        const std::optional<std::string>& game_key
     ) {
-        if (!key)
+        if (!game_key)
             return mb::MapCard::Fit::unknown;
         for (const auto& [game, fitting] : table)
-            if (game == *key)
+            if (game == *game_key)
                 return fitting ? mb::MapCard::Fit::fits : mb::MapCard::Fit::does_not_fit;
         return mb::MapCard::Fit::unknown;
     }
@@ -756,21 +767,21 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
                 found = queued;
         if (!found)
             return false;
-        const std::string name = *model_.downloading;
+        const std::string downloaded = *model_.downloading;
         switch (found->state) {
         case content::DownloadState::done: {
-            if (runtime_.pack_map(name) == nullptr)
+            if (runtime_.pack_map(downloaded) == nullptr)
                 runtime_.map_packs().refresh();
-            if (runtime_.pack_map(name) == nullptr)
+            if (runtime_.pack_map(downloaded) == nullptr)
                 return false;
             model_.downloading.reset();
             download_item_.reset();
             build_cards();
             for (std::size_t index = 0; index < model_.cards.size(); ++index)
-                if (model_.cards[index].name == name)
+                if (model_.cards[index].name == downloaded)
                     model_.selected = index;
             mb::apply_filters(model_);
-            if (!select_in_picker(name)) {
+            if (!select_in_picker(downloaded)) {
                 model_.error = shown(word_not_offered);
                 ++revision_;
                 return false;
@@ -812,13 +823,13 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
     /// a pack installed since it opened. The player still chooses it with
     /// the picker's LOAD.
     ///
-    /// @param name the map's game name
+    /// @param map_name the map's game name
     /// @return true when the picker selected it
-    bool select_in_picker(const std::string& name) {
+    bool select_in_picker(const std::string& map_name) {
         if (model_.opener == mb::Browser::Opener::battle_room)
-            return mp::multiplayer_offer_map(name.c_str());
+            return mp::multiplayer_offer_map(map_name.c_str());
         Runtime& game = runtime_;
-        if (std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), name) ==
+        if (std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name) ==
             game.bound_map_names_.end()) {
             // A pack installed since the list was made joins it, after the
             // base maps, as the start's scan lists the pack maps.
@@ -847,7 +858,7 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
             game.bind_map_names(names);
         }
         const auto row =
-            std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), name);
+            std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name);
         if (row == game.bound_map_names_.end())
             return false;
         game.preview_map_index(static_cast<std::size_t>(row - game.bound_map_names_.begin()));
@@ -937,25 +948,25 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
     /// asked for, and the worker woken.
     ///
     /// @param context the browser
-    /// @param key the picture's address
+    /// @param address the picture's address
     /// @param[out] out its bytes
     /// @return false while they are not ready
-    static bool online_bytes(void* context, const std::string& key, std::vector<uint8_t>* out) {
+    static bool online_bytes(void* context, const std::string& address, std::vector<uint8_t>* out) {
         auto& self = *static_cast<MapBrowserScreen*>(context);
-        const auto registry = self.picture_registry_.find(key);
+        const auto registry = self.picture_registry_.find(address);
         if (registry == self.picture_registry_.end() || out == nullptr)
             return false;
         LibraryHost& library = self.runtime_.library_host();
         if (!library.work.pictures)
             return false;
         if (std::optional<std::vector<uint8_t>> bytes =
-                library.work.pictures->take_bytes(registry->second, key)) {
+                library.work.pictures->take_bytes(registry->second, address)) {
             *out = std::move(*bytes);
             return true;
         }
         // Asked for once more: a picture taken before is read again from
         // the folder, and one refused is not asked for.
-        library.work.pictures->request(registry->second, key);
+        library.work.pictures->request(registry->second, address);
         bool held = false;
         {
             base::threads::LockGuard guard(library.work.mutex);

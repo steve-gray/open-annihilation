@@ -650,7 +650,9 @@ hosts them on the OA layer.
   move as before.
 - **The browser.** Pressing MORE MAPS… pushes the browser (`map-browser`),
   modal over a backdrop, centred at its size class's dialog size; it closes
-  when its picker closes or a match starts. Its cards: base maps, which fit;
+  when its picker closes or a match starts. The controller's A and B are
+  Enter and Escape there, the D-pad the arrows, Y gives the search the
+  focus and the right stick scrolls the grid. Its cards: base maps, which fit;
   installed pack maps, whose fit is P08's `pack_map_fit`, checked as each
   card comes into view or is selected (a failure is the mod's fit while a
   mod plays, the game's otherwise); and online maps, whose fit is the

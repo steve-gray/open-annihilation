@@ -343,9 +343,11 @@ void names_and_buttons() {
         OA_CHECK(isle != nullptr && isle->text == "check_isle@oa-check-isles");
         // The footer's buttons: Cancel, and Select disabled with nothing selected.
         const kit::Control* cancel = named(list, mb::name_cancel);
-        const kit::Control* select = named(list, mb::name_select);
+        const kit::Control* select_button = named(list, mb::name_select);
         OA_CHECK(cancel != nullptr && cancel->enabled && cancel->text == "Cancel");
-        OA_CHECK(select != nullptr && !select->enabled && select->text == "Select");
+        OA_CHECK(
+            select_button != nullptr && !select_button->enabled && select_button->text == "Select"
+        );
     }
 }
 
@@ -513,6 +515,13 @@ void pointer_and_keys() {
     list = laid_out(browser, state, frame);
     std::ignore = mb::browser_text(browser, state, list, "e");
 
+    // The controller's Y gives the search the focus.
+    state.interaction = {};
+    list = laid_out(browser, state, frame);
+    OA_CHECK(!mb::focused_field(state, list).has_value());
+    std::ignore = mb::browser_find(state, list);
+    OA_CHECK(mb::focused_field(state, list).has_value());
+
     // A press on a card selects it; a press on the selected card acts.
     list = laid_out(browser, state, frame);
     mb::ScreenResult result = press(browser, state, list, "maps-card-check-isle-oa-check-isles");
@@ -521,8 +530,8 @@ void pointer_and_keys() {
         browser.selected && browser.cards[*browser.selected].name == "check_isle@oa-check-isles"
     );
     list = laid_out(browser, state, frame);
-    const kit::Control* select = named(list, mb::name_select);
-    OA_CHECK(select != nullptr && select->enabled);
+    const kit::Control* select_button = named(list, mb::name_select);
+    OA_CHECK(select_button != nullptr && select_button->enabled);
     result = press(browser, state, list, "maps-card-check-isle-oa-check-isles");
     OA_CHECK(result.action == mb::BrowserAction::choose);
     result = press(browser, state, list, mb::name_select);
@@ -539,8 +548,8 @@ void pointer_and_keys() {
     list = laid_out(browser, state, frame);
     result = press(browser, state, list, "maps-card-check-clash-oa-check-clash", 8);
     OA_CHECK(result.action == mb::BrowserAction::none);
-    select = named(list, mb::name_select);
-    OA_CHECK(select != nullptr && !select->enabled);
+    select_button = named(list, mb::name_select);
+    OA_CHECK(select_button != nullptr && !select_button->enabled);
     // Its card is greyed with the problem chip, and the footer gives the reason.
     bool greyed = false;
     bool reason = false;
@@ -637,8 +646,11 @@ void header_and_footer_words() {
         std::find(chips.begin(), chips.end(), "Fit with Ridge is checked when it's installed") !=
             chips.end()
     );
-    const kit::Control* select = named(list, mb::name_select);
-    OA_CHECK(select != nullptr && select->enabled && select->text == "Download and select");
+    const kit::Control* select_button = named(list, mb::name_select);
+    OA_CHECK(
+        select_button != nullptr && select_button->enabled &&
+        select_button->text == "Download and select"
+    );
 }
 
 } // namespace

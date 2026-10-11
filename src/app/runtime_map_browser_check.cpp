@@ -417,8 +417,11 @@ void Runtime::check_map_browser() {
             }
             require(greyed, "the clashing map's card is not greyed" + on);
             require(reason, "the footer does not give the clashing map's reason" + on);
-            const std::optional<AutomationControl> select = named("oa.maps-select");
-            require(select && !select->enabled, "Select is not disabled for the clashing map" + on);
+            const std::optional<AutomationControl> select_button = named("oa.maps-select");
+            require(
+                select_button && !select_button->enabled,
+                "Select is not disabled for the clashing map" + on
+            );
         }
 
         // The frame for review: every map, the clashing map selected.

@@ -268,6 +268,14 @@ ScreenResult scroll_to(ScreenState& state, const kit::DisplayList& list, int32_t
 
 } // namespace
 
+ScreenResult browser_find(ScreenState& state, const kit::DisplayList& list) {
+    if (kit::control_of(list, ids::search) == nullptr)
+        return {};
+    state.interaction.focused = ids::search;
+    state.interaction.focus_shown = true;
+    return redrawn();
+}
+
 std::optional<kit::Rect>
 focused_field(const ScreenState& state, const kit::DisplayList& list) noexcept {
     if (!state.interaction.focus_shown || state.interaction.focused != ids::search)

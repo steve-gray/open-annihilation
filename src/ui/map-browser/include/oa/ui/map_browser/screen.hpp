@@ -260,6 +260,14 @@ ScreenResult browser_text(
 ScreenResult
 browser_wheel(Browser& browser, ScreenState& state, const kit::DisplayList& list, float notches);
 
+/// Gives the search field the focus, as the controller's Y and a press on
+/// the field do, so that typing searches.
+///
+/// @param[in,out] state the screen's state
+/// @param list the display list it was laid out to
+/// @return what the host is to do: a redraw; nothing without a search field
+ScreenResult browser_find(ScreenState& state, const kit::DisplayList& list);
+
 /// Returns the search field while it has the focus.
 ///
 /// @param state the screen's state
