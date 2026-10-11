@@ -44,7 +44,7 @@ the locks a running game puts on them (`settings_locks`).
 | | After zoom, a drop-down, locked "Needs Dots" while Zoomed out units is Rendered | 1/2, 1/3, 1/4, 1/6, 1/8, 1/12, 1/16 of normal size | 1/6 | `open-annihilation.zoomed-out-after` (`1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`) |
 | | Window frame: whether a window shows its title bar and borders while a game is played; the game menu, a panel it opens and every other screen show them | Hidden in play, Always shown | Hidden in play | `open-annihilation.window-frame` (`hidden-in-play` or `always-shown`) |
 | | HUD scaling: whether a game's side column and bars grow with the window, up to twice the original game's size, or keep its size | Off, On | On | `open-annihilation.hud-scaling` |
-| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn outside a match, held to the largest whole step at which Compact's dialog fits the window ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `200`, `300` or `400`; any other text, `150` and `0` among them, reads as Auto) |
+| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn outside a match, held to the largest step at which Compact's dialog fits the window ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
 | Touch, listed only while the game has touch controls | One-finger drag | Automatic (a selection box on a tablet, scrolling on a phone), Box, Scroll | Automatic | `open-annihilation.touch-drag` (`automatic`, `box` or `scroll`) |
 | | Hold delay | 250 to 700 ms, steps of 50; a stored delay is held to the range and put on its nearest step | 350 ms | `open-annihilation.touch-hold-delay` |
 | | QUEUE and ADD | Stay on, One action | Stay on | `open-annihilation.touch-latches` (`stay-on` or `one-action`) |
@@ -270,6 +270,18 @@ OA layer lays its screens out again at the new size from the next frame
 (`Runtime::apply_engine_settings`). It changes no game text (Text size),
 no part of a game's interface (HUD scaling) and no 3.1c menu (Menu
 scaling). In a match the in-game Settings keeps its own size.
+
+150% is drawn in the modern fonts, as the game's bitmap fonts take only
+whole steps, so the drop-down offers it, between 100% and 200%, only while
+the dialog shows Use modern fonts for game text On (the switch, or a
+language that locks it On). Turning the switch Off while 150% is chosen
+sets Interface size to 100% in the dialog, and turning it On again leaves
+100%. A stored `150` read while the modern fonts read Off reads as 100%
+(`interface_size_with_fonts`), and the OA layer draws 150% only while the
+modern fonts in effect are On and open. At 150% the screens are laid out
+for the window's points at one and a half and drawn on the kit canvas's
+smooth form: every rectangle's edge on a whole pixel, the text in the
+modern fonts at one and a half times its size (`src/ui/kit/README.md`).
 
 A language drawn only in the modern fonts (`TextNeeds::modern_fonts`,
 Simplified Chinese) turns Use modern fonts for game text On when it is
@@ -677,9 +689,13 @@ window's height over 720, rounded, never below the display's density. The
 step is capped at the largest at which Compact's 480 by 324 dialog fits the
 window, less its safe insets on a touch screen, and is at least 1×, so a
 size never draws a dialog cut off by the window's edge; the class then
-comes from the window's points at that step. On a 1920 by 1080 window
-100% is Large at 1× and 400% is Compact at 3×, as 4× does not fit Compact
-in 1080 rows.
+comes from the window's points at that step. 150% is held the same way:
+it is 1.5× where Compact's 720 by 486 pixels at one and a half fit the
+window, and 1× where they do not. On a 1920 by 1080 window
+100% is Large at 1×, 150% is Large at 1.5× (1280 by 720 points, the dialog
+1440 by 900 pixels) and 400% is Compact at 3×, as 4× does not fit Compact
+in 1080 rows; on 1280 by 720 150% is Compact at 1.5× (853 by 480 points),
+and on 640 by 480 it is 1×.
 
 ## The rows' table
 
@@ -1043,9 +1059,11 @@ and Restore defaults bringing them back; and Control size and the
 Controller section: their keys, defaults on every machine, words read and
 others dropped, the speeds held to their ranges and steps, and the round
 trip and Restore defaults; and Interface size: its key, Auto by default
-with and without the player's own file, its five words each read and
-written alone, the words it refuses (`150` and `0` among them) read as
-Auto, other keys left as they were, and Restore defaults;
+with and without the player's own file, its six words each read and
+written alone, `150` with the modern fonts On, and as 100% read with them
+Off from the key or from a named file's default, the words it refuses
+(`0` among them) read as Auto, other keys left as they were, and Restore
+defaults;
 `ui-engine-settings-dialog` the dialog's layout (every part inside the
 panel and none overlapping), and at Regular and Large every section with
 Touch, Controller and Game files listed inside the dialog under every lock,
@@ -1086,7 +1104,10 @@ for the Mods folder;
 the Graphics section's thirteen rows, Interface size last, their places at every offset
 and under every lock, the focus scrolling them into view, both forms of a
 locked row, Zoomed out units' faded Icons and After zoom's lock, Window frame's two ways, HUD scaling's two hints, every status of Hardware acceleration, Full's included, and
-the requests to try the graphics card afresh; on sections of the test's own taller than the
+the requests to try the graphics card afresh; Interface size's drop-down
+offering 150% only with the modern fonts shown On, and turning them Off
+taking 150% to 100%; Graphics drawn on the kit canvas's smooth form at 1.5×
+with every pixel painted whole; on sections of the test's own taller than the
 view (`SectionHooks`), its scrolling: the view and its limit, the wheel, the
 scroll bar, the scroll keys, the focus brought into view, rows the view
 cuts and the control numbers; and the mod options' sections, stops,
