@@ -173,11 +173,12 @@ each mapped the pointer, told a finger from a mouse, mapped the keys,
 latched the closing key and drew a backdrop.
 
 - **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
-  and darkens what lies under it, a layout at the view's size class
-  (`lay_out`), a drawing from its own top left corner at the canvas's whole
-  scale, its answers to the pointer, the keys, the wheel and typed text, a
-  text field, its display list and interaction (what automation lists), a
-  tick and a revision. No call of it names an SDL type. A screen joins with
+  and darkens what lies under it, whether it is opaque, a layout at the
+  view's size class (`lay_out`), a drawing from its own top left corner at
+  the canvas's whole scale, its answers to the pointer, the keys, the wheel
+  and typed text, a text field, its display list and interaction (what
+  automation lists), a tick and a revision. No call of it names an SDL
+  type. A screen joins with
   `oa_layer().push(std::make_unique<...>())` and leaves when it answers
   `close`, by `oa_layer().close(screen)`, or by `close_top` and
   `close_above(name)`; `close` tells it it leaves, and a screen whose own
@@ -287,14 +288,36 @@ latched the closing key and drew a backdrop.
   screen's points by its placement (`layer_point`): floor((pixel − left) /
   scale). A finger's press gets the reach of the touch controls in the
   screen's points, the pick distance over the window pixels a point takes;
-  a mouse's none; keys go through `layer_key`.
+  a mouse's none; keys go through `layer_key`. Outside a match F1 is the
+  kit's information key, `Key::info`, which a screen with more to tell
+  about what the pointer or the focus is on takes; a screen that answers
+  `pass` lets F1 go on to the game as before, and Settings does. In a
+  match F1 is the game's (unit information) and no screen is given it.
+- **Opaque or not.** A screen is opaque unless it says otherwise
+  (`opaque`): it covers every pixel of its place, drawn over black, as
+  every screen did before. One that is not, such as a card beside a badge
+  with its arrow outside the card, may take the whole window as its place
+  and draw only what it shows: the layer draws it on a surface cleared to
+  clear each time, once over black and once over white, and takes each
+  pixel's opacity from what it leaves of the white and its colour from the
+  one over black (`draw_screen`, `LayerDrawing`), so that what it fills is
+  opaque in its own colour, what it leaves alone is clear, and what it
+  blends takes the blend's opacity. The colours stay straight, never
+  multiplied by their opacity, and a pixel is laid over what lies under it,
+  the picture or the screens below, src over: (colour × opacity + under ×
+  (255 − opacity)) / 255. That happens wherever the layer shows it: in the
+  window (`present`, whose texture SDL blends the same way), in the frame
+  (`compose_front_end`) and in a match's layer (`stamp`). Such a screen
+  never darkens what lies under it, whatever `backdrop` says, and only the
+  part of it that holds what it drew goes into the window's texture. The
+  cursor stays above it.
 - **Typed text** goes to the screen taking input (`text`), and while that
   screen reports a `text_field` the system's text input stays started over
   the field, mapped back to the coordinates input arrives in
   (`Runtime::start_text_input`); it stops once no screen has one.
-- **On the front end** each modal screen with a backdrop darkens the frame
-  itself, a blend in 256ths (`darken_front_end`), and the window round the
-  picture, which SDL clears to black, takes black darkened as often, so
+- **On the front end** each opaque modal screen with a backdrop darkens the
+  frame itself, a blend in 256ths (`darken_front_end`), and the window round
+  the picture, which SDL clears to black, takes black darkened as often, so
   the backdrop covers the whole window; every screen under it darkens too,
   as its drawing is darkened before it is copied: a question over Settings
   darkens the menu twice and Settings once. The screens are drawn through a
@@ -313,13 +336,18 @@ latched the closing key and drew a backdrop.
   reads back (`read_whole_window`); otherwise the read-back holds the
   picture's area, as it always has. `oa_layer_check.hpp` gives the checks
   the frame expected with a screen open (`expected_layer_frame`), the pixels
-  a frame differs in outside the cursor's square (`layer_differences`), and
+  a frame differs in outside the cursor's square (`layer_differences`),
   pointer and finger events at a window pixel (`window_pointer_event`,
-  `window_finger_event`, `layer_window_pixel`).
+  `window_finger_event`, `layer_window_pixel`), and a screen of their own,
+  opaque or not, that fills one small rectangle and notes the information
+  key (`MarkScreen`), with which the layer's own check
+  (`OaLayer::check_clear_screens`) holds screens that are not opaque and
+  F1.
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
-  under a modal screen, and the screens stamped at their places, each
-  under a modal screen with a backdrop darkened as the button is
+  under a modal screen, and the screens stamped at their places (one that
+  is not opaque by its opacity), each under a modal screen with a backdrop
+  darkened as the button is
   (`refresh_match`), drawn again only when what it shows changes. It goes
   over the composed frame (`compose_match`) and is presented after the
   match's other layers and before the frontend dialogs' and the cursor
@@ -1620,7 +1648,17 @@ latched the closing key and drew a backdrop.
   that picture, the OA layer passing on what its screens do not take
   (screens of the check's own that are not modal, a text field's text and
   text input, `layer_key`, `close_above`), Escape doing nothing on the menu
-  itself and EXIT ending the run;
+  itself and EXIT ending the run; `oa_layer_check.cpp` the layer's own
+  check, run after the window sizes: in a 640x480 and a 1920x1080 window
+  a screen that is not opaque, alone, over an opaque screen and under one,
+  and under the cursor, changes no pixel of the window or of the frame
+  without the cursor but those it draws (a half blend within 2 of the
+  colour blended straight over what lies under it), darkens nothing, keeps
+  the cursor above it and lists its control to automation, while an opaque
+  one draws as before; F1 reaches a screen that takes the information key,
+  goes on past one that does not, and changes nothing in Settings; and in a
+  match F1 goes on to the game and such a screen changes only the pixels it
+  draws in the match's picture;
   `runtime_engine_settings_dialog_check.cpp` the dialog driven by the
   pointer, the wheel and the keys (every section, scrolling, each setting in
   effect at once, Vertical sync read back from the renderer, Font shadow
