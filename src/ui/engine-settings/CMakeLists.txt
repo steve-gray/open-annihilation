@@ -6,11 +6,12 @@
 # Developer Mode's list of the standard hacks among its sections (src/developer.cpp),
 # the one-off notices of Open Annihilation's own in the dialog's look
 # (engine_settings/notice.hpp), the prompts that ask with buttons of
-# their own in the same look (engine_settings/prompt.hpp), and the download
-# check (engine_settings/challenge.hpp).
+# their own in the same look (engine_settings/prompt.hpp), the download
+# check (engine_settings/challenge.hpp), and the missing-language notice
+# (engine_settings/language_notice.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/language_page.cpp src/mods.cpp src/notice.cpp src/prompt.cpp
-  src/challenge.cpp src/registered.cpp src/settings_rows.cpp)
+  src/developer.cpp src/language_page.cpp src/language_notice.cpp src/mods.cpp src/notice.cpp
+  src/prompt.cpp src/challenge.cpp src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
@@ -28,6 +29,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-engine-settings-prompt-test PRIVATE oa-ui-engine-settings
     oa-test-support oa-options)
   add_test(NAME ui-engine-settings-prompt COMMAND oa-ui-engine-settings-prompt-test)
+
+  # The missing-language notice: its parts, wrap, greyed Download, focus and reach.
+  add_executable(oa-ui-engine-settings-language-notice-test tests/language_notice_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-language-notice-test PRIVATE oa-ui-engine-settings
+    oa-test-support oa-options)
+  add_test(NAME ui-engine-settings-language-notice COMMAND oa-ui-engine-settings-language-notice-test)
 
   # The download check: its words, buttons, focus, keys and placement.
   add_executable(oa-ui-engine-settings-challenge-test tests/challenge_test.cpp)
