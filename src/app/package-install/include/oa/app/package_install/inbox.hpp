@@ -119,7 +119,8 @@ void post_registry_file(const std::filesystem::path& file);
 void post_opened_file(const std::filesystem::path& file);
 
 /// A change whose target is what the game plays: it waits for the run to end
-/// and its archives to close, then main() puts it in place before the next run.
+/// and its archives to close, then main() puts it in place before the next
+/// run, or before the game ends when the player quits.
 struct PendingChange {
     const PackageKind* kind{};    ///< the kind; null never
     std::filesystem::path root{}; ///< the kind's root folder
@@ -148,6 +149,13 @@ void set_pending_change(PendingChange change);
 /// @return true while one does
 [[nodiscard]] bool pending_change_waiting();
 
+/// Returns the folder the waiting change acts on, so that what the player
+/// sees can say the change finishes when they leave it: the folder in its
+/// kind's root (PendingChange::target).
+///
+/// @return the folder's name; nothing while no change waits
+[[nodiscard]] std::optional<std::string> pending_change_target();
+
 /// What a change that waited for its run did, for the next run to tell.
 struct ChangeOutcome {
     PendingChange change{};
@@ -156,7 +164,8 @@ struct ChangeOutcome {
 
 /// Puts the waiting change in place, if any, keeps its outcome for the next
 /// run, releases the hold on the root folder, then settles the folder again
-/// (recover_changes) and keeps the discard folders found.
+/// (recover_changes) and keeps the discard folders found. main() calls it
+/// after each run: after a soft restart, and on the way out.
 ///
 /// @param options the hooks and the waits
 void finish_pending_change(const ChangeOptions& options = {});

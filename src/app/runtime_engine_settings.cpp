@@ -7,6 +7,7 @@
 
 #include "engine_settings_state.hpp"
 #include "library_host.hpp"
+#include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
@@ -1490,12 +1491,19 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         return false;
     case settings::DialogAction::roll_back_mod: {
         // The dialog stays open, unless the mod played rolls back as the
-        // run ends. The Library looks for updates again, since the version
-        // put back may have one.
-        const bool closed = roll_back_mod_folder(*dialog);
+        // run ends: it then keeps its choices, saves them and closes. A
+        // refusal is told in a prompt over the dialog, whose text wraps,
+        // and the line under Mods' list is cleared. The Library looks for
+        // updates again, since the version put back may have one.
+        std::string refusal;
+        if (!roll_back_mod_folder(path_from_utf8(dialog->roll_back_folder), refusal))
+            mod_install_state().tell_roll_back_refusal(*this);
+        settings::Dialog* still_open = engine_settings_dialog();
+        if (still_open != nullptr)
+            std::ignore = settings::set_folder_notice(*still_open, {});
         if (library_)
             library_->look_again(*this);
-        return closed;
+        return still_open == nullptr;
     }
     case settings::DialogAction::add_registry:
         // The window opens over the dialog, which stays open. What it adds

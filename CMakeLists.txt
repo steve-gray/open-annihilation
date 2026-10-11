@@ -956,7 +956,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_engine_settings_menu.cpp
   src/app/runtime_engine_settings_match.cpp
   src/app/oa_layer.cpp
-  src/app/runtime_library.cpp
+  src/app/runtime_library.cpp src/app/runtime_library_actions.cpp
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
@@ -998,7 +998,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
-  src/app/runtime_library_check.cpp
+  src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1584,8 +1584,8 @@ if(OA_BUILD_PLATFORM)
       # main menu's OA button as before with no update waiting, opening the
       # Library on Mods, its dot and the Library on Updates with two, GET and
       # CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
-      # recorded openers, ROLL BACK's question in Settings, PLAY NOW's soft
-      # restart, Settings over the Library and the Library over Settings,
+      # recorded openers, ROLL BACK's question over the Library, PLAY NOW's
+      # soft restart, Settings over the Library and the Library over Settings,
       # the shortcut and the in-match OA button opening Settings, at 640x480
       # and 1920x1080. Its data and the player's folder stay in the build tree.
       set(oa_library_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library")
@@ -1598,6 +1598,30 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-library PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_library_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Made-up mod packages posted as the download queue posts them, from a
+      # built-in registry and two added ones, installed while the Library
+      # shows: the built-in one's with no question, the added ones' asking
+      # REPLACE MOD and FOLDER IN USE over the Library, refusals in its
+      # queue, a file still asking UPDATE MOD, ROLL BACK's question and PLAY
+      # NOW from the Library; then, over soft restarts, an update to the mod
+      # played held until the mod is switched. Its data, settings and the
+      # player's folder stay in the build tree, and are cleared before each
+      # run, which is when the settings are read.
+      set(oa_library_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-install")
+      file(MAKE_DIRECTORY "${oa_library_install_dir}")
+      add_test(NAME library-install-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_install_dir}/Open Annihilation" "${oa_library_install_dir}/files"
+        "${oa_library_install_dir}/data" "${oa_library_install_dir}/library-install.conf")
+      set_tests_properties(library-install-clean PROPERTIES FIXTURES_SETUP library-install-clean)
+      add_test(NAME native-library-install COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-install
+        --preferences-file "${oa_library_install_dir}/library-install.conf"
+        --user-folder "${oa_library_install_dir}/Open Annihilation"
+        --data-dir "${oa_library_install_dir}/data")
+      set_tests_properties(native-library-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_install_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED library-install-clean)
       # The pseudo language pack installed through the game: a dropped file
       # asked and installed, the same package declined, then a catalogue
       # revision installed while Settings stay open and no prompt shows.

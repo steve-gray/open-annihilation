@@ -8,11 +8,18 @@
 // and what came of it told; a change
 // to the mod played waits for the run to end. A catalogue map pack, and a
 // catalogue language pack, ask nothing and show nothing, including while
-// Settings or a notice show and in a run nobody watches. PLAY NOW switches
-// to the mod installed, and the Mods page's ROLL BACK swaps a mod folder
-// with the version its .backup keeps.
+// Settings or a notice show and in a run nobody watches. A mod the player
+// chose in the Library also starts while the Library shows: a built-in
+// registry's asks nothing, an added registry's asks only before it replaces
+// another registry's copy or goes beside a folder of the player's own, and
+// while the Library shows its questions show over it and the rest in its
+// queue; its update to the mod being played waits until the player leaves
+// that mod. PLAY NOW switches to the mod installed, and ROLL BACK, on the
+// Mods page and in the Library, swaps a mod folder with the version its
+// .backup keeps.
 
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "user_folder_state.hpp"
@@ -34,17 +41,23 @@
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -111,6 +124,172 @@ std::string_view answer_word(install::Answer answer) noexcept {
         return "play-now";
     }
     return {};
+}
+
+/// REPLACE MOD's title: an added registry's mod over the copy another
+/// registry installed.
+constexpr std::string_view kReplaceModTitle = "REPLACE MOD";
+/// What REPLACE MOD asks, with the mod's name and the registries' names.
+constexpr std::string_view kReplaceModText =
+    "{name} from {installed} is installed. Replace it with {name} from {new}? The one from "
+    "{installed} is kept, and ROLL BACK brings it back.";
+/// Why a built-in registry's mod is not installed where its folder name
+/// holds a folder of the player's own that is not the mod.
+constexpr std::string_view kOwnFolderText =
+    "{folder} is a folder of your own, not {name}. Move or rename it, then RETRY.";
+/// The title of the prompt that says a mod was not installed, the same
+/// English words as the installer's own, so one catalogue entry serves both.
+constexpr std::string_view kNotInstalledTitle = "MOD NOT INSTALLED";
+/// Its first sentence, with the package's name, as the installer's.
+constexpr std::string_view kNotInstalledText = "{file} cannot be installed.";
+/// The buttons' captions, as the settings' own dialogs show them.
+constexpr std::string_view kCancelCaption = "CANCEL";
+constexpr std::string_view kReplaceCaption = "REPLACE";
+constexpr std::string_view kOkCaption = "OK";
+
+/// Returns a template looked up in the language shown, with its places
+/// ({name}) filled; the values are not looked up.
+///
+/// @param english the template, in English
+/// @param places each place's name and value
+/// @return the text
+std::string filled(
+    std::string_view english,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> places
+) {
+    const std::string_view pattern = oa::data::languages::interface_text(english);
+    std::string text;
+    std::size_t at = 0;
+    while (at < pattern.size()) {
+        const std::size_t opening = pattern.find('{', at);
+        const std::size_t closing =
+            opening == std::string_view::npos ? opening : pattern.find('}', opening + 1);
+        if (closing == std::string_view::npos) {
+            text.append(pattern.substr(at));
+            break;
+        }
+        text.append(pattern.substr(at, opening - at));
+        const std::string_view place = pattern.substr(opening + 1, closing - opening - 1);
+        const auto value = std::find_if(places.begin(), places.end(), [&](const auto& named) {
+            return named.first == place;
+        });
+        text.append(
+            value != places.end() ? value->second : pattern.substr(opening, closing - opening + 1)
+        );
+        at = closing + 1;
+    }
+    return text;
+}
+
+/// What a mod the player chose in the Library does with a plan that asks,
+/// by whether its registry is built in and by the origin record of the
+/// folder the plan acts on.
+enum class ChosenModStep : uint8_t {
+    ask,           ///< asks the plan's own question, as a file does
+    replace,       ///< replaces the folder's copy with no question; the copy goes to .backup
+    reinstall,     ///< installs the same registry's copy again with no question
+    ask_registry,  ///< asks REPLACE MOD: the folder holds the mod from another registry
+    refuse_folder, ///< refused with no question: the folder is the player's own, not the mod
+};
+
+/// Decides what a mod the player chose in the Library does with its plan.
+/// A built-in registry's never asks: it replaces whatever copy the folder
+/// holds, and never goes beside a folder of the player's own. An added
+/// registry's replaces its own copy, and a copy with no record, with no
+/// question; asks REPLACE MOD over another registry's copy; and otherwise
+/// asks what a file asks.
+///
+/// @param plan the plan
+/// @param origin the package's catalogue origin
+/// @param built_in its registry is built in
+/// @return what it does
+ChosenModStep
+chosen_mod_step(const install::InstallPlan& plan, const install::Origin& origin, bool built_in) {
+    switch (plan.kind) {
+    case install::PlanKind::ask_update:
+    case install::PlanKind::ask_reinstall:
+    case install::PlanKind::ask_version: {
+        const std::optional<install::Origin>& record = plan.installed.origin;
+        const bool same = record && record->kind == install::OriginKind::catalogue &&
+                          record->registry == origin.registry &&
+                          record->catalogue_id == origin.catalogue_id;
+        // The same registry's copy of this revision is installed again; any
+        // other copy is kept as the .backup, which ROLL BACK brings back.
+        const ChosenModStep silent = plan.kind == install::PlanKind::ask_reinstall && same
+                                         ? ChosenModStep::reinstall
+                                         : ChosenModStep::replace;
+        if (built_in || !record || same)
+            return silent;
+        if (record->kind == install::OriginKind::catalogue && record->registry != origin.registry)
+            return ChosenModStep::ask_registry;
+        return ChosenModStep::ask;
+    }
+    case install::PlanKind::ask_alongside:
+        return built_in ? ChosenModStep::refuse_folder : ChosenModStep::ask;
+    default:
+        return ChosenModStep::ask;
+    }
+}
+
+/// Returns REPLACE MOD: CANCEL, and REPLACE, which replaces the folder's
+/// copy and keeps it as the .backup; CANCEL is marked first.
+///
+/// @param name the mod's name
+/// @param installed the name of the registry whose copy is installed
+/// @param incoming the name of the registry the package comes from
+/// @return the prompt
+install::PackagePrompt replace_registry_prompt(
+    std::string_view name, std::string_view installed, std::string_view incoming
+) {
+    install::PackagePrompt made{};
+    made.prompt.title = std::string(oa::data::languages::interface_text(kReplaceModTitle));
+    made.prompt.paragraphs.push_back(
+        {filled(kReplaceModText, {{"name", name}, {"installed", installed}, {"new", incoming}}),
+         false}
+    );
+    made.prompt.buttons.push_back(
+        {std::string(oa::data::languages::interface_text(kCancelCaption)), false, {}}
+    );
+    made.prompt.buttons.push_back(
+        {std::string(oa::data::languages::interface_text(kReplaceCaption)), true, {}}
+    );
+    made.answers = {install::Answer::cancel, install::Answer::replace};
+    made.prompt.cancel_button = 0;
+    made.prompt.primary_button = 1;
+    made.prompt.marked = 0;
+    return made;
+}
+
+/// Returns the prompt that says a mod was not installed because its folder
+/// name holds a folder of the player's own: MOD NOT INSTALLED, with OK.
+///
+/// @param file_name the package's name
+/// @param reason why, as the Library's queue says it
+/// @return the prompt
+install::PackagePrompt own_folder_prompt(std::string_view file_name, std::string reason) {
+    install::PackagePrompt made{};
+    made.prompt.title = std::string(oa::data::languages::interface_text(kNotInstalledTitle));
+    made.prompt.paragraphs.push_back({filled(kNotInstalledText, {{"file", file_name}}), false});
+    made.prompt.paragraphs.push_back({std::move(reason), false});
+    made.prompt.buttons.push_back(
+        {std::string(oa::data::languages::interface_text(kOkCaption)), true, {}}
+    );
+    made.answers = {install::Answer::ok};
+    return made;
+}
+
+/// Returns a prompt's words as one line: its paragraphs, a space between.
+///
+/// @param prompt the prompt
+/// @return the words
+std::string prompt_words(const settings::Prompt& prompt) {
+    std::string words;
+    for (const auto& paragraph : prompt.paragraphs) {
+        if (!words.empty())
+            words += ' ';
+        words += paragraph.text;
+    }
+    return words;
 }
 
 } // namespace
@@ -221,7 +400,55 @@ void Runtime::ModInstallState::finish_package() {
     release_opened_copy();
     package.reset();
     kind = nullptr;
+    chosen = false;
+    from_built_in = false;
     install::finish_package_file();
+}
+
+bool Runtime::ModInstallState::told_in_library(const Runtime& runtime) const {
+    return chosen && runtime.oa_layer_ && runtime.oa_layer_->find(library_screen_name) != nullptr;
+}
+
+void Runtime::ModInstallState::report(
+    Runtime& runtime,
+    install::OutcomeResult result,
+    std::string reason,
+    const std::vector<std::string>& lines
+) {
+    if (chosen) {
+        LibraryNote note{origin.registry, origin.catalogue_id, {}, {}};
+        if (result == install::OutcomeResult::refused || result == install::OutcomeResult::failed) {
+            note.problem = reason;
+            if (!note.problem.empty() && note.problem.back() == ':' && !lines.empty())
+                note.problem += ' ' + lines.front();
+        }
+        note_for_library(runtime, std::move(note));
+    }
+    install::report_package_outcome({.file = file, .result = result, .reason = std::move(reason)});
+}
+
+void Runtime::ModInstallState::note_for_library(Runtime& runtime, LibraryNote note) {
+    std::erase_if(library_notes, [&note](const LibraryNote& kept) {
+        return kept.registry == note.registry && kept.key == note.key;
+    });
+    if (!note.problem.empty() || !note.held_target.empty())
+        library_notes.push_back(std::move(note));
+    // The Library builds its model again at its next tick.
+    if (runtime.library_)
+        runtime.library_->refreshed = false;
+}
+
+void Runtime::ModInstallState::tell_roll_back_refusal(Runtime& runtime) {
+    if (!roll_back_refusal)
+        return;
+    install::PackagePrompt made = std::move(*roll_back_refusal);
+    roll_back_refusal.reset();
+    if (prompt != nullptr || stage != Stage::idle)
+        return;
+    told_folder.clear();
+    play_folder.clear();
+    stage = Stage::telling;
+    show(runtime, std::move(made), true);
 }
 
 void Runtime::take_handed_mod_files() {
@@ -267,11 +494,9 @@ void Runtime::tell_mod_installs() {
                 problem.refusal = result.refusal;
                 problem.detail = result.detail;
                 log_line(state.package->file_name + ": not put in place: " + result.detail);
-                install::report_package_outcome({
-                    .file = state.file,
-                    .result = install::OutcomeResult::failed,
-                    .reason = install::refusal_text(kind, problem),
-                });
+                state.report(
+                    *this, install::OutcomeResult::failed, install::refusal_text(kind, problem)
+                );
                 if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
@@ -281,10 +506,7 @@ void Runtime::tell_mod_installs() {
                 }
             } else {
                 log_line(state.package->file_name + ": installed in " + path_to_utf8(folder));
-                install::report_package_outcome({
-                    .file = state.file,
-                    .result = install::OutcomeResult::installed,
-                });
+                state.report(*this, install::OutcomeResult::installed);
                 state.told_folder = folder;
                 state.play_folder = folder;
                 package_changed(kind, folder);
@@ -322,11 +544,9 @@ void Runtime::tell_mod_installs() {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             log_line(state.package->file_name + ": " + install::refusal_text(kind, problem));
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = install::refusal_text(kind, problem),
-            });
+            state.report(
+                *this, install::OutcomeResult::refused, install::refusal_text(kind, problem)
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(
@@ -337,7 +557,8 @@ void Runtime::tell_mod_installs() {
             return;
         }
         if (step == oa::formats::zip::StreamStep::more) {
-            if (state.quiet) {
+            // While the Library shows, its queue tells a chosen mod's progress.
+            if (state.quiet || state.told_in_library(*this)) {
                 state.hide(*this);
                 return;
             }
@@ -377,11 +598,12 @@ void Runtime::tell_mod_installs() {
                 state.unpacking->cancel();
                 state.discarder.add(state.unpacking->discards());
                 state.unpacking.reset();
-                install::report_package_outcome({
-                    .file = state.file,
-                    .result = install::OutcomeResult::refused,
-                    .reason = install::refusal_text(kind, staged),
-                });
+                state.report(
+                    *this,
+                    install::OutcomeResult::refused,
+                    install::refusal_text(kind, staged),
+                    staged.lines
+                );
                 if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
@@ -409,11 +631,12 @@ void Runtime::tell_mod_installs() {
                 install::Problem refused{};
                 refused.refusal = install::Refusal::manifest_errors;
                 refused.lines = check.errors;
-                install::report_package_outcome({
-                    .file = state.file,
-                    .result = install::OutcomeResult::refused,
-                    .reason = install::refusal_text(kind, refused),
-                });
+                state.report(
+                    *this,
+                    install::OutcomeResult::refused,
+                    install::refusal_text(kind, refused),
+                    refused.lines
+                );
                 if (!state.finish_quietly(*this)) {
                     state.stage = ModInstallState::Stage::telling;
                     state.show(
@@ -427,7 +650,7 @@ void Runtime::tell_mod_installs() {
         }
         if (!state.target_played) {
             state.placing = true;
-            if (state.quiet) {
+            if (state.quiet || state.told_in_library(*this)) {
                 state.hide(*this);
                 return;
             }
@@ -460,6 +683,19 @@ void Runtime::tell_mod_installs() {
         state.unpacking.reset();
         state.hide(*this);
         state.stage = ModInstallState::Stage::idle;
+        if (state.chosen) {
+            // A mod the player chose in the Library is held until they leave
+            // the mod: switching mod or quitting makes the change, and the
+            // Library's queue says it waits. The download queue counts it
+            // installed, so that it is not fetched again at the next start.
+            log_line(state.package->file_name + ": held until the player leaves the mod");
+            state.report(*this, install::OutcomeResult::installed);
+            state.note_for_library(
+                *this, {state.origin.registry, state.origin.catalogue_id, {}, state.target}
+            );
+            state.finish_package();
+            return;
+        }
         state.finish_package();
         request_soft_restart();
         return;
@@ -470,6 +706,14 @@ void Runtime::tell_mod_installs() {
                          state_.pending_signal != frontend_state::signal_id::multiplayer &&
                          !saves_notice_shown() && oa::ui::frontend_dialogs::dialog_count() == 0 &&
                          engine_settings_dialog() == nullptr;
+    // A registry's name as the Library shows it; its id when the Library
+    // does not list it.
+    const auto library_registry_name = [this](std::string_view registry) {
+        for (const oa::ui::library::Registry& listed : library_host().model.inputs.registries)
+            if (listed.id == registry && !listed.name.empty())
+                return listed.name;
+        return std::string(registry);
+    };
     // Opens the package taken and plans it. A quiet install shows nothing:
     // a plan that asks goes back to the inbox, and a refusal is reported.
     const auto begin_package = [&](const install::OpenedPackage& opened_file) {
@@ -480,13 +724,23 @@ void Runtime::tell_mod_installs() {
         state.kind = install::kind_for_file(state.file);
         log_line("opening " + path_to_utf8(state.file));
         const std::string name = path_to_utf8(state.file.filename());
+        // A mod the player chose in the Library: its origin says so, and its
+        // registry, asked once, whether it asks before it replaces. An
+        // earlier note of the same registry and key is done with.
+        state.chosen = state.kind != nullptr && state.kind->name == "oamod" &&
+                       state.origin.kind == install::OriginKind::catalogue;
+        state.from_built_in = state.chosen && library_registry_built_in(state.origin.registry);
+        if (state.chosen)
+            state.note_for_library(
+                *this, {state.origin.registry, state.origin.catalogue_id, {}, {}}
+            );
         if (state.kind == nullptr) {
             log_line(name + ": it is not a kind of package this game installs");
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = "It is not a kind of package this game installs.",
-            });
+            state.report(
+                *this,
+                install::OutcomeResult::refused,
+                "It is not a kind of package this game installs."
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(*this, install::unknown_kind_prompt(name));
@@ -508,11 +762,11 @@ void Runtime::tell_mod_installs() {
                     problem.refusal = install::Refusal::unreadable;
                     problem.detail = why;
                     log_line(path_to_utf8(state.file) + ": " + why);
-                    install::report_package_outcome({
-                        .file = state.file,
-                        .result = install::OutcomeResult::refused,
-                        .reason = install::refusal_text(*state.kind, problem),
-                    });
+                    state.report(
+                        *this,
+                        install::OutcomeResult::refused,
+                        install::refusal_text(*state.kind, problem)
+                    );
                     if (!state.finish_quietly(*this)) {
                         state.stage = ModInstallState::Stage::telling;
                         state.show(
@@ -540,13 +794,14 @@ void Runtime::tell_mod_installs() {
             );
             for (const auto& line : opened.problem.lines)
                 log_line(name + ": " + line);
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = opened.problem.refusal == install::Refusal::unknown_kind
-                              ? std::string("It is not a kind of package this game installs.")
-                              : install::refusal_text(*state.kind, opened.problem),
-            });
+            state.report(
+                *this,
+                install::OutcomeResult::refused,
+                opened.problem.refusal == install::Refusal::unknown_kind
+                    ? std::string("It is not a kind of package this game installs.")
+                    : install::refusal_text(*state.kind, opened.problem),
+                opened.problem.lines
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(
@@ -571,11 +826,11 @@ void Runtime::tell_mod_installs() {
             log_line(state.package->file_name + ": its own .oa-origin.yaml is left out");
         if (state.kind == nullptr || state.kind->plan == nullptr) {
             log_line(name + ": it is not a kind of package this game installs");
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = "It is not a kind of package this game installs.",
-            });
+            state.report(
+                *this,
+                install::OutcomeResult::refused,
+                "It is not a kind of package this game installs."
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(*this, install::unknown_kind_prompt(name));
@@ -604,11 +859,9 @@ void Runtime::tell_mod_installs() {
             install::Problem problem{};
             problem.refusal = state.plan.refusal;
             problem.subject = state.incoming.id;
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = install::refusal_text(kind, problem),
-            });
+            state.report(
+                *this, install::OutcomeResult::refused, install::refusal_text(kind, problem)
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(
@@ -619,32 +872,82 @@ void Runtime::tell_mod_installs() {
             return;
         }
         default:
-            if (state.quiet) {
-                install::return_package_file({state.file, state.origin});
-                state.catalogue_question = state.file;
-                state.release_opened_copy();
-                state.package.reset();
-                state.kind = nullptr;
-                state.hide(*this);
-                state.quiet = false;
-                state.stage = ModInstallState::Stage::idle;
-                return;
+            break;
+        }
+        if (state.quiet) {
+            install::return_package_file({state.file, state.origin});
+            state.catalogue_question = state.file;
+            state.release_opened_copy();
+            state.package.reset();
+            state.kind = nullptr;
+            state.hide(*this);
+            state.quiet = false;
+            state.stage = ModInstallState::Stage::idle;
+            return;
+        }
+        // A mod the player chose in the Library asks only what its registry
+        // must: the player asked for it there. While the Library shows, its
+        // question shows over the Library at once.
+        const ChosenModStep step =
+            state.chosen ? chosen_mod_step(state.plan, state.origin, state.from_built_in)
+                         : ChosenModStep::ask;
+        switch (step) {
+        case ChosenModStep::replace:
+        case ChosenModStep::reinstall:
+            state.target = state.plan.target;
+            state.change = step == ChosenModStep::reinstall ? install::Change::reinstall
+                                                            : install::Change::replace;
+            state.expected = state.plan.installed;
+            state.target_played = false;
+            answer_mod_install_prompt(-1);
+            return;
+        case ChosenModStep::refuse_folder: {
+            // The folder is left as it is, and nothing goes beside it.
+            const std::string folder = std::string(kind.root_folder) + "/" + state.incoming.id;
+            std::string reason =
+                filled(kOwnFolderText, {{"folder", folder}, {"name", state.incoming.name}});
+            log_line(state.package->file_name + ": " + reason);
+            state.report(*this, install::OutcomeResult::refused, reason);
+            if (!state.finish_quietly(*this)) {
+                state.stage = ModInstallState::Stage::telling;
+                state.show(*this, own_folder_prompt(state.package->file_name, std::move(reason)));
             }
+            state.finish_package();
+            return;
+        }
+        case ChosenModStep::ask_registry: {
+            const install::Origin& record = *state.plan.installed.origin;
             state.stage = ModInstallState::Stage::asking;
             state.show(
                 *this,
-                install::question_prompt(
-                    kind,
-                    state.plan,
-                    state.incoming,
-                    state.package->file_name,
-                    root,
-                    !state.plan.target.empty() &&
-                        package_target_in_use(kind, root / path_from_utf8(state.plan.target))
-                )
+                replace_registry_prompt(
+                    state.incoming.name,
+                    library_registry_name(record.registry),
+                    library_registry_name(state.origin.registry)
+                ),
+                state.told_in_library(*this)
             );
             return;
         }
+        case ChosenModStep::ask:
+            break;
+        }
+        // A chosen mod's change to the mod being played waits until the
+        // player leaves it, so its question says nothing of a reload.
+        state.stage = ModInstallState::Stage::asking;
+        state.show(
+            *this,
+            install::question_prompt(
+                kind,
+                state.plan,
+                state.incoming,
+                state.package->file_name,
+                root,
+                !state.chosen && !state.plan.target.empty() &&
+                    package_target_in_use(kind, root / path_from_utf8(state.plan.target))
+            ),
+            state.told_in_library(*this)
+        );
     };
     // A catalogue language pack asks nothing. It is installed with no prompt
     // while Settings or a notice show, and in a run nobody watches. A match
@@ -666,6 +969,28 @@ void Runtime::tell_mod_installs() {
         begin_package(*opened_file);
         return true;
     };
+    // A mod the player chose in the Library starts as catalogue_mod_may_start
+    // says: on the main menu and also while the Library is the top screen
+    // over it, Settings under it included. Any other package waits for the
+    // settled main menu, as a file always has.
+    const auto chosen_mod = [](const install::OpenedPackage& waiting) {
+        const install::PackageKind* kind = install::kind_for_file(waiting.file);
+        return kind != nullptr && kind->name == "oamod" &&
+               waiting.origin.kind == install::OriginKind::catalogue;
+    };
+    const auto take_chosen_mod = [&]() -> bool {
+        if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
+            return false;
+        const auto next = install::next_package_file();
+        if (!next || !chosen_mod(*next) || !catalogue_mod_may_start())
+            return false;
+        const auto opened_file = install::take_package_file();
+        if (!opened_file)
+            return false;
+        state.quiet = false;
+        begin_package(*opened_file);
+        return true;
+    };
     if (!settled) {
         state.settled_frames = 0;
         // Nothing starts while a match loads or runs. A catalogue map pack
@@ -678,6 +1003,8 @@ void Runtime::tell_mod_installs() {
         if (take_catalogue_language())
             return;
         if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts)
+            return;
+        if (take_chosen_mod())
             return;
         if (!state.catalogue_question.empty())
             return;
@@ -749,10 +1076,30 @@ void Runtime::tell_mod_installs() {
     // A catalogue map pack that needed a question waited for this menu.
     state.catalogue_question.clear();
     state.quiet = false;
+    if (take_chosen_mod())
+        return;
+    // A chosen mod first in the inbox waits while another OA screen shows.
+    if (const auto next = install::next_package_file(); !next || chosen_mod(*next))
+        return;
     const auto opened_file = install::take_package_file();
     if (!opened_file)
         return;
     begin_package(*opened_file);
+}
+
+bool Runtime::catalogue_mod_may_start() {
+    namespace frontend_state = oa::ui::frontend_state;
+    // Never in a match or on a loading screen, nor while a package owns the
+    // frame, the menu is leaving for another or a message box shows.
+    if (match_ != nullptr || screen_ != Screen::main_menu || frame_owned_by_package() ||
+        state_.state != frontend_state::state_id::main_menu ||
+        state_.pending_signal == frontend_state::signal_id::multiplayer ||
+        oa::ui::frontend_dialogs::dialog_count() != 0 || engine_settings_fonts() == nullptr)
+        return false;
+    // Nothing of Open Annihilation's own over the main menu, or the Library
+    // on top; never Settings, a notice or a question.
+    const LayerScreen* top = oa_layer_ ? oa_layer_->top() : nullptr;
+    return top == nullptr || top->name() == library_screen_name;
 }
 
 void Runtime::answer_mod_install_prompt(int32_t button) {
@@ -784,11 +1131,9 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
                 state.package->file_name + ": " + install::refusal_text(kind, problem) +
                 (problem.detail.empty() ? "" : " (" + problem.detail + ")")
             );
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::refused,
-                .reason = install::refusal_text(kind, problem),
-            });
+            state.report(
+                *this, install::OutcomeResult::refused, install::refusal_text(kind, problem)
+            );
             if (!state.finish_quietly(*this)) {
                 state.stage = ModInstallState::Stage::telling;
                 state.show(
@@ -804,7 +1149,9 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         );
         state.stage = ModInstallState::Stage::unpacking;
         state.placing = false;
-        if (state.quiet) {
+        // While the Library shows, its queue tells a chosen mod's progress,
+        // and the question that asked for it closes.
+        if (state.quiet || state.told_in_library(*this)) {
             state.hide(*this);
             return;
         }
@@ -848,10 +1195,7 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
             return;
         default:
             log_line(state.package ? state.package->file_name + ": cancelled" : "cancelled");
-            install::report_package_outcome({
-                .file = state.file,
-                .result = install::OutcomeResult::set_aside,
-            });
+            state.report(*this, install::OutcomeResult::set_aside);
             play_ui_sound(kCloseSound, 0);
             state.hide(*this);
             state.stage = ModInstallState::Stage::idle;
@@ -866,10 +1210,7 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
         state.discarder.add(state.unpacking->discards());
         state.unpacking.reset();
         log_line(state.package ? state.package->file_name + ": unpacking cancelled" : "cancelled");
-        install::report_package_outcome({
-            .file = state.file,
-            .result = install::OutcomeResult::set_aside,
-        });
+        state.report(*this, install::OutcomeResult::set_aside);
         play_ui_sound(kCloseSound, 0);
         state.hide(*this);
         state.stage = ModInstallState::Stage::idle;
@@ -943,28 +1284,21 @@ bool Runtime::switch_to_mod_folder(const fs::path& folder, std::string& refusal)
     return true;
 }
 
-bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
-    auto& state = engine_settings_state();
-    const fs::path folder = path_from_utf8(dialog.roll_back_folder);
+bool Runtime::roll_back_mod_folder(const fs::path& folder, std::string& refusal) {
     const fs::path mods = folder.parent_path();
     const std::string target = path_to_utf8(folder.filename());
     const install::PackageKind& kind = install::mod_kind();
     const install::InstalledPackage installed = install::oamod::read_installed_mod(folder);
     const auto backup = install::oamod::read_backup(folder);
     const std::string title = installed.name.empty() ? target : installed.name;
-    // A refusal is told in a prompt over the dialog, whose text wraps, and
-    // the dialog stays open under it.
+    auto& install_state = mod_install_state();
+    install_state.roll_back_refusal.reset();
+    // A refusal changes nothing. Its words go to the caller, and its prompt
+    // is kept for the Mods page to show over Settings.
     const auto refuse = [&](install::PackagePrompt made, std::string_view why) {
         log_line(path_to_utf8(folder) + ": not rolled back: " + std::string(why));
-        auto& install_state = mod_install_state();
-        if (install_state.prompt == nullptr &&
-            install_state.stage == ModInstallState::Stage::idle) {
-            install_state.told_folder.clear();
-            install_state.play_folder.clear();
-            install_state.stage = ModInstallState::Stage::telling;
-            install_state.show(*this, std::move(made), true);
-        }
-        std::ignore = settings::set_folder_notice(dialog, {});
+        refusal = prompt_words(made.prompt);
+        install_state.roll_back_refusal = std::move(made);
         return false;
     };
     if (!backup || backup->kind != install::FolderKind::package)
@@ -994,6 +1328,7 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
             ),
             "the version it keeps cannot be played"
         );
+    auto& state = engine_settings_state();
     const bool played = package_target_in_use(kind, folder);
     install::PendingChange pending{};
     pending.kind = &kind;
@@ -1003,18 +1338,22 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
     pending.incoming = {backup->id, backup->name, backup->version, backup->revision};
     pending.replaced = installed;
     if (played) {
-        // As SWITCH does: the dialog's settings are kept and saved, it
-        // closes, and the run ends for the folder to change.
-        take_renderer_retry(dialog);
-        keep_renderer_records();
-        apply_engine_settings(dialog.chosen);
-        const auto failure = save_engine_settings(dialog.opened, dialog.chosen, dialog.restored);
-        state.last_page = dialog.page;
-        state.last_developer_list = dialog.developer;
-        state.dialog.reset();
-        if (failure) {
-            EngineSettingsState::report_failed_save(*this, *failure);
-            return true;
+        // As SWITCH does: Settings, where it is open, keeps its choices,
+        // saves them and closes, and the run ends for the folder to change.
+        if (settings::Dialog* dialog = engine_settings_dialog()) {
+            take_renderer_retry(*dialog);
+            keep_renderer_records();
+            apply_engine_settings(dialog->chosen);
+            const auto failure =
+                save_engine_settings(dialog->opened, dialog->chosen, dialog->restored);
+            state.last_page = dialog->page;
+            state.last_developer_list = dialog->developer;
+            state.dialog.reset();
+            if (failure) {
+                EngineSettingsState::report_failed_save(*this, *failure);
+                refusal = *failure;
+                return false;
+            }
         }
         install::set_pending_change(std::move(pending));
         log_line(path_to_utf8(folder) + ": rolled back as the run ends");
@@ -1026,16 +1365,18 @@ bool Runtime::roll_back_mod_folder(settings::Dialog& dialog) {
     options.hooks.wait = wait_pumping;
     const install::ChangeResult result =
         install::commit_change(kind, mods, target, install::Change::roll_back, options);
-    mod_install_state().discarder.add(result.discards);
+    install_state.discarder.add(result.discards);
     if (!result.changed)
         return refuse(install::oamod::roll_back_failed_prompt(title), result.detail);
     log_line(path_to_utf8(folder) + ": rolled back to " + backup->version);
     package_changed(kind, folder);
-    dialog.mod_names = state.mod_names;
-    dialog.mod_folders = state.mod_folders;
-    dialog.mod_details = state.mod_details;
-    std::ignore = settings::set_folder_notice(dialog, {});
-    return false;
+    // Settings, where it is open, lists the folder's versions as they are now.
+    if (settings::Dialog* dialog = engine_settings_dialog()) {
+        dialog->mod_names = state.mod_names;
+        dialog->mod_folders = state.mod_folders;
+        dialog->mod_details = state.mod_details;
+    }
+    return true;
 }
 
 } // namespace oa::app

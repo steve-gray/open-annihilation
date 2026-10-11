@@ -1087,6 +1087,12 @@ and ROLL BACK, ROLL BACK marked. ROLL BACK names the folder
 (`DialogAction::roll_back_mod`); the dialog stays open. A locked page draws
 it dimmed and inert.
 
+`roll_back_prompt` (`prompt.hpp`) is the same question as a prompt of its
+own, for a screen that asks it over itself, such as the Library: the
+heading and what it does in the page's words, with the reload line for the
+mod the game plays, and CANCEL and ROLL BACK, named `cancel` and
+`roll-back` to automation, CANCEL marked.
+
 ## Your files and the notice
 
 Common Tweaks' first row, Your files (`Setting::user_folder`, a row of
