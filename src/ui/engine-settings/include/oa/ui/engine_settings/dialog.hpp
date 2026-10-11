@@ -61,8 +61,11 @@ inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop
 enum class Page : uint8_t {
     controls,      ///< Controls
     common_tweaks, ///< Common Tweaks: the player's own folder, the unit limit and pathfinding
-    language,      ///< Language: the language and how game text is drawn
+    language,      ///< Language & Text: the language and how game text is drawn
     graphics,      ///< Graphics
+    /// User Interface: menu scaling, the window's frame, HUD scaling,
+    /// Interface size, and whether Escape opens the game menu
+    user_interface,
     /// Touch: how the touch controls answer a finger; listed only while the
     /// game has touch controls (Dialog::touch)
     touch,
@@ -95,11 +98,11 @@ enum class Page : uint8_t {
 
 /// The number of sections, of every kind of dialog, counting Downloads and
 /// the registered page.
-inline constexpr std::size_t page_count = 15;
-/// The most sections a dialog lists: the engine's settings' nine with
-/// Touch, Controller and Game files, six without them; a mod's options have
+inline constexpr std::size_t page_count = 16;
+/// The most sections a dialog lists: the engine's settings' ten with
+/// Touch, Controller and Game files, seven without them; a mod's options have
 /// five.
-inline constexpr std::size_t most_listed_pages = 9;
+inline constexpr std::size_t most_listed_pages = 10;
 
 /// Which settings a dialog shows.
 enum class DialogKind : uint8_t {
@@ -117,16 +120,18 @@ enum class DialogKind : uint8_t {
 ///
 /// @param kind the dialog's kind
 /// @param touch the game has touch controls (Dialog::touch), so that the
-///     engine's settings list Touch between Graphics and Developer
+///     engine's settings list Touch after User Interface and before Downloads
 /// @param game_files the dialog lists Game files (Dialog::game_files),
 ///     after Touch and Controller and before Developer
 /// @param controller a gamepad has sent input in this run
 ///     (Dialog::controller), so that the engine's settings list Controller
 ///     after Touch and before Game files and Developer
-/// @return six sections for the engine's settings, one more for each of
-///     Touch, Controller and Game files listed, nine with all three; five
-///     for a mod's options and one for Language alone, whatever the others
-///     say
+/// @return seven sections for the engine's settings (Controls, Common
+///     Tweaks, Language & Text, Graphics, User Interface, Downloads and
+///     Developer), one more for each of Touch, Controller and Game files
+///     listed, ten with all three; five
+///     for a mod's options and one for Language & Text alone, whatever the
+///     others say
 [[nodiscard]] std::span<const Page> dialog_pages(
     DialogKind kind, bool touch = false, bool game_files = false, bool controller = false
 ) noexcept;
@@ -232,8 +237,8 @@ enum class Setting : uint8_t {
     /// Window frame: a strip of Hidden in play and Always shown
     window_frame,
     hud_scaling, ///< HUD scaling: a switch
-    /// Interface size: a drop-down of Auto, 100%, 200%, 300% and 400%, the
-    /// last of Graphics' rows
+    /// Interface size: a drop-down of Auto, 100%, 200%, 300% and 400%, on
+    /// User Interface
     interface_size,
     /// MORE IN THE LIBRARY…: a link under Language's row that opens the
     /// Library on Languages, listed only while Dialog::library_link is set;
@@ -354,9 +359,9 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
-/// listed, so that Touch is 4, Controller 5, Developer 6, Game files 7 and
-/// Downloads 8 in every dialog of the engine's settings, and a dialog
-/// without Touch has no control 4, one without Controller no control 5.
+/// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8 and
+/// Downloads 9 in every dialog of the engine's settings, and a dialog
+/// without Touch has no control 5, one without Controller no control 6.
 /// The registered page has no entry of this form; its entries are
 /// registered_nav_control.
 ///

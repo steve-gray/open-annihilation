@@ -48,12 +48,11 @@ constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::kit_gall
 
 /// Controls' rows: the zoom's limits right under the switch for the wheel,
 /// and how far past the map's edges the view goes under them.
-constexpr std::array<Setting, 6> kControlsRows{
+constexpr std::array<Setting, 5> kControlsRows{
     Setting::wheel_zoom,
     Setting::max_zoom_out,
     Setting::max_zoom_in,
     Setting::view_past_map_edge,
-    Setting::escape_opens_menu,
     Setting::switch_alt,
 };
 /// Common Tweaks' rows: the player's own folder first.
@@ -62,23 +61,28 @@ constexpr std::array<Setting, 3> kCommonTweaksRows{
     Setting::unit_limit,
     Setting::path_search,
 };
-/// Graphics' rows: how units look zoomed out, the zoom they look so from
-/// right under the way, then the window's frame, the HUD's scaling and,
-/// last, the size Open Annihilation's own screens are drawn at.
-constexpr std::array<Setting, 13> kGraphicsRows{
+/// Graphics' rows: how units look zoomed out, and the zoom they look so
+/// from right under the way.
+constexpr std::array<Setting, 9> kGraphicsRows{
     Setting::max_frame_rate,
     Setting::anti_aliasing,
     Setting::screen_size,
     Setting::hardware_acceleration,
     Setting::vertical_sync,
-    Setting::menu_scaling,
     Setting::native_density,
     Setting::explosion_flash,
     Setting::zoomed_out_units,
     Setting::zoomed_out_after,
+};
+/// User Interface's rows: how the menus scale, the window's frame, the
+/// HUD's scaling, the size Open Annihilation's own screens are drawn at,
+/// then whether Escape opens the game menu.
+constexpr std::array<Setting, 5> kUserInterfaceRows{
+    Setting::menu_scaling,
     Setting::window_frame,
     Setting::hud_scaling,
     Setting::interface_size,
+    Setting::escape_opens_menu,
 };
 /// Language's rows: the language first, and the text size right
 /// under the switch it needs.
@@ -195,6 +199,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kCommonTweaksRows,
     kLanguageRows,
     kGraphicsRows,
+    kUserInterfaceRows,
     kTouchRows,
     kControllerRows,
     kDeveloperRows,
@@ -211,8 +216,9 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
 constexpr std::array<std::string_view, page_count> kPageNames{
     "Controls",
     "Common Tweaks",
-    "Language",
+    "Language & Text",
     "Graphics",
+    "User Interface",
     "Touch",
     "Controller",
     "Developer",
@@ -229,8 +235,9 @@ constexpr std::array<std::string_view, page_count> kPageNames{
 constexpr std::array<std::string_view, page_count> kPageHeadings{
     "CONTROLS",
     "COMMON TWEAKS",
-    "LANGUAGE",
+    "LANGUAGE & TEXT",
     "GRAPHICS",
+    "USER INTERFACE",
     "TOUCH",
     "CONTROLLER",
     "DEVELOPER",
@@ -250,6 +257,7 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "common-tweaks",
     "language",
     "graphics",
+    "user-interface",
     "touch",
     "controller",
     "developer",

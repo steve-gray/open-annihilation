@@ -20,12 +20,11 @@ the locks a running game puts on them (`settings_locks`).
 | | Maximum zoom out, a drop-down: how far out the wheel, a pinch, the touch zoom buttons and a controller zoom | Automatic (half the game's scale, a sixth while Full draws the battlefield), Whole map, 1/32, 1/16, 1/8, 1/4, 1/2; no choice but Automatic goes past the whole map | Automatic | `open-annihilation.max-zoom-out` (`automatic`, `whole-map`, `1/32`, `1/16`, `1/8`, `1/4` or `1/2`) |
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
-| | Escape opens the game menu | Off, On | On on macOS, Off elsewhere and with `--preferences-file` | `open-annihilation.escape-opens-menu` |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
 | Common Tweaks | Your files: the player's own folder and buttons that open its Saves, Screenshots and Mods folders | changes no setting | | `open-annihilation.user-folder`, read at start (`src/app/include/oa/app/user_folder.hpp`) |
 | | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
-| Language | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
+| Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
 | | Use modern fonts for game text; On, locked, while a language drawn only in them is chosen | Off, On | On with the player's own preferences file; Off with `--preferences-file` | `open-annihilation.modern-fonts` |
 | | Text size, of the modern fonts | 50% to 300% of the game fonts' sizes, steps of 10% | 80% | `open-annihilation.text-size` |
 | | Font outline | Off, On | On | `open-annihilation.text-outline` |
@@ -37,14 +36,15 @@ the locks a running game puts on them (`settings_locks`).
 | | Screen size, when OK is pressed | Desktop, then the sizes the display offers from 640×480 (`Dialog::offered_screen_sizes`), in a window shown at the window's own size until moved, as Custom where the display offers no such size; Desktop, 640×480, 800×600, 1024×768 and 1280×1024 where the game does not say | Desktop; 800×600 on a light machine with the player's own preferences file, 640×480 when its desktop is smaller | `open-annihilation.screen-size` (`desktop`, or a size such as `2560x1440`) |
 | | Hardware acceleration | Off, Basic, Full | Full with the player's own preferences file on every machine; Off with `--preferences-file` | `open-annihilation.hardware-acceleration` (`off`, `basic` or `full`) |
 | | Vertical sync | Off, On | Off | `open-annihilation.vertical-sync` |
-| | Menu scaling | Sharp, Whole steps, Unfiltered | Sharp | `open-annihilation.menu-scaling` (`sharp`, `whole-steps` or `unfiltered`) |
 | | Native pixel density, from the next start | Off, On; always On where the platform opens every window at native density | Off | `open-annihilation.native-density` |
 | | Explosion flash; a mod's profile may draw the flashes lower still (`ui.explosion-flash`), and the lower of the two is drawn | Off, Reduced, Full | Full | `open-annihilation.explosion-flash` (`off`, `reduced` or `full`) |
 | | Zoomed out units: how units are drawn farther out than After zoom | Rendered, Dots; Icons shown faded, not offered | Rendered | `open-annihilation.zoomed-out-units` (`rendered` or `dots`; any other word, `icons` among them, reads as Rendered) |
 | | After zoom, a drop-down, locked "Needs Dots" while Zoomed out units is Rendered | 1/2, 1/3, 1/4, 1/6, 1/8, 1/12, 1/16 of normal size | 1/6 | `open-annihilation.zoomed-out-after` (`1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`) |
+| User Interface | Menu scaling | Sharp, Whole steps, Unfiltered | Sharp | `open-annihilation.menu-scaling` (`sharp`, `whole-steps` or `unfiltered`) |
 | | Window frame: whether a window shows its title bar and borders while a game is played; the game menu, a panel it opens and every other screen show them | Hidden in play, Always shown | Hidden in play | `open-annihilation.window-frame` (`hidden-in-play` or `always-shown`) |
 | | HUD scaling: whether a game's side column and bars grow with the window, up to twice the original game's size, or keep its size | Off, On | On | `open-annihilation.hud-scaling` |
-| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn, held to the largest step at which Compact's dialog fits the window, and in a match Settings no larger than the side column's scale ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
+| | Interface size, a drop-down, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn, held to the largest step at which Compact's dialog fits the window, and in a match Settings no larger than the side column's scale ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
+| | Escape opens the game menu | Off, On | On on macOS, Off elsewhere and with `--preferences-file` | `open-annihilation.escape-opens-menu` |
 | Touch, listed only while the game has touch controls | One-finger drag | Automatic (a selection box on a tablet, scrolling on a phone), Box, Scroll | Automatic | `open-annihilation.touch-drag` (`automatic`, `box` or `scroll`) |
 | | Hold delay | 250 to 700 ms, steps of 50; a stored delay is held to the range and put on its nearest step | 350 ms | `open-annihilation.touch-hold-delay` |
 | | QUEUE and ADD | Stay on, One action | Stay on | `open-annihilation.touch-latches` (`stay-on` or `one-action`) |
@@ -232,10 +232,10 @@ link (`Setting::more_in_library`, named `settings.more-in-library`) whose
 hint says "More languages are in the Library.". Its press sets
 `Dialog::library_tab` to Languages and asks the host for the Library
 (`DialogAction::open_library`); the dialog stays open under it. In a match
-and in Language alone it is not listed, and Language's rows stand as
+and in Language & Text alone it is not listed, and Language's rows stand as
 `page_settings` gives them.
 
-The rest of the Language settings say how game text is drawn. Use modern fonts
+The rest of Language & Text says how game text is drawn. Use modern fonts
 for game text draws it in modern fonts, which hold the letters of many
 languages, in place of the game's own 8-bit fonts; Text size scales every
 size those fonts are drawn at together, from half the game fonts' sizes to
@@ -411,9 +411,10 @@ edge and hairline rules, and one green accent for what is selected:
 - the header: the Open Annihilation icon, 20 by 20 source pixels, "OPEN
   ANNIHILATION SETTINGS" and the version, with "Shared game - still
   running" in amber while a shared game keeps running;
-- the sections down the left (Controls, Common Tweaks, Language,
-  Graphics, Touch while the game has touch controls, Controller once a
-  gamepad has sent input, and Game files where the host lists it),
+- the sections down the left (Controls, Common Tweaks, Language & Text,
+  Graphics, User Interface, Touch while the game has touch controls,
+  Controller once a gamepad has sent input, and Game files where the host
+  lists it),
   Developer at the foot after a line, the open one marked;
 - the open section's heading and rows: a label, a hint of one or two lines,
   and an Off/On switch, a level strip (Off, 2x, 4x, 8x, 16x for Enhanced
@@ -435,11 +436,13 @@ and the footer never move. A section whose rows, with 8 clear pixels under
 the last row's line, are taller than the view scrolls by whole source
 pixels, and shows a scroll bar in the margin right of its rows: a well like
 a switch's, its thumb as tall as the view's share of the section and never
-under 16 pixels. Graphics, with thirteen rows, is taller than its view by
-592 pixels, Language, with the Language drop-down, four switches and the
-Text size slider, by 129, Touch, with its three strips, the Hold delay
-slider and two switches, by 121, and Controls, with its three switches and
-the zoom's two drop-downs, by 84; Common Tweaks fits, its Your files and
+under 16 pixels. Graphics, with nine rows, is taller than its view by
+336 pixels, Language & Text, with the Language drop-down, four switches and
+the Text size slider, by 129, User Interface, with its three switches, Menu
+scaling's strip and Interface size's drop-down, by 88, Touch, with its
+three strips, the Hold delay slider and two switches, by 121, and Controls,
+with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge
+and Select groups without Alt, by 84; Common Tweaks fits, its Your files and
 two sliders in 210 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the
@@ -498,8 +501,8 @@ Pointer speed, Pointer acceleration, Trackpad glide, Right stick, Magnetism
 (stick pointer), Gyro pointer, Gyro speed, Haptics, Button prompts,
 Left-handed, then Touch's own Control size, Hold delay and QUEUE and ADD.
 
-The Game files section is listed, between Controller (or Touch, or
-Graphics) and Downloads, only where the host says so (`Dialog::game_files`, given to
+The Game files section is listed, between Controller (or Touch, or User
+Interface) and Downloads, only where the host says so (`Dialog::game_files`, given to
 `open_dialog`): the main menu's dialog of a game whose platform brings game
 files in. A dialog asked to open on Game files without it opens on its
 first section, Controls. Its three rows:
@@ -526,7 +529,7 @@ The host's texts keep to their lines' columns as they are drawn.
 
 The Downloads section is listed in every dialog of the engine's settings,
 after Game files where that is listed and otherwise after Controller, Touch
-or Graphics, and before the line above Developer. Its rows come from the
+or User Interface, and before the line above Developer. Its rows come from the
 host's offer (`set_downloads_offer`), not from a fixed list of settings:
 
 - Check for content updates: a drop-down of Automatically, Only when I
@@ -877,7 +880,7 @@ The names: a registered page's entry is `settings.nav.<id>`, its id as
 registered (`settings.nav.check.page`), and its rows `settings.<id>.<row>`
 (`settings.check.page.toggle`, whose halves are `.off` and `.on`). The
 engine's section entries are `settings.nav.<page>` (`controls`,
-`common-tweaks`, `language`, `graphics`, `touch`, `controller`,
+`common-tweaks`, `language`, `graphics`, `user-interface`, `touch`, `controller`,
 `developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
 `mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,
 `settings.ok` and `settings.scroll-bar`; each row `settings.<row>`, its
@@ -1301,10 +1304,10 @@ while the modern fonts are Off, lifted as they turn On; the Language
 drop-down's choices, each language named in itself, its field and list,
 the pointer and the keys on them, a press off the list, the command line's
 lock, and lists that scroll or open over their field;
-the Graphics section's thirteen rows, Interface size last, their places at every offset
+the Graphics section's nine rows, After zoom last, their places at every offset
 and under every lock, the focus scrolling them into view, both forms of a
-locked row, Zoomed out units' faded Icons and After zoom's lock, Window frame's two ways, HUD scaling's two hints, every status of Hardware acceleration, Full's included, and
-the requests to try the graphics card afresh; Interface size's drop-down
+locked row, Zoomed out units' faded Icons and After zoom's lock, every status of Hardware acceleration, Full's included, and
+the requests to try the graphics card afresh; User Interface's five rows, Menu scaling, Window frame, HUD scaling, Interface size and Escape opens the game menu, Window frame's two ways and HUD scaling's two hints; Interface size's drop-down
 offering 150% only with the modern fonts shown On, and turning them Off
 taking 150% to 100%; Graphics drawn on the kit canvas's smooth form at 1.5×
 with every pixel painted whole; on sections of the test's own taller than the
@@ -1319,7 +1322,7 @@ set through the pointer and the keys, the overrides kept and dropped as
 the profile's own values come back, Restore profile values, Show Active
 Only and its count, the list's scrolling and focus, and its summaries'
 lines; Controller: listed only once a gamepad has sent input, after
-Graphics and Touch and before Game files, each entry's number kept, the
+User Interface and Touch and before Game files, each entry's number kept, the
 focus walking it, `set_controller_section` listing and unlisting it, its
 fifteen rows with their strips, sliders (26 and 36 stops), switches and
 drop-downs by pointer and keys, Control size, Hold delay and QUEUE and ADD
@@ -1337,7 +1340,7 @@ its entry down, and a finger's press taking the nearest control within
 reach (15 points off a switch takes it, 30 points off nothing, a mouse
 press 15 points off nothing) at several scales, a slider dragged from under
 its track and an open list's nearest item; Game files: listed only with
-its flag, between Touch or Graphics and Downloads, the line and
+its flag, between Touch or User Interface and Downloads, the line and
 Developer under it, its entry numbered 8 with Touch 5, Controller 6,
 Developer 7 and Downloads 9, the
 focus walking it, its three rows and their texts, MANAGE… returning
@@ -1369,7 +1372,7 @@ waits for the game's end. It also finds Text size locked with the modern
 fonts Off, turns them On and raises the size a stop, which the text style
 reads at once and OK saves, and chooses Deutsch from the Language
 drop-down, which puts German in effect at once, and steps back to English.
-With touch controls on it finds Touch listed between Graphics and
+With touch controls on it finds Touch listed between User Interface and
 Developer with its rows at their defaults, and a finger's press beside
 Haptics' switch taking it where a mouse press there does nothing; in the
 match, it checks that on a phone the dialog and the OA button fit the

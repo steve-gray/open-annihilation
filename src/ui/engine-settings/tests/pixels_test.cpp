@@ -135,6 +135,8 @@ std::string_view page_slug(Page page) {
         return "language";
     case Page::graphics:
         return "graphics";
+    case Page::user_interface:
+        return "user-interface";
     case Page::touch:
         return "touch";
     case Page::controller:
