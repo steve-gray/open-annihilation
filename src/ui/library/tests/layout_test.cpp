@@ -200,8 +200,11 @@ int declared_place(std::string_view name) {
         return 3;
     if (name == "library.action" || starts(name, "library.action.") || name == "library.back")
         return 4;
-    if (name == "library.settings" || name == "library.details" || name == "library.close")
+    if (starts(name, "library.registry."))
         return 5;
+    if (name == "library.add-registry" || name == "library.settings" || name == "library.details" ||
+        name == "library.close")
+        return 6;
     return -1;
 }
 
@@ -272,19 +275,21 @@ std::vector<std::string> order_problems(const kit::DisplayList& list) {
 /// @return true when it is
 bool designed_name(const std::string& name) {
     static const std::regex pattern(
-        "library\\.(tab\\.(active|mods|maps|languages|updates)|search|filter|"
+        "library\\.(tab\\.(active|mods|maps|languages|updates|registries)|search|filter|"
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
         "+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
         "details|back|settings|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|map\\.[1-9][0-9]*))"
+        "active\\.(mod|language|map\\.[1-9][0-9]*)|"
+        "add-registry|registries\\.(note|notice)|"
+        "registry\\.[a-z0-9-]+(\\.(remove|add-mirror))?)"
     );
     return std::regex_match(name, pattern);
 }
 
 /// The labels: lines a journey reads, which take nothing.
-constexpr std::array<std::string_view, 7> label_names{
+constexpr std::array<std::string_view, 9> label_names{
     "library.status",
     "library.queue",
     "library.note",
@@ -292,6 +297,8 @@ constexpr std::array<std::string_view, 7> label_names{
     "library.rules",
     "library.active.mod",
     "library.active.language",
+    "library.registries.note",
+    "library.registries.notice",
 };
 
 /// Lists what is wrong with the controls' names: the kit's rules, step 8's
@@ -753,7 +760,7 @@ void tab_commands_change_tabs() {
     OA_CHECK(library.tab == lib::Tab::active);
     list = laid_out(library, state, regular);
     static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::previous_tab));
-    OA_CHECK(library.tab == lib::Tab::updates);
+    OA_CHECK(library.tab == lib::Tab::registries);
     list = laid_out(library, state, regular);
     static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::next_tab));
     OA_CHECK(library.tab == lib::Tab::active);
@@ -879,6 +886,7 @@ void tab_follows_the_declared_order() {
         "library.tab.maps",
         "library.tab.languages",
         "library.tab.updates",
+        "library.tab.registries",
         "library.search",
         "library.filter",
         "library.list",
@@ -915,8 +923,8 @@ void tab_follows_the_declared_order() {
     OA_CHECK(regular.size() > regular_end.size() + 5);
     OA_CHECK(std::equal(regular_end.rbegin(), regular_end.rend(), regular.rbegin()));
     OA_CHECK(
-        regular.size() > 8 && regular[5] == "library.search" &&
-        regular[6] == "library.filter.all" && regular[7] == "library.filter.new"
+        regular.size() > 9 && regular[6] == "library.search" &&
+        regular[7] == "library.filter.all" && regular[8] == "library.filter.new"
     );
 }
 
@@ -1250,6 +1258,85 @@ void details_page_keeps_its_entry() {
     }
 }
 
+/// The Registries tab lists every registry, with REMOVE and ADD MIRROR… only
+/// for one the player added, and ADD REGISTRY… in the footer. It has no search.
+void registries_tab_lists_every_registry() {
+    lib::Library library = with_ridge();
+    lib::set_tab(library, lib::Tab::registries);
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        const kit::DisplayList list = laid_out(library, {}, named.frame);
+        const kit::Point window = lib::window_size(named.frame);
+        OA_EXPECT_NONE(fixture::outside_window(list, window), named.name + " registries");
+        OA_EXPECT_NONE(name_problems(list), named.name + " registries");
+        OA_EXPECT_NONE(order_problems(list), named.name + " registries");
+        OA_CHECK(fixture::named(list, "library.tab.registries") != nullptr);
+        OA_CHECK(fixture::named(list, "library.search") == nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.fixture-core") != nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.fixture-core.remove") == nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.fixture-core.add-mirror") == nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.example-mods") != nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.example-mods.remove") != nullptr);
+        OA_CHECK(fixture::named(list, "library.registry.example-mods.add-mirror") != nullptr);
+        OA_CHECK(fixture::named(list, "library.add-registry") != nullptr);
+        OA_CHECK(fixture::named(list, "library.registries.note") != nullptr);
+        OA_CHECK(fixture::named(list, "library.details") == nullptr);
+    }
+
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(library, state, regular);
+    const lib::ScreenResult removed =
+        click(library, state, list, "library.registry.example-mods.remove");
+    OA_CHECK(removed.action == lib::Action::remove_registry && removed.registry == fixture::added);
+    list = laid_out(library, state, regular);
+    const lib::ScreenResult mirror =
+        click(library, state, list, "library.registry.example-mods.add-mirror");
+    OA_CHECK(mirror.action == lib::Action::add_mirror && mirror.registry == fixture::added);
+    list = laid_out(library, state, regular);
+    const lib::ScreenResult add = click(library, state, list, "library.add-registry");
+    OA_CHECK(add.action == lib::Action::add_registry && add.registry.empty());
+
+    // The switch's right half turns it on, and its left half turns it off.
+    // Space toggles. A half that is already chosen asks for nothing.
+    const kit::Control* core_switch = fixture::named(list, "library.registry.fixture-core");
+    OA_CHECK(core_switch != nullptr);
+    if (core_switch != nullptr) {
+        const kit::Point on_half{
+            core_switch->rect.x + core_switch->rect.width * 3 / 4, core_switch->rect.y + 1
+        };
+        static_cast<void>(
+            lib::library_pointer(library, state, list, lib::PointerKind::down, 1, on_half, 0)
+        );
+        const lib::ScreenResult already =
+            lib::library_pointer(library, state, list, lib::PointerKind::up, 1, on_half, 0);
+        OA_CHECK(!already.action);
+        const kit::Point off_half{
+            core_switch->rect.x + core_switch->rect.width / 4, core_switch->rect.y + 1
+        };
+        static_cast<void>(
+            lib::library_pointer(library, state, list, lib::PointerKind::down, 1, off_half, 0)
+        );
+        const lib::ScreenResult turned =
+            lib::library_pointer(library, state, list, lib::PointerKind::up, 1, off_half, 0);
+        OA_CHECK(
+            turned.action == lib::Action::set_registry && turned.registry == fixture::core &&
+            !turned.registry_on
+        );
+    }
+    state = focused_on(list, "library.registry.fixture-core");
+    const lib::ScreenResult keyed = lib::library_key(library, state, list, kit::Key::space);
+    OA_CHECK(
+        keyed.action == lib::Action::set_registry && keyed.registry == fixture::core &&
+        !keyed.registry_on
+    );
+
+    library.inputs.in_match = true;
+    list = laid_out(library, state, regular);
+    OA_CHECK(fixture::named(list, "library.add-registry") == nullptr);
+    OA_CHECK(fixture::named(list, "library.registry.example-mods.add-mirror") == nullptr);
+    OA_CHECK(fixture::named(list, "library.registry.example-mods.remove") != nullptr);
+}
+
 /// MORE ▾ on Compact's details page holds the actions after the first
 /// three, and choosing one asks for it.
 void more_holds_the_rest() {
@@ -1286,6 +1373,7 @@ int main() {
     typing_searches();
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
+    registries_tab_lists_every_registry();
     more_holds_the_rest();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();

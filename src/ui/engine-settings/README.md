@@ -591,73 +591,18 @@ host's offer (`set_downloads_offer`), not from a fixed list of settings:
   kept. EMPTY acts at once. It is disabled when nothing is kept, and while
   a download is queued, running or paused the value names that the files
   are in use and EMPTY stays disabled.
-- Registries: how many registries are on of those the Registries part
-  lists ("2 on of 3"), or the one built-in registry's name and "only"
-  while it alone is on ("Core Prime only"), or "None"; a registry marked
-  for removal is not counted. MANAGE… (`settings.registries.manage`)
-  opens the Registries part and asks nothing of the host.
+- REGISTRIES IN THE LIBRARY… (`settings.registries-in-library`), on the
+  main menu only (`Dialog::library_link`): a link whose hint reads
+  "Registries are in the Library." It asks the host to open the Library
+  on the Registries tab (`DialogAction::open_library`,
+  `Dialog::library_tab` set to `LibraryTab::registries`). The registries
+  themselves are drawn by the Library (`oa-ui-library`), not by this
+  dialog.
 
 In a game the page still shows. RESET and EMPTY are locked: the padlock
 and "Locked during a game." stand where those buttons were, and neither
-button is drawn. The check and the switches stay editable.
-
-### The Registries part
-
-The Registries part (`src/registries_page.cpp`) is a second view of the
-Downloads section (`Dialog::downloads_part`, `DownloadsPart::main` or
-`DownloadsPart::registries`). Opening the dialog, showing another section,
-‹ DOWNLOADS (`settings.registries.back`), Escape and a pad's B go back to
-the main view; Escape there cancels the dialog as everywhere else. Its
-heading reads DOWNLOADS · REGISTRIES, right of the ‹ DOWNLOADS link. Its
-rows come from the host's offer (`set_registries_offer`, `RegistriesOffer`
-of `RegistryRow`s), built-in registries first:
-
-- the avatar: the name's initials in a square, the first letters of its
-  first three words, or of a name of one word its first two letters, in
-  upper case; on the accent for a built-in registry;
-- the name, with a Built in chip after it for a built-in registry;
-- the subtitle: a built-in registry's "{n} packages · checked {age}"
-  ("not checked yet" before its first refresh), an added registry's
-  "{address} · {n} packages · not reviewed", " · {k} mirrors" after it
-  when the player added mirrors, and, when the last refresh found nothing
-  usable, "couldn't reach · list from {age}" in a built-in registry's
-  checked age's place and after an added one's subtitle;
-- an Off/On switch (`settings.registry.<id>`, its halves `.off` and `.on`);
-- for an added registry only, REMOVE (`settings.registry.<id>.remove`)
-  and ADD MIRROR… (`settings.registry.<id>.add-mirror`) under the
-  subtitle. REMOVE marks the row: its subtitle reads "Removed when you
-  press OK" in amber, UNDO (`settings.registry.<id>.undo`) stands in
-  REMOVE's place, the switch is drawn locked and ADD MIRROR… goes.
-
-Under the list a note says "Content from registries other than {built-in
-names} isn't reviewed by the OA team. OA still checks every package before
-using it.", or with no built-in registry "Content from these registries
-isn't reviewed by the OA team. …"; the offer's notice, why the last OK
-could not change a registry, stands over it in amber. The rows and the note
-scroll together in the section's view, with the section's scroll bar. The
-footer has ADD REGISTRY… (`settings.add-registry`) in Restore defaults'
-place, then Cancel and OK.
-
-The switches and the removals live on the dialog (`registry_chosen`,
-`registry_opened`, matched to the offer by id). They take effect at OK:
-`registry_changes` gives each registry marked for removal, never a
-built-in one, and each switch that differs from the one it was given;
-Cancel puts them back. ADD REGISTRY… asks the host with
-`DialogAction::add_registry`, ADD MIRROR… with `DialogAction::add_mirror`
-and the registry on `Dialog::mirror_request`; both open the Add registry
-window, which adds at once, and a later offer brings what it added in as
-it was added, so that Cancel does not remove it. In a game ADD REGISTRY…
-and ADD MIRROR… give way to the padlock and "Choose from the main menu.";
-the switches and REMOVE stay.
-
-Its controls are numbered from the first row's: the link
-(`registries_back_control`), then three for each registry, its switch,
-REMOVE or UNDO and ADD MIRROR… (`registry_switch_control`,
-`registry_remove_control`, `registry_mirror_control`); a built-in registry
-leaves its last two unused. ADD REGISTRY… takes Restore defaults' number
-(`add_registry_control`). Tab follows the link, each registry's controls
-and the footer; a key that moves the focus to a registry's control
-scrolls its row into view.
+button is drawn. The check and the install-ID switch stay editable. The
+link is not listed.
 
 `open_language_text_dialog` opens a dialog of the third kind,
 `DialogKind::language_text`: Language alone, its entry at the top
@@ -944,12 +889,9 @@ otherwise the mod's profile id (`ModDetails::profile_id`) or, for a folder
 without one, the folder's last component, in lower case, every character
 outside `a`–`z`, `0`–`9` and `-` a `-` (`geometry::word_form`), a second
 row of the same word with `-2` after it and a third with `-3`;
-`settings.open-mods-folder`; the Registries part's
-`settings.registries.back`, `settings.registry.<id>` with its halves
-`.off` and `.on`, `settings.registry.<id>.remove`, `.undo` and
-`.add-mirror`, `<id>` the registry's id, and `settings.add-registry` in
-`settings.restore-defaults`' place, with Downloads' MANAGE…
-`settings.registries.manage` opening it; and the question's
+`settings.open-mods-folder`; Downloads' REGISTRIES IN THE LIBRARY…
+`settings.registries-in-library`, on the main menu, which opens the
+Library on its Registries tab; and the question's
 `settings.question.yes` and `settings.question.no`, which a press tries
 first while it shows.
 
@@ -1295,24 +1237,15 @@ then Enter, a pointer release and a finger within reach, and that every
 part, including the focus ring, lies inside the window at Compact, Regular
 and Large, with each control named once.
 
-`ui-engine-settings-registries` holds the Registries part and the Add
-registry window. The part: the Registries row's value ("2 on of 3", "Core
-Prime only", None) and MANAGE…, the avatars, ages and subtitles of a
-built-in registry checked, never checked and unreachable and of an added
-one with mirrors and unreachable, the note with one, two and no built-in
-registries and the notice over it, built-in registries without REMOVE or
-ADD MIRROR…, REMOVE marking a row and UNDO taking it back, Cancel putting
-switches and removals back, the changes OK yields and that nothing applies
-before it, a new registry in the offer keeping the player's other choices
-and surviving Cancel, Escape and the link going back to Downloads with the
-focus on MANAGE…, ADD REGISTRY… and ADD MIRROR… asking the host, the locks
-in a game, and every part inside the dialog and apart at Compact, Regular
-and Large with nine registries scrolled to either end. The window: its
-words, field and buttons in every mode and phase, the keys over three and
-the unsigned line, the focus starting on CANCEL once ready, Enter and
-Space on CANCEL never adding, typing and a paste cut at its line break and
-at 2,048 bytes, a refused address going back to editing, the pointer, and
-every part inside the window at every class. Every name is unique.
+`ui-engine-settings-registries` holds the Add registry window: its words,
+field and buttons in every mode and phase, the keys over three and the
+unsigned line, the focus starting on CANCEL once ready, Enter and Space
+on CANCEL never adding, typing and a paste cut at its line break and at
+2,048 bytes, a refused address going back to editing, the pointer, and
+every part inside the window at every class. The registries list is the
+Library's (`ui-library` and `ui-library-layout`). Downloads' link, on the
+main menu, is `settings.registries-in-library` and opens the Library on
+Registries (`ui-engine-settings-downloads`).
 
 `ui-engine-settings-rows` holds every setting's row, written out as
 literals, to the table: its kind, label, hint lines without and with the

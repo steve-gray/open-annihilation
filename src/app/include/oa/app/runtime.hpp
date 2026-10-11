@@ -4383,9 +4383,9 @@ class Runtime final : public menu::Host,
     /// (runtime_registries.cpp).
     struct AddRegistryScreen;
 
-    /// Opens the Add registry window over Settings or the main menu, to add a
-    /// registry by its address: ADD REGISTRY… in Settings › Downloads, and a
-    /// caller with an address, whose check starts at once. Nothing opens
+    /// Opens the Add registry window over the Library or the main menu, to add a
+    /// registry by its address: ADD REGISTRY… on the Library's Registries tab,
+    /// and a caller with an address, whose check starts at once. Nothing opens
     /// while the window already shows.
     ///
     /// @param url the address to check at once; none opens the window empty
@@ -4406,21 +4406,30 @@ class Runtime final : public menu::Host,
     /// tell_mod_installs.
     void take_registry_files();
 
-    /// Gives the settings dialog the Registries part's registries, from the
-    /// registries in effect.
+    /// Turns a registry on or off at once, through the content service, and
+    /// refreshes an open Library. A refusal is logged, and the Registries tab
+    /// says why.
     ///
-    /// @param[in,out] dialog the dialog
-    /// @param opening the dialog has just opened: the note says why the last
-    ///     OK could not change a registry, once; otherwise the note it shows stays
-    void give_settings_registries(oa::ui::engine_settings::Dialog& dialog, bool opening);
+    /// @param id the registry's id
+    /// @param on true to turn it on
+    void change_library_registry(std::string_view id, bool on);
 
-    /// Makes the changes OK asks of the registries through the content
-    /// service. A refused change is logged, and the Registries part's note
-    /// says why the next time it opens.
+    /// Removes a registry the player added, at once, and refreshes an open
+    /// Library. A refusal is logged, and the Registries tab says why.
     ///
-    /// @param changes the changes (oa::ui::engine_settings::registry_changes)
-    void
-    apply_registry_changes(const std::vector<oa::ui::engine_settings::RegistryChange>& changes);
+    /// @param id the registry's id
+    void remove_library_registry(std::string_view id);
+
+    /// Keeps why the last registry change was refused, for the Library's
+    /// Registries tab, and refreshes an open Library. Empty clears the note.
+    ///
+    /// @param notice the sentence; empty when the change was kept
+    void finish_registry_edit(std::string notice);
+
+    /// Returns why the last registry change was refused.
+    ///
+    /// @return the sentence; empty when the last change was kept
+    [[nodiscard]] std::string registry_edit_notice() const;
 
     /// Counts the checks the Add registry windows have asked the content
     /// service for in this process, which --check-registries reads.
@@ -4433,9 +4442,9 @@ class Runtime final : public menu::Host,
     /// (--check-registries).
     void prepare_registries_check();
 
-    /// Lists, switches and removes an added registry in Settings › Downloads,
-    /// refuses an https address without asking the content service, and opens
-    /// an .oareg file the run posts, which is refused once its catalogue
+    /// Lists, switches and removes an added registry on the Library's Registries
+    /// tab, refuses an https address without asking the content service, and
+    /// opens an .oareg file the run posts, which is refused once its catalogue
     /// cannot be reached (--check-registries).
     void check_registries();
 

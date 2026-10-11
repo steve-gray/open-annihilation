@@ -212,7 +212,7 @@ bool before_with_search(const Library& library, const Candidate& left, const Can
 /// @param tab the tab
 /// @param kind the kind
 /// @return true for its own kind on Mods, Maps and Languages, every kind on
-///     Updates, and none on Active
+///     Updates, and none on Active or Registries
 bool tab_holds(Tab tab, Kind kind) {
     switch (tab) {
     case Tab::active:
@@ -225,6 +225,8 @@ bool tab_holds(Tab tab, Kind kind) {
         return kind == Kind::language;
     case Tab::updates:
         return true;
+    case Tab::registries:
+        return false;
     }
     return false;
 }

@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// --check-registries: Settings › Downloads › Registries and the Add registry
+// --check-registries: the Library's Registries tab and the Add registry
 // window over a registry list the check writes itself before the content
-// service starts. One added registry, signed with a key the check makes from
-// a fixed seed, its catalogue at 127.0.0.1:1, where nothing answers. The
-// check switches it off at OK, on at Cancel, and removes it at OK, reading
-// the player's registry list after each; types an https address, which is
-// refused without a check; and opens an .oareg file of another registry,
-// which is refused once its catalogue cannot be reached. It makes no
-// connection beyond that refused one to 127.0.0.1.
+// service starts. Settings › Downloads links to that tab. One added
+// registry, signed with a key the check makes from a fixed seed, its
+// catalogue at 127.0.0.1:1, where nothing answers. The check switches it
+// off and on at once, and removes it at once, reading the player's
+// registry list after each; CLOSE does not put a change back. It types an
+// https address, which is refused without a check; and opens an .oareg
+// file of another registry, which is refused once its catalogue cannot be
+// reached. It makes no connection beyond that refused one to 127.0.0.1.
 
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -267,16 +268,6 @@ void Runtime::check_registries() {
             require(running, "a click ended the run");
         }
     };
-    const auto open_registries = [&] {
-        tap(SDLK_COMMA, kShortcutModifier);
-        require(engine_settings_dialog() != nullptr, "the shortcut did not open Settings");
-        click_named("oa.settings.nav.downloads");
-        click_named("oa.settings.registries.manage");
-        require(
-            named("oa.settings.registries.back").has_value(),
-            "MANAGE… did not open the Registries part"
-        );
-    };
     // With --snapshot, the frame as presented at a step.
     const auto keep_frame = [this](std::string_view step) {
         if (options_.snapshot.empty())
@@ -287,6 +278,36 @@ void Runtime::check_registries() {
         capture_frame_ = nullptr;
         write_ppm(step_snapshot(options_.snapshot, step), presented);
     };
+    const auto open_downloads = [&] {
+        tap(SDLK_COMMA, kShortcutModifier);
+        require(engine_settings_dialog() != nullptr, "the shortcut did not open Settings");
+        click_named("oa.settings.nav.downloads");
+        require(
+            named("oa.settings.registries-in-library").has_value(),
+            "Downloads has no link to the Library"
+        );
+    };
+    const auto open_registries = [&] {
+        open_downloads();
+        keep_frame("menu-downloads");
+        click_named("oa.settings.registries-in-library");
+        require(
+            oa_layer().top() != nullptr && oa_layer().top()->name() == "library",
+            "the link did not open the Library"
+        );
+        require(
+            named("oa.library.tab.registries").has_value(),
+            "the Library did not show its Registries tab"
+        );
+    };
+    const auto close_library_and_settings = [&] {
+        if (oa_layer().find("library") != nullptr)
+            click_named("oa.library.close");
+        require(oa_layer().find("library") == nullptr, "CLOSE did not close the Library");
+        if (engine_settings_dialog() != nullptr)
+            click_named("oa.settings.cancel");
+        require(engine_settings_dialog() == nullptr, "Cancel did not close Settings");
+    };
     const auto window_list = [this]() -> kit::DisplayList {
         LayerScreen* top = oa_layer().top();
         require(
@@ -295,10 +316,10 @@ void Runtime::check_registries() {
         return top->display_list();
     };
 
-    // The part lists the added registry with REMOVE, and every built-in
+    // The tab lists the added registry with REMOVE, and every built-in
     // registry this build has with its switch alone.
     open_registries();
-    const std::string added_switch = "oa.settings.registry." + std::string(kAddedId);
+    const std::string added_switch = "oa.library.registry." + std::string(kAddedId);
     require(named(added_switch).has_value(), "the added registry is not listed");
     require(named(added_switch + ".remove").has_value(), "the added registry has no REMOVE");
     std::size_t built_ins = 0;
@@ -306,7 +327,7 @@ void Runtime::check_registries() {
         for (const content::RegistryView& listed : snapshot->registries) {
             if (listed.registry.origin != registry::Origin::built_in)
                 continue;
-            const std::string word = "oa.settings.registry." + listed.registry.descriptor.id;
+            const std::string word = "oa.library.registry." + listed.registry.descriptor.id;
             require(named(word).has_value(), word + " is not listed");
             require(!named(word + ".remove").has_value(), word + " offers REMOVE");
             require(!named(word + ".add-mirror").has_value(), word + " offers ADD MIRROR…");
@@ -317,44 +338,46 @@ void Runtime::check_registries() {
     std::cout << "registries check: listed " << kAddedId << " with REMOVE and " << built_ins
               << " built-in registr" << (built_ins == 1 ? "y" : "ies") << " without\n";
 
-    // Off, then OK: the list says so.
+    // Off applies at once, without OK.
     click_named(added_switch + ".off");
-    click_named("oa.settings.ok");
-    require(engine_settings_dialog() == nullptr, "OK did not close Settings");
     {
         const registry::PlayerRegistries list = read_list(list_file);
         const registry::AddedRegistry* added = added_of(list, kAddedId);
-        require(added != nullptr && !added->enabled, "OK did not store the registry turned off");
+        require(added != nullptr && !added->enabled, "the switch did not store the registry off");
         require(
             file_bytes(list_file).find("enabled: false") != std::string::npos,
             "the list does not say enabled: false"
         );
     }
-    std::cout << "registries check: OK stored the registry turned off\n";
+    std::cout << "registries check: the switch stored the registry turned off\n";
 
-    // On, then Cancel: the list is as it was, byte for byte.
-    const std::string before_cancel = file_bytes(list_file);
-    open_registries();
+    // On applies at once. CLOSE leaves the list as the switch wrote it.
     click_named(added_switch + ".on");
-    click_named("oa.settings.cancel");
-    require(engine_settings_dialog() == nullptr, "Cancel did not close Settings");
-    require(file_bytes(list_file) == before_cancel, "Cancel changed the registry list");
-    std::cout << "registries check: Cancel left the registry list as it was\n";
+    {
+        // Name the list: added_of's pointer is into it, and the temporary a
+        // call returns is gone at the end of the statement.
+        const registry::PlayerRegistries list = read_list(list_file);
+        const registry::AddedRegistry* added = added_of(list, kAddedId);
+        require(added != nullptr && added->enabled, "the switch did not store the registry on");
+    }
+    const std::string before_close = file_bytes(list_file);
+    close_library_and_settings();
+    require(file_bytes(list_file) == before_close, "CLOSE changed the registry list");
+    std::cout << "registries check: CLOSE left the registry list as the switch wrote it\n";
 
-    // REMOVE, then OK: the list no longer holds it.
+    // REMOVE applies at once, with no UNDO.
     open_registries();
     click_named(added_switch + ".remove");
-    require(named(added_switch + ".undo").has_value(), "REMOVE did not offer UNDO");
-    click_named("oa.settings.ok");
-    require(engine_settings_dialog() == nullptr, "OK did not close Settings");
-    require(added_of(read_list(list_file), kAddedId) == nullptr, "OK did not remove the registry");
-    std::cout << "registries check: OK removed the registry\n";
+    require(!named(added_switch + ".undo").has_value(), "REMOVE offered UNDO");
+    require(
+        added_of(read_list(list_file), kAddedId) == nullptr, "REMOVE did not remove the registry"
+    );
+    std::cout << "registries check: REMOVE removed the registry\n";
 
     // ADD REGISTRY… with an https address: refused at once, and the content
     // service never asked.
-    open_registries();
     const uint64_t asked = registry_checks_asked();
-    click_named("oa.settings.add-registry");
+    click_named("oa.library.add-registry");
     require(!window_list().controls.empty(), "ADD REGISTRY… did not open the window");
     require(SDL_TextInputActive(sdl_.window), "the address field did not start text input");
     SDL_Event typed{};
@@ -378,9 +401,8 @@ void Runtime::check_registries() {
     keep_frame("menu-add-registry-refused");
     click_named("oa.add-registry.cancel");
     require(oa_layer().find("add-registry") == nullptr, "CANCEL did not close the window");
-    require(engine_settings_dialog() != nullptr, "CANCEL closed Settings too");
-    click_named("oa.settings.cancel");
-    require(engine_settings_dialog() == nullptr, "Cancel did not close Settings");
+    require(oa_layer().find("library") != nullptr, "CANCEL closed the Library too");
+    close_library_and_settings();
     std::cout << "registries check: an https address was refused without a check\n";
 
     // An .oareg file of another registry, posted as --open posts it: the

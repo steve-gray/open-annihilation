@@ -44,6 +44,16 @@ struct Registry {
     bool downloads_on{true};
     /// Why downloads are off, in the player's words; empty when they are on.
     std::string downloads_off_reason{};
+    /// The registry's own switch: false when the player turned the registry off.
+    bool on{true};
+    /// Its catalogue's host, and the port when it is not 80. Empty for a built-in one.
+    std::string address{};
+    std::size_t packages{}; ///< the packages the catalogue kept for it lists
+    /// How long ago a refresh last found a usable catalogue, in seconds.
+    /// None when no refresh ever has.
+    std::optional<int64_t> checked_ago{};
+    std::size_t mirrors{}; ///< the mirrors the player added
+    bool unreachable{};    ///< the last refresh found nothing usable
 };
 
 /// One map of a map pack, as its catalogue entry lists it.
@@ -221,6 +231,9 @@ struct Inputs {
     std::optional<PlayingMod> playing_mod{};
     LanguageInUse language{};               ///< the language the game shows its words in
     std::vector<InstalledMaps> map_packs{}; ///< every installed map pack, with its maps
+    /// Why the last change of a registry was refused, in the player's words.
+    /// The Registries tab shows it in amber; empty for none.
+    std::string registries_notice{};
 };
 
 /// One of the Library's tabs, in the order they are shown.
@@ -229,11 +242,12 @@ enum class Tab : uint8_t {
     mods,
     maps,
     languages,
-    updates, ///< every kind, opening on the entries with an update
+    updates,    ///< every kind, opening on the entries with an update
+    registries, ///< every registry, with its switch; no list of packages
 };
 
 /// How many tabs there are.
-inline constexpr std::size_t tab_total = 5;
+inline constexpr std::size_t tab_total = 6;
 
 /// Which entries a tab shows, apart from its kind, in the order the filters are shown.
 enum class Filter : uint8_t {
@@ -310,9 +324,10 @@ struct Library {
     std::vector<Entry> entries{};
     Tab tab{Tab::active}; ///< the tab shown; Active until another is asked for
     /// Each tab's own filter, by Tab's order: Updates starts on Updates and
-    /// the others on All. The Active tab has no filters and ignores its own.
+    /// the others on All. Active and Registries have no filters and ignore
+    /// their own.
     std::array<Filter, tab_total> filters{
-        Filter::all, Filter::all, Filter::all, Filter::all, Filter::updates
+        Filter::all, Filter::all, Filter::all, Filter::all, Filter::updates, Filter::all
     };
     std::string tag{};                  ///< the tag shown; empty for every tag
     std::string query{};                ///< the search, at most max_query_bytes
@@ -537,6 +552,16 @@ enum class Action : uint8_t {
     back,
     settings,
     close,
+    /// ADD REGISTRY… on the Registries tab. The host opens the add-registry question.
+    add_registry,
+    /// ADD MIRROR… on a registry the player added. `ScreenResult::registry` names it.
+    add_mirror,
+    /// REMOVE on a registry the player added. `ScreenResult::registry` names it.
+    /// The host removes it at once.
+    remove_registry,
+    /// A registry's switch. `ScreenResult::registry` names it and
+    /// `ScreenResult::registry_on` is the half that was chosen.
+    set_registry,
 };
 
 /// One button of an entry's details.

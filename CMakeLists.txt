@@ -1753,11 +1753,12 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-challenge PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_challenge_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
-      # Settings › Downloads › Registries over a registry list the check
-      # writes under its player's folder: one added registry switched off and
-      # removed at OK, left alone by Cancel, an https address refused without
-      # a check, and an .oareg file whose catalogue at 127.0.0.1:1 cannot be
-      # reached. The data folder is the check's own.
+      # The Library's Registries tab, opened from Downloads' link, over a
+      # registry list the check writes under its player's folder: one added
+      # registry switched off and on at once and removed at once, CLOSE
+      # leaving the list as the switch wrote it, an https address refused
+      # without a check, and an .oareg file whose catalogue at 127.0.0.1:1
+      # cannot be reached. The data folder is the check's own.
       set(oa_registries_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/registries")
       file(MAKE_DIRECTORY "${oa_registries_dir}")
       add_test(NAME native-registries COMMAND oa-game --game-dir "${OA_GAME_DIR}"

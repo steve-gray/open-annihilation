@@ -54,9 +54,11 @@ translator finds them together. Every word passes through `Library::text`
 - `set_tab`, `set_filter`, `set_tag`, `set_query`, `select`,
   `move_selection`, `open_details` and `close_details` browse; each
   recomputes `visible`, the entries shown in their order:
-  - the tabs are Active, Mods, Maps, Languages and Updates, in that order.
-    A Library opens on Active (`Library::tab`), which lists no entry and
-    selects none: it shows the player's setup (`active_setup`, below);
+  - the tabs are Active, Mods, Maps, Languages, Updates and Registries,
+    in that order. A Library opens on Active (`Library::tab`), which lists
+    no entry and selects none: it shows the player's setup (`active_setup`,
+    below). Registries lists the registries (`Inputs::registries`) and has
+    no search, no filter and no package list;
   - Mods, Maps and Languages show their kind and Updates every kind, under
     the tab's own filter (`Library::filters`, `shown_filter`) and the tag:
     All; New keeps the tab's ten listings (`newest_count`) with the latest
@@ -194,9 +196,25 @@ words.
     players and the size in columns. The lines are labels, scroll as the
     details do when they are taller than the window, and take no press;
     Compact's footer holds no DETAILS there;
+  - **The Registries tab**, at every class, shows under the tabs, with no
+    search and no filters, one row for each registry: its avatar (the
+    initials, `registry_initials`, on the accent for a built-in registry
+    and on `colour::switch_idle` for one the player added), its name with
+    a Built in chip when it ships with the game, its subtitle
+    (`registry_subtitle`) and an Off/On switch; REMOVE and ADD MIRROR…
+    under the subtitle for one the player added. A note under the list
+    (`registry_note`) names the built-in registries, and a refusal
+    (`Inputs::registries_notice`) stands over it in the lock colour. The rows and
+    the note scroll as the details do. The footer holds ADD REGISTRY…,
+    SETTINGS… and CLOSE, and no DETAILS. During a match ADD REGISTRY… and
+    ADD MIRROR… give way to the padlock and "Choose from the main menu.";
+    the switches and REMOVE stay. A switch, REMOVE, ADD MIRROR… and ADD
+    REGISTRY… ask the host (`Action::set_registry`, `remove_registry`,
+    `add_mirror`, `add_registry`); the host applies a switch and a removal
+    at once;
   - **Compact** shows a list page: the header (the OA mark, "Library" and
     the list's age), the tabs with short names ("Active", "Mods", "Maps",
-    "Lang", "Upd" with the update count), the search field and the filter
+    "Lang", "Upd" with the update count, "Reg"), the search field and the filter
     drop-down (All, New, Installed and Updates with their counts, "All
     (11)", then "Tag: balance (3)" for each tag of the tab), on the
     Updates tab "{n} updates" and UPDATE ALL on a line over the list, the
@@ -245,12 +263,14 @@ words.
   - **Keys** (`kit::Key`): Tab and Shift+Tab follow the declared order: the
     tabs, the search, the filters, UPDATE ALL and the list, the details'
     actions, the footer's buttons (on Active, the tabs and the footer's
-    buttons alone); on Compact's details page, the way back, the actions,
+    buttons alone; on Registries, the tabs, each registry's switch, REMOVE
+    and ADD MIRROR…, and the footer's buttons); on Compact's details page, the way back, the actions,
     MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
-    to the ends; on Active, the page keys, Home and End scroll its lines.
+    to the ends; on Active and on Registries, the page keys, Home and End
+    scroll those lines.
     Enter on the list opens the details page at Compact and moves the
     focus to the first enabled action at Regular and Large.
     Escape clears a search that has the focus and holds words, else leaves
@@ -281,7 +301,11 @@ words.
   and its name):
   - `library.tab.active`, `library.tab.mods`, `library.tab.maps`,
     `library.tab.languages`, `library.tab.updates` (their text holds the
-    count: "Updates 2"); `library.search`;
+    count: "Updates 2"), `library.tab.registries`; `library.search`;
+  - on the Registries tab `library.registry.<id>` (its halves `.off` and
+    `.on`), and for a registry the player added `.remove` and
+    `.add-mirror`; `library.add-registry`; the labels
+    `library.registries.note` and `library.registries.notice`;
   - `library.filter` (Compact's drop-down, whose items, while it is open,
     are `library.filter.all`, `.new`, `.installed`, `.updates` and
     `.tag-<tag>`), or the chips or nav entries `library.filter.all`,
@@ -397,7 +421,8 @@ that names no revision, bylines with and without a download count, and
 the playing note; the queue lines, after an update that changed the
 rules and one that kept them; `change_texts` for a new revision, a new
 version and a side that names no revision; every text function,
-`release_text` among them; and a lookup that translates.
+`release_text` among them, and the Registries tab's initials, ages,
+subtitles and note; and a lookup that translates.
 
 `ui-library-search` checks that a name beats a tag, a tag an author or
 publisher and those a summary; several words; a word in no field hiding
@@ -417,7 +442,12 @@ press areas meet; that every action of the selected entry is a control
 on the Updates tab beside the Mods tab's filters, and SETTINGS… and CLOSE;
 that the Active tab is first, has no search, filter, list or DETAILS,
 reads its mod, language and maps as labels and keeps only the tabs and
-the footer in Tab's order; that Tab follows the declared order and the
+the footer in Tab's order; that the Registries tab lists each registry's
+switch, REMOVE and ADD MIRROR… only for one the player added, ADD
+REGISTRY… in the footer, and no search or DETAILS, and that a switch's
+halves, Space, REMOVE, ADD MIRROR… and ADD REGISTRY… ask for those
+actions, with ADD REGISTRY… and ADD MIRROR… absent during a match; that
+Tab follows the declared order and the
 arrows reach every control that takes the focus from the first tab, and
 no label; that the names are the screen's and unique; that every text
 fits by the kit's measure, and that the Rules and From facts read their

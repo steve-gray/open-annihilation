@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Downloads: its place in the section list before Developer, its rows for
-// none, one and three registries (the Registries row last), the labels and
-// hints filled with the registries' names, an install ID shown as its first
+// none, one and three registries, the link to the Library's Registries tab
+// on the main menu, the labels and hints filled with the registries' names,
+// an install ID shown as its first
 // 8 and last 4 hex
 // digits, each state's value, RESET and EMPTY disabled when they cannot
 // act and locked during a game, Cancel putting the switches and the check
@@ -294,7 +295,7 @@ void section_list_puts_downloads_before_developer() {
 
 void rows_follow_the_registries() {
     const settings::Dialog none = opened({});
-    OA_CHECK(geometry::open_rows(none).rows.rows.size() == 3);
+    OA_CHECK(geometry::open_rows(none).rows.rows.size() == 2);
     OA_CHECK(settings::scroll_limit(none) == 0);
     OA_CHECK(layout_has(none, "Check for content updates"));
     OA_CHECK(layout_has(none, "Downloaded files"));
@@ -302,7 +303,7 @@ void rows_follow_the_registries() {
 
     const settings::Dialog one = opened(offer_of({core_prime()}));
     const kit::PlacedRows one_rows = placed_rows(one);
-    OA_CHECK(one_rows.rows.size() == 5);
+    OA_CHECK(one_rows.rows.size() == 4);
     OA_CHECK(one_rows.rows[1].view.label == "Install ID");
     OA_CHECK(layout_has(one, "Install ID"));
     hint_matches(one_rows.rows[1].view, install_hint("Core Prime"), one);
@@ -313,7 +314,7 @@ void rows_follow_the_registries() {
         registry_row("north-archive", "North Archive", false, true, {}),
     }));
     const kit::PlacedRows three_rows = placed_rows(three);
-    OA_CHECK(three_rows.rows.size() == 9);
+    OA_CHECK(three_rows.rows.size() == 8);
     OA_CHECK(settings::scroll_limit(three) > 0);
     OA_CHECK(three_rows.rows[1].view.label == "Install ID \u00b7 Core Prime");
     OA_CHECK(three_rows.rows[3].view.label == "Install ID \u00b7 Ridge");
@@ -330,6 +331,26 @@ void rows_follow_the_registries() {
     OA_CHECK(layout_has(three, "Install ID \u00b7 Core Prime"));
     three.scroll[static_cast<std::size_t>(Page::downloads)] = settings::scroll_limit(three);
     OA_CHECK(layout_has(three, "Install ID \u00b7 North Archive"));
+
+    // Off the main menu the page has no link. On it, REGISTRIES IN THE
+    // LIBRARY… is the last row and a click opens the Library on Registries.
+    OA_CHECK(!control_named(none, "settings.registries-in-library").found);
+    settings::Dialog linked = opened({});
+    linked.library_link = true;
+    const kit::PlacedRows linked_rows = placed_rows(linked);
+    OA_CHECK(linked_rows.rows.size() == 3);
+    OA_CHECK(layout_has(linked, "Registries are in the Library."));
+    const kit::DisplayList linked_list = geometry::dialog_list(linked, nullptr);
+    const kit::Control* link = kit::control_of(
+        linked_list, kit::control_named(linked_list, "settings.registries-in-library")
+    );
+    OA_CHECK(link != nullptr && link->text == "REGISTRIES IN THE LIBRARY…");
+    if (link != nullptr) {
+        linked.library_tab = settings::LibraryTab::mods;
+        const Point at = centre({link->rect.x, link->rect.y, link->rect.width, link->rect.height});
+        OA_CHECK(click(linked, at) == DialogAction::open_library);
+        OA_CHECK(linked.library_tab == settings::LibraryTab::registries);
+    }
 }
 
 void values_show_each_state() {

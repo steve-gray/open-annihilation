@@ -7,12 +7,11 @@
 # the one-off notices of Open Annihilation's own in the dialog's look
 # (engine_settings/notice.hpp), the prompts that ask with buttons of
 # their own in the same look (engine_settings/prompt.hpp), the download
-# check (engine_settings/challenge.hpp), Downloads' Registries part
-# (src/registries_page.cpp), the Add registry window
+# check (engine_settings/challenge.hpp), the Add registry window
 # (engine_settings/add_registry.hpp) and the missing-language notice
 # (engine_settings/language_notice.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/downloads_page.cpp src/registries_page.cpp src/language_page.cpp
+  src/developer.cpp src/downloads_page.cpp src/language_page.cpp
   src/language_notice.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
   src/add_registry.cpp src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)

@@ -290,8 +290,8 @@ latched the closing key and drew a backdrop.
 - **Registries.** `runtime_registries.cpp` hosts the Add registry window,
   a screen named `add-registry` (`Runtime::AddRegistryScreen`, modal, over
   a backdrop, centred over the front end at the view's size class, nowhere
-  in a match) and drawn by `draw_add_registry`. ADD REGISTRY… in Settings ›
-  Downloads › Registries opens it empty (`open_add_registry`); a caller
+  in a match) and drawn by `draw_add_registry`. ADD REGISTRY… on the
+  Library's Registries tab opens it empty (`open_add_registry`); a caller
   with an address passes it, and its check starts at once. ADD MIRROR…
   opens it for a mirror of a registry the player added
   (`open_add_mirror`), with the keys the player trusts for that registry.
@@ -310,16 +310,16 @@ latched the closing key and drew a backdrop.
   for a file) and polls `registry_check` each frame in its tick; CANCEL
   closes it and drops the check, whose answer is never used. ADD calls
   `add_checked_registry` or `add_checked_mirror`, closes the window and
-  gives an open Settings dialog the Registries part's registries again; a
+  refreshes an open Library so its Registries tab lists what was added; a
   refusal then, the registries having moved since the check, shows as any
   other. The refusal sentences are one table in that file, `{name}` the
   checked registry's name (for a mirror, the registry's own) or the
-  address without one. The Registries part's offer comes from the content
-  service's snapshot (`give_settings_registries`, at each opening of the
-  dialog), leaving out an added registry whose id a built-in one has
-  taken. OK makes the part's changes with `set_registry_enabled` and
-  `remove_registry` (`apply_registry_changes`); a refusal is logged with
-  `refusal_text` and said in the part's note the next time it opens. The
+  address without one. The Library's Registries tab lists every registry
+  in effect from the content service's snapshot (`library_inputs`), leaving
+  out an added registry whose id a built-in one has taken. Its switch and
+  REMOVE apply at once with `set_registry_enabled` and `remove_registry`
+  (`change_library_registry`, `remove_library_registry`); a refusal is
+  logged with `refusal_text` and said on the tab at once. The
   window's field keeps the system's text input started while it has the
   focus (`text_field`); Space or a pad's A on it, and a press on it, start
   that input again (`OaLayer::restart_text_input`), so that an on-screen
@@ -328,9 +328,9 @@ latched the closing key and drew a backdrop.
   up to its first line break (`layer_paste`), which the window takes up to
   its 2,048-byte limit. `native-registries` (`--check-registries`) writes
   its own registry list under `--user-folder` before the content service
-  starts, switches its added registry off at OK and on at Cancel, removes
-  it at OK, refuses an https address without a check, and opens an
-  `.oareg` file whose catalogue at 127.0.0.1:1 cannot be reached.
+  starts, switches its added registry off and on at once, removes it at
+  once, refuses an https address without a check, and opens an `.oareg`
+  file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale on the kit canvas's crisp form, or at 150% on its smooth
   form in the modern fonts (`layer_drawing`), and lays them out at the size

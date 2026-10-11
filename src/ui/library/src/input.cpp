@@ -207,6 +207,24 @@ bool active_shows(const kit::DisplayList& list) {
     return kit::control_of(list, controls::active_mod) != nullptr;
 }
 
+/// Tells whether the Registries tab shows: its note is in the list. Its
+/// rows scroll as the details do.
+///
+/// @param list the display list
+/// @return true while it shows
+bool registries_shows(const kit::DisplayList& list) {
+    return kit::control_of(list, controls::registries_note) != nullptr;
+}
+
+/// Tells whether the page keys scroll the details: the details page, the
+/// Active tab or the Registries tab.
+///
+/// @param list the display list
+/// @return true while they do
+bool body_scrolls(const kit::DisplayList& list) {
+    return page_shows(list) || active_shows(list) || registries_shows(list);
+}
+
 /// Returns the drop-down field a menu opens from.
 ///
 /// @param menu the menu
@@ -471,23 +489,107 @@ ScreenResult show_tab(Library& library, ScreenState& state, const kit::DisplayLi
     return redrawn();
 }
 
+/// Returns what a Registries-tab control asks for.
+///
+/// A switch's left half and Left turn it off, its right half and Right turn
+/// it on, and Space or Enter toggles it. Nothing is asked when that is
+/// already its state. REMOVE and ADD MIRROR… name the registry; ADD REGISTRY…
+/// does not. During a match ADD REGISTRY… and ADD MIRROR… do nothing.
+///
+/// @param library the model
+/// @param list the display list
+/// @param id the control
+/// @param key the key, when one was pressed
+/// @param point the point, when the pointer let go on it
+/// @return what the host is to do; none when the control is not one of these
+std::optional<ScreenResult> registry_press(
+    const Library& library,
+    const kit::DisplayList& list,
+    kit::ControlId id,
+    std::optional<kit::Key> key,
+    std::optional<kit::Point> point
+) {
+    const bool on_switch = controls::registry_switch_control(id);
+    const bool on_remove = controls::registry_remove_control(id);
+    const bool on_mirror = controls::registry_mirror_control(id);
+    if (!on_switch && !on_remove && !on_mirror && id != controls::add_registry)
+        return std::nullopt;
+    if (id == controls::add_registry) {
+        if (library.inputs.in_match)
+            return ScreenResult{};
+        ScreenResult result = redrawn();
+        result.action = Action::add_registry;
+        return result;
+    }
+    const std::size_t index = controls::registry_index(id);
+    if (index >= library.inputs.registries.size())
+        return ScreenResult{};
+    const Registry& registry = library.inputs.registries[index];
+    if (on_switch) {
+        bool next = registry.on;
+        if (key) {
+            if (*key == kit::Key::left)
+                next = false;
+            else if (*key == kit::Key::right)
+                next = true;
+            else if (*key == kit::Key::space || *key == kit::Key::enter)
+                next = !registry.on;
+            else
+                return ScreenResult{};
+        } else if (point) {
+            const kit::Control* control = kit::control_of(list, id);
+            if (control == nullptr)
+                return ScreenResult{};
+            next = point->x >= control->rect.x + control->rect.width / 2;
+        } else {
+            next = !registry.on;
+        }
+        if (next == registry.on)
+            return ScreenResult{};
+        ScreenResult result = redrawn();
+        result.action = Action::set_registry;
+        result.registry = registry.id;
+        result.registry_on = next;
+        return result;
+    }
+    if (registry.built_in)
+        return ScreenResult{};
+    if (on_mirror && library.inputs.in_match)
+        return ScreenResult{};
+    ScreenResult result = redrawn();
+    result.action = on_remove ? Action::remove_registry : Action::add_mirror;
+    result.registry = registry.id;
+    return result;
+}
+
 /// Does what a control does when it is pressed, or takes Space or Enter.
 ///
 /// No press on a row gets, updates or installs anything: it selects the
 /// row, and at Compact opens its details page. A row's state icon that
 /// takes a press selects its row and asks for its GET or UPDATE, as that
-/// button would, while the button allows it.
+/// button would, while the button allows it. A Registries-tab switch reads
+/// the key or the point so each half sets its own state.
 ///
 /// @param[in,out] library the model
 /// @param[in,out] state the screen's state
 /// @param list the display list
 /// @param id the control
+/// @param key the key, when one was pressed on the control
+/// @param point the point, when the pointer let go on the control
 /// @return what the host is to do
-ScreenResult
-activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit::ControlId id) {
+ScreenResult activate(
+    Library& library,
+    ScreenState& state,
+    const kit::DisplayList& list,
+    kit::ControlId id,
+    std::optional<kit::Key> key,
+    std::optional<kit::Point> point
+) {
     const kit::Control* control = kit::control_of(list, id);
     if (control == nullptr || !control->enabled)
         return {};
+    if (const std::optional<ScreenResult> registry = registry_press(library, list, id, key, point))
+        return *registry;
     if (menu_item_control(id))
         return choose_item(library, state, list, id - controls::first_menu_item);
     state.menu = id == field_of(state.menu) ? state.menu : MenuKind::none;
@@ -704,7 +806,7 @@ Pane focused_pane(const ScreenState& state, const kit::DisplayList& list) {
     if (state.interaction.focus_shown && control != nullptr &&
         control->group == controls::details_group)
         return Pane::details;
-    return page_shows(list) || active_shows(list) ? Pane::details : Pane::list;
+    return body_scrolls(list) ? Pane::details : Pane::list;
 }
 
 } // namespace
@@ -806,7 +908,7 @@ ScreenResult library_pointer(
         }
         const kit::PointerOutcome outcome = kit::pointer_up(interaction, list, at);
         if (outcome.result == kit::PointerResult::activated)
-            return activate(library, state, list, outcome.control);
+            return activate(library, state, list, outcome.control, std::nullopt, at);
         ScreenResult result;
         result.redraw = outcome.result != kit::PointerResult::none;
         return result;
@@ -835,10 +937,9 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
     const bool on_drop_down = focus == controls::filter_menu || focus == controls::tags_menu ||
                               focus == controls::more_menu;
     // On the details page the page keys scroll its body, never the list it
-    // hides; on the Active tab they scroll its lines.
-    const bool in_details =
-        page_shows(list) || active_shows(list) ||
-        (focus != kit::no_control && !on_list && focused_pane(state, list) == Pane::details);
+    // hides; on the Active and Registries tabs they scroll those lines.
+    const bool in_details = body_scrolls(list) || (focus != kit::no_control && !on_list &&
+                                                   focused_pane(state, list) == Pane::details);
 
     switch (pressed) {
     case kit::Key::escape:
@@ -864,13 +965,17 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         if (on_list || focus == kit::no_control)
             return enter_list(library, state, list);
         if (on_drop_down)
-            return activate(library, state, list, focus);
+            return activate(library, state, list, focus, std::nullopt, std::nullopt);
+        // Enter on a switch toggles it. The kit sends Enter only to a button,
+        // a link, a list row or a tab.
+        if (controls::registry_switch_control(focus))
+            return activate(library, state, list, focus, pressed, std::nullopt);
         break;
     case kit::Key::space:
         if (on_list)
             return enter_list(library, state, list);
         if (on_drop_down)
-            return activate(library, state, list, focus);
+            return activate(library, state, list, focus, std::nullopt, std::nullopt);
         break;
     case kit::Key::up:
     case kit::Key::down:
@@ -968,7 +1073,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         show_in_details(state, list, interaction.focused);
         return redrawn();
     case kit::KeyResult::to_control:
-        return activate(library, state, list, outcome.control);
+        return activate(library, state, list, outcome.control, pressed, std::nullopt);
     case kit::KeyResult::accept:
         return enter_list(library, state, list);
     case kit::KeyResult::scroll:
