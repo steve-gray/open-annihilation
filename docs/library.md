@@ -34,7 +34,8 @@ settings and exactly what a download sends and records.
 
 The Library opens on the main menu, from:
 
-- **the OA button** at the bottom right of the main menu. It opens on the
+- **the OA button**, the Open Annihilation logo at the bottom right of the
+  main menu, left of the **Settings** button and its gears. It opens on the
   Updates tab while updates wait, and on Mods otherwise. While updates you
   can install wait, the button wears an amber dot in its top right corner,
   from the moment OA finds them: you need not open the Library to learn of
@@ -48,11 +49,15 @@ skirmish and battle room map lists have **MORE MAPS…** instead, which opens
 the map browser, and the battle room has **GET MAP**, which downloads the
 host's map without a detour ([map packs](maps/README.md)).
 
-The settings are one step away: **SETTINGS…** at the foot of the list, or
-**Cmd+,** on macOS and **Ctrl+,** elsewhere, opens them over the Library.
-**CLOSE**, or Escape, goes back to the main menu. The Library shows only on
-the main menu: it closes when the menu gives way to another screen, and in
-a game the in-game menu's OA button opens the settings, not the Library.
+The settings have a button of their own on the main menu, the gears beside
+the OA button, which opens them with no Library under them
+([settings](settings.md#opening-the-settings)). From the Library they are
+one step away: **SETTINGS…** at the foot of the list, or **Cmd+,** on macOS
+and **Ctrl+,** elsewhere, opens them over the Library. **CLOSE**, or
+Escape, goes back to the main menu. The Library shows only on the main
+menu: it closes when the menu gives way to another screen, and in a game
+the in-game menu's button, which shows the gears too, opens the settings,
+not the Library.
 
 The Library lays itself out for the room the window gives it, at the
 Interface size in Settings › Graphics ([settings](settings.md#graphics)):
