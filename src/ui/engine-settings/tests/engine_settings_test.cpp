@@ -15,7 +15,8 @@
 // size Larger, a stored value winning and Restore defaults bringing them
 // back. Control size and the Controller section's settings: their keys,
 // defaults, words, the speeds' ranges and stops, unknown values, and the
-// round trip.
+// round trip. Interface size: its key, its default Auto, its five words,
+// the words it refuses and its round trip, which leaves other keys alone.
 
 #include "oa/ui/engine_settings.hpp"
 
@@ -23,11 +24,13 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -2132,6 +2135,127 @@ void the_hud_scaling_default_read_and_round_trip() {
     CHECK(values.empty());
 }
 
+/// Interface size: Auto everywhere by default, with the player's own file
+/// and with a named one, a file written before it included; each of its
+/// five words reads its size and round-trips alone; any other text, 150%
+/// and 0 among them, reads Auto; writing it leaves every other key as it
+/// is, and Restore defaults then OK erases its key.
+void the_interface_size_default_read_and_round_trip() {
+    using settings::InterfaceSize;
+    CHECK(settings::key::interface_size == "open-annihilation.interface-size");
+    settings::Inputs own_mac = players_own_on_linux;
+    own_mac.macos = true;
+    settings::Inputs light = players_own_on_linux;
+    light.light_machine = true;
+    settings::Inputs deck = players_own_on_linux;
+    deck.steam_deck_panel_hz = 90;
+    for (const auto& inputs : {settings::Inputs{}, players_own_on_linux, own_mac, light, deck}) {
+        const auto defaults = settings::default_settings(inputs);
+        CHECK(defaults.interface_size == InterfaceSize::automatic);
+        CHECK(settings::read_settings({}, inputs, false) == defaults);
+    }
+    CHECK(settings::EngineSettings{}.interface_size == InterfaceSize::automatic);
+
+    // The dialog's order, each size's word and percent, and back.
+    CHECK(
+        settings::interface_size_choices == (std::array<InterfaceSize, 5>{
+                                                InterfaceSize::automatic,
+                                                InterfaceSize::size_100,
+                                                InterfaceSize::size_200,
+                                                InterfaceSize::size_300,
+                                                InterfaceSize::size_400,
+                                            })
+    );
+    constexpr std::array<std::string_view, 5> words{"automatic", "100", "200", "300", "400"};
+    constexpr std::array<int32_t, 5> percents{0, 100, 200, 300, 400};
+    for (std::size_t index = 0; index < words.size(); ++index) {
+        const InterfaceSize size = settings::interface_size_choices[index];
+        CHECK(settings::interface_size_text(size) == words[index]);
+        CHECK(settings::interface_size_from_text(words[index]) == size);
+        CHECK(settings::interface_size_percent(size) == percents[index]);
+        CHECK(
+            read_one(settings::key::interface_size, std::string{words[index]}).interface_size ==
+            size
+        );
+    }
+
+    // Any other text reads Auto: 150% is not offered, and 0 is no size.
+    const auto size_of = [](const char* text) {
+        return read_one(settings::key::interface_size, text).interface_size;
+    };
+    for (const char* text :
+         {"150",
+          "0",
+          "",
+          "Auto",
+          "auto",
+          "Automatic",
+          "100%",
+          " 100",
+          "100 ",
+          "1",
+          "2",
+          "500",
+          "-100",
+          "1000",
+          "0100",
+          "1/2"}) {
+        CHECK(!settings::interface_size_from_text(text));
+        CHECK(size_of(text) == InterfaceSize::automatic);
+    }
+    auto expected = settings::read_settings({}, {}, false);
+    expected.interface_size = InterfaceSize::size_300;
+    CHECK(read_one(settings::key::interface_size, "300") == expected);
+
+    // Each size chosen alone writes its word alone and reads back; Auto
+    // chosen again by hand is written as its word; Restore defaults then OK
+    // erases the key.
+    const auto defaults = settings::default_settings(players_own_on_linux);
+    for (const InterfaceSize size : settings::interface_size_choices) {
+        if (size == InterfaceSize::automatic)
+            continue;
+        auto chosen = defaults;
+        chosen.interface_size = size;
+        Values values;
+        settings::write_settings(values, defaults, chosen, defaults, false);
+        CHECK(values.size() == 1);
+        CHECK(
+            values.at(std::string{settings::key::interface_size}) ==
+            settings::interface_size_text(size)
+        );
+        CHECK(settings::read_settings(values, players_own_on_linux, false) == chosen);
+        settings::write_settings(values, chosen, defaults, defaults, false);
+        CHECK(values.at(std::string{settings::key::interface_size}) == "automatic");
+        CHECK(settings::read_settings(values, players_own_on_linux, false) == defaults);
+        settings::write_settings(values, defaults, chosen, defaults, false);
+        settings::write_settings(values, chosen, defaults, defaults, true);
+        CHECK(values.empty());
+    }
+
+    // Writing it leaves every other key as it was: another setting's, a
+    // key of the game's own and one the settings do not know.
+    Values values;
+    values[std::string{settings::key::hud_scaling}] = "0";
+    values[std::string{settings::key::menu_scaling}] = "unfiltered";
+    values[std::string{settings::key::text_size}] = "120";
+    values["Total Annihilation|SwitchAlt"] = "1";
+    values["open-annihilation.not-a-setting"] = "kept";
+    const Values others = values;
+    const auto opened = settings::read_settings(values, players_own_on_linux, false);
+    auto chosen = opened;
+    chosen.interface_size = InterfaceSize::size_200;
+    settings::write_settings(values, opened, chosen, defaults, false);
+    CHECK(values.size() == others.size() + 1);
+    for (const auto& [key, value] : others)
+        CHECK(values.contains(key) && values.at(key) == value);
+    CHECK(values.at(std::string{settings::key::interface_size}) == "200");
+    const auto read_back = settings::read_settings(values, players_own_on_linux, false);
+    CHECK(read_back.interface_size == InterfaceSize::size_200);
+    CHECK(!read_back.hud_scaling);
+    CHECK(read_back.menu_scaling == settings::MenuScaling::unfiltered);
+    CHECK(read_back.text_size == 120);
+}
+
 void menu_scaling_and_native_density_default_read_and_round_trip() {
     CHECK(settings::key::menu_scaling == "open-annihilation.menu-scaling");
     CHECK(settings::key::native_density == "open-annihilation.native-density");
@@ -2291,6 +2415,7 @@ int main() {
     the_zoomed_out_units_default_read_and_round_trip();
     the_window_frame_default_read_and_round_trip();
     the_hud_scaling_default_read_and_round_trip();
+    the_interface_size_default_read_and_round_trip();
     the_zoom_limits_default_read_and_round_trip();
     the_view_past_the_map_edge_defaults_reads_and_round_trips();
     if (failures != 0)

@@ -580,6 +580,9 @@ struct Options {
     // installing it again, then installs a catalogue revision while Settings
     // stay open and no prompt shows.
     bool check_language_install = false;
+    // Shows a made-up download check over the main menu, opens its page,
+    // retries it and cancels it, and keeps it hidden during a skirmish.
+    bool check_challenge = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

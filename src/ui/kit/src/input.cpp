@@ -437,14 +437,15 @@ strip_levels(const Control& control, const Rect& area, const LevelsLook& look) {
     return entry;
 }
 
-} // namespace
-
-Reached reach(const DisplayList& list, Point finger, int32_t reach_px) noexcept {
-    const ControlId under = hit(list, finger);
-    if (under != no_control || reach_px <= 0)
-        return {under, finger};
-
-    const int64_t within = int64_t{reach_px} * reach_px;
+/// Returns the nearest enabled control a finger on none reaches.
+///
+/// @param list the display list
+/// @param finger the finger, which no control holds
+/// @param within tells whether a squared distance, in points squared, is within reach
+/// @return the control and its nearest point; no control and the finger when none is within reach
+template <typename Within>
+[[nodiscard]] Reached
+nearest_control(const DisplayList& list, Point finger, Within within) noexcept {
     bool found = false;
     int64_t best_distance = 0;
     Reached best{no_control, finger};
@@ -459,13 +460,49 @@ Reached reach(const DisplayList& list, Point finger, int32_t reach_px) noexcept 
         if (hit(list, candidate) != control.id)
             continue;
         const int64_t distance = distance_squared(candidate, finger);
-        if (distance <= within && (!found || distance < best_distance)) {
+        if (within(distance) && (!found || distance < best_distance)) {
             found = true;
             best_distance = distance;
             best = {control.id, candidate};
         }
     }
     return found ? best : Reached{no_control, finger};
+}
+
+} // namespace
+
+Reached reach(const DisplayList& list, Point finger, int32_t reach_px) noexcept {
+    const ControlId under = hit(list, finger);
+    if (under != no_control || reach_px <= 0)
+        return {under, finger};
+    const int64_t within = int64_t{reach_px} * reach_px;
+    return nearest_control(list, finger, [within](int64_t distance) { return distance <= within; });
+}
+
+Reached reach(const DisplayList& list, Point finger, float within) noexcept {
+    const ControlId under = hit(list, finger);
+    if (under != no_control || !(within > 0.0F))
+        return {under, finger};
+    // A float's square is exact in double precision, and so is a squared
+    // distance between two points of a canvas, so the distance is within the
+    // reach exactly when its square is within the reach's square.
+    const double limit = static_cast<double>(within) * static_cast<double>(within);
+    return nearest_control(list, finger, [limit](int64_t distance) {
+        return static_cast<double>(distance) <= limit;
+    });
+}
+
+void mark_states(DisplayList& list, const Interaction& interaction) noexcept {
+    for (Item& item : list.items) {
+        if (item.control == no_control) {
+            item.state.focused = false;
+            item.state.pressed = false;
+            continue;
+        }
+        item.state.focused = interaction.focus_shown && item.control == interaction.focused;
+        item.state.pressed =
+            interaction.pressed != no_control && item.control == interaction.pressed;
+    }
 }
 
 PointerOutcome pointer_move(Interaction& interaction, const DisplayList& list, Point point) {

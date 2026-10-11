@@ -219,19 +219,36 @@ latched the closing key and drew a backdrop.
   under it asked. The saves notice, the mod warning and the found folder's
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
+- **The download check.** `Runtime::tell_challenges`, once a frame beside
+  `tell_mod_installs`, reads the download queue when its generation moves.
+  While the main menu shows, including under the Library or Settings, one
+  window named `challenge` shows the registry's name, the page and the code
+  (`draw_challenge`). It joins at once, or with `show_when_free` while a
+  notice or a question is the top screen. OPEN THE CHECK calls
+  `open_web_link` with the page the queue gave and leaves the window
+  waiting; that button is absent when `web_address_available` is false. TRY
+  AGAIN asks the queue to start that download again. CANCEL cancels that
+  download and the same registry's downloads that are still waiting, then
+  closes the window. A passed check, or a download cancelled somewhere
+  else, closes it. A check that arrives during a game waits until the main
+  menu, and leaving the main menu hides the window without cancelling the
+  download. A new code refreshes the same window.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale and lays them out at the size class of the points left
   over (`LayerView`, from `view`, worked out afresh whenever the window's
-  size or the touch state may have changed: each input, tick and present
-  lays the screens out again, `lay_out_screens`). It fills a `kit::Viewport`
+  size, the touch state or the Interface size in effect may have changed:
+  each input, tick and present lays the screens out again,
+  `lay_out_screens`). It fills a `kit::Viewport`
   as the Game files screen fills its own: the canvas in pixels (the
   renderer's output size, a desktop window's size in pixels, never its
   points), the canvas pixels a window point holds (`density`) and, while
-  the game has touch controls, the window's safe insets. The scale is
-  `kit::auto_scale`: the canvas height over 720, halves rounded up, never
-  below the density, so a point is never smaller than a window point; it is
-  then held to the largest scale at which Compact's 480 by 324 dialog fits
-  the canvas less its insets, and to at least 1. The class comes from
+  the game has touch controls, the window's safe insets. The scale
+  (`kit::layer_viewport`) is the Interface size setting's whole step, taken
+  when its OK is pressed, or for Auto `kit::auto_scale`: the canvas height
+  over 720, halves rounded up, never below the density, so a point is never
+  smaller than a window point; it is then held to the largest scale at
+  which Compact's 480 by 324 dialog fits the canvas less its insets, and to
+  at least 1. The class comes from
   `kit::frame_of`: Compact below 960 by 540 points, Regular from 960 by 540,
   Large from 1280 by 720. A 640 by 480 window is Compact at 1×, pixel for
   pixel as 0.7.3; 1024 by 768 is Regular at 1×, 1280 by 720 Large at 1×,
@@ -3108,6 +3125,10 @@ a missing scheme, and an address whose body holds a space or an ASCII
 control, is refused and is not handed to the browser. `app-web-address`
 checks that through a stub opener
 ([testing.md](../../docs/development/testing.md#opening-a-web-address)).
+The download check asks `web_address_available` before it offers OPEN THE
+CHECK, and opens the page with `open_web_link` only when that button is
+pressed. `native-challenge` checks the window, the recorded page, the
+retry, the cancel and a check that waits out a skirmish.
 Neither is a hook, and no extension fills them.
 
 An extension calls `modern_text_chain`, `modern_text_layout` and

@@ -159,6 +159,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.zoomed-out-after` | `1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`; any other text reads as `1/6` | `1/6` |
 | `open-annihilation.window-frame` | `hidden-in-play` or `always-shown`; any other text reads as `hidden-in-play` | `hidden-in-play` |
 | `open-annihilation.hud-scaling` | 0 or 1 | 1 |
+| `open-annihilation.interface-size` | `automatic`, or the percent `100`, `200`, `300` or `400`; any other text, `150` and `0` among them, reads as `automatic` | `automatic` |
 | `open-annihilation.modern-fonts` | 0 or 1 | 1 with the player's own file, else 0 |
 | `open-annihilation.text-outline` | 0 or 1 | 1 |
 | `open-annihilation.text-shadow` | 0 or 1 | 1 |

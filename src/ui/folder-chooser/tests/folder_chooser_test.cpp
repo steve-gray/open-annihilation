@@ -129,9 +129,9 @@ void check_controls(const chooser::Layout& layout, const chooser::Viewport& view
     }
     OA_CHECK(enabled == layout.focus_order);
     // Every painted item but the scrolled ones lies on the canvas.
-    for (const gf::Item& item : layout.paint.items)
+    for (const oa::ui::kit::Item& item : layout.paint.list.items)
         if (item.clip.height <= 0)
-            OA_CHECK(inside(item.box, {0, 0, viewport.width, viewport.height}));
+            OA_CHECK(inside(item.rect, {0, 0, viewport.width, viewport.height}));
 }
 
 /// Checks the list's targets, their order and where presses go.
@@ -175,9 +175,9 @@ void check_list() {
         OA_CHECK(empty.focus_order.size() == 3);
         OA_CHECK(empty.focus_order.front() == (Target{TargetKind::browse, 0}));
         const bool notice_shown = std::any_of(
-            empty.paint.items.begin(), empty.paint.items.end(), [](const gf::Item& item) {
-                return item.role == gf::ItemRole::banner;
-            }
+            empty.paint.list.items.begin(),
+            empty.paint.list.items.end(),
+            [](const oa::ui::kit::Item& item) { return item.role == oa::ui::kit::Role::banner; }
         );
         OA_CHECK(notice_shown);
     }
@@ -253,10 +253,11 @@ void check_keys() {
     OA_CHECK(chooser::key(layout, state, chooser::Key::down).command == chooser::Command::none);
     OA_CHECK(state.focus_shown && state.focus == 0);
     layout = chooser::lay_out(model, state, viewport, {});
-    const bool marked =
-        std::any_of(layout.paint.items.begin(), layout.paint.items.end(), [](const gf::Item& item) {
-            return item.focused;
-        });
+    const bool marked = std::any_of(
+        layout.paint.list.items.begin(),
+        layout.paint.list.items.end(),
+        [](const oa::ui::kit::Item& item) { return item.state.focused; }
+    );
     OA_CHECK(marked);
     // Right along the places, to the parent folder, then down into the folders.
     static_cast<void>(chooser::key(layout, state, chooser::Key::right));
@@ -346,10 +347,11 @@ void check_presses() {
     chooser::press_down(layout, state, centre(browse_box));
     OA_CHECK(state.pressed >= 0);
     layout = chooser::lay_out(list_model(), state, viewport, {});
-    const bool held =
-        std::any_of(layout.paint.items.begin(), layout.paint.items.end(), [](const gf::Item& item) {
-            return item.pressed;
-        });
+    const bool held = std::any_of(
+        layout.paint.list.items.begin(),
+        layout.paint.list.items.end(),
+        [](const oa::ui::kit::Item& item) { return item.state.pressed; }
+    );
     OA_CHECK(held);
     const chooser::Outcome opened = chooser::press_up(layout, state, centre(browse_box));
     OA_CHECK(opened.command == chooser::Command::open_browser);
