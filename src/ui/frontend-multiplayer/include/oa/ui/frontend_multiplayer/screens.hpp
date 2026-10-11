@@ -395,7 +395,9 @@ int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) no
 /// Returns the slot of the battle room's row whose name has the keyboard's
 /// focus: the front panel's focused control when it is a remote player's
 /// PLAYER<slot> name (the local player's own row is a label and takes no
-/// focus).
+/// focus). Tab and the arrow keys, which are also the pad's D-pad, move
+/// the focus onto those rows after the lists and before the chat line.
+/// Up and Down stay inside a list, and Left and Right stay in the chat line.
 ///
 /// @return the slot, 0..9; -1 while the battle room is not shown, a dialog
 ///     covers it, or the focus is on no player's row
