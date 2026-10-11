@@ -8,6 +8,7 @@
 // the screen, from the preferences file, before the Runtime starts.
 #include "game_files_screen.hpp"
 #include "language_packs.hpp"
+#include "window_pixels.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/user_folder.hpp"
@@ -526,16 +527,13 @@ dialog_key_of(const SDL_KeyboardEvent& key) noexcept {
     }
 }
 
-/// Tells whether the dialog takes a touch device's fingers: a touch screen's, or the check's.
+/// Tells whether the dialog takes a touch device's fingers: a touch screen's (touch_screen), or
+/// the check's.
 ///
 /// @param device the device
 /// @return true for a direct touch device or the check's
 [[nodiscard]] bool accepted_touch(SDL_TouchID device) noexcept {
-    if (device == SDL_MOUSE_TOUCHID || device == SDL_PEN_TOUCHID)
-        return false;
-    if (device == game_files_check_touch_id)
-        return true;
-    return SDL_GetTouchDeviceType(device) == SDL_TOUCH_DEVICE_DIRECT;
+    return device == game_files_check_touch_id || touch_screen(device);
 }
 
 } // namespace
