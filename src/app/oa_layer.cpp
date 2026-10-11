@@ -54,6 +54,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -2065,6 +2066,36 @@ bool paragraphs_ok(const char* const* paragraphs, std::size_t count) noexcept {
     return true;
 }
 
+/// Gives one drawn part the pointer's hover and press, on its look, so the
+/// painter shows them. The extension's list is not this copy.
+///
+/// @param[in,out] item one part of the copy
+/// @param interaction the pointer and the focus
+void show_pointer(kit::Item& item, const kit::Interaction& interaction) {
+    if (item.control == kit::no_control)
+        return;
+    const bool over = item.control == interaction.hovered;
+    const bool held = item.control == interaction.pressed;
+    std::visit(
+        [&](auto& look) {
+            using Look = std::decay_t<decltype(look)>;
+            if constexpr (requires(Look& value) { value.hovered = true; })
+                look.hovered = over || held;
+            if constexpr (requires(Look& value) { value.held = true; })
+                look.held = over && held;
+            if constexpr (std::is_same_v<Look, kit::OaButtonLook>) {
+                if (over && held)
+                    look.state = kit::OaButtonState::pressed;
+                else if (over || held)
+                    look.state = kit::OaButtonState::hovered;
+                else
+                    look.state = kit::OaButtonState::idle;
+            }
+        },
+        item.look
+    );
+}
+
 /// A registered kit screen: modal, over a backdrop, filling the front end's
 /// room. Its layout is the descriptor's, drawn with the kit. act returning 2
 /// closes it; closed runs once, from close.
@@ -2123,10 +2154,11 @@ class RegisteredKitScreen final : public LayerScreen {
         ++revision_;
     }
 
-    /// Draws the screen's display list with the kit.
+    /// Draws a copy of the screen's display list, with the pointer's hover
+    /// and press and the focus ring on it.
     ///
     /// @param canvas where it draws
-    void draw(const kit::Canvas& canvas) const override { kit::paint(canvas, list_); }
+    void draw(const kit::Canvas& canvas) const override { kit::paint(canvas, shown_list()); }
 
     /// Takes a pointer's move, press or release. A release over the control
     /// it held is a press of that control (act, with enter). A hover or a
@@ -2189,10 +2221,11 @@ class RegisteredKitScreen final : public LayerScreen {
     /// @return none
     LayerAnswer wheel(kit::Point /*at*/, float /*notches*/) override { return LayerAnswer::none; }
 
-    /// Returns the screen's display list.
+    /// Returns the screen's display list, with the hover, the press and the
+    /// focus ring it draws.
     ///
     /// @return the list
-    [[nodiscard]] kit::DisplayList display_list() const override { return list_; }
+    [[nodiscard]] kit::DisplayList display_list() const override { return shown_list(); }
 
     /// Returns the screen's hover, press and focus.
     ///
@@ -2238,6 +2271,29 @@ class RegisteredKitScreen final : public LayerScreen {
             return LayerAnswer::redraw;
         }
         return LayerAnswer::none;
+    }
+
+    /// Returns a copy of the layout with the pointer's hover and press and
+    /// the focus ring marked on it. The extension's list is left as lay_out
+    /// returned it.
+    ///
+    /// @return the list the screen draws
+    [[nodiscard]] kit::DisplayList shown_list() const {
+        kit::DisplayList shown = list_;
+        std::vector<kit::Item> items;
+        items.reserve(shown.items.size());
+        for (kit::Item& item : shown.items) {
+            if (item.role == kit::Role::focus_ring)
+                continue;
+            show_pointer(item, interaction_);
+            items.push_back(std::move(item));
+        }
+        shown.items = std::move(items);
+        kit::mark_states(shown, interaction_);
+        if (interaction_.focus_shown)
+            if (const kit::Control* control = kit::control_of(shown, interaction_.focused))
+                kit::add_focus_ring(shown, control->rect, true);
+        return shown;
     }
 
     std::string name_;               ///< the screen's name
