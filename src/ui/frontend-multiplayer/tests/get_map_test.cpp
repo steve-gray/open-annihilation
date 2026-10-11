@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -705,7 +706,10 @@ void the_joiner_reads_the_host_map(Driver& d) {
 /// A pack map installed while the battle room shows is found by its own
 /// per-frame selection, and the release mounted afresh is read again.
 void the_battle_room_finds_an_installed_map(Driver& d) {
-    const auto base = std::filesystem::temp_directory_path() / "oa-p11-get-map";
+    // A folder of this run's own: runs at once on one machine never share one.
+    std::random_device entropy;
+    const auto base = std::filesystem::temp_directory_path() /
+                      ("oa-get-map-" + std::to_string(entropy()) + "-" + std::to_string(entropy()));
     const auto first = base / "release-2";
     const auto second = base / "release-3";
 
