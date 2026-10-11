@@ -46,16 +46,13 @@ constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::kit_gall
 // ---------------------------------------------------------------------------
 // The sections' rows.
 
-/// Mods' one row: the list of the mods the game can play.
-constexpr std::array<Setting, 1> kModsRows{Setting::mod};
 /// Controls' rows: the zoom's limits right under the switch for the wheel,
 /// and how far past the map's edges the view goes under them.
-constexpr std::array<Setting, 6> kControlsRows{
+constexpr std::array<Setting, 5> kControlsRows{
     Setting::wheel_zoom,
     Setting::max_zoom_out,
     Setting::max_zoom_in,
     Setting::view_past_map_edge,
-    Setting::escape_opens_menu,
     Setting::switch_alt,
 };
 /// Common Tweaks' rows: the player's own folder first.
@@ -64,23 +61,28 @@ constexpr std::array<Setting, 3> kCommonTweaksRows{
     Setting::unit_limit,
     Setting::path_search,
 };
-/// Graphics' rows: how units look zoomed out, the zoom they look so from
-/// right under the way, then the window's frame, the HUD's scaling and,
-/// last, the size Open Annihilation's own screens are drawn at.
-constexpr std::array<Setting, 13> kGraphicsRows{
+/// Graphics' rows: how units look zoomed out, and the zoom they look so
+/// from right under the way.
+constexpr std::array<Setting, 9> kGraphicsRows{
     Setting::max_frame_rate,
     Setting::anti_aliasing,
     Setting::screen_size,
     Setting::hardware_acceleration,
     Setting::vertical_sync,
-    Setting::menu_scaling,
     Setting::native_density,
     Setting::explosion_flash,
     Setting::zoomed_out_units,
     Setting::zoomed_out_after,
+};
+/// User Interface's rows: how the menus scale, the window's frame, the
+/// HUD's scaling, the size Open Annihilation's own screens are drawn at,
+/// then whether Escape opens the game menu.
+constexpr std::array<Setting, 5> kUserInterfaceRows{
+    Setting::menu_scaling,
     Setting::window_frame,
     Setting::hud_scaling,
     Setting::interface_size,
+    Setting::escape_opens_menu,
 };
 /// Language's rows: the language first, and the text size right
 /// under the switch it needs.
@@ -193,11 +195,11 @@ constexpr std::array<Setting, 0> kDownloadsRows{};
 
 /// What each section shows, in Page's order.
 constexpr std::array<std::span<const Setting>, page_count> kPageRows{
-    kModsRows,
     kControlsRows,
     kCommonTweaksRows,
     kLanguageRows,
     kGraphicsRows,
+    kUserInterfaceRows,
     kTouchRows,
     kControllerRows,
     kDeveloperRows,
@@ -212,11 +214,11 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
 };
 /// Each section's name, as its list entry shows it, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageNames{
-    "Mods",
     "Controls",
     "Common Tweaks",
-    "Language",
+    "Language & Text",
     "Graphics",
+    "User Interface",
     "Touch",
     "Controller",
     "Developer",
@@ -231,11 +233,11 @@ constexpr std::array<std::string_view, page_count> kPageNames{
 };
 /// Each section's heading, in capitals, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageHeadings{
-    "MODS",
     "CONTROLS",
     "COMMON TWEAKS",
-    "LANGUAGE",
+    "LANGUAGE & TEXT",
     "GRAPHICS",
+    "USER INTERFACE",
     "TOUCH",
     "CONTROLLER",
     "DEVELOPER",
@@ -251,11 +253,11 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
 /// Each section's name in kebab case, Page's enumerator with '_' as '-',
 /// in Page's order.
 constexpr std::array<std::string_view, page_count> kPageWords{
-    "mods",
     "controls",
     "common-tweaks",
     "language",
     "graphics",
+    "user-interface",
     "touch",
     "controller",
     "developer",
@@ -672,12 +674,6 @@ void copy_field(const SettingsModel& to, const SettingsModel& from) {
 template <auto Field>
 void copy_option(const SettingsModel& to, const SettingsModel& from) {
     to.settings->mod_options.*Field = from.settings->mod_options.*Field;
-}
-
-/// Copies the mod and the folder the player picked.
-void copy_mod_folders(const SettingsModel& to, const SettingsModel& from) {
-    to.settings->mod_folder = from.settings->mod_folder;
-    to.settings->picked_mod_folder = from.settings->picked_mod_folder;
 }
 
 /// Returns a fixed number of hint lines.
@@ -1739,15 +1735,6 @@ constexpr Spec linear(std::string_view id, std::string_view label, Hint hint) no
     );
 }
 
-/// The Mod row: the bespoke list of Mods stands in its place, and a check's
-/// own section shows it as a switch that changes nothing.
-constexpr Spec mod_row() noexcept {
-    Spec spec(kit::RowKind::toggle, "mod");
-    spec.label = "Mod";
-    spec.hint = {"A mod from a mods folder, or one picked.", "Applies from the next start."};
-    return spec;
-}
-
 /// The Game files summary row: what is installed, and MANAGE….
 constexpr Spec game_files_summary_row() noexcept {
     Spec spec = kit::value_and_button<SettingsModel>(
@@ -2067,10 +2054,6 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                                 {"Mirrors the roles: the left pad points, the right", "pad moves the map, triggers and grips swap."})},
     {.setting = S::pad_steam_input_notice,
      .spec = steam_input_notice_row()},
-    {.setting = S::mod,
-     .spec = mod_row(),
-     .lock = &Locks::mod,
-     .copy = &copy_mod_folders},
     {.setting = S::snap_override_key,
      .spec = slider("snap-override-key", "Snap override key", KeySlider<&O::snap_override_key>::stepper(),
                     {"Held, a click is not snapped.", {}}),
@@ -2222,7 +2205,6 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "pad-prompts",
     "pad-left-handed",
     "pad-steam-input-notice",
-    "mod",
     "snap-override-key",
     "autoclick-key",
     "rotate-build-key",

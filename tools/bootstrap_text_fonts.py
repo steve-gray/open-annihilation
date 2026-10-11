@@ -126,8 +126,8 @@ FIXTURE_FILES = ("language.yaml", "translate.tdf", "units.tdf", "interface.tdf",
 FIXTURE_FONT = "NotoSansCJKsc-Bold-Fixture.otf"
 TEST_FONTS = "text-fonts-tests"
 # The SHA-256 and character count of the cut the pinned fontTools makes.
-FIXTURE_SUBSET_SHA256 = "f319f5e95817fb1544ee37bc85085c32d85cebd352652423fbdacdd2a7f6b65c"
-FIXTURE_SUBSET_CHARACTERS = 1270
+FIXTURE_SUBSET_SHA256 = "3fc02fe3ac4b4700ff400a87e78dc1e024e5fa58ac6e5d25fb9c84befc753e1f"
+FIXTURE_SUBSET_CHARACTERS = 1271
 # Font records, beside the fonts folder, never inside it.
 ENDONYM_RECORDS = "text-fonts.records.json"
 # Each licence text in licenses/ and the file of a download, or a member of

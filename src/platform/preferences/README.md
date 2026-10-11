@@ -85,12 +85,12 @@ and no `|`, so they never collide with the game's `<section>|<name>` keys.
 `open-annihilation.game-directory` holds the Total Annihilation folder chosen
 in the first-start dialog as a UTF-8 path. It is written after that migration,
 once the game starts from the folder.
-`open-annihilation.mod-directory` holds the mod folder the player chose on
-the Open Annihilation settings' Mods page to layer over that folder, as an
-absolute UTF-8 path; absent, the game folder plays as it is.
+`open-annihilation.mod-directory` holds the mod folder the player chose in
+the Library to layer over that folder, as an absolute UTF-8 path; absent,
+the game folder plays as it is, as after SWITCH OFF.
 `open-annihilation.picked-mod-directory` holds the folder an earlier
-version's Pick Folder... chose, as an absolute UTF-8 path, which the Mods
-page lists while the folder still exists. It is kept only while
+version's Pick Folder... chose, as an absolute UTF-8 path, which the
+Library lists while the folder still exists. It is kept only while
 `open-annihilation.mod-directory` names the same folder: once another mod
 or No Mod is chosen, it is erased. Absent, there is none.
 `open-annihilation.user-folder` holds the folder the player keeps their

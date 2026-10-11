@@ -87,12 +87,13 @@ without a mod and in a made-up mod's own with one, the main menu's notice
 of the moves shown once in the settings dialog's look and closed, its Open
 folder button and the
 settings' Your files buttons through a recorded opener, and the `Mods`
-folder's mods listed on the Mods page. With `--snapshot` it writes the
+folder's mods offered to the Library. With `--snapshot` it writes the
 notice and the Your files row beside the snapshot. `native-mod-switch`
 (`--check-mod-switch`) writes two test profiles into that folder's `Mods`
-and switches the mod ten times through the Mods page's Switch Mod question,
-each a soft restart on the same window: each run plays the mod chosen,
-listed first, and what the heap holds in live allocations as the last
+and switches the mod ten times through the Library, with PLAY NOW, and
+SWITCH OFF and its Switch Mod question for no mod, each a soft restart on
+the same window: each run plays the mod chosen, shown as played, and what
+the heap holds in live allocations as the last
 round's runs reach the main menu stays level with the first round's after
 the first start.
 `native-mod-install` (`--check-mod-install`) installs made-up mod packages
@@ -102,9 +103,9 @@ Finder made from a dropped file with no question, cancels and then accepts
 an update, replaces a third revision keeping one `.backup`, reinstalls,
 declines an older revision, installs another version alongside, leaves a
 folder that holds another mod as it is, refuses a profile that does not
-resolve, rolls a mod back twice on the Mods page, offers no roll back to a
-kept version this build cannot play and refuses, in a prompt over the
-dialog, one that became so while it asked, and plays the mod with PLAY
+resolve, rolls a mod back twice in the Library, offers no roll back to a
+kept version this build cannot play and refuses, in a prompt, one that
+became so while it asked, and plays the mod with PLAY
 NOW; the second replaces the mod played, the change staged until the run
 ends; the third finds it put in place, told, and rolls it back; the fourth
 finds that put in place and leaves the folder as a stop after a replace's
@@ -122,8 +123,9 @@ that folder's `Mods`: one whose second side's interface art and font are
 missing, one whose unit files are missing, one whose commander's file the
 catalog refuses and one that plays whole; and two folders without a
 profile: one whose SIDEDATA names the same missing art and font, and one
-that lacks a side's LOGO, which the Mods page refuses. It switches to each
-of the others through the Mods page, in one run: the folder and the
+that lacks a side's LOGO, which the Library's PLAY NOW refuses in a note.
+It switches to each of the others with PLAY NOW, in one run: the folder
+and the
 profile whose side files are missing each warn of both files once over the
 main menu and say that their games still start, and a skirmish on that
 side starts from Skirmish's Start and plays 300 ticks; the profile whose

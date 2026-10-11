@@ -12,9 +12,9 @@
 // revision replacing, keeping one .backup; a reinstall dropping a file
 // added since; an older revision declined; another version installed
 // alongside; a folder that holds another mod left as it is; a profile that
-// does not resolve refused; ROLL BACK twice on the Mods page, none offered
-// for a kept version that cannot be played, and one that became so refused
-// in a prompt over the dialog; then PLAY NOW. The second plays
+// does not resolve refused; ROLL BACK twice in the Library, none offered for
+// a kept version that cannot be played, and one that became so refused in a
+// prompt; then PLAY NOW. The second plays
 // the mod and replaces it, the change waiting for the run to end; the third
 // plays the new revision, tells of the update and rolls the mod played
 // back; the fourth plays the rolled back revision, tells of it, and leaves
@@ -23,6 +23,7 @@
 // resolved.
 
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -41,7 +42,9 @@
 #include "oa/formats/zip.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -63,6 +66,7 @@ namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
 namespace install = oa::app::package_install;
+namespace library = oa::ui::library;
 
 namespace {
 
@@ -504,47 +508,45 @@ void Runtime::check_mod_install() {
             }
         require(false, "the prompt's button is not laid out");
     };
-    // ROLL BACK on a folder's row of the Mods page, answered ROLL BACK;
-    // `before_answer` runs while the question shows.
-    const auto roll_back = [&](const fs::path& rolled, const auto& before_answer) {
+    // Finds a folder's entry in the Library, as the run's own feed lists the
+    // mod folders.
+    const auto library_entry = [&](const fs::path& listed) -> const library::Entry* {
         list_offered_mods();
-        auto& dialog = open_engine_settings_dialog(settings::DialogKind::engine);
-        dialog.page = settings::Page::mods;
-        const std::string path = kept_path(rolled);
-        const auto rows = settings::mod_rows(dialog);
-        int32_t row_control = settings::no_control;
-        for (std::size_t index = 0; index < rows.size(); ++index)
-            if (rows[index].offered >= 0 &&
-                dialog.mod_folders[static_cast<std::size_t>(rows[index].offered)] == path)
-                row_control = settings::first_row_control + static_cast<int32_t>(index);
-        require(row_control != settings::no_control, "Mods does not list the folder");
-        const auto parts = settings::dialog_layout(dialog);
-        const auto row = std::find_if(parts.begin(), parts.end(), [&](const auto& part) {
-            return part.control == row_control;
-        });
-        require(row != parts.end(), "the folder's row is not shown");
-        bool clicked = false;
-        for (const auto& part : parts) {
-            const auto& r = part.rect;
-            if (part.control < 0 || part.text != "ROLL BACK" || r.x < row->rect.x ||
-                r.y < row->rect.y || r.x + r.width > row->rect.x + row->rect.width ||
-                r.y + r.height > row->rect.y + row->rect.height)
-                continue;
-            const int32_t x = r.x + r.width / 2;
-            const int32_t y = r.y + r.height / 2;
-            std::ignore = settings::dialog_pointer_move(dialog, x, y);
-            std::ignore = settings::dialog_pointer_down(dialog, x, y);
-            std::ignore = settings::dialog_pointer_up(dialog, x, y);
-            clicked = true;
-        }
-        require(clicked, "the folder's row shows no ROLL BACK");
+        LibraryHost& host = library_host();
+        host.rebuild(*this);
+        const std::string path = kept_path(listed);
+        for (const library::Entry& each : host.model.entries)
+            if (each.id.kind == library::Kind::mod && each.installed != nullptr &&
+                kept_path(each.installed->folder) == path)
+                return &each;
+        return nullptr;
+    };
+    // Tells whether an entry offers ROLL BACK that can be pressed.
+    const auto offers_roll_back = [&](const library::Entry& entry) {
+        for (const library::ActionButton& button :
+             library::entry_actions(library_host().model, entry))
+            if (button.action == library::Action::roll_back && button.enabled)
+                return true;
+        return false;
+    };
+    // ROLL BACK on a folder's entry in the Library, answered ROLL BACK;
+    // `before_answer` runs while the question shows. True when the run ends
+    // for it, as for the mod played.
+    const auto roll_back = [&](const fs::path& rolled, const auto& before_answer) {
+        const library::Entry* entry = library_entry(rolled);
+        require(entry != nullptr, "the Library does not list the folder");
+        require(offers_roll_back(*entry), "the folder's entry offers no ROLL BACK");
+        const library::EntryId id = entry->id;
+        library_entry_action(library::Action::roll_back, id);
+        auto* asked = dynamic_cast<QuestionScreen*>(oa_layer().top());
         require(
-            dialog.mod_question == settings::ModQuestion::roll_back, "ROLL BACK asked no question"
+            asked != nullptr && asked->question().title == "ROLL BACK MOD",
+            "ROLL BACK asked no question"
         );
         before_answer();
-        const auto action = settings::dialog_key(dialog, settings::DialogKey::enter);
-        require(action == settings::DialogAction::roll_back_mod, "ROLL BACK did not ask for it");
-        return take_engine_settings_action(action);
+        oa_layer().take_answer(*asked, asked->key(oa::ui::kit::Key::yes, SDLK_Y), SDLK_Y);
+        oa_layer().forget_latched_key();
+        return soft_restart_requested();
     };
     const auto play_example = [&] {
         return options_.game_folders.size() > 1 &&
@@ -922,7 +924,7 @@ void Runtime::check_mod_install() {
         key(SDLK_RETURN);
         require(!fs::exists(mods / "broken-package"), "a refused package was installed");
 
-        // ROLL BACK on the Mods page, twice: back and forth.
+        // ROLL BACK in the Library, twice: back and forth.
         std::ignore = roll_back(folder, [] {});
         require(
             revision_in(folder) == 2 && revision_in(kept) == 3,
@@ -938,10 +940,9 @@ void Runtime::check_mod_install() {
                 "ROLL BACK did not swap the origin records"
             );
         }
-        auto* dialog = engine_settings_dialog();
         require(
-            dialog != nullptr && dialog->folder_notice.empty(),
-            "ROLL BACK closed the dialog or failed"
+            state.prompt == nullptr && !soft_restart_requested(),
+            "ROLL BACK ended the run or told a refusal"
         );
         std::ignore = roll_back(folder, [] {});
         require(
@@ -949,8 +950,8 @@ void Runtime::check_mod_install() {
             "a second ROLL BACK did not swap them back"
         );
         // A kept version this build cannot play offers no ROLL BACK; one
-        // that became so while the question showed is refused in a prompt
-        // over the dialog, nothing changed.
+        // that became so while the question showed is refused in a prompt,
+        // nothing changed.
         const fs::path broken = mods / std::string(kBrokenId);
         const fs::path broken_kept = broken / std::string(install::backup_folder_name);
         fs::create_directories(broken_kept);
@@ -965,15 +966,10 @@ void Runtime::check_mod_install() {
         };
         std::ofstream(broken / "oamod.yaml") << profile_text(kBrokenId, "Broken Mod", "1.0", 2);
         keep_broken(false);
-        list_offered_mods();
         {
-            const auto& listed = engine_settings_state();
-            const auto at =
-                std::find(listed.mod_folders.begin(), listed.mod_folders.end(), kept_path(broken));
+            const library::Entry* listed = library_entry(broken);
             require(
-                at != listed.mod_folders.end() &&
-                    listed.mod_details[static_cast<std::size_t>(at - listed.mod_folders.begin())]
-                        .roll_back_from.empty(),
+                listed != nullptr && !offers_roll_back(*listed),
                 "ROLL BACK is offered for a kept version that cannot be played"
             );
         }
@@ -989,15 +985,16 @@ void Runtime::check_mod_install() {
             "an unplayable kept version was not refused in a prompt"
         );
         require(revision_in(broken) == 2, "an unplayable kept version was rolled back to");
-        dialog = engine_settings_dialog();
         require(
-            dialog != nullptr && dialog->folder_notice.empty(),
-            "the refusal closed the dialog or went to the page's note"
+            oa_layer().top() == state.prompt && !soft_restart_requested(),
+            "the refusal was not told in a prompt on top, or ended the run"
         );
         key(SDLK_RETURN);
         require(state.prompt == nullptr, "Enter did not close the roll back's refusal");
-        require(engine_settings_dialog() != nullptr, "the refusal's OK closed the dialog");
-        std::ignore = take_engine_settings_action(settings::DialogAction::cancelled);
+        require(
+            screen_ == Screen::main_menu && revision_in(broken) == 2 && !soft_restart_requested(),
+            "the refusal's OK changed something more"
+        );
         until_deleted();
 
         // PLAY NOW plays the mod: the run ends for it.
@@ -1064,7 +1061,7 @@ void Runtime::check_mod_install() {
         until_deleted();
         require(!reserved_left(mods), "the update between runs left a folder of its own");
         // ROLL BACK of the mod played ends the run too.
-        require(roll_back(folder, [] {}), "ROLL BACK of the mod played did not close the dialog");
+        require(roll_back(folder, [] {}), "ROLL BACK of the mod played did not end the run");
         require(
             soft_restart_requested() && install::pending_change_waiting(),
             "ROLL BACK of the mod played did not end the run"

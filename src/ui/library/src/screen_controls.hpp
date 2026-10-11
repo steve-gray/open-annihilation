@@ -41,12 +41,8 @@ inline constexpr kit::ControlId back = 51;
 inline constexpr kit::ControlId settings = 52;
 /// CLOSE.
 inline constexpr kit::ControlId close = 53;
-/// ADD REGISTRY… on the Registries tab.
-inline constexpr kit::ControlId add_registry = 70;
-/// The Registries tab's amber note, when a change was refused.
-inline constexpr kit::ControlId registries_notice = 71;
-/// The note under the Registries list.
-inline constexpr kit::ControlId registries_note = 72;
+/// CHECK NOW. 54 is the next footer number after CLOSE.
+inline constexpr kit::ControlId check_now = 54;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
 /// The first queue line's label.
@@ -61,6 +57,13 @@ inline constexpr kit::ControlId rules = 64;
 inline constexpr kit::ControlId active_mod = 65;
 /// The Active tab's line on the language in use.
 inline constexpr kit::ControlId active_language = 66;
+/// ADD REGISTRY… on the Registries tab. 70–72 are free between the Active
+/// lines (66) and the action buttons (100).
+inline constexpr kit::ControlId add_registry = 70;
+/// The Registries tab's amber note, when a change was refused.
+inline constexpr kit::ControlId registries_notice = 71;
+/// The note under the Registries list.
+inline constexpr kit::ControlId registries_note = 72;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.
@@ -80,6 +83,8 @@ inline constexpr kit::ControlId first_row = 10000;
 /// entry's place in the model's visible entries, below first_registry.
 inline constexpr kit::ControlId first_row_icon = 1000000;
 /// A Registries-tab switch: this and the registry's place in the inputs.
+/// Switches occupy 2000000 until 3000000, REMOVE 3000000 until 4000000 and
+/// ADD MIRROR… 4000000 until 5000000, after the row icons at 1000000.
 inline constexpr kit::ControlId first_registry = 2000000;
 /// A Registries-tab REMOVE: this and the registry's place in the inputs.
 inline constexpr kit::ControlId first_registry_remove = 3000000;

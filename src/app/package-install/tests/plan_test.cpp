@@ -243,7 +243,7 @@ void test_prompts() {
     OA_CHECK(oa::ui::engine_settings::prompt_fits(made.prompt));
     made = install::oamod::installed_prompt(incoming, mods / "example-mod", false);
     OA_CHECK((captions_of(made) == std::vector<std::string>{"OPEN FOLDER", "OK"}));
-    OA_CHECK(says(made, "Choose it on Mods"));
+    OA_CHECK(says(made, "Choose it with PLAY NOW in the Library"));
 
     install::ChangeResult result{};
     result.changed = true;

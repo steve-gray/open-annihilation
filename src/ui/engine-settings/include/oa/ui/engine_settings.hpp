@@ -59,7 +59,7 @@ inline constexpr std::string_view screen_size = "open-annihilation.screen-size";
 inline constexpr std::string_view mod_directory = "open-annihilation.mod-directory";
 /// The folder the player picked with an earlier version's Pick Folder...,
 /// as a UTF-8 path, kept only while key::mod_directory names the same
-/// folder; the Mods page lists it while it is still a folder. Absent for
+/// folder; the Library lists it while it is still a folder. Absent for
 /// none (EngineSettings::picked_mod_folder).
 inline constexpr std::string_view picked_mod_directory = "open-annihilation.picked-mod-directory";
 /// "off", "basic" or "full" (EngineSettings::hardware_acceleration). A
@@ -924,7 +924,7 @@ struct EngineSettings {
     std::string mod_folder;
     /// The folder the player picked with an earlier version's Pick
     /// Folder..., as an absolute UTF-8 path, while it is the mod
-    /// (mod_folder); the Mods page lists it while it is still a folder.
+    /// (mod_folder); the Library lists it while it is still a folder.
     /// Empty for none.
     std::string picked_mod_folder;
     /// Developer Mode: the player's overrides of the standard hacks
@@ -1054,8 +1054,8 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 /// was before: Full above 0, else Off; any other value gives the default.
 /// The mod is the stored folder, and the picked folder the one
 /// remembered_picked_folder gives; a mod folder the game folder does not
-/// offer is the picked folder whatever that key holds, so that the Mods
-/// page lists it. The Language switches
+/// offer is the picked folder whatever that key holds, so that the
+/// Library lists it. The Language switches
 /// (modern fonts, text outline, shadow and background) and Developer Mode
 /// read as every
 /// switch does, and the text size as every number, lowest_text_size to
@@ -1311,10 +1311,9 @@ enum class Lock : uint8_t {
     none,        ///< it can be changed
     in_game,     ///< a game is running; it can be changed outside a game
     set_by_host, ///< a shared game or a replay decides it
-    /// --max-fps decides the frame rate, --hardware-acceleration, in any of
-    /// its forms, or --no-hardware-acceleration decides hardware
-    /// acceleration, or --mod-dir or --base-game decides the mod, for this
-    /// run
+    /// --max-fps decides the frame rate, or --hardware-acceleration, in any
+    /// of its forms, or --no-hardware-acceleration decides hardware
+    /// acceleration, for this run
     command_line,
     unavailable, ///< nothing in the game could make the setting help this run
     set_by_mod,  ///< the mod allows no other value
@@ -1351,9 +1350,6 @@ struct GameState {
     /// 3.1c's command line names the language, which then decides it for the
     /// run.
     bool language_from_command_line{};
-    /// --mod-dir or --base-game was given, which decides the mod the run
-    /// plays.
-    bool mod_from_command_line{};
     /// The platform opens every window at the display's own pixel density
     /// (Inputs::native_density_windows).
     bool native_density_windows{};
@@ -1382,10 +1378,6 @@ struct Locks {
     /// Enable Unicode Multiplayer Chat: the dialog itself locks it
     /// set_by_language while a pack of the language it shows asks for it.
     Lock unicode_chat{};
-    /// Mod: locked command_line, the stored choice stays shown and plays
-    /// from a start without the flag that set it aside; locked in_game, the
-    /// row shows the mod the game plays, and the main menu chooses another.
-    Lock mod{};
     /// Native pixel density: locked command_line, the stored choice stays
     /// shown and takes effect from a start without the flag.
     Lock native_density{};
@@ -1405,9 +1397,7 @@ struct Locks {
 /// cannot wait for the display, else in_game in a shared game or a replay,
 /// where its value holds until the match ends. The language is locked
 /// command_line while 3.1c's command line names one, and never by a game:
-/// it changes only what players read. The mod is locked command_line while
-/// --mod-dir or --base-game decides it, else in_game during any game: it is
-/// chosen from the main menu. Native pixel density is locked always_on where
+/// it changes only what players read. Native pixel density is locked always_on where
 /// the platform opens every window at native density, else command_line
 /// while --native-density decides it, and never by a game: it takes effect
 /// from the next start. No game locks Menu scaling or Interface size.

@@ -303,8 +303,8 @@ target_link_libraries(oa-app-game-directory PUBLIC oa-app-headers oa-base-sha256
 # oa-game's mod profile: a folder's oamod.yaml found and resolved with the
 # settings it binds, the mod folders a game folder offers, the layout and
 # discovery a profile sets, the --mod and --print-profile options, and the
-# Mods page's row for a folder: its title, version and description, and its
-# badge decoded.
+# Library's summary of a mod folder: its title, version and description, and
+# its badge decoded.
 add_library(oa-app-mod-profile src/app/mod_profile_loader.cpp src/app/mod_folder.cpp
   src/app/mod_summary.cpp)
 add_library(oa::app::mod_profile ALIAS oa-app-mod-profile)
@@ -665,7 +665,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-mod-profile-test src/app/mod_profile_loader_test.cpp)
   target_link_libraries(oa-app-mod-profile-test PRIVATE oa-app-mod-profile oa-test-support oa-options)
   add_test(NAME app-mod-profile COMMAND oa-app-mod-profile-test)
-  # The Mods page's rows over scratch folders: a profile's name, version and
+  # Mod folders' summaries over scratch folders: a profile's name, version and
   # description, a folder without a profile or with a damaged one, and
   # badges of each colour type, scaled down, damaged or too large.
   add_executable(oa-app-mod-summary-test src/app/mod_summary_test.cpp)
@@ -990,6 +990,13 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/folder_chooser_screen.cpp src/app/window_pixels.cpp src/app/runtime_found_install.cpp
   src/app/simulation_hash.cpp
   src/app/presence_facts.cpp)
+# The macOS window's live content size. A resize a full-screen change skipped
+# is still the size the player sees; other systems take the size SDL reports.
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  enable_language(OBJCXX)
+  list(APPEND oa_game_sources src/app/window_live_size.mm)
+  set_source_files_properties(src/app/window_live_size.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()
 # The self-checks: the --check-* options with which the game drives itself
 # through its screens and orders and reports a verdict, for the native
 # checks. OA_SELF_CHECKS=OFF leaves them out, as the release packages do.
@@ -1155,6 +1162,11 @@ if(OA_BUILD_PLATFORM)
   if(WIN32)
     # The shell's open verb shows the player's folders (user_folder_open.cpp).
     target_link_libraries(oa-game PRIVATE shell32 ole32)
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # window_live_size.mm reads the window the player sees.
+    set_target_properties(oa-game PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
+    target_link_libraries(oa-game PRIVATE "-framework AppKit")
   endif()
   if(BUILD_TESTING)
     # The native checks run oa-game over the installation OA_GAME_DIR names;
@@ -1574,10 +1586,10 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-user-folder PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_user_folder_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
-      # The settings' Mods page switches the mod ten times, between No Mod
-      # and two test profiles it writes into the player's own Mods folder:
-      # each switch stores the mod and builds the game afresh on the same
-      # window, which plays the mod chosen, listed first; what the heap holds
+      # The Library switches the mod ten times, between no mod and two test
+      # profiles it writes into the player's own Mods folder: each switch
+      # stores the mod and builds the game afresh on the same window, which
+      # plays the mod chosen, shown as played; what the heap holds
       # as the last round's runs reach the main menu stays level with the
       # first round's after the first start.
       set(oa_mod_switch_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/mod-switch")
@@ -1635,8 +1647,8 @@ if(OA_BUILD_PLATFORM)
       # revisions keeping one .backup, a reinstall, an older revision
       # declined, another version installed alongside, a folder that holds
       # another mod left as it is, a profile that does not resolve refused,
-      # and a kept version that cannot be played refused; ROLL BACK twice on
-      # the Mods page; then, over soft restarts, PLAY NOW, a replace of the
+      # and a kept version that cannot be played refused; ROLL BACK twice in
+      # the Library; then, over soft restarts, PLAY NOW, a replace of the
       # mod played and its roll back, each put in place between runs, and a
       # stop mid-replace settled before the mod folder is resolved.
       set(oa_mod_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/mod-install")
@@ -1721,9 +1733,10 @@ if(OA_BUILD_PLATFORM)
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED "language-install-pack;language-install-clean")
       # A folder without a profile whose second side lacks its LOGO: the
-      # Mods page refuses it. A folder without a profile, and a profile,
-      # whose second side's intgaf and font name files no folder holds: the
-      # Mods page switches to each, the main menu warns once of both files
+      # Library's PLAY NOW refuses it. A folder without a profile, and a
+      # profile, whose second side's intgaf and font name files no folder
+      # holds: the Library's PLAY NOW switches to each, the main menu warns
+      # once of both files
       # and that its games still start, and a skirmish on that side starts
       # and plays. A mod folder whose unit files are missing: the main menu
       # warns once that its games cannot start, and Skirmish's Start warns

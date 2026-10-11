@@ -5,10 +5,8 @@
 // asks, before an update of a mod from a registry the player added that may
 // stop saved games loading (its rules hash changes, or cannot be known). A
 // built-in registry's update, and one that keeps the rules, never asks. The
-// Library's UPDATE and UPDATE ALL and Settings › Mods' UPDATE share these
-// functions, so the rule lives in one place (asks_before_update). Also the
-// lines Settings › Mods shows on a row's update and on the last check for
-// updates. Its words are in text.hpp.
+// Library's UPDATE and UPDATE ALL share these functions, so the rule lives
+// in one place (asks_before_update). Its words are in text.hpp.
 #pragma once
 
 #include "oa/ui/kit/components_more.hpp"
@@ -90,58 +88,5 @@ update_all_question(std::span<const Entry> entries, const TextHooks& text = {});
 /// @return the kit question
 [[nodiscard]] oa::ui::kit::Question
 update_prompt(const UpdateQuestion& asked, const TextHooks& text = {});
-
-/// Writes Settings › Mods' line on a row's update: "Revision 4 available ·
-/// 3.2 MB", or "Version 4.9 available · 3.2 MB" when the version changes,
-/// or "Update available · 3.2 MB" when the version stays and the update
-/// names no revision above 0; "… changes the rules · …" when its rules hash
-/// changes, and "… may change the rules · …" when that cannot be known. It says so whatever the
-/// registry, so a built-in registry's update, which asks nothing, is told
-/// before UPDATE is pressed.
-///
-/// @param installed the package installed
-/// @param update its update
-/// @param text how texts are looked up
-/// @return the line
-[[nodiscard]] std::string
-update_line(const Installed& installed, const UpdateNote& update, const TextHooks& text = {});
-
-/// Writes Settings › Mods' line on an update the queue holds: "Updating ·
-/// 28%" until it is installed, or "Waiting · finishes when you leave {name}"
-/// while it waits for the player to leave the mod being played.
-///
-/// @param item the update's queue item
-/// @param text how texts are looked up
-/// @return the line; empty once the item has failed or is installed
-[[nodiscard]] std::string update_progress(const QueueItem& item, const TextHooks& text = {});
-
-/// Where the check for updates stands, as Settings › Mods' line under its
-/// list tells it.
-struct UpdateCheck {
-    bool registries_on{}; ///< a registry is on that can be checked
-    bool checking{};      ///< a check is running
-    bool failed{};        ///< the last check reached no registry
-    /// How long ago the newest list was fetched, in seconds; nothing when no
-    /// list has been fetched.
-    std::optional<int64_t> age_seconds{};
-};
-
-/// Settings › Mods' line on the check for updates.
-struct UpdateCheckLine {
-    std::string text{}; ///< what it says
-    bool warning{};     ///< drawn in the warning colour: the check failed
-    bool check_now{};   ///< CHECK NOW follows it
-};
-
-/// Writes Settings › Mods' line on the check for updates: "Checked for
-/// updates 4 min ago", "Not checked for updates yet", "Checking for
-/// updates…", "Couldn't check for updates" in the warning colour, or "No
-/// registries are on." with no CHECK NOW.
-///
-/// @param check where the check stands
-/// @param text how texts are looked up
-/// @return the line
-[[nodiscard]] UpdateCheckLine
-update_check_line(const UpdateCheck& check, const TextHooks& text = {});
 
 } // namespace oa::ui::library

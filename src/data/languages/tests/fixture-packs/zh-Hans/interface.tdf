@@ -1969,14 +1969,14 @@
 	zh-Hans=修订号{incoming}比已安装的旧。;
 	}
 
-[The version installed is kept, and ROLL BACK on Mods in the Open Annihilation settings brings it back.]
+[The version installed is kept, and ROLL BACK in the Library brings it back.]
 	{
-	zh-Hans=已安装的版本会保留，在Open Annihilation设置的“模组”页点击回滚即可恢复。;
+	zh-Hans=已安装的版本会保留，在资料库中点击回滚即可恢复。;
 	}
 
-[Revision {installed} is kept, and ROLL BACK on Mods in the Open Annihilation settings brings it back.]
+[Revision {installed} is kept, and ROLL BACK in the Library brings it back.]
 	{
-	zh-Hans=修订号{installed}会保留，在Open Annihilation设置的“模组”页点击回滚即可恢复。;
+	zh-Hans=修订号{installed}会保留，在资料库中点击回滚即可恢复。;
 	}
 
 [{title} {installed} is installed. Replace it with {incoming}, or install {incoming} alongside it?]
@@ -1984,9 +1984,9 @@
 	zh-Hans=已安装{title} {installed}。要用{incoming}替换它，还是将{incoming}与其并列安装？;
 	}
 
-[Replacing keeps {installed}, and ROLL BACK on Mods in the Open Annihilation settings brings it back.]
+[Replacing keeps {installed}, and ROLL BACK in the Library brings it back.]
 	{
-	zh-Hans=替换后会保留{installed}，在Open Annihilation设置的“模组”页点击回滚即可恢复。;
+	zh-Hans=替换后会保留{installed}，在资料库中点击回滚即可恢复。;
 	}
 
 [Alongside, {incoming} goes in a folder of its own:]
@@ -2029,19 +2029,19 @@
 	zh-Hans={title} {version}已安装到你的Mods文件夹：;
 	}
 
-[Choose PLAY NOW to play it, or choose it later on Mods in the Open Annihilation settings.]
+[Choose PLAY NOW to play it, or choose it later with PLAY NOW in the Library.]
 	{
-	zh-Hans=选择“立即游戏”开始游玩，或稍后在Open Annihilation设置的“模组”页中选择它。;
+	zh-Hans=选择“立即游戏”开始游玩，或稍后在资料库中用“立即游戏”选择它。;
 	}
 
-[Choose it on Mods in the Open Annihilation settings to play it.]
+[Choose it with PLAY NOW in the Library to play it.]
 	{
-	zh-Hans=在Open Annihilation设置的“模组”页中选择它即可游玩。;
+	zh-Hans=在资料库中用“立即游戏”选择它即可游玩。;
 	}
 
-[{title} is now {new}. {old} is kept, and ROLL BACK on Mods in the Open Annihilation settings brings it back.]
+[{title} is now {new}. {old} is kept, and ROLL BACK in the Library brings it back.]
 	{
-	zh-Hans={title}现在是{new}。{old}已保留，在Open Annihilation设置的“模组”页点击回滚即可恢复。;
+	zh-Hans={title}现在是{new}。{old}已保留，在资料库中点击回滚即可恢复。;
 	}
 
 [{title} is now {new}.]
@@ -2479,9 +2479,9 @@
 	zh-Hans=其模组配置无法使用：;
 	}
 
-[It is still copied, so it can be fixed in your file manager; the Mods page plays only mods that work.]
+[It is still copied, so it can be fixed in your file manager; the Library's Mods tab plays only mods that work.]
 	{
-	zh-Hans=它仍会被复制，以便在文件管理器中修复；“模组”页只能运行可用的模组。;
+	zh-Hans=它仍会被复制，以便在文件管理器中修复；资料库的“模组”标签只能运行可用的模组。;
 	}
 
 [Remove the old folder?]

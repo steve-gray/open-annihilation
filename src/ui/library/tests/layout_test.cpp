@@ -184,7 +184,7 @@ std::vector<std::string> meeting_controls(const kit::DisplayList& list) {
 
 /// Returns the place a control's name gives it in the declared order: the
 /// tabs, the search, the filters, UPDATE ALL over the list and the list,
-/// the details' actions, then the footer's buttons.
+/// the details' actions, the Registries tab's rows, then the footer's buttons.
 ///
 /// @param name the name
 /// @return the place, or -1 for a name of none
@@ -202,8 +202,8 @@ int declared_place(std::string_view name) {
         return 4;
     if (starts(name, "library.registry."))
         return 5;
-    if (name == "library.add-registry" || name == "library.settings" || name == "library.details" ||
-        name == "library.close")
+    if (name == "library.check-now" || name == "library.add-registry" ||
+        name == "library.settings" || name == "library.details" || name == "library.close")
         return 6;
     return -1;
 }
@@ -279,8 +279,9 @@ bool designed_name(const std::string& name) {
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
         "+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
-        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
-        "details|back|settings|close|status|queue|note|from|rules|"
+        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
+        "open-folder|homepage)|"
+        "details|back|check-now|settings|close|status|queue|note|from|rules|"
         "active\\.(mod|language|map\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror))?)"
@@ -431,6 +432,8 @@ std::string_view word_of(lib::Action action) {
         return "roll-back";
     case lib::Action::play_now:
         return "play-now";
+    case lib::Action::uninstall:
+        return "uninstall";
     case lib::Action::open_folder:
         return "open-folder";
     case lib::Action::homepage:
@@ -468,7 +471,7 @@ void check_frame(const fixture::NamedFrame& named) {
     if (ridge == nullptr)
         return;
     const std::vector<lib::ActionButton> actions = lib::entry_actions(library, *ridge);
-    OA_CHECK(actions.size() == 5);
+    OA_CHECK(actions.size() == 6);
     if (!compact) {
         for (const lib::ActionButton& action : actions)
             OA_CHECK(
@@ -642,6 +645,37 @@ void rows_name_their_entries() {
     OA_CHECK(lib::badge_letters("TA Zero") == "TZ");
     OA_CHECK(lib::badge_letters("Star of the Sea Pack") == "SOT");
     OA_CHECK(lib::badge_letters("ab") == "AB");
+}
+
+/// A mod of the player's own, which no listing describes, shows its
+/// manifest's description in the details.
+void an_own_mods_details_show_its_description() {
+    lib::Inputs inputs = fixture::fixture_inputs();
+    lib::Installed own;
+    own.kind = lib::Kind::mod;
+    own.key = "own-description";
+    own.folder = "own-description";
+    own.name = "Own Description";
+    own.version = "1.0";
+    own.description = "A mod of the player's own.";
+    inputs.installed.push_back(own);
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::mods);
+    lib::select(library, {"", lib::Kind::mod, "own-description"});
+    OA_CHECK(library.selected.has_value());
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        if (named.frame.size_class == kit::SizeClass::compact)
+            continue;
+        const kit::DisplayList list = laid_out(library, {}, named.frame);
+        bool shown = false;
+        for (const kit::Item& item : list.items)
+            shown = shown ||
+                    (item.role == kit::Role::text && item.text == "A mod of the player's own.");
+        if (!shown)
+            std::fprintf(stderr, "%s: the description is not in the details\n", named.name.c_str());
+        OA_CHECK(shown);
+    }
 }
 
 /// An empty list says why, and a list the last fetch could not refresh says so above it.
@@ -915,6 +949,7 @@ void tab_follows_the_declared_order() {
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
+        "library.action.uninstall",
         "library.action.open-folder",
         "library.action.homepage",
         "library.settings",
@@ -993,6 +1028,17 @@ void pressing_rows_selects_and_never_gets() {
     OA_CHECK(result.action == lib::Action::settings);
     result = click(small, small_state, small_list, "library.close");
     OA_CHECK(result.action == lib::Action::close);
+    // CHECK NOW asks for nothing until a registry is on to ask, then for the check.
+    const kit::Control* check_off = fixture::named(small_list, "library.check-now");
+    OA_CHECK(check_off != nullptr && !check_off->enabled);
+    result = click(small, small_state, small_list, "library.check-now");
+    OA_CHECK(!result.action);
+    small.inputs.can_check = true;
+    small_list = laid_out(small, small_state, all[0].frame);
+    const kit::Control* check_on = fixture::named(small_list, "library.check-now");
+    OA_CHECK(check_on != nullptr && check_on->enabled);
+    result = click(small, small_state, small_list, "library.check-now");
+    OA_CHECK(result.action == lib::Action::check_now);
 }
 
 /// A row's state icon: a circled up-arrow pressed as UPDATE and a download
@@ -1361,6 +1407,7 @@ int main() {
     larger_classes_show_more();
     rows_name_their_entries();
     empty_and_offline_lists_say_why();
+    an_own_mods_details_show_its_description();
     enter_opens_details_or_reaches_the_actions();
     escape_clears_leaves_or_closes();
     tab_commands_change_tabs();

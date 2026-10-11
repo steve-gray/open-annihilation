@@ -49,6 +49,16 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-package-install-change-test PRIVATE oa-app-package-install oa-formats-zip
     oa-platform-shims ZLIB::ZLIB oa-test-support oa-options)
   add_test(NAME app-mod-install-change COMMAND oa-app-package-install-change-test)
+  # Uninstalls in a scratch Mods folder: a mod and its .backup moved aside
+  # whole and deleted a step at a time, links never followed, names that are
+  # not one plain folder, folders of the player's own, a changed folder, an
+  # unfinished change and the lock refused, a refused rename leaving the mod
+  # whole, and a deletion stopped halfway finished by the next recovery.
+  add_executable(oa-app-package-install-uninstall-test tests/uninstall_test.cpp)
+  target_link_libraries(oa-app-package-install-uninstall-test PRIVATE oa-app-package-install
+    oa-test-support oa-options)
+  add_test(NAME app-package-install-uninstall COMMAND oa-app-package-install-uninstall-test)
+  set_tests_properties(app-package-install-uninstall PROPERTIES TIMEOUT 30)
   # The instance lock and the hand-off folder.
   add_executable(oa-app-package-install-handoff-test tests/handoff_test.cpp)
   target_link_libraries(oa-app-package-install-handoff-test PRIVATE oa-app-package-install oa-test-support

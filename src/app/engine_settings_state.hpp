@@ -9,6 +9,7 @@
 #pragma once
 
 #include "oa/app/mod_profile_loader.hpp"
+#include "oa/app/mod_summary.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/window_icon.hpp"
 #include "oa/base/sha256.hpp"
@@ -25,6 +26,26 @@
 namespace oa::app {
 
 struct Runtime::EngineSettingsState {
+    /// What the Library shows of an offered mod folder besides its title:
+    /// read from its oamod.yaml and the oamod.png beside it.
+    struct OfferedMod {
+        std::string version{};     ///< the profile's version; "N/A" without an oamod.yaml
+        std::string description{}; ///< the profile's description, or why there is none
+        /// The folder holds an oamod.yaml; without one its files layer over
+        /// the game folder's and the game plays by 3.1c's own rules.
+        bool has_profile{};
+        /// The id its oamod.yaml gives; empty without one, and the Library
+        /// names it by its folder's name.
+        std::string profile_id{};
+        ModBadge badge{}; ///< its oamod.png, decoded; empty without one
+        /// A folder of the player's own Mods folder whose .backup keeps an
+        /// earlier version of its mod that the game can play, checked as a
+        /// pick is: the Library offers ROLL BACK on it.
+        bool roll_back{};
+        std::string kept_version{}; ///< that version, as its oamod.yaml writes it
+        int64_t kept_revision{};    ///< that version's packaging revision; 0 when it names none
+    };
+
     oa::ui::engine_settings::EngineSettings current{}; ///< in effect
     /// The installation's totala.ini, as read; empty when it has none or
     /// --preferences-file names the preferences file.
@@ -40,23 +61,27 @@ struct Runtime::EngineSettingsState {
     /// a second (Inputs::steam_deck_panel_hz), as read once at start; 0 on
     /// every other machine.
     uint32_t steam_deck_panel_hz{};
-    /// The mod folders Mods lists, as absolute UTF-8 paths, read once at
-    /// start: the game folder's mods folder's (list_mod_folders), the
-    /// player's own Mods folder's, the folder an earlier Pick Folder...
-    /// stored while it is the mod stored and still a folder, and the one
-    /// played.
+    /// The mod folders the Library lists, as absolute UTF-8 paths, read at
+    /// start and again as a mod is installed or rolled back
+    /// (Runtime::list_offered_mods): the game folder's mods folder's
+    /// (list_mod_folders), the player's own Mods folder's, the folder an
+    /// earlier Pick Folder... stored while it is the mod stored and still a
+    /// folder, and the one played.
     std::vector<std::string> mod_folders;
-    /// Their titles, in the same order, as Mods shows them (read_mod_summary).
+    /// Their titles, in the same order, as the Library shows them (read_mod_summary).
     std::vector<std::string> mod_names;
-    /// Their versions, descriptions and badges, in the same order.
-    std::vector<oa::ui::engine_settings::ModDetails> mod_details;
+    /// Their versions, descriptions, badges and kept versions, in the same order.
+    std::vector<OfferedMod> mod_details;
+    /// Counts the times the folders above were listed, so that the
+    /// Library's feed moves on with them.
+    uint64_t offered_generation{};
     /// The mod folder the game plays, as the preferences keep one; empty
     /// for none. With --mod-dir or --base-game, the Mod setting as read at
     /// start, which the flags set aside for the run.
     std::string playing_mod_folder;
     /// The Mod setting as stored when the start dropped its folder for
-    /// being gone; empty when none was. The dialog shows No Mod in its
-    /// place, and the settings' next save stores the choice over it.
+    /// being gone; empty when none was. The game plays no mod in its place,
+    /// and the settings' next save stores the choice over it.
     std::string dropped_mod_folder;
     /// The machine's physical memory in bytes, as read once at start; 0 when
     /// the system does not say.
@@ -70,8 +95,8 @@ struct Runtime::EngineSettingsState {
     RendererHost* records_host{};
     std::optional<oa::ui::engine_settings::Dialog> dialog; ///< the open dialog
     /// The section the dialog showed when it last closed; it opens there,
-    /// and on Mods the first time.
-    oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::mods};
+    /// and on its first section, Controls, the first time.
+    oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::controls};
     std::optional<oa::ui::engine_settings::DialogFonts> fonts; ///< loaded on first use
     bool fonts_missing{}; ///< loading the fonts failed; they are not tried again
     /// The icon the header and the main menu's OA button draw: the window

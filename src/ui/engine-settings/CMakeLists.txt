@@ -12,7 +12,7 @@
 # (engine_settings/language_notice.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
   src/developer.cpp src/downloads_page.cpp src/language_page.cpp
-  src/language_notice.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
+  src/language_notice.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
   src/add_registry.cpp src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
@@ -60,17 +60,6 @@ if(BUILD_TESTING)
   # The test places parts through the dialog's own geometry (src/geometry.hpp).
   target_include_directories(oa-ui-engine-settings-dialog-test PRIVATE src)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)
-
-  # Mods with its registries' updates: rows with and without one, their
-  # lines whole beside UPDATE and ROLL BACK, a blocked and a queued update,
-  # the line on the check for updates, UPDATE, CHECK NOW and GET MORE MODS…,
-  # what a game hides, the focus, every class, and today's parts kept.
-  add_executable(oa-ui-engine-settings-mods-updates-test tests/mods_updates_test.cpp)
-  target_link_libraries(oa-ui-engine-settings-mods-updates-test PRIVATE oa-ui-engine-settings
-    oa-options)
-  target_include_directories(oa-ui-engine-settings-mods-updates-test PRIVATE src)
-  add_test(NAME ui-engine-settings-mods-updates COMMAND oa-ui-engine-settings-mods-updates-test)
-  set_tests_properties(ui-engine-settings-mods-updates PROPERTIES TIMEOUT 60)
 
   # Downloads: the section list, the check, install IDs and the downloaded files.
   add_executable(oa-ui-engine-settings-downloads-test tests/downloads_page_test.cpp)

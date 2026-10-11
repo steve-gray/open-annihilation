@@ -147,7 +147,8 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   - cards with a square preview or a placeholder, chips on the preview, a
     title and a subtitle, greyed or not, `card_height` and `card_cells`, a
     grid of as many columns as fit or of a fixed number;
-  - a hover card with the OA mark, a title and an aside, label and value
+  - a hover card with the OA mark (the logo when the canvas carries the icon,
+    otherwise the one-bit mark), a title and an aside, label and value
     rows, a quiet block and an arrow from any edge, `hover_card_size`,
     `hover_card_rect` and `hover_card_due`, which says when the pointer has
     rested on one control for `hover_card_delay_ms` (400);

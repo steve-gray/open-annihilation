@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
@@ -52,8 +53,8 @@ struct EnginePageList {
 constexpr EnginePageList engine_page_list(bool touch, bool controller, bool game_files) noexcept {
     EnginePageList list{};
     const auto add = [&list](Page page) { list.pages[list.count++] = page; };
-    for (const Page page :
-         {Page::mods, Page::controls, Page::common_tweaks, Page::language, Page::graphics})
+    for (const Page page : {Page::controls, Page::common_tweaks, Page::language, Page::graphics,
+                            Page::user_interface})
         add(page);
     if (touch)
         add(Page::touch);
@@ -169,6 +170,54 @@ std::size_t folder_button_at(const SourceRect& area, int32_t x, int32_t y) noexc
 
 std::string_view shown_text(std::string_view english) {
     return oa::data::languages::interface_text(english);
+}
+
+std::string filled(
+    std::string_view english,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> places
+) {
+    const std::string pattern(shown_text(english));
+    std::string text;
+    std::size_t at = 0;
+    while (at < pattern.size()) {
+        const std::size_t open = pattern.find('{', at);
+        const std::size_t close = open == std::string::npos ? open : pattern.find('}', open);
+        if (close == std::string::npos) {
+            text.append(pattern, at, std::string::npos);
+            break;
+        }
+        text.append(pattern, at, open - at);
+        const std::string_view name(pattern.data() + open + 1, close - open - 1);
+        bool found = false;
+        for (const auto& [place, value] : places)
+            if (place == name) {
+                text += value;
+                found = true;
+                break;
+            }
+        if (!found)
+            text.append(pattern, open, close - open + 1);
+        at = close + 1;
+    }
+    return text;
+}
+
+std::string cut_text(
+    std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
+) {
+    if (text_width(text) <= width)
+        return std::string(text);
+    const std::string ellipsis(path_ellipsis);
+    std::size_t end = text.size();
+    while (end > 0) {
+        --end;
+        while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0U) == 0x80U)
+            --end;
+        std::string shown = std::string(text.substr(0, end)) + ellipsis;
+        if (text_width(shown) <= width)
+            return shown;
+    }
+    return ellipsis;
 }
 
 RowContext row_context(const Dialog& dialog) noexcept {
@@ -341,16 +390,6 @@ ScrolledRows open_rows(const Dialog& dialog) {
     const Sizes& sized = sizes_of(dialog);
     ScrolledRows open{};
     open.area = sized.section_scroll;
-    if (mods_page(dialog)) {
-        // Mods' list scrolls in a view of its own, over OPEN MODS FOLDER.
-        open.area = mods_scroll(dialog.locks.mod != Lock::none, dialog.size_class);
-        open.rows = place_mod_rows(dialog, 0);
-        open.content_height = open.rows.bottom - open.area.view.y;
-        open.limit = std::max(open.content_height - open.area.view.height, int32_t{0});
-        open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
-        scroll_rows(open.rows, open.scroll);
-        return open;
-    }
     open.rows = place_section(
         dialog, dialog.page, shown_locks(dialog), dialog.section_hooks, &estimated_width
     );
@@ -652,21 +691,14 @@ const layout::Row* row_of(const layout::Rows& rows, int32_t control) noexcept {
 
 /// Returns the control a press at a point acts on: the first of the
 /// dialog's display list's controls that a press reaches there (kit::hit).
-/// While the question shows its buttons come first, and while a drop-down
-/// list is open its items do. On Mods a row's UPDATE that cannot be pressed
-/// lies over its row and takes a press there to no control, so that it never
-/// asks the Switch Mod question.
+/// While a drop-down list is open its items come first.
 ///
 /// @param dialog the dialog
 /// @param x the point's column
 /// @param y the point's row
 /// @return the control; no_control when none is there
 int32_t control_under(const Dialog& dialog, int32_t x, int32_t y) {
-    return kit::hit(
-        layout::dialog_list(dialog, nullptr),
-        {x, y},
-        layout::mods_page(dialog) ? kit::DisabledControl::blocks : kit::DisabledControl::passes
-    );
+    return kit::hit(layout::dialog_list(dialog, nullptr), {x, y}, kit::DisabledControl::passes);
 }
 
 /// Notes where the pointer is, so that the hover can follow the rows a
@@ -729,15 +761,6 @@ DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t contro
         return control < first_hack_list_control
                    ? DialogAction::none
                    : scroll_to(dialog, open, layout::list_scroll_showing(open, control));
-    if (layout::mods_page(dialog) && control >= layout::mods_folder_control(open.rows)) {
-        // A row's ROLL BACK or UPDATE brings its row into view.
-        int32_t row = layout::roll_back_row(open.rows, control);
-        if (row < 0)
-            row = layout::update_row(open.rows, control);
-        if (row < 0)
-            return DialogAction::none;
-        return scroll_to(dialog, open, layout::scroll_showing(open, static_cast<std::size_t>(row)));
-    }
     return scroll_to(
         dialog,
         open,
@@ -767,8 +790,8 @@ DialogAction move_in_tab_order(Dialog& dialog, layout::ScrolledRows& open, bool 
 
 /// Moves the focus to the control an arrow points at, by where the
 /// display list's controls lie (kit::focus_toward): within the focused
-/// control's scroll area first, the open section's rows, Developer's list
-/// or Mods' list, rows it does not show included; then among the controls
+/// control's scroll area first, the open section's rows or Developer's
+/// list, rows it does not show included; then among the controls
 /// that show. A row it moves onto is scrolled into view (show_row). From no
 /// focus, or a focus on no control the dialog shows, Up shows the focus on
 /// the last control in the declared order and the other arrows on the
@@ -1104,152 +1127,6 @@ list_key(Dialog& dialog, layout::ScrolledRows& open, const OpenList& list, Dialo
     return DialogAction::redraw;
 }
 
-/// Returns the question's button under a point: the button whose control
-/// the display list puts there (control_under).
-///
-/// @param dialog the dialog, its question showing
-/// @param x the point's column
-/// @param y the point's row
-/// @return question_yes_control, question_no_control, or no_control for neither
-int32_t question_button_at(const Dialog& dialog, int32_t x, int32_t y) {
-    const int32_t control = control_under(dialog, x, y);
-    return control == question_yes_control || control == question_no_control ? control : no_control;
-}
-
-/// Answers the question over Mods and puts it away: SWITCH makes the mod
-/// offered the Mod setting and asks the host to switch to it; ROLL BACK asks
-/// the host to roll the row's folder back; CANCEL leaves everything as it
-/// was.
-///
-/// @param[in,out] dialog the dialog
-/// @param yes the answer: SWITCH
-/// @return DialogAction::switch_mod for SWITCH, roll_back_mod for ROLL BACK,
-///         else DialogAction::redraw
-DialogAction answer_question(Dialog& dialog, bool yes) {
-    const int32_t offered = dialog.switch_question;
-    const ModQuestion asked = dialog.mod_question;
-    dialog.switch_question = no_question;
-    dialog.mod_question = ModQuestion::switch_mod;
-    dialog.question_marks_no = false;
-    dialog.hovered = no_control;
-    dialog.pressed = no_control;
-    if (!yes)
-        return DialogAction::redraw;
-    if (asked == ModQuestion::roll_back) {
-        if (offered < 0 || static_cast<std::size_t>(offered) >= dialog.mod_folders.size())
-            return DialogAction::redraw;
-        dialog.roll_back_folder = dialog.mod_folders[static_cast<std::size_t>(offered)];
-        return DialogAction::roll_back_mod;
-    }
-    if (offered >= 0 && static_cast<std::size_t>(offered) < dialog.mod_folders.size())
-        dialog.chosen.mod_folder = dialog.mod_folders[static_cast<std::size_t>(offered)];
-    else
-        dialog.chosen.mod_folder.clear();
-    return DialogAction::switch_mod;
-}
-
-/// Asks the Switch Mod question for a row of Mods; the row of the mod
-/// played, and every row while the page is locked, asks nothing.
-///
-/// @param[in,out] dialog the dialog
-/// @param open Mods' rows
-/// @param control the row's control
-/// @return DialogAction::redraw when the question shows, else DialogAction::none
-DialogAction ask_to_switch(Dialog& dialog, const layout::ScrolledRows& open, int32_t control) {
-    const layout::Row* row = row_of(open.rows, control);
-    if (row == nullptr || row->lock != Lock::none)
-        return DialogAction::none;
-    const auto rows = mod_rows(dialog);
-    const auto index = static_cast<std::size_t>(control - first_row_control);
-    if (index >= rows.size() || rows[index].playing)
-        return DialogAction::none;
-    dialog.switch_question = rows[index].offered;
-    dialog.mod_question = ModQuestion::switch_mod;
-    dialog.question_marks_no = false;
-    dialog.hovered = no_control;
-    dialog.pressed = no_control;
-    dialog.dragging = false;
-    return DialogAction::redraw;
-}
-
-/// Asks the Roll Back Mod question for a row of Mods whose folder keeps an
-/// earlier version; every row while the page is locked asks nothing.
-///
-/// @param[in,out] dialog the dialog
-/// @param open Mods' rows
-/// @param index the row's place
-/// @return DialogAction::redraw when the question shows, else DialogAction::none
-DialogAction ask_to_roll_back(Dialog& dialog, const layout::ScrolledRows& open, std::size_t index) {
-    if (index >= open.rows.rows.size() || open.rows.rows[index].lock != Lock::none)
-        return DialogAction::none;
-    const auto rows = mod_rows(dialog);
-    if (index >= rows.size() || !layout::offers_roll_back(dialog, rows[index]))
-        return DialogAction::none;
-    dialog.switch_question = rows[index].offered;
-    dialog.mod_question = ModQuestion::roll_back;
-    dialog.question_marks_no = false;
-    dialog.hovered = no_control;
-    dialog.pressed = no_control;
-    dialog.dragging = false;
-    return DialogAction::redraw;
-}
-
-/// Asks the host to start a row of Mods' update: its UPDATE was pressed. A
-/// row whose UPDATE is hidden or off, and every row while the page is
-/// locked, asks nothing.
-///
-/// @param[in,out] dialog the dialog
-/// @param index the row's place among Mods' rows
-/// @return DialogAction::update_mod, Dialog::update_folder naming the row's
-///         folder; else DialogAction::none
-DialogAction ask_to_update(Dialog& dialog, std::size_t index) {
-    const auto rows = mod_rows(dialog);
-    if (index >= rows.size() || !layout::shows_update(dialog, rows[index]))
-        return DialogAction::none;
-    const ModDetails* details = layout::update_details(dialog, rows[index]);
-    if (details == nullptr || !details->update_enabled)
-        return DialogAction::none;
-    dialog.update_folder = dialog.mod_folders[static_cast<std::size_t>(rows[index].offered)];
-    return DialogAction::update_mod;
-}
-
-/// Takes a key while the question shows: Y answers Yes; N and Escape answer
-/// No; Enter and Space answer the marked button; Left marks No, Right marks
-/// Yes, and Tab and Shift+Tab move the mark to the other button.
-///
-/// @param[in,out] dialog the dialog
-/// @param key the key
-/// @return what the key asks of the host
-DialogAction question_key(Dialog& dialog, DialogKey key) {
-    bool marks_no = dialog.question_marks_no;
-    switch (key) {
-    case DialogKey::yes:
-        return answer_question(dialog, true);
-    case DialogKey::no:
-    case DialogKey::escape:
-        return answer_question(dialog, false);
-    case DialogKey::enter:
-    case DialogKey::space:
-        return answer_question(dialog, !dialog.question_marks_no);
-    case DialogKey::left:
-        marks_no = true;
-        break;
-    case DialogKey::right:
-        marks_no = false;
-        break;
-    case DialogKey::tab:
-    case DialogKey::back_tab:
-        marks_no = !marks_no;
-        break;
-    default:
-        return DialogAction::none;
-    }
-    if (marks_no == dialog.question_marks_no)
-        return DialogAction::none;
-    dialog.question_marks_no = marks_no;
-    return DialogAction::redraw;
-}
-
 /// Resets every setting the dialog can change to its default. Each locked
 /// setting, found through its row's lock on every section the dialog lists,
 /// keeps its value. A dialog of the engine's settings keeps the mod
@@ -1291,7 +1168,7 @@ DialogAction restore_defaults(Dialog& dialog) {
     EngineSettings restored = dialog.defaults;
     restored.mod_options = before.mod_options;
     // The overrides stay: Restore profile values clears them. The mod
-    // changes only through the Switch Mod question.
+    // changes only through the Library.
     restored.hack_overrides = before.hack_overrides;
     restored.picked_mod_folder = before.picked_mod_folder;
     restored.mod_folder = before.mod_folder;
@@ -1451,25 +1328,6 @@ DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t 
         if (const layout::ListRow* row = layout::list_row(open.list, control))
             return developer::activate(dialog, *row);
     }
-    if (layout::mods_page(dialog)) {
-        if (control == layout::mods_folder_control(open.rows))
-            return dialog.locks.mod == Lock::none ? open_folder(dialog, FolderButton::mods)
-                                                  : DialogAction::none;
-        if (const int32_t row = layout::roll_back_row(open.rows, control); row >= 0)
-            return ask_to_roll_back(dialog, open, static_cast<std::size_t>(row));
-        if (const int32_t row = layout::update_row(open.rows, control); row >= 0)
-            return ask_to_update(dialog, static_cast<std::size_t>(row));
-        if (control == layout::check_now_control(open.rows))
-            return layout::shows_check_now(dialog) ? DialogAction::check_for_updates
-                                                   : DialogAction::none;
-        if (control == layout::get_more_mods_control(open.rows)) {
-            if (!layout::shows_get_more_mods(dialog))
-                return DialogAction::none;
-            dialog.library_tab = LibraryTab::mods;
-            return DialogAction::open_library;
-        }
-        return ask_to_switch(dialog, open, control);
-    }
     // A row takes Space as its row spec says: a switch flips, a drop-down
     // opens its list, MANAGE… and the marked button of Your files ask the
     // host to act; a slider, a strip and a row of text take nothing.
@@ -1515,9 +1373,9 @@ DialogAction drag_to(Dialog& dialog, const layout::Row& row, int32_t column) {
 
 /// Returns where a finger's press lands, by the kit's reach (kit::reach)
 /// over the dialog's display list: the finger's own point over a control,
-/// else the nearest point of the nearest control within reach. While the
-/// question shows, only its two buttons are reached, and while a drop-down
-/// list is open only its items, since either takes every press.
+/// else the nearest point of the nearest control within reach. While a
+/// drop-down list is open only its items are reached, since it takes every
+/// press.
 ///
 /// @param dialog the dialog
 /// @param open the open section's rows
@@ -1529,11 +1387,8 @@ kit::Point finger_landing(
     const Dialog& dialog, const layout::ScrolledRows& open, int32_t x, int32_t y, int32_t reach
 ) {
     kit::DisplayList list = layout::dialog_list(dialog, nullptr);
-    const bool asking = dialog.switch_question != no_question;
-    if (asking || open_list(dialog, open).has_value())
-        std::erase_if(list.controls, [asking](const kit::Control& control) {
-            if (asking)
-                return control.id != question_yes_control && control.id != question_no_control;
+    if (open_list(dialog, open).has_value())
+        std::erase_if(list.controls, [](const kit::Control& control) {
             return control.id > layout::first_menu_item_control;
         });
     return kit::reach(list, {x, y}, reach).at;
@@ -1573,7 +1428,6 @@ void open_dialog(
     Page page,
     const AccelerationStatus& acceleration,
     uint16_t highest_offered_unit,
-    const ModOffer& mods,
     std::span<const oa::data::mod_profile::HackState> profile_hacks,
     const oa::data::languages::Language* system_language,
     bool touch,
@@ -1586,10 +1440,6 @@ void open_dialog(
     dialog.controller = controller;
     dialog.system_language = system_language;
     dialog.highest_offered_unit = highest_offered_unit;
-    dialog.mod_names.assign(mods.names.begin(), mods.names.end());
-    dialog.mod_folders.assign(mods.folders.begin(), mods.folders.end());
-    dialog.mod_details.assign(mods.details.begin(), mods.details.end());
-    dialog.playing_mod_folder = std::string(mods.playing);
     dialog.opened = current;
     dialog.chosen = current;
     dialog.defaults = defaults;
@@ -1739,14 +1589,6 @@ DialogAction dialog_pointer_move(Dialog& dialog, int32_t x, int32_t y) {
         y += dialog.finger_shift_y;
     }
     note_pointer(dialog, x, y);
-    // The question hovers its own buttons only.
-    if (dialog.switch_question != no_question) {
-        const int32_t button = question_button_at(dialog, x, y);
-        if (button == dialog.hovered)
-            return DialogAction::none;
-        dialog.hovered = button;
-        return DialogAction::redraw;
-    }
     layout::ScrolledRows open = layout::open_rows(dialog);
     // An open list marks the item under the pointer.
     if (const auto list = open_list(dialog, open)) {
@@ -1790,14 +1632,6 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
     dialog.finger_shift_x = 0;
     dialog.finger_shift_y = 0;
     note_pointer(dialog, x, y);
-    // The question takes the press: on a button it holds the button.
-    if (dialog.switch_question != no_question) {
-        const int32_t button = question_button_at(dialog, x, y);
-        dialog.hovered = button;
-        dialog.pressed = button;
-        dialog.dragging = false;
-        return button == no_control ? DialogAction::none : DialogAction::redraw;
-    }
     layout::ScrolledRows open = layout::open_rows(dialog);
     // An open list takes the press: on an item it holds the item; anywhere
     // else it closes the list, and the press does nothing more.
@@ -1886,18 +1720,6 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     dialog.finger_shift_x = 0;
     dialog.finger_shift_y = 0;
     note_pointer(dialog, x, y);
-    // A release over the question's button the press held answers it.
-    if (dialog.switch_question != no_question) {
-        const int32_t pressed = dialog.pressed;
-        const int32_t button = question_button_at(dialog, x, y);
-        dialog.pressed = no_control;
-        dialog.hovered = button;
-        if (pressed == no_control)
-            return DialogAction::none;
-        if (button != pressed)
-            return DialogAction::redraw;
-        return answer_question(dialog, button == question_yes_control);
-    }
     const layout::ScrolledRows open = layout::open_rows(dialog);
     // A release over the list item the press held chooses it.
     if (const auto list = open_list(dialog, open)) {
@@ -1929,9 +1751,6 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
         if (const layout::ListRow* row = layout::list_row(open.list, control))
             return developer::release_on(dialog, *row, x);
     }
-    // A mod row asks the Switch Mod question; OPEN MODS FOLDER opens it.
-    if (layout::mods_page(dialog))
-        return activate(dialog, open, control);
     // A row takes the release as its row spec says: a switch's half sets
     // it, a strip's level is chosen, a drop-down opens its list, MANAGE…
     // and the button of Your files the press held ask the host to act.
@@ -1967,8 +1786,6 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
 }
 
 DialogAction dialog_key(Dialog& dialog, DialogKey key) {
-    if (dialog.switch_question != no_question)
-        return question_key(dialog, key);
     layout::ScrolledRows open = layout::open_rows(dialog);
     const layout::Rows& rows = open.rows;
     if (const auto list = open_list(dialog, open))
@@ -2059,8 +1876,7 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
 }
 
 DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {
-    if (!dialog_contains(dialog, x, y) || dialog.pressed != no_control || !std::isfinite(notches) ||
-        dialog.switch_question != no_question)
+    if (!dialog_contains(dialog, x, y) || dialog.pressed != no_control || !std::isfinite(notches))
         return DialogAction::none;
     note_pointer(dialog, x, y);
     layout::ScrolledRows open = layout::open_rows(dialog);
@@ -2262,148 +2078,6 @@ void developer_layout(
 
 } // namespace
 
-namespace {
-
-/// Lists Mods' parts: the lock line while it is locked, each row wholly in
-/// the list's view (its badge, title, PLAYING tag, version and
-/// description; the row itself the control a press switches with; a row
-/// with an update its update's lines and its UPDATE), the line on the check
-/// for updates and CHECK NOW, OPEN MODS FOLDER, GET MORE MODS… and the lines
-/// under them.
-///
-/// @param dialog the dialog
-/// @param open Mods' rows
-/// @param[in,out] parts the parts, which Mods' are added to
-/// @param text_width a regular text's width
-/// @param small_text_width a small text's width
-void mods_layout(
-    const Dialog& dialog,
-    const layout::ScrolledRows& open,
-    std::vector<LayoutPart>& parts,
-    const std::function<int32_t(std::string_view)>& text_width,
-    const std::function<int32_t(std::string_view)>& small_text_width
-) {
-    const layout::Sizes& sized = layout::sizes_of(dialog);
-    const auto text = [&parts](layout::SourceRect rect, std::string shown, DialogFont font) {
-        parts.push_back(LayoutPart{rect, std::move(shown), font, 0, no_control});
-    };
-    if (dialog.locks.mod != Lock::none) {
-        // The reason, beside the padlock, over as many of its two lines as
-        // it needs.
-        oa::ui::kit::WrapRules rules;
-        rules.shorten_word = [&](std::string_view word) {
-            return layout::cut_text(word, sized.mods_lock_text.width, small_text_width);
-        };
-        const auto lines = oa::ui::kit::wrap(
-            layout::shown_text(
-                dialog.locks.mod == Lock::command_line ? layout::mod_from_command_line_text
-                                                       : layout::mod_in_game_text
-            ),
-            sized.mods_lock_text.width,
-            small_text_width,
-            rules
-        );
-        for (std::size_t line = 0; line < lines.size() && line < 2; ++line) {
-            layout::SourceRect rect = sized.mods_lock_text;
-            rect.y += static_cast<int32_t>(line) * rect.height;
-            text(rect, lines[line], DialogFont::small);
-        }
-    }
-    const auto rows = mod_rows(dialog);
-    for (std::size_t index = 0; index < open.rows.rows.size() && index < rows.size(); ++index) {
-        const layout::Row& row = open.rows.rows[index];
-        if (!wholly_in(row.control_area, open.area.view))
-            continue;
-        const layout::ModRowText shown = layout::mod_row_text(dialog, rows[index]);
-        parts.push_back(
-            LayoutPart{
-                row.control_area,
-                {},
-                DialogFont::regular,
-                0,
-                row.lock == Lock::none ? row.control : no_control
-            }
-        );
-        // The row's own parts lie inside it; only the row is listed as its
-        // control, and its texts and badge as texts and a mark, and its ROLL
-        // BACK as a control of its own.
-        static_cast<void>(text_width);
-        static_cast<void>(small_text_width);
-        if (layout::offers_roll_back(dialog, rows[index]))
-            parts.push_back(
-                LayoutPart{
-                    layout::roll_back_button(row),
-                    std::string(layout::shown_text(layout::roll_back_text)),
-                    DialogFont::small,
-                    0,
-                    row.lock == Lock::none ? layout::roll_back_control(open.rows, index)
-                                           : no_control
-                }
-            );
-        // A row with an update: its lines in place of its description, and
-        // UPDATE, a control while it can be pressed.
-        const std::vector<std::string> lines = layout::update_lines(dialog, rows[index]);
-        for (std::size_t line = 0; line < lines.size() && line < row.hint_lines; ++line)
-            text(row.hints[line], lines[line], DialogFont::small);
-        if (layout::shows_update(dialog, rows[index])) {
-            const ModDetails* update = layout::update_details(dialog, rows[index]);
-            parts.push_back(
-                LayoutPart{
-                    layout::update_button(row, layout::offers_roll_back(dialog, rows[index])),
-                    std::string(layout::shown_text(layout::mod_update_caption)),
-                    DialogFont::small,
-                    0,
-                    update != nullptr && update->update_enabled
-                        ? layout::update_control(open.rows, index)
-                        : no_control
-                }
-            );
-        }
-    }
-    // The line on the check for updates, and CHECK NOW after it.
-    if (const auto [place, words] = layout::check_line_text(dialog); !words.empty())
-        text(place, words, DialogFont::small);
-    if (layout::shows_check_now(dialog))
-        parts.push_back(
-            LayoutPart{
-                layout::check_now_link(dialog),
-                std::string(layout::shown_text(layout::check_now_text)),
-                DialogFont::small,
-                0,
-                layout::check_now_control(open.rows)
-            }
-        );
-    if (layout::shows_get_more_mods(dialog))
-        parts.push_back(
-            LayoutPart{
-                layout::get_more_mods_button(dialog),
-                std::string(layout::shown_text(layout::get_more_mods_text)),
-                DialogFont::small,
-                0,
-                layout::get_more_mods_control(open.rows)
-            }
-        );
-    parts.push_back(
-        LayoutPart{
-            sized.mods_folder_button,
-            std::string(layout::shown_text(layout::open_mods_folder_text)),
-            DialogFont::small,
-            0,
-            dialog.locks.mod == Lock::none ? layout::mods_folder_control(open.rows) : no_control,
-        }
-    );
-    const std::string_view second =
-        dialog.folder_notice.empty() ? layout::mods_folders_text[1] : dialog.folder_notice;
-    text(
-        sized.mods_note_first,
-        std::string(layout::shown_text(layout::mods_folders_text[0])),
-        DialogFont::small
-    );
-    text(sized.mods_note_second, std::string(layout::shown_text(second)), DialogFont::small);
-}
-
-} // namespace
-
 std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* fonts) {
     const layout::Sizes& sized = layout::sizes_of(dialog);
     std::vector<LayoutPart> parts;
@@ -2527,22 +2201,18 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         };
     if (dialog.page == Page::registered)
         append_registered_content(dialog, parts);
-    else if (layout::mods_page(dialog))
-        mods_layout(dialog, open, parts, text_width, small_text_width);
     // Every other section's rows as they are drawn, from their row specs:
     // Developer's stay at its top while its list scrolls.
     oa::ui::kit::PlacedRows placed;
-    if (!layout::mods_page(dialog)) {
-        static_cast<void>(layout::place_section(
-            dialog,
-            dialog.page,
-            layout::shown_locks(dialog),
-            dialog.section_hooks,
-            small_text_width,
-            &placed
-        ));
-        oa::ui::kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
-    }
+    static_cast<void>(layout::place_section(
+        dialog,
+        dialog.page,
+        layout::shown_locks(dialog),
+        dialog.section_hooks,
+        small_text_width,
+        &placed
+    ));
+    oa::ui::kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
     const layout::SettingsModel model = layout::reading(dialog.chosen, dialog);
     for (std::size_t index = 0; index < placed.rows.size() && index < open.rows.rows.size();
          ++index) {
@@ -2765,76 +2435,6 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                 }
             );
         }
-    }
-    // The question lies over everything else, which is not listed under it.
-    if (dialog.switch_question != no_question) {
-        const auto under_question = [&sized](const LayoutPart& part) {
-            const auto& a = part.rect;
-            const auto& b = sized.question_box;
-            return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height &&
-                   b.y < a.y + a.height;
-        };
-        parts.erase(std::remove_if(parts.begin(), parts.end(), under_question), parts.end());
-        text_part(
-            sized.question_heading,
-            dialog.mod_question == ModQuestion::roll_back ? layout::roll_back_heading_text
-                                                          : layout::switch_heading_text,
-            DialogFont::small
-        );
-        control_part(sized.question_badge, no_control);
-        const layout::ModRowText offered =
-            layout::mod_row_text(dialog, ModRow{dialog.switch_question, false});
-        parts.push_back(
-            LayoutPart{
-                sized.question_title,
-                layout::cut_text(offered.title, sized.question_title.width, text_width),
-                DialogFont::regular,
-                0,
-                no_control,
-            }
-        );
-        parts.push_back(
-            LayoutPart{
-                sized.question_version,
-                layout::cut_text(
-                    layout::question_version_text(dialog, offered),
-                    sized.question_version.width,
-                    small_text_width
-                ),
-                DialogFont::small,
-                0,
-                no_control,
-            }
-        );
-        const auto lines = layout::question_text_lines(dialog, small_text_width);
-        for (std::size_t line = 0; line < lines.size(); ++line) {
-            layout::SourceRect rect = sized.question_first_line;
-            rect.y += static_cast<int32_t>(line) * rect.height;
-            parts.push_back(LayoutPart{rect, lines[line], DialogFont::small, 0, no_control});
-        }
-        parts.push_back(
-            LayoutPart{
-                layout::question_no_rect(dialog),
-                std::string(layout::shown_text(layout::no_text)),
-                DialogFont::small,
-                0,
-                question_no_control,
-            }
-        );
-        parts.push_back(
-            LayoutPart{
-                layout::question_yes_rect(dialog),
-                std::string(
-                    layout::shown_text(
-                        dialog.mod_question == ModQuestion::roll_back ? layout::roll_back_text
-                                                                      : layout::yes_text
-                    )
-                ),
-                DialogFont::small,
-                0,
-                question_yes_control,
-            }
-        );
     }
     return parts;
 }

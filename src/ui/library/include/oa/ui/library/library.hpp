@@ -119,9 +119,18 @@ struct Installed {
     int64_t release{};                           ///< the release it matched; 0 for the player's own
     std::optional<base::sha256::Digest> rules{}; ///< a mod's rules hash, when it resolves
     bool playing{};                              ///< the mod being played
-    std::optional<Kept> kept{};                  ///< the copy ROLL BACK restores
-    std::optional<Badge> badge{};                ///< the badge, when the app has it
-    std::string author{}; ///< the manifest's author's name; empty when it names none
+    /// A language pack the game shows its words from now: the language
+    /// chosen's, or one of its fallbacks'. False for every other kind.
+    bool in_use{};
+    std::optional<Kept> kept{};   ///< the copy ROLL BACK restores
+    std::optional<Badge> badge{}; ///< the badge, when the app has it
+    std::string author{};         ///< the manifest's author's name; empty when it names none
+    /// The manifest's description; empty when it gives none. The details
+    /// show it where the listing has no summary (entry_summary).
+    std::string description{};
+    /// A mod folder with no oamod.yaml, which layers over the game folder
+    /// and plays by the game's own rules: its status line says so.
+    bool without_manifest{};
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -226,6 +235,11 @@ struct Inputs {
     int64_t list_age_seconds{-1};           ///< how old the newest list is; -1 for none
     bool offline{};                         ///< the last fetch could not reach a registry
     bool in_match{};                        ///< a game is being played
+    /// The command line chose this run's mod (--mod-dir or --base-game):
+    /// PLAY NOW and SWITCH OFF are off, and a mod's details say why.
+    bool mod_from_command_line{};
+    bool can_check{}; ///< a registry is on that CHECK NOW can ask for its list
+    bool checking{};  ///< the registries are being asked for their lists now
     /// The mod being played; none when the game plays no mod. An installed
     /// mod marked playing is shown in its place.
     std::optional<PlayingMod> playing_mod{};
@@ -431,6 +445,14 @@ void close_details(Library& library);
 /// @return the name
 [[nodiscard]] std::string_view entry_name(const Entry& entry);
 
+/// Returns the words the details show under an entry's name: its listing's
+/// summary, else, as for a mod of the player's own, its installed
+/// manifest's description.
+///
+/// @param entry the entry
+/// @return the words; empty when neither gives any
+[[nodiscard]] std::string_view entry_summary(const Entry& entry);
+
 /// Lists the tags of the entries a tab shows under its filter, with how many have each.
 ///
 /// The tag and the search are not applied.
@@ -546,10 +568,14 @@ enum class Action : uint8_t {
     retry,
     roll_back,
     play_now,
+    /// The mod being played's own in place of PLAY NOW: the game plays no
+    /// mod from then on, once the player answers the Switch Mod question.
+    switch_off,
     open_folder,
     homepage,
     details,
     back,
+    check_now, ///< the footer's: the registries are asked for their lists again
     settings,
     close,
     /// ADD REGISTRY… on the Registries tab. The host opens the add-registry question.
@@ -562,6 +588,9 @@ enum class Action : uint8_t {
     /// A registry's switch. `ScreenResult::registry` names it and
     /// `ScreenResult::registry_on` is the half that was chosen.
     set_registry,
+    /// An installed package's: asks first, then removes its folder and the
+    /// copy ROLL BACK keeps (uninstall.hpp).
+    uninstall,
 };
 
 /// One button of an entry's details.
@@ -575,13 +604,23 @@ struct ActionButton {
 ///
 /// GET or UPDATE first, or CANCEL while it is queued, or RETRY when its
 /// download failed and can be tried again; then PLAY NOW for an installed mod
-/// that is not being played, ROLL BACK when a copy is kept, OPEN FOLDER when
-/// installed, and HOMEPAGE when the listing has one.
+/// that is not being played, or SWITCH OFF for the one that is, ROLL BACK
+/// when a copy is kept, UNINSTALL and OPEN FOLDER when installed, and
+/// HOMEPAGE when the listing has one. PLAY NOW, SWITCH OFF and ROLL BACK are
+/// off during a game, and PLAY NOW and SWITCH OFF while the command line
+/// chose the mod; UNINSTALL is off while uninstall_off_reason gives a reason.
 ///
 /// @param library the Library
 /// @param entry one of its entries
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
+
+/// Tells whether the footer's CHECK NOW can be pressed: a registry is on
+/// that it can ask, none is being asked now, and no game is being played.
+///
+/// @param library the Library
+/// @return true when it can
+[[nodiscard]] bool can_check_now(const Library& library) noexcept;
 
 /// How a fact's value is marked.
 enum class Mark : uint8_t {
@@ -638,7 +677,9 @@ struct Fact {
 ///         listing names neither a person nor a count
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
-/// Says how an update of the selected mod meets the mod being played.
+/// Says how an update of the selected mod meets the mod being played, and,
+/// on an installed mod while the command line chose this run's mod, that it
+/// did, before anything else.
 ///
 /// @param library the Library
 /// @return the note; empty when it has none

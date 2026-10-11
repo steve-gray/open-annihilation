@@ -357,12 +357,16 @@ struct BuiltinScreens {
             return static_cast<Runtime*>(context)->offers_movies();
         };
         // A mod shows its own version where the profile names one, whether
-        // or not its game data names a revision.
+        // or not its game data names a revision. Otherwise the label is the
+        // program's name and this build's version, and game data that does
+        // not name its revision (the demo) keeps the label hidden.
+        const std::string program_line = ui::frontend::main_menu_version_text();
         if (const auto* profile = runtime.options_.mod_profile.get();
             profile != nullptr &&
             profile->identity.display_version != oa::data::mod_profile::Identity{}.display_version)
             menu.version_text = profile->identity.display_version.c_str();
-        else
+        else {
+            menu.version_text = program_line.c_str();
             menu.revision_named = [](void* context) {
                 return static_cast<Runtime*>(context)->assets_.file_size(
                            oa::data::defs::data_path(
@@ -370,6 +374,7 @@ struct BuiltinScreens {
                            )
                        ) != 0;
             };
+        }
         static ui::frontend::Panel panel;
         ui::frontend::panel_load_layout(panel, runtime.resources_.layout);
         ui::frontend::main_menu_setup(panel, checks, menu);

@@ -16,9 +16,9 @@
 // another registry's copy or goes beside a folder of the player's own, and
 // while the Library shows its questions show over it and the rest in its
 // queue; its update to the mod being played waits until the player leaves
-// that mod. PLAY NOW switches to the mod installed, and ROLL BACK, on the
-// Mods page and in the Library, swaps a mod folder with the version its
-// .backup keeps.
+// that mod. PLAY NOW switches to the mod installed, SWITCH OFF in the
+// Library to no mod, and ROLL BACK in the Library swaps a mod folder with
+// the version its .backup keeps.
 
 #include "engine_settings_state.hpp"
 #include "library_host.hpp"
@@ -586,7 +586,7 @@ void Runtime::tell_mod_installs() {
         // Unpacked whole. A kind that checks the staged files does so before
         // they are put in place or left for the run's end. The folder the
         // game plays, when the kind checks nothing of its own, is checked as
-        // the Mods page checks a folder, then changed once the run ends and
+        // PLAY NOW checks a folder, then changed once the run ends and
         // its archives are closed. Any other is put in place on the next
         // frame, once the prompt says so.
         if (kind.check_staged != nullptr) {
@@ -1314,26 +1314,35 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
 bool Runtime::switch_to_mod_folder(const fs::path& folder, std::string& refusal) {
     auto& state = engine_settings_state();
     settings::EngineSettings chosen = state.current;
-    chosen.mod_folder = kept_path(folder);
+    // No mod needs no check: the game folder plays as it is, and the folder
+    // an earlier version picked is forgotten with the mod it was.
+    chosen.mod_folder = folder.empty() ? std::string() : kept_path(folder);
+    if (folder.empty())
+        chosen.picked_mod_folder.clear();
     const auto& game_folder =
         options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
-    auto check = check_picked_mod_folder(
-        folder,
-        game_folder,
-        ModChoice{{}, {}, options_.accept_unimplemented_hacks, &preference_values_}
-    );
-    if (check.refusal.empty() && check.without_profile)
-        if (auto problem =
-                side_data_problem_over(folder, game_folder, data_word_for(chosen.language));
-            !problem.empty()) {
-            check.refusal = "That folder cannot be played; the log says why.";
-            check.errors.push_back(std::move(problem));
+    if (!folder.empty()) {
+        auto check = check_picked_mod_folder(
+            folder,
+            game_folder,
+            ModChoice{{}, {}, options_.accept_unimplemented_hacks, &preference_values_}
+        );
+        // Without a profile, the start ends on a SIDEDATA it cannot play,
+        // such as one a side's section is missing from, in the language
+        // chosen.
+        if (check.refusal.empty() && check.without_profile)
+            if (auto problem =
+                    side_data_problem_over(folder, game_folder, data_word_for(chosen.language));
+                !problem.empty()) {
+                check.refusal = "That folder cannot be played; the log says why.";
+                check.errors.push_back(std::move(problem));
+            }
+        for (const auto& line : check.errors)
+            std::cerr << "open-annihilation: the mod chosen: " << line << '\n';
+        if (!check.refusal.empty()) {
+            refusal = check.refusal;
+            return false;
         }
-    for (const auto& line : check.errors)
-        std::cerr << "open-annihilation: the mod chosen: " << line << '\n';
-    if (!check.refusal.empty()) {
-        refusal = check.refusal;
-        return false;
     }
     const settings::EngineSettings opened = state.current;
     apply_engine_settings(chosen);
@@ -1356,7 +1365,7 @@ bool Runtime::roll_back_mod_folder(const fs::path& folder, std::string& refusal)
     auto& install_state = mod_install_state();
     install_state.roll_back_refusal.reset();
     // A refusal changes nothing. Its words go to the caller, and its prompt
-    // is kept for the Mods page to show over Settings.
+    // is kept for the Library to show over itself.
     const auto refuse = [&](install::PackagePrompt made, std::string_view why) {
         log_line(path_to_utf8(folder) + ": not rolled back: " + std::string(why));
         refusal = prompt_words(made.prompt);
@@ -1400,8 +1409,8 @@ bool Runtime::roll_back_mod_folder(const fs::path& folder, std::string& refusal)
     pending.incoming = {backup->id, backup->name, backup->version, backup->revision};
     pending.replaced = installed;
     if (played) {
-        // As SWITCH does: Settings, where it is open, keeps its choices,
-        // saves them and closes, and the run ends for the folder to change.
+        // As OK does: Settings, where it is open, keeps its choices, saves
+        // them and closes, and the run ends for the folder to change.
         if (settings::Dialog* dialog = engine_settings_dialog()) {
             take_renderer_retry(*dialog);
             keep_renderer_records();
@@ -1432,12 +1441,6 @@ bool Runtime::roll_back_mod_folder(const fs::path& folder, std::string& refusal)
         return refuse(install::oamod::roll_back_failed_prompt(title), result.detail);
     log_line(path_to_utf8(folder) + ": rolled back to " + backup->version);
     package_changed(kind, folder);
-    // Settings, where it is open, lists the folder's versions as they are now.
-    if (settings::Dialog* dialog = engine_settings_dialog()) {
-        dialog->mod_names = state.mod_names;
-        dialog->mod_folders = state.mod_folders;
-        dialog->mod_details = state.mod_details;
-    }
     return true;
 }
 

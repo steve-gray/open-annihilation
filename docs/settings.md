@@ -1,29 +1,33 @@
 # Settings
 
-Open Annihilation adds settings of its own to the game: which mod to play,
-a few controls, the unit limit, the language and fonts of the game's text,
-graphics and the size of Open Annihilation's own screens, touch and gamepad
-controls, downloads, and Developer Mode. The registries packages come
-from are a tab of the Library.
-They live in one dialog, apart from the game's own options, which stay in
-3.1c's Options menu. This page shows each section of the dialog and says
-what every setting does, its default, when it takes effect and when you
-might change it.
+Open Annihilation adds settings of its own to the game: a few controls, the
+unit limit, the language and fonts of the game's text, graphics and the
+size of Open Annihilation's own screens, touch and gamepad controls,
+downloads, and Developer Mode. The registries packages come from are a tab
+of the Library. They live in one dialog, apart from the game's own
+options, which stay in 3.1c's Options menu. This page shows each section
+of the dialog and says what every setting does, its default, when it takes
+effect and when you might change it.
+
+The mod you play is not a setting here: you choose it in
+[the Library](library.md#choosing-a-mod), where **PLAY NOW** plays a mod
+and **SWITCH OFF** goes back to the game as 3.1c plays it.
 
 The pictures show each section at its defaults on a Mac, opened from the
 main menu, with Core Prime's list of content checked a few minutes before.
-The top and middle of Graphics, and Controller, are pictures from 0.7, from
-before Downloads joined the column on the left.
+They are from before Mods left the column on the left for the Library, and
+the top and middle of Graphics, and Controller, are pictures from 0.7, from
+before Downloads joined it.
 
 ## Contents
 
 - [Opening the settings](#opening-the-settings)
 - [OK, Cancel and Restore defaults](#ok-cancel-and-restore-defaults)
-- [Mods](#mods)
 - [Controls](#controls)
 - [Common Tweaks](#common-tweaks)
-- [Language](#language)
+- [Language & Text](#language)
 - [Graphics](#graphics)
+- [User Interface](#user-interface)
 - [Touch](#touch)
 - [Controller](#controller)
 - [Game files](#game-files)
@@ -48,11 +52,11 @@ A game played alone stays paused while the settings are open. A
 multiplayer game keeps running, and the dialog's header says so in amber:
 "Shared game - still running".
 
-The column on the left lists the sections: Mods, Controls, Common Tweaks,
-Language and Graphics, then Touch while the game has touch controls,
-Controller once a gamepad has been used, and Game files in the main menu
-on an iPhone or an iPad, then Downloads, and Developer at its foot under a
-divider. A
+The column on the left lists the sections: Controls, Common Tweaks,
+Language & Text, Graphics and User Interface, then Touch while the game
+has touch controls, Controller once a gamepad has been used, and Game
+files in the main menu on an iPhone or an iPad, then Downloads, and
+Developer at its foot under a divider. A
 section taller than the dialog, such as Graphics, scrolls with the mouse
 wheel, its scroll bar, Page Up, Page Down, Home and End.
 
@@ -70,8 +74,8 @@ keep it. A row's hint says when a setting takes effect later instead:
 - **Cancel** (Escape) closes it and puts back every setting as it was when
   the dialog opened.
 - **Restore defaults** sets every setting back to its default. It leaves
-  alone the mod you play, which changes only through the Mods section's
-  question, the changes Developer Mode keeps for the standard hacks, and
+  alone the mod you play, which changes only in the Library, the changes
+  Developer Mode keeps for the standard hacks, and
   any setting that is locked. It also has the graphics card tried afresh (see
   [Hardware acceleration](#graphics)), turns every install ID in Downloads
   back on and sets Check for content updates to Automatically; the
@@ -104,78 +108,9 @@ A setting that cannot change now is faded, with a padlock and the reason:
 - **Needs modern fonts**: Text size, while the modern fonts are off.
 - **Always on here**: Native pixel density on an iPhone or an iPad.
 
-## Mods
-
-![The Mods section: No Mod, marked PLAYING, with the version 3.1c and the line "The game's own rules, as 3.1c plays them."; under the list the line "Checked for updates 4 min ago · CHECK NOW", the OPEN MODS FOLDER and GET MORE MODS… buttons, and a line naming the folders listed.](images/settings/mods.png)
-
-Mods chooses the mod the game plays, or **No Mod** for 3.1c's own rules,
-which is the default. It is a list rather than a column of settings: a row
-for each mod, with its badge, its title, its version at the right and a
-line that describes it. A mod without a badge shows an empty dashed square.
-
-- **The list** starts with the mod being played, marked PLAYING, then No
-  Mod when a mod is playing, then every other mod by title. It holds the
-  mods in the game folder's `mods` folder and in your own Mods folder,
-  `Documents/Open Annihilation/Mods`. A folder without an `oamod.yaml`
-  shows its folder's name, "N/A" and "No oamod.yaml present" in amber; it
-  plays with the game's own rules.
-- **Choosing a mod.** A click on another row, or Space on it, asks
-  **Switch Mod**: "Switch to *title* now? The game reloads its data for
-  the new mod and returns to the main menu. Your other settings are kept."
-  **Switch** (Enter) keeps the dialog's other changes as OK does, then
-  reloads the game for that mod and returns to the main menu, without
-  closing the window. **Cancel** (Escape) leaves everything as it was. The
-  mod chosen is played at every later start too.
-- **An update.** When a registry lists a newer release of a mod you
-  installed from it, the mod's row says so in amber in place of its
-  description, with the download's size: "Revision 4 available · 3.2 MB" or
-  "Version 4.9 available · 41.0 MB", or "Revision 4 changes the rules ·
-  3.2 MB" when the update changes the game's rules, which saved games are
-  tied to, and "… may change the rules · …" when OA cannot tell. **UPDATE**,
-  beside ROLL BACK, starts it. An update from Core Prime's registry starts
-  at once; one from a registry you added asks first when it changes the
-  rules or may change them ([which downloads ask first](library.md#which-downloads-ask-first)).
-  While it downloads the line says how far it has come ("Updating · 28%"),
-  and an update to the mod being played waits until you leave that mod
-  ("Waiting · finishes when you leave *title*"). Nothing updates until you
-  press UPDATE, here or in the [Library](library.md).
-- **ROLL BACK** shows on a mod's row when its folder keeps the version an
-  update replaced. It asks first (**ROLL BACK MOD**: "Roll back *title* to
-  *the kept version*? *The installed version* is kept in its place, and
-  ROLL BACK again brings it back.", with **CANCEL** and **ROLL BACK**); it
-  swaps the two versions, and a second ROLL BACK undoes the first. For the
-  mod being played it adds "The game reloads its data for the mod and
-  returns to the main menu.". Rolling back an update makes that update show
-  again.
-- **Checked for updates 4 min ago · CHECK NOW**, under the list, says when
-  the registries' lists were last checked: "Not checked for updates yet",
-  "Checking for updates…", "Couldn't check for updates" in amber, or "No
-  registries are on.". **CHECK NOW** checks every registry that is on, at
-  once, whatever Check for content updates in [Downloads](#downloads)
-  says.
-- **Open Mods Folder** opens your Mods folder in the system's file manager,
-  where a mod's folder goes to be listed.
-- **Get More Mods…**, beside it on the main menu, opens the Library on its
-  Mods tab, over the settings.
-
-During a game the section is locked ("Locked during a game. Choose the mod
-from the main menu."): a game keeps the mod it started with, and UPDATE,
-CHECK NOW and GET MORE MODS… are not shown. It is locked too while
-`--mod-dir` or `--base-game` chose the run's mod ("The command line chose
-this run's mod.").
-
-Change it to play a mod, or to go back to the game as 3.1c plays it.
-[The Library](library.md) finds, installs and updates mods from Core
-Prime's registry and those you add. [Mod support](mods/README.md) covers
-[installing a mod](mods/README.md#installing-a-mod),
-[installing a .oamod file](mods/README.md#installing-a-oamod-file) and
-[choosing one](mods/README.md#choosing-a-mod) in full.
-
 ## Controls
 
 ![The top of the Controls section: Mouse wheel zoom On, Maximum zoom out at Automatic, Maximum zoom in at 4x and the top of View past the map's edge at 50%.](images/settings/controls-1.png)
-
-![The rest of the Controls section, scrolled to its end: Maximum zoom in at 4x, View past the map's edge at 50%, Escape opens the game menu On and Select groups without Alt Off.](images/settings/controls-2.png)
 
 Each of these takes effect at once.
 
@@ -232,10 +167,6 @@ Each of these takes effect at once.
   follow goes on, and the view follows the unit again as it comes back.
   Choose Off or 25% to keep the black past the map out of a view zoomed
   far out.
-- **Escape opens the game menu**, On by default on macOS and Off
-  elsewhere. The first Escape cancels an order or clears the selection, as
-  in 3.1c; the next opens the in-game menu. Turn it on if F2 is awkward to
-  reach, as on many Mac keyboards.
 - **Select groups without Alt**, Off by default, as 3.1c plays. Off, Alt
   and a number select that group of units, and a number alone turns the
   selected unit's menu to that page. On, a number alone selects its group,
@@ -277,15 +208,13 @@ Each of these takes effect at once.
 Both sliders are locked during a game, and in a multiplayer game or a
 replay they show "Set by the host".
 
-## Language
+<a id="language"></a>
 
-![The top of the Language section: Language set to System default (English), the MORE IN THE LIBRARY… link with the line "More languages are in the Library.", Use modern fonts for game text On and the Text size row.](images/settings/language-1.png)
+## Language & Text
 
-![The Language section with the Language list open: System default (English), English, Deutsch, Español, Français and Italiano, then under AVAILABLE TO DOWNLOAD 简体中文 with its size, 3.5 MB, and the download mark.](images/settings/language-list.png)
+![The top of the Language & Text section, in a game: Language set to System default (English), Use modern fonts for game text On, Text size at 80% and the top of Font outline. More in the Library… is on the main menu, under Language.](images/settings/language-1.png)
 
-![The rest of the Language section, scrolled to its end: Text size at 80%, Font outline On, Font shadow On, Game text background Off and Enable Unicode Multiplayer Chat Off.](images/settings/language-2.png)
-
-The Language section says which language the game's text is shown in and
+The Language & Text section says which language the game's text is shown in and
 how that text is drawn. None of these changes the game itself, so no game
 locks them, and players in different languages play together.
 
@@ -358,10 +287,6 @@ the game draws its text and how the modern fonts draw it.
 ## Graphics
 
 ![The top of the Graphics section: Maximum frame rate at 120 fps, Enhanced anti-aliasing Off, Screen size Desktop and Hardware acceleration at Full.](images/settings/graphics-1.png)
-
-![The middle of the Graphics section: Vertical sync Off, Menu scaling Sharp, Native pixel density Off and Explosion flash Full.](images/settings/graphics-2.png)
-
-![The rest of the Graphics section, scrolled to its end: After zoom at 1/6, Window frame Hidden in play, HUD scaling On and Interface size at Auto.](images/settings/graphics-3.png)
 
 - **Maximum frame rate**, 30 to 120 frames a second in steps of 5, 120 by
   default. It caps how many pictures the game draws a second; the game
@@ -446,18 +371,6 @@ the game draws its text and how the modern fonts draw it.
   it on if you see tearing lines when the view scrolls. It takes effect at
   once, keeps its value for the length of a multiplayer game or a replay,
   and shows "Not available here" where the renderer cannot offer it.
-- **Menu scaling**, Sharp, Whole steps or Unfiltered, Sharp by default. It
-  says how the menus, drawn at 640x480, fill the window, and how a game in
-  full screen drawn at a Screen size of its own fills the screen, and takes
-  effect at once.
-  - **Sharp**: as large as the window holds, every pixel as wide as the
-    next, where the graphics card can.
-  - **Whole steps**: the largest whole-number scale that fits; the menus
-    are smaller, with a black border, but every pixel is square.
-  - **Unfiltered**: they fill the window as the game always drew them.
-
-  Choose Whole steps for the crispest pixels, or Unfiltered for the
-  original look.
 - **Native pixel density**, Off by default; it applies from the next start.
   The window opens at the display's own pixel density, the Retina
   resolution on a Mac, in place of the window system's, so the picture can
@@ -495,6 +408,40 @@ the game draws its text and how the modern fonts draw it.
   zoom out at Automatic the view never goes farther out than 1/2, or 1/6
   with Full hardware acceleration, so choose a farther Maximum zoom out to
   see the dots.
+
+Some computers start with other defaults, which Restore defaults puts back
+and which a value you choose always replaces:
+
+- a **light computer**, one with a single processor, a processor without
+  SSE2 (a Pentium III or an Athlon XP) or less than 512 MB of memory,
+  starts at 800x600 (640x480 when its desktop is smaller), at 60 frames a
+  second, with Enhanced anti-aliasing off;
+- a **Raspberry Pi** starts at 60 frames a second;
+- a **Steam Deck** starts at its screen's rate, 60 frames a second on the
+  LCD model and 90 on the OLED, with the touch controls' Control size at
+  Larger ([Steam Deck](installation/steam-deck.md)).
+
+## User Interface
+
+![The top of the User Interface section: Menu scaling Sharp, Window frame Hidden in play, HUD scaling On and the Interface size row.](images/settings/user-interface.png)
+
+The User Interface section says how Open Annihilation's own screens, the
+window and the side panel are drawn, and whether Escape opens the game
+menu. Each setting takes effect at once, except Interface size, which
+applies when you press OK.
+
+- **Menu scaling**, Sharp, Whole steps or Unfiltered, Sharp by default. It
+  says how the menus, drawn at 640x480, fill the window, and how a game in
+  full screen drawn at a Screen size of its own fills the screen, and takes
+  effect at once.
+  - **Sharp**: as large as the window holds, every pixel as wide as the
+    next, where the graphics card can.
+  - **Whole steps**: the largest whole-number scale that fits; the menus
+    are smaller, with a black border, but every pixel is square.
+  - **Unfiltered**: they fill the window as the game always drew them.
+
+  Choose Whole steps for the crispest pixels, or Unfiltered for the
+  original look.
 - **Window frame**, Hidden in play or Always shown, Hidden in play by
   default. In a window, Hidden in play hides the window's title bar and
   borders while you play a game, so that only the battlefield shows, and
@@ -514,9 +461,9 @@ the game draws its text and how the modern fonts draw it.
   default: how large Open Annihilation's own screens are drawn. These are
   the settings, their notices and questions, the Library, the map browser,
   GET MAP in the battle room, the Add registry window, the check that you
-  are a person, the battle room's player cards and the UI kit gallery. The 3.1c screens
-  keep Menu scaling, the game's text keeps Text size and the side panel and
-  bars keep HUD scaling.
+  are a person, the battle room's player cards and the UI kit gallery. The
+  3.1c screens keep Menu scaling, the game's text keeps Text size and the
+  side panel and bars keep HUD scaling.
   - **Auto** draws them at the window's height in pixels divided by 720,
     rounded: 1x below 1080 lines, 2x at 1080 and 1440, 3x at 2160, and
     never below the display's own pixel density, so a phone keeps the
@@ -535,21 +482,15 @@ the game draws its text and how the modern fonts draw it.
   versions did. In a match the settings sit beside the side column, at no
   more than its scale, and take their layout from the room beside it: a
   1920x1080 match shows Compact at 2x where the menus show Regular. It
-  takes effect when you press OK, and is never locked. Choose a larger
-  size if OA's screens are small to read on a large display, or a smaller
-  one to see more of a list at once.
-
-Some computers start with other defaults, which Restore defaults puts back
-and which a value you choose always replaces:
-
-- a **light computer**, one with a single processor, a processor without
-  SSE2 (a Pentium III or an Athlon XP) or less than 512 MB of memory,
-  starts at 800x600 (640x480 when its desktop is smaller), at 60 frames a
-  second, with Enhanced anti-aliasing off;
-- a **Raspberry Pi** starts at 60 frames a second;
-- a **Steam Deck** starts at its screen's rate, 60 frames a second on the
-  LCD model and 90 on the OLED, with the touch controls' Control size at
-  Larger ([Steam Deck](installation/steam-deck.md)).
+  takes effect as you choose it, so the open dialog and every OA screen
+  redraw at the new size at once, and is never locked. Cancel puts back
+  the size the dialog opened with; OK keeps the size you chose. Choose a
+  larger size if OA's screens are small to read on a large display, or a
+  smaller one to see more of a list at once.
+- **Escape opens the game menu**, On by default on macOS and Off
+  elsewhere. The first Escape cancels an order or clears the selection, as
+  in 3.1c; the next opens the in-game menu. Turn it on if F2 is awkward to
+  reach, as on many Mac keyboards.
 
 ## Touch
 
@@ -729,8 +670,9 @@ a page for each in [standard-hacks](mods/standard-hacks/).
 ## For one run: the command line
 
 These options set a setting for one run without changing what is kept.
-The row then shows "Set on the command line", and the Mods section "The
-command line chose this run's mod."
+The row then shows "Set on the command line". The mod options choose the
+mod for the run: the Library then says "The command line chose this run's
+mod." and turns PLAY NOW and SWITCH OFF off.
 
 | Option | Setting | For the run |
 |---|---|---|
@@ -738,8 +680,8 @@ command line chose this run's mod."
 | `--hardware-acceleration=off`, `=basic` or `=full` | Hardware acceleration | that level; `--hardware-acceleration` alone is Full |
 | `--no-hardware-acceleration` | Hardware acceleration | Off |
 | `--native-density` | Native pixel density | On |
-| `--mod-dir PATH` | Mods | plays the mod folder at `PATH` |
-| `--base-game` | Mods | plays 3.1c without the mod you chose |
+| `--mod-dir PATH` | the mod (the Library) | plays the mod folder at `PATH` |
+| `--base-game` | the mod (the Library) | plays 3.1c without the mod you chose |
 | a language's name, as `german` | Language | that language, as 3.1c's command line names it |
 
 Two more change what the settings show: `--touch-controls` turns the touch

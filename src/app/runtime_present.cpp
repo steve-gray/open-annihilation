@@ -3,6 +3,7 @@
 
 // SDL output textures, viewport sizing and frame presentation.
 #include "mod_install_watch.hpp"
+#include "window_live_size.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/game_directory.hpp"
 #include "graphics_report.hpp"
@@ -46,6 +47,28 @@ namespace {
         .count();
 }
 
+/// Tells whether a resize is waiting to be handled.
+///
+/// A size the game has not handled yet is still delivered as that resize,
+/// so laying the match out for it early is the same scale, and is not a
+/// size that arrived with no resize at all.
+///
+/// @return true when a resize or a pixel-size change is queued
+[[nodiscard]] bool resize_event_waiting() {
+    SDL_Event waiting{};
+    if (SDL_PeepEvents(
+            &waiting, 1, SDL_PEEKEVENT, SDL_EVENT_WINDOW_RESIZED, SDL_EVENT_WINDOW_RESIZED
+        ) > 0)
+        return true;
+    return SDL_PeepEvents(
+               &waiting,
+               1,
+               SDL_PEEKEVENT,
+               SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,
+               SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED
+           ) > 0;
+}
+
 } // namespace
 
 void Runtime::ensure_texture(int width, int height) {
@@ -63,27 +86,95 @@ void Runtime::ensure_texture(int width, int height) {
     }
 }
 
+SDL_Point Runtime::match_canvas_point() const {
+    // On a window at native density a layout pixel is a window point, which
+    // logical presentation stretches over the display's pixels, so the
+    // processor lays out and draws what it does on any other window of that
+    // size; elsewhere a layout pixel is a window pixel.
+    int width = kCanvasWidth;
+    int height = kCanvasHeight;
+    if (sdl_.window != nullptr) {
+        if (native_density_window())
+            SDL_GetWindowSize(sdl_.window, &width, &height);
+        else
+            SDL_GetWindowSizeInPixels(sdl_.window, &width, &height);
+    }
+    // Full screen on the desktop's mode at a screen size of its own draws
+    // the match at that size.
+    const SDL_Point scaled = scaled_frame_size();
+    if (scaled.x > 0 && scaled.y > 0)
+        return scaled;
+    return {width, height};
+}
+
+void Runtime::sync_live_window_size() {
+    if (sdl_.window == nullptr)
+        return;
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(sdl_.window);
+    // Full screen and a maximised or minimised window report their own size
+    // as they change; asking again would move a window the player placed.
+    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED)) != 0)
+        return;
+    int live_width = 0;
+    int live_height = 0;
+    if (!platform_window_content_size(sdl_.window, live_width, live_height))
+        return;
+    if (live_width == nudged_window_width_ && live_height == nudged_window_height_)
+        return;
+    int taken_width = 0;
+    int taken_height = 0;
+    SDL_GetWindowSize(sdl_.window, &taken_width, &taken_height);
+    if (live_width == taken_width && live_height == taken_height)
+        return;
+    std::cout << "open-annihilation: the window is " << live_width << 'x' << live_height
+              << " and had been taken as " << taken_width << 'x' << taken_height << '\n';
+    // Asked once for this size, whether or not the window took it, so a size
+    // it refuses is not asked again every frame.
+    nudged_window_width_ = live_width;
+    nudged_window_height_ = live_height;
+    std::ignore = SDL_SetWindowSize(sdl_.window, live_width, live_height);
+}
+
+void Runtime::follow_window_output() {
+    if (sdl_.renderer == nullptr)
+        return;
+    sync_live_window_size();
+    if (screen_ != Screen::match)
+        return;
+    const SDL_Point canvas = match_canvas_point();
+    if (canvas.x <= 0 || canvas.y <= 0)
+        return;
+    if (canvas.x == followed_canvas_width_ && canvas.y == followed_canvas_height_)
+        return;
+    // A resize still waiting is handled in its turn. A layout that is not
+    // this window, with no resize waiting, was taken from an earlier size.
+    if ((match_layout_.width != canvas.x || match_layout_.height != canvas.y) &&
+        !resize_event_waiting()) {
+        int window_width = 0;
+        int window_height = 0;
+        if (sdl_.window != nullptr)
+            SDL_GetWindowSize(sdl_.window, &window_width, &window_height);
+        std::cout << "open-annihilation: the match was laid out at " << match_layout_.width << 'x'
+                  << match_layout_.height << " for a " << window_width << 'x' << window_height
+                  << " window\n";
+    }
+    apply_output_mode();
+}
+
 void Runtime::apply_output_mode() {
     if (sdl_.renderer == nullptr)
         return;
     if (screen_ == Screen::match) {
-        // On a window at native density a layout pixel is a window point,
-        // which logical presentation stretches over the display's pixels,
-        // so the processor lays out and draws what it does on any other
-        // window of that size; elsewhere a layout pixel is a window pixel.
         const bool native_density = native_density_window();
-        int width = kCanvasWidth, height = kCanvasHeight;
+        const SDL_Point canvas = match_canvas_point();
+        int width = canvas.x;
+        int height = canvas.y;
         // The window's size in points, from which the layout's density, its
         // safe area and (with touch controls) its device class come; none
         // without a window.
         int window_width = 0, window_height = 0;
-        if (sdl_.window != nullptr) {
-            if (native_density)
-                SDL_GetWindowSize(sdl_.window, &width, &height);
-            else
-                SDL_GetWindowSizeInPixels(sdl_.window, &width, &height);
+        if (sdl_.window != nullptr)
             SDL_GetWindowSize(sdl_.window, &window_width, &window_height);
-        }
         // Full screen on the desktop's mode at a screen size of its own
         // draws the match at that size, laid out as a window of it, and
         // scales the frame to the screen.
@@ -111,6 +202,10 @@ void Runtime::apply_output_mode() {
         // only once SDL reports it.
         if (match_layout_.width != laid_out.width || match_layout_.height != laid_out.height)
             match_pointer_known_ = false;
+        // The size just laid out, so a later frame lays out only when the
+        // window's size is no longer this one.
+        followed_canvas_width_ = width;
+        followed_canvas_height_ = height;
         try {
             // A scaled frame is letterboxed, or held in whole steps, as Menu
             // scaling holds the menus' frame.
@@ -151,6 +246,8 @@ void Runtime::apply_output_mode() {
         // it darkens the match's last frame.
         match_layout_ = {};
         match_pointer_known_ = false;
+        followed_canvas_width_ = 0;
+        followed_canvas_height_ = 0;
         scaled_frame_width_ = 0;
         scaled_frame_height_ = 0;
         scaled_frame_mode_ = SDL_SCALEMODE_NEAREST;
@@ -1035,6 +1132,11 @@ bool Runtime::frame_pixelart_works() {
 }
 
 void Runtime::render() {
+    // The frame is drawn at the window's size, including a size that changed
+    // with no resize. A headless check and a director lay the match out at a
+    // size of their own; the window must not replace it.
+    if (!options_.headless_check && director_ == nullptr)
+        follow_window_output();
     if (render_run_ && !render_run_->pending_rebuild.empty() && !render_run_->device_lost)
         rebuild_renderer(render_run_->pending_rebuild);
     // A reset device took the front end's texture with it.

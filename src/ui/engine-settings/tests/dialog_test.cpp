@@ -31,12 +31,8 @@
 // the files are), MANAGE… asking the host, and the switch. The Language
 // dialog: its one section, Restore defaults restoring that section alone,
 // and every text drawn in the modern fonts when its fonts hold no glyphs.
-// Mods: its rows in order, the mod played first, each row's badge, title,
-// version and description, long texts cut, the list scrolling under fixed
-// buttons, the Switch Mod question by pointer and keys, ROLL BACK on a row
-// whose folder keeps an earlier version and its question, the locks during
-// a game and by the command line, and OPEN MODS FOLDER. The names the
-// automation endpoint lists every control and part by, on every section.
+// The names the automation endpoint lists every control and part by, on
+// every section.
 // Those names at each size class, and at Regular and Large: every section
 // inside the dialog with its parts apart, hints kept to their lines,
 // Graphics showing more whole rows, the footer's buttons at their Compact
@@ -69,6 +65,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <ios>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -135,36 +132,36 @@ using settings::Setting;
 
 /// The engine's sections, in the order the list shows them.
 constexpr std::array<Page, 7> kPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::downloads,
     Page::developer,
 };
 
 /// The engine's sections while the game has touch controls: Touch between
-/// Graphics and Downloads.
+/// User Interface and Downloads.
 constexpr std::array<Page, 8> kTouchPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::touch,
     Page::downloads,
     Page::developer,
 };
 
 /// The engine's sections in the main menu's dialog of a game that brings
-/// game files in: Game files between Graphics and Downloads.
+/// game files in: Game files between User Interface and Downloads.
 constexpr std::array<Page, 8> kGameFilesPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::game_files,
     Page::downloads,
     Page::developer,
@@ -172,11 +169,11 @@ constexpr std::array<Page, 8> kGameFilesPages{
 
 /// The engine's sections with Touch and Game files both listed.
 constexpr std::array<Page, 9> kTouchGameFilesPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::touch,
     Page::game_files,
     Page::downloads,
@@ -184,13 +181,13 @@ constexpr std::array<Page, 9> kTouchGameFilesPages{
 };
 
 /// The engine's sections once a gamepad has sent input: Controller between
-/// Graphics and Downloads.
+/// User Interface and Downloads.
 constexpr std::array<Page, 8> kControllerPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::controller,
     Page::downloads,
     Page::developer,
@@ -199,11 +196,11 @@ constexpr std::array<Page, 8> kControllerPages{
 /// The engine's sections with Touch and Controller listed, Controller after
 /// Touch.
 constexpr std::array<Page, 9> kTouchControllerPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::touch,
     Page::controller,
     Page::downloads,
@@ -213,11 +210,11 @@ constexpr std::array<Page, 9> kTouchControllerPages{
 /// The engine's sections with all three listed: Touch, Controller, then
 /// Game files, then Downloads.
 constexpr std::array<Page, 10> kAllPages{
-    Page::mods,
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
+    Page::user_interface,
     Page::touch,
     Page::controller,
     Page::game_files,
@@ -292,7 +289,6 @@ settings::Dialog opened_with_touch(Page page, bool touch = true) {
         {},
         settings::highest_unit_limit,
         {},
-        {},
         nullptr,
         touch
     );
@@ -313,7 +309,6 @@ settings::Dialog opened_with_game_files(Page page, bool touch = false) {
         page,
         {},
         settings::highest_unit_limit,
-        {},
         {},
         nullptr,
         touch,
@@ -353,7 +348,6 @@ settings::Dialog opened_with_controller(
         page,
         {},
         settings::highest_unit_limit,
-        {},
         {},
         nullptr,
         touch,
@@ -508,10 +502,10 @@ void every_part_lies_inside_the_dialog_and_apart() {
                 // the footer.
                 const auto rows = geometry::place_rows(page, locks);
                 // Downloads' rows come from the offer, which this dialog leaves
-                // empty: the check, the downloaded files and the registries,
-                // and no install ID.
+                // empty, and it is not the main menu: the check and the
+                // downloaded files, no install ID and no link to the Library.
                 const std::size_t row_count =
-                    page == Page::downloads ? 3 : settings::page_settings(page).size();
+                    page == Page::downloads ? 2 : settings::page_settings(page).size();
                 CHECK(rows.rows.size() == row_count);
                 const auto open = geometry::open_rows(dialog);
                 CHECK(
@@ -576,17 +570,14 @@ void each_section_shows_its_rows() {
     CHECK(graphics_entry.y + graphics_entry.height <= divider.y);
     CHECK(divider.y + divider.height <= geometry::list_item(Page::developer).y);
 
-    CHECK(settings::page_settings(Page::mods).size() == 1);
-    CHECK(settings::page_settings(Page::mods)[0] == Setting::mod);
     // Controls: the wheel's switch with the zoom's two limits under it, and
     // how far past the map's edges the view goes under them.
-    CHECK(settings::page_settings(Page::controls).size() == 6);
+    CHECK(settings::page_settings(Page::controls).size() == 5);
     CHECK(settings::page_settings(Page::controls)[0] == Setting::wheel_zoom);
     CHECK(settings::page_settings(Page::controls)[1] == Setting::max_zoom_out);
     CHECK(settings::page_settings(Page::controls)[2] == Setting::max_zoom_in);
     CHECK(settings::page_settings(Page::controls)[3] == Setting::view_past_map_edge);
-    CHECK(settings::page_settings(Page::controls)[4] == Setting::escape_opens_menu);
-    CHECK(settings::page_settings(Page::controls)[5] == Setting::switch_alt);
+    CHECK(settings::page_settings(Page::controls)[4] == Setting::switch_alt);
     // Common Tweaks: Your files first, then the unit limit and pathfinding.
     CHECK(settings::page_settings(Page::common_tweaks).size() == 3);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::user_folder);
@@ -595,38 +586,39 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::language)[0] == Setting::language);
     CHECK(settings::page_settings(Page::graphics)[0] == Setting::max_frame_rate);
     CHECK(settings::page_settings(Page::graphics)[1] == Setting::anti_aliasing);
-    CHECK(settings::page_settings(Page::graphics).size() == 13);
+    CHECK(settings::page_settings(Page::graphics).size() == 9);
     CHECK(settings::page_settings(Page::graphics)[2] == Setting::screen_size);
     CHECK(settings::page_settings(Page::graphics)[3] == Setting::hardware_acceleration);
     CHECK(settings::page_settings(Page::graphics)[4] == Setting::vertical_sync);
-    CHECK(settings::page_settings(Page::graphics)[5] == Setting::menu_scaling);
-    CHECK(settings::page_settings(Page::graphics)[6] == Setting::native_density);
-    CHECK(settings::page_settings(Page::graphics)[7] == Setting::explosion_flash);
-    CHECK(settings::page_settings(Page::graphics)[8] == Setting::zoomed_out_units);
-    CHECK(settings::page_settings(Page::graphics)[9] == Setting::zoomed_out_after);
-    CHECK(settings::page_settings(Page::graphics)[10] == Setting::window_frame);
-    CHECK(settings::page_settings(Page::graphics)[11] == Setting::hud_scaling);
-    CHECK(settings::page_settings(Page::graphics)[12] == Setting::interface_size);
+    CHECK(settings::page_settings(Page::graphics)[5] == Setting::native_density);
+    CHECK(settings::page_settings(Page::graphics)[6] == Setting::explosion_flash);
+    CHECK(settings::page_settings(Page::graphics)[7] == Setting::zoomed_out_units);
+    CHECK(settings::page_settings(Page::graphics)[8] == Setting::zoomed_out_after);
+    CHECK(settings::page_settings(Page::user_interface).size() == 5);
+    CHECK(settings::page_settings(Page::user_interface)[0] == Setting::menu_scaling);
+    CHECK(settings::page_settings(Page::user_interface)[1] == Setting::window_frame);
+    CHECK(settings::page_settings(Page::user_interface)[2] == Setting::hud_scaling);
+    CHECK(settings::page_settings(Page::user_interface)[3] == Setting::interface_size);
+    CHECK(settings::page_settings(Page::user_interface)[4] == Setting::escape_opens_menu);
     CHECK(settings::page_settings(Page::developer).size() == 3);
     CHECK(settings::page_settings(Page::developer)[0] == Setting::developer_mode);
     CHECK(settings::page_settings(Page::developer)[1] == Setting::frame_stats);
     CHECK(settings::page_settings(Page::developer)[2] == Setting::kit_gallery);
-    // Graphics' thirteen rows are taller than the view, by 513 rows and
-    // Interface size's row.
+    // Graphics' nine rows are taller than the view, by 336 rows.
     const auto graphics = geometry::place_rows(Page::graphics, {});
-    CHECK(graphics.rows.size() == 13);
-    CHECK(geometry::scroll_limit(geometry::content_height(graphics, 0)) == 513 + kInterfaceSizeRow);
+    CHECK(graphics.rows.size() == 9);
+    CHECK(geometry::scroll_limit(geometry::content_height(graphics, 0)) == 336);
 
     auto parts = settings::dialog_layout(opened(Page::controls));
     for (const std::string_view text :
          {"OPEN ANNIHILATION",
           "SETTINGS",
           "v0.2.0",
-          "Mods",
           "Controls",
           "Common Tweaks",
-          "Language",
+          "Language & Text",
           "Graphics",
+          "User Interface",
           "Developer",
           "CONTROLS",
           "Mouse wheel zoom",
@@ -652,15 +644,15 @@ void each_section_shows_its_rows() {
             find_part(parts, choice, settings::first_row_control + static_cast<int32_t>(row)) !=
             nullptr
         );
-    CHECK(controls_rows.rows.size() == 6);
+    CHECK(controls_rows.rows.size() == 5);
     // The last two rows, scrolled into view.
     settings::Dialog scrolled = opened(Page::controls);
     scrolled.scroll[static_cast<std::size_t>(Page::controls)] = std::numeric_limits<int32_t>::max();
     parts = settings::dialog_layout(scrolled);
     for (const std::string_view text :
-         {"Escape opens the game menu",
-          "The first press clears the selection,",
-          "the second opens the menu.",
+         {"View past the map's edge",
+          "Up to half the battlefield past the map's edges;",
+          "a zoom keeps the ground under the pointer.",
           "Select groups without Alt",
           "A number key selects its group on its own."})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
@@ -754,12 +746,15 @@ void switches_take_a_click_on_either_half_and_keys() {
     CHECK(dialog.chosen.view_past_map_edge == settings::ViewPastMapEdge::one_quarter);
     CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
     CHECK(dialog.focused == settings::first_row_control + 4);
-    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
-    CHECK(dialog.chosen.escape_opens_menu);
-    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::changed);
     CHECK(dialog.chosen.switch_alt);
     CHECK(dialog.chosen != dialog.opened);
+
+    // Escape opens the game menu moved to User Interface, its last row.
+    settings::Dialog ui_page = opened(Page::user_interface);
+    ui_page.focused = settings::first_row_control + 4;
+    CHECK(settings::dialog_key(ui_page, DialogKey::right) == DialogAction::changed);
+    CHECK(ui_page.chosen.escape_opens_menu);
 
     settings::Dialog developer = opened(Page::developer);
     const auto stats = geometry::place_rows(Page::developer, {}).rows[1].control_area;
@@ -789,7 +784,7 @@ void language_and_text_shows_a_language_five_switches_and_a_size() {
     // Its entry comes after Common Tweaks and before Graphics, over the line
     // above Developer.
     const auto entry = geometry::list_item(Page::language);
-    CHECK(settings::page_control(Page::language) == 3);
+    CHECK(settings::page_control(Page::language) == 2);
     CHECK(entry.y > geometry::list_item(Page::common_tweaks).y);
     CHECK(entry.y < geometry::list_item(Page::graphics).y);
     CHECK(entry.y + entry.height < geometry::list_divider().y);
@@ -805,8 +800,8 @@ void language_and_text_shows_a_language_five_switches_and_a_size() {
     settings::open_dialog(dialog, defaults, defaults, {}, "v0.2.0", Page::language);
     const auto parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
-         {"Language",
-          "LANGUAGE",
+         {"Language & Text",
+          "LANGUAGE & TEXT",
           "Language",
           "The game's own text and unit names, where its",
           "data has them in the language.",
@@ -952,7 +947,6 @@ settings::Dialog language_dialog() {
         Page::language,
         {},
         settings::highest_unit_limit,
-        {},
         {},
         oa::data::languages::find_by_tag("de")
     );
@@ -2094,15 +2088,14 @@ void the_focus_moves_round_every_control() {
         settings::first_row_control + 2,
         settings::first_row_control + 3,
         settings::first_row_control + 4,
-        settings::first_row_control + 5,
         settings::restore_control,
         settings::cancel_control,
         settings::ok_control,
-        settings::page_control(Page::mods),
         settings::page_control(Page::controls),
         settings::page_control(Page::common_tweaks),
         settings::page_control(Page::language),
         settings::page_control(Page::graphics),
+        settings::page_control(Page::user_interface),
         settings::page_control(Page::downloads),
         settings::page_control(Page::developer),
     };
@@ -2117,10 +2110,10 @@ void the_focus_moves_round_every_control() {
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::page_control(Page::downloads));
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
-    CHECK(dialog.focused == settings::page_control(Page::graphics));
+    CHECK(dialog.focused == settings::page_control(Page::user_interface));
     // Space on an entry shows its section.
     CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::redraw);
-    CHECK(dialog.page == Page::graphics);
+    CHECK(dialog.page == Page::user_interface);
     // Up from nothing lands on the last control.
     settings::Dialog fresh = opened(Page::controls);
     CHECK(settings::dialog_key(fresh, DialogKey::up) == DialogAction::redraw);
@@ -2317,17 +2310,17 @@ void the_view_and_the_scroll_bar_keep_their_places() {
 void sections_that_fit_do_not_scroll() {
     // Each section's content: its rows, and the end gap under the last.
     // Common Tweaks' Your files, unit limit and pathfinding sliders are 210,
-    // and fit; Controls' three switches, the zoom's two drop-downs and View
-    // past the map's edge's strip are 379, Graphics' twelve rows 749 and its
-    // last, Interface size, kInterfaceSizeRow more, and Language's
-    // drop-down, five switches and slider 424, and they scroll.
-    // Mods' list and Developer's list scroll in views of their own
-    // (mods_scroll, developer_*).
-    const std::array<Page, 4> pages{
-        Page::controls, Page::common_tweaks, Page::graphics, Page::language
+    // and fit; Controls' two switches, the zoom's two drop-downs and View
+    // past the map's edge's strip are 320, Graphics' nine rows are 572,
+    // Language's drop-down, five switches and slider 424, and User
+    // Interface's four strips and switches with Interface size's row are
+    // 324, and they scroll. Developer's list scrolls in a view of its own
+    // (developer_*).
+    const std::array<Page, 5> pages{
+        Page::controls, Page::common_tweaks, Page::graphics, Page::language, Page::user_interface
     };
-    const std::array<int32_t, 4> content{379, 210, 749 + kInterfaceSizeRow, 424};
-    const std::array<int32_t, 4> limits{143, 0, 513 + kInterfaceSizeRow, 188};
+    const std::array<int32_t, 5> content{320, 210, 572, 424, 324};
+    const std::array<int32_t, 5> limits{84, 0, 336, 188, 88};
     for (std::size_t index = 0; index < content.size(); ++index) {
         const Page page = pages[index];
         if (limits[index] != 0) {
@@ -2741,7 +2734,7 @@ void the_focus_scrolls_its_row_into_view() {
         CHECK(five.scroll() == expected);
     }
     CHECK(settings::dialog_key(five.dialog, DialogKey::up) == DialogAction::redraw);
-    CHECK(five.dialog.focused == settings::page_control(Page::controls)); // 2D focus (D30)
+    CHECK(five.dialog.focused == settings::page_control(Page::common_tweaks)); // 2D focus (D30)
     CHECK(five.scroll() == 0);
 
     // Scrolling never moves the focus; a key that acts on the focused row
@@ -3028,29 +3021,25 @@ int32_t graphics_scroll(const settings::Dialog& dialog) {
 }
 
 /// Graphics' offset at which Explosion flash shows whole with its hint.
-constexpr int32_t explosion_flash_in_view = 395;
+constexpr int32_t explosion_flash_in_view = 336;
 /// Graphics' offset at which Zoomed out units and After zoom show whole
-/// with their hints.
-constexpr int32_t zoomed_out_units_in_view = 454;
+/// with their hints. The page's end is that offset.
+constexpr int32_t zoomed_out_units_in_view = 336;
 
-void the_graphics_page_scrolls_its_twelve_rows() {
+void the_graphics_page_scrolls_its_rows() {
     settings::Dialog dialog = graphics_page();
     const auto open = geometry::open_rows(dialog);
-    CHECK(open.rows.rows.size() == 13);
-    const std::array<int32_t, 13> tops{
-        54, 119, 178, 255, 314, 361, 420, 479, 538, 597, 676, 735, 794
-    };
-    const std::array<int32_t, 13> heights{
-        65, 59, 77, 59, 47, 59, 59, 59, 59, 79, 59, 59, kInterfaceSizeRow
-    };
+    CHECK(open.rows.rows.size() == 9);
+    const std::array<int32_t, 9> tops{54, 119, 178, 255, 314, 361, 420, 479, 538};
+    const std::array<int32_t, 9> heights{65, 59, 77, 59, 47, 59, 59, 59, 79};
     for (std::size_t index = 0; index < open.rows.rows.size() && index < tops.size(); ++index) {
         const auto& row = open.rows.rows[index];
         CHECK(row.top == tops[index]);
         CHECK(row.height == heights[index]);
         CHECK(row.control == settings::first_row_control + static_cast<int32_t>(index));
     }
-    CHECK(open.rows.bottom == 794 + kInterfaceSizeRow);
-    CHECK(open.limit == 513 + kInterfaceSizeRow);
+    CHECK(open.rows.bottom == 617);
+    CHECK(open.limit == 336);
     // Hardware acceleration: a strip of Off, Basic and Full, 34 columns a
     // level inside its border, with two status lines; Vertical sync a
     // switch with one hint line.
@@ -3067,71 +3056,38 @@ void the_graphics_page_scrolls_its_twelve_rows() {
     CHECK(same_rect(vsync.label, {158, 323, 249, 16}));
     CHECK(same_rect(vsync.control_area, {415, 323, 52, 16}));
     CHECK(vsync.hint_lines == 1 && vsync.hints[0].y == 341);
-    // Menu scaling: a strip of Sharp, Whole steps and Unfiltered, 71
-    // columns a level inside its border, with two hint lines; Native pixel
-    // density a switch with two.
-    const auto& scaling = open.rows.rows[5];
-    CHECK(scaling.setting == Setting::menu_scaling);
-    CHECK(!scaling.hint_is_status);
-    CHECK(same_rect(scaling.label, {158, 370, 86, 16}));
-    CHECK(same_rect(scaling.control_area, {252, 370, 215, 16}));
-    CHECK(scaling.hint_lines == 2);
-    CHECK(scaling.hints[0].y == 388 && scaling.hints[1].y == 400);
-    const auto& density = open.rows.rows[6];
+    // Native pixel density, where Menu scaling was: a switch with two hint
+    // lines.
+    const auto& density = open.rows.rows[5];
     CHECK(density.setting == Setting::native_density);
-    CHECK(same_rect(density.label, {158, 429, 249, 16}));
-    CHECK(same_rect(density.control_area, {415, 429, 52, 16}));
+    CHECK(same_rect(density.label, {158, 370, 249, 16}));
+    CHECK(same_rect(density.control_area, {415, 370, 52, 16}));
     CHECK(density.hint_lines == 2);
-    CHECK(density.hints[0].y == 447 && density.hints[1].y == 459);
+    CHECK(density.hints[0].y == 388 && density.hints[1].y == 400);
     // Explosion flash: a strip of Off, Reduced and Full, 50 columns a level
     // inside its border, with two hint lines.
-    const auto& flash = open.rows.rows[7];
+    const auto& flash = open.rows.rows[6];
     CHECK(flash.setting == Setting::explosion_flash);
     CHECK(!flash.hint_is_status);
-    CHECK(same_rect(flash.label, {158, 488, 149, 16}));
-    CHECK(same_rect(flash.control_area, {315, 488, 152, 16}));
+    CHECK(same_rect(flash.label, {158, 429, 149, 16}));
+    CHECK(same_rect(flash.control_area, {315, 429, 152, 16}));
     CHECK(flash.hint_lines == 2);
-    CHECK(flash.hints[0].y == 506 && flash.hints[1].y == 518);
+    CHECK(flash.hints[0].y == 447 && flash.hints[1].y == 459);
     // Zoomed out units: a strip of Rendered, Dots and Icons, 56 columns a
     // level inside its border, with two hint lines; After zoom a drop-down
-    // under its label, with two.
-    const auto& zoomed_out = open.rows.rows[8];
+    // under its label, with two, the last row.
+    const auto& zoomed_out = open.rows.rows[7];
     CHECK(zoomed_out.setting == Setting::zoomed_out_units);
-    CHECK(same_rect(zoomed_out.label, {158, 547, 131, 16}));
-    CHECK(same_rect(zoomed_out.control_area, {297, 547, 170, 16}));
+    CHECK(same_rect(zoomed_out.label, {158, 488, 131, 16}));
+    CHECK(same_rect(zoomed_out.control_area, {297, 488, 170, 16}));
     CHECK(zoomed_out.hint_lines == 2);
-    CHECK(zoomed_out.hints[0].y == 565 && zoomed_out.hints[1].y == 577);
-    const auto& after = open.rows.rows[9];
+    CHECK(zoomed_out.hints[0].y == 506 && zoomed_out.hints[1].y == 518);
+    const auto& after = open.rows.rows[8];
     CHECK(after.setting == Setting::zoomed_out_after);
-    CHECK(same_rect(after.label, {158, 606, 153, 16}));
-    CHECK(same_rect(after.control_area, {158, 652, 200, 16}));
+    CHECK(same_rect(after.label, {158, 547, 153, 16}));
+    CHECK(same_rect(after.control_area, {158, 593, 200, 16}));
     CHECK(after.hint_lines == 2);
-    CHECK(after.hints[0].y == 624 && after.hints[1].y == 636);
-    // Window frame: a strip of Hidden in play and Always shown, 85 columns
-    // a level inside its border, with two hint lines.
-    const auto& frame = open.rows.rows[10];
-    CHECK(frame.setting == Setting::window_frame);
-    CHECK(same_rect(frame.label, {158, 685, 129, 16}));
-    CHECK(same_rect(frame.control_area, {295, 685, 172, 16}));
-    CHECK(frame.hint_lines == 2);
-    CHECK(frame.hints[0].y == 703 && frame.hints[1].y == 715);
-    // HUD scaling: a switch, with two hint lines.
-    const auto& hud = open.rows.rows[11];
-    CHECK(hud.setting == Setting::hud_scaling);
-    CHECK(same_rect(hud.control_area, {415, 744, 52, 16}));
-    CHECK(hud.label.x == 158 && hud.label.y == 744);
-    CHECK(hud.hint_lines == 2);
-    CHECK(hud.hints[0].y == 762 && hud.hints[1].y == 774);
-    // Interface size, the last: a drop-down under its label, as After
-    // zoom's, with two hint lines, never locked, so its label takes the
-    // row's width.
-    const auto& interface_size = open.rows.rows[12];
-    CHECK(interface_size.setting == Setting::interface_size);
-    CHECK(interface_size.control == settings::first_row_control + 12);
-    CHECK(same_rect(interface_size.label, {158, 803, 309, 16}));
-    CHECK(same_rect(interface_size.control_area, {158, 849, 200, 16}));
-    CHECK(interface_size.hint_lines == 2);
-    CHECK(interface_size.hints[0].y == 821 && interface_size.hints[1].y == 833);
+    CHECK(after.hints[0].y == 565 && after.hints[1].y == 577);
 
     // At the top the first three rows keep their places and Hardware
     // acceleration's label and strip show whole; at the end the closing
@@ -3142,70 +3098,34 @@ void the_graphics_page_scrolls_its_twelve_rows() {
     CHECK(find_part(top, {}, settings::first_row_control + 3) != nullptr);
     dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 900;
     const auto end = geometry::open_rows(dialog);
-    CHECK(end.scroll == 513 + kInterfaceSizeRow);
+    CHECK(end.scroll == 336);
     CHECK(end.rows.bottom == 281);
-    CHECK(end.rows.rows[1].control_area.y == -385 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[7].label.y == -25 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[8].label.y == 34 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[9].label.y == 93 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[9].control_area.y == 139 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[10].label.y == 172 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[11].label.y == 231 - kInterfaceSizeRow);
-    CHECK(end.rows.rows[12].label.y == 211);
-    CHECK(end.rows.rows[12].control_area.y == 257);
-    // At the end, Window frame, HUD scaling and Interface size show whole,
-    // Interface size's field with Auto and its hint.
+    CHECK(end.rows.rows[1].control_area.y == -208);
+    CHECK(end.rows.rows[6].label.y == 93);
+    CHECK(end.rows.rows[7].label.y == 152);
+    CHECK(end.rows.rows[8].label.y == 211);
+    CHECK(end.rows.rows[8].control_area.y == 257);
+    // At the end, After zoom shows whole, with its field and its hint.
+    // Menu scaling, Window frame, HUD scaling and Interface size are on
+    // User Interface.
     const auto last = settings::dialog_layout(dialog);
-    CHECK(find_part(last, "Window frame", settings::no_control) != nullptr);
-    CHECK(find_part(last, "HUD scaling", settings::no_control) != nullptr);
-    CHECK(find_part(last, "Interface size", settings::no_control) != nullptr);
-    CHECK(find_part(last, "Auto", settings::first_row_control + 12) != nullptr);
+    CHECK(find_part(last, "After zoom", settings::no_control) != nullptr);
+    CHECK(find_part(last, "Window frame", settings::no_control) == nullptr);
+    CHECK(find_part(last, "Interface size", settings::no_control) == nullptr);
     CHECK(
-        find_part(last, "How large Open Annihilation's own screens", settings::no_control) !=
+        find_part(last, "Far out on a large map, needs a fast CPU.", settings::no_control) !=
         nullptr
     );
-    CHECK(
-        find_part(last, "are drawn. Auto suits the window's height.", settings::no_control) !=
-        nullptr
-    );
-    CHECK(
-        find_part(last, "The side panel and bars grow with the window,", settings::no_control) !=
-        nullptr
-    );
-    // At 513, the end before Interface size's row, After zoom and the rows
-    // under it show.
-    dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 513;
-    const auto at_end = settings::dialog_layout(dialog);
-    CHECK(find_part(at_end, "After zoom", settings::no_control) != nullptr);
-    CHECK(find_part(at_end, "Window frame", settings::no_control) != nullptr);
-    CHECK(find_part(at_end, "HUD scaling", settings::no_control) != nullptr);
-    CHECK(
-        find_part(at_end, "Far out on a large map, needs a fast CPU.", settings::no_control) !=
-        nullptr
-    );
-    CHECK(
-        find_part(at_end, "A window hides its title bar and borders", settings::no_control) !=
-        nullptr
-    );
-    CHECK(
-        find_part(at_end, "The side panel and bars grow with the window,", settings::no_control) !=
-        nullptr
-    );
-    // After zoom is locked while Zoomed out units is Rendered: it says how
-    // far out the dots begin.
-    CHECK(find_part(at_end, "Needs Dots", settings::no_control) != nullptr);
+    CHECK(find_part(last, "Needs Dots", settings::no_control) != nullptr);
 
     // Tab from no focus: the first three rows at 0, Hardware acceleration at
-    // 25, Vertical sync at 72, Menu scaling at 131, Native pixel density at
-    // 190, Explosion flash at 249, Zoomed out units at 308, Window frame at
-    // 446, HUD scaling at 505 and Interface size at the end, 513 and its
-    // row; After zoom, its field locked, takes no focus. Back up, HUD
-    // scaling and Window frame stay at the end, Zoomed out units at 484,
-    // Explosion flash at 425, Native pixel density at 366, Hardware
-    // acceleration at 201, Screen size at 124 and Enhanced anti-aliasing at
-    // 65.
+    // 25, Vertical sync at 72, Native pixel density at 131, Explosion flash
+    // at 190 and Zoomed out units at 249. After zoom, its field locked,
+    // takes no focus. Back up, the rows that still show whole stay at 249,
+    // then Hardware acceleration at 201, Screen size at 124 and Enhanced
+    // anti-aliasing at 65.
     settings::Dialog keys = graphics_page();
-    const std::array<std::pair<int32_t, int32_t>, 12> forward{{
+    const std::array<std::pair<int32_t, int32_t>, 8> forward{{
         {settings::first_row_control, 0},
         {settings::first_row_control + 1, 0},
         {settings::first_row_control + 2, 0},
@@ -3214,24 +3134,16 @@ void the_graphics_page_scrolls_its_twelve_rows() {
         {settings::first_row_control + 5, 131},
         {settings::first_row_control + 6, 190},
         {settings::first_row_control + 7, 249},
-        {settings::first_row_control + 8, 308},
-        {settings::first_row_control + 10, 446},
-        {settings::first_row_control + 11, 505},
-        {settings::first_row_control + 12, 513 + kInterfaceSizeRow},
     }};
     for (const auto& [control, expected] : forward) {
         CHECK(settings::dialog_key(keys, DialogKey::tab) == DialogAction::redraw);
         CHECK(keys.focused == control);
         CHECK(graphics_scroll(keys) == expected);
     }
-    const std::array<std::pair<int32_t, int32_t>, 11> back{{
-        {settings::first_row_control + 11, 513 + kInterfaceSizeRow},
-        {settings::first_row_control + 10, 513 + kInterfaceSizeRow},
-        {settings::first_row_control + 8, 484},
-        {settings::first_row_control + 7, 425},
-        {settings::first_row_control + 6, 366},
-        {settings::first_row_control + 5, 307},
-        {settings::first_row_control + 4, 260},
+    const std::array<std::pair<int32_t, int32_t>, 7> back{{
+        {settings::first_row_control + 6, 249},
+        {settings::first_row_control + 5, 249},
+        {settings::first_row_control + 4, 249},
         {settings::first_row_control + 3, 201},
         {settings::first_row_control + 2, 124},
         {settings::first_row_control + 1, 65},
@@ -3246,20 +3158,43 @@ void the_graphics_page_scrolls_its_twelve_rows() {
     // Every part apart and in its place at every offset, under every lock.
     for (const auto& locks : lock_states()) {
         settings::Dialog locked = graphics_page({}, locks);
-        for (int32_t scroll = 0; scroll <= 513 + kInterfaceSizeRow; scroll += 6)
+        for (int32_t scroll = 0; scroll <= 336; scroll += 6)
             check_dialog_layout_at(locked, scroll);
     }
+
+    // User Interface holds the rows that left Graphics, then Escape, and
+    // Interface size keeps a drop-down's height.
+    settings::Dialog ui_page = opened(Page::user_interface);
+    const auto ui = geometry::open_rows(ui_page);
+    CHECK(ui.rows.rows.size() == 5);
+    const std::array<int32_t, 5> interface_tops{54, 113, 172, 231, 310};
+    const std::array<int32_t, 5> interface_heights{59, 59, 59, kInterfaceSizeRow, 59};
+    const std::array<Setting, 5> interface_settings{
+        Setting::menu_scaling,
+        Setting::window_frame,
+        Setting::hud_scaling,
+        Setting::interface_size,
+        Setting::escape_opens_menu,
+    };
+    for (std::size_t index = 0; index < ui.rows.rows.size(); ++index) {
+        CHECK(ui.rows.rows[index].top == interface_tops[index]);
+        CHECK(ui.rows.rows[index].height == interface_heights[index]);
+        CHECK(ui.rows.rows[index].setting == interface_settings[index]);
+    }
+    CHECK(ui.rows.bottom == 369);
+    CHECK(ui.limit == 88);
 }
 
-/// Returns Interface size's field at the end of Graphics, scrolling there.
+/// Returns Interface size's field on User Interface, scrolled to the end.
 ///
-/// @param[in,out] dialog the dialog, on Graphics
+/// @param[in,out] dialog the dialog
 /// @return the field's part; null when it does not show
 const settings::LayoutPart* interface_size_field(settings::Dialog& dialog) {
-    dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 900;
+    dialog.page = Page::user_interface;
+    dialog.scroll[static_cast<std::size_t>(Page::user_interface)] = 900;
     static thread_local std::vector<settings::LayoutPart> parts;
     parts = settings::dialog_layout(dialog);
-    return find_part(parts, {}, settings::first_row_control + 12);
+    return find_part(parts, {}, settings::first_row_control + 3);
 }
 
 /// Returns the automation words of Interface size's open drop-down's items.
@@ -3269,7 +3204,7 @@ const settings::LayoutPart* interface_size_field(settings::Dialog& dialog) {
 std::vector<std::string> interface_size_words(const settings::Dialog& dialog) {
     const auto list = geometry::dialog_list(dialog, nullptr);
     for (const auto& control : list.controls)
-        if (control.id == settings::first_row_control + 12)
+        if (control.id == settings::first_row_control + 3)
             return control.parts;
     return {};
 }
@@ -3290,7 +3225,7 @@ void interface_size_offers_150_with_the_modern_fonts() {
     if (field == nullptr)
         return;
     CHECK(click(off, centre(field->rect)) == DialogAction::redraw);
-    CHECK(off.open_list == settings::first_row_control + 12);
+    CHECK(off.open_list == settings::first_row_control + 3);
     auto parts = settings::dialog_layout(off);
     for (const std::string_view caption : {"Auto", "100%", "200%", "300%", "400%"})
         CHECK(find_part(parts, caption, settings::no_control) != nullptr);
@@ -3575,7 +3510,7 @@ void the_new_rows_lock_in_their_own_forms() {
     CHECK(same_rect(rows[4].control_area, {415, 323, 52, 16}));
     CHECK(same_rect(rows[4].lock_area, {259, 323, 148, 16}));
     CHECK(same_rect(rows[4].label, {158, 323, 93, 16}));
-    CHECK(geometry::open_rows(dialog).limit == 513 + kInterfaceSizeRow);
+    CHECK(geometry::open_rows(dialog).limit == 336);
 
     // Scrolled down to Native pixel density: both lock texts, the status,
     // the kept switch's captions with no control, none of the strip's, and
@@ -3595,9 +3530,9 @@ void the_new_rows_lock_in_their_own_forms() {
     );
     CHECK(find_part(parts, "Basic", settings::no_control) == nullptr);
     // A press where either control is, and every key, leaves them; the
-    // keys pass from the first three rows to Menu scaling, Native pixel
-    // density, Explosion flash, Zoomed out units, Window frame, HUD
-    // scaling and Interface size, After zoom locked while it is Rendered.
+    // keys pass from the first three rows to Native pixel density,
+    // Explosion flash and Zoomed out units. After zoom stays locked while
+    // units are Rendered, and the rows that moved are on User Interface.
     CHECK(click(dialog, {460, 72}) == DialogAction::none);
     CHECK(click(dialog, {380, 72}) == DialogAction::none);
     CHECK(click(dialog, {460, 131}) == DialogAction::none);
@@ -3609,10 +3544,6 @@ void the_new_rows_lock_in_their_own_forms() {
           settings::first_row_control + 5,
           settings::first_row_control + 6,
           settings::first_row_control + 7,
-          settings::first_row_control + 8,
-          settings::first_row_control + 10,
-          settings::first_row_control + 11,
-          settings::first_row_control + 12,
           settings::restore_control}) {
         CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
         CHECK(dialog.focused == expected);
@@ -4110,11 +4041,11 @@ settings::DialogFonts block_fonts() {
 void the_dialog_draws_the_scroll_bar_and_clips_the_rows() {
     const auto fonts = block_fonts();
     // Sections that fit draw no scroll bar, whatever offset they hold:
-    // every one but Controls, Graphics, Language, and Mods and Developer,
-    // whose lists scroll in views of their own.
+    // every one but Controls, Graphics, Language & Text, User Interface, and
+    // Developer, whose list scrolls in a view of its own.
     for (const Page page : kPages) {
         if (page == Page::controls || page == Page::graphics || page == Page::language ||
-            page == Page::mods || page == Page::developer)
+            page == Page::user_interface || page == Page::developer)
             continue;
         Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
         settings::Dialog dialog = opened(page);
@@ -4364,7 +4295,6 @@ settings::Dialog developer_dialog(
         Page::developer,
         {},
         settings::highest_unit_limit,
-        {},
         profile
     );
     return dialog;
@@ -4662,21 +4592,27 @@ void the_kit_gallery_row_moves_only_developers_list() {
         return control.name == "settings.kit-gallery.show";
     }));
     // Every other section's Compact parts are those before the row: their
-    // digests, as the dialog laid them out without it.
+    // digests, as the dialog laid them out without it. A digest that differs
+    // is printed, so that a change meant to move these parts can pin them
+    // again.
     const std::array<std::pair<Page, uint64_t>, 9> kBefore{{
-        {Page::mods, 0x9dba550e53ae1954ULL},
-        {Page::controls, 0xf7fe7c7fe8fb1f61ULL},
-        {Page::common_tweaks, 0x26be62ade4cc1d58ULL},
-        {Page::language, 0xe5b0ea2cdf3c0de1ULL},
-        {Page::graphics, 0x036a24fc33540bf0ULL},
-        {Page::touch, 0x71adeef7c5e2c0c0ULL},
-        {Page::controller, 0x7589ee6b065155bcULL},
-        {Page::game_files, 0x6495f47d3e37541bULL},
-        {Page::downloads, 0x24a20260d8eb73e3ULL},
+        {Page::controls, 0xdcbb19afe965487e},
+        {Page::common_tweaks, 0x458c57c811c4fe7},
+        {Page::language, 0x1e421d77440cc69a},
+        {Page::graphics, 0x21a6cc0213c37a8f},
+        {Page::user_interface, 0x2cc133a0679b173},
+        {Page::touch, 0xbb486b06e5b76dbf},
+        {Page::controller, 0x4754d43dc9a9fbcb},
+        {Page::game_files, 0xdc5976830185b9a4},
+        {Page::downloads, 0x269e51ef899517e7},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
-        CHECK(parts_digest(settings::dialog_layout(other)) == before);
+        const uint64_t digest = parts_digest(settings::dialog_layout(other));
+        if (digest != before)
+            std::cerr << "section " << static_cast<int>(page) << "'s parts digest is 0x" << std::hex
+                      << digest << std::dec << '\n';
+        CHECK(digest == before);
     }
 }
 
@@ -5603,284 +5539,6 @@ void your_files_shows_the_folder_and_opens_its_folders() {
     CHECK(dialog.folder_marked == settings::FolderButton::screenshots);
 }
 
-/// The offered mod folders' titles and paths of Mods' tests: Zeta, alpha,
-/// and Beta, whose folder holds no oamod.yaml.
-const std::vector<std::string> kModNames{"Zeta", "alpha", "Beta"};
-const std::vector<std::string> kModFolders{
-    "/games/ta/mods/zeta",
-    "/games/ta/mods/alpha",
-    "/games/ta/mods/Beta",
-};
-
-/// The colour of Zeta's badge.
-constexpr renderer::Rgb kBadgeColor{0xc0, 0x30, 0x30};
-
-/// Returns what Mods shows of kModFolders: Zeta's version, description and
-/// a 2 by 2 badge of kBadgeColor; alpha's version and description and no
-/// badge; Beta's folder, without an oamod.yaml.
-std::vector<settings::ModDetails> offered_details() {
-    std::vector<settings::ModDetails> details(kModFolders.size());
-    details[0].version = "1.2";
-    details[0].description = "Faster tanks and longer ranges.";
-    details[0].badge_width = 2;
-    details[0].badge_height = 2;
-    for (int32_t pixel = 0; pixel < 4; ++pixel) {
-        details[0].badge_pixels.insert(
-            details[0].badge_pixels.end(), kBadgeColor.begin(), kBadgeColor.end()
-        );
-        details[0].badge_pixels.push_back(0xff);
-    }
-    details[1].version = "0.9";
-    details[1].description = "New maps.";
-    details[2].has_profile = false;
-    return details;
-}
-
-/// Opens the dialog on Mods with kModFolders offered.
-///
-/// @param playing the mod folder the game plays now; empty for none
-/// @param locks what cannot be changed now
-/// @return the dialog
-settings::Dialog mods_dialog(std::string_view playing = {}, const settings::Locks& locks = {}) {
-    const auto details = offered_details();
-    settings::Dialog dialog;
-    settings::open_dialog(
-        dialog,
-        settings::EngineSettings{},
-        settings::EngineSettings{},
-        locks,
-        "v0.2.0",
-        Page::mods,
-        {},
-        settings::highest_unit_limit,
-        settings::ModOffer{kModNames, kModFolders, details, playing}
-    );
-    return dialog;
-}
-
-/// Returns the place among Mods' rows of the row that lists an offered mod
-/// folder.
-///
-/// @param dialog the dialog
-/// @param offered the folder's place among Dialog::mod_folders; no_mod_row for No Mod
-/// @return the row's place; the rows' count when none lists it
-std::size_t listed_at(const settings::Dialog& dialog, int32_t offered) {
-    const auto rows = settings::mod_rows(dialog);
-    for (std::size_t index = 0; index < rows.size(); ++index)
-        if (rows[index].offered == offered)
-            return index;
-    return rows.size();
-}
-
-/// Returns the control of the row of Mods that lists an offered mod folder.
-int32_t mod_control(const settings::Dialog& dialog, int32_t offered) {
-    return settings::first_row_control + static_cast<int32_t>(listed_at(dialog, offered));
-}
-
-/// Returns the middle of the row of Mods that lists an offered mod folder.
-Point mod_point(const settings::Dialog& dialog, int32_t offered) {
-    return centre(geometry::open_rows(dialog).rows.rows[listed_at(dialog, offered)].control_area);
-}
-
-void mods_lists_the_mod_played_first_then_no_mod_then_the_others_by_title() {
-    // While no mod plays, No Mod comes first, as the one played; the others
-    // follow by title, whatever the case of its letters.
-    settings::Dialog dialog = mods_dialog();
-    auto rows = settings::mod_rows(dialog);
-    CHECK(rows.size() == 4);
-    CHECK(rows[0].offered == settings::no_mod_row && rows[0].playing);
-    CHECK(rows[1].offered == 1 && rows[2].offered == 2 && rows[3].offered == 0);
-    CHECK(!rows[1].playing && !rows[2].playing && !rows[3].playing);
-    // The mod played comes first, then No Mod, then the others by title.
-    dialog = mods_dialog(kModFolders[0]);
-    rows = settings::mod_rows(dialog);
-    CHECK(rows.size() == 4);
-    CHECK(rows[0].offered == 0 && rows[0].playing);
-    CHECK(rows[1].offered == settings::no_mod_row && !rows[1].playing);
-    CHECK(rows[2].offered == 1 && rows[3].offered == 2);
-    CHECK(!rows[2].playing && !rows[3].playing);
-    // A control a row, each pressed where it lies, then OPEN MODS FOLDER
-    // under the list, and the note under the button.
-    const auto open = geometry::open_rows(dialog);
-    CHECK(open.rows.rows.size() == rows.size());
-    const auto parts = settings::dialog_layout(dialog);
-    for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
-        const auto& row = open.rows.rows[index];
-        CHECK(row.setting == Setting::mod && row.lock == Lock::none);
-        CHECK(row.control == settings::first_row_control + static_cast<int32_t>(index));
-        CHECK(inside(row.control_area, open.area.view));
-        const auto* part = find_part(parts, {}, row.control);
-        CHECK(part != nullptr && same_rect(part->rect, row.control_area));
-    }
-    const int32_t folder = geometry::mods_folder_control(open.rows);
-    CHECK(folder == settings::first_row_control + 4);
-    const auto* button = find_part(parts, geometry::open_mods_folder_text, settings::no_control);
-    CHECK(button != nullptr && button->control == folder);
-    CHECK(button != nullptr && same_rect(button->rect, geometry::mods_folder_button));
-    CHECK(open.area.view.y + open.area.view.height <= geometry::mods_folder_button.y);
-    CHECK(
-        geometry::mods_folder_button.y + geometry::mods_folder_button.height <=
-        geometry::mods_note_first.y
-    );
-    for (const std::string_view text :
-         {std::string_view{"MODS"}, geometry::mods_folders_text[0], geometry::mods_folders_text[1]})
-        CHECK(find_part(parts, text, settings::no_control) != nullptr);
-    CHECK(find_part(parts, geometry::mod_in_game_text, settings::no_control) == nullptr);
-    CHECK(find_part(parts, geometry::mod_from_command_line_text, settings::no_control) == nullptr);
-}
-
-void each_mod_row_shows_its_badge_title_version_and_description() {
-    settings::Dialog dialog = mods_dialog(kModFolders[0]);
-    const auto rows = settings::mod_rows(dialog);
-    // The mod played: its title, version, description and badge.
-    auto shown = geometry::mod_row_text(dialog, rows[0]);
-    CHECK(shown.title == "Zeta" && shown.version == "1.2");
-    CHECK(shown.description == "Faster tanks and longer ranges.");
-    CHECK(shown.has_profile && shown.details == &dialog.mod_details[0]);
-    // No Mod: the game's own rules, as 3.1c plays them.
-    shown = geometry::mod_row_text(dialog, rows[1]);
-    CHECK(shown.title == "No Mod" && shown.version == "3.1c");
-    CHECK(shown.description == geometry::no_mod_description_text);
-    CHECK(shown.has_profile && shown.details == nullptr);
-    // A folder without an oamod.yaml: its folder's name, N/A, and that it
-    // has none.
-    shown = geometry::mod_row_text(dialog, rows[3]);
-    CHECK(shown.title == "Beta" && shown.version == "N/A");
-    CHECK(shown.description == "No oamod.yaml present" && !shown.has_profile);
-    // A folder the host read nothing of shows its title alone.
-    dialog.mod_details.resize(1);
-    shown = geometry::mod_row_text(dialog, rows[2]);
-    CHECK(shown.title == "alpha" && shown.version.empty() && shown.description.empty());
-    CHECK(shown.details == nullptr);
-
-    // Drawn: Zeta's badge, No Mod's in the green outline of the OA mark,
-    // and a dashed square for alpha, which has no badge.
-    const auto fonts = block_fonts();
-    Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
-    dialog = mods_dialog(kModFolders[0]);
-    settings::draw_dialog(canvas.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
-    const auto open = geometry::open_rows(dialog);
-    const auto badge_of = [&open](std::size_t index) {
-        const auto& box = open.rows.rows[index].control_area;
-        return renderer::SourceRect{
-            box.x + geometry::mod_row_inset,
-            box.y + (box.height - geometry::mod_badge_side) / 2,
-            geometry::mod_badge_side,
-            geometry::mod_badge_side,
-        };
-    };
-    const auto zeta = badge_of(listed_at(dialog, 0));
-    CHECK(canvas.at(zeta.x + zeta.width / 2, zeta.y + zeta.height / 2) == kBadgeColor);
-    const auto no_mod = badge_of(listed_at(dialog, settings::no_mod_row));
-    CHECK(canvas.at(no_mod.x, no_mod.y + no_mod.height / 2) == kAccent);
-    const auto alpha = badge_of(listed_at(dialog, 1));
-    CHECK(canvas.at(alpha.x, alpha.y) == kControlBorder);
-    CHECK(canvas.at(alpha.x + 2, alpha.y) == kList);
-    CHECK(canvas.at(alpha.x + alpha.width / 2, alpha.y + alpha.height / 2) == kList);
-}
-
-void long_mod_texts_are_cut_with_an_ellipsis() {
-    const auto bytes = [](std::string_view text) { return static_cast<int32_t>(text.size()); };
-    // A text that fits shows whole; else as much of its start as fits
-    // before "...", in whole characters; else "..." alone.
-    CHECK(geometry::cut_text("Zeta", 4, bytes) == "Zeta");
-    CHECK(geometry::cut_text("abcdefghij", 7, bytes) == "abcd...");
-    CHECK(
-        geometry::cut_text(
-            "\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9", 5, one_a_character
-        ) == "\xC3\xA9\xC3\xA9..."
-    );
-    CHECK(geometry::cut_text("abcdefghij", 2, bytes) == "...");
-    const auto estimate = [](std::string_view text) {
-        return one_a_character(text) * settings::estimated_character_width;
-    };
-    // The question's title is cut to its line, and its text to its lines.
-    settings::Dialog dialog = mods_dialog();
-    dialog.mod_names[1].clear();
-    for (int32_t word = 0; word < 40; ++word)
-        dialog.mod_names[1] += "wide ";
-    CHECK(click(dialog, mod_point(dialog, 1)) == DialogAction::redraw);
-    CHECK(dialog.switch_question == 1);
-    bool cut = false;
-    for (const auto& part : settings::dialog_layout(dialog)) {
-        if (!same_rect(part.rect, geometry::question_title))
-            continue;
-        cut = part.text.starts_with("wide wide") && part.text.ends_with("...");
-        CHECK(estimate(part.text) <= part.rect.width);
-    }
-    CHECK(cut);
-    auto lines = geometry::question_text_lines(dialog, estimate);
-    CHECK(lines.size() == geometry::question_lines);
-    CHECK(!lines.empty() && lines.back().ends_with("..."));
-    for (const auto& line : lines)
-        CHECK(estimate(line) <= geometry::question_first_line.width);
-    // A short title's question shows whole.
-    dialog.switch_question = 0;
-    lines = geometry::question_text_lines(dialog, estimate);
-    CHECK(lines.size() <= geometry::question_lines);
-    std::string joined;
-    for (const auto& line : lines)
-        joined += (joined.empty() ? "" : " ") + line;
-    CHECK(joined == geometry::filled(geometry::switch_ask_text, {{"title", "Zeta"}}));
-    CHECK(joined.starts_with("Switch to Zeta now? "));
-}
-
-/// Opens Mods with more mod folders than its view holds rows for.
-///
-/// @param count the mod folders offered
-/// @return the dialog
-settings::Dialog many_mods_dialog(std::size_t count) {
-    std::vector<std::string> names;
-    std::vector<std::string> folders;
-    for (std::size_t index = 0; index < count; ++index) {
-        const std::string number = (index < 10 ? "0" : "") + std::to_string(index);
-        names.push_back("Mod " + number);
-        folders.push_back("/games/ta/mods/" + number);
-    }
-    settings::Dialog dialog;
-    settings::open_dialog(
-        dialog,
-        settings::EngineSettings{},
-        settings::EngineSettings{},
-        {},
-        "v0.2.0",
-        Page::mods,
-        {},
-        settings::highest_unit_limit,
-        settings::ModOffer{names, folders, {}, {}}
-    );
-    return dialog;
-}
-
-/// While the dialog's words are drawn in the modern fonts, whose ideographs
-/// stand taller than the game's fonts, a mod row is taller and its
-/// description lower, clear of its title and of its border; in a language
-/// the game's fonts draw, the rows keep their place.
-void mod_rows_grow_while_the_modern_fonts_draw_the_words() {
-    settings::Dialog dialog = many_mods_dialog(1);
-    const auto game_fonts = geometry::place_mod_rows(dialog, 0);
-    static oa::data::languages::Language modern{};
-    modern.tag = "en-XA";
-    modern.needs = oa::data::languages::TextNeeds::modern_fonts;
-    oa::data::languages::set_interface_language(nullptr, modern);
-    const auto tall = geometry::place_mod_rows(dialog, 0);
-    oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
-    CHECK(game_fonts.rows.size() == 2 && tall.rows.size() == 2);
-    if (game_fonts.rows.size() != 2 || tall.rows.size() != 2)
-        return;
-    const auto& row = game_fonts.rows[0];
-    CHECK(row.control_area.height == 28 && row.label.y == row.top + 1);
-    CHECK(row.hints[0].y == row.top + 15 && game_fonts.rows[1].top == row.top + 28 + 3);
-    const auto& grown = tall.rows[0];
-    CHECK(grown.control_area.height == 34 && grown.label.y == grown.top + 1);
-    CHECK(grown.hints[0].y == grown.top + 19 && tall.rows[1].top == grown.top + 34 + 3);
-    CHECK(grown.hints[0].y >= grown.label.y + geometry::label_line_height + 2);
-    CHECK(
-        grown.hints[0].y + geometry::hint_line_height <
-        grown.control_area.y + grown.control_area.height - 2
-    );
-}
-
 /// While the dialog's words are drawn in the modern fonts, whose ideographs
 /// stand as tall as a hint line, a hint's two lines lie three rows further
 /// apart, so that one line's letters, outline and shadow keep clear of the
@@ -5894,8 +5552,8 @@ void hint_lines_part_while_the_modern_fonts_draw_the_words() {
     oa::data::languages::set_interface_language(nullptr, modern);
     const auto tall = geometry::place_rows(Page::controls, {});
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
-    CHECK(game_fonts.rows.size() == 6 && tall.rows.size() == 6);
-    if (game_fonts.rows.size() != 6 || tall.rows.size() != 6)
+    CHECK(game_fonts.rows.size() == 5 && tall.rows.size() == 5);
+    if (game_fonts.rows.size() != 5 || tall.rows.size() != 5)
         return;
     // Mouse wheel zoom: one line, in the same place.
     CHECK(tall.rows[0].hint_lines == 1 && tall.rows[0].height == game_fonts.rows[0].height);
@@ -5936,405 +5594,6 @@ void hint_lines_stay_whole_at_the_end_of_a_section() {
             }
     }
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
-}
-
-void the_mods_list_scrolls_while_its_button_and_note_stay() {
-    settings::Dialog dialog = many_mods_dialog(20);
-    const auto first = geometry::open_rows(dialog);
-    const int32_t stride = geometry::mod_row_height + geometry::mod_row_gap;
-    CHECK(first.rows.rows.size() == 21);
-    CHECK(first.content_height == 21 * stride - geometry::mod_row_gap);
-    CHECK(first.limit > 0 && first.limit == first.content_height - first.area.view.height);
-    const auto offset = [&dialog] { return dialog.scroll[static_cast<std::size_t>(Page::mods)]; };
-    // The wheel scrolls the list 24 rows a notch.
-    const Point in_list = centre(first.area.view);
-    CHECK(settings::dialog_wheel(dialog, in_list.x, in_list.y, -1.0F) == DialogAction::redraw);
-    CHECK(offset() == 24);
-    CHECK(settings::dialog_wheel(dialog, in_list.x, in_list.y, 1.0F) == DialogAction::redraw);
-    CHECK(offset() == 0);
-    CHECK(settings::dialog_wheel(dialog, in_list.x, in_list.y, 1.0F) == DialogAction::none);
-    // Page Down and Page Up scroll by the view less a row; End and Home to
-    // the list's ends.
-    CHECK(first.area.page_step == first.area.view.height - stride);
-    CHECK(settings::dialog_key(dialog, DialogKey::page_down) == DialogAction::redraw);
-    CHECK(offset() == first.area.page_step);
-    CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
-    CHECK(offset() == first.limit);
-    CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::none);
-    CHECK(settings::dialog_key(dialog, DialogKey::page_up) == DialogAction::redraw);
-    CHECK(offset() == first.limit - first.area.page_step);
-    CHECK(settings::dialog_key(dialog, DialogKey::home) == DialogAction::redraw);
-    CHECK(offset() == 0);
-    // A press on the scroll bar's well at its foot scrolls towards the end,
-    // and a drag past it shows the end.
-    const auto& hit = first.area.hit;
-    const int32_t bar = hit.x + hit.width / 2;
-    static_cast<void>(settings::dialog_pointer_move(dialog, bar, hit.y + hit.height - 1));
-    static_cast<void>(settings::dialog_pointer_down(dialog, bar, hit.y + hit.height - 1));
-    CHECK(offset() > 0);
-    static_cast<void>(settings::dialog_pointer_move(dialog, bar, hit.y + hit.height + 40));
-    CHECK(offset() == first.limit);
-    static_cast<void>(settings::dialog_pointer_up(dialog, bar, hit.y + hit.height + 40));
-    // Space on the last row brings it into view before it asks.
-    dialog.scroll[static_cast<std::size_t>(Page::mods)] = 0;
-    CHECK(
-        key_on(dialog, settings::first_row_control + 20, DialogKey::space) == DialogAction::redraw
-    );
-    CHECK(offset() == first.limit && dialog.switch_question == 19);
-    CHECK(settings::dialog_key(dialog, DialogKey::no) == DialogAction::redraw);
-    // At every offset the button, the note and the view stay put, and only
-    // the rows wholly in the view are listed, clear of the button.
-    const int32_t folder = geometry::mods_folder_control(first.rows);
-    for (int32_t scroll = 0; scroll <= first.limit; scroll += 5) {
-        dialog.scroll[static_cast<std::size_t>(Page::mods)] = scroll;
-        const auto parts = settings::dialog_layout(dialog);
-        const auto* button =
-            find_part(parts, geometry::open_mods_folder_text, settings::no_control);
-        CHECK(button != nullptr && same_rect(button->rect, geometry::mods_folder_button));
-        CHECK(button != nullptr && button->control == folder);
-        const auto* note = find_part(parts, geometry::mods_folders_text[1], settings::no_control);
-        CHECK(note != nullptr && same_rect(note->rect, geometry::mods_note_second));
-        const auto open = geometry::open_rows(dialog);
-        CHECK(open.scroll == scroll && same_rect(open.area.view, first.area.view));
-        std::size_t listed = 0;
-        for (const auto& row : open.rows.rows) {
-            const auto* part = find_part(parts, {}, row.control);
-            const bool whole = inside(row.control_area, open.area.view);
-            CHECK((part != nullptr) == whole);
-            if (part != nullptr)
-                CHECK(!overlap(part->rect, geometry::mods_folder_button));
-            listed += whole ? 1 : 0;
-        }
-        CHECK(listed >= 4);
-    }
-}
-
-void choosing_another_mod_asks_before_switching() {
-    settings::Dialog dialog = mods_dialog(kModFolders[0]);
-    const settings::EngineSettings before = dialog.chosen;
-    // The row of the mod played asks nothing.
-    static_cast<void>(click(dialog, mod_point(dialog, 0)));
-    CHECK(dialog.switch_question == settings::no_question);
-    // Another row asks the Switch Mod question, SWITCH marked, over the
-    // dialog.
-    const Point alpha = mod_point(dialog, 1);
-    CHECK(click(dialog, alpha) == DialogAction::redraw);
-    CHECK(dialog.switch_question == 1 && !dialog.question_marks_no);
-    auto parts = settings::dialog_layout(dialog);
-    for (const std::string_view text :
-         {geometry::switch_heading_text, std::string_view{"alpha"}, std::string_view{"0.9"}})
-        CHECK(find_part(parts, text, settings::no_control) != nullptr);
-    const auto* yes = find_part(parts, {}, settings::question_yes_control);
-    CHECK(yes != nullptr && yes->text == "SWITCH");
-    CHECK(yes != nullptr && same_rect(yes->rect, geometry::question_yes_button));
-    const auto* no = find_part(parts, {}, settings::question_no_control);
-    CHECK(no != nullptr && no->text == "CANCEL");
-    CHECK(no != nullptr && same_rect(no->rect, geometry::question_no_button));
-    for (const auto& part : parts)
-        CHECK(
-            !overlap(part.rect, geometry::question_box) || inside(part.rect, geometry::question_box)
-        );
-    // A press elsewhere and the wheel do nothing while it shows.
-    CHECK(click(dialog, centre(geometry::ok_button)) == DialogAction::none);
-    CHECK(settings::dialog_wheel(dialog, alpha.x, alpha.y, -1.0F) == DialogAction::none);
-    CHECK(dialog.switch_question == 1);
-    // CANCEL leaves the settings chosen as they were.
-    CHECK(click(dialog, centre(geometry::question_no_button)) == DialogAction::redraw);
-    CHECK(dialog.switch_question == settings::no_question && dialog.chosen == before);
-    // SWITCH chooses the mod and asks the host to switch to it.
-    CHECK(click(dialog, alpha) == DialogAction::redraw);
-    CHECK(click(dialog, centre(geometry::question_yes_button)) == DialogAction::switch_mod);
-    CHECK(dialog.switch_question == settings::no_question);
-    CHECK(dialog.chosen.mod_folder == kModFolders[1]);
-    // No Mod clears the mod chosen.
-    dialog = mods_dialog(kModFolders[0]);
-    dialog.chosen.mod_folder = kModFolders[0];
-    CHECK(click(dialog, mod_point(dialog, settings::no_mod_row)) == DialogAction::redraw);
-    CHECK(dialog.switch_question == settings::no_mod_row);
-    parts = settings::dialog_layout(dialog);
-    CHECK(find_part(parts, "No Mod", settings::no_control) != nullptr);
-    CHECK(find_part(parts, "3.1c", settings::no_control) != nullptr);
-    CHECK(click(dialog, centre(geometry::question_yes_button)) == DialogAction::switch_mod);
-    CHECK(dialog.chosen.mod_folder.empty());
-    // The question for a folder without an oamod.yaml adds a line saying
-    // the game's own rules apply.
-    dialog = mods_dialog(kModFolders[0]);
-    dialog.switch_question = 1;
-    auto lines = geometry::question_text_lines(dialog, one_a_character);
-    CHECK(
-        lines.size() == 1 &&
-        lines[0] == geometry::filled(geometry::switch_ask_text, {{"title", "alpha"}})
-    );
-    dialog.switch_question = settings::no_question;
-    CHECK(click(dialog, mod_point(dialog, 2)) == DialogAction::redraw);
-    CHECK(dialog.switch_question == 2);
-    lines = geometry::question_text_lines(dialog, one_a_character);
-    CHECK(lines.size() == 2 && lines[0].starts_with("Switch to Beta now?"));
-    CHECK(lines.size() == 2 && lines[1] == geometry::switch_no_profile_text);
-    parts = settings::dialog_layout(dialog);
-    CHECK(find_part(parts, "N/A", settings::no_control) != nullptr);
-    bool noted = false;
-    for (const auto& part : parts)
-        noted = noted || (part.text.starts_with("This folder has no oamod.yaml") &&
-                          inside(part.rect, geometry::question_box));
-    CHECK(noted);
-    CHECK(click(dialog, centre(geometry::question_yes_button)) == DialogAction::switch_mod);
-    CHECK(dialog.chosen.mod_folder == kModFolders[2]);
-}
-
-void the_keys_answer_the_switch_mod_question() {
-    settings::Dialog dialog = mods_dialog(kModFolders[0]);
-    const int32_t alpha = mod_control(dialog, 1);
-    // Y and N do nothing while no question shows, and Space on the row of
-    // the mod played asks nothing.
-    CHECK(settings::dialog_key(dialog, DialogKey::yes) == DialogAction::none);
-    CHECK(settings::dialog_key(dialog, DialogKey::no) == DialogAction::none);
-    CHECK(key_on(dialog, mod_control(dialog, 0), DialogKey::space) == DialogAction::none);
-    CHECK(dialog.switch_question == settings::no_question);
-    // Space on another row asks, SWITCH marked; Left marks CANCEL, Right
-    // SWITCH, and Tab and Shift+Tab the other button.
-    CHECK(key_on(dialog, alpha, DialogKey::space) == DialogAction::redraw);
-    CHECK(dialog.switch_question == 1 && !dialog.question_marks_no);
-    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::none);
-    CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::redraw);
-    CHECK(dialog.question_marks_no);
-    CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::none);
-    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
-    CHECK(!dialog.question_marks_no);
-    CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
-    CHECK(dialog.question_marks_no);
-    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::redraw);
-    CHECK(!dialog.question_marks_no);
-    CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::redraw);
-    // Enter answers the button marked: CANCEL.
-    CHECK(settings::dialog_key(dialog, DialogKey::enter) == DialogAction::redraw);
-    CHECK(dialog.switch_question == settings::no_question && dialog.chosen.mod_folder.empty());
-    // N and Escape answer CANCEL; Escape leaves the dialog open.
-    for (const DialogKey answer : {DialogKey::no, DialogKey::escape}) {
-        CHECK(key_on(dialog, alpha, DialogKey::space) == DialogAction::redraw);
-        CHECK(settings::dialog_key(dialog, answer) == DialogAction::redraw);
-        CHECK(dialog.switch_question == settings::no_question);
-        CHECK(dialog.chosen.mod_folder.empty());
-    }
-    // Y, and Enter or Space while SWITCH is marked, answer SWITCH.
-    for (const DialogKey answer : {DialogKey::yes, DialogKey::enter, DialogKey::space}) {
-        dialog = mods_dialog(kModFolders[0]);
-        CHECK(key_on(dialog, alpha, DialogKey::space) == DialogAction::redraw);
-        CHECK(settings::dialog_key(dialog, answer) == DialogAction::switch_mod);
-        CHECK(dialog.switch_question == settings::no_question);
-        CHECK(dialog.chosen.mod_folder == kModFolders[1]);
-    }
-}
-
-/// Opens the dialog on Mods with kModFolders offered, alpha's folder keeping
-/// an earlier version of the same version.
-///
-/// @param playing the folder played
-/// @param locks what cannot be changed
-/// @return the dialog
-settings::Dialog roll_back_dialog(std::string_view playing, const settings::Locks& locks = {}) {
-    auto details = offered_details();
-    details[1].roll_back_from = "0.9 revision 2";
-    details[1].roll_back_to = "0.9 revision 1";
-    settings::Dialog dialog;
-    settings::open_dialog(
-        dialog,
-        settings::EngineSettings{},
-        settings::EngineSettings{},
-        locks,
-        "v0.2.0",
-        Page::mods,
-        {},
-        settings::highest_unit_limit,
-        settings::ModOffer{kModNames, kModFolders, details, playing}
-    );
-    return dialog;
-}
-
-void a_kept_version_rolls_back_after_a_question() {
-    settings::Dialog dialog = roll_back_dialog(kModFolders[0]);
-    const auto open = geometry::open_rows(dialog);
-    const std::size_t alpha = listed_at(dialog, 1);
-    const int32_t roll_back = geometry::roll_back_control(open.rows, alpha);
-    CHECK(roll_back == geometry::mods_folder_control(open.rows) + 1 + static_cast<int32_t>(alpha));
-    // Only the row whose folder keeps a version shows ROLL BACK, inside it.
-    auto parts = settings::dialog_layout(dialog);
-    int32_t shown = 0;
-    for (const auto& part : parts)
-        if (part.text == geometry::roll_back_text) {
-            ++shown;
-            CHECK(part.control == roll_back);
-            CHECK(inside(part.rect, open.rows.rows[alpha].control_area));
-        }
-    CHECK(shown == 1);
-    // The focus walks the row, then its ROLL BACK, then the next row.
-    dialog.focused = mod_control(dialog, 1);
-    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
-    CHECK(dialog.focused == roll_back);
-    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
-    CHECK(dialog.focused == settings::first_row_control + static_cast<int32_t>(alpha) + 1);
-    // A press on ROLL BACK asks, ROLL BACK marked, the versions named.
-    const Point button = centre(geometry::roll_back_button(open.rows.rows[alpha]));
-    const settings::EngineSettings before = dialog.chosen;
-    CHECK(click(dialog, button) == DialogAction::redraw);
-    CHECK(dialog.switch_question == 1 && dialog.mod_question == settings::ModQuestion::roll_back);
-    CHECK(!dialog.question_marks_no);
-    parts = settings::dialog_layout(dialog);
-    CHECK(find_part(parts, geometry::roll_back_heading_text, settings::no_control) != nullptr);
-    CHECK(find_part(parts, "0.9 revision 2 to 0.9 revision 1", settings::no_control) != nullptr);
-    const auto* yes = find_part(parts, {}, settings::question_yes_control);
-    CHECK(yes != nullptr && yes->text == "ROLL BACK");
-    CHECK(yes != nullptr && same_rect(yes->rect, geometry::question_yes_rect(dialog)));
-    const auto* no = find_part(parts, {}, settings::question_no_control);
-    CHECK(no != nullptr && !overlap(no->rect, yes != nullptr ? yes->rect : no->rect));
-    bool asks = false;
-    for (const auto& part : parts)
-        asks = asks || part.text.starts_with("Roll back alpha to 0.9 revision 1?");
-    CHECK(asks);
-    // CANCEL changes nothing; ROLL BACK names the folder to the host.
-    CHECK(settings::dialog_key(dialog, DialogKey::escape) == DialogAction::redraw);
-    CHECK(dialog.switch_question == settings::no_question);
-    CHECK(dialog.mod_question == settings::ModQuestion::switch_mod);
-    CHECK(click(dialog, button) == DialogAction::redraw);
-    CHECK(settings::dialog_key(dialog, DialogKey::enter) == DialogAction::roll_back_mod);
-    CHECK(dialog.roll_back_folder == kModFolders[1]);
-    CHECK(dialog.switch_question == settings::no_question && dialog.chosen == before);
-    // The row itself still asks to switch.
-    CHECK(click(dialog, mod_point(dialog, 1)) == DialogAction::redraw);
-    CHECK(dialog.mod_question == settings::ModQuestion::switch_mod);
-    // A locked page draws it, inert.
-    for (const Lock lock : {Lock::in_game, Lock::command_line}) {
-        settings::Locks locks{};
-        locks.mod = lock;
-        settings::Dialog locked = roll_back_dialog(kModFolders[0], locks);
-        const auto locked_open = geometry::open_rows(locked);
-        const std::size_t row = listed_at(locked, 1);
-        const auto locked_parts = settings::dialog_layout(locked);
-        const auto* part = find_part(locked_parts, geometry::roll_back_text, settings::no_control);
-        CHECK(part != nullptr && part->control == settings::no_control);
-        CHECK(
-            click(locked, centre(geometry::roll_back_button(locked_open.rows.rows[row]))) ==
-            DialogAction::none
-        );
-        CHECK(locked.switch_question == settings::no_question);
-    }
-}
-
-void the_roll_back_question_asks_as_a_prompt_in_the_pages_words() {
-    // What the page's question asks of alpha, as a prompt of its own.
-    const settings::Prompt asked =
-        settings::roll_back_prompt("alpha", "0.9 revision 2", "0.9 revision 1", false);
-    CHECK(asked.title == geometry::roll_back_heading_text);
-    CHECK(asked.paragraphs.size() == 1);
-    CHECK(
-        !asked.paragraphs.empty() &&
-        asked.paragraphs[0].text == "Roll back alpha to 0.9 revision 1? 0.9 revision 2 is kept "
-                                    "in its place, and ROLL BACK again brings it back."
-    );
-    // CANCEL, then ROLL BACK, named to automation; CANCEL marked.
-    CHECK(asked.buttons.size() == 2);
-    if (asked.buttons.size() == 2) {
-        CHECK(asked.buttons[0].caption == geometry::no_text && asked.buttons[0].id == "cancel");
-        CHECK(!asked.buttons[0].accent);
-        CHECK(
-            asked.buttons[1].caption == geometry::roll_back_text &&
-            asked.buttons[1].id == "roll-back"
-        );
-        CHECK(asked.buttons[1].accent);
-    }
-    CHECK(asked.cancel_button == 0 && asked.primary_button == 1 && asked.marked == 0);
-    CHECK(settings::prompt_fits(asked));
-    // For the mod the game plays it says the game reloads.
-    const settings::Prompt played =
-        settings::roll_back_prompt("alpha", "0.9 revision 2", "0.9 revision 1", true);
-    CHECK(
-        !played.paragraphs.empty() &&
-        played.paragraphs[0].text ==
-            asked.paragraphs[0].text + " " + std::string(geometry::roll_back_reload_text)
-    );
-    CHECK(settings::prompt_fits(played));
-}
-
-void mods_locks_during_a_game_and_by_the_command_line() {
-    const auto fonts = block_fonts();
-    const settings::Dialog unlocked = mods_dialog(kModFolders[0]);
-    Canvas unlocked_canvas = blank(settings::dialog_width, settings::dialog_height);
-    settings::draw_dialog(unlocked_canvas.surface, {0, 0, 1}, unlocked, fonts, kNoIcon);
-    const auto unlocked_rows = geometry::open_rows(unlocked);
-    for (const Lock lock : {Lock::in_game, Lock::command_line}) {
-        settings::Locks locks{};
-        locks.mod = lock;
-        settings::Dialog dialog = mods_dialog(kModFolders[0], locks);
-        const auto open = geometry::open_rows(dialog);
-        // The list lies under the line that says why it is locked.
-        CHECK(open.area.view.y >= geometry::mods_lock_line.y + geometry::mods_lock_line.height);
-        const auto parts = settings::dialog_layout(dialog);
-        const std::string_view why = lock == Lock::in_game ? geometry::mod_in_game_text
-                                                           : geometry::mod_from_command_line_text;
-        // The reason fills as many of its two lines as it needs.
-        std::string said;
-        for (const auto& part : parts)
-            if (part.control == settings::no_control && inside(part.rect, geometry::mods_lock_line))
-                said += (said.empty() ? "" : " ") + part.text;
-        CHECK(said == why);
-        if (lock == Lock::in_game)
-            CHECK(why == "Locked during a game. Choose the mod from the main menu.");
-        // Every row is inert: none is a control, and neither a press nor
-        // Space on one asks.
-        for (const auto& row : open.rows.rows) {
-            CHECK(row.lock == lock);
-            CHECK(find_part(parts, {}, row.control) == nullptr);
-            CHECK(click(dialog, centre(row.control_area)) == DialogAction::none);
-            CHECK(key_on(dialog, row.control, DialogKey::space) == DialogAction::none);
-            CHECK(dialog.switch_question == settings::no_question);
-        }
-        // OPEN MODS FOLDER shows, but opens nothing.
-        const auto* button =
-            find_part(parts, geometry::open_mods_folder_text, settings::no_control);
-        CHECK(button != nullptr && button->control == settings::no_control);
-        CHECK(click(dialog, centre(geometry::mods_folder_button)) == DialogAction::none);
-        // The focus passes over the rows and the button to the footer.
-        dialog.focused = settings::no_control;
-        static_cast<void>(settings::dialog_key(dialog, DialogKey::tab));
-        CHECK(dialog.focused == settings::restore_control);
-        CHECK(dialog.chosen == dialog.opened);
-        // The rows other than the mod played are drawn dimmed.
-        Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
-        settings::draw_dialog(canvas.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
-        for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
-            const auto& box = open.rows.rows[index].control_area;
-            const auto& unlocked_box = unlocked_rows.rows.rows[index].control_area;
-            const auto at = canvas.at(box.x + box.width - 3, box.y + box.height - 3);
-            const auto unlocked_at = unlocked_canvas.at(
-                unlocked_box.x + unlocked_box.width - 3, unlocked_box.y + unlocked_box.height - 3
-            );
-            CHECK((at == unlocked_at) == (index == 0));
-        }
-    }
-}
-
-void open_mods_folder_asks_for_the_mods_folder() {
-    settings::Dialog dialog = mods_dialog();
-    CHECK(dialog.folder_to_open == settings::FolderButton::saves);
-    CHECK(click(dialog, centre(geometry::mods_folder_button)) == DialogAction::open_folder);
-    CHECK(dialog.folder_to_open == settings::FolderButton::mods);
-    // The focus reaches it after the last row, and Space presses it.
-    dialog.folder_to_open = settings::FolderButton::saves;
-    const int32_t folder = geometry::mods_folder_control(geometry::open_rows(dialog).rows);
-    dialog.focused = folder - 1;
-    static_cast<void>(settings::dialog_key(dialog, DialogKey::tab));
-    CHECK(dialog.focused == folder);
-    CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::open_folder);
-    CHECK(dialog.folder_to_open == settings::FolderButton::mods);
-    // A folder that cannot be opened is said in place of the note's second
-    // line.
-    CHECK(
-        settings::set_folder_notice(dialog, "The folder cannot be made.") == DialogAction::redraw
-    );
-    const auto parts = settings::dialog_layout(dialog);
-    const auto* notice = find_part(parts, "The folder cannot be made.", settings::no_control);
-    CHECK(notice != nullptr && same_rect(notice->rect, geometry::mods_note_second));
-    CHECK(find_part(parts, geometry::mods_folders_text[1], settings::no_control) == nullptr);
 }
 
 /// A notice as the main menu shows it after the saved games moved.
@@ -6651,19 +5910,18 @@ void fonts_load_and_every_text_fits_its_place() {
             flash.scroll[static_cast<std::size_t>(Page::graphics)] = explosion_flash_in_view;
             every_text_fits(flash);
         }
-        // Window frame each way, at Graphics' end with its hint.
+        // Window frame each way, on User Interface with its hint.
         for (const auto way : settings::window_frame_choices) {
-            settings::Dialog frame = opened(Page::graphics);
+            settings::Dialog frame = opened(Page::user_interface);
             frame.chosen.window_frame = way;
-            frame.scroll[static_cast<std::size_t>(Page::graphics)] =
-                geometry::open_rows(frame).limit;
+            frame.scroll[static_cast<std::size_t>(Page::user_interface)] = 0;
             every_text_fits(frame);
         }
-        // HUD scaling each way, at Graphics' end with its hint.
+        // HUD scaling each way, on User Interface with its hint.
         for (const bool scaled : {true, false}) {
-            settings::Dialog hud = opened(Page::graphics);
+            settings::Dialog hud = opened(Page::user_interface);
             hud.chosen.hud_scaling = scaled;
-            hud.scroll[static_cast<std::size_t>(Page::graphics)] = geometry::open_rows(hud).limit;
+            hud.scroll[static_cast<std::size_t>(Page::user_interface)] = 0;
             every_text_fits(hud);
         }
     }
@@ -6757,64 +6015,6 @@ void fonts_load_and_every_text_fits_its_place() {
             dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 80;
             fits(dialog);
         }
-    }
-    // Mods: the lock lines, the notes under the list and a notice an open
-    // that failed gives fit their places, and so does the Switch Mod
-    // question for each mod: a long title is cut to its line, and the note
-    // for a folder without an oamod.yaml shows whole.
-    {
-        const auto fits_drawn = [&](const settings::Dialog& shown) {
-            for (const auto& part : settings::dialog_layout(shown, &fonts)) {
-                if (part.text.empty())
-                    continue;
-                const auto width = settings::dialog_text_width(fonts, part.font, part.text) +
-                                   part.tracking * static_cast<int32_t>(part.text.size() - 1);
-                if (width > part.rect.width) {
-                    std::cerr << "'" << part.text << "' is " << width << " wide in a box "
-                              << part.rect.width << " wide\n";
-                    CHECK(width <= part.rect.width);
-                }
-            }
-        };
-        for (const Lock lock : {Lock::none, Lock::command_line, Lock::in_game}) {
-            settings::Locks locks{};
-            locks.mod = lock;
-            settings::Dialog dialog = mods_dialog(kModFolders[0], locks);
-            fits_drawn(dialog);
-            dialog.folder_notice = "The file manager could not open it.";
-            fits_drawn(dialog);
-        }
-        // ROLL BACK on its row, and its question with the versions it names.
-        for (const Lock lock : {Lock::none, Lock::in_game}) {
-            settings::Locks locks{};
-            locks.mod = lock;
-            settings::Dialog kept = roll_back_dialog(kModFolders[0], locks);
-            fits_drawn(kept);
-            kept.switch_question = 1;
-            kept.mod_question = settings::ModQuestion::roll_back;
-            fits_drawn(kept);
-        }
-        settings::Dialog dialog = mods_dialog();
-        dialog.mod_names[0] = "A Rather Long Mod Title That Runs Past Its Line 3.1";
-        for (const auto& row : settings::mod_rows(dialog)) {
-            dialog.switch_question = row.offered;
-            fits_drawn(dialog);
-        }
-        dialog.switch_question = 2;
-        const auto lines = geometry::question_text_lines(dialog, [&](std::string_view text) {
-            return settings::dialog_text_width(fonts, settings::DialogFont::small, text);
-        });
-        std::string joined;
-        for (const auto& line : lines)
-            joined += (joined.empty() ? "" : " ") + line;
-        CHECK(joined.ends_with(geometry::switch_no_profile_text));
-        for (const std::string_view text :
-             {geometry::mod_in_game_text,
-              geometry::mod_from_command_line_text,
-              geometry::switch_no_profile_text,
-              geometry::mods_folders_text[0],
-              geometry::mods_folders_text[1]})
-            std::cout << "'" << text << "' is " << small_width(text) << " columns\n";
     }
     // Your files: a long folder's tail and the notice an open that failed
     // gives fit their hint lines; the buttons' captions fit the buttons.
@@ -7064,8 +6264,8 @@ void touch_is_listed_only_with_touch_controls() {
     CHECK(geometry::list_divider().y == 256);
     CHECK(geometry::list_item(Page::developer).y == 262);
     CHECK(geometry::list_item(Page::mod_chat).y == 120);
-    // With Touch, Touch takes the sixth place; the line and Developer stay at
-    // the list's foot.
+    // With Touch, Touch takes the place after User Interface; the line and
+    // Developer stay at the list's foot.
     for (std::size_t index = 0; index < kTops.size(); ++index)
         CHECK(geometry::list_item(kTouchPages[index], true).y == kTops[index]);
     CHECK(geometry::list_item(Page::touch, true).y == 141);
@@ -7093,7 +6293,7 @@ void touch_is_listed_only_with_touch_controls() {
     CHECK(entry != nullptr && entry->control == settings::page_control(Page::touch));
 
     // Touch opens only where it is listed.
-    CHECK(opened_with_touch(Page::touch, false).page == Page::mods);
+    CHECK(opened_with_touch(Page::touch, false).page == Page::controls);
     CHECK(opened_with_touch(Page::touch).page == Page::touch);
     CHECK(opened(Page::developer).page == Page::developer && !opened(Page::developer).touch);
 
@@ -7124,13 +6324,14 @@ void touch_is_listed_only_with_touch_controls() {
     CHECK(click(later, centre(geometry::list_item(Page::touch, true))) == DialogAction::redraw);
     later.focused = settings::first_row_control;
     CHECK(settings::set_touch_controls(later, false) == DialogAction::redraw);
-    CHECK(later.page == Page::mods && later.focused == settings::no_control);
+    CHECK(later.page == Page::controls && later.focused == settings::no_control);
     CHECK(list_entries(later).size() == kPages.size());
 }
 
 void game_files_is_listed_only_where_the_host_says() {
-    // With the flag the engine's settings list Game files between Graphics,
-    // or Touch, and Developer; a mod's options and Language alone never do.
+    // With the flag the engine's settings list Game files after User
+    // Interface, or after Touch, and before Developer; a mod's options and
+    // Language & Text alone never do.
     const auto plain = settings::dialog_pages(settings::DialogKind::engine, false, false);
     CHECK(std::equal(plain.begin(), plain.end(), kPages.begin(), kPages.end()));
     const auto files = settings::dialog_pages(settings::DialogKind::engine, false, true);
@@ -7145,8 +6346,8 @@ void game_files_is_listed_only_where_the_host_says() {
     CHECK(std::equal(mods.begin(), mods.end(), kModPages.begin(), kModPages.end()));
     CHECK(settings::dialog_pages(settings::DialogKind::language_text, true, true).size() == 1);
 
-    // Its entry takes the place after Graphics, or after Touch; the entries
-    // above stay, and the line and Developer stay at the list's foot.
+    // Its entry takes the place after User Interface, or after Touch; the
+    // entries above stay, and the line and Developer stay at the list's foot.
     constexpr std::array<int32_t, 5> kTops{36, 57, 78, 99, 120};
     for (std::size_t index = 0; index < kTops.size(); ++index) {
         CHECK(geometry::list_item(kGameFilesPages[index], false, true).y == kTops[index]);
@@ -7193,7 +6394,7 @@ void game_files_is_listed_only_where_the_host_says() {
     );
 
     // Game files opens only where it is listed.
-    CHECK(opened(Page::game_files).page == Page::mods);
+    CHECK(opened(Page::game_files).page == Page::controls);
     CHECK(opened_with_game_files(Page::game_files).page == Page::game_files);
     CHECK(opened_with_game_files(Page::game_files).game_files);
 
@@ -7384,7 +6585,7 @@ void manage_asks_the_host_and_the_backups_switch_changes_at_once() {
     CHECK(settings::dialog_key(keys, DialogKey::space) == DialogAction::manage_game_files);
     CHECK(settings::dialog_key(keys, DialogKey::right) == DialogAction::none);
     CHECK(settings::dialog_key(keys, DialogKey::left) == DialogAction::redraw);  // 2D focus (D30)
-    CHECK(keys.focused == settings::page_control(Page::controls));               // 2D focus (D30)
+    CHECK(keys.focused == settings::page_control(Page::common_tweaks));          // 2D focus (D30)
     CHECK(settings::dialog_key(keys, DialogKey::right) == DialogAction::redraw); // 2D focus (D30)
     CHECK(keys.focused == settings::first_row_control);                          // 2D focus (D30)
     CHECK(keys.chosen == before);
@@ -7415,7 +6616,6 @@ void manage_asks_the_host_and_the_backups_switch_changes_at_once() {
         Page::game_files,
         {},
         settings::highest_unit_limit,
-        {},
         {},
         nullptr,
         false,
@@ -7500,7 +6700,7 @@ void language_text_lists_one_section_and_draws_without_the_game_fonts() {
     for (const std::string_view absent : {"Graphics", "Developer", "Game files", "Touch"})
         CHECK(find_part(parts, absent, settings::no_control) == nullptr);
     for (const std::string_view present :
-         {"Language", "LANGUAGE", "RESTORE DEFAULTS", "CANCEL", "OK"})
+         {"Language & Text", "LANGUAGE & TEXT", "Language", "RESTORE DEFAULTS", "CANCEL", "OK"})
         CHECK(find_part(parts, present, settings::no_control) != nullptr);
     // Where Graphics' entry would be, nothing is pressed.
     const auto graphics = centre(geometry::list_item(Page::graphics));
@@ -7548,8 +6748,9 @@ void language_text_lists_one_section_and_draws_without_the_game_fonts() {
         return std::find(modern_lines.begin(), modern_lines.end(), text) != modern_lines.end();
     };
     CHECK(drew("OPEN ANNIHILATION") || drew("O"));
+    CHECK(drew("Language & Text"));
+    CHECK(drew("LANGUAGE & TEXT"));
     CHECK(drew("Language"));
-    CHECK(drew("LANGUAGE"));
     CHECK(drew("OK"));
     CHECK(drew("v0.6"));
     // The label's letters are drawn in the text colour inside its box, the
@@ -7803,9 +7004,8 @@ void touch_shows_its_rows_and_their_values() {
     CHECK(dialog.chosen == dialog.opened);
 }
 
-/// Graphics' offset at which every row from Hardware acceleration's to
-/// Explosion flash's shows whole.
-constexpr int32_t menu_scaling_in_view = 257;
+/// Graphics' offset at which Native pixel density shows whole.
+constexpr int32_t native_density_in_view = 131;
 
 void menu_scaling_and_native_density_show_and_change() {
     CHECK(geometry::kind_of(Setting::menu_scaling) == geometry::RowKind::levels);
@@ -7815,10 +7015,9 @@ void menu_scaling_and_native_density_show_and_change() {
     CHECK(geometry::strip_caption(Setting::menu_scaling, 1) == "Whole steps");
     CHECK(geometry::strip_caption(Setting::menu_scaling, 2) == "Unfiltered");
 
-    // Scrolled as far as the rows from Hardware acceleration's show: both
-    // labels, Sharp's hint, the three captions and the density's hint.
-    settings::Dialog dialog = graphics_page();
-    dialog.scroll[static_cast<std::size_t>(Page::graphics)] = menu_scaling_in_view;
+    // Menu scaling is User Interface's first row. Native pixel density stays
+    // on Graphics, scrolled into view.
+    settings::Dialog dialog = opened(Page::user_interface);
     auto parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
          {"Menu scaling",
@@ -7826,17 +7025,23 @@ void menu_scaling_and_native_density_show_and_change() {
           "as wide as the next.",
           "Sharp",
           "Whole steps",
-          "Unfiltered",
-          "Native pixel density",
+          "Unfiltered"})
+        CHECK(find_part(parts, text, settings::no_control) != nullptr);
+    settings::Dialog density_page = graphics_page();
+    density_page.scroll[static_cast<std::size_t>(Page::graphics)] = native_density_in_view;
+    for (const std::string_view text :
+         {"Native pixel density",
           "The display's own pixel density (Retina on a Mac).",
           "Applies from the next start."})
-        CHECK(find_part(parts, text, settings::no_control) != nullptr);
+        CHECK(
+            find_part(settings::dialog_layout(density_page), text, settings::no_control) != nullptr
+        );
 
     // A click on a caption picks it, and the hint follows.
     const auto click_caption = [&](std::string_view caption) {
         const auto shown = settings::dialog_layout(dialog);
         const auto* part = find_part(shown, caption, settings::no_control);
-        CHECK(part != nullptr && part->control == settings::first_row_control + 5);
+        CHECK(part != nullptr && part->control == settings::first_row_control);
         return part != nullptr ? click(dialog, centre(part->rect)) : DialogAction::none;
     };
     CHECK(click_caption("Whole steps") == DialogAction::changed);
@@ -7852,19 +7057,22 @@ void menu_scaling_and_native_density_show_and_change() {
         find_part(settings::dialog_layout(dialog), "as the game always drew them.", -1) != nullptr
     );
     // The switch, by a press and by Space.
-    const auto density = geometry::open_rows(dialog).rows.rows[6].control_area;
-    CHECK(click(dialog, {density.x + density.width - 3, density.y + 4}) == DialogAction::changed);
-    CHECK(dialog.chosen.native_density);
-    dialog.focused = settings::first_row_control + 6;
-    CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::changed);
-    CHECK(!dialog.chosen.native_density);
-    CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::changed);
-    CHECK(dialog.chosen.native_density);
+    const auto density = geometry::open_rows(density_page).rows.rows[5].control_area;
+    CHECK(
+        click(density_page, {density.x + density.width - 3, density.y + 4}) == DialogAction::changed
+    );
+    CHECK(density_page.chosen.native_density);
+    density_page.focused = settings::first_row_control + 5;
+    CHECK(settings::dialog_key(density_page, DialogKey::space) == DialogAction::changed);
+    CHECK(!density_page.chosen.native_density);
+    CHECK(settings::dialog_key(density_page, DialogKey::space) == DialogAction::changed);
+    CHECK(density_page.chosen.native_density);
 
     // Restore defaults gives Sharp and Off.
     CHECK(click(dialog, centre(geometry::restore_button)) == DialogAction::changed);
     CHECK(dialog.chosen.menu_scaling == settings::MenuScaling::sharp);
-    CHECK(!dialog.chosen.native_density);
+    CHECK(click(density_page, centre(geometry::restore_button)) == DialogAction::changed);
+    CHECK(!density_page.chosen.native_density);
 
     // Locked by --native-density or by a platform whose windows are always
     // at native density: the switch keeps its place and its value, with the
@@ -7875,8 +7083,8 @@ void menu_scaling_and_native_density_show_and_change() {
         settings::EngineSettings current{};
         current.native_density = lock == Lock::always_on;
         settings::Dialog locked = graphics_page(current, locks);
-        locked.scroll[static_cast<std::size_t>(Page::graphics)] = menu_scaling_in_view;
-        const auto row = geometry::open_rows(locked).rows.rows[6];
+        locked.scroll[static_cast<std::size_t>(Page::graphics)] = native_density_in_view;
+        const auto row = geometry::open_rows(locked).rows.rows[5];
         CHECK(row.lock == lock);
         CHECK(row.control_area.width == geometry::switch_width);
         CHECK(row.lock_area.width > 0);
@@ -7893,8 +7101,9 @@ void menu_scaling_and_native_density_show_and_change() {
         );
         CHECK(click(locked, centre(geometry::restore_button)) == DialogAction::changed);
         CHECK(locked.chosen.native_density == current.native_density);
-        // Menu scaling stays free.
-        CHECK(geometry::open_rows(locked).rows.rows[5].lock == Lock::none);
+        // Menu scaling stays free, on User Interface.
+        settings::Dialog scaling = opened(Page::user_interface, locks);
+        CHECK(geometry::open_rows(scaling).rows.rows[0].lock == Lock::none);
     }
 }
 
@@ -7925,7 +7134,7 @@ void explosion_flash_shows_and_changes() {
         const auto shown = settings::dialog_layout(dialog);
         const settings::LayoutPart* found = nullptr;
         for (const auto& part : shown)
-            if (part.text == caption && part.control == settings::first_row_control + 7)
+            if (part.text == caption && part.control == settings::first_row_control + 6)
                 found = &part;
         CHECK(found != nullptr);
         return found != nullptr ? click(dialog, centre(found->rect)) : DialogAction::none;
@@ -7945,7 +7154,7 @@ void explosion_flash_shows_and_changes() {
     );
     CHECK(find_part(parts, "whatever a mod asks for.", settings::no_control) != nullptr);
     // The keys step it a level at a time.
-    dialog.focused = settings::first_row_control + 7;
+    dialog.focused = settings::first_row_control + 6;
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
     CHECK(dialog.chosen.explosion_flash == settings::ExplosionFlash::reduced);
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
@@ -7988,14 +7197,14 @@ void zoomed_out_units_show_and_change() {
           "Needs Dots",
           "1/6"})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
-    CHECK(geometry::open_rows(dialog).rows.rows[9].lock == Lock::needs_dots);
+    CHECK(geometry::open_rows(dialog).rows.rows[8].lock == Lock::needs_dots);
 
     // A click on a caption of the strip: Icons, faded, changes nothing.
     const auto click_caption = [&](std::string_view caption) {
         const auto shown = settings::dialog_layout(dialog);
         const settings::LayoutPart* found = nullptr;
         for (const auto& part : shown)
-            if (part.text == caption && part.control == settings::first_row_control + 8)
+            if (part.text == caption && part.control == settings::first_row_control + 7)
                 found = &part;
         CHECK(found != nullptr);
         return found != nullptr ? click(dialog, centre(found->rect)) : DialogAction::none;
@@ -8014,7 +7223,7 @@ void zoomed_out_units_show_and_change() {
     );
     // With Dots, After zoom is free, and its hint names its choice.
     CHECK(find_part(parts, "Needs Dots", settings::no_control) == nullptr);
-    CHECK(geometry::open_rows(dialog).rows.rows[9].lock == Lock::none);
+    CHECK(geometry::open_rows(dialog).rows.rows[8].lock == Lock::none);
     CHECK(
         find_part(parts, "Dots farther out than 1/6 of normal size.", settings::no_control) !=
         nullptr
@@ -8023,12 +7232,12 @@ void zoomed_out_units_show_and_change() {
         find_part(parts, "Closer in, units are drawn as models.", settings::no_control) != nullptr
     );
     // The keys: Right from Dots reaches no Icons; Left gives Rendered back.
-    dialog.focused = settings::first_row_control + 8;
+    dialog.focused = settings::first_row_control + 7;
     CHECK(settings::dialog_key(dialog, DialogKey::right) != DialogAction::changed);
     CHECK(dialog.chosen.zoomed_out_units == settings::ZoomedOutUnits::dots);
     // Down to After zoom: Right steps a choice farther out, Left back.
     CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
-    CHECK(dialog.focused == settings::first_row_control + 9);
+    CHECK(dialog.focused == settings::first_row_control + 8);
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
     CHECK(dialog.chosen.zoomed_out_after == settings::ZoomedOutAfter::one_eighth);
     CHECK(
@@ -8044,7 +7253,7 @@ void zoomed_out_units_show_and_change() {
     CHECK(settings::dialog_key(dialog, DialogKey::up) == DialogAction::redraw);
     CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::changed);
     CHECK(dialog.chosen.zoomed_out_units == settings::ZoomedOutUnits::rendered);
-    CHECK(geometry::open_rows(dialog).rows.rows[9].lock == Lock::needs_dots);
+    CHECK(geometry::open_rows(dialog).rows.rows[8].lock == Lock::needs_dots);
 
     // Restore defaults gives Rendered and 1/6; Cancel what it opened with.
     dialog.chosen.zoomed_out_units = settings::ZoomedOutUnits::dots;
@@ -8062,9 +7271,9 @@ void window_frame_shows_and_changes() {
     CHECK(geometry::strip_caption(Setting::window_frame, 1) == "Always shown");
     CHECK(settings::EngineSettings{}.window_frame == settings::WindowFrame::hidden_in_play);
 
-    // At Graphics' end: the label, both captions and Hidden in play's hint.
-    settings::Dialog dialog = graphics_page();
-    CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
+    // User Interface's second row: the label, both captions and Hidden in
+    // play's hint.
+    settings::Dialog dialog = opened(Page::user_interface);
     auto parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
          {"Window frame",
@@ -8076,7 +7285,7 @@ void window_frame_shows_and_changes() {
 
     // A click on Always shown picks it, and the hint follows.
     const auto* always = find_part(parts, "Always shown", settings::no_control);
-    CHECK(always != nullptr && always->control == settings::first_row_control + 10);
+    CHECK(always != nullptr && always->control == settings::first_row_control + 1);
     if (always != nullptr)
         CHECK(click(dialog, centre(always->rect)) == DialogAction::changed);
     CHECK(dialog.chosen.window_frame == settings::WindowFrame::always_shown);
@@ -8087,7 +7296,7 @@ void window_frame_shows_and_changes() {
     );
     CHECK(find_part(parts, "on every screen, a game's included.", settings::no_control) != nullptr);
     // The keys step it a way at a time.
-    dialog.focused = settings::first_row_control + 10;
+    dialog.focused = settings::first_row_control + 1;
     CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::changed);
     CHECK(dialog.chosen.window_frame == settings::WindowFrame::hidden_in_play);
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
@@ -8130,8 +7339,9 @@ void touch_changes_only_its_entry_and_the_sections_under_it() {
 
 void controller_is_listed_only_once_a_gamepad_sent_input() {
     // Without a gamepad the engine's settings list as they always have;
-    // with one, Controller comes after Graphics and Touch, before Game files
-    // and Developer. A mod's options and Language alone never list it.
+    // with one, Controller comes after User Interface and Touch, before Game
+    // files and Developer. A mod's options and Language & Text alone never
+    // list it.
     const auto engine = settings::dialog_pages(settings::DialogKind::engine);
     CHECK(std::equal(engine.begin(), engine.end(), kPages.begin(), kPages.end()));
     const auto pad = settings::dialog_pages(settings::DialogKind::engine, false, false, true);
@@ -8147,8 +7357,8 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(all.size() == settings::most_listed_pages);
     const auto files = settings::dialog_pages(settings::DialogKind::engine, false, true, true);
     CHECK(
-        files.size() == 9 && files[5] == Page::controller && files[6] == Page::game_files &&
-        files[7] == Page::downloads && files[8] == Page::developer
+        files.size() == 9 && files[4] == Page::user_interface && files[5] == Page::controller &&
+        files[6] == Page::game_files && files[7] == Page::downloads && files[8] == Page::developer
     );
     const auto mods = settings::dialog_pages(settings::DialogKind::mod_options, true, true, true);
     CHECK(std::equal(mods.begin(), mods.end(), kModPages.begin(), kModPages.end()));
@@ -8156,8 +7366,8 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
         settings::dialog_pages(settings::DialogKind::language_text, true, true, true);
     CHECK(language.size() == 1 && language[0] == Page::language);
 
-    // Its entry takes the sixth place, or the seventh after Touch; Game files
-    // follows it; the line and Developer stay at the list's foot.
+    // Its entry takes the place after User Interface, or after Touch; Game
+    // files follows it; the line and Developer stay at the list's foot.
     CHECK(geometry::list_item(Page::controller, false, false, true).y == 141);
     CHECK(geometry::list_item(Page::touch, true, false, true).y == 141);
     CHECK(geometry::list_item(Page::controller, true, false, true).y == 162);
@@ -8200,7 +7410,7 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(entry != nullptr && entry->control == settings::page_control(Page::controller));
 
     // Controller opens only where it is listed.
-    CHECK(opened_with_controller(Page::controller, false).page == Page::mods);
+    CHECK(opened_with_controller(Page::controller, false).page == Page::controls);
     CHECK(opened_with_controller(Page::controller).page == Page::controller);
     CHECK(opened_with_controller(Page::controller).controller);
     CHECK(!opened(Page::graphics).controller && !opened(Page::graphics).steam_input);
@@ -8239,7 +7449,7 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(later.page == Page::controller);
     later.focused = settings::first_row_control + 2;
     CHECK(settings::set_controller_section(later, false, false) == DialogAction::redraw);
-    CHECK(later.page == Page::mods && later.focused == settings::no_control);
+    CHECK(later.page == Page::controls && later.focused == settings::no_control);
     CHECK(list_entries(later).size() == kPages.size());
     // Off while another section shows, that section stays and keeps its focus.
     settings::Dialog elsewhere = opened_with_controller(Page::graphics);
@@ -8819,40 +8029,6 @@ void a_finger_takes_the_nearest_control() {
     );
     CHECK(languages.open_list == settings::no_control);
     CHECK(geometry::choice_index(languages, Setting::language) == 1);
-
-    // While the Switch Mod question shows, a finger beside one of its
-    // buttons takes that button, and one on a button takes it whatever
-    // lies near it under the question.
-    settings::Dialog asking = mods_dialog(kModFolders[0]);
-    asking.touch = true;
-    static_cast<void>(click(asking, mod_point(asking, 1)));
-    CHECK(asking.switch_question == 1);
-    const auto& yes = geometry::question_yes_button;
-    const Point under_yes{yes.x + yes.width / 2, yes.y + yes.height - 1 + 6};
-    static_cast<void>(settings::dialog_finger_down(asking, under_yes.x, under_yes.y, 22));
-    CHECK(asking.pressed == settings::question_yes_control);
-    CHECK(
-        settings::dialog_pointer_up(asking, under_yes.x, under_yes.y) == DialogAction::switch_mod
-    );
-    asking = mods_dialog(kModFolders[0]);
-    static_cast<void>(click(asking, mod_point(asking, 1)));
-    const auto& no = geometry::question_no_button;
-    const Point on_no{no.x + 1, no.y + no.height / 2};
-    static_cast<void>(settings::dialog_finger_down(asking, on_no.x, on_no.y, 22));
-    CHECK(asking.pressed == settings::question_no_control);
-    CHECK(settings::dialog_pointer_up(asking, on_no.x, on_no.y) == DialogAction::redraw);
-    CHECK(asking.switch_question == settings::no_question);
-
-    // On Mods a finger beside OPEN MODS FOLDER takes it.
-    settings::Dialog mods = mods_dialog();
-    const auto& folder = geometry::mods_folder_button;
-    const Point under_folder{folder.x + folder.width / 2, folder.y + folder.height - 1 + 6};
-    static_cast<void>(settings::dialog_finger_down(mods, under_folder.x, under_folder.y, 22));
-    CHECK(mods.pressed == geometry::mods_folder_control(geometry::open_rows(mods).rows));
-    CHECK(
-        settings::dialog_pointer_up(mods, under_folder.x, under_folder.y) ==
-        DialogAction::open_folder
-    );
 }
 
 /// The most bytes a name the automation endpoint lists may have.
@@ -8976,23 +8152,15 @@ void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
         static_cast<void>(settings::dialog_key(dropped, key));
     CHECK(dropped.open_list != settings::no_control);
     check_endpoint_names(dropped, "Controls, a drop-down open", seen);
-    // Interface size's drop-down open, Graphics' last row: Tab reaches it
-    // past After zoom, which is locked.
+    // Interface size's drop-down open, User Interface's fourth row.
     settings::Dialog sizes = engine;
-    sizes.page = Page::graphics;
-    for (int32_t press = 0; press < 12; ++press)
+    sizes.page = Page::user_interface;
+    for (int32_t press = 0; press < 4; ++press)
         static_cast<void>(settings::dialog_key(sizes, DialogKey::tab));
-    CHECK(sizes.focused == settings::first_row_control + 12);
+    CHECK(sizes.focused == settings::first_row_control + 3);
     static_cast<void>(settings::dialog_key(sizes, DialogKey::space));
-    CHECK(sizes.open_list == settings::first_row_control + 12);
-    check_endpoint_names(sizes, "Graphics, Interface size open", seen);
-    // Mods with three mods, and its Switch Mod question.
-    settings::Dialog mods = mods_dialog(kModFolders[0]);
-    mods.size_class = size_class;
-    check_endpoint_names(mods, "mods", seen);
-    static_cast<void>(click(mods, mod_point(mods, 1)));
-    CHECK(mods.switch_question == 1);
-    check_endpoint_names(mods, "mods, the question showing", seen);
+    CHECK(sizes.open_list == settings::first_row_control + 3);
+    check_endpoint_names(sizes, "User Interface, Interface size open", seen);
     // A mod's options.
     settings::Dialog options;
     settings::open_mod_options_dialog(options, {}, {}, {}, "v0.2.0", Page::mod_keys);
@@ -9001,6 +8169,8 @@ void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
 
     for (const std::string_view name : {
              "oa.settings.nav.controls",
+             "oa.settings.nav.language",
+             "oa.settings.nav.user-interface",
              "oa.settings.wheel-zoom",
              "oa.settings.wheel-zoom.off",
              "oa.settings.wheel-zoom.on",
@@ -9021,10 +8191,6 @@ void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
              "oa.settings.frame-stats.on",
              "oa.settings.active-only.off",
              "oa.settings.restore-profile-values",
-             "oa.settings.mod.no-mod.switch",
-             "oa.settings.open-mods-folder",
-             "oa.settings.question.yes",
-             "oa.settings.question.no",
              "oa.settings.scroll-bar",
              "oa.settings.nav.mod-keys",
              "oa.settings.ok",
@@ -9132,20 +8298,20 @@ std::vector<int32_t> tab_round(settings::Dialog dialog) {
 }
 
 void the_arrows_move_by_geometry() {
-    // Controls: Down walks its six rows, and from the last, which it brings
+    // Controls: Down walks its five rows, and from the last, which it brings
     // into view, reaches the footer under it. A row lies across the
     // section, so Cancel and OK both lie in line with it; Cancel's middle
     // is nearer the row's. Up comes back to the last row.
     settings::Dialog controls = opened(Page::controls);
-    for (int32_t row = 0; row < 6; ++row) {
+    for (int32_t row = 0; row < 5; ++row) {
         CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
         CHECK(controls.focused == settings::first_row_control + row);
     }
-    CHECK(inside(geometry::open_rows(controls).rows.rows[5].control_area, geometry::view));
+    CHECK(inside(geometry::open_rows(controls).rows.rows[4].control_area, geometry::view));
     CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
     CHECK(controls.focused == settings::cancel_control);
     CHECK(settings::dialog_key(controls, DialogKey::up) == DialogAction::redraw);
-    CHECK(controls.focused == settings::first_row_control + 5);
+    CHECK(controls.focused == settings::first_row_control + 4);
     // Down from the footer finds nothing: the focus stays.
     controls.focused = settings::ok_control;
     CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::none);
@@ -9167,12 +8333,12 @@ void the_arrows_move_by_geometry() {
     CHECK(controls.focused == settings::cancel_control);
 
     // Game files: MANAGE… takes no steps, so Left goes to the entry at its
-    // height, Controls', and Right comes back.
+    // height, Common Tweaks', and Right comes back.
     settings::Dialog files = opened_with_game_files(Page::game_files);
     CHECK(settings::dialog_key(files, DialogKey::tab) == DialogAction::redraw);
     CHECK(files.focused == settings::first_row_control);
     CHECK(settings::dialog_key(files, DialogKey::left) == DialogAction::redraw);
-    CHECK(files.focused == settings::page_control(Page::controls));
+    CHECK(files.focused == settings::page_control(Page::common_tweaks));
     CHECK(settings::dialog_key(files, DialogKey::right) == DialogAction::redraw);
     CHECK(files.focused == settings::first_row_control);
     CHECK(files.chosen == files.opened);
@@ -9198,19 +8364,6 @@ void the_arrows_move_by_geometry() {
     CHECK(settings::dialog_key(graphics, DialogKey::left) == DialogAction::changed);
     CHECK(graphics.focused == settings::first_row_control);
 
-    // Mods: a row that offers ROLL BACK reaches it with Right, and Left
-    // comes back to the row.
-    settings::Dialog mods = roll_back_dialog(kModFolders[0]);
-    const auto open = geometry::open_rows(mods);
-    const std::size_t alpha = listed_at(mods, 1);
-    const int32_t roll_back = geometry::roll_back_control(open.rows, alpha);
-    mods.focused = mod_control(mods, 1);
-    CHECK(settings::dialog_key(mods, DialogKey::right) == DialogAction::redraw);
-    CHECK(mods.focused == roll_back);
-    CHECK(settings::dialog_key(mods, DialogKey::left) == DialogAction::redraw);
-    CHECK(mods.focused == mod_control(mods, 1));
-    CHECK(mods.switch_question == settings::no_question);
-
     // From no focus, Up shows it on the last control in Tab's order and the
     // other arrows on the first.
     for (const auto& [key, expected] :
@@ -9230,11 +8383,11 @@ void the_arrows_move_by_geometry() {
         settings::restore_control,
         settings::cancel_control,
         settings::ok_control,
-        settings::page_control(Page::mods),
         settings::page_control(Page::controls),
         settings::page_control(Page::common_tweaks),
         settings::page_control(Page::language),
         settings::page_control(Page::graphics),
+        settings::page_control(Page::user_interface),
         settings::page_control(Page::downloads),
         settings::page_control(Page::developer),
     };
@@ -9242,11 +8395,8 @@ void the_arrows_move_by_geometry() {
         order.insert(order.end(), rest.begin(), rest.end());
         return order;
     };
-    // Mods with no mod offered: No Mod's row and OPEN MODS FOLDER.
-    CHECK(tab_round(opened(Page::mods)) == then_rest({row, row + 1}));
     CHECK(
-        tab_round(opened(Page::controls)) ==
-        then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5})
+        tab_round(opened(Page::controls)) == then_rest({row, row + 1, row + 2, row + 3, row + 4})
     );
     CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1, row + 2}));
     // Language: Text size waits for the modern fonts.
@@ -9256,20 +8406,13 @@ void the_arrows_move_by_geometry() {
     );
     // Graphics: After zoom waits for Dots.
     CHECK(
-        tab_round(opened(Page::graphics)) == then_rest(
-                                                 {row,
-                                                  row + 1,
-                                                  row + 2,
-                                                  row + 3,
-                                                  row + 4,
-                                                  row + 5,
-                                                  row + 6,
-                                                  row + 7,
-                                                  row + 8,
-                                                  row + 10,
-                                                  row + 11,
-                                                  row + 12}
-                                             )
+        tab_round(opened(Page::graphics)) ==
+        then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5, row + 6, row + 7})
+    );
+    // User Interface: every row takes a change, Interface size among them.
+    CHECK(
+        tab_round(opened(Page::user_interface)) ==
+        then_rest({row, row + 1, row + 2, row + 3, row + 4})
     );
     // Developer, Developer Mode off: its three rows, every area of its list,
     // then Show Active Only.
@@ -9432,7 +8575,6 @@ opened_at(oa::ui::kit::SizeClass size_class, Page page, const settings::Locks& l
         {},
         settings::highest_unit_limit,
         {},
-        {},
         nullptr,
         true,
         true,
@@ -9501,10 +8643,6 @@ void check_rows_in_their_column(const settings::Dialog& dialog) {
     };
     const auto open = geometry::open_rows(dialog);
     for (const auto& row : open.rows.rows) {
-        if (row.setting == Setting::mod) {
-            CHECK(in_columns(row.control_area));
-            continue;
-        }
         CHECK(in_columns(row.label));
         if (row.control_area.width == 0)
             continue;
@@ -9523,7 +8661,7 @@ void check_rows_in_their_column(const settings::Dialog& dialog) {
         CHECK(row.label.x >= sized.content_left);
         CHECK(row.label.x + row.label.width <= sized.content_right);
     }
-    if (!geometry::mods_page(dialog) && !geometry::developer_page(dialog))
+    if (!geometry::developer_page(dialog))
         CHECK(open.rows.bottom + open.scroll - open.limit < sized.footer_rule_row);
 }
 
@@ -9563,13 +8701,6 @@ void the_larger_classes_lay_out_every_section_inside_the_dialog() {
             check_parts_inside_and_apart(developer);
             check_rows_in_their_column(developer);
         }
-        // Mods with a long list, at its top and its end.
-        settings::Dialog mods = many_mods_dialog(30);
-        mods.size_class = size_class;
-        check_parts_inside_and_apart(mods);
-        check_rows_in_their_column(mods);
-        mods.scroll[static_cast<std::size_t>(Page::mods)] = 100000;
-        check_parts_inside_and_apart(mods);
     }
 }
 
@@ -9798,7 +8929,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
         return page;
     };
 
-    settings::Dialog listed = opened(Page::mods);
+    settings::Dialog listed = opened(Page::controls);
     const std::array<settings::RegisteredPage, 3> owners{
         page_of("alpha.one", "One", "Alpha", &kOne, 1),
         page_of("alpha.two", "Two", "Alpha", &kOne, 1),
@@ -9809,8 +8940,9 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     const auto developer = std::find(texts.begin(), texts.end(), "Developer");
     CHECK(developer != texts.end());
     const std::vector<std::string> tail(developer + 1, texts.end());
-    // Downloads takes the row Three used to fill, so Three starts just under
-    // the list. The owners and the pages that fit stay in order under Developer.
+    // The owners and their pages stay in order under Developer. User
+    // Interface takes one more row above Developer, so Three, which used to
+    // be the last that fit, is cut until the list scrolls.
     CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta"}));
     listed.nav_scroll = 100000;
     const auto scrolled = nav_texts(listed);
@@ -9830,7 +8962,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
         many[index] =
             page_of("n" + std::to_string(index), "Page " + std::to_string(index), "Pack", &kOne, 1);
     }
-    settings::Dialog crowded = opened(Page::mods);
+    settings::Dialog crowded = opened(Page::controls);
     settings::set_registered_pages(crowded, many, {});
     std::set<int32_t> reached;
     for (int32_t press = 0; press < 200; ++press) {
@@ -9860,7 +8992,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
         page_of("check.page", "Check", "Check", kRows.data(), kRows.size());
     for (const auto size_class :
          {kit::SizeClass::compact, kit::SizeClass::regular, kit::SizeClass::large}) {
-        settings::Dialog dialog = opened(Page::mods);
+        settings::Dialog dialog = opened(Page::controls);
         dialog.size_class = size_class;
         settings::set_registered_pages(dialog, std::span(&sample, 1), {});
         dialog.page = Page::registered;
@@ -9871,7 +9003,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
         CHECK(find_part(parts, "Check", settings::no_control) != nullptr);
     }
 
-    settings::Dialog dialog = opened(Page::mods);
+    settings::Dialog dialog = opened(Page::controls);
     settings::set_registered_pages(dialog, std::span(&sample, 1), {});
     dialog.page = Page::registered;
     dialog.focused = settings::no_control;
@@ -9908,7 +9040,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     }
     CHECK(wrote_toggle && wrote_mode);
 
-    settings::Dialog cancelled = opened(Page::mods);
+    settings::Dialog cancelled = opened(Page::controls);
     settings::set_registered_pages(cancelled, std::span(&sample, 1), {});
     cancelled.page = Page::registered;
     const auto cancel_toggled = settings::dialog_layout(cancelled);
@@ -9928,7 +9060,7 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     CHECK(settings::registered_writes(cancelled).empty());
     CHECK(cancelled.registered_values.values.count("check.toggle") == 0);
 
-    settings::Dialog restored = opened(Page::mods);
+    settings::Dialog restored = opened(Page::controls);
     settings::set_registered_pages(restored, std::span(&sample, 1), {});
     restored.page = Page::registered;
     const auto restore_toggled = settings::dialog_layout(restored);
@@ -10003,7 +9135,7 @@ int main(int argc, char** argv) {
         offsets_are_kept_for_each_section_until_the_dialog_opens_again();
         the_hover_follows_the_rows_under_a_still_pointer();
         locked_switch_rows_keep_their_value_in_sight();
-        the_graphics_page_scrolls_its_twelve_rows();
+        the_graphics_page_scrolls_its_rows();
         interface_size_offers_150_with_the_modern_fonts();
         menu_scaling_and_native_density_show_and_change();
         explosion_flash_shows_and_changes();
@@ -10047,19 +9179,8 @@ int main(int argc, char** argv) {
         language_text_lists_one_section_and_draws_without_the_game_fonts();
         dark_letters_on_the_accent_are_drawn_bare();
         your_files_shows_the_folder_and_opens_its_folders();
-        mods_lists_the_mod_played_first_then_no_mod_then_the_others_by_title();
-        each_mod_row_shows_its_badge_title_version_and_description();
-        long_mod_texts_are_cut_with_an_ellipsis();
-        the_mods_list_scrolls_while_its_button_and_note_stay();
-        mod_rows_grow_while_the_modern_fonts_draw_the_words();
         hint_lines_part_while_the_modern_fonts_draw_the_words();
         hint_lines_stay_whole_at_the_end_of_a_section();
-        choosing_another_mod_asks_before_switching();
-        the_keys_answer_the_switch_mod_question();
-        a_kept_version_rolls_back_after_a_question();
-        the_roll_back_question_asks_as_a_prompt_in_the_pages_words();
-        mods_locks_during_a_game_and_by_the_command_line();
-        open_mods_folder_asks_for_the_mods_folder();
         the_notice_wraps_its_text_and_places_its_buttons();
         the_notice_answers_its_buttons_and_keys();
         the_notice_draws_in_the_dialogs_colours(settings::DialogFonts{});

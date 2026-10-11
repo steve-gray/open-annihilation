@@ -14,18 +14,17 @@ the locks a running game puts on them (`settings_locks`).
 
 | Section | Setting | Range | Default | Key |
 |---|---|---|---|---|
-| Mods | Mod | No Mod, or one of the mod folders the game finds | No Mod | `open-annihilation.mod-directory` (the folder's path; absent for No Mod) |
+| (the Library) | Mod | No Mod, or one of the mod folders the game finds | No Mod | `open-annihilation.mod-directory` (the folder's path; absent for No Mod) |
 | | A mod folder chosen outside the folders the game finds, kept while it is the Mod | any folder | none | `open-annihilation.picked-mod-directory` (the folder's path; absent for none, erased once another mod or No Mod is stored) |
 | Controls | Mouse wheel zoom | Off, On | On | `open-annihilation.wheel-zoom` |
 | | Maximum zoom out, a drop-down: how far out the wheel, a pinch, the touch zoom buttons and a controller zoom | Automatic (half the game's scale, a sixth while Full draws the battlefield), Whole map, 1/32, 1/16, 1/8, 1/4, 1/2; no choice but Automatic goes past the whole map | Automatic | `open-annihilation.max-zoom-out` (`automatic`, `whole-map`, `1/32`, `1/16`, `1/8`, `1/4` or `1/2`) |
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
-| | Escape opens the game menu | Off, On | On on macOS, Off elsewhere and with `--preferences-file` | `open-annihilation.escape-opens-menu` |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
 | Common Tweaks | Your files: the player's own folder and buttons that open its Saves, Screenshots and Mods folders | changes no setting | | `open-annihilation.user-folder`, read at start (`src/app/include/oa/app/user_folder.hpp`) |
 | | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
-| Language | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
+| Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
 | | Use modern fonts for game text; On, locked, while a language drawn only in them is chosen | Off, On | On with the player's own preferences file; Off with `--preferences-file` | `open-annihilation.modern-fonts` |
 | | Text size, of the modern fonts | 50% to 300% of the game fonts' sizes, steps of 10% | 80% | `open-annihilation.text-size` |
 | | Font outline | Off, On | On | `open-annihilation.text-outline` |
@@ -37,14 +36,15 @@ the locks a running game puts on them (`settings_locks`).
 | | Screen size, when OK is pressed | Desktop, then the sizes the display offers from 640×480 (`Dialog::offered_screen_sizes`), in a window shown at the window's own size until moved, as Custom where the display offers no such size; Desktop, 640×480, 800×600, 1024×768 and 1280×1024 where the game does not say | Desktop; 800×600 on a light machine with the player's own preferences file, 640×480 when its desktop is smaller | `open-annihilation.screen-size` (`desktop`, or a size such as `2560x1440`) |
 | | Hardware acceleration | Off, Basic, Full | Full with the player's own preferences file on every machine; Off with `--preferences-file` | `open-annihilation.hardware-acceleration` (`off`, `basic` or `full`) |
 | | Vertical sync | Off, On | Off | `open-annihilation.vertical-sync` |
-| | Menu scaling | Sharp, Whole steps, Unfiltered | Sharp | `open-annihilation.menu-scaling` (`sharp`, `whole-steps` or `unfiltered`) |
 | | Native pixel density, from the next start | Off, On; always On where the platform opens every window at native density | Off | `open-annihilation.native-density` |
 | | Explosion flash; a mod's profile may draw the flashes lower still (`ui.explosion-flash`), and the lower of the two is drawn | Off, Reduced, Full | Full | `open-annihilation.explosion-flash` (`off`, `reduced` or `full`) |
 | | Zoomed out units: how units are drawn farther out than After zoom | Rendered, Dots; Icons shown faded, not offered | Rendered | `open-annihilation.zoomed-out-units` (`rendered` or `dots`; any other word, `icons` among them, reads as Rendered) |
 | | After zoom, a drop-down, locked "Needs Dots" while Zoomed out units is Rendered | 1/2, 1/3, 1/4, 1/6, 1/8, 1/12, 1/16 of normal size | 1/6 | `open-annihilation.zoomed-out-after` (`1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`) |
+| User Interface | Menu scaling | Sharp, Whole steps, Unfiltered | Sharp | `open-annihilation.menu-scaling` (`sharp`, `whole-steps` or `unfiltered`) |
 | | Window frame: whether a window shows its title bar and borders while a game is played; the game menu, a panel it opens and every other screen show them | Hidden in play, Always shown | Hidden in play | `open-annihilation.window-frame` (`hidden-in-play` or `always-shown`) |
 | | HUD scaling: whether a game's side column and bars grow with the window, up to twice the original game's size, or keep its size | Off, On | On | `open-annihilation.hud-scaling` |
-| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn, held to the largest step at which Compact's dialog fits the window, and in a match Settings no larger than the side column's scale ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
+| | Interface size, a drop-down, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn, held to the largest step at which Compact's dialog fits the window, and in a match Settings no larger than the side column's scale ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
+| | Escape opens the game menu | Off, On | On on macOS, Off elsewhere and with `--preferences-file` | `open-annihilation.escape-opens-menu` |
 | Touch, listed only while the game has touch controls | One-finger drag | Automatic (a selection box on a tablet, scrolling on a phone), Box, Scroll | Automatic | `open-annihilation.touch-drag` (`automatic`, `box` or `scroll`) |
 | | Hold delay | 250 to 700 ms, steps of 50; a stored delay is held to the range and put on its nearest step | 350 ms | `open-annihilation.touch-hold-delay` |
 | | QUEUE and ADD | Stay on, One action | Stay on | `open-annihilation.touch-latches` (`stay-on` or `one-action`) |
@@ -232,10 +232,10 @@ link (`Setting::more_in_library`, named `settings.more-in-library`) whose
 hint says "More languages are in the Library.". Its press sets
 `Dialog::library_tab` to Languages and asks the host for the Library
 (`DialogAction::open_library`); the dialog stays open under it. In a match
-and in Language alone it is not listed, and Language's rows stand as
+and in Language & Text alone it is not listed, and Language's rows stand as
 `page_settings` gives them.
 
-The rest of the Language settings say how game text is drawn. Use modern fonts
+The rest of Language & Text says how game text is drawn. Use modern fonts
 for game text draws it in modern fonts, which hold the letters of many
 languages, in place of the game's own 8-bit fonts; Text size scales every
 size those fonts are drawn at together, from half the game fonts' sizes to
@@ -322,65 +322,21 @@ draws the size is in the application's README and on the
 [ui.text-rendering](../../../docs/mods/standard-hacks/ui.text-rendering.md)
 page.
 
-Mods chooses the mod folder the game plays, layered over the game folder
-as `--mod-dir` would play it. It lists one row a mod, in a view of its own
-that scrolls by the wheel, its scroll bar, Page Up, Page Down, Home and End
-while the rows are taller than it, with the line on the check for updates,
-OPEN MODS FOLDER and GET MORE MODS… in one row, and the two lines naming
-the folders listed fixed under it (see [Updates](#updates)). The mod the
-game plays comes
-first, marked PLAYING (`ModOffer::playing`); then No Mod, when another mod
-plays; then every mod folder the host offers (`ModOffer::names`,
-`ModOffer::folders`), by its title, whatever the case of its letters
-(`mod_rows`). A row shows the mod's badge, its title, its version at the
-right and its description under them (`ModDetails`, read from the folder's
-`oamod.yaml` and the `oamod.png` beside it): a dashed square stands for a
-mod without a badge, and No Mod shows the OA mark, the version "3.1c" and
-"The game's own rules, as 3.1c plays them." A folder without an
-`oamod.yaml` shows its folder's name, "N/A" and "No oamod.yaml present" in
-amber. A title, a version or a description too long for its place is cut
-with "...".
-
-A press on a row other than the one played, or Space on it, asks the
-Switch Mod question over the dialog: the mod's badge, title and version,
-"Switch to <title> now? The game reloads its data for the new mod and
-returns to the main menu. Your other settings are kept.", and, for a
-folder without an `oamod.yaml`, "This folder has no oamod.yaml, so the
-game's own rules apply." in amber, each broken into the lines that fit,
-with CANCEL and SWITCH. Until it is answered the question takes every
-pointer event and key: Y, or Enter or Space on a marked SWITCH, answers
-SWITCH; N, Escape, or Enter or Space on a marked CANCEL, answers CANCEL;
-Left marks CANCEL, Right SWITCH, and Tab and Shift+Tab move the mark,
-SWITCH at first; a press and release on a button answers it. Y and N do
-nothing while no question shows. CANCEL leaves the settings as they were;
-SWITCH sets the Mod to the folder (`EngineSettings::mod_folder`, cleared
-for No Mod) and asks the host to keep the settings, close the dialog and
-reload the game for that mod on the main menu (`DialogAction::switch_mod`).
-OPEN MODS FOLDER asks the host to open the player's own Mods folder in the
-system's file manager (`DialogAction::open_folder` with
-`FolderButton::mods`), as Your files' MODS button does; a folder that
-cannot be opened is said, in amber, in place of the second line under it
-(`set_folder_notice`).
-
-During a game (`Locks::mod`, `Lock::in_game`) Mods is locked: "Locked
-during a game. Choose the mod from the main menu." shows over the list
-beside a padlock, the rows other than the one played are dimmed, no row
-takes a press or the focus, OPEN MODS FOLDER is disabled, and UPDATE,
-CHECK NOW and GET MORE MODS… are hidden. While
-`--mod-dir` or `--base-game` decides the run's mod
-(`GameState::mod_from_command_line`, `Lock::command_line`), it is locked
-the same way, with "The command line chose this run's mod." A stored mod
-folder the game folder does not offer reads as the stored one
-(`EngineSettings::picked_mod_folder`); a file without either key, as
-earlier versions wrote, reads No Mod. The picked folder is remembered only
-while it is the Mod (`remembered_picked_folder`): a picked folder's key
-naming any other folder reads as none, and `write_settings` erases it, so
-that a switch to another mod or No Mod forgets the folder. Developer Mode
-keeps its overrides under the id of the profile the game plays, and No Mod
-the plain 3.1c baseline's (`ta-3.1c`), which no mod's profile can take. A
-mod folder without a profile keeps its own under `folder:` and its path
-(`folder_overrides_id` in the application), which no profile's kebab-case
-id can be either.
+The Mod, the mod folder the game plays, layered over the game folder as
+`--mod-dir` would play it, has no section of the dialog: the application's
+Library chooses it, with PLAY NOW, and SWITCH OFF for No Mod, stores it
+with `write_settings`, and reloads the game for it. The dialog keeps it as
+it is, through Restore defaults too. A stored mod folder the game folder
+does not offer reads as the stored one (`EngineSettings::picked_mod_folder`);
+a file without either key, as earlier versions wrote, reads No Mod. The
+picked folder is remembered only while it is the Mod
+(`remembered_picked_folder`): a picked folder's key naming any other folder
+reads as none, and `write_settings` erases it, so that a switch to another
+mod or No Mod forgets the folder. Developer Mode keeps its overrides under
+the id of the profile the game plays, and No Mod the plain 3.1c baseline's
+(`ta-3.1c`), which no mod's profile can take. A mod folder without a
+profile keeps its own under `folder:` and its path (`folder_overrides_id`
+in the application), which no profile's kebab-case id can be either.
 
 Developer Mode is described [below](#developer-mode).
 
@@ -455,9 +411,10 @@ edge and hairline rules, and one green accent for what is selected:
 - the header: the Open Annihilation icon, 20 by 20 source pixels, "OPEN
   ANNIHILATION SETTINGS" and the version, with "Shared game - still
   running" in amber while a shared game keeps running;
-- the sections down the left (Mods, Controls, Common Tweaks, Language,
-  Graphics, Touch while the game has touch controls, Controller once a
-  gamepad has sent input, and Game files where the host lists it),
+- the sections down the left (Controls, Common Tweaks, Language & Text,
+  Graphics, User Interface, Touch while the game has touch controls,
+  Controller once a gamepad has sent input, and Game files where the host
+  lists it),
   Developer at the foot after a line, the open one marked;
 - the open section's heading and rows: a label, a hint of one or two lines,
   and an Off/On switch, a level strip (Off, 2x, 4x, 8x, 16x for Enhanced
@@ -469,8 +426,7 @@ edge and hairline rules, and one green accent for what is selected:
   the hint (Language, Gyro pointer, whose field is wider for its longest
   choice, and Button prompts): a field showing the choice, with an arrow at
   its right; a text row shows only text under its label (Where the files
-  are, and Controller's Steam Input notice of up to four lines); Mods shows
-  its list of mods in their place;
+  are, and Controller's Steam Input notice of up to four lines);
 - Restore defaults, Cancel and OK along the bottom.
 
 A section holds any number of rows. They lie in a view under the section's
@@ -480,11 +436,13 @@ and the footer never move. A section whose rows, with 8 clear pixels under
 the last row's line, are taller than the view scrolls by whole source
 pixels, and shows a scroll bar in the margin right of its rows: a well like
 a switch's, its thumb as tall as the view's share of the section and never
-under 16 pixels. Graphics, with thirteen rows, is taller than its view by
-592 pixels, Language, with the Language drop-down, four switches and the
-Text size slider, by 129, Touch, with its three strips, the Hold delay
-slider and two switches, by 121, and Controls, with its three switches and
-the zoom's two drop-downs, by 84; Common Tweaks fits, its Your files and
+under 16 pixels. Graphics, with nine rows, is taller than its view by
+336 pixels, Language & Text, with the Language drop-down, four switches and
+the Text size slider, by 129, User Interface, with its three switches, Menu
+scaling's strip and Interface size's drop-down, by 88, Touch, with its
+three strips, the Hold delay slider and two switches, by 121, and Controls,
+with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge
+and Select groups without Alt, by 84; Common Tweaks fits, its Your files and
 two sliders in 210 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the
@@ -527,7 +485,7 @@ The Touch section is listed only while the game has touch controls:
 `Dialog::touch`, which the host gives `open_dialog` and keeps with
 `set_touch_controls` each frame, so that Touch shows from the moment a
 finger turns the touch controls on (`dialog_pages(kind, touch)`). A dialog
-asked to open on Touch without them opens on its first section, Mods.
+asked to open on Touch without them opens on its first section, Controls.
 
 The Controller section is listed only once a gamepad has sent input in the
 run: `Dialog::controller`, which the host gives `open_dialog` and keeps with
@@ -535,19 +493,19 @@ run: `Dialog::controller`, which the host gives `open_dialog` and keeps with
 Controller shows from the moment a gamepad is used and its Steam Input
 notice while it applies (`dialog_pages(kind, touch, game_files,
 controller)`). It stands after Touch and before Game files. A dialog asked
-to open on Controller without it opens on its first section, Mods; one that
-stops listing it while it shows it shows Mods, and the focus leaves its
+to open on Controller without it opens on its first section, Controls; one
+that stops listing it while it shows it shows Controls, and the focus leaves its
 controls. The notice coming or going while Controller shows moves each row
 by one, and the focus with its row. Its rows: Scheme, Right trackpad,
 Pointer speed, Pointer acceleration, Trackpad glide, Right stick, Magnetism
 (stick pointer), Gyro pointer, Gyro speed, Haptics, Button prompts,
 Left-handed, then Touch's own Control size, Hold delay and QUEUE and ADD.
 
-The Game files section is listed, between Controller (or Touch, or
-Graphics) and Downloads, only where the host says so (`Dialog::game_files`, given to
+The Game files section is listed, between Controller (or Touch, or User
+Interface) and Downloads, only where the host says so (`Dialog::game_files`, given to
 `open_dialog`): the main menu's dialog of a game whose platform brings game
 files in. A dialog asked to open on Game files without it opens on its
-first section, Mods. Its three rows:
+first section, Controls. Its three rows:
 
 - Installed: what is installed and, under it, the sizes line, both the
   host's texts (`Dialog::game_files_summary`, `game_files_sizes`), with
@@ -571,7 +529,7 @@ The host's texts keep to their lines' columns as they are drawn.
 
 The Downloads section is listed in every dialog of the engine's settings,
 after Game files where that is listed and otherwise after Controller, Touch
-or Graphics, and before the line above Developer. Its rows come from the
+or User Interface, and before the line above Developer. Its rows come from the
 host's offer (`set_downloads_offer`), not from a fixed list of settings:
 
 - Check for content updates: a drop-down of Automatically, Only when I
@@ -620,8 +578,7 @@ A finger's press (`dialog_finger_down`) that lands on no control takes the
 nearest control within a reach the host gives, in the dialog's own pixels,
 pressed at its pixel nearest the finger: the kit's reach (`kit::reach`) over
 the dialog's display list. While a drop-down's list is open it reaches the
-list's items alone, and while the Switch Mod question shows, its two
-buttons alone. The press's moves and its release are moved as
+list's items alone. The press's moves and its release are moved as
 far as the press was (`Dialog::finger_shift_x`, `finger_shift_y`), so that
 a release where the finger landed acts on the control it took: a switch's
 nearer half, a strip's nearer level, a slider dragged along its track. A
@@ -677,7 +634,7 @@ acts on it.
 The dialog's keys are the kit's (`DialogKey` is `oa::ui::kit::Key`), so a
 host passes one through as the other. Backspace and Delete, which edit a
 kit screen's text, do nothing in the dialog, its drop-down lists, its
-question, its notices and its prompts.
+notices and its prompts.
 
 | Key | Does |
 |---|---|
@@ -699,8 +656,8 @@ dialog open; Tab and Shift+Tab close it and move the focus.
 
 The arrows move the focus by where the controls lie, by the kit's rule
 (`kit::focus_toward`; see [the kit](../kit/README.md)): a control in line
-with the focused one comes first, then the nearest. The open section's rows,
-Developer's list and Mods' list are each a scroll area, searched first from
+with the focused one comes first, then the nearest. The open section's rows
+and Developer's list are each a scroll area, searched first from
 a control inside it, rows it does not show included; a move from outside it
 never lands on a row it hides. The sections' entries and the footer lie in
 no scroll area. A row's control lies across the section at its control's
@@ -746,13 +703,12 @@ size is the same in all three classes: rows keep their height, and text,
 switches, strips, drop-down fields, buttons and the slider's line keep
 theirs, so a larger dialog shows more rows and scrolls less
 (`scroll_limit`). The content column starts right of the section list and
-ends the padding short of the right edge; a section's rows, Mods' list and
-Developer's list take its width, a slider's track running across it, and
+ends the padding short of the right edge; a section's rows and Developer's
+list take its width, a slider's track running across it, and
 the body between the header's and the footer's rules. The header's mark,
 title and version keep their Compact distances from the dialog's edges,
 the footer's buttons keep their sizes and order, Restore defaults at the
-padding from the left, and the Switch Mod question keeps its 300 by 150
-box, centred over the body. A hint keeps its lines; the host's own texts
+padding from the left. A hint keeps its lines; the host's own texts
 under a row (Controller's Steam Input notice, where the game files are)
 break at the class's characters. A drop-down's open list opens over its
 field when it would pass the class's footer line. A notice's or a prompt's
@@ -843,13 +799,12 @@ changes.
 
 `geometry::dialog_list` returns what the dialog draws, in the order it
 draws it (the face, the header, the section list, the open section's
-heading and rows, Mods' list or Developer's rows, list and footer, the
-footer band and buttons, the edge, an open drop-down's menu and the
-question), and its controls, in the order a press tries them, each named
-for automation. The rows are the kit's `add_rows` with the prefix
-`settings`, each row's control in the section's scroll group; Mods' list,
-Developer's list and its footer are generic items and the kit's
-components. A mod's badge is a picture item. Tab follows the declared order
+heading and rows, or Developer's rows, list and footer, the footer band
+and buttons, the edge and an open drop-down's menu), and its controls, in
+the order a press tries them, each named for automation. The rows are the
+kit's `add_rows` with the prefix `settings`, each row's control in the
+section's scroll group; Developer's list and its footer are generic items
+and the kit's components. Tab follows the declared order
 the list holds (`DisplayList::tab_order`), which `dialog_list` builds as it
 adds the controls.
 
@@ -862,15 +817,15 @@ control's columns, keeps a press to the control where the view shows it.
 The controls that take Left and Right as steps say so (`Control::steps`):
 the rows' switches, strips, sliders and drop-downs, Your files, Developer's
 list's rows and Show Active Only. The scroll groups are the section's rows
-(`section_group`), Developer's list (`developer_list_group`) and Mods' rows
-with their ROLL BACK (`mods_list_group`); the entries, the footer, OPEN MODS
-FOLDER, Show Active Only and Restore profile values are in none.
+(`section_group`) and Developer's list (`developer_list_group`); the
+entries, the footer, Show Active Only and Restore profile values are in
+none.
 
 The names: a registered page's entry is `settings.nav.<id>`, its id as
 registered (`settings.nav.check.page`), and its rows `settings.<id>.<row>`
 (`settings.check.page.toggle`, whose halves are `.off` and `.on`). The
-engine's section entries are `settings.nav.<page>` (`mods`, `controls`,
-`common-tweaks`, `language`, `graphics`, `touch`, `controller`,
+engine's section entries are `settings.nav.<page>` (`controls`,
+`common-tweaks`, `language`, `graphics`, `user-interface`, `touch`, `controller`,
 `developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
 `mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,
 `settings.ok` and `settings.scroll-bar`; each row `settings.<row>`, its
@@ -881,19 +836,9 @@ Developer's `settings.active-only`,
 `settings.restore-profile-values`, `settings.hack-area.<area>`,
 `settings.hack.<hack id>` and `settings.hack.<hack id>.<parameter>`, with
 `.<value>` for a set's value, `.<n>` for a list's item and `.length` for
-its length; Mods' rows `settings.mod.<mod>.switch`, their UPDATE
-`settings.mod.<mod>.update` and their ROLL BACK
-`settings.mod.<mod>.roll-back`, CHECK NOW `settings.check-now` and GET MORE
-MODS… `settings.get-more-mods`, `<mod>` being `no-mod` for No Mod and
-otherwise the mod's profile id (`ModDetails::profile_id`) or, for a folder
-without one, the folder's last component, in lower case, every character
-outside `a`–`z`, `0`–`9` and `-` a `-` (`geometry::word_form`), a second
-row of the same word with `-2` after it and a third with `-3`;
-`settings.open-mods-folder`; Downloads' REGISTRIES IN THE LIBRARY…
+its length; Downloads' REGISTRIES IN THE LIBRARY…
 `settings.registries-in-library`, on the main menu, which opens the
-Library on its Registries tab; and the question's
-`settings.question.yes` and `settings.question.no`, which a press tries
-first while it shows.
+Library on its Registries tab.
 
 Every word is the code's, never a text as shown, so no name changes with
 the language. A row's word is its `Setting`'s enumerator with `_` as `-`,
@@ -1030,80 +975,6 @@ A snap radius the mod gives no room shows "Set by the mod"
 there resets the mod options alone, and the engine's settings keep their
 values. The application keeps the mod options with the player's other view
 settings; this library neither reads nor writes them.
-
-## ROLL BACK
-
-A row of Mods whose folder keeps an earlier version of its mod
-(`ModDetails::roll_back_from` and `roll_back_to`, which the host fills for
-the player's own Mods folder) shows a ROLL BACK button at the right of its
-description line, which is cut shorter for it. Its control is OPEN MODS
-FOLDER's and one more for each row before it and itself; Tab walks a row,
-then its ROLL BACK, and Right from a row reaches its ROLL BACK, Left coming
-back. A press, or Space, asks the Roll Back Mod question
-in the Switch Mod question's box (`Dialog::mod_question`): its heading, the
-row's badge and title, the versions "from to to" and what it does, CANCEL
-and ROLL BACK, ROLL BACK marked. ROLL BACK names the folder
-(`Dialog::roll_back_folder`) and asks the host to roll it back
-(`DialogAction::roll_back_mod`); the dialog stays open. A locked page draws
-it dimmed and inert.
-
-`roll_back_prompt` (`prompt.hpp`) is the same question as a prompt of its
-own, for a screen that asks it over itself, such as the Library: the
-heading and what it does in the page's words, with the reload line for the
-mod the game plays, and CANCEL and ROLL BACK, named `cancel` and
-`roll-back` to automation, CANCEL marked.
-
-## Updates
-
-Mods shows what its registries' lists say of each mod, as the host gives
-it; the page reads no catalogue, file or queue of its own, and links no
-library for it.
-
-- **A row with an update** (`ModDetails::update_offered`) shows, in amber
-  in place of its description, the host's line on it (`update_text`):
-  "Revision 4 available · 3.2 MB", "Version 4.9 available · 3.2 MB", or,
-  when the update changes the rules saved games are tied to, "Revision 4
-  changes the rules · 3.2 MB", and "… may change the rules · …" when that
-  cannot be known. While the download queue holds it the line is where it
-  stands (`update_progress`: "Updating · 28%", or "Waiting · finishes when
-  you leave {title}"), and while UPDATE cannot be pressed
-  (`update_enabled` unset) it is why (`update_blocked`). The line is shown
-  whole, never cut: it is broken between words into the lines it needs in
-  the room left of the row's buttons, counted in characters (a class's
-  `hint_line_characters` to its content column, so a row is as tall
-  whatever the fonts), and the row grows by a line for each after the
-  first (`update_lines`, `place_mod_rows`). Its UPDATE button, 60 by 12,
-  sits at the right of the description line as ROLL BACK does, left of
-  ROLL BACK by `mod_roll_back_gap` when the row has both
-  (`update_button`); it is dimmed and takes no press while UPDATE cannot
-  be pressed, and a press on it then reaches no control, not the row under
-  it. UPDATE names the row's folder (`Dialog::update_folder`) and asks the
-  host to start the update (`DialogAction::update_mod`); the host maps the
-  row back to its package by `update_entry`, and asks the update question
-  first where an update asks it (src/app's `request_update`). A row without
-  an update draws exactly as before.
-- **The line on the check for updates** (`mods_check_line`) lies under the
-  list, directly over OPEN MODS FOLDER: the list's view is one hint line
-  shorter for it. It shows the host's text (`Dialog::mods_check_text`:
-  "Checked for updates 4 min ago", "Checking for updates…", "Couldn't check
-  for updates" in amber with `mods_check_warning`, or "No registries are
-  on."), then " · " and CHECK NOW, a link, while the host offers it
-  (`mods_check_offered`). CHECK NOW lies after the text at the small font's
-  estimated width, so a press lands where it is drawn whatever the fonts,
-  and asks the host to check (`DialogAction::check_for_updates`).
-- **GET MORE MODS…** lies right of OPEN MODS FOLDER, 6 columns apart and as
-  tall, as wide as its caption at the kit's estimated width with the kit's
-  button padding, while the host offers it (`mods_library_offered`, on the
-  main menu). It asks for the Library on Mods (`DialogAction::open_library`
-  with `LibraryTab::mods`).
-
-Tab walks a row, then its UPDATE while it can be pressed, then its ROLL
-BACK; then OPEN MODS FOLDER, CHECK NOW and GET MORE MODS…. Right from a row
-reaches its UPDATE, then its ROLL BACK. UPDATE's control comes after every
-ROLL BACK's (`update_control`), and CHECK NOW's and GET MORE MODS…'s after
-those, so OPEN MODS FOLDER and ROLL BACK keep their numbers. Regular and
-Large place the same parts in their own sizes: the check line under the
-list, and the two buttons in one row under it.
 
 ## Your files and the notice
 
@@ -1263,10 +1134,8 @@ scroll end, unlocked and under a game's locks, it finds every control of
 the display list named once, every control `dialog_layout` lists in the
 list where the layout has it, and Tab stopping only on the list's
 focusable, enabled controls, each once; and
-Developer with every hack open, an open drop-down's items, the question's
-buttons, Mods' names for folders of one word and for a profile's id, and
-the Tab orders of Controls, Graphics, Developer with an area open and Mods
-with two mods as literals.
+Developer with every hack open, an open drop-down's items, and the Tab
+orders of Controls, Graphics and Developer with an area open as literals.
 
 `ui-engine-settings-downloads` holds the Downloads section: its place before
 Developer for every combination of Touch, Controller and Game files, its
@@ -1284,7 +1153,7 @@ the controls' names unique.
 for the dialog, `oa.` before each name and part `kit::automation_parts`
 gives, on every section of the engine's settings with Touch, Controller and
 Game files listed and every hack open, with a drop-down open on Controls,
-on Mods with its question, and on every section of a mod's options: the
+and on every section of a mod's options: the
 kit finds no fault in the names, each matches `^oa(\.[a-z0-9-]+)+$`, is
 at most 120 bytes and like no other ignoring case, and the names a journey
 presses (`oa.settings.wheel-zoom.off`, `oa.settings.max-zoom-out.whole-map`,
@@ -1303,26 +1172,10 @@ its hint in two lines at Compact and one at Regular and Large, and SHOW,
 which asks for the gallery by a press and by Space and changes no
 setting; Developer's list exactly the row's height lower than with two
 rows at every class; and every other section's Compact parts, as a digest
-of each, as they were before the row was added.
+of each, as they were before the row was added, a digest that differs
+printed so that a change meant to move them can pin them again.
 
-The dialog's tests cover ROLL BACK: shown only on a row whose folder keeps
-a version, its control and focus, its question by pointer and keys, and
-inert while locked.
-
-`ui-engine-settings-mods-updates` builds Mods with made-up mods' updates:
-rows with and without one, a row without one drawn item for item as
-before; an update that changes the rules and one whose rules cannot be
-known, their lines whole beside UPDATE and ROLL BACK at Compact with a
-title of 24 characters, the row a line taller; a blocked update, which
-says why and takes no press, and an update the queue holds; UPDATE and
-ROLL BACK apart at every class; the line on the check for updates in each
-state with and without CHECK NOW; UPDATE, CHECK NOW and GET MORE MODS…
-pressed, keyed and reached by a finger, and absent when not offered;
-UPDATE, CHECK NOW and GET MORE MODS… hidden in a game; Tab's order, the
-arrows and the names; every part inside the dialog at Compact, Regular and
-Large at every scroll; and a page with no updates, whose parts are
-today's at Compact but for the list's shorter view, the check line and
-GET MORE MODS…. `ui-engine-settings-prompt` lays out prompts of one, two and three buttons,
+`ui-engine-settings-prompt` lays out prompts of one, two and three buttons,
 their keys, a pointer's press and release and a finger's within reach, the
 progress bar's part and a text found cut, and at each size class a notice
 and a three-button prompt within the class's width and heights, their
@@ -1371,8 +1224,8 @@ slider stops, both level strips, keys, footer buttons, locks and the faces
 it draws; the arrows by geometry (`the_arrows_move_by_geometry`: down a
 section's rows to the footer and back, from a section's entry to the row
 at its height, from MANAGE… to the entry at its height and back, from Developer's entry
-to Restore defaults, down Graphics past its view, to a row's ROLL BACK and
-back, from no focus, and Tab's order on every section); the OA button's icon at its size in both buttons, at rest, under
+to Restore defaults, down Graphics past its view, from no focus, and Tab's
+order on every section); the OA button's icon at its size in both buttons, at rest, under
 the pointer, held and twice as large, and the mark without it; with the
 installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
@@ -1383,24 +1236,11 @@ text style they set, the slider's 26 stops from 50% to 300%, and its lock
 while the modern fonts are Off, lifted as they turn On; the Language
 drop-down's choices, each language named in itself, its field and list,
 the pointer and the keys on them, a press off the list, the command line's
-lock, and lists that scroll or open over their field; Mods: the mod
-played first, then No Mod while another plays, then the others by title,
-each row's badge, dashed square or OA mark, title, version and
-description, a folder without an `oamod.yaml` shown by its name with
-"N/A" and "No oamod.yaml present", long texts cut with "...", the list
-scrolled by the wheel, the scroll bar, Page Up, Page Down, Home and End
-under twenty mods while OPEN MODS FOLDER and its lines stay put, the
-Switch Mod question asked by a press or Space, its parts over the dialog,
-CANCEL leaving the settings, SWITCH choosing the mod or clearing it for No
-Mod, the note for a folder without an `oamod.yaml`, the keys Y, N, Enter,
-Escape, Left, Right, Tab and Shift+Tab on it, the rest of the dialog taking
-nothing meanwhile, the locks during a game and by the command line with
-their notes, inert rows and disabled button, and OPEN MODS FOLDER asking
-for the Mods folder;
-the Graphics section's thirteen rows, Interface size last, their places at every offset
+lock, and lists that scroll or open over their field;
+the Graphics section's nine rows, After zoom last, their places at every offset
 and under every lock, the focus scrolling them into view, both forms of a
-locked row, Zoomed out units' faded Icons and After zoom's lock, Window frame's two ways, HUD scaling's two hints, every status of Hardware acceleration, Full's included, and
-the requests to try the graphics card afresh; Interface size's drop-down
+locked row, Zoomed out units' faded Icons and After zoom's lock, every status of Hardware acceleration, Full's included, and
+the requests to try the graphics card afresh; User Interface's five rows, Menu scaling, Window frame, HUD scaling, Interface size and Escape opens the game menu, Window frame's two ways and HUD scaling's two hints; Interface size's drop-down
 offering 150% only with the modern fonts shown On, and turning them Off
 taking 150% to 100%; Graphics drawn on the kit canvas's smooth form at 1.5×
 with every pixel painted whole; on sections of the test's own taller than the
@@ -1415,7 +1255,7 @@ set through the pointer and the keys, the overrides kept and dropped as
 the profile's own values come back, Restore profile values, Show Active
 Only and its count, the list's scrolling and focus, and its summaries'
 lines; Controller: listed only once a gamepad has sent input, after
-Graphics and Touch and before Game files, each entry's number kept, the
+User Interface and Touch and before Game files, each entry's number kept, the
 focus walking it, `set_controller_section` listing and unlisting it, its
 fifteen rows with their strips, sliders (26 and 36 stops), switches and
 drop-downs by pointer and keys, Control size, Hold delay and QUEUE and ADD
@@ -1433,7 +1273,7 @@ its entry down, and a finger's press taking the nearest control within
 reach (15 points off a switch takes it, 30 points off nothing, a mouse
 press 15 points off nothing) at several scales, a slider dragged from under
 its track and an open list's nearest item; Game files: listed only with
-its flag, between Touch or Graphics and Downloads, the line and
+its flag, between Touch or User Interface and Downloads, the line and
 Developer under it, its entry numbered 8 with Touch 5, Controller 6,
 Developer 7 and Downloads 9, the
 focus walking it, its three rows and their texts, MANAGE… returning
@@ -1453,9 +1293,7 @@ Touch's with each way of its strips, Controller's with each way of its
 strips and drop-downs, with and without the notice and with its lists
 open, Graphics on a Steam Deck, every status line in the 309 columns
 of a hint, the Game files section with a host's usual texts and the
-Language dialog, Mods under each lock and with a notice, the Switch Mod
-question for every mod, a long title's among them, and its note for a
-folder without an `oamod.yaml` whole, Your files with a long folder and
+Language dialog, Your files with a long folder and
 each reason a folder could not be shown, the notice with a long path and a
 failure, and every row of
 Developer Mode's list with every area and hack open and every hack on,
@@ -1467,7 +1305,7 @@ waits for the game's end. It also finds Text size locked with the modern
 fonts Off, turns them On and raises the size a stop, which the text style
 reads at once and OK saves, and chooses Deutsch from the Language
 drop-down, which puts German in effect at once, and steps back to English.
-With touch controls on it finds Touch listed between Graphics and
+With touch controls on it finds Touch listed between User Interface and
 Developer with its rows at their defaults, and a finger's press beside
 Haptics' switch taking it where a mouse press there does nothing; in the
 match, it checks that on a phone the dialog and the OA button fit the
@@ -1476,17 +1314,20 @@ safe area, and on each window of the in-match table under
 its class and scale, its class's points at the scale centred right of the
 column, is drawn there pixel for pixel as the dialog drawn offscreen at
 them, and shows a section a click on its entry's middle asks for.
-On Mods it finds No Mod played first and a folder stored by an earlier
-version's Pick Folder... listed by its oamod.yaml's name; a click on that
-row asks the Switch Mod question, which Escape and CANCEL put away with the
-Mod unchanged; --base-game locks the page with its note; SWITCH from that
-folder played to No Mod erases its keys, after which the next start no
-longer lists it, and a start erases a picked folder's key that names a
-folder other than the mod stored; and a start that plays a folder without
-a profile keeps the overrides under the folder's own id. Over a match it
-finds Mods locked with its note, the mod played first, and neither a press
-nor a key asking to switch. `native-mod-switch` switches the mod ten times
-through the question, each a soft restart.
+It finds no Mods section, and the mods in the application's Library: no
+mod played, and a folder stored by an earlier version's Pick Folder...
+listed by its oamod.yaml's name with PLAY NOW; --base-game greys PLAY NOW
+with its note and PLAY NOW then changes nothing; on that folder played,
+SWITCH OFF asks the Switch Mod question, which Escape and CANCEL put away
+with the Mod unchanged, and SWITCH erases its keys, after which the next
+start no longer lists it, and a start erases a picked folder's key that
+names a folder other than the mod stored; a stored mod folder that is gone
+reads as no mod played, and OK replaces it; and a start that plays a
+folder without a profile keeps the overrides under the folder's own id.
+Over a match it finds no Mods section, the Library closed, PLAY NOW and
+SWITCH OFF greyed and asking nothing, and the keys never moving the focus
+onto a row the game locks. `native-mod-switch` switches the mod ten times
+through the Library, each a soft restart.
 
 ## Limitations
 

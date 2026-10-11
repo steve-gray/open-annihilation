@@ -661,6 +661,9 @@ ScreenResult activate(
         return open_page(library, state);
     case controls::back:
         return close_page(library, state);
+    case controls::check_now:
+        result.action = Action::check_now;
+        return result;
     case controls::settings:
         result.action = Action::settings;
         return result;
