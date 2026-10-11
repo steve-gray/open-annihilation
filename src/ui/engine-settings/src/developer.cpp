@@ -1220,7 +1220,7 @@ List place_list(const Dialog& dialog, int32_t scroll) {
     const Sizes& sized = sizes_of(dialog);
     const std::vector<HackState> shown = shown_hacks(dialog);
     const auto& areas = gathered_areas();
-    int32_t top = sized.developer_view.y;
+    int32_t top = developer_list_scroll(dialog).view.y;
     int32_t control = first_hack_list_control;
     for (const std::size_t area : shown_area_order()) {
         const HackArea& group = areas[area];

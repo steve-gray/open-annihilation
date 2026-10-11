@@ -607,9 +607,10 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::graphics)[10] == Setting::window_frame);
     CHECK(settings::page_settings(Page::graphics)[11] == Setting::hud_scaling);
     CHECK(settings::page_settings(Page::graphics)[12] == Setting::interface_size);
-    CHECK(settings::page_settings(Page::developer).size() == 2);
+    CHECK(settings::page_settings(Page::developer).size() == 3);
     CHECK(settings::page_settings(Page::developer)[0] == Setting::developer_mode);
     CHECK(settings::page_settings(Page::developer)[1] == Setting::frame_stats);
+    CHECK(settings::page_settings(Page::developer)[2] == Setting::kit_gallery);
     // Graphics' thirteen rows are taller than the view, by 513 rows and
     // Interface size's row.
     const auto graphics = geometry::place_rows(Page::graphics, {});
@@ -2461,13 +2462,13 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     CHECK(settings::ok_control == 12);
     CHECK(settings::scroll_bar_control == 13);
     CHECK(settings::first_row_control == 14);
-    // Developer's two rows come first, Enable Developer Mode and Show
-    // performance statistics, then its footer's switch and button, then
-    // its list's rows.
+    // Developer's three rows come first, Enable Developer Mode, Show
+    // performance statistics and UI kit gallery, then its footer's switch
+    // and button, then its list's rows.
     CHECK(settings::developer_mode_control == 14);
-    CHECK(settings::active_only_control == 16);
-    CHECK(settings::restore_profile_control == 17);
-    CHECK(settings::first_hack_list_control == 18);
+    CHECK(settings::active_only_control == 17);
+    CHECK(settings::restore_profile_control == 18);
+    CHECK(settings::first_hack_list_control == 19);
 
     // Every row's number comes after every fixed control's, and each is its own.
     Scrolling all(nine_rows());
@@ -4531,30 +4532,152 @@ void developer_mode_lists_every_hack_by_area_closed_at_first() {
     for (const auto& part : parts)
         if (part.control == settings::scroll_bar_control) {
             ++bars;
-            CHECK(same_rect(part.rect, {470, 133, 7, 114}));
+            CHECK(same_rect(part.rect, {470, 184, 7, 63}));
         }
     CHECK(bars == 1);
-    // The section's parts keep their places: its two rows at its top, closer
-    // than a section's, Enable Developer Mode first; the list between the
-    // line under them and its footer's line.
+    // The section's parts keep their places: its three rows at its top,
+    // closer than a section's, Enable Developer Mode first and UI kit
+    // gallery last, whose hint takes two lines at Compact; the list between
+    // the line under them and its footer's line.
     const auto rows = open.rows.rows;
-    CHECK(rows.size() == 2);
+    CHECK(rows.size() == 3);
     CHECK(rows[0].setting == Setting::developer_mode && rows[1].setting == Setting::frame_stats);
+    CHECK(rows[2].setting == Setting::kit_gallery);
     CHECK(rows[0].control == settings::developer_mode_control);
     CHECK(rows[1].control == settings::first_row_control + 1);
-    CHECK(rows[0].top == geometry::first_row_top && rows[1].top == 93);
+    CHECK(rows[2].control == settings::first_row_control + 2);
+    CHECK(rows[0].top == geometry::first_row_top && rows[1].top == 93 && rows[2].top == 132);
     CHECK(same_rect(rows[0].control_area, {415, 59, 52, 16}));
     CHECK(same_rect(rows[1].control_area, {415, 98, 52, 16}));
     CHECK(same_rect(rows[1].hints[0], {158, 116, 309, 12}));
     CHECK(open.rows.bottom == geometry::developer_list_rule);
-    CHECK(same_rect(geometry::developer_view, {158, 133, 309, 114}));
+    CHECK(same_rect(geometry::developer_view, {158, 184, 309, 63}));
     CHECK(same_rect(geometry::active_only_switch, {415, 251, 52, 16}));
     CHECK(same_rect(geometry::restore_profile_button, {158, 271, 142, 17}));
-    CHECK(geometry::developer_list_rule == 132 && geometry::developer_footer_rule == 247);
+    CHECK(geometry::developer_list_rule == 183 && geometry::developer_footer_rule == 247);
     CHECK(
         geometry::restore_profile_button.y + geometry::restore_profile_button.height <
         geometry::footer_rule_row
     );
+}
+
+/// Returns a digest of a dialog's parts, in their order: FNV-1a over each
+/// part's rectangle, control, font, tracking and text.
+///
+/// @param parts the parts
+/// @return the digest
+uint64_t parts_digest(const std::vector<settings::LayoutPart>& parts) {
+    uint64_t digest = 0xcbf29ce484222325ULL;
+    const auto fold = [&digest](uint64_t value) {
+        for (int byte = 0; byte < 8; ++byte) {
+            digest ^= (value >> (8 * byte)) & 0xffU;
+            digest *= 0x100000001b3ULL;
+        }
+    };
+    for (const settings::LayoutPart& part : parts) {
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.rect.x)));
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.rect.y)));
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.rect.width)));
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.rect.height)));
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.control)));
+        fold(static_cast<uint64_t>(part.font));
+        fold(static_cast<uint64_t>(static_cast<uint32_t>(part.tracking)));
+        for (const char character : part.text)
+            fold(static_cast<uint8_t>(character));
+        fold(part.text.size());
+    }
+    return digest;
+}
+
+/// UI kit gallery, Developer's third row: its label, its hint (two lines at
+/// Compact, one at Regular and Large) and SHOW, which asks for the gallery;
+/// the list under the rows moved down by exactly that row's height at every
+/// class; and every other section's Compact parts as they were before the
+/// row was added.
+void the_kit_gallery_row_moves_only_developers_list() {
+    // The row's parts at Compact.
+    settings::Dialog dialog = opened(Page::developer);
+    const auto parts = settings::dialog_layout(dialog);
+    const int32_t show_control = settings::first_row_control + 2;
+    const auto* label = find_part(parts, "UI kit gallery", settings::no_control);
+    CHECK(label != nullptr && same_rect(label->rect, {158, 137, 225, 16}));
+    const auto* first_line =
+        find_part(parts, "Every part of OA's own screens, in each of its", settings::no_control);
+    const auto* second_line = find_part(parts, "states, at this size.", settings::no_control);
+    CHECK(first_line != nullptr && same_rect(first_line->rect, {158, 155, 309, 12}));
+    CHECK(second_line != nullptr && same_rect(second_line->rect, {158, 167, 309, 12}));
+    const auto* show = find_part(parts, "SHOW", show_control);
+    CHECK(show != nullptr && same_rect(show->rect, {391, 137, 76, 16}));
+    // Its hint breaks as the Developer rule assumes at every class.
+    for (const auto size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large}) {
+        const geometry::Sizes& sized = geometry::sizes_of(size_class);
+        const auto lines = geometry::break_lines(
+            geometry::kit_gallery_hint_text,
+            sized.hint_line_characters,
+            geometry::kit_gallery_hint_most_lines
+        );
+        CHECK(
+            lines.size() == geometry::lines_between_words(
+                                geometry::kit_gallery_hint_text, sized.hint_line_characters
+                            )
+        );
+        CHECK(lines.size() == (size_class == oa::ui::kit::SizeClass::compact ? 2U : 1U));
+    }
+    // The list's first part lies exactly the row's height lower than it
+    // did with two rows, when the line over the list was at 132, at every
+    // class: 51 at Compact, where the hint takes two lines, 39 at the others.
+    constexpr int32_t kTwoRowsRule = 132;
+    for (const auto size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large}) {
+        settings::Dialog sized_dialog = opened(Page::developer);
+        sized_dialog.size_class = size_class;
+        const auto open = geometry::open_rows(sized_dialog);
+        CHECK(open.rows.rows.size() == 3);
+        const auto& gallery = open.rows.rows[2];
+        const int32_t row_height =
+            geometry::developer_row_height +
+            (size_class == oa::ui::kit::SizeClass::compact ? geometry::hint_line_height : 0);
+        CHECK(gallery.setting == Setting::kit_gallery && gallery.top == kTwoRowsRule);
+        CHECK(gallery.height == row_height);
+        CHECK(!open.list.rows.empty() && open.list.rows[0].top == kTwoRowsRule + 1 + row_height);
+        CHECK(open.area.view.y == kTwoRowsRule + 1 + row_height);
+        CHECK(geometry::sizes_of(size_class).developer_list_rule == kTwoRowsRule + row_height);
+    }
+    // SHOW asks for the gallery, pressed or by Space, and changes nothing.
+    CHECK(click(dialog, centre(show->rect)) == DialogAction::show_gallery);
+    CHECK(dialog.chosen == dialog.opened);
+    settings::Dialog keyed = opened(Page::developer);
+    for (int presses = 0; presses < 3; ++presses)
+        CHECK(settings::dialog_key(keyed, DialogKey::tab) == DialogAction::redraw);
+    CHECK(keyed.focused == show_control);
+    CHECK(settings::dialog_key(keyed, DialogKey::space) == DialogAction::show_gallery);
+    // Its button is settings.kit-gallery.show to automation.
+    const auto list = geometry::dialog_list(dialog, nullptr);
+    CHECK(std::any_of(list.controls.begin(), list.controls.end(), [](const auto& control) {
+        return control.name == "settings.kit-gallery.show";
+    }));
+    // Every other section's Compact parts are those before the row: their
+    // digests, as the dialog laid them out without it.
+    const std::array<std::pair<Page, uint64_t>, 9> kBefore{{
+        {Page::mods, 0x9dba550e53ae1954ULL},
+        {Page::controls, 0xf7fe7c7fe8fb1f61ULL},
+        {Page::common_tweaks, 0x26be62ade4cc1d58ULL},
+        {Page::language, 0xe5b0ea2cdf3c0de1ULL},
+        {Page::graphics, 0x036a24fc33540bf0ULL},
+        {Page::touch, 0x71adeef7c5e2c0c0ULL},
+        {Page::controller, 0x7589ee6b065155bcULL},
+        {Page::game_files, 0x6495f47d3e37541bULL},
+        {Page::downloads, 0x24a20260d8eb73e3ULL},
+    }};
+    for (const auto& [page, before] : kBefore) {
+        const settings::Dialog other = opened_with_controller(page, true, true, true);
+        CHECK(parts_digest(settings::dialog_layout(other)) == before);
+    }
 }
 
 void areas_and_hacks_open_and_close() {
@@ -4596,12 +4719,14 @@ void areas_and_hacks_open_and_close() {
             CHECK(row.kind != geometry::ListRowKind::scope);
     dialog.developer.areas_open[area_index("ui")] = 0;
     // The keys: the focus goes to Enable Developer Mode, Show performance
-    // statistics, then the list's headers; Left closes an open area, Right
-    // opens it, Space flips it.
+    // statistics, UI kit gallery's SHOW, then the list's headers; Left
+    // closes an open area, Right opens it, Space flips it.
     CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::developer_mode_control);
     CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::first_row_control + 1);
+    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::first_row_control + 2);
     CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::first_hack_list_control);
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::none);
@@ -9146,9 +9271,9 @@ void the_arrows_move_by_geometry() {
                                                   row + 12}
                                              )
     );
-    // Developer, Developer Mode off: its two rows, every area of its list,
+    // Developer, Developer Mode off: its three rows, every area of its list,
     // then Show Active Only.
-    std::vector<int32_t> developer{row, row + 1};
+    std::vector<int32_t> developer{row, row + 1, row + 2};
     for (std::size_t area = 0; area < settings::developer_areas().size(); ++area)
         developer.push_back(settings::first_hack_list_control + static_cast<int32_t>(area));
     developer.push_back(settings::active_only_control);
@@ -9895,6 +10020,7 @@ int main(int argc, char** argv) {
         the_graphics_page_draws_its_locked_rows();
         the_dialog_draws_on_the_smooth_form_on_whole_pixels();
         developer_mode_lists_every_hack_by_area_closed_at_first();
+        the_kit_gallery_row_moves_only_developers_list();
         areas_and_hacks_open_and_close();
         hacks_show_their_titles_alphabetically();
         developer_mode_off_shows_the_profile_and_takes_no_change();

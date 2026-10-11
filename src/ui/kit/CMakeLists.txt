@@ -6,10 +6,11 @@
 # include/oa/ui/kit/layout.hpp, include/oa/ui/kit/input.hpp,
 # include/oa/ui/kit/looks.hpp, include/oa/ui/kit/canvas.hpp, include/oa/ui/kit/components.hpp,
 # include/oa/ui/kit/chrome.hpp, include/oa/ui/kit/controls.hpp,
-# include/oa/ui/kit/components_more.hpp). Provisional until the kit is declared
+# include/oa/ui/kit/components_more.hpp), and the gallery of every component
+# (include/oa/ui/kit/gallery.hpp). Provisional until the kit is declared
 # stable.
 add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/canvas.cpp src/components.cpp
-  src/chrome.cpp src/controls.cpp src/components_more.cpp)
+  src/chrome.cpp src/controls.cpp src/components_more.cpp src/gallery.cpp)
 # Declared rows: a settings page as a table (include/oa/ui/kit/rows.hpp).
 target_sources(oa-ui-kit PRIVATE src/rows.cpp)
 add_library(oa::ui::kit ALIAS oa-ui-kit)
@@ -77,4 +78,14 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-kit-rows-test PRIVATE oa-ui-kit oa-test-support oa-options)
   add_test(NAME ui-kit-rows COMMAND oa-ui-kit-rows-test)
   set_tests_properties(ui-kit-rows PROPERTIES TIMEOUT 30)
+
+  # The gallery at Compact, Large and Regular: every role, every state, its
+  # places, focus and names, and that no text shows the build's version,
+  # which the test is given.
+  add_executable(oa-ui-kit-gallery-test tests/gallery_test.cpp)
+  target_link_libraries(oa-ui-kit-gallery-test PRIVATE oa-ui-kit oa-test-support oa-options)
+  target_compile_definitions(oa-ui-kit-gallery-test PRIVATE
+    "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
+  add_test(NAME ui-kit-gallery COMMAND oa-ui-kit-gallery-test)
+  set_tests_properties(ui-kit-gallery PROPERTIES TIMEOUT 30)
 endif()

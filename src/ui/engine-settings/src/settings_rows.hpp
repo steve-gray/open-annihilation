@@ -50,6 +50,10 @@ inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
 /// Languages. It follows Your files' buttons and Downloads' RESET and EMPTY
 /// (downloads_page.hpp).
 inline constexpr oa::ui::kit::ActionId open_library_action = 6;
+/// What SHOW, Developer's UI kit gallery's button, asks for: the gallery.
+/// It follows MORE IN THE LIBRARY… and Downloads' MANAGE…
+/// (downloads_page.hpp).
+inline constexpr oa::ui::kit::ActionId show_gallery_action = 8;
 
 /// Returns a setting's row spec.
 ///
