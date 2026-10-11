@@ -1,11 +1,26 @@
 # OA UI kit
 
-The OA UI kit (`oa/ui/kit`, `oa::ui::kit`): one look, one scale and one input
-model for Open Annihilation's own screens. Provisional until the kit is
-declared stable (D31). Its headers change whenever a screen needs them to,
-until then.
+The OA UI kit (`oa/ui/kit`, `oa::ui::kit`, the library `oa-ui-kit`): one
+look, one scale and one input model for Open Annihilation's own screens.
+Settings and its notices and prompts, the Library, the map browser, the
+download check, the Add registry window, the battle room's card, the Game
+files screen and the folder chooser are built from it, and from version 15
+of the extension table an extension builds its Settings pages, kit
+screens, notices, prompts and match-overlay components from it too
+([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md)). It lays
+a screen out in points at a size class, as one display list of what is
+drawn and which controls a press reaches; draws that list on a canvas at a
+whole scale or at 150%; and turns a pointer, a finger, the keys and the
+wheel into what a screen does, with every control named for automation.
+Nothing in it reads or writes the preferences file, and it never looks a
+word up: a caller passes the text to show. It is provisional until it is
+declared stable (D31): its headers change whenever a screen needs them to
+([Limitations](#limitations)).
 
 ## Entry points
+
+Every header below is public, and each is part of the extension table's
+contract from version 15 (`src/app/include/oa/app/extension.hpp`).
 
 - `theme.hpp`: the colour tokens (the settings dialog, the Game files screen
   and the folder chooser, the touch controls) and the metrics of the three
@@ -236,7 +251,9 @@ the game's fonts measure the texts in points whichever form draws them.
 The gallery shows every component of the kit at the scale and size class of
 its frame, once working on its own model and once in each fixed state, so
 that a change to a shared component shows up there, and in its one golden
-frame for each class, before it shows up across the screens.
+frame for each class, before it shows up across the screens. The extension
+chapter shows it at Compact, Regular and Large, in the pictures its check
+takes ([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md#the-gallery)).
 
 - **What it shows.** One window over the whole frame: the face, the header
   (the OA mark, "Open Annihilation", "UI kit gallery" and the class and
@@ -287,12 +304,25 @@ frame for each class, before it shows up across the screens.
 
 ## State
 
-None. `load_game_fonts` reads the game's font files. A screen passes the
-pointer's place and the wheel's fraction in, and keeps its fields' text and
-its hover card's timer in its own state.
+None: every model is the caller's. The kit keeps nothing between calls and
+writes no file and no setting. A screen holds its own model (a settings
+page's values, the gallery's `GalleryModel`, a notice's or a question's
+marked button), its `Interaction` (the hovered, held and focused control),
+its fields' text and caret, its scroll offsets and its hover card's timer,
+and passes them in; the kit's functions read them and change only what they
+are handed. A preference row reads and writes the `PreferenceModel` its
+caller fills from the preferences and saves. `load_game_fonts` reads the
+game's font files, and the canvas draws on the surface or the painter its
+caller gives it.
 
 ## Invariants
 
+- Compact is 0.7.3's pixels. At Compact, on the crisp form at 1x, the
+  settings dialog, its notices and prompts and the OA button draw exactly
+  the pixels 0.7.3 draws: `ui-engine-settings-pixels` and
+  `ui-engine-settings-pixels-data` hold their hashes in fixed states to
+  `src/ui/engine-settings/tests/pixels.txt`, which changes only when a
+  change to their look is accepted.
 - Compact metrics are 0.7.3's exactly, for the controls 0.7.3 has. Regular
   and Large metrics differ from them only in the sizes the design's table
   gives the classes; rows, text and controls keep Compact's sizes, so a
@@ -350,16 +380,20 @@ its hover card's timer in its own state.
   whether the pointer is over the button or holds it.
 - `paint` draws a display list's items in the list's order. A control is
   added with its automation name.
-- The crisp form of the canvas draws every whole scale exactly as 0.7.3
-  does; the smooth form puts every rectangle's edge on a whole pixel and
-  never scales a game font. Both draw through the same primitives, from the
-  same draw functions.
+- Two backends, one set of components. The crisp form of the canvas draws
+  every whole scale exactly as 0.7.3 does, in the game's fonts; the smooth
+  form, for 150%, puts every rectangle's edge on a whole pixel, draws its
+  text in the modern fonts and never scales a game font. Both draw through
+  the same primitives, from the same draw functions, and lay out the same
+  ([The canvas's two forms](#the-canvass-two-forms)).
 - The display list is the only record of what a screen drew and where its
   controls are. Hit testing reads `controls`. Drawing reads `items`.
-- Every control of a kit screen carries a unique name: words of a-z, 0-9 and
-  hyphens joined by dots, at most 100 bytes. The automation endpoint adds its
-  own prefix; the name here has none. A part of a control is named after it
-  with one word more, from the code's own words (a row's, a choice's or a
+- Every control of a kit screen carries a name unique on its screen,
+  ignoring case: words of a-z, 0-9 and hyphens joined by dots, at most 100
+  bytes. Names are lower case, so two that differ differ ignoring case too;
+  `name_problem` reports the first fault. The automation endpoint adds its
+  own prefix; the name here has none. A part of a control is named after
+  it with one word more, from the code's own words (a row's, a choice's or a
   button's id), never from a text as shown.
 - A column of rows is placed exactly as the settings dialog places a
   section's rows: `ui-kit-rows` holds rows shaped as Controls', Graphics' and
@@ -466,7 +500,40 @@ or its scroll area, no two controls overlapping, Tab and Down, the names,
 no text holding the build's version (which the test is given), and the
 working samples changing the model alone; and that it draws.
 
+The module's ctests are those eleven: `ui-kit-theme`, `ui-kit-text`,
+`ui-kit-layout`, `ui-kit-input`, `ui-kit-components`, `ui-kit-chrome`,
+`ui-kit-controls`, `ui-kit-notices`, `ui-kit-smooth`, `ui-kit-rows` and
+`ui-kit-gallery`, none of which needs the game's data. Others guard the
+kit from its users: `ui-engine-settings-pixels` and
+`ui-engine-settings-pixels-data` pin Compact's pixels
+([Invariants](#invariants));
+`native-kit-gallery` opens the gallery from Settings › Developer on
+640x480, 1280x720 and 1920x1080 windows and checks its class, scale and
+pixels, with game data; `screen-registry` checks the registrations an
+extension makes; `native-registered-kit` checks a page, a kit screen, a
+notice and a prompt registered from inside the engine; and, in a build
+configured with `-DOA_RECORD_EXTENSION_HOOKS=ON`, `extension-kit` checks
+the Kit fixture, a test extension that uses the kit through the extension
+table alone (`tests/extension/kit_fixture.cpp`).
+
 ## Limitations
+
+The kit is provisional until it is declared stable (D31), a decision of its
+own that is not tied to a release: until then it changes whenever OA's
+screens need it to, and the rework that follows is expected, in the
+engine's screens and in any extension that uses it. Each header says so in
+its first comment. From version 15 its public headers are part of the
+extension table's contract (`OA_EXTENSION_API_VERSION`, in
+`src/app/include/oa/app/extension.hpp`): a change to one before 0.8.0, the
+first release that carries version 15, keeps 15 and updates the engine's
+own followers and test extensions in the same change; from 0.8.0 on, any
+change to a kit header raises the version.
+
+Text is laid out and drawn left to right, one character after another, in
+the order it is stored: the kit has no right-to-left or bidirectional
+layout, and no screen is mirrored. 150% is the only fractional size, and
+only on the smooth form in the modern fonts; every other scale is a whole
+step.
 
 The metrics hold the settings dialog's, its notices' and its prompts' sizes
 for each class (`regular_metrics`, `large_metrics`, `metrics_of`); the
