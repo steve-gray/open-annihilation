@@ -768,6 +768,8 @@ void Runtime::idle_tick() {
     tick_content();
     // A catalogue that moved on adds its language packs to the registry.
     note_catalogue_languages();
+    // After the catalogue, so a size that arrived this frame is on the notice.
+    tell_missing_language();
     tell_mod_installs();
     tell_challenges();
     render();

@@ -102,6 +102,11 @@ inline constexpr std::string_view text_size = "open-annihilation.text-size";
 /// "system" for the operating system's choice, or a language's BCP-47 tag,
 /// as "de" (EngineSettings::language).
 inline constexpr std::string_view language = "open-annihilation.language";
+/// Tags the player answered with Use English when the game asked, at the
+/// start, about a language the operating system wanted that was not
+/// installed. Comma-separated. Absent, none have been answered.
+inline constexpr std::string_view language_notice_dismissed =
+    "open-annihilation.language-notice-dismissed";
 /// 1 or 0 (EngineSettings::developer_mode).
 inline constexpr std::string_view developer_mode = "open-annihilation.developer-mode";
 /// "automatic", "box" or "scroll" (EngineSettings::touch_drag).
@@ -150,6 +155,91 @@ inline constexpr std::string_view game_files_backed_up = "open-annihilation.game
 /// (EngineSettings::hack_overrides).
 inline constexpr std::string_view hack_overrides = "open-annihilation.hack-overrides.";
 } // namespace key
+
+/// Tells whether two tags are the same, ignoring ASCII case and reading '_' as '-'.
+///
+/// @param left a tag
+/// @param right a tag
+/// @return true when they match
+[[nodiscard]] inline bool
+language_notice_same_tag(std::string_view left, std::string_view right) noexcept {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        const auto fold = [](char letter) noexcept {
+            if (letter == '_')
+                return '-';
+            if (letter >= 'A' && letter <= 'Z')
+                return static_cast<char>(letter - 'A' + 'a');
+            return letter;
+        };
+        if (fold(left[index]) != fold(right[index]))
+            return false;
+    }
+    return true;
+}
+
+/// Drops spaces and tabs from both ends of a tag list's piece.
+///
+/// @param text the piece
+/// @return the piece
+[[nodiscard]] inline std::string_view language_notice_trim(std::string_view text) noexcept {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+        text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t'))
+        text.remove_suffix(1);
+    return text;
+}
+
+/// Tells whether a dismissed-language list holds a tag.
+///
+/// The list is comma-separated. Each piece is trimmed. The match ignores
+/// the case of ASCII letters and reads '_' as '-'.
+///
+/// @param stored the preference's value; empty when the key is absent
+/// @param tag the language's tag
+/// @return true when the list holds it
+[[nodiscard]] inline bool
+language_notice_dismissed_has(std::string_view stored, std::string_view tag) noexcept {
+    const std::string_view wanted = language_notice_trim(tag);
+    if (wanted.empty())
+        return false;
+    std::size_t start = 0;
+    while (start <= stored.size()) {
+        const auto comma = stored.find(',', start);
+        const auto end = comma == std::string_view::npos ? stored.size() : comma;
+        if (language_notice_same_tag(
+                language_notice_trim(stored.substr(start, end - start)), wanted
+            ))
+            return true;
+        if (comma == std::string_view::npos)
+            break;
+        start = comma + 1;
+    }
+    return false;
+}
+
+/// Returns the dismissed-language list with a tag added, when it is not there.
+///
+/// A tag already in the list leaves the stored text unchanged. An empty tag
+/// leaves it unchanged. Otherwise the tag is appended after a comma.
+///
+/// @param stored the preference's value; empty when the key is absent
+/// @param tag the language's tag
+/// @return the value to store
+[[nodiscard]] inline std::string
+language_notice_dismiss_tag(std::string_view stored, std::string_view tag) {
+    const std::string_view wanted = language_notice_trim(tag);
+    if (wanted.empty() || language_notice_dismissed_has(stored, wanted))
+        return std::string(stored);
+    const std::string_view kept = language_notice_trim(stored);
+    if (kept.empty())
+        return std::string(wanted);
+    std::string next(kept);
+    next += ", ";
+    next.append(wanted);
+    return next;
+}
 
 /// Path nodes the path search may visit in a game tick, all players
 /// together, at 1x: the credit every match starts with.

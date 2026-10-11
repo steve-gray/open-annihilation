@@ -3896,6 +3896,15 @@ class Runtime final : public menu::Host,
     /// due, unless --check-user-folder asks for it.
     void tell_saves_moved();
 
+    /// Shows the notice that a language is only available as a download,
+    /// over the settled main menu, once that menu has been up for a frame
+    /// and stays, with no dialog and no settings over it. A run nobody
+    /// watches shows none unless the user-folder check asks for a notice.
+    /// 3.1c's command line naming the language shows none. Download queues
+    /// the pack; Use English records the answer; Escape closes it for this
+    /// run only.
+    void tell_missing_language();
+
     /// Returns the folder of the mod played: the mod folder laid over the
     /// game folder, else the folder of the profile --mod names, else the game
     /// folder whose own profile plays.
@@ -10772,6 +10781,15 @@ class Runtime final : public menu::Host,
     /// naming what differed.
     void check_language_registry();
 
+    /// Shows the missing-language notice over the main menu and presses
+    /// Use English. With the language set to Simplified Chinese and no pack,
+    /// the notice names that language, Use English stores English and the
+    /// notice does not return. With System default and the operating system
+    /// asking for Simplified Chinese, Use English remembers that language
+    /// and a second pass shows no notice. Throws std::runtime_error naming
+    /// what differed.
+    void check_language_notice();
+
     /// Checks the commander's build pages against the side column on windows of several sizes.
     ///
     /// On each window from 640x480 to 5120x2880 a skirmish starts, the commander
@@ -13652,6 +13670,18 @@ class Runtime final : public menu::Host,
     init::MapListState map_list_state_{};
     std::map<uintptr_t, int32_t> map_list_objects_;
     std::map<std::string, std::string> preference_values_;
+    /// The missing-language notice for this run (runtime_language_notice.cpp).
+    friend class LanguageNoticeHost;
+
+    struct LanguageNoticeRun {
+        uint32_t main_menu_frames{}; ///< settled main-menu frames since the case last applied
+        bool closed_for_run{};       ///< Escape or B closed it; it stays closed
+        std::string tag;             ///< the language the notice is about
+        bool system_case{};          ///< the operating system asked, not the setting
+        bool download_failed{};      ///< Download was asked and did not queue
+    };
+
+    LanguageNoticeRun language_notice_run_{};
     fs::path preference_path_;
     std::string first_map_name_;
     std::vector<std::string> eligible_map_names_;
