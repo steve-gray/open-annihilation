@@ -85,8 +85,6 @@ constexpr int32_t least_search_width = 120;
 constexpr int32_t most_search_width = 240;
 /// A full progress bar, in the bar's own units.
 constexpr int32_t progress_whole = 1000;
-/// The share of the footer's room the fit chips and reason may take, at most, in eighths.
-constexpr int32_t most_fit_eighths = 5;
 /// Bytes in a kilobyte and a megabyte, as the download size is shown.
 constexpr uint64_t kilobyte = 1024;
 /// Bytes in a megabyte.
@@ -1091,10 +1089,23 @@ void add_footer(Building& building) {
         const int32_t chip_room = chips_width(building, chips);
         const int32_t reason_room =
             reason.empty() ? 0 : kit::text_width(*building.fonts, kit::FontRole::small, reason);
-        const int32_t most = room * most_fit_eighths / 8;
-        int32_t fit_width = std::min(std::max(chip_room, reason_room), most);
-        if (downloading)
-            fit_width = std::max(fit_width, most / 2);
+        // The title and details keep the room they need, up to half of it;
+        // the chips and the reason, or the bar, take the rest they need.
+        int32_t text_needed =
+            kit::text_width(*building.fonts, kit::FontRole::small, ids::word(word_none_selected));
+        if (card != nullptr)
+            text_needed = std::max(
+                kit::text_width(
+                    *building.fonts,
+                    kit::FontRole::regular,
+                    card->title.empty() ? card->name : card->title
+                ),
+                kit::text_width(*building.fonts, kit::FontRole::small, details_line(*card))
+            );
+        const int32_t fit_room =
+            std::max(room - std::min(text_needed, room / 2) - window.padding, int32_t{0});
+        int32_t fit_width =
+            downloading ? fit_room : std::min(std::max(chip_room, reason_room), fit_room);
         fit_width = std::max(fit_width, std::min(chip_room, room));
         const int32_t fit_left = room_right - fit_width;
         text_right = fit_left - window.padding;
