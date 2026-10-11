@@ -472,11 +472,14 @@ struct Fact {
 /// @return the line
 [[nodiscard]] std::string status_line(const Library& library, const Entry& entry);
 
-/// Names who made an entry's package: "by" its author, else its publisher.
+/// Names who made an entry's package, and how many times it was downloaded
+/// when the registry has a count: "by" its author, else its publisher, then
+/// " · 12,400 downloads". The count alone when the listing names no one.
 ///
 /// @param entry the entry
 /// @param text how texts are looked up
-/// @return the line; empty for the player's own packages and when the listing names neither
+/// @return the line; empty for the player's own packages, and when the
+///         listing names neither a person nor a count
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
 /// Says how an update of the selected mod meets the mod being played.

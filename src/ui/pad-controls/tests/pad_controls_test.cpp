@@ -999,6 +999,8 @@ void layer_tables() {
                         row(PadButton::r1, Action::focus_next),
                         row(PadButton::a, Action::press),
                         row(PadButton::b, Action::back),
+                        row(PadButton::x, Action::library_action),
+                        row(PadButton::y, Action::library_search),
                         row(PadButton::menu, Action::default_button),
                         row(PadButton::view, Action::info),
                         row(PadButton::r2, Action::left_button),
@@ -1433,6 +1435,44 @@ void view_is_information_in_the_menus() {
     OA_CHECK(chord_is(pad::chord_for(deck, Action::info), PadButton::none, PadButton::view));
 }
 
+/// Checks Y and X in the menus: the Library's search and its entry's first action, in every
+/// map and both hands. In a match they keep the meanings they had.
+void library_buttons_in_the_menus() {
+    for (const bool left_handed : {false, true})
+        for (const bool fallback : {false, true})
+            for (const auto scheme : {pad::Scheme::trackpads, pad::Scheme::sticks})
+                for (const bool trackpads : {false, true}) {
+                    auto ctx = map_of(scheme, fallback, trackpads);
+                    ctx.left_handed = left_handed;
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::menus, PadButton::y).action ==
+                        Action::library_search
+                    );
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::menus, PadButton::x).action ==
+                        Action::library_action
+                    );
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::base, PadButton::y).action !=
+                        Action::library_search
+                    );
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::base, PadButton::x).action !=
+                        Action::library_action
+                    );
+                }
+    for (const bool left_handed : {false, true}) {
+        auto ctx = map_of(pad::Scheme::trackpads, false, true);
+        ctx.left_handed = left_handed;
+        OA_CHECK(
+            chord_is(pad::chord_for(ctx, Action::library_search), PadButton::none, PadButton::y)
+        );
+        OA_CHECK(
+            chord_is(pad::chord_for(ctx, Action::library_action), PadButton::none, PadButton::x)
+        );
+    }
+}
+
 } // namespace
 
 /// Runs the checks.
@@ -1461,6 +1501,7 @@ int main() {
     layer_tables();
     mirror_swaps_the_sides();
     view_is_information_in_the_menus();
+    library_buttons_in_the_menus();
     layer_follows_what_is_held();
     chords_for_every_badge();
     effective_scheme_needs_a_pointer();
