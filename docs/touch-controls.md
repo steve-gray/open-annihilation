@@ -104,9 +104,11 @@ prompt and Done button stand in it.
 
 A tap does not have to land exactly on a unit: when nothing lies under the
 finger, the nearest unit within about 12 points is taken. On buttons, in
-menus and dialogs the nearest button within about 22 points is pressed. A
-button shows pressed while a finger rests on it, and a finger that slides
-off before lifting presses nothing, as with a mouse.
+menus and dialogs the nearest button within about 22 points is pressed. The
+two buttons at the main menu's bottom right, the **OA** button, which opens
+the Library, and the **Settings** button with the gears, take a tap inside
+them. A button shows pressed while a finger rests on it, and a finger that
+slides off before lifting presses nothing, as with a mouse.
 
 While a finger rests on the battlefield, the order cursor is drawn at the
 finger; on a tablet the status bar names the unit under the finger. The map scrolls by itself while a selection box or a
