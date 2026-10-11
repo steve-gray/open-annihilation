@@ -703,7 +703,7 @@ void Runtime::take_registry_files() {
     std::optional<std::vector<uint8_t>> bytes;
     if (brought) {
         std::error_code error;
-        const std::uintmax_t size = std::filesystem::file_size(readable, error);
+        const uintmax_t size = std::filesystem::file_size(readable, error);
         if (error) {
             why = "it cannot be read";
         } else if (size > registry::max_descriptor_bytes) {
