@@ -8,15 +8,18 @@
 // tells a finger from a mouse, maps the keys to the kit's, latches the key
 // that closed a screen, lets the top modal screen take every input, darkens
 // what lies under each modal screen, and draws the screens in the window's
-// own pixels before the software cursor. On the front end it draws them at a
-// whole scale (kit::layer_viewport: the Interface size setting, or the Auto
-// scale) and lays them out at the size class of the points left over. oa_layer.cpp holds it, the settings' screen
+// own pixels before the software cursor. On the front end it draws them at
+// the scale kit::layer_viewport gives (the Interface size setting, or the
+// Auto scale) and lays them out at the size class of the points left over:
+// at a whole scale on the kit canvas's crisp form, and at 150% on its smooth
+// form in the modern fonts. oa_layer.cpp holds it, the settings' screen
 // (Runtime::SettingsScreen) and the screens of a notice (NoticeScreen) and a
 // question (QuestionScreen).
 #pragma once
 
 #include "oa/app/automation_host.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/platform/text_font.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/components.hpp"
@@ -63,8 +66,14 @@ struct LayerView {
     /// Interface size setting in effect chooses, or for Auto the window
     /// canvas's Auto scale (kit::auto_scale), no larger than lets Compact's
     /// settings dialog fit the room, and at least 1 (kit::layer_viewport).
-    /// 1 in a match.
+    /// At 150% it is 1, and scale_percent holds the fraction. 1 in a match.
     int32_t scale{1};
+    /// The window pixels a point takes, in percent: scale times 100, or 150
+    /// while the Interface size in effect is 150%, the modern fonts are on
+    /// and Compact's dialog fits the room at one and a half. The screens are
+    /// drawn on the kit canvas's crisp form at a whole scale and on its
+    /// smooth form at 150%. 100 in a match.
+    int32_t scale_percent{100};
     /// The room in window pixels: the canvas less its safe insets on the
     /// front end, the safe area in a match. A centred screen centres in it.
     oa::ui::display_layout::Rect room{};
@@ -79,13 +88,18 @@ struct LayerView {
 
 /// Where a screen of the OA layer shows.
 struct LayerPlacement {
-    /// Where the screen shows, in window pixels: points_width times the
-    /// scale wide on the front end, and wherever the in-match Settings is
-    /// stamped in a match. Empty while the screen does not show: it then
-    /// neither draws nor takes input.
+    /// Where the screen shows, in window pixels: points_width at the scale
+    /// wide on the front end (kit::to_canvas), and wherever the in-match
+    /// Settings is stamped in a match. Empty while the screen does not
+    /// show: it then neither draws nor takes input.
     oa::ui::display_layout::Rect shown{};
     int32_t points_width{};  ///< the screen's width in its own points, as draw draws it
     int32_t points_height{}; ///< the screen's height in its own points
+    /// The scale the screen is drawn at as large as its place, in percent,
+    /// which layer_point divides by: the view's on the front end. 0 for a
+    /// screen stamped onto a place of its own size, as the in-match
+    /// Settings is, whose points map by the place's size.
+    int32_t scale_percent{};
 };
 
 /// What a screen of the OA layer did with an input, or with its frame's tick.
@@ -135,12 +149,13 @@ class LayerScreen {
     /// @return true for a backdrop
     [[nodiscard]] virtual bool backdrop() const = 0;
 
-    /// Draws the screen from its own top left corner at the canvas's whole
-    /// scale, every pixel of its points_width × points_height points opaque.
+    /// Draws the screen from its own top left corner at the canvas's scale,
+    /// every pixel of its points_width × points_height points opaque, through
+    /// the kit's draw functions, on whichever form the canvas has.
     ///
-    /// @param canvas where it draws: a picture of the screen's size times
-    ///     the scale, the scale, the dialog's fonts and the Open Annihilation
-    ///     icon
+    /// @param canvas where it draws: a picture of the screen's size at the
+    ///     scale, crisp at a whole scale and smooth at 150%, the dialog's
+    ///     fonts and the Open Annihilation icon
     virtual void draw(const oa::ui::kit::Canvas& canvas) const = 0;
 
     /// Lays the screen out for a view: Settings, a notice and a question take
@@ -219,9 +234,10 @@ class LayerScreen {
     virtual void close(bool by_key) = 0;
 };
 
-/// Maps a point to a screen's own points by its placement:
-/// floor((x - shown.x) × points_width / shown.width), and the same down. On
-/// the front end that is floor((x - left) / scale).
+/// Maps a point to a screen's own points by its placement: on the front end
+/// floor((x - left) × 100 / scale_percent), the drawing's own scale, 150%
+/// included; for a screen stamped onto a place of its own size
+/// floor((x - shown.x) × points_width / shown.width). The same down.
 ///
 /// @param placement where the screen shows
 /// @param x the point's column, in window pixels
@@ -231,8 +247,10 @@ class LayerScreen {
 layer_point(const LayerPlacement& placement, float x, float y) noexcept;
 
 /// Returns where a screen of a size shows centred in a view's room at the
-/// view's scale: left = room's left + (room's width - width × scale) / 2,
-/// rounded down, and the same down.
+/// view's scale: its size the points at the scale as the canvas's smooth
+/// form rounds them (kit::to_canvas, width × scale at a whole scale), and
+/// left = room's left + (room's width - that width) / 2, rounded down, and
+/// the same down. The placement keeps the view's scale.
 ///
 /// @param view what the screen is placed on
 /// @param width_points the screen's width, in points
@@ -240,6 +258,31 @@ layer_point(const LayerPlacement& placement, float x, float y) noexcept;
 /// @return its place, in window pixels
 [[nodiscard]] LayerPlacement
 centred_placement(const LayerView& view, int32_t width_points, int32_t height_points) noexcept;
+
+/// Draws on a canvas of a screen's size at a scale, as the OA layer draws
+/// its screens: at a whole scale on the kit canvas's crisp form, the
+/// placement's scale that whole number; at any other scale on its smooth
+/// form, the modern fonts drawing its text, every pixel starting opaque
+/// black. The picture is the points at the scale (kit::to_canvas).
+///
+/// @param points_width the screen's width, in points
+/// @param points_height the screen's height, in points
+/// @param scale_percent the scale, in percent: 100, 150, 200 and so on
+/// @param fonts the game's fonts the screens lay out and, crisp, draw in
+/// @param modern_fonts the modern fonts the smooth form draws text in; null
+///     draws no text there
+/// @param icon the Open Annihilation icon; empty draws the OA mark
+/// @param draw draws the screen on the canvas it is given
+/// @return the picture, opaque
+[[nodiscard]] renderer::Surface layer_drawing(
+    int32_t points_width,
+    int32_t points_height,
+    int32_t scale_percent,
+    const oa::ui::kit::Fonts* fonts,
+    oa::platform::text_font::FontStack* modern_fonts,
+    const oa::ui::frontend_renderer::RgbaPicture& icon,
+    const std::function<void(const oa::ui::kit::Canvas&)>& draw
+);
 
 /// A place in the window, in window pixels and their fractions.
 struct WindowPosition {
@@ -402,8 +445,21 @@ class OaLayer {
 
     /// Returns the whole scale the front end's screens are drawn at now.
     ///
-    /// @return window pixels a point; 1 in a match
+    /// @return window pixels a point; 1 at 150% and in a match
     [[nodiscard]] int32_t screen_scale() const { return view().scale; }
+
+    /// Returns the scale the front end's screens are drawn at now, in percent.
+    ///
+    /// @return 100, 150, 200 and so on; 100 in a match
+    [[nodiscard]] int32_t screen_scale_percent() const { return view().scale_percent; }
+
+    /// Returns the modern fonts the screens draw their text in at 150%: the
+    /// bundled fonts beside the game, opened the first time they are asked
+    /// for, with the faces the language shown adds (Runtime::follow_language_fonts).
+    ///
+    /// @return the fonts; null when they cannot be opened, and 150% is then
+    ///     not in effect
+    [[nodiscard]] oa::platform::text_font::FontStack* smooth_fonts() const;
 
     /// Returns the size class the front end's screens are laid out at now.
     ///
@@ -768,14 +824,16 @@ class OaLayer {
     /// (LayerScreen::lay_out).
     void lay_out_screens();
 
-    /// Draws a screen from its own top left corner at a whole scale.
+    /// Draws a screen from its own top left corner at a scale, never drawn
+    /// at another and enlarged (layer_drawing).
     ///
     /// @param screen the screen
     /// @param placed where it shows
-    /// @param scale window pixels a point
-    /// @return its picture, points_width × points_height times the scale
-    [[nodiscard]] renderer::Surface
-    draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const;
+    /// @param scale_percent the scale, in percent
+    /// @return its picture, points_width × points_height at the scale
+    [[nodiscard]] renderer::Surface draw_screen(
+        const LayerScreen& screen, const LayerPlacement& placed, int32_t scale_percent
+    ) const;
 
     /// Draws the front end's screens into the window.
     ///
@@ -824,6 +882,13 @@ class OaLayer {
     /// The layer's texture, in tiles beyond the renderer's limit; none
     /// before the first present.
     TiledTexture texture_;
+    /// The modern fonts the smooth form draws in (smooth_fonts); null before
+    /// they are opened, or when they cannot be.
+    mutable std::unique_ptr<oa::platform::text_font::FontStack> smooth_fonts_{};
+    mutable bool smooth_fonts_tried_{}; ///< smooth_fonts tried to open them
+    /// The fonts generation of the language's faces the modern fonts hold
+    /// (Runtime::follow_language_fonts); empty before they took any.
+    mutable std::optional<uint64_t> smooth_fonts_generation_{};
 };
 
 /// A notice of Open Annihilation's own (kit::Notice) as a screen of the OA

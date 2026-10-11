@@ -7,8 +7,8 @@
 // frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
 // on the main menu and in a match, and the screens of a notice and a
 // question (NoticeScreen, QuestionScreen). On the front end the screens are
-// laid out at the size class of the window's canvas and drawn at its whole
-// scale in the window's own pixels.
+// laid out at the size class of the window's canvas and drawn at its scale
+// in the window's own pixels: crisp at a whole scale, smooth at 150%.
 
 #include "oa_layer.hpp"
 
@@ -20,6 +20,7 @@
 #include "oa/app/frame_coordinates.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/text_font.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -31,6 +32,7 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -38,6 +40,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -52,6 +56,8 @@ namespace settings = oa::ui::engine_settings;
 namespace layout = oa::ui::display_layout;
 namespace kit = oa::ui::kit;
 namespace artless = oa::ui::frontend_renderer;
+namespace paint = oa::ui::paint;
+namespace text_font = oa::platform::text_font;
 
 namespace {
 
@@ -575,11 +581,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// @param canvas where it draws
     void draw(const kit::Canvas& canvas) const override {
         const auto* dialog = runtime_.engine_settings_dialog();
-        if (dialog == nullptr || canvas.surface == nullptr || canvas.fonts == nullptr)
+        if (dialog == nullptr || !kit::can_draw(canvas) || canvas.fonts == nullptr)
             return;
-        settings::draw_dialog(
-            *canvas.surface, canvas.placement, *dialog, *canvas.fonts, canvas.icon
-        );
+        settings::draw_dialog(canvas, *dialog);
     }
 
     /// Takes a pointer's move, press or release: a finger's press takes the
@@ -787,9 +791,9 @@ void NoticeScreen::lay_out(const LayerView& view) {
 }
 
 void NoticeScreen::draw(const kit::Canvas& canvas) const {
-    if (canvas.surface == nullptr || canvas.fonts == nullptr)
+    if (!kit::can_draw(canvas) || canvas.fonts == nullptr)
         return;
-    settings::draw_notice(*canvas.surface, canvas.placement, notice_, *canvas.fonts, canvas.icon);
+    settings::draw_notice(canvas, notice_);
 }
 
 LayerAnswer
@@ -888,9 +892,9 @@ void QuestionScreen::lay_out(const LayerView& view) {
 }
 
 void QuestionScreen::draw(const kit::Canvas& canvas) const {
-    if (canvas.surface == nullptr || canvas.fonts == nullptr)
+    if (!kit::can_draw(canvas) || canvas.fonts == nullptr)
         return;
-    settings::draw_prompt(*canvas.surface, canvas.placement, question_, *canvas.fonts, canvas.icon);
+    settings::draw_prompt(canvas, question_);
 }
 
 LayerAnswer
@@ -970,6 +974,16 @@ LayerAnswer QuestionScreen::take(kit::QuestionAnswer outcome, uint32_t sdl_key) 
 
 kit::Point layer_point(const LayerPlacement& placement, float x, float y) noexcept {
     const auto& shown = placement.shown;
+    // Drawn at a scale as large as its place: the window pixels over the
+    // scale, as the drawing's own edges are lround(point * scale).
+    if (placement.scale_percent > 0) {
+        const auto map = [&placement](float offset) {
+            return static_cast<int32_t>(std::floor(
+                static_cast<double>(offset) * 100.0 / static_cast<double>(placement.scale_percent)
+            ));
+        };
+        return {map(x - static_cast<float>(shown.x)), map(y - static_cast<float>(shown.y))};
+    }
     const auto map = [](float offset, int32_t length, int32_t points) {
         if (length <= 0)
             return 0;
@@ -985,17 +999,63 @@ kit::Point layer_point(const LayerPlacement& placement, float x, float y) noexce
 
 LayerPlacement
 centred_placement(const LayerView& view, int32_t width_points, int32_t height_points) noexcept {
-    const int32_t scale = std::max(view.scale, 1);
-    const int32_t width = width_points * scale;
-    const int32_t height = height_points * scale;
+    const int32_t percent = std::max(view.scale_percent, int32_t{100});
+    const kit::Rect drawn = kit::to_canvas({0, 0, width_points, height_points}, percent);
     return {
-        {view.room.x + floor_div(view.room.width - width, 2),
-         view.room.y + floor_div(view.room.height - height, 2),
-         width,
-         height},
+        {view.room.x + floor_div(view.room.width - drawn.width, 2),
+         view.room.y + floor_div(view.room.height - drawn.height, 2),
+         drawn.width,
+         drawn.height},
         width_points,
-        height_points
+        height_points,
+        percent
     };
+}
+
+renderer::Surface layer_drawing(
+    int32_t points_width,
+    int32_t points_height,
+    int32_t scale_percent,
+    const kit::Fonts* fonts,
+    text_font::FontStack* modern_fonts,
+    const artless::RgbaPicture& icon,
+    const std::function<void(const kit::Canvas&)>& draw
+) {
+    const int32_t percent = std::max(scale_percent, int32_t{100});
+    const kit::Rect size =
+        kit::to_canvas({0, 0, std::max(points_width, 0), std::max(points_height, 0)}, percent);
+    renderer::Surface drawn;
+    drawn.width = static_cast<uint32_t>(size.width);
+    drawn.height = static_cast<uint32_t>(size.height);
+    drawn.rgb.assign(static_cast<std::size_t>(drawn.width) * drawn.height * 3U, 0);
+    if (drawn.rgb.empty())
+        return drawn;
+    kit::Canvas canvas{};
+    canvas.fonts = fonts;
+    canvas.icon = icon;
+    if (percent % 100 == 0) {
+        // At the scale itself on the crisp form: never drawn at 1x and enlarged.
+        canvas.surface = &drawn;
+        canvas.placement = {0, 0, percent / 100};
+        draw(canvas);
+        return drawn;
+    }
+    // A fractional scale is laid out and drawn at itself on the smooth form,
+    // its every pixel starting opaque black as the crisp form's do.
+    paint::Canvas pixels = paint::make_canvas(size.width, size.height);
+    for (std::size_t alpha = 3; alpha < pixels.rgba.size(); alpha += 4)
+        pixels.rgba[alpha] = 255U;
+    paint::Painter painter(pixels);
+    canvas.smooth.painter = &painter;
+    canvas.smooth.fonts = modern_fonts;
+    canvas.smooth.scale_percent = percent;
+    draw(canvas);
+    for (std::size_t pixel = 0; pixel < drawn.rgb.size() / 3U; ++pixel) {
+        drawn.rgb[pixel * 3U] = pixels.rgba[pixel * 4U];
+        drawn.rgb[pixel * 3U + 1U] = pixels.rgba[pixel * 4U + 1U];
+        drawn.rgb[pixel * 3U + 2U] = pixels.rgba[pixel * 4U + 2U];
+    }
+    return drawn;
 }
 
 WindowPosition window_position(const LayerView& view, float x, float y) noexcept {
@@ -1184,6 +1244,20 @@ const kit::Fonts* OaLayer::screen_fonts() const {
     return runtime_.engine_settings_fonts();
 }
 
+text_font::FontStack* OaLayer::smooth_fonts() const {
+    if (!smooth_fonts_tried_) {
+        smooth_fonts_tried_ = true;
+        try {
+            smooth_fonts_ = text_font::FontStack::open(text_font::bundled_font_directory());
+        } catch (const std::exception&) {
+            smooth_fonts_.reset();
+        }
+    }
+    // The language shown may add faces of its pack, for its own letters.
+    std::ignore = runtime_.follow_language_fonts(smooth_fonts_.get(), smooth_fonts_generation_);
+    return smooth_fonts_.get();
+}
+
 LayerView OaLayer::view() const {
     LayerView seen{};
     seen.match = runtime_.screen_ == Screen::match;
@@ -1268,10 +1342,17 @@ LayerView OaLayer::view() const {
     // The Interface size the settings in effect choose (taken when the
     // dialog's OK is pressed), or the Auto scale, no larger than lets
     // Compact's dialog fit the room, and at least 1; the class from the
-    // points left over.
-    const settings::InterfaceSize chosen = runtime_.engine_settings_state().current.interface_size;
+    // points left over. 150% is drawn in the modern fonts, and is 100%
+    // while they are off or cannot be opened.
+    const settings::EngineSettings& current = runtime_.engine_settings_state().current;
+    settings::InterfaceSize chosen = current.interface_size;
+    if (chosen == settings::InterfaceSize::size_150)
+        chosen = settings::interface_size_with_fonts(
+            chosen, current.modern_fonts && smooth_fonts() != nullptr
+        );
     viewport = kit::layer_viewport(viewport, settings::interface_size_percent(chosen));
-    seen.scale = viewport.scale_percent / 100;
+    seen.scale_percent = viewport.scale_percent;
+    seen.scale = std::max(viewport.scale_percent / 100, int32_t{1});
     seen.frame = kit::frame_of(viewport);
     return seen;
 }
@@ -1619,23 +1700,20 @@ void OaLayer::sync_text_input() {
     }
 }
 
-renderer::Surface
-OaLayer::draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const {
-    // At the scale itself: never drawn at 1× and enlarged.
-    const int32_t whole = std::max(scale, int32_t{1});
-    renderer::Surface drawn;
-    drawn.width = static_cast<uint32_t>(std::max(placed.points_width, 0) * whole);
-    drawn.height = static_cast<uint32_t>(std::max(placed.points_height, 0) * whole);
-    drawn.rgb.assign(static_cast<std::size_t>(drawn.width) * drawn.height * 3U, 0);
-    if (drawn.rgb.empty())
-        return drawn;
-    kit::Canvas canvas{};
-    canvas.surface = &drawn;
-    canvas.placement = {0, 0, whole};
-    canvas.fonts = runtime_.engine_settings_fonts();
-    canvas.icon = runtime_.engine_settings_icon();
-    screen.draw(canvas);
-    return drawn;
+renderer::Surface OaLayer::draw_screen(
+    const LayerScreen& screen, const LayerPlacement& placed, int32_t scale_percent
+) const {
+    // At the scale itself: never drawn at another and enlarged.
+    const bool whole = scale_percent % 100 == 0;
+    return layer_drawing(
+        placed.points_width,
+        placed.points_height,
+        scale_percent,
+        runtime_.engine_settings_fonts(),
+        whole ? nullptr : smooth_fonts(),
+        runtime_.engine_settings_icon(),
+        [&screen](const kit::Canvas& canvas) { screen.draw(canvas); }
+    );
 }
 
 void OaLayer::darken_front_end(renderer::Surface& frame) const {
@@ -1665,7 +1743,7 @@ void OaLayer::compose_front_end(renderer::Surface& frame) const {
             continue;
         // A screen under a modal screen with a backdrop darkens with what
         // lies under it.
-        renderer::Surface drawn = draw_screen(screen, placed, seen.scale);
+        renderer::Surface drawn = draw_screen(screen, placed, seen.scale_percent);
         darken(drawn, above[index], kit::menu_backdrop_opacity);
         stamp_onto_picture(frame, drawn, placed.shown, seen);
     }
@@ -1719,7 +1797,7 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         piece.window = window;
         piece.shown = placed.shown;
         // Drawn at the view's scale, as large as its place.
-        piece.drawn = draw_screen(screen, placed, seen.scale);
+        piece.drawn = draw_screen(screen, placed, seen.scale_percent);
         darken(piece.drawn, above[index], kit::menu_backdrop_opacity);
         bounds = union_rect(bounds, piece.window);
         look.pieces.push_back(std::move(piece));
@@ -2065,7 +2143,7 @@ bool OaLayer::refresh_match() {
     for (const auto& shown : shown_screens) {
         // A screen under a modal screen with a backdrop darkens as the
         // button does.
-        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed, 1);
+        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed, 100);
         darken(drawn, shown.darkenings, settings::ingame_backdrop_opacity);
         stamp(rgba_, look.width, look.height, drawn, shown.placed.shown);
         bounds_ = union_rect(bounds_, shown.placed.shown);

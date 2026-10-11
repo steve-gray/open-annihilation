@@ -186,7 +186,8 @@ kit::Viewport desktop_canvas(int32_t width, int32_t height) {
 
 /// Checks the Interface size's scale rule: the design's examples, Auto at
 /// each window the OA layer's checks use, the step held to what fits
-/// Compact, and the density floor and insets on a touch canvas.
+/// Compact, 150% held to where Compact fits at one and a half, and the
+/// density floor and insets on a touch canvas.
 void an_interface_size_takes_the_largest_step_that_fits_compact() {
     for (const Chosen& example : chosen_sizes) {
         const kit::Viewport canvas = desktop_canvas(example.width, example.height);
@@ -227,6 +228,26 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::layer_viewport(full_hd, 250).scale_percent == 200);
     OA_CHECK(kit::layer_viewport(full_hd, 50).scale_percent == 100);
 
+    // 150%, held to where Compact fits at one and a half: 1920 by 1080 is
+    // 1.5x with 1280 by 720 points, Large; 1280 by 720 is 1.5x with 853 by
+    // 480 points, Compact; 640 by 480 would need 720 columns, so is 1x.
+    OA_CHECK(kit::fractional_scale_percent == 150);
+    const kit::Viewport large_fraction = kit::layer_viewport(full_hd, 150);
+    OA_CHECK(large_fraction.scale_percent == 150);
+    OA_CHECK(kit::frame_of(large_fraction).size_class == kit::SizeClass::large);
+    OA_CHECK(rect_is(kit::frame_of(large_fraction).area, 0, 0, 1280, 720));
+    const kit::Viewport compact_fraction = kit::layer_viewport(desktop_canvas(1280, 720), 150);
+    OA_CHECK(compact_fraction.scale_percent == 150);
+    OA_CHECK(kit::frame_of(compact_fraction).size_class == kit::SizeClass::compact);
+    OA_CHECK(rect_is(kit::frame_of(compact_fraction).area, 0, 0, 853, 480));
+    const kit::Viewport too_small = kit::layer_viewport(desktop_canvas(640, 480), 150);
+    OA_CHECK(too_small.scale_percent == 100);
+    OA_CHECK(kit::frame_of(too_small).size_class == kit::SizeClass::compact);
+    // The edge: Compact's 480 by 324 points take 720 by 486 pixels.
+    OA_CHECK(kit::layer_viewport(desktop_canvas(720, 486), 150).scale_percent == 150);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(719, 486), 150).scale_percent == 100);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(720, 485), 150).scale_percent == 100);
+
     // The 1704 by 786 phone canvas at density 2 with its insets: Auto keeps
     // the density's 2x, Compact; a chosen 100% replaces the density floor
     // and lays out the room's 1468 by 744 points at Large; 400% is held to
@@ -245,6 +266,13 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::frame_of(one).size_class == kit::SizeClass::large);
     OA_CHECK(rect_is(kit::frame_of(one).area, 118, 0, 1468, 744));
     OA_CHECK(kit::layer_viewport(phone, 400).scale_percent == 200);
+    // 150% replaces the density floor too, as the room of 1468 by 744
+    // pixels holds Compact at one and a half; with 260 columns of insets
+    // more it does not.
+    OA_CHECK(kit::layer_viewport(phone, 150).scale_percent == 150);
+    kit::Viewport narrow_phone = phone;
+    narrow_phone.safe.left += 760;
+    OA_CHECK(kit::layer_viewport(narrow_phone, 150).scale_percent == 100);
     // The insets count: 1440 by 972 fits 3x, and not with a row inset.
     kit::Viewport inset_canvas = desktop_canvas(1440, 972);
     OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 300);
