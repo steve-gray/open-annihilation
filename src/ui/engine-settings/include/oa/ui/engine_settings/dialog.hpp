@@ -74,10 +74,13 @@ enum class Page : uint8_t {
     /// Developer Mode's list of the standard hacks
     developer,
     /// Game files: what is installed, the backups switch and where the
-    /// files are; listed, between Controller and Developer, only where the
+    /// files are; listed, between Controller and Downloads, only where the
     /// platform brings game files in and the dialog is the main menu's
     /// (Dialog::game_files)
     game_files,
+    /// Downloads: when catalogues are checked, each registry's install ID,
+    /// and the downloaded files. Listed after Game files and before Developer.
+    downloads,
     mod_keys,   ///< the mod's keys
     mod_patrol, ///< what patrolling builders do
     mod_guard,  ///< what guarding builders do
@@ -88,12 +91,13 @@ enum class Page : uint8_t {
     registered,
 };
 
-/// The number of sections, of every kind of dialog, counting the registered page.
-inline constexpr std::size_t page_count = 15;
-/// The most sections a dialog lists: the engine's settings' nine with
-/// Touch, Controller and Game files, six without them; a mod's options have
+/// The number of sections, of every kind of dialog, counting Downloads and
+/// the registered page.
+inline constexpr std::size_t page_count = 16;
+/// The most sections a dialog lists: the engine's settings' ten with
+/// Touch, Controller and Game files, seven without them; a mod's options have
 /// five.
-inline constexpr std::size_t most_listed_pages = 9;
+inline constexpr std::size_t most_listed_pages = 10;
 
 /// Which settings a dialog shows.
 enum class DialogKind : uint8_t {
@@ -117,8 +121,8 @@ enum class DialogKind : uint8_t {
 /// @param controller a gamepad has sent input in this run
 ///     (Dialog::controller), so that the engine's settings list Controller
 ///     after Touch and before Game files and Developer
-/// @return six sections for the engine's settings, one more for each of
-///     Touch, Controller and Game files listed, nine with all three; five
+/// @return seven sections for the engine's settings, one more for each of
+///     Touch, Controller and Game files listed, ten with all three; five
 ///     for a mod's options and one for Language alone, whatever the others
 ///     say
 [[nodiscard]] std::span<const Page> dialog_pages(
@@ -314,10 +318,11 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
-/// listed, so that Touch is 5, Controller 6, Developer 7 and Game files 8
-/// in every dialog of the engine's settings, and a dialog without Touch has
-/// no control 5, one without Controller no control 6. The registered page
-/// has no entry of this form; its entries are registered_nav_control.
+/// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8 and
+/// Downloads 9 in every dialog of the engine's settings, and a dialog
+/// without Touch has no control 5, one without Controller no control 6.
+/// The registered page has no entry of this form; its entries are
+/// registered_nav_control.
 ///
 /// @param page the section
 /// @return its control's number, or no_control for the registered page
@@ -467,6 +472,13 @@ enum class DialogAction : uint8_t {
     /// Dialog::roll_back_folder names with the version its .backup keeps;
     /// the dialog stays open, and a failure is told with set_folder_notice
     roll_back_mod,
+    /// RESET on an install ID: the host makes a new ID for
+    /// Dialog::install_id_registry and the dialog stays open. Cancel does
+    /// not put the old ID back.
+    reset_install_id,
+    /// EMPTY on Downloaded files: the host removes downloaded files nothing
+    /// is using, and the dialog stays open. Cancel does not put them back.
+    empty_downloads,
     /// An available language was chosen: download Dialog::download_request,
     /// keep the dialog open, and apply the language when its pack arrives
     download_language,
@@ -641,6 +653,32 @@ inline constexpr int32_t no_question = -2;
 /// @param dialog the dialog
 /// @return one row for No Mod and one for each offered mod folder
 [[nodiscard]] std::vector<ModRow> mod_rows(const Dialog& dialog);
+
+/// One registry's install ID, as Downloads shows it. The host fills this
+/// from the registries that use an install ID, built-in first, and never
+/// puts a whole ID here: id_text is the short form.
+struct InstallIdRow {
+    std::string registry_id;   ///< the registry's id, kebab-case
+    std::string registry_name; ///< the name a player sees
+    bool on{true};             ///< false only while the stored ID is off
+    std::string id_text;       ///< the short form, or empty when none is stored
+    bool made{};               ///< an ID is stored
+};
+
+/// What Downloads shows besides the check for content updates, which the
+/// host gives with set_downloads_offer. The switches the player moves live
+/// on the dialog, as its chosen settings do, and take effect at OK.
+struct DownloadsOffer {
+    std::vector<InstallIdRow> install_ids; ///< one row per registry that uses an install ID
+    uint64_t kept_bytes{};                 ///< downloaded files kept for resuming and repairs
+    bool downloads_busy{};                 ///< a download is queued, running or paused
+};
+
+/// One install-ID switch, as the dialog keeps the player's choice.
+struct InstallIdChoice {
+    std::string registry_id; ///< the registry's id
+    bool on{true};           ///< the switch
+};
 
 /// One registered settings page the engine's dialog lists after its own
 /// sections, under a divider naming its owner. The rows stay the caller's.
@@ -824,6 +862,16 @@ struct Dialog {
     /// The open list's first item shown, while it holds more items than it
     /// shows.
     int32_t list_first{};
+    /// What Downloads shows, which the host sets with set_downloads_offer
+    /// after the dialog has opened. open_dialog clears it.
+    DownloadsOffer downloads{};
+    /// Each install-ID switch as the player has it, in downloads.install_ids'
+    /// order. A switch takes effect at OK.
+    std::vector<InstallIdChoice> install_id_chosen{};
+    /// Those switches as the dialog opened, which Cancel puts back.
+    std::vector<InstallIdChoice> install_id_opened{};
+    /// The registry the last RESET names.
+    std::string install_id_registry{};
     /// The size class it is laid out at: its size, padding, section list and
     /// content column are the class's (oa::ui::kit::metrics_of), and a larger
     /// class shows more rows, each at its Compact size. A host sets it from
@@ -992,6 +1040,16 @@ void open_dialog(
     bool game_files = false,
     bool controller = false
 );
+
+/// Gives Downloads what it shows. The first call, and any call whose
+/// registries are not the same ids in the same order, copies each row's
+/// switch into the dialog's chosen and opened switches. A later call with
+/// the same registries refreshes the IDs, the sizes and whether downloads
+/// are busy, and leaves the switches as the player has them.
+///
+/// @param[in,out] dialog the dialog
+/// @param offer what Downloads shows
+void set_downloads_offer(Dialog& dialog, const DownloadsOffer& offer);
 
 /// Opens the dialog over a mod's options (ui.options-dialog): its sections
 /// list the mod options alone, and only EngineSettings::mod_options change.
