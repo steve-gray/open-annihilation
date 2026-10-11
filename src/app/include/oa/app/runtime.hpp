@@ -4514,7 +4514,8 @@ class Runtime final : public menu::Host,
     /// ones, installed while the Library shows, each asking only what its
     /// registry must; refusals in the Library's queue; ROLL BACK and PLAY
     /// NOW from the Library; and an update to the mod played held until the
-    /// mod is switched, across soft restarts. Each run is one turn.
+    /// mod is switched, whose CANCEL drops it before it is held again,
+    /// across soft restarts. Each run is one turn.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();

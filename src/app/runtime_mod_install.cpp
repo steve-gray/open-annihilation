@@ -431,7 +431,7 @@ void Runtime::ModInstallState::note_for_library(Runtime& runtime, LibraryNote no
     std::erase_if(library_notes, [&note](const LibraryNote& kept) {
         return kept.registry == note.registry && kept.key == note.key;
     });
-    if (!note.problem.empty() || !note.held_target.empty())
+    if (!note.problem.empty() || !note.held_target.empty() || note.cancelled)
         library_notes.push_back(std::move(note));
     // The Library builds its model again at its next tick.
     if (runtime.library_)

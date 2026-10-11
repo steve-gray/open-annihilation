@@ -330,6 +330,27 @@ void finish_pending_change(const ChangeOptions& options) {
             state.discards.push_back(std::move(folder));
 }
 
+bool discard_pending_change(const ChangeOptions& options) {
+    std::optional<PendingChange> pending;
+    {
+        Kept& state = kept();
+        const base::threads::LockGuard guard(state.lock);
+        // A roll back waiting for the run to end is not the Library's held
+        // update, and CANCEL on that update must leave it.
+        if (!state.pending || state.pending->change == Change::roll_back)
+            return false;
+        pending = std::move(state.pending);
+        state.pending.reset();
+    }
+    pending->hold.reset();
+    if (pending->kind == nullptr)
+        return true;
+    const Recovery recovery = recover_changes(*pending->kind, pending->root, options);
+    keep_discards(recovery.discards);
+    detail::log_line(pending->target + ": dropped before it was put in place");
+    return true;
+}
+
 std::optional<ChangeOutcome> take_change_outcome() {
     Kept& state = kept();
     const base::threads::LockGuard guard(state.lock);
