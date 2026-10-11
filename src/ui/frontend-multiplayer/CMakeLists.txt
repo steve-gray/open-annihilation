@@ -11,7 +11,8 @@ add_library(oa-ui-frontend-multiplayer
   src/restrict.cpp
   src/connect.cpp
   src/dialogs.cpp
-  src/screens.cpp)
+  src/screens.cpp
+  src/presence_card.cpp)
 add_library(oa::ui::frontend_multiplayer ALIAS oa-ui-frontend-multiplayer)
 target_include_directories(oa-ui-frontend-multiplayer PUBLIC include)
 target_link_libraries(oa-ui-frontend-multiplayer
@@ -37,6 +38,12 @@ if(BUILD_TESTING)
     oa-test-game-data)
   add_test(NAME ui-multiplayer-screens COMMAND oa-ui-frontend-multiplayer-screens-test)
   set_tests_properties(ui-multiplayer-screens PROPERTIES TIMEOUT 120)
+  # The presence card's words over hand-made battle rooms.
+  add_executable(oa-ui-frontend-multiplayer-presence-card-test tests/presence_card_test.cpp)
+  target_link_libraries(oa-ui-frontend-multiplayer-presence-card-test PRIVATE
+    oa-ui-frontend-multiplayer oa-netgame oa-test-support)
+  add_test(NAME ui-multiplayer-presence-card COMMAND oa-ui-frontend-multiplayer-presence-card-test)
+  set_tests_properties(ui-multiplayer-presence-card PROPERTIES TIMEOUT 30)
   add_executable(oa-ui-frontend-multiplayer-team-rules-test tests/team_rules_test.cpp)
   target_link_libraries(oa-ui-frontend-multiplayer-team-rules-test PRIVATE oa-ui-frontend-multiplayer)
   add_test(NAME ui-multiplayer-team-rules COMMAND oa-ui-frontend-multiplayer-team-rules-test)
