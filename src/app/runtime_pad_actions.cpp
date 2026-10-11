@@ -410,6 +410,9 @@ void PadAccess::act_press(
     case pc::Action::default_button:
         send_key(runtime, SDLK_RETURN);
         return;
+    case pc::Action::info:
+        send_key(runtime, SDLK_F1);
+        return;
     case pc::Action::wheel_up:
     case pc::Action::wheel_down:
         menu_step(runtime, binding.action);

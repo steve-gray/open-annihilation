@@ -11,12 +11,13 @@ add_library(oa-ui-frontend-multiplayer
   src/restrict.cpp
   src/connect.cpp
   src/dialogs.cpp
-  src/screens.cpp)
+  src/screens.cpp
+  src/presence_card.cpp)
 add_library(oa::ui::frontend_multiplayer ALIAS oa-ui-frontend-multiplayer)
 target_include_directories(oa-ui-frontend-multiplayer PUBLIC include)
 target_link_libraries(oa-ui-frontend-multiplayer
   PUBLIC oa-core-types oa-ui-gui-layout oa-ui-gui-input oa-netgame oa-ui-screen-registry oa-options
-    oa-data-campaign oa-data-match-rules
+    oa-data-campaign oa-data-match-rules oa-ui-kit
   PRIVATE oa-platform-shims oa-base-text oa-base-bytes oa-ui-frontend-renderer oa-ui-decoded oa-formats-hpi oa-data-defs-assets oa-formats-tnt oa-data-unit-definitions
     oa-formats-tdf
     oa-data-campaign-assets oa-data-defs oa-data-languages oa-netgame-sync oa-present oa-present-model
@@ -37,6 +38,13 @@ if(BUILD_TESTING)
     oa-test-game-data)
   add_test(NAME ui-multiplayer-screens COMMAND oa-ui-frontend-multiplayer-screens-test)
   set_tests_properties(ui-multiplayer-screens PROPERTIES TIMEOUT 120)
+  # The presence card's words, its hover card and place by the badge, and
+  # when it opens and closes, over hand-made battle rooms and a synthetic font.
+  add_executable(oa-ui-frontend-multiplayer-presence-card-test tests/presence_card_test.cpp)
+  target_link_libraries(oa-ui-frontend-multiplayer-presence-card-test PRIVATE
+    oa-ui-frontend-multiplayer oa-ui-kit oa-netgame oa-test-support)
+  add_test(NAME ui-multiplayer-presence-card COMMAND oa-ui-frontend-multiplayer-presence-card-test)
+  set_tests_properties(ui-multiplayer-presence-card PROPERTIES TIMEOUT 30)
   add_executable(oa-ui-frontend-multiplayer-team-rules-test tests/team_rules_test.cpp)
   target_link_libraries(oa-ui-frontend-multiplayer-team-rules-test PRIVATE oa-ui-frontend-multiplayer)
   add_test(NAME ui-multiplayer-team-rules COMMAND oa-ui-frontend-multiplayer-team-rules-test)
