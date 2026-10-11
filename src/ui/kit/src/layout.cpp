@@ -34,6 +34,22 @@ floor_mul_div(int32_t value, int32_t numerator, int32_t denominator) noexcept {
     return static_cast<int32_t>(quotient);
 }
 
+/// Returns value * numerator / denominator rounded to the nearest whole
+/// number, a half away from zero. A denominator of 0 or less counts as 1.
+///
+/// @param value the value
+/// @param numerator the multiplier
+/// @param denominator the divisor
+/// @return the rounded product
+[[nodiscard]] int32_t
+nearest_mul_div(int32_t value, int32_t numerator, int32_t denominator) noexcept {
+    const int64_t divisor = denominator > 0 ? denominator : 1;
+    const int64_t product = static_cast<int64_t>(value) * numerator;
+    const int64_t magnitude = (product < 0 ? -product : product) * 2 + divisor;
+    const int64_t rounded = magnitude / (2 * divisor);
+    return static_cast<int32_t>(product < 0 ? -rounded : rounded);
+}
+
 /// Returns the percentage a scale divides by. 0 or less counts as 1.
 ///
 /// @param scale_percent the scale, as a percentage
@@ -140,25 +156,35 @@ Frame frame_of(const Viewport& viewport) noexcept {
 }
 
 Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept {
+    const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
+    const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
+    Viewport viewport = canvas;
+    if (chosen_percent == fractional_scale_percent) {
+        // One and a half where Compact's dialog fits the room at it, else 1x.
+        const bool fits_fraction =
+            int64_t{room_width} * 100 >=
+                int64_t{compact_metrics.dialog_width} * fractional_scale_percent &&
+            int64_t{room_height} * 100 >=
+                int64_t{compact_metrics.dialog_height} * fractional_scale_percent;
+        viewport.scale_percent = fits_fraction ? fractional_scale_percent : 100;
+        return viewport;
+    }
     const int32_t chosen =
         chosen_percent > 0 ? chosen_percent / 100 : auto_scale(canvas.height, canvas.density);
     // The largest whole step at which Compact's dialog fits the room.
-    const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
-    const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
     const int32_t fits = std::min(
         room_width / compact_metrics.dialog_width, room_height / compact_metrics.dialog_height
     );
-    Viewport viewport = canvas;
     viewport.scale_percent = std::max(int32_t{1}, std::min(chosen, fits)) * 100;
     return viewport;
 }
 
 Rect to_canvas(const Rect& points, int32_t scale_percent) noexcept {
     const int32_t percent = percent_of(scale_percent);
-    const int32_t left = floor_mul_div(points.x, percent, 100);
-    const int32_t top = floor_mul_div(points.y, percent, 100);
-    const int32_t right = floor_mul_div(points.x + points.width, percent, 100);
-    const int32_t bottom = floor_mul_div(points.y + points.height, percent, 100);
+    const int32_t left = nearest_mul_div(points.x, percent, 100);
+    const int32_t top = nearest_mul_div(points.y, percent, 100);
+    const int32_t right = nearest_mul_div(points.x + points.width, percent, 100);
+    const int32_t bottom = nearest_mul_div(points.y + points.height, percent, 100);
     return {left, top, right - left, bottom - top};
 }
 

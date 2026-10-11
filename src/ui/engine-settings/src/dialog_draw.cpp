@@ -1416,6 +1416,12 @@ void draw_dialog(
     kit::paint({&target, placement, &fonts, icon}, layout::dialog_list(dialog, &fonts));
 }
 
+void draw_dialog(const kit::Canvas& canvas, const Dialog& dialog) {
+    if (canvas.fonts == nullptr)
+        return;
+    kit::paint(canvas, layout::dialog_list(dialog, canvas.fonts));
+}
+
 void draw_oa_button(
     renderer::Surface& target,
     const renderer::Placement& placement,

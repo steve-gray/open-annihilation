@@ -18,6 +18,7 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/rows.hpp"
@@ -1345,6 +1346,16 @@ void draw_dialog(
     const DialogFonts& fonts,
     const oa::ui::frontend_renderer::RgbaPicture& icon
 );
+
+/// Draws the dialog at its size class on a canvas of either form: its
+/// display list (geometry::dialog_list), laid out in the canvas's game
+/// fonts, painted with kit::paint. The crisp form draws what draw_dialog
+/// draws; the smooth form draws the same parts at its own scale.
+///
+/// @param canvas where the dialog's top left corner lands, its fonts and its
+///     icon; without game fonts nothing is drawn
+/// @param dialog the dialog
+void draw_dialog(const oa::ui::kit::Canvas& canvas, const Dialog& dialog);
 
 namespace geometry {
 

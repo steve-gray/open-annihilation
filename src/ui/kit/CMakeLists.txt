@@ -4,19 +4,21 @@
 # The OA UI kit: one look, one text measure, one layout and one set of controls
 # for every OA screen (include/oa/ui/kit/theme.hpp, include/oa/ui/kit/text.hpp,
 # include/oa/ui/kit/layout.hpp, include/oa/ui/kit/input.hpp,
-# include/oa/ui/kit/looks.hpp, include/oa/ui/kit/components.hpp,
+# include/oa/ui/kit/looks.hpp, include/oa/ui/kit/canvas.hpp, include/oa/ui/kit/components.hpp,
 # include/oa/ui/kit/chrome.hpp, include/oa/ui/kit/controls.hpp,
 # include/oa/ui/kit/components_more.hpp). Provisional until the kit is declared
 # stable.
-add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/components.cpp
+add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/canvas.cpp src/components.cpp
   src/chrome.cpp src/controls.cpp src/components_more.cpp)
 # Declared rows: a settings page as a table (include/oa/ui/kit/rows.hpp).
 target_sources(oa-ui-kit PRIVATE src/rows.cpp)
 add_library(oa::ui::kit ALIAS oa-ui-kit)
 target_include_directories(oa-ui-kit PUBLIC include)
 target_compile_features(oa-ui-kit PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-kit PUBLIC oa-ui-paint oa-ui-frontend-renderer oa-present oa-formats-fnt
-  oa-formats-hpi oa-platform-preferences PRIVATE oa-base-text oa-ui-decoded oa-options)
+# The canvas's smooth form paints with oa-ui-paint in the bundled modern fonts.
+target_link_libraries(oa-ui-kit PUBLIC oa-ui-paint oa-platform-text-font oa-ui-frontend-renderer
+  oa-present oa-formats-fnt oa-formats-hpi oa-platform-preferences PRIVATE oa-base-text oa-ui-decoded
+  oa-options)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-kit-theme-test tests/theme_test.cpp)
@@ -61,6 +63,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-kit-notices-test PRIVATE oa-ui-kit oa-test-support oa-options)
   add_test(NAME ui-kit-notices COMMAND oa-ui-kit-notices-test)
   set_tests_properties(ui-kit-notices PROPERTIES TIMEOUT 30)
+
+  # The smooth form of the canvas at 1.5x; its text checks read the bundled
+  # fonts beside the test.
+  add_executable(oa-ui-kit-smooth-test tests/smooth_test.cpp)
+  target_link_libraries(oa-ui-kit-smooth-test PRIVATE oa-ui-kit oa-test-support oa-options oa-ui-paint
+    oa-platform-text-font)
+  oa_copy_text_fonts(oa-ui-kit-smooth-test "$<TARGET_FILE_DIR:oa-ui-kit-smooth-test>")
+  add_test(NAME ui-kit-smooth COMMAND oa-ui-kit-smooth-test)
+  set_tests_properties(ui-kit-smooth PROPERTIES TIMEOUT 30)
 
   add_executable(oa-ui-kit-rows-test tests/rows_test.cpp)
   target_link_libraries(oa-ui-kit-rows-test PRIVATE oa-ui-kit oa-test-support oa-options)

@@ -159,13 +159,12 @@ class PresenceCardScreen final : public LayerScreen {
     [[nodiscard]] LayerPlacement placement(const LayerView& placed_on) const override {
         if (placed_on.match || (badges_.empty() && !shown_))
             return {};
-        const int32_t scale = std::max(placed_on.scale, int32_t{1});
+        // At 150% too: each edge the point at the scale, rounded as the
+        // kit's smooth canvas rounds it, and input mapped back by the scale.
+        const int32_t percent = std::max(placed_on.scale_percent, int32_t{100});
         const kit::Rect held = box();
-        return {
-            {held.x * scale, held.y * scale, held.width * scale, held.height * scale},
-            held.width,
-            held.height
-        };
+        const kit::Rect at = kit::to_canvas(held, percent);
+        return {{at.x, at.y, at.width, at.height}, held.width, held.height, percent};
     }
 
     /// Tells that the screen lets what it does not take go on.
@@ -333,7 +332,8 @@ class PresenceCardScreen final : public LayerScreen {
         std::array<mp::PresenceBadgeSpot, most_badges> spots{};
         const int32_t count =
             mp::multiplayer_presence_badges(spots.data(), static_cast<int32_t>(spots.size()));
-        const int64_t scale = std::max(view_.scale, int32_t{1});
+        // Window pixels to points at the view's scale, 150% among them.
+        const int64_t percent = std::max(view_.scale_percent, int32_t{100});
         const auto& picture = view_.picture;
         const auto across = [&](int32_t column) {
             return picture.x + static_cast<int64_t>(column) * picture.width / view_.picture_size.x;
@@ -341,14 +341,16 @@ class PresenceCardScreen final : public LayerScreen {
         const auto down = [&](int32_t row) {
             return picture.y + static_cast<int64_t>(row) * picture.height / view_.picture_size.y;
         };
-        const auto floor_points = [scale](int64_t pixels) {
+        const auto floor_points = [percent](int64_t pixels) {
+            const int64_t scaled = pixels * 100;
             return static_cast<int32_t>(
-                pixels >= 0 ? pixels / scale : -((-pixels + scale - 1) / scale)
+                scaled >= 0 ? scaled / percent : -((-scaled + percent - 1) / percent)
             );
         };
-        const auto ceil_points = [scale](int64_t pixels) {
+        const auto ceil_points = [percent](int64_t pixels) {
+            const int64_t scaled = pixels * 100;
             return static_cast<int32_t>(
-                pixels >= 0 ? (pixels + scale - 1) / scale : -(-pixels / scale)
+                scaled >= 0 ? (scaled + percent - 1) / percent : -(-scaled / percent)
             );
         };
         for (int32_t index = 0; index < count && index < static_cast<int32_t>(spots.size());

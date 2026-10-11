@@ -191,7 +191,8 @@ kit::Viewport desktop_canvas(int32_t width, int32_t height) {
 
 /// Checks the Interface size's scale rule: the design's examples, Auto at
 /// each window the OA layer's checks use, the step held to what fits
-/// Compact, and the density floor and insets on a touch canvas.
+/// Compact, 150% held to where Compact fits at one and a half, and the
+/// density floor and insets on a touch canvas.
 void an_interface_size_takes_the_largest_step_that_fits_compact() {
     for (const Chosen& example : chosen_sizes) {
         const kit::Viewport canvas = desktop_canvas(example.width, example.height);
@@ -232,6 +233,26 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::layer_viewport(full_hd, 250).scale_percent == 200);
     OA_CHECK(kit::layer_viewport(full_hd, 50).scale_percent == 100);
 
+    // 150%, held to where Compact fits at one and a half: 1920 by 1080 is
+    // 1.5x with 1280 by 720 points, Large; 1280 by 720 is 1.5x with 853 by
+    // 480 points, Compact; 640 by 480 would need 720 columns, so is 1x.
+    OA_CHECK(kit::fractional_scale_percent == 150);
+    const kit::Viewport large_fraction = kit::layer_viewport(full_hd, 150);
+    OA_CHECK(large_fraction.scale_percent == 150);
+    OA_CHECK(kit::frame_of(large_fraction).size_class == kit::SizeClass::large);
+    OA_CHECK(rect_is(kit::frame_of(large_fraction).area, 0, 0, 1280, 720));
+    const kit::Viewport compact_fraction = kit::layer_viewport(desktop_canvas(1280, 720), 150);
+    OA_CHECK(compact_fraction.scale_percent == 150);
+    OA_CHECK(kit::frame_of(compact_fraction).size_class == kit::SizeClass::compact);
+    OA_CHECK(rect_is(kit::frame_of(compact_fraction).area, 0, 0, 853, 480));
+    const kit::Viewport too_small = kit::layer_viewport(desktop_canvas(640, 480), 150);
+    OA_CHECK(too_small.scale_percent == 100);
+    OA_CHECK(kit::frame_of(too_small).size_class == kit::SizeClass::compact);
+    // The edge: Compact's 480 by 324 points take 720 by 486 pixels.
+    OA_CHECK(kit::layer_viewport(desktop_canvas(720, 486), 150).scale_percent == 150);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(719, 486), 150).scale_percent == 100);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(720, 485), 150).scale_percent == 100);
+
     // The 1704 by 786 phone canvas at density 2 with its insets: Auto keeps
     // the density's 2x, Compact; a chosen 100% replaces the density floor
     // and lays out the room's 1468 by 744 points at Large; 400% is held to
@@ -250,6 +271,13 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::frame_of(one).size_class == kit::SizeClass::large);
     OA_CHECK(rect_is(kit::frame_of(one).area, 118, 0, 1468, 744));
     OA_CHECK(kit::layer_viewport(phone, 400).scale_percent == 200);
+    // 150% replaces the density floor too, as the room of 1468 by 744
+    // pixels holds Compact at one and a half; with 260 columns of insets
+    // more it does not.
+    OA_CHECK(kit::layer_viewport(phone, 150).scale_percent == 150);
+    kit::Viewport narrow_phone = phone;
+    narrow_phone.safe.left += 760;
+    OA_CHECK(kit::layer_viewport(narrow_phone, 150).scale_percent == 100);
     // The insets count: 1440 by 972 fits 3x, and not with a row inset.
     kit::Viewport inset_canvas = desktop_canvas(1440, 972);
     OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 300);
@@ -257,8 +285,9 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 200);
 }
 
-/// Checks that neighbouring rectangles share an edge at each scale, and that a
-/// whole scale maps a rectangle back onto itself.
+/// Checks that neighbouring rectangles share an edge at each scale, that each
+/// edge is rounded to the nearest pixel on its own, and that a whole scale
+/// maps a rectangle back onto itself.
 void canvas_pixels_tile_and_whole_scales_round_trip() {
     const kit::Rect left{0, 0, 10, 10};
     const kit::Rect right{10, 0, 10, 10};
@@ -276,6 +305,12 @@ void canvas_pixels_tile_and_whole_scales_round_trip() {
     }
     OA_CHECK(rect_is(kit::to_canvas(left, 150), 0, 0, 15, 15));
     OA_CHECK(rect_is(kit::to_canvas(right, 150), 15, 0, 15, 15));
+    // At 1.5x each edge is lround(point * 1.5) on its own: a point is one or
+    // two pixels, halves rounded away from zero.
+    OA_CHECK(rect_is(kit::to_canvas({1, 1, 1, 1}, 150), 2, 2, 1, 1));
+    OA_CHECK(rect_is(kit::to_canvas({2, 3, 1, 1}, 150), 3, 5, 2, 1));
+    OA_CHECK(rect_is(kit::to_canvas({3, 5, 10, 10}, 150), 5, 8, 15, 15));
+    OA_CHECK(rect_is(kit::to_canvas({-1, -3, 2, 2}, 150), -2, -5, 4, 3));
 
     const kit::Rect samples[] = {{0, 0, 1, 1}, {3, 5, 7, 11}, {10, 20, 30, 40}};
     constexpr int32_t whole[] = {100, 200, 300};
