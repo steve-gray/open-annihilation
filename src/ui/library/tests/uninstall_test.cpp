@@ -166,13 +166,15 @@ lib::Inputs fixture_inputs(bool in_match = false) {
     return inputs;
 }
 
-/// Builds a Library from inputs.
+/// Builds a Library from inputs, on its Mods tab.
 ///
 /// @param inputs the inputs
 /// @return the Library
 lib::Library built(lib::Inputs inputs) {
     lib::Library library;
     lib::refresh(library, std::move(inputs));
+    // A Library opens on Active, which lists no packages to select.
+    lib::set_tab(library, lib::Tab::mods);
     return library;
 }
 
