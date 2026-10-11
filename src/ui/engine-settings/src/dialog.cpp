@@ -9,6 +9,8 @@
 #include "developer.hpp"
 #include "downloads_page.hpp"
 #include "geometry.hpp"
+#include "language_page.hpp"
+#include "registered.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -196,6 +198,8 @@ kit::RowView row_view(
         }
         shown.hints[line] = std::string(shown_text(shown.hints[line]));
     }
+    if (setting == Setting::language)
+        shown.value = language_closed_field(dialog, std::move(shown.value));
     return shown;
 }
 
@@ -441,6 +445,12 @@ int32_t scroll_at(
 SourceRect list_item(
     Page page, bool touch, bool game_files, bool controller, kit::SizeClass size_class
 ) noexcept {
+    // A registered page has no pinned entry. Its list is laid out with the
+    // pages set_registered_pages gave.
+    if (page == Page::registered)
+        return {
+            list_item_left, list_first_top, sizes_of(size_class).list_item_width, list_item_height
+        };
     // Each entry at its place in the list its dialog shows; Touch and
     // Controller, which only a dialog that lists them asks for, keep their
     // own places.
@@ -721,6 +731,7 @@ DialogAction move_in_tab_order(Dialog& dialog, layout::ScrolledRows& open, bool 
         return DialogAction::none;
     dialog.focused = next;
     static_cast<void>(show_row(dialog, open, dialog.focused));
+    reveal_registered_nav(dialog);
     return DialogAction::redraw;
 }
 
@@ -747,6 +758,7 @@ DialogAction move_toward(Dialog& dialog, layout::ScrolledRows& open, kit::Direct
         return DialogAction::none;
     dialog.focused = next;
     static_cast<void>(show_row(dialog, open, dialog.focused));
+    reveal_registered_nav(dialog);
     return DialogAction::redraw;
 }
 
@@ -829,6 +841,23 @@ void knob_moved(Dialog& dialog, Setting setting) noexcept {
 void step(Dialog& dialog, Setting setting, bool up) {
     const auto& spec = layout::row_spec(setting);
     layout::SettingsModel model = chosen_model(dialog);
+    // Left and Right stay among System default and the installed languages.
+    // An available pack is chosen only from the open list.
+    if (setting == Setting::language) {
+        const int32_t installed = layout::language_installed_count();
+        const int32_t current = kit::row_index(spec, model);
+        if (current >= installed) {
+            if (up || installed <= 0)
+                return;
+            layout::set_language(model, installed - 1);
+            return;
+        }
+        const int32_t next = current + (up ? 1 : -1);
+        if (next < 0 || next >= installed)
+            return;
+        layout::set_language(model, next);
+        return;
+    }
     if (spec.kind != kit::RowKind::slider) {
         static_cast<void>(kit::step(spec, model, up));
         return;
@@ -951,6 +980,20 @@ DialogAction choose(Dialog& dialog, const OpenList& list, int32_t item) {
         return changed_or_redraw(dialog, before);
     }
     const Setting setting = list.row->setting;
+    // A divider and a pack whose downloads are off leave the list open.
+    // Choosing an available pack asks for its download even when its tag
+    // was already the choice, so a failed download can be tried again.
+    if (setting == Setting::language) {
+        const layout::LanguagePick pick = layout::language_pick(dialog, item);
+        if (pick.kind == layout::LanguagePickKind::refused)
+            return DialogAction::redraw;
+        if (pick.kind == layout::LanguagePickKind::download) {
+            close_list(dialog);
+            dialog.chosen.language = pick.tag;
+            dialog.download_request = pick.tag;
+            return DialogAction::download_language;
+        }
+    }
     close_list(dialog);
     const EngineSettings before = dialog.chosen;
     layout::SettingsModel model = chosen_model(dialog);
@@ -974,22 +1017,41 @@ list_key(Dialog& dialog, layout::ScrolledRows& open, const OpenList& list, Dialo
     int32_t marked = dialog.list_marked;
     switch (key) {
     case DialogKey::up:
-        --marked;
-        break;
     case DialogKey::down:
-        ++marked;
-        break;
     case DialogKey::page_up:
-        marked -= list.shown;
-        break;
     case DialogKey::page_down:
-        marked += list.shown;
-        break;
     case DialogKey::home:
-        marked = 0;
-        break;
     case DialogKey::end:
-        marked = last;
+        // Language's divider is not an item the keys can mark. A step that
+        // lands on it continues one further in the same direction.
+        if (list.row->setting == Setting::language) {
+            int32_t moved = 0;
+            if (key == DialogKey::up)
+                moved = -1;
+            else if (key == DialogKey::down)
+                moved = 1;
+            else if (key == DialogKey::page_up)
+                moved = -list.shown;
+            else if (key == DialogKey::page_down)
+                moved = list.shown;
+            else if (key == DialogKey::home)
+                moved = -(last + 1);
+            else
+                moved = last + 1;
+            marked = layout::language_mark_toward(dialog, marked, moved);
+        } else if (key == DialogKey::up) {
+            --marked;
+        } else if (key == DialogKey::down) {
+            ++marked;
+        } else if (key == DialogKey::page_up) {
+            marked -= list.shown;
+        } else if (key == DialogKey::page_down) {
+            marked += list.shown;
+        } else if (key == DialogKey::home) {
+            marked = 0;
+        } else {
+            marked = last;
+        }
         break;
     case DialogKey::enter:
     case DialogKey::space:
@@ -1201,6 +1263,7 @@ DialogAction restore_defaults(Dialog& dialog) {
         choice.on = true;
     dialog.restored = true;
     ++dialog.forget_renderer_failures;
+    restore_registered_page(dialog);
     return DialogAction::changed;
 }
 
@@ -1223,6 +1286,7 @@ DialogAction cancel(Dialog& dialog) noexcept {
     dialog.open_list = no_control;
     dialog.chosen = dialog.opened;
     dialog.install_id_chosen = dialog.install_id_opened;
+    dialog.registered_values = dialog.registered_opened;
     dialog.pressed = no_control;
     dialog.dragging = false;
     return DialogAction::cancelled;
@@ -1238,8 +1302,9 @@ DialogAction show_page(Dialog& dialog, Page page) noexcept {
     dialog.list_pressed = -1;
     dialog.page = page;
     dialog.wheel_rows = 0.0F;
-    if (dialog.focused >= first_row_control)
-        dialog.focused = page_control(page);
+    if (dialog.focused >= first_row_control || registered_nav_index(dialog, dialog.focused) >= 0)
+        dialog.focused = page == Page::registered ? registered_nav_control(dialog.registered_page)
+                                                  : page_control(page);
     return DialogAction::redraw;
 }
 
@@ -1294,6 +1359,8 @@ DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t 
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller))
         if (control == page_control(page))
             return show_page(dialog, page);
+    if (const std::optional<DialogAction> registered = activate_registered(dialog, control))
+        return *registered;
     if (layout::developer_page(dialog)) {
         if (control == active_only_control)
             return developer::set_active_only(dialog, !dialog.developer.active_only);
@@ -1648,6 +1715,10 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
         if (item >= 0) {
             dialog.list_pressed = item;
             dialog.list_marked = item;
+        } else if (kit::contains(list->rect, {x, y})) {
+            // The divider and the menu's border are inside the menu and are
+            // not items: the press keeps the list open and chooses nothing.
+            dialog.list_pressed = -1;
         } else {
             close_list(dialog);
         }
@@ -1754,6 +1825,9 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     dialog.hovered = control;
     if (dragged || control != pressed)
         return DialogAction::redraw;
+    if (const std::optional<DialogAction> registered =
+            press_registered_row(dialog, control, {x, y}))
+        return *registered;
     if (layout::developer_page(dialog)) {
         if (control == active_only_control) {
             const layout::SourceRect& active = layout::sizes_of(dialog).active_only_switch;
@@ -1861,6 +1935,11 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
         if (const layout::ListRow* row = layout::list_row(open.list, dialog.focused))
             return or_shown(developer::step(dialog, *row, up));
     }
+    if (key == DialogKey::left || key == DialogKey::right) {
+        if (const std::optional<DialogAction> stepped =
+                step_registered_row(dialog, dialog.focused, key == DialogKey::right))
+            return or_shown(*stepped);
+    }
     const layout::Row* row = row_of(rows, dialog.focused);
     if (row != nullptr && row->downloads >= 0) {
         if (row->lock != Lock::none)
@@ -1908,6 +1987,10 @@ DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {
         dialog.list_first = first;
         return DialogAction::redraw;
     }
+    if (const std::optional<DialogAction> nav = wheel_registered_nav(dialog, x, y, notches))
+        return *nav;
+    if (const std::optional<DialogAction> registered = wheel_registered_content(dialog, notches))
+        return *registered;
     // Away from the player scrolls towards the top, wheel_step rows a notch,
     // the fraction carried to the next turn (kit::wheel_offset). A section
     // that does not scroll drops what was carried.
@@ -2251,33 +2334,49 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         );
     }
 
-    // The section list.
-    for (const Page page :
-         dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
-        const layout::SourceRect item = layout::dialog_list_item(dialog, page);
+    // The section list. Registered pages flow under the engine's sections,
+    // each owner named on its own divider, and the list scrolls.
+    if (registered_nav(dialog))
+        append_registered_nav(dialog, parts);
+    else {
+        for (const Page page :
+             dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
+            const layout::SourceRect item = layout::dialog_list_item(dialog, page);
+            parts.push_back(
+                LayoutPart{
+                    {item.x + layout::list_text_offset,
+                     item.y,
+                     item.width - layout::list_text_offset - layout::list_text_margin,
+                     item.height},
+                    std::string(layout::shown_text(layout::page_name(page))),
+                    DialogFont::regular,
+                    0,
+                    page_control(page),
+                }
+            );
+        }
+        if (dialog.kind == DialogKind::engine)
+            control_part(layout::list_divider(dialog.size_class), no_control);
+    }
+
+    // The open section. A registered page's heading is its title as registered.
+    if (dialog.page == Page::registered)
         parts.push_back(
             LayoutPart{
-                {item.x + layout::list_text_offset,
-                 item.y,
-                 item.width - layout::list_text_offset - layout::list_text_margin,
-                 item.height},
-                std::string(layout::shown_text(layout::page_name(page))),
-                DialogFont::regular,
-                0,
-                page_control(page),
+                sized.heading,
+                registered_heading(dialog),
+                DialogFont::small,
+                layout::heading_tracking,
+                no_control,
             }
         );
-    }
-    if (dialog.kind == DialogKind::engine)
-        control_part(layout::list_divider(dialog.size_class), no_control);
-
-    // The open section.
-    text_part(
-        sized.heading,
-        layout::page_heading(dialog.page),
-        DialogFont::small,
-        layout::heading_tracking
-    );
+    else
+        text_part(
+            sized.heading,
+            layout::page_heading(dialog.page),
+            DialogFont::small,
+            layout::heading_tracking
+        );
     // The rows: only the parts wholly in the view are listed, so that each
     // listed control is pressed where it is drawn and each text is whole.
     const layout::ScrolledRows open = layout::open_rows(dialog);
@@ -2289,7 +2388,9 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         [&row_part](layout::SourceRect rect, std::string_view text, DialogFont font) {
             row_part(LayoutPart{rect, std::string(layout::shown_text(text)), font, 0, no_control});
         };
-    if (layout::mods_page(dialog))
+    if (dialog.page == Page::registered)
+        append_registered_content(dialog, parts);
+    else if (layout::mods_page(dialog))
         mods_layout(dialog, open, parts, text_width, small_text_width);
     // Every other section's rows as they are drawn, from their row specs:
     // Developer's stay at its top while its list scrolls.
@@ -2378,21 +2479,20 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                         }
                     );
             break;
-        case oa::ui::kit::RowKind::choice:
-            // The field shows the choice, in the regular font.
+        case oa::ui::kit::RowKind::choice: {
+            // The field shows the choice, in the regular font. Language's
+            // field names a pack that is still downloading, and its state.
+            std::string caption =
+                oa::ui::kit::row_caption(layout::row_spec(row.setting), model, view.index);
+            if (row.setting == Setting::language)
+                caption = layout::language_closed_field(dialog, std::move(caption));
+            if (row.downloads >= 0)
+                caption = downloads::choice_caption(downloads::choice_index(dialog));
             row_part(
-                LayoutPart{
-                    row.control_area,
-                    row.downloads >= 0 ? downloads::choice_caption(downloads::choice_index(dialog))
-                                       : oa::ui::kit::row_caption(
-                                             layout::row_spec(row.setting), model, view.index
-                                         ),
-                    DialogFont::regular,
-                    0,
-                    control,
-                }
+                LayoutPart{row.control_area, std::move(caption), DialogFont::regular, 0, control}
             );
             break;
+        }
         case oa::ui::kit::RowKind::slider:
             row_part(LayoutPart{row.control_area, {}, DialogFont::regular, 0, control});
             row_part(LayoutPart{row.value, view.value, DialogFont::regular, 0, no_control});
@@ -2459,14 +2559,69 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
             const int32_t item = dialog.list_first + shown;
             if (item >= static_cast<int32_t>(list->choices))
                 break;
+            const layout::SourceRect box = layout::choice_item(list->rect, shown);
+            if (list->row->downloads >= 0) {
+                parts.push_back(
+                    LayoutPart{
+                        box,
+                        downloads::choice_caption(item),
+                        DialogFont::regular,
+                        0,
+                        no_control,
+                    }
+                );
+                continue;
+            }
+            const Setting setting = list->row->setting;
             const std::string caption =
-                list->row->downloads >= 0
-                    ? downloads::choice_caption(item)
-                    : oa::ui::kit::row_caption(layout::row_spec(list->row->setting), model, item);
+                oa::ui::kit::row_caption(layout::row_spec(setting), model, item);
+            // The divider is a section heading, not a choice.
+            if (layout::language_item_divider(dialog, setting, item)) {
+                parts.push_back(
+                    LayoutPart{
+                        box,
+                        caption,
+                        DialogFont::small,
+                        layout::heading_tracking,
+                        no_control,
+                    }
+                );
+                continue;
+            }
+            const std::string aside = layout::language_item_aside(dialog, setting, item);
+            if (aside.empty()) {
+                parts.push_back(LayoutPart{box, caption, DialogFont::regular, 0, no_control});
+                continue;
+            }
+            // The same gap the menu draws between a label and its aside, so
+            // the two parts do not meet.
+            constexpr int32_t kMargin = 4;
+            constexpr int32_t kGap = 8;
+            constexpr int32_t kMinLabel = 8;
+            const int32_t inset = kit::compact_metrics.choice_item_text_inset;
+            const int32_t inner_left = box.x + inset;
+            const int32_t inner_right = box.x + box.width - kMargin;
+            int32_t aside_width = text_width(aside);
+            int32_t room = inner_right - inner_left - kMinLabel - kGap;
+            if (room < 1)
+                room = 1;
+            if (aside_width > room)
+                aside_width = room;
+            const int32_t aside_left = inner_right - aside_width;
+            const int32_t label_width = std::max(aside_left - kGap - inner_left, int32_t{0});
             parts.push_back(
                 LayoutPart{
-                    layout::choice_item(list->rect, shown),
+                    {inner_left, box.y, label_width, box.height},
                     caption,
+                    DialogFont::regular,
+                    0,
+                    no_control,
+                }
+            );
+            parts.push_back(
+                LayoutPart{
+                    {aside_left, box.y, aside_width, box.height},
+                    aside,
                     DialogFont::regular,
                     0,
                     no_control,

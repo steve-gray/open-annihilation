@@ -211,6 +211,15 @@ bool Runtime::modern_fonts_open() {
     return opened_stack(fonts) != nullptr;
 }
 
+bool Runtime::modern_fonts_draw(std::string_view text) const {
+    auto& fonts = modern_fonts();
+    const base::threads::LockGuard lock(fonts.mutex);
+    // Nothing has been found missing while the stack is not open.
+    if (fonts.stack == nullptr)
+        return true;
+    return fonts.stack->draws(text, text_font::Weight::bold);
+}
+
 std::size_t Runtime::modern_font_pack_faces() {
     auto& fonts = modern_fonts();
     const base::threads::LockGuard lock(fonts.mutex);

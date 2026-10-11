@@ -213,6 +213,17 @@ the run, and the row shows "Set on the command line". A new choice shows at
 once in what is drawn each frame; screens and panels already open show it
 once they open again.
 
+Languages a catalogue offers, and the game does not have yet, are listed
+under AVAILABLE TO DOWNLOAD. The host fills `Dialog::available_languages`.
+Each `AvailableLanguage` carries the tag, the endonym, the English name,
+the aside, whether the endonym draws, whether the row can be chosen, and
+where its download stands. `src/language_page.cpp` builds the menu from
+that list. Choosing one asks the host to queue the download, and the
+closed field then shows the language and its progress. An available item's
+automation name is `oa.settings.language.` and the tag in lower case:
+`oa.settings.language.zh-hans`, `oa.settings.language.pt-br`. The divider
+above those rows has no automation name.
+
 The rest of the Language settings say how game text is drawn. Use modern fonts
 for game text draws it in modern fonts, which hold the letters of many
 languages, in place of the game's own 8-bit fonts; Text size scales every
@@ -377,6 +388,18 @@ caption it has already looked up. `Dialog::section_hooks` (`SectionHooks`) lets 
 dialog's tests and the game's checks show rows and locks of their own in
 place of a section's, on Developer in place of its list and the list's
 footer too; a host never sets it.
+
+A registered page (`set_registered_pages`) is listed after the engine's own
+sections, under a divider that names its owner, in the order it was
+registered. Pages of one owner share that divider. The divider is a margin,
+a one-pixel rule, a margin and the owner's name in the small font. The page
+itself is laid out from its preference rows (`PreferenceRow`), at the
+dialog's size class, the same way the engine's rows are. OK writes each key
+whose stored text changed and the host calls the page's `applied` once the
+preferences are saved. Cancel drops the changes. Restore defaults puts the
+open registered page's rows back to their defaults. A mod's options dialog
+lists none of them. With no registered page the section list is the engine's
+own, Developer pinned at the foot.
 
 The host hands both drawing functions the Open Annihilation icon as an
 RGBA picture: the game's window icon without its clear margin. They scale
@@ -781,7 +804,10 @@ list's rows and Show Active Only. The scroll groups are the section's rows
 with their ROLL BACK (`mods_list_group`); the entries, the footer, OPEN MODS
 FOLDER, Show Active Only and Restore profile values are in none.
 
-The names: the section entries `settings.nav.<page>` (`mods`, `controls`,
+The names: a registered page's entry is `settings.nav.<id>`, its id as
+registered (`settings.nav.check.page`), and its rows `settings.<id>.<row>`
+(`settings.check.page.toggle`, whose halves are `.off` and `.on`). The
+engine's section entries are `settings.nav.<page>` (`mods`, `controls`,
 `common-tweaks`, `language`, `graphics`, `touch`, `controller`,
 `developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
 `mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,
@@ -808,7 +834,8 @@ its spec's id; a drop-down's item's or a strip's level's `<value>` is its
 id (`kit::Stepper::id`): the word the preferences keep it as
 (`stored_words.hpp`, or the text functions such as `menu_scaling_text`),
 lower case with every other character a `-` (`1/32` gives `1-32`, a
-language's tag `zh-Hans` gives `zh-hans`, System default `system`), and
+language's tag `zh-Hans` gives `zh-hans` (`oa.settings.language.zh-hans`),
+System default `system`), and
 for Zoomed out units' Icons, which no preference keeps yet, `icons`.
 `geometry::choice_word` gives it, and the dialog names an open menu's item
 controls by it. The kit lists the parts of a control that take a press of

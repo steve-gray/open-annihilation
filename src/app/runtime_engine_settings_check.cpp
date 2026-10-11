@@ -293,6 +293,7 @@ void Runtime::check_engine_settings() {
     check_engine_settings_in_menu();
     check_engine_settings_dialog();
     check_engine_settings_window_sizes();
+    oa_layer().check_clear_screens();
     check_engine_settings_in_match();
     check_unsaved_unit_limit_ends_with_its_match();
     check_engine_settings_wiring();

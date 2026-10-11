@@ -374,10 +374,21 @@ strip_levels(const Control& control, const Rect& area, const LevelsLook& look) {
             continue;
         for (std::size_t place = 0; place < look->shown.size(); ++place) {
             const int32_t index = look->first + static_cast<int32_t>(place);
+            const bool named = index >= 0 && static_cast<std::size_t>(index) < look->items.size();
+            const ChoiceMenuRow* row =
+                named ? &look->items[static_cast<std::size_t>(index)] : nullptr;
+            // A divider is not a control and has no name.
+            if (row != nullptr && row->divider)
+                continue;
             Part part;
-            part.word = part_word(control, static_cast<std::size_t>(std::max(index, int32_t{0})));
+            if (row != nullptr && !row->id.empty())
+                part.word = row->id;
+            else
+                part.word =
+                    part_word(control, static_cast<std::size_t>(std::max(index, int32_t{0})));
             part.rect = choice_item(item.rect, static_cast<int32_t>(place));
             part.inside = false;
+            part.enabled = row == nullptr || row->choosable;
             part.checked = index == look->chosen;
             part.text = look->shown[place];
             items.push_back(std::move(part));
@@ -683,6 +694,7 @@ KeyOutcome key(Interaction& interaction, const DisplayList& list, Key pressed) {
         return outcome_of(KeyResult::cancel, no_control, pressed);
     case Key::yes:
     case Key::no:
+    case Key::info:
         return outcome_of(KeyResult::none, no_control, pressed);
     case Key::backspace:
     case Key::delete_forward:

@@ -257,6 +257,19 @@ locks them, and players in different languages play together.
   panels as they open. Choose a language to play in one other than your
   system's. 3.1c's own command line, such as `open-annihilation german`,
   decides it for the run.
+  A catalogue can offer further languages. They are listed under
+  AVAILABLE TO DOWNLOAD, each with its size: whole kB under 1,000,000
+  bytes, one decimal of MB under 100 MB, and whole MB from there on. A
+  pack the OA team published shows that size and a download mark. A
+  community pack shows "community", the share of the game it translates
+  when the catalogue gives one, and its size. A pack from a registry that
+  was added shows "not reviewed" where a community pack shows
+  "community". A registry whose downloads are off shows "downloads off",
+  and its language stays greyed. Choosing one starts its download at
+  once, and the field shows how far it has got. The language applies when
+  the pack arrives. OK keeps the choice. Cancel restores the language the
+  dialog opened with. A download already started still installs, and the
+  game keeps the language it had.
   [Languages](languages.md) says what the game data and the language packs
   translate.
 - **Use modern fonts for game text**, On by default. The game's text is

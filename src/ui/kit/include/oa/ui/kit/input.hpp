@@ -19,9 +19,9 @@ namespace oa::ui::kit {
 
 /// The keys a kit screen answers to. A host gives the platform's keys these
 /// meanings. The names and their order up to no are the settings dialog's
-/// keys, so a host can pass one through as the other; the editing keys after
-/// it are the kit's own. Enter also goes to a focused tab, and Home and End
-/// to a focused text field, as key says.
+/// keys, so a host can pass one through as the other; the editing keys and
+/// the information key after it are the kit's own. Enter also goes to a
+/// focused tab, and Home and End to a focused text field, as key says.
 enum class Key : uint8_t {
     enter,     ///< the focused button, link or list row; otherwise the screen accepts
     escape,    ///< the screen cancels
@@ -42,6 +42,10 @@ enum class Key : uint8_t {
     backspace,
     /// A focused text field deletes the character after its caret.
     delete_forward,
+    /// The information key: a screen that has more to tell about what the
+    /// pointer or the focus is on shows it, such as a card. The OA layer
+    /// gives it F1 outside a match; nothing on a kit screen otherwise.
+    info,
 };
 
 /// One of the four ways the arrows move the focus.
@@ -234,7 +238,8 @@ struct KeyOutcome {
 /// otherwise the screen accepts. Escape cancels. Page Up and Page Down
 /// scroll. Home and End go to a focused text field, which moves its caret,
 /// and otherwise scroll. Backspace and Delete go to a focused text field and
-/// otherwise do nothing. Yes and No do nothing.
+/// otherwise do nothing. Yes, No and Info do nothing: a screen that answers
+/// to Info does so before it calls key.
 ///
 /// @param[in,out] interaction the focus; a move shows it and sets the control
 /// @param list the display list
@@ -334,9 +339,12 @@ automation_entries(const DisplayList& list, const Interaction& interaction);
 ///   checked on the chosen level and enabled only where it is offered;
 /// - a row of buttons (ControlKind::buttons): each button the list draws for it;
 /// - a drop-down whose menu is open (Role::choice, ChoiceLook::open): each
-///   item the menu (Role::choice_menu) shows, at choice_item, checked on the
-///   chosen item. A control of the list that bears such an item's name is
-///   that item, and is listed once, as the part.
+///   item the menu (Role::choice_menu) shows, at the rectangle the menu draws
+///   it in, checked on the chosen item. A divider is not listed. An item
+///   whose row gives an id is named by that id; another by the control's
+///   parts word for it, else its place from 1. A row that is not choosable
+///   is listed and is not enabled. A control of the list that bears such an
+///   item's name is that item, and is listed once, as the part.
 ///
 /// A part is named <name>.<word>, its word the control's parts word for it,
 /// else its place from 1; a switch's are off and on. A part's kind is its

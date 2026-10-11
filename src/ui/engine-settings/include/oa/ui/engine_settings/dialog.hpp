@@ -20,6 +20,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/rows.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -85,10 +86,14 @@ enum class Page : uint8_t {
     mod_guard,  ///< what guarding builders do
     mod_tools,  ///< the build tools and the mex snap
     mod_chat,   ///< the wreck snap, the chat and the resource bar
+    /// One registered page the engine's settings show, laid out from the row
+    /// specs set_registered_pages gave. A mod's options never list one.
+    registered,
 };
 
-/// The number of sections, of every kind of dialog.
-inline constexpr std::size_t page_count = 15;
+/// The number of sections, of every kind of dialog, counting Downloads and
+/// the registered page.
+inline constexpr std::size_t page_count = 16;
 /// The most sections a dialog lists: the engine's settings' ten with
 /// Touch, Controller and Game files, seven without them; a mod's options have
 /// five.
@@ -295,19 +300,35 @@ static_assert(
 );
 static_assert(
     static_cast<std::size_t>(Page::developer) < most_listed_pages &&
-        static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
-    "every section of the engine's settings has an entry's number, and every section a scroll"
+        static_cast<std::size_t>(Page::registered) + 1 == page_count,
+    "every engine section has an entry's number, and every section a scroll"
 );
+
+/// The first registered page's entry. Each next page's counts down from it,
+/// under the question's buttons and an open list's items.
+inline constexpr int32_t first_registered_nav_control = -10000;
+
+/// Returns a registered page's entry's control.
+///
+/// @param index the page's place in the pages set_registered_pages gave, from 0
+/// @return its control's number
+[[nodiscard]] constexpr int32_t registered_nav_control(std::size_t index) noexcept {
+    return first_registered_nav_control - static_cast<int32_t>(index);
+}
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
 /// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8 and
 /// Downloads 9 in every dialog of the engine's settings, and a dialog
 /// without Touch has no control 5, one without Controller no control 6.
+/// The registered page has no entry of this form; its entries are
+/// registered_nav_control.
 ///
 /// @param page the section
-/// @return its control's number
+/// @return its control's number, or no_control for the registered page
 [[nodiscard]] constexpr int32_t page_control(Page page) noexcept {
+    if (page == Page::registered)
+        return no_control;
     const auto index = static_cast<int32_t>(page);
     const auto first_mod = static_cast<int32_t>(Page::mod_keys);
     return first_page_control + (index >= first_mod ? index - first_mod : index);
@@ -458,6 +479,9 @@ enum class DialogAction : uint8_t {
     /// EMPTY on Downloaded files: the host removes downloaded files nothing
     /// is using, and the dialog stays open. Cancel does not put them back.
     empty_downloads,
+    /// An available language was chosen: download Dialog::download_request,
+    /// keep the dialog open, and apply the language when its pack arrives
+    download_language,
 };
 
 /// How the OA button looks.
@@ -561,6 +585,64 @@ struct ModRow {
     bool playing{}; ///< the game plays it now
 };
 
+/// One language pack a registry offers that is not installed. The host fills
+/// it; the Language page reads it and does not ask the content service or
+/// the fonts itself.
+struct AvailableLanguage {
+    std::string tag;          ///< the pack's tag, as the preference stores it
+    std::string endonym;      ///< its name in itself
+    std::string english_name; ///< its name in English, when the endonym cannot be drawn
+    std::string aside;        ///< the size and coverage shown at the row's right
+    /// The endonym is drawn; false shows english_name. True while the font
+    /// stack is not open, which the host decides.
+    bool endonym_drawable{true};
+    /// A press on the row chooses it. False greys the row: downloads are off.
+    bool choosable{true};
+
+    /// Where a download of this pack stands, from the download queue.
+    enum class State : uint8_t {
+        offered,     ///< listed, and not queued yet: the field shows the name only
+        waiting,     ///< queued, or asking, or paused
+        downloading, ///< bytes are arriving, or the pack is being checked
+        installing,  ///< the pack is being installed
+        failed,      ///< the download failed or was refused
+    };
+
+    State state{State::offered}; ///< where the download stands
+    uint8_t percent{};           ///< how much of a download has arrived, 0 to 100
+    std::string failure;         ///< why it failed; empty otherwise
+};
+
+/// Returns a pack's size as the Language page shows it: under 1,000,000
+/// bytes, whole kB; under 100 MB, one decimal of MB; otherwise whole MB.
+///
+/// @param bytes the pack's size
+/// @return the size, such as "312 kB", "4.0 MB" or "188 MB"
+[[nodiscard]] std::string download_size_text(uint64_t bytes);
+
+/// Returns the aside of an available language.
+///
+/// A reviewed pack from "OA team" shows its size and the download mark.
+/// A reviewed pack from anyone else shows "community", its coverage when it
+/// has one, and its size. A pack that is not reviewed shows "not reviewed"
+/// in place of "community", whoever published it. Downloads off shows
+/// "downloads off" and nothing else.
+///
+/// @param reviewed a built-in registry reviewed the pack
+/// @param publisher who published it
+/// @param coverage the fraction of the game's text the pack has, from 0 to
+///     1; none when the pack gives no coverage
+/// @param bytes the pack's size
+/// @param downloads_on the registry can download
+/// @return the aside
+[[nodiscard]] std::string language_download_aside(
+    bool reviewed,
+    std::string_view publisher,
+    std::optional<double> coverage,
+    uint64_t bytes,
+    bool downloads_on
+);
+
 /// ModRow::offered for No Mod.
 inline constexpr int32_t no_mod_row = -1;
 /// Dialog::switch_question while no question shows.
@@ -596,6 +678,27 @@ struct DownloadsOffer {
 struct InstallIdChoice {
     std::string registry_id; ///< the registry's id
     bool on{true};           ///< the switch
+};
+
+/// One registered settings page the engine's dialog lists after its own
+/// sections, under a divider naming its owner. The rows stay the caller's.
+struct RegisteredPage {
+    std::string id;                           ///< the page's word in automation names
+    std::string title;                        ///< the section heading, as registered
+    std::string owner;                        ///< the divider's name, as registered
+    const oa::ui::kit::PreferenceRow* rows{}; ///< the page's rows; the caller keeps them
+    std::size_t row_count{};                  ///< how many rows
+    /// Called by the host once per key OK changed, after the preferences are written.
+    void (*applied)(void* state, const char* key, const char* value){};
+    void* state{}; ///< what applied is called with
+};
+
+/// One key OK changed on a registered page, and who the host tells once it is saved.
+struct RegisteredWrite {
+    std::string key;   ///< the preference key
+    std::string value; ///< the text to store; empty when the key is cleared
+    void (*applied)(void* state, const char* key, const char* value){}; ///< the page's applied
+    void* state{};                                                      ///< the page's state
 };
 
 /// One open dialog. A host reads opened, chosen, defaults, restored, page
@@ -742,6 +845,13 @@ struct Dialog {
     /// Unicode Multiplayer Chat shows On, locked. A host sets it as the
     /// dialog opens.
     std::vector<std::string> unicode_chat_languages{};
+    /// Language packs the enabled registries offer that are not installed,
+    /// in the order the page lists them under AVAILABLE TO DOWNLOAD. Empty
+    /// draws the page as it did with nothing to download. The host fills it
+    /// as the dialog opens and as the catalogue or a download moves.
+    std::vector<AvailableLanguage> available_languages{};
+    /// The tag DialogAction::download_language asks the host to download.
+    std::string download_request;
     /// The row whose drop-down list is open: its control; no_control while
     /// no list is open. An open list takes every pointer event and key.
     int32_t open_list{no_control};
@@ -768,6 +878,22 @@ struct Dialog {
     /// the room it has; the scroll offsets are held to the class's limits
     /// wherever they are used.
     oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
+    /// Registered pages listed after the engine's sections. Empty leaves the
+    /// list as the engine's own, Developer pinned at its foot.
+    std::vector<RegisteredPage> registered_pages;
+    /// Which registered page is open while page is Page::registered.
+    std::size_t registered_page{};
+    /// The preference values the registered rows show.
+    oa::ui::kit::PreferenceModel registered_values{};
+    /// Those values as the pages were given. Cancel puts them back, and OK
+    /// writes a key whose text differs.
+    oa::ui::kit::PreferenceModel registered_opened{};
+    /// The section list's scroll, in source pixels, while registered pages
+    /// make the list taller than its room.
+    int32_t nav_scroll{};
+    /// The part of a source pixel the wheel has turned over the section list
+    /// and not yet scrolled.
+    float nav_wheel_rows{};
 };
 
 /// Returns every standard hack as Developer Mode shows it: as the profile
@@ -851,6 +977,26 @@ struct ModOffer {
     /// The mod folder the game plays now; empty for none.
     std::string_view playing{};
 };
+
+/// Gives the engine's dialog the registered pages to list, and the preference
+/// values their rows read. A dialog that is not the engine's settings keeps
+/// none. The rows stay the caller's for as long as the dialog shows them.
+///
+/// @param[in,out] dialog the dialog
+/// @param pages the pages, in the order the list shows them
+/// @param values the stored preferences the rows read and OK writes back
+void set_registered_pages(
+    Dialog& dialog,
+    std::span<const RegisteredPage> pages,
+    const oa::platform::preferences::Values& values
+);
+
+/// Returns the registered keys whose stored text differs from the values the
+/// dialog was given. A key missing from either side compares as empty.
+///
+/// @param dialog the dialog
+/// @return one write for each changed key, in page order then row order
+[[nodiscard]] std::vector<RegisteredWrite> registered_writes(const Dialog& dialog);
 
 /// Opens the dialog over settings in effect.
 ///

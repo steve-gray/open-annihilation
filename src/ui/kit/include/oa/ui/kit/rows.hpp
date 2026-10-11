@@ -12,6 +12,7 @@
 // up: whoever lays a page out passes the function that gives the text to show.
 #pragma once
 
+#include "oa/platform/preferences.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
@@ -26,6 +27,7 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -199,7 +201,181 @@ struct RowSpec {
     /// Tells whether a hint line is a notice, drawn as a lock's text is; null
     /// draws every line as a hint.
     bool (*hint_notice)(const Model&, std::size_t){};
+    /// The preference key this row reads and writes, when set. A preference
+    /// row uses it in place of a field of the model (preference_toggle and
+    /// the other preference factories). Empty for a row bound to a field.
+    std::string_view key{};
+    /// The text stored for key when none is stored, or the stored text is
+    /// not one this row keeps. Empty until a preference factory sets it.
+    std::string_view default_text{};
+    /// A preference slider's least value, used when key is set.
+    double slider_least{};
+    /// A preference slider's greatest value, used when key is set.
+    double slider_most{};
+    /// A preference slider's step, used when key is set. Zero is no slider.
+    double slider_step{};
 };
+
+/// The values a preference-bound row reads and writes. The dialog fills
+/// them from the stored preferences and changes them as the player does.
+struct PreferenceModel {
+    /// The stored texts, keyed by the rows' keys.
+    oa::platform::preferences::Values values{};
+};
+
+/// A row bound to a preference key.
+using PreferenceRow = RowSpec<PreferenceModel>;
+
+/// The most bytes a preference text field stores.
+inline constexpr std::size_t preference_text_most = 256;
+
+/// Returns why a preference key is refused, or null when the key is kept.
+///
+/// A kept key is dotted words of a to z, 0 to 9 and hyphens, at least two
+/// words, at most 64 bytes, and it does not start with open-annihilation.
+///
+/// @param key the key
+/// @return a reason the key is refused, or null
+[[nodiscard]] const char* preference_key_problem(std::string_view key) noexcept;
+
+/// Makes a preference row of an Off/On switch. It stores 1 or 0.
+///
+/// @param id the row's word
+/// @param label the label, in English
+/// @param key the preference key
+/// @param default_text the text read when none is stored, or the stored text is neither 1 nor 0
+/// @param hint the hint's lines, in English
+/// @return the spec
+[[nodiscard]] PreferenceRow preference_toggle(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::array<std::string_view, 2> hint = {}
+);
+
+/// Makes a preference row of a drop-down. It stores one of the choices' ids.
+///
+/// @param id the row's word
+/// @param label the label, in English
+/// @param key the preference key
+/// @param default_text the choice's id read when none is stored, or the stored text is not one of them
+/// @param choice_ids the choices' ids, of a to z, 0 to 9 and hyphens; they outlive the spec
+/// @param captions the choices' captions, in English, in the ids' order; they outlive the spec
+/// @param hint the hint's lines, in English
+/// @return the spec
+[[nodiscard]] PreferenceRow preference_choice(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::span<const std::string_view> choice_ids,
+    std::span<const std::string_view> captions,
+    std::array<std::string_view, 2> hint = {}
+);
+
+/// Makes a preference row of a slider. It stores a decimal in its range, on its step.
+///
+/// @param id the row's word
+/// @param label the label, in English
+/// @param key the preference key
+/// @param default_text the decimal read when none is stored, or the stored text is off the step
+/// @param least the least value
+/// @param most the greatest value
+/// @param step the step, greater than zero
+/// @param hint the hint's lines, in English
+/// @return the spec
+[[nodiscard]] PreferenceRow preference_slider(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    double least,
+    double most,
+    double step,
+    std::array<std::string_view, 2> hint = {}
+);
+
+/// Makes a preference row of a text field. It stores the player's text, up to
+/// preference_text_most bytes.
+///
+/// @param id the row's word
+/// @param label the label, in English
+/// @param key the preference key
+/// @param default_text the text read when none is stored, or the stored text is longer than the field keeps
+/// @param hint the hint's lines, in English
+/// @return the spec
+[[nodiscard]] PreferenceRow preference_text_field(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::array<std::string_view, 2> hint = {}
+);
+
+/// Tells whether a preference toggle is On.
+///
+/// @param model the values
+/// @param spec the row
+/// @return true for On
+[[nodiscard]] bool preference_stored_on(const PreferenceModel& model, const PreferenceRow& spec);
+
+/// Sets a preference toggle to On or Off.
+///
+/// @param[in,out] model the values
+/// @param spec the row
+/// @param on true for On
+void preference_store_on(PreferenceModel& model, const PreferenceRow& spec, bool on);
+
+/// Returns how many choices or stops a preference row offers.
+///
+/// @param spec the row
+/// @return the count; 0 when the row is neither a choice nor a slider
+[[nodiscard]] int32_t preference_stored_count(const PreferenceRow& spec);
+
+/// Returns a preference choice's or slider's chosen index.
+///
+/// @param model the values
+/// @param spec the row
+/// @return the index, from 0
+[[nodiscard]] int32_t
+preference_stored_index(const PreferenceModel& model, const PreferenceRow& spec);
+
+/// Sets a preference choice's or slider's chosen index.
+///
+/// @param[in,out] model the values
+/// @param spec the row
+/// @param chosen the index, from 0
+void preference_store_index(PreferenceModel& model, const PreferenceRow& spec, int32_t chosen);
+
+/// Returns a preference choice's caption or a slider stop's decimal.
+///
+/// @param spec the row
+/// @param at the choice or the stop, from 0
+/// @return its text; empty past the end
+[[nodiscard]] std::string preference_stored_caption(const PreferenceRow& spec, int32_t at);
+
+/// Returns a preference choice's id.
+///
+/// @param spec the row
+/// @param at the choice, from 0
+/// @return its id; empty past the end or when the row is not a choice
+[[nodiscard]] std::string preference_stored_choice_id(const PreferenceRow& spec, int32_t at);
+
+/// Returns a preference text field's text.
+///
+/// @param model the values
+/// @param spec the row
+/// @return the stored text, or the default when none is stored or it is too long
+[[nodiscard]] std::string
+preference_stored_text(const PreferenceModel& model, const PreferenceRow& spec);
+
+/// Stores a preference text field's text.
+///
+/// @param[in,out] model the values
+/// @param spec the row
+/// @param text the text, at most preference_text_most bytes
+void preference_store_text(PreferenceModel& model, const PreferenceRow& spec, std::string text);
 
 /// Makes a row of an Off/On switch bound to a field.
 ///
@@ -494,6 +670,10 @@ row_button_count(const std::array<std::string_view, 3>& captions) noexcept {
 /// @return true for On; false when the spec binds no switch
 template <class Model>
 [[nodiscard]] bool row_on(const RowSpec<Model>& spec, const Model& model) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty())
+            return preference_stored_on(model, spec);
+    }
     if (spec.flag != nullptr)
         return model.*spec.flag;
     return spec.get_flag != nullptr && spec.get_flag(model);
@@ -506,6 +686,12 @@ template <class Model>
 /// @param on true for On
 template <class Model>
 void set_row_on(const RowSpec<Model>& spec, Model& model, bool on) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty()) {
+            preference_store_on(model, spec, on);
+            return;
+        }
+    }
     if (spec.flag != nullptr)
         model.*spec.flag = on;
     else if (spec.set_flag != nullptr)
@@ -520,6 +706,10 @@ void set_row_on(const RowSpec<Model>& spec, Model& model, bool on) {
 /// @return the count; 0 when the spec binds none
 template <class Model>
 [[nodiscard]] int32_t row_count(const RowSpec<Model>& spec, const Model& model) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty() && (spec.kind == RowKind::choice || spec.kind == RowKind::slider))
+            return preference_stored_count(spec);
+    }
     if (spec.index != nullptr)
         return static_cast<int32_t>(spec.captions.size());
     return spec.stepper.count != nullptr ? std::max(spec.stepper.count(model), int32_t{0}) : 0;
@@ -533,6 +723,10 @@ template <class Model>
 /// @return the index, from 0; 0 when the spec binds none
 template <class Model>
 [[nodiscard]] int32_t row_index(const RowSpec<Model>& spec, const Model& model) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty() && (spec.kind == RowKind::choice || spec.kind == RowKind::slider))
+            return preference_stored_index(model, spec);
+    }
     if (spec.index != nullptr)
         return model.*spec.index;
     return spec.stepper.get != nullptr ? spec.stepper.get(model) : 0;
@@ -546,6 +740,12 @@ template <class Model>
 /// @param chosen the index, from 0
 template <class Model>
 void set_row_index(const RowSpec<Model>& spec, Model& model, int32_t chosen) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty() && (spec.kind == RowKind::choice || spec.kind == RowKind::slider)) {
+            preference_store_index(model, spec, chosen);
+            return;
+        }
+    }
     if (spec.index != nullptr)
         model.*spec.index = chosen;
     else if (spec.stepper.set != nullptr)
@@ -560,6 +760,10 @@ void set_row_index(const RowSpec<Model>& spec, Model& model, int32_t chosen) {
 /// @return its text, in English or already as shown; empty past the end
 template <class Model>
 [[nodiscard]] std::string row_caption(const RowSpec<Model>& spec, const Model& model, int32_t at) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty() && (spec.kind == RowKind::choice || spec.kind == RowKind::slider))
+            return preference_stored_caption(spec, at);
+    }
     if (spec.index != nullptr)
         return at >= 0 && static_cast<std::size_t>(at) < spec.captions.size()
                    ? std::string(spec.captions[static_cast<std::size_t>(at)])
@@ -576,6 +780,10 @@ template <class Model>
 template <class Model>
 [[nodiscard]] std::string
 row_choice_id(const RowSpec<Model>& spec, const Model& model, int32_t at) {
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty() && spec.kind == RowKind::choice)
+            return preference_stored_choice_id(spec, at);
+    }
     if (spec.index != nullptr)
         return at >= 0 && static_cast<std::size_t>(at) < spec.choice_ids.size()
                    ? std::string(spec.choice_ids[static_cast<std::size_t>(at)])
@@ -733,6 +941,12 @@ view_of(const RowSpec<Model>& spec, const Model& model, const ShownText& shown) 
         break;
     }
     case RowKind::text_field:
+        if constexpr (std::is_same_v<Model, PreferenceModel>) {
+            if (!spec.key.empty()) {
+                view.text = preference_stored_text(model, spec);
+                break;
+            }
+        }
         if (spec.text != nullptr)
             view.text = model.*spec.text;
         break;
@@ -1131,7 +1345,21 @@ RowResult choose(const RowSpec<Model>& spec, Model& model, int32_t item) {
 template <class Model>
 RowResult
 type(const RowSpec<Model>& spec, Model& model, std::size_t& caret, std::string_view utf8) {
-    if (spec.kind != RowKind::text_field || spec.text == nullptr || !row_takes_events(spec, model))
+    if (spec.kind != RowKind::text_field || !row_takes_events(spec, model))
+        return {};
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty()) {
+            const std::string before = preference_stored_text(model, spec);
+            TextField field{before, caret};
+            if (!insert_text(field, utf8) || field.text.size() > preference_text_most)
+                return {};
+            const bool moved = field.text != before;
+            preference_store_text(model, spec, std::move(field.text));
+            caret = field.caret;
+            return changed_if(moved);
+        }
+    }
+    if (spec.text == nullptr)
         return {};
     TextField field{model.*spec.text, caret};
     if (!insert_text(field, utf8))
@@ -1153,7 +1381,21 @@ type(const RowSpec<Model>& spec, Model& model, std::size_t& caret, std::string_v
 /// @return changed only when the text changed; a caret's move alone is none
 template <class Model>
 RowResult edit(const RowSpec<Model>& spec, Model& model, std::size_t& caret, Key pressed) {
-    if (spec.kind != RowKind::text_field || spec.text == nullptr || !row_takes_events(spec, model))
+    if (spec.kind != RowKind::text_field || !row_takes_events(spec, model))
+        return {};
+    if constexpr (std::is_same_v<Model, PreferenceModel>) {
+        if (!spec.key.empty()) {
+            const std::string before = preference_stored_text(model, spec);
+            TextField field{before, caret};
+            if (!edit_text(field, pressed) || field.text.size() > preference_text_most)
+                return {};
+            const bool moved = field.text != before;
+            preference_store_text(model, spec, std::move(field.text));
+            caret = field.caret;
+            return changed_if(moved);
+        }
+    }
+    if (spec.text == nullptr)
         return {};
     TextField field{model.*spec.text, caret};
     if (!edit_text(field, pressed))

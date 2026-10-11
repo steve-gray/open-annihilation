@@ -157,6 +157,8 @@ std::string_view page_slug(Page page) {
         return "mod-tools";
     case Page::mod_chat:
         return "mod-chat";
+    case Page::registered:
+        return "registered";
     }
     return "page";
 }
@@ -361,183 +363,217 @@ struct InstalledSimplifiedChinese {
 };
 
 std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
-    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     std::vector<Picture> pictures;
     const renderer::RgbaPicture no_icon{};
-    const auto game = settings::settings_locks(settings::GameState{true, false, false, false});
+    { // Simplified Chinese is installed for the scenes in this block.
+        [[maybe_unused]] const InstalledSimplifiedChinese installed;
+        const auto game = settings::settings_locks(settings::GameState{true, false, false, false});
 
-    for (const Page page : settings::dialog_pages(settings::DialogKind::engine, true, true, true)) {
-        add(pictures,
-            std::string("dialog/") + std::string(page_slug(page)),
-            drawn_dialog(engine_dialog(page), fonts, no_icon, 1));
-    }
-
-    Dialog graphics_end = engine_dialog(Page::graphics);
-    show_scroll_end(graphics_end);
-    if (graphics_end.scroll[static_cast<std::size_t>(Page::graphics)] <= 0)
-        problem("graphics is not at its scroll end");
-    add(pictures, "dialog/graphics-end", drawn_dialog(graphics_end, fonts, no_icon, 1));
-
-    Dialog language = engine_dialog(Page::language);
-    press_keys(language, {DialogKey::tab, DialogKey::space});
-    if (language.open_list == settings::no_control)
-        problem("language drop-down is not open");
-    add(pictures, "dialog/language-open", drawn_dialog(language, fonts, no_icon, 1));
-
-    Dialog controls = engine_dialog(Page::controls);
-    const auto cancel = control_rect(controls, fonts, settings::cancel_control);
-    const auto ok = control_rect(controls, fonts, settings::ok_control);
-    if (!cancel || !ok) {
-        problem("controls has no OK or Cancel");
-    } else {
-        static_cast<void>(settings::dialog_pointer_down(
-            controls, cancel->x + cancel->width / 2, cancel->y + cancel->height / 2
-        ));
-        static_cast<void>(
-            settings::dialog_pointer_move(controls, ok->x + ok->width / 2, ok->y + ok->height / 2)
-        );
-        press_keys(controls, {DialogKey::tab, DialogKey::tab});
-        if (controls.focused != settings::first_row_control + 1 ||
-            controls.hovered != settings::ok_control ||
-            controls.pressed != settings::cancel_control) {
-            problem(
-                "controls focus is " + std::to_string(controls.focused) + " hover " +
-                std::to_string(controls.hovered) + " press " + std::to_string(controls.pressed)
-            );
+        for (const Page page :
+             settings::dialog_pages(settings::DialogKind::engine, true, true, true)) {
+            add(pictures,
+                std::string("dialog/") + std::string(page_slug(page)),
+                drawn_dialog(engine_dialog(page), fonts, no_icon, 1));
         }
-    }
-    add(pictures, "dialog/controls-focus", drawn_dialog(controls, fonts, no_icon, 1));
 
-    add(pictures,
-        "dialog/common-tweaks-locked",
-        drawn_dialog(engine_dialog(Page::common_tweaks, game), fonts, no_icon, 1));
-    add(pictures,
-        "dialog/graphics-locked",
-        drawn_dialog(engine_dialog(Page::graphics, game), fonts, no_icon, 1));
+        Dialog graphics_end = engine_dialog(Page::graphics);
+        show_scroll_end(graphics_end);
+        if (graphics_end.scroll[static_cast<std::size_t>(Page::graphics)] <= 0)
+            problem("graphics is not at its scroll end");
+        add(pictures, "dialog/graphics-end", drawn_dialog(graphics_end, fonts, no_icon, 1));
 
-    Dialog developer = engine_dialog(Page::developer);
-    press_keys(
-        developer,
-        {DialogKey::tab, DialogKey::space, DialogKey::tab, DialogKey::tab, DialogKey::space}
-    );
-    const bool area_open = std::any_of(
-        developer.developer.areas_open.begin(),
-        developer.developer.areas_open.end(),
-        [](uint8_t open) { return open != 0; }
-    );
-    if (!developer.chosen.developer_mode || !area_open)
-        problem("developer mode is not on with its first area open");
-    add(pictures, "dialog/developer-open", drawn_dialog(developer, fonts, no_icon, 1));
+        Dialog language = engine_dialog(Page::language);
+        press_keys(language, {DialogKey::tab, DialogKey::space});
+        if (language.open_list == settings::no_control)
+            problem("language drop-down is not open");
+        add(pictures, "dialog/language-open", drawn_dialog(language, fonts, no_icon, 1));
 
-    Dialog switching = mods_dialog();
-    press_keys(switching, {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space});
-    if (switching.switch_question == settings::no_question ||
-        switching.mod_question != settings::ModQuestion::switch_mod)
-        problem("the Switch Mod question is not showing");
-    add(pictures, "dialog/mods-switch", drawn_dialog(switching, fonts, no_icon, 1));
-
-    Dialog rolling = mods_dialog();
-    press_keys(
-        rolling, {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space}
-    );
-    if (rolling.switch_question == settings::no_question ||
-        rolling.mod_question != settings::ModQuestion::roll_back)
-        problem("the Roll Back Mod question is not showing");
-    add(pictures, "dialog/mods-rollback", drawn_dialog(rolling, fonts, no_icon, 1));
-
-    Dialog files = engine_dialog(Page::common_tweaks);
-    files.user_folder = "/Users/player/My Games/Total Annihilation";
-    static_cast<void>(settings::set_folder_notice(files, "The folder could not be opened."));
-    add(pictures, "dialog/files-notice", drawn_dialog(files, fonts, no_icon, 1));
-
-    Dialog mod_options;
-    settings::open_mod_options_dialog(mod_options, {}, {}, {}, "v0.7.3", Page::mod_keys);
-    add(pictures, "dialog/mod-options", drawn_dialog(mod_options, fonts, no_icon, 1));
-
-    Dialog language_only;
-    settings::open_language_text_dialog(language_only, {}, {}, {}, "v0.7.3");
-    add(pictures, "dialog/language-only", drawn_dialog(language_only, fonts, no_icon, 1));
-
-    add(pictures,
-        "dialog/controls-scale-2",
-        drawn_dialog(engine_dialog(Page::controls), fonts, no_icon, 2));
-    add(pictures,
-        "dialog/developer-scale-2",
-        drawn_dialog(engine_dialog(Page::developer), fonts, no_icon, 2));
-    add(pictures,
-        "dialog/controls-scale-3",
-        drawn_dialog(engine_dialog(Page::controls), fonts, no_icon, 3));
-    add(pictures,
-        "dialog/controls-icon",
-        drawn_dialog(engine_dialog(Page::controls), fonts, icon.picture(), 1));
-
-    add(pictures, "notice/short", drawn_notice(short_notice(), fonts));
-    const settings::Notice long_one = long_notice();
-    add(pictures, "notice/long", drawn_notice(long_one, fonts));
-    settings::Notice marked = long_one;
-    marked.marked = settings::notice_open_control;
-    marked.hovered = settings::notice_ok_control;
-    add(pictures, "notice/long-marked", drawn_notice(marked, fonts));
-
-    const settings::PromptButton ok_button{"OK", true};
-    const settings::PromptButton cancel_button{"Cancel", false};
-    const settings::PromptButton later_button{"Later", false};
-    add(pictures, "prompt/one", drawn_prompt(prompt_with({ok_button}, -1), fonts));
-    add(pictures, "prompt/two", drawn_prompt(prompt_with({cancel_button, ok_button}, -1), fonts));
-    add(pictures,
-        "prompt/three",
-        drawn_prompt(prompt_with({later_button, cancel_button, ok_button}, -1), fonts));
-    add(pictures, "prompt/progress-0", drawn_prompt(prompt_with({ok_button}, 0), fonts));
-    add(pictures, "prompt/progress-500", drawn_prompt(prompt_with({ok_button}, 500), fonts));
-    add(pictures, "prompt/progress-1000", drawn_prompt(prompt_with({ok_button}, 1000), fonts));
-
-    settings::Prompt cut;
-    cut.title = "A LONG NOTE";
-    const std::string line =
-        "Screenshots, films and mods now go in your own folder, and the game keeps them there.";
-    std::string body;
-    // Enough repeats that the text is cut even in the synthetic font, whose
-    // glyphs are only a few columns wide.
-    for (int repeat = 0; repeat < 200; ++repeat) {
-        if (!body.empty())
-            body += ' ';
-        body += line;
-    }
-    cut.paragraphs.push_back({body, false});
-    cut.buttons.push_back(ok_button);
-    cut.primary_button = 0;
-    if (settings::prompt_fits(cut, &fonts))
-        problem("prompt/cut fits, so its text is not cut");
-    add(pictures, "prompt/cut", drawn_prompt(cut, fonts));
-
-    for (const int32_t side : {settings::menu_button_side, settings::ingame_button_side}) {
-        for (const auto look :
-             {settings::ButtonLook::idle,
-              settings::ButtonLook::hovered,
-              settings::ButtonLook::pressed}) {
-            const char* look_name = "idle";
-            if (look == settings::ButtonLook::hovered)
-                look_name = "hovered";
-            else if (look == settings::ButtonLook::pressed)
-                look_name = "pressed";
-            for (const bool with_icon : {false, true}) {
-                renderer::Surface surface = black(side, side);
-                settings::draw_oa_button(
-                    surface, {0, 0, 1}, side, look, fonts, with_icon ? icon.picture() : no_icon
+        Dialog controls = engine_dialog(Page::controls);
+        const auto cancel = control_rect(controls, fonts, settings::cancel_control);
+        const auto ok = control_rect(controls, fonts, settings::ok_control);
+        if (!cancel || !ok) {
+            problem("controls has no OK or Cancel");
+        } else {
+            static_cast<void>(settings::dialog_pointer_down(
+                controls, cancel->x + cancel->width / 2, cancel->y + cancel->height / 2
+            ));
+            static_cast<void>(settings::dialog_pointer_move(
+                controls, ok->x + ok->width / 2, ok->y + ok->height / 2
+            ));
+            press_keys(controls, {DialogKey::tab, DialogKey::tab});
+            if (controls.focused != settings::first_row_control + 1 ||
+                controls.hovered != settings::ok_control ||
+                controls.pressed != settings::cancel_control) {
+                problem(
+                    "controls focus is " + std::to_string(controls.focused) + " hover " +
+                    std::to_string(controls.hovered) + " press " + std::to_string(controls.pressed)
                 );
-                std::string name = "button/" + std::to_string(side) + "-" + look_name;
-                if (with_icon)
-                    name += "-icon";
-                add(pictures, std::move(name), std::move(surface));
             }
         }
-    }
+        add(pictures, "dialog/controls-focus", drawn_dialog(controls, fonts, no_icon, 1));
 
-    for (const int32_t side : {20, 32}) {
-        renderer::Surface surface = black(side, side);
-        settings::draw_oa_mark(surface, {0, 0, 1}, side, no_icon);
-        add(pictures, "mark/" + std::to_string(side), std::move(surface));
+        add(pictures,
+            "dialog/common-tweaks-locked",
+            drawn_dialog(engine_dialog(Page::common_tweaks, game), fonts, no_icon, 1));
+        add(pictures,
+            "dialog/graphics-locked",
+            drawn_dialog(engine_dialog(Page::graphics, game), fonts, no_icon, 1));
+
+        Dialog developer = engine_dialog(Page::developer);
+        press_keys(
+            developer,
+            {DialogKey::tab, DialogKey::space, DialogKey::tab, DialogKey::tab, DialogKey::space}
+        );
+        const bool area_open = std::any_of(
+            developer.developer.areas_open.begin(),
+            developer.developer.areas_open.end(),
+            [](uint8_t open) { return open != 0; }
+        );
+        if (!developer.chosen.developer_mode || !area_open)
+            problem("developer mode is not on with its first area open");
+        add(pictures, "dialog/developer-open", drawn_dialog(developer, fonts, no_icon, 1));
+
+        Dialog switching = mods_dialog();
+        press_keys(switching, {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space});
+        if (switching.switch_question == settings::no_question ||
+            switching.mod_question != settings::ModQuestion::switch_mod)
+            problem("the Switch Mod question is not showing");
+        add(pictures, "dialog/mods-switch", drawn_dialog(switching, fonts, no_icon, 1));
+
+        Dialog rolling = mods_dialog();
+        press_keys(
+            rolling,
+            {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space}
+        );
+        if (rolling.switch_question == settings::no_question ||
+            rolling.mod_question != settings::ModQuestion::roll_back)
+            problem("the Roll Back Mod question is not showing");
+        add(pictures, "dialog/mods-rollback", drawn_dialog(rolling, fonts, no_icon, 1));
+
+        Dialog files = engine_dialog(Page::common_tweaks);
+        files.user_folder = "/Users/player/My Games/Total Annihilation";
+        static_cast<void>(settings::set_folder_notice(files, "The folder could not be opened."));
+        add(pictures, "dialog/files-notice", drawn_dialog(files, fonts, no_icon, 1));
+
+        Dialog mod_options;
+        settings::open_mod_options_dialog(mod_options, {}, {}, {}, "v0.7.3", Page::mod_keys);
+        add(pictures, "dialog/mod-options", drawn_dialog(mod_options, fonts, no_icon, 1));
+
+        Dialog language_only;
+        settings::open_language_text_dialog(language_only, {}, {}, {}, "v0.7.3");
+        add(pictures, "dialog/language-only", drawn_dialog(language_only, fonts, no_icon, 1));
+
+        add(pictures,
+            "dialog/controls-scale-2",
+            drawn_dialog(engine_dialog(Page::controls), fonts, no_icon, 2));
+        add(pictures,
+            "dialog/developer-scale-2",
+            drawn_dialog(engine_dialog(Page::developer), fonts, no_icon, 2));
+        add(pictures,
+            "dialog/controls-scale-3",
+            drawn_dialog(engine_dialog(Page::controls), fonts, no_icon, 3));
+        add(pictures,
+            "dialog/controls-icon",
+            drawn_dialog(engine_dialog(Page::controls), fonts, icon.picture(), 1));
+
+        add(pictures, "notice/short", drawn_notice(short_notice(), fonts));
+        const settings::Notice long_one = long_notice();
+        add(pictures, "notice/long", drawn_notice(long_one, fonts));
+        settings::Notice marked = long_one;
+        marked.marked = settings::notice_open_control;
+        marked.hovered = settings::notice_ok_control;
+        add(pictures, "notice/long-marked", drawn_notice(marked, fonts));
+
+        const settings::PromptButton ok_button{"OK", true};
+        const settings::PromptButton cancel_button{"Cancel", false};
+        const settings::PromptButton later_button{"Later", false};
+        add(pictures, "prompt/one", drawn_prompt(prompt_with({ok_button}, -1), fonts));
+        add(pictures,
+            "prompt/two",
+            drawn_prompt(prompt_with({cancel_button, ok_button}, -1), fonts));
+        add(pictures,
+            "prompt/three",
+            drawn_prompt(prompt_with({later_button, cancel_button, ok_button}, -1), fonts));
+        add(pictures, "prompt/progress-0", drawn_prompt(prompt_with({ok_button}, 0), fonts));
+        add(pictures, "prompt/progress-500", drawn_prompt(prompt_with({ok_button}, 500), fonts));
+        add(pictures, "prompt/progress-1000", drawn_prompt(prompt_with({ok_button}, 1000), fonts));
+
+        settings::Prompt cut;
+        cut.title = "A LONG NOTE";
+        const std::string line =
+            "Screenshots, films and mods now go in your own folder, and the game keeps them there.";
+        std::string body;
+        // Enough repeats that the text is cut even in the synthetic font, whose
+        // glyphs are only a few columns wide.
+        for (int repeat = 0; repeat < 200; ++repeat) {
+            if (!body.empty())
+                body += ' ';
+            body += line;
+        }
+        cut.paragraphs.push_back({body, false});
+        cut.buttons.push_back(ok_button);
+        cut.primary_button = 0;
+        if (settings::prompt_fits(cut, &fonts))
+            problem("prompt/cut fits, so its text is not cut");
+        add(pictures, "prompt/cut", drawn_prompt(cut, fonts));
+
+        for (const int32_t side : {settings::menu_button_side, settings::ingame_button_side}) {
+            for (const auto look :
+                 {settings::ButtonLook::idle,
+                  settings::ButtonLook::hovered,
+                  settings::ButtonLook::pressed}) {
+                const char* look_name = "idle";
+                if (look == settings::ButtonLook::hovered)
+                    look_name = "hovered";
+                else if (look == settings::ButtonLook::pressed)
+                    look_name = "pressed";
+                for (const bool with_icon : {false, true}) {
+                    renderer::Surface surface = black(side, side);
+                    settings::draw_oa_button(
+                        surface, {0, 0, 1}, side, look, fonts, with_icon ? icon.picture() : no_icon
+                    );
+                    std::string name = "button/" + std::to_string(side) + "-" + look_name;
+                    if (with_icon)
+                        name += "-icon";
+                    add(pictures, std::move(name), std::move(surface));
+                }
+            }
+        }
+
+        for (const int32_t side : {20, 32}) {
+            renderer::Surface surface = black(side, side);
+            settings::draw_oa_mark(surface, {0, 0, 1}, side, no_icon);
+            add(pictures, "mark/" + std::to_string(side), std::move(surface));
+        }
     }
+    // Available packs, with Simplified Chinese not installed, so it is listed
+    // only under the divider. The closed field then shows a download.
+    const auto offer = [](Dialog& dialog) {
+        settings::AvailableLanguage simplified;
+        simplified.tag = "zh-Hans";
+        simplified.endonym = "\347\256\200\344\275\223\344\270\255\346\226\207";
+        simplified.english_name = "Chinese (Simplified)";
+        simplified.aside = "4.0 MB \u21E9";
+        settings::AvailableLanguage portuguese;
+        portuguese.tag = "pt-BR";
+        portuguese.endonym = "Portugu\u00EAs (Brasil)";
+        portuguese.english_name = "Portuguese (Brazil)";
+        portuguese.aside = "community \u00B7 92% \u00B7 1.1 MB";
+        dialog.available_languages = {std::move(simplified), std::move(portuguese)};
+    };
+    Dialog available = engine_dialog(Page::language);
+    offer(available);
+    press_keys(available, {DialogKey::tab, DialogKey::space});
+    if (available.open_list == settings::no_control)
+        problem("language-available drop-down is not open");
+    add(pictures, "language-available", drawn_dialog(available, fonts, no_icon, 1));
+
+    Dialog downloading = engine_dialog(Page::language);
+    offer(downloading);
+    downloading.chosen.language = "zh-Hans";
+    downloading.available_languages[0].state = settings::AvailableLanguage::State::downloading;
+    downloading.available_languages[0].percent = 40;
+    add(pictures, "language-downloading", drawn_dialog(downloading, fonts, no_icon, 1));
     return pictures;
 }
 

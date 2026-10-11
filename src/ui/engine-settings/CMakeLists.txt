@@ -9,8 +9,8 @@
 # their own in the same look (engine_settings/prompt.hpp), and the download
 # check (engine_settings/challenge.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/downloads_page.cpp src/mods.cpp src/notice.cpp src/prompt.cpp
-  src/challenge.cpp
+  src/developer.cpp src/downloads_page.cpp src/language_page.cpp src/mods.cpp
+  src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
   src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)

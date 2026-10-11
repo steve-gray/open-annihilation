@@ -7,10 +7,12 @@
 // that wait for it to be free; maps the input to each by its placement,
 // tells a finger from a mouse, maps the keys to the kit's, latches the key
 // that closed a screen, lets the top modal screen take every input, darkens
-// what lies under each modal screen, and draws the screens in the window's
-// own pixels before the software cursor. On the front end it draws them at a
-// whole scale (kit::layer_viewport: the Interface size setting, or the Auto
-// scale) and lays them out at the size class of the points left over. oa_layer.cpp holds it, the settings' screen
+// what lies under each opaque modal screen, and draws the screens in the
+// window's own pixels before the software cursor, each opaque or laid over
+// what lies under it by its pixels' opacity. On the front end it draws them
+// at a whole scale (kit::layer_viewport: the Interface size setting, or the
+// Auto scale) and lays them out at the size class of the points left over.
+// oa_layer.cpp holds it, the settings' screen
 // (Runtime::SettingsScreen) and the screens of a notice (NoticeScreen) and a
 // question (QuestionScreen).
 #pragma once
@@ -24,6 +26,7 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/screen_registry.hpp"
+#include "oa/ui/screen_registry/kit.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -32,6 +35,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -88,6 +92,23 @@ struct LayerPlacement {
     int32_t points_height{}; ///< the screen's height in its own points
 };
 
+/// A screen of the OA layer as drawn, before it is laid over what lies under
+/// it (OaLayer::draw_screen).
+///
+/// Its colours are straight: not multiplied by their opacity. A pixel is
+/// laid over what lies under it as (colour × opacity + under × (255 −
+/// opacity)) / 255, src over; an opaque pixel replaces what lies under it,
+/// and a clear one leaves it as it is.
+struct LayerDrawing {
+    /// The colours, row by row: points_width × points_height points times
+    /// the scale.
+    renderer::Surface picture{};
+    /// Each pixel's opacity, one byte a pixel of picture, row by row: 0
+    /// clear, 255 opaque. Empty for an opaque screen, every pixel of which
+    /// is opaque.
+    std::vector<uint8_t> opacity{};
+};
+
 /// What a screen of the OA layer did with an input, or with its frame's tick.
 enum class LayerAnswer : uint8_t {
     /// The screen does not take it. Under a modal screen it counts as none;
@@ -130,13 +151,28 @@ class LayerScreen {
     /// @return true for a modal screen
     [[nodiscard]] virtual bool modal() const = 0;
 
-    /// Tells whether what lies under the screen darkens while it shows.
+    /// Tells whether what lies under the screen darkens while it shows. A
+    /// screen that is not opaque never darkens what lies under it, whatever
+    /// it answers here.
     ///
     /// @return true for a backdrop
     [[nodiscard]] virtual bool backdrop() const = 0;
 
+    /// Tells whether the screen covers every pixel of its place. One that
+    /// does not, such as a card beside a badge with its arrow outside the
+    /// card, is drawn on a clear surface each time, and what it draws is laid
+    /// over what lies under it, the picture or the screens below, by each
+    /// pixel's opacity (OaLayer::draw_screen); what it leaves clear shows
+    /// what lies under it unchanged.
+    ///
+    /// @return true for a screen that covers its place, the default
+    [[nodiscard]] virtual bool opaque() const { return true; }
+
     /// Draws the screen from its own top left corner at the canvas's whole
-    /// scale, every pixel of its points_width × points_height points opaque.
+    /// scale: an opaque screen every pixel of its points_width ×
+    /// points_height points, over black; one that is not opaque only what it
+    /// shows, leaving the rest as it finds it. The layer may draw a screen
+    /// that is not opaque more than once for one picture.
     ///
     /// @param canvas where it draws: a picture of the screen's size times
     ///     the scale, the scale, the dialog's fonts and the Open Annihilation
@@ -260,13 +296,16 @@ struct WindowPosition {
 
 /// Returns the key a press means to a screen of the OA layer: Enter, Escape,
 /// the arrows, Space, Tab and Shift+Tab, Page Up and Page Down, Home and End,
-/// Y and N, Backspace and Delete.
+/// Y and N, Backspace and Delete, and, outside a match, F1 as the
+/// information key. In a match F1 is the game's own (unit information), so
+/// it goes on to the game.
 ///
 /// @param sdl_key the SDL keycode
 /// @param modifiers SDL_Keymod bits
+/// @param in_match the press comes in a match
 /// @return the kit's key; nothing for a key no screen answers to
 [[nodiscard]] std::optional<oa::ui::kit::Key>
-layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept;
+layer_key(uint32_t sdl_key, uint16_t modifiers, bool in_match = false) noexcept;
 
 /// Returns the kind the automation endpoint lists a control or a part of a
 /// screen of the OA layer as: a button, a link and a row of buttons' button
@@ -294,19 +333,25 @@ automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 ///
 /// A screen somebody asked for joins at once (push); one nobody asked for
 /// at that moment, such as a notice or an install's question, waits in a
-/// queue, first in, first out, until no modal screen shows
-/// (show_when_free), so that two never show at once.
+/// queue, first in, first out (show_when_free), so that two never show at
+/// once. The first waiting screen is pushed while the layer has no modal
+/// screen up, no frontend message box is up, and no match is being played.
+/// A registered request joins that same queue and is never held back because
+/// nobody is watching. A question a screen asks about its own content is
+/// pushed over that screen and is not queued.
 ///
 /// On the front end the screens are laid out at the size class of the
 /// window's canvas and drawn at its whole scale (view), centred in the
-/// window; each modal screen with a backdrop darkens the frame itself, the
-/// window round it and every screen under it (darken_front_end, present),
-/// and the screens are copied into the window in its own pixels (present),
-/// before the software cursor; without a renderer, and for
+/// window; each opaque modal screen with a backdrop darkens the frame
+/// itself, the window round it and every screen under it (darken_front_end,
+/// present), and the screens are copied into the window in its own pixels
+/// (present), before the software cursor; without a renderer, and for
 /// frame_without_cursor, they are composed into the frame instead
-/// (compose_front_end). In a match the layer is one picture of the window's
-/// size: the in-game OA button, the backdrop and the screens, drawn again
-/// when what it shows changes (refresh_match).
+/// (compose_front_end). A screen that is not opaque (LayerScreen::opaque) is
+/// laid over what lies under it by its pixels' opacity wherever it goes. In
+/// a match the layer is one picture of the window's size: the in-game OA
+/// button, the backdrop and the screens, drawn again when what it shows
+/// changes (refresh_match).
 class OaLayer {
   public:
 
@@ -321,8 +366,9 @@ class OaLayer {
     /// @param runtime the runtime it hosts screens for
     explicit OaLayer(Runtime& runtime) noexcept;
 
-    /// Lets the screens, and those waiting, go without closing them, and
-    /// destroys the textures.
+    /// Answers each registered prompt still queued or shown with −1, lets the
+    /// screens and those waiting go without closing the others, and destroys
+    /// the textures. Calling drop_pending_prompts first, and again here, is safe.
     ~OaLayer();
 
     OaLayer(const OaLayer&) = delete;
@@ -337,9 +383,10 @@ class OaLayer {
 
     /// Shows a screen nobody asked for at this moment, such as a notice or an
     /// install's question, once the layer is free: the screens wait first in,
-    /// first out, and the first is pushed while no modal screen shows, at
-    /// once, after an input or a tick, or when a screen is closed
-    /// (close); one at a time while each shows.
+    /// first out, and the first is pushed while no modal screen shows, no
+    /// frontend message box is up and no match is being played, at once,
+    /// after an input or a tick, or when a screen is closed (close); one at
+    /// a time while each shows.
     ///
     /// @param screen the screen; null is ignored
     void show_when_free(std::unique_ptr<LayerScreen> screen);
@@ -644,22 +691,79 @@ class OaLayer {
         const oa::ui::display_layout::MatchLayout& match_layout, bool fit = false
     ) noexcept;
 
-    /// Copies a surface into a rectangle of an opaque-or-clear layer, each
-    /// layer pixel taking the surface pixel it lands on (nearest), fully
-    /// opaque.
+    /// Returns the settings pages registered for this runtime.
     ///
-    /// @param[in,out] rgba the layer, 4 bytes a pixel
+    /// @return the registry; the caller keeps each page's rows alive
+    [[nodiscard]] SettingsRegistry& registered_settings() noexcept { return settings_pages_; }
+
+    /// Returns the kit screens registered for this runtime.
+    ///
+    /// @return the registry
+    [[nodiscard]] KitScreenRegistry& registered_screens() noexcept { return kit_screens_; }
+
+    /// Opens a registered kit screen by name on this layer: modal, over a
+    /// backdrop, filling the front end's room, laid out from its descriptor
+    /// and drawn with the kit. An unknown name opens nothing.
+    ///
+    /// @param name the screen's name
+    /// @return true when the screen was opened
+    bool open_registered_screen(std::string_view name);
+
+    /// Queues a registered notice on this layer's one queue. Its word is
+    /// "registered", so it does not take the engine notice's name.
+    ///
+    /// @param request the notice; its strings are copied
+    /// @return an id that is never 0; 0 when the request is malformed
+    uint32_t queue_notice(const NoticeRequest& request);
+
+    /// Queues a registered prompt on this layer's one queue. Its word is
+    /// "prompt". answered is called once, with the button pressed, or with
+    /// −1 from drop_pending_prompts when the prompt is still queued or shown.
+    ///
+    /// @param request the prompt; its strings are copied
+    /// @return an id that is never 0; 0 when the request is malformed
+    uint32_t queue_prompt(const PromptRequest& request);
+
+    /// Answers every registered prompt still queued or shown with −1, once,
+    /// and takes it off. The runtime's end calls this. Calling it twice is safe.
+    void drop_pending_prompts();
+
+    /// Copies a surface into a rectangle of a layer of straight colours and
+    /// opacity, each layer pixel taking the surface pixel it lands on
+    /// (nearest): fully opaque, or, with the surface's opacity, laid over
+    /// the layer's pixel (src over, LayerDrawing).
+    ///
+    /// @param[in,out] rgba the layer, 4 bytes a pixel: red, green, blue and opacity
     /// @param width the layer's width
     /// @param height the layer's height
     /// @param source the surface
     /// @param rect where the surface lands, in layer pixels; clipped to the layer
+    /// @param opacity each surface pixel's opacity (LayerDrawing::opacity);
+    ///     empty for an opaque surface
     static void stamp(
         std::vector<uint8_t>& rgba,
         int32_t width,
         int32_t height,
         const renderer::Surface& source,
-        const oa::ui::display_layout::Rect& rect
+        const oa::ui::display_layout::Rect& rect,
+        std::span<const uint8_t> opacity = {}
     );
+
+    /// Checks, for --check-engine-settings, screens that are not opaque and
+    /// the information key (oa_layer_check.cpp). On the main menu in a 640
+    /// by 480 and a 1920 by 1080 window, such a screen changes no pixel of
+    /// the window, nor of the frame without the cursor, but those it draws,
+    /// alone, over an opaque screen and under one, and darkens nothing; the
+    /// cursor shows above it; opaque screens draw as before; automation
+    /// lists its controls; F1
+    /// reaches a screen that takes the information key, goes on past one
+    /// that does not, and changes nothing in Settings. In a match F1 goes on
+    /// to the game, and such a screen changes no pixel of the match's
+    /// picture but those it draws. The match's layer lays a pixel over its
+    /// own by its opacity, its colours straight.
+    ///
+    /// Throws std::runtime_error naming the first thing that failed.
+    void check_clear_screens();
 
   private:
 
@@ -685,10 +789,11 @@ class OaLayer {
 
     /// One screen of the front end as the window shows it.
     struct FrontPiece {
-        oa::ui::display_layout::Rect
-            window{};                         ///< the part of it the window shows, in window pixels
+        /// The part of it the window shows, in window pixels: for a screen
+        /// that is not opaque, only the part that holds what it drew.
+        oa::ui::display_layout::Rect window{};
         oa::ui::display_layout::Rect shown{}; ///< where it shows, in window pixels
-        renderer::Surface drawn{};            ///< its drawing at the view's scale
+        LayerDrawing drawn{};                 ///< its drawing at the view's scale
     };
 
     /// What the front end's part of the layer shows in the window.
@@ -748,8 +853,13 @@ class OaLayer {
     void drop_waiting(const LayerScreen* screen);
 
     /// Pushes the waiting screens, first in first, while no modal screen
-    /// shows.
+    /// shows, no frontend message box is open and no match is being played.
     void show_waiting();
+
+    /// Returns the next id for a registered notice or prompt. Never 0.
+    ///
+    /// @return the id
+    uint32_t take_request_id() noexcept;
 
     /// Takes the input the in-game OA button answers to: the shortcut,
     /// Ctrl+F2 while the profile offers the mod options, and the pointer
@@ -768,13 +878,21 @@ class OaLayer {
     /// (LayerScreen::lay_out).
     void lay_out_screens();
 
-    /// Draws a screen from its own top left corner at a whole scale.
+    /// Draws a screen from its own top left corner at a whole scale: an
+    /// opaque screen on a picture cleared to black. One that is not opaque
+    /// draws on a surface cleared to clear: it is drawn twice, over black
+    /// and over white, and each pixel's opacity is what it leaves of the
+    /// white, 255 less the most any colour channel differs between the two;
+    /// its colour is the one over black divided by that opacity, so that the
+    /// colours stay straight. What the screen fills is opaque and keeps its
+    /// colour exactly, what it leaves alone is clear, and what it blends
+    /// over takes the blend's opacity.
     ///
     /// @param screen the screen
     /// @param placed where it shows
     /// @param scale window pixels a point
-    /// @return its picture, points_width × points_height times the scale
-    [[nodiscard]] renderer::Surface
+    /// @return its drawing, points_width × points_height times the scale
+    [[nodiscard]] LayerDrawing
     draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const;
 
     /// Draws the front end's screens into the window.
@@ -824,6 +942,16 @@ class OaLayer {
     /// The layer's texture, in tiles beyond the renderer's limit; none
     /// before the first present.
     TiledTexture texture_;
+    /// Settings pages registered for this runtime.
+    SettingsRegistry settings_pages_{};
+    /// Kit screens registered for this runtime.
+    KitScreenRegistry kit_screens_{};
+    /// The next id queue_notice and queue_prompt hand out. Never 0.
+    uint32_t next_request_{1};
+    /// One registered prompt still to answer.
+    struct RegisteredPrompt;
+    /// Registered prompts still queued or shown. drop_pending_prompts answers each.
+    std::vector<std::shared_ptr<RegisteredPrompt>> prompts_{};
 };
 
 /// A notice of Open Annihilation's own (kit::Notice) as a screen of the OA
@@ -870,6 +998,9 @@ class NoticeScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
+    /// Shows the notice on any menu screen. It still shows in no match.
+    void show_on_any_menu() noexcept { any_menu_ = true; }
+
     /// Returns the notice's word (kit::notice_word_of): "notice" unless it
     /// gives its own.
     ///
@@ -883,7 +1014,8 @@ class NoticeScreen final : public LayerScreen {
     /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
-    /// @return its place; empty in a match, over another screen, or without fonts
+    /// @return its place; empty in a match, over another screen unless it shows
+    ///     on any menu, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
 
     /// Lays the notice out at the view's size class (kit::Notice::size_class).
@@ -976,6 +1108,7 @@ class NoticeScreen final : public LayerScreen {
     oa::ui::kit::Notice notice_; ///< the notice
     Host host_;                  ///< what its host does
     uint64_t revision_{};        ///< counts the changes to its look
+    bool any_menu_{};            ///< shows on any menu, never in a match
 };
 
 /// A question of Open Annihilation's own (kit::Question) as a screen of the
@@ -1041,6 +1174,9 @@ class QuestionScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
+    /// Shows the question on any menu screen. It still shows in no match.
+    void show_on_any_menu() noexcept { any_menu_ = true; }
+
     /// Returns the question's word (kit::question_word_of): "prompt" unless
     /// it gives its own.
     ///
@@ -1054,7 +1190,8 @@ class QuestionScreen final : public LayerScreen {
     /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
-    /// @return its place; empty in a match, over another screen, or without fonts
+    /// @return its place; empty in a match, over another screen unless it shows
+    ///     on any menu, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
 
     /// Lays the question out at the view's size class
@@ -1153,6 +1290,7 @@ class QuestionScreen final : public LayerScreen {
     uint64_t revision_{};            ///< counts the changes to its look
     /// The size class the layer lays the question out at (lay_out).
     oa::ui::kit::SizeClass size_class_{oa::ui::kit::SizeClass::compact};
+    bool any_menu_{}; ///< shows on any menu, never in a match
 };
 
 } // namespace oa::app

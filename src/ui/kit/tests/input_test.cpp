@@ -591,6 +591,8 @@ void keys_with_no_focus_show_an_end_of_the_order() {
     OA_CHECK(kit::key(interaction, list, kit::Key::end).result == kit::KeyResult::scroll);
     OA_CHECK(kit::key(interaction, list, kit::Key::yes).result == kit::KeyResult::none);
     OA_CHECK(kit::key(interaction, list, kit::Key::no).result == kit::KeyResult::none);
+    OA_CHECK(kit::key(interaction, list, kit::Key::info).result == kit::KeyResult::none);
+    OA_CHECK(!interaction.focus_shown);
 
     // The first control steps, and Left still only shows it.
     list.tab_order = {2, 1, 3, 4, 5};
@@ -672,6 +674,7 @@ void keys_on_a_stepping_control_stay_with_it() {
     OA_CHECK(kit::key(interaction, list, kit::Key::page_down).result == kit::KeyResult::scroll);
     OA_CHECK(kit::key(interaction, list, kit::Key::yes).result == kit::KeyResult::none);
     OA_CHECK(kit::key(interaction, list, kit::Key::no).result == kit::KeyResult::none);
+    OA_CHECK(kit::key(interaction, list, kit::Key::info).result == kit::KeyResult::none);
     OA_CHECK(interaction.focused == 2);
 }
 
@@ -1052,6 +1055,49 @@ void an_open_drop_down_lists_its_items_at_choice_item() {
     OA_CHECK(kit::automation_parts(closed, {}).size() == 1u);
 }
 
+/// A menu with a divider names the items it shows by their ids, at the
+/// rectangles it draws them in, and names the divider not at all.
+void a_menu_with_a_divider_lists_the_other_items() {
+    kit::DisplayList list;
+    const kit::Rect field{60, 40, 160, 16};
+    kit::add_choice(list, field, {"English", false, true}, 2, "settings.language");
+    list.controls.back().parts = {"system", "en", "7", "zh-hans"};
+    const kit::Rect menu = kit::choice_menu(field, 4);
+    kit::Item drawn;
+    drawn.role = kit::Role::choice_menu;
+    drawn.rect = menu;
+    kit::ChoiceMenuLook shown;
+    shown.shown = {"English", "AVAILABLE", "Simplified"};
+    shown.first = 1;
+    shown.total = 4;
+    shown.items = {
+        {.id = "system"},
+        {.id = "en"},
+        {.divider = true},
+        {.aside = "4.0 MB", .id = "zh-hans", .choosable = false},
+    };
+    drawn.look = shown;
+    list.items.push_back(std::move(drawn));
+
+    const auto entries = kit::automation_parts(list, {});
+    OA_CHECK(entries.size() == 3u);
+    if (entries.size() != 3u)
+        return;
+    OA_CHECK(entries[0].name == "settings.language" && !entries[0].part);
+    OA_CHECK(entries[1].name == "settings.language.en");
+    OA_CHECK(entries[2].name == "settings.language.zh-hans");
+    const kit::Rect english = kit::choice_item(menu, 0);
+    const kit::Rect simplified = kit::choice_item(menu, 2);
+    OA_CHECK(rect_is(entries[1].rect, english.x, english.y, english.width, english.height));
+    OA_CHECK(
+        rect_is(entries[2].rect, simplified.x, simplified.y, simplified.width, simplified.height)
+    );
+    OA_CHECK(entries[1].enabled && entries[1].text == "English");
+    OA_CHECK(!entries[2].enabled && entries[2].text == "Simplified");
+    for (const kit::AutomationEntry& entry : entries)
+        OA_CHECK(entry.text != "AVAILABLE" && entry.name != "settings.language.7");
+}
+
 /// A row of buttons lists each button it draws; a control's rectangle is
 /// the part of it a press reaches.
 void buttons_list_each_button_and_a_clip_narrows_a_control() {
@@ -1098,7 +1144,7 @@ void buttons_list_each_button_and_a_clip_narrows_a_control() {
 }
 
 /// The keys keep the settings dialog's values up to No, and the editing
-/// keys follow it.
+/// keys and the information key follow it.
 void the_keys_keep_their_values() {
     OA_CHECK(static_cast<int>(kit::Key::enter) == 0);
     OA_CHECK(static_cast<int>(kit::Key::escape) == 1);
@@ -1117,6 +1163,7 @@ void the_keys_keep_their_values() {
     OA_CHECK(static_cast<int>(kit::Key::no) == 14);
     OA_CHECK(static_cast<int>(kit::Key::backspace) == 15);
     OA_CHECK(static_cast<int>(kit::Key::delete_forward) == 16);
+    OA_CHECK(static_cast<int>(kit::Key::info) == 17);
 }
 
 /// Tells whether a field holds a text with its caret at a byte.
@@ -1258,7 +1305,8 @@ void editing_takes_whole_characters() {
           kit::Key::tab,
           kit::Key::page_up,
           kit::Key::yes,
-          kit::Key::no}) {
+          kit::Key::no,
+          kit::Key::info}) {
         OA_CHECK(!kit::edit_text(other, pressed));
         OA_CHECK(holds(other, "ab", 1));
     }
@@ -1356,6 +1404,7 @@ int main() {
     a_switch_lists_its_two_halves();
     a_strip_lists_its_levels_where_level_at_finds_them();
     an_open_drop_down_lists_its_items_at_choice_item();
+    a_menu_with_a_divider_lists_the_other_items();
     buttons_list_each_button_and_a_clip_narrows_a_control();
     the_keys_keep_their_values();
     typing_inserts_at_the_caret();

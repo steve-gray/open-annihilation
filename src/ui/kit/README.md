@@ -116,6 +116,18 @@ until then.
   };
   ```
 
+  A row bound to a preference is a `PreferenceRow` (`RowSpec<PreferenceModel>`).
+  `preference_toggle`, `preference_choice`, `preference_slider` and
+  `preference_text_field` take the row's id, its label, its key, its default
+  text and its hint; a choice also takes its choices' ids and captions, a
+  slider its range and step. The model holds an
+  `oa::platform::preferences::Values`. A missing or malformed stored value
+  reads as the default. A toggle stores `1` or `0`, a choice one of its
+  choices' ids, a slider a decimal on its step, and a text field the player's
+  text up to 256 bytes. A key is dotted words of a to z, 0 to 9 and hyphens,
+  at least two words, at most 64 bytes, and it does not start with
+  `open-annihilation.`. `preference_key_problem` names a key that is refused.
+
   `view_of` reads a row's `RowView` from its spec and the model through the
   caller's text function; `place_rows` places a column of views,
   `rows_scroll` and `scroll` scroll it, and `add_rows` lists what the rows
@@ -193,7 +205,10 @@ its hover card's timer in its own state.
   its caret stands on a character boundary: `insert_text` refuses anything
   else whole, and `edit_text` deletes and steps over whole characters.
 - `kit::Key` keeps the settings dialog's keys' values up to No; the editing
-  keys, Backspace and Delete, follow it.
+  keys, Backspace and Delete, follow it, and then the information key,
+  Info, which the OA layer gives F1 outside a match. `key` does nothing
+  with Info, as with Yes and No: a screen that has more to tell about what
+  the pointer or the focus is on answers it before it calls `key`.
 - A hover card is due only once the pointer has rested on one control for
   `hover_card_delay_ms`. The timer is the screen's: the kit keeps none.
 - A notice and a question place their parts from the Compact metrics, but
@@ -263,10 +278,13 @@ above a backdrop.
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item
-control listed once, a row of buttons' buttons and a clipped control's
-press area), and a text field's typing and editing over characters of one
-to four bytes. `ui-kit-components` checks each control's
-pixels, that `paint` matches a direct draw, and the controls' geometry.
+control listed once, a menu with a divider naming the other items by their
+ids and naming the divider not at all, a row of buttons' buttons and a
+clipped control's press area), and a text field's typing and editing over
+characters of one to four bytes. `ui-kit-components` checks each control's
+pixels, that `paint` matches a direct draw, and the controls' geometry,
+including a menu row that is a divider, one with a right-aligned aside and
+one that cannot be chosen.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
 `ui-kit-controls` checks each new control's pixels in the tokens above with
@@ -281,7 +299,7 @@ parts against the settings dialog's own placement, their display lists'
 names, kinds and Tab order, a word of their own (`language-notice`) and
 their text's control, which changes what no press or finger finds at any
 point of the box, where a finger lands, every key (the editing
-keys, which do nothing, among them), that `paint` matches `draw_notice` and
+keys and Info, which do nothing, among them), that `paint` matches `draw_notice` and
 `draw_question`, and the progress bar's fill.
 `ui-kit-rows` lays out, draws, focuses and changes a page of every row
 kind from a table: the placement of rows shaped as the settings dialog's
@@ -298,7 +316,11 @@ The metrics hold the settings dialog's, its notices' and its prompts' sizes
 for each class (`regular_metrics`, `large_metrics`, `metrics_of`); the
 Library's and the map browser's are theirs to add. A drop-down's open menu
 keeps above the footer line it is given (`choice_menu`), the Compact
-settings dialog's unless a larger dialog gives its own. The canvas draws at
+settings dialog's unless a larger dialog gives its own. A menu item may be
+a divider, drawn as a section heading and skipped by the focus, with no
+automation name; an item may carry a right-aligned aside, clipped before it
+meets the label; and an item may be greyed so a press does not choose it
+(`ChoiceMenuRow`). The canvas draws at
 whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
 tuned after controller playtests (D30). The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's

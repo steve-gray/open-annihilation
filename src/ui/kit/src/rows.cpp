@@ -8,9 +8,12 @@
 #include "oa/ui/kit/rows.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ostream>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -437,6 +440,356 @@ std::string shown_copy(const ShownText& shown, std::string_view english) {
 }
 
 void row_id_is_not_one_word() noexcept {
+}
+
+namespace {
+
+/// The most bytes a preference key may hold.
+constexpr std::size_t kPreferenceKeyMost = 64;
+
+/// Tells whether a key's word is a to z, 0 to 9 and hyphens.
+///
+/// @param word the word
+/// @return true when it is one such word
+[[nodiscard]] bool key_word(std::string_view word) noexcept {
+    return row_word(word);
+}
+
+/// Returns the text stored for a key, or null when the key is absent.
+///
+/// @param model the values
+/// @param key the key
+/// @return the stored text; null when none is stored
+[[nodiscard]] const std::string* stored_text(const PreferenceModel& model, std::string_view key) {
+    const auto found = model.values.find(std::string(key));
+    if (found == model.values.end())
+        return nullptr;
+    return &found->second;
+}
+
+/// Writes a key's text.
+///
+/// @param[in,out] model the values
+/// @param key the key
+/// @param text the text
+void store_text(PreferenceModel& model, std::string_view key, std::string text) {
+    model.values[std::string(key)] = std::move(text);
+}
+
+/// Tells whether a text is the toggle's On.
+///
+/// @param text the stored text
+/// @return true for 1
+[[nodiscard]] bool toggle_on(std::string_view text) noexcept {
+    return text == "1";
+}
+
+/// Returns how many stops a preference slider has.
+///
+/// @param spec the row
+/// @return the stops; 1 when the step is not a step
+[[nodiscard]] int32_t slider_stops(const PreferenceRow& spec) noexcept {
+    if (!(spec.slider_step > 0.0) || spec.slider_most < spec.slider_least)
+        return 1;
+    const double span = (spec.slider_most - spec.slider_least) / spec.slider_step;
+    const auto count = static_cast<int32_t>(std::llround(span)) + 1;
+    return count < 1 ? 1 : count;
+}
+
+/// Returns a slider stop's value.
+///
+/// @param spec the row
+/// @param index the stop, from 0
+/// @return the value
+[[nodiscard]] double slider_value(const PreferenceRow& spec, int32_t index) noexcept {
+    return spec.slider_least + static_cast<double>(index) * spec.slider_step;
+}
+
+/// Writes a decimal with no trailing zeros.
+///
+/// @param value the value
+/// @return its text
+[[nodiscard]] std::string format_decimal(double value) {
+    std::ostringstream stream;
+    stream.setf(std::ios::fixed);
+    stream.precision(6);
+    stream << value;
+    std::string text = stream.str();
+    const std::size_t dot = text.find('.');
+    if (dot == std::string::npos)
+        return text;
+    while (!text.empty() && text.back() == '0')
+        text.pop_back();
+    if (!text.empty() && text.back() == '.')
+        text.pop_back();
+    if (text.empty() || text == "-")
+        return "0";
+    return text;
+}
+
+/// Reads a decimal with no other characters.
+///
+/// @param text the text
+/// @param[out] value the value
+/// @return true when the whole text is a decimal
+[[nodiscard]] bool parse_decimal(std::string_view text, double& value) noexcept {
+    if (text.empty())
+        return false;
+    std::size_t index = 0;
+    double sign = 1.0;
+    if (text[index] == '+' || text[index] == '-') {
+        if (text[index] == '-')
+            sign = -1.0;
+        ++index;
+    }
+    if (index >= text.size() || text[index] < '0' || text[index] > '9')
+        return false;
+    double whole = 0.0;
+    while (index < text.size() && text[index] >= '0' && text[index] <= '9') {
+        whole = whole * 10.0 + static_cast<double>(text[index] - '0');
+        ++index;
+    }
+    double fraction = 0.0;
+    if (index < text.size() && text[index] == '.') {
+        ++index;
+        if (index >= text.size())
+            return false;
+        double place = 0.1;
+        while (index < text.size() && text[index] >= '0' && text[index] <= '9') {
+            fraction += static_cast<double>(text[index] - '0') * place;
+            place *= 0.1;
+            ++index;
+        }
+    }
+    if (index != text.size())
+        return false;
+    value = sign * (whole + fraction);
+    return true;
+}
+
+/// Returns the stop a stored decimal names, or -1 when it is not on the step.
+///
+/// @param spec the row
+/// @param text the stored text
+/// @return the stop, from 0; -1 when the text is not a stop
+[[nodiscard]] int32_t slider_stop_of(const PreferenceRow& spec, std::string_view text) noexcept {
+    double value = 0.0;
+    if (!parse_decimal(text, value) || !(spec.slider_step > 0.0))
+        return -1;
+    const double steps = (value - spec.slider_least) / spec.slider_step;
+    const double nearest = std::round(steps);
+    if (std::abs(steps - nearest) > 1e-4)
+        return -1;
+    const auto index = static_cast<int32_t>(nearest);
+    if (index < 0 || index >= slider_stops(spec))
+        return -1;
+    return index;
+}
+
+/// Returns a choice's index for an id, or -1 when the id is not one of them.
+///
+/// @param spec the row
+/// @param id the choice's id
+/// @return the index, from 0; -1 when it is not a choice
+[[nodiscard]] int32_t choice_index_of(const PreferenceRow& spec, std::string_view id) noexcept {
+    for (std::size_t index = 0; index < spec.choice_ids.size(); ++index)
+        if (spec.choice_ids[index] == id)
+            return static_cast<int32_t>(index);
+    return -1;
+}
+
+/// Returns a text cut to the bytes a preference field keeps.
+///
+/// @param text the text
+/// @return the text, at most preference_text_most bytes, on a byte boundary
+[[nodiscard]] std::string capped_text(std::string_view text) {
+    if (text.size() <= preference_text_most)
+        return std::string(text);
+    return std::string(text.substr(0, preference_text_most));
+}
+
+} // namespace
+
+const char* preference_key_problem(std::string_view key) noexcept {
+    if (key.size() > kPreferenceKeyMost)
+        return "a preference key is longer than 64 bytes";
+    if (key.starts_with("open-annihilation."))
+        return "a preference key uses the engine's own prefix";
+    if (key.empty() || key.front() == '.' || key.back() == '.')
+        return "a preference key is not dotted words";
+    std::size_t words = 0;
+    std::size_t start = 0;
+    for (std::size_t index = 0; index <= key.size(); ++index) {
+        if (index != key.size() && key[index] != '.')
+            continue;
+        if (index == start || !key_word(key.substr(start, index - start)))
+            return "a preference key is not dotted words";
+        ++words;
+        start = index + 1;
+    }
+    if (words < 2)
+        return "a preference key is not dotted words";
+    return nullptr;
+}
+
+PreferenceRow preference_toggle(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::array<std::string_view, 2> hint
+) {
+    PreferenceRow spec(RowKind::toggle, id);
+    spec.label = label;
+    spec.key = key;
+    spec.default_text = default_text;
+    spec.hint = hint;
+    return spec;
+}
+
+PreferenceRow preference_choice(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::span<const std::string_view> choice_ids,
+    std::span<const std::string_view> captions,
+    std::array<std::string_view, 2> hint
+) {
+    PreferenceRow spec(RowKind::choice, id);
+    spec.label = label;
+    spec.key = key;
+    spec.default_text = default_text;
+    spec.choice_ids = choice_ids;
+    spec.captions = captions;
+    spec.hint = hint;
+    return spec;
+}
+
+PreferenceRow preference_slider(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    double least,
+    double most,
+    double step,
+    std::array<std::string_view, 2> hint
+) {
+    PreferenceRow spec(RowKind::slider, id);
+    spec.label = label;
+    spec.key = key;
+    spec.default_text = default_text;
+    spec.slider_least = least;
+    spec.slider_most = most;
+    spec.slider_step = step;
+    spec.hint = hint;
+    return spec;
+}
+
+PreferenceRow preference_text_field(
+    std::string_view id,
+    std::string_view label,
+    std::string_view key,
+    std::string_view default_text,
+    std::array<std::string_view, 2> hint
+) {
+    PreferenceRow spec(RowKind::text_field, id);
+    spec.label = label;
+    spec.key = key;
+    spec.default_text = default_text;
+    spec.hint = hint;
+    return spec;
+}
+
+bool preference_stored_on(const PreferenceModel& model, const PreferenceRow& spec) {
+    const std::string* stored = stored_text(model, spec.key);
+    if (stored == nullptr || (*stored != "0" && *stored != "1"))
+        return toggle_on(spec.default_text);
+    return toggle_on(*stored);
+}
+
+void preference_store_on(PreferenceModel& model, const PreferenceRow& spec, bool on) {
+    store_text(model, spec.key, on ? "1" : "0");
+}
+
+int32_t preference_stored_count(const PreferenceRow& spec) {
+    if (spec.kind == RowKind::choice)
+        return static_cast<int32_t>(spec.captions.size());
+    if (spec.kind == RowKind::slider)
+        return slider_stops(spec);
+    return 0;
+}
+
+int32_t preference_stored_index(const PreferenceModel& model, const PreferenceRow& spec) {
+    const std::string* stored = stored_text(model, spec.key);
+    if (spec.kind == RowKind::choice) {
+        const int32_t found = stored != nullptr ? choice_index_of(spec, *stored) : -1;
+        if (found >= 0)
+            return found;
+        const int32_t fallback = choice_index_of(spec, spec.default_text);
+        return fallback >= 0 ? fallback : 0;
+    }
+    if (spec.kind == RowKind::slider) {
+        const int32_t found = stored != nullptr ? slider_stop_of(spec, *stored) : -1;
+        if (found >= 0)
+            return found;
+        const int32_t fallback = slider_stop_of(spec, spec.default_text);
+        return fallback >= 0 ? fallback : 0;
+    }
+    return 0;
+}
+
+void preference_store_index(PreferenceModel& model, const PreferenceRow& spec, int32_t chosen) {
+    if (chosen < 0)
+        return;
+    if (spec.kind == RowKind::choice) {
+        if (static_cast<std::size_t>(chosen) >= spec.choice_ids.size())
+            return;
+        store_text(model, spec.key, std::string(spec.choice_ids[static_cast<std::size_t>(chosen)]));
+        return;
+    }
+    if (spec.kind == RowKind::slider) {
+        if (chosen >= slider_stops(spec))
+            return;
+        store_text(model, spec.key, format_decimal(slider_value(spec, chosen)));
+    }
+}
+
+std::string preference_stored_caption(const PreferenceRow& spec, int32_t at) {
+    if (at < 0)
+        return {};
+    if (spec.kind == RowKind::choice) {
+        if (static_cast<std::size_t>(at) >= spec.captions.size())
+            return {};
+        return std::string(spec.captions[static_cast<std::size_t>(at)]);
+    }
+    if (spec.kind == RowKind::slider) {
+        if (at >= slider_stops(spec))
+            return {};
+        return format_decimal(slider_value(spec, at));
+    }
+    return {};
+}
+
+std::string preference_stored_choice_id(const PreferenceRow& spec, int32_t at) {
+    if (spec.kind != RowKind::choice || at < 0 ||
+        static_cast<std::size_t>(at) >= spec.choice_ids.size())
+        return {};
+    return std::string(spec.choice_ids[static_cast<std::size_t>(at)]);
+}
+
+std::string preference_stored_text(const PreferenceModel& model, const PreferenceRow& spec) {
+    const std::string* stored = stored_text(model, spec.key);
+    if (stored == nullptr || stored->size() > preference_text_most)
+        return capped_text(spec.default_text);
+    return *stored;
+}
+
+void preference_store_text(PreferenceModel& model, const PreferenceRow& spec, std::string text) {
+    if (text.size() > preference_text_most)
+        text.resize(preference_text_most);
+    store_text(model, spec.key, std::move(text));
 }
 
 PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placement) {
