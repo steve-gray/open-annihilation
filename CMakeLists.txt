@@ -1649,9 +1649,12 @@ if(OA_BUILD_PLATFORM)
       # REPLACE MOD and FOLDER IN USE over the Library, refusals in its
       # queue, a file still asking UPDATE MOD, ROLL BACK's question and PLAY
       # NOW from the Library; then, over soft restarts, an update to the mod
-      # played held until the mod is switched. Its data, settings and the
-      # player's folder stay in the build tree, and are cleared before each
-      # run, which is when the settings are read.
+      # played held until the mod is switched; and last a run nobody
+      # watches, the check's prompts off on the dummy video driver, where a
+      # chosen mod installs and asks only while the Library shows and a file
+      # waits. Its data, settings and the player's folder stay in the build
+      # tree, and are cleared before each run, which is when the settings
+      # are read.
       set(oa_library_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-install")
       file(MAKE_DIRECTORY "${oa_library_install_dir}")
       add_test(NAME library-install-clean COMMAND ${CMAKE_COMMAND} -E rm -rf

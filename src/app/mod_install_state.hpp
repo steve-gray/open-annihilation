@@ -68,6 +68,8 @@ struct Runtime::ModInstallState {
     /// Frames in a row the main menu has shown as itself.
     uint32_t settled_frames{};
     /// --check-mod-install shows the prompts although nobody watches the run.
+    /// Without it, a run nobody watches takes only a catalogue language pack,
+    /// and a mod chosen in the Library while the Library is the top screen.
     bool check_shows_prompts{};
     /// Prompts this run has shown.
     uint32_t prompts_shown{};
