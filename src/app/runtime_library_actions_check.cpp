@@ -794,10 +794,10 @@ void Runtime::check_library_install() {
         // goes is refused in the Library's queue with no question and no
         // prompt, and left as it is; an added registry's asks FOLDER IN USE;
         // with the Library closed, the refusal is told.
-        const fs::path own = mods / std::string(kCinder);
-        fs::create_directories(own, error);
+        const fs::path players_folder = mods / std::string(kCinder);
+        fs::create_directories(players_folder, error);
         {
-            std::ofstream(own / "notes.txt") << "not a mod";
+            std::ofstream(players_folder / "notes.txt") << "not a mod";
         }
         const fs::path cinder = packages / "cinder.oamod";
         write_package(cinder, profile_text(kCinder, "Cinder", "1.0", 1), 1);
@@ -824,8 +824,8 @@ void Runtime::check_library_install() {
             );
         }
         const auto own_folder_unchanged = [&] {
-            return fs::exists(own / "notes.txt") && !fs::exists(own / "oamod.yaml") &&
-                   !fs::exists(mods / "cinder-1.0");
+            return fs::exists(players_folder / "notes.txt") &&
+                   !fs::exists(players_folder / "oamod.yaml") && !fs::exists(mods / "cinder-1.0");
         };
         require(own_folder_unchanged(), "the folder of the player's own was changed");
         post_catalogue(cinder, kAdded, kCinder, "Cinder", 1);
