@@ -4543,11 +4543,35 @@ class Runtime final : public menu::Host,
     /// (update_all_question), whose UPDATE asks request_update for each of
     /// them in that order and whose NOT NOW leaves them.
     ///
-    /// @param action Action::roll_back, play_now, update or update_all; any
-    ///     other does nothing
+    /// @param action Action::roll_back, play_now, update, update_all or
+    ///     uninstall (library_uninstall); any other does nothing
     /// @param entry the entry; none for UPDATE ALL
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
+
+    /// Carries out an installed entry's UNINSTALL, which library_entry_action
+    /// hands here. For the mod being played, or the language pack the game
+    /// shows its words from, as the Library's model or this run says
+    /// (package_target_in_use, language_pack_in_use), it shows the notice of
+    /// what comes first over the Library and removes nothing. Otherwise it
+    /// asks the Uninstall question (oa::ui::library::uninstall_question),
+    /// whose UNINSTALL looks again and removes the package's folder in the
+    /// player's Mods, Maps or Languages folder, with the copy ROLL BACK
+    /// keeps (package_install::uninstall_package), the folders it drops
+    /// deleted a step a frame. A folder outside those folders is never
+    /// touched, and a refusal shows its notice. Nothing happens while the
+    /// button is off.
+    ///
+    /// @param entry the entry
+    void library_uninstall(const oa::ui::library::EntryId& entry);
+
+    /// Tells whether a language pack's folder is one the game shows its words
+    /// from now: the language shown's, or one of its fallbacks'
+    /// (language_pack_folders).
+    ///
+    /// @param folder the pack's folder
+    /// @return true when it is
+    [[nodiscard]] bool language_pack_in_use(const std::filesystem::path& folder) const;
 
     /// Starts an entry's update: the one place an update reaches the download
     /// queue, from the Library's UPDATE and UPDATE ALL and Settings › Mods'

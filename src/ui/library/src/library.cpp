@@ -7,6 +7,7 @@
 
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/uninstall.hpp"
 #include "visible.hpp"
 
 #include <algorithm>
@@ -613,8 +614,10 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
         add(Action::play_now, !in_match);
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
-    if (installed != nullptr)
+    if (installed != nullptr) {
+        add(Action::uninstall, uninstall_off_reason(library, entry).empty());
         add(Action::open_folder, true);
+    }
     if (entry.listing != nullptr && !entry.listing->homepage.empty())
         add(Action::homepage, true);
     return buttons;

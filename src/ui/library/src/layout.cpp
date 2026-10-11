@@ -18,6 +18,7 @@
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/uninstall.hpp"
 #include "screen_controls.hpp"
 
 #include <algorithm>
@@ -117,6 +118,8 @@ std::string_view action_word(Action action) {
         return "settings";
     case Action::close:
         return "close";
+    case Action::uninstall:
+        return "uninstall";
     }
     return "action";
 }
@@ -1456,7 +1459,7 @@ kit::Colour status_colour(const Entry& entry) {
     return entry.state == State::update || !entry.can_act ? kit::colour::lock : kit::colour::hint;
 }
 
-/// Appends the playing note, when the model has one, under a row.
+/// Appends the details' note (details_note), when the model has one, under a row.
 ///
 /// @param[in,out] building the layout
 /// @param left its left column
@@ -1473,7 +1476,7 @@ int32_t add_note(
     const kit::Rect& clip,
     int32_t scroll_group
 ) {
-    const std::string note = playing_note(*building.library);
+    const std::string note = details_note(*building.library);
     if (note.empty())
         return top;
     const std::vector<std::string> lines = wrapped(building, kit::FontRole::small, note, width, 0);
@@ -1582,7 +1585,8 @@ int32_t add_details_content(
              each,
              metrics.button_height},
             action.text,
-            index == 0,
+            // UNINSTALL is never drawn as the main button.
+            index == 0 && action.action != Action::uninstall,
             action.enabled,
             controls::action_control(action.action),
             named("action." + std::string(action_word(action.action))),
@@ -2271,7 +2275,7 @@ kit::DisplayList details_page_layout(
             building.footer,
             {left, window.button_top, width_points, metrics.button_height},
             action.text,
-            index == 0,
+            index == 0 && action.action != Action::uninstall,
             action.enabled,
             controls::action_control(action.action),
             named("action." + std::string(action_word(action.action))),

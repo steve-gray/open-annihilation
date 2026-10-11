@@ -53,6 +53,7 @@ inline constexpr std::string_view action_details = "DETAILS";
 inline constexpr std::string_view action_back = "BACK";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
+inline constexpr std::string_view action_uninstall = "UNINSTALL";
 
 // Why GET or UPDATE is off.
 inline constexpr std::string_view blocked_in_match = "Not during a game";
@@ -66,6 +67,48 @@ inline constexpr std::string_view hacks_and_more = "{hacks} · {count} more";
 /// The comma between two names of a list. Callers write the joining space
 /// after the lookup, so the looked-up text can be a catalogue section.
 inline constexpr std::string_view list_separator = ",";
+
+// UNINSTALL (uninstall.hpp): why it is off, its question and its notices.
+/// Why UNINSTALL is off for a map pack while a game is played.
+inline constexpr std::string_view uninstall_off_in_game =
+    "Map packs can't be uninstalled during a game.";
+/// Why UNINSTALL is off while the package is in the download queue.
+inline constexpr std::string_view uninstall_off_queued =
+    "It is in the download queue: CANCEL it before you uninstall it.";
+/// The question's title, and the notices'.
+inline constexpr std::string_view uninstall_title = "Uninstall {name}";
+/// What the question asks, with the folder under the player's folder, as
+/// "Mods/ridge"; the second for a package that keeps a copy to roll back to.
+inline constexpr std::string_view uninstall_ask =
+    "Uninstall {name}? Its folder, {folder}, is removed.";
+inline constexpr std::string_view uninstall_ask_kept =
+    "Uninstall {name}? Its folder, {folder}, is removed, and with it the copy ROLL BACK keeps.";
+/// After the question: for a package a registry lists, and for the player's own.
+inline constexpr std::string_view uninstall_listed = "GET installs it again.";
+inline constexpr std::string_view uninstall_own =
+    "No registry lists it, so the Library cannot get it again.";
+/// The notice for the mod being played.
+inline constexpr std::string_view uninstall_playing =
+    "You are playing {name}. Switch it off first with SWITCH OFF, then uninstall it.";
+/// The notice for the language pack in use.
+inline constexpr std::string_view uninstall_language =
+    "The game is shown in {name}. Choose another language in Settings › Language first, then "
+    "uninstall it.";
+/// The notice when an uninstall removed nothing, then one of the reasons below.
+inline constexpr std::string_view uninstall_failed = "{name} was not uninstalled. {reason}";
+inline constexpr std::string_view uninstall_failed_busy =
+    "Open Annihilation, or another copy of it, is still changing its folder. Try again in a "
+    "moment.";
+inline constexpr std::string_view uninstall_failed_changed =
+    "Its folder changed since the Library listed it. Try again.";
+inline constexpr std::string_view uninstall_failed_link =
+    "Its folder is a link, and OA never removes what a link leads to. OPEN FOLDER shows it.";
+inline constexpr std::string_view uninstall_failed_outside =
+    "Its folder is not in your own Open Annihilation folder, and OA removes nothing outside it.";
+inline constexpr std::string_view uninstall_failed_not_moved =
+    "Its folder could not be moved; another program may be using it. Close it, then try again.";
+/// The notices' one button.
+inline constexpr std::string_view uninstall_ok = "OK";
 
 // Sizes, binary units.
 /// A number with one decimal.

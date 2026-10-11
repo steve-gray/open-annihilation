@@ -73,8 +73,8 @@ translator finds them together. Every word passes through `Library::text`
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
-    that can be retried), PLAY NOW, ROLL BACK, OPEN FOLDER and HOMEPAGE,
-    each with whether it is enabled;
+    that can be retried), PLAY NOW, ROLL BACK, UNINSTALL, OPEN FOLDER and
+    HOMEPAGE, each with whether it is enabled;
   - the facts Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, in
     a long and a short form. An update's Rules fact says in words whether
     it changes the game's rules and which saved games stop loading
@@ -145,6 +145,37 @@ words.
   updates ("Checked for updates 4 min ago" with `age_text`, "Not checked
   for updates yet", "Checking for updates…", "Couldn't check for updates"
   marked as a warning, or "No registries are on." without CHECK NOW).
+
+### Uninstalling
+
+`uninstall.hpp` holds UNINSTALL's rules, its question and its notices. The
+app removes the folder (`Runtime::library_uninstall`,
+`package_install::uninstall_package`).
+
+- `entry_actions` shows UNINSTALL on every installed entry, after ROLL BACK
+  and before OPEN FOLDER, never as the main button. `uninstall_off_reason`
+  turns it off, and says why, for a map pack while a game is played ("Map
+  packs can't be uninstalled during a game.") and for any package with a
+  queue item that has not failed or been installed ("It is in the download
+  queue: CANCEL it before you uninstall it."). `details_note` adds that
+  reason after `playing_note`'s, as the note under the buttons.
+- `uninstall_step(library, entry)` says what pressing it leads to: nothing
+  while it is off, a notice for the mod being played
+  (`Installed::playing`) and for a language pack the game shows its words
+  from (`Installed::in_use`), and the question for every other installed
+  package.
+- `uninstall_question(entry, folder)` makes the kit question: "Uninstall
+  {name}", "Uninstall {name}? Its folder, {folder}, is removed." with ",
+  and with it the copy ROLL BACK keeps." when a copy is kept, then "GET
+  installs it again." for a package a registry lists, or "No registry
+  lists it, so the Library cannot get it again."; CANCEL (`cancel`) marked
+  and answering Escape, B and N, and UNINSTALL (`uninstall`) primary. Its
+  word is the kit's default, so automation lists `oa.prompt.cancel` and
+  `oa.prompt.uninstall`.
+- `uninstall_notice(entry, step)` makes the notice for a package in use,
+  and `uninstall_failed_notice(name, problem)` the one for an uninstall
+  that removed nothing (busy, changed, a link, outside the player's
+  folders, or not moved), each with one OK (`ok`).
 
 ### The screens
 
@@ -319,6 +350,17 @@ for an unchanged, changed and unknown rules hash in both lengths; status
 lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
 changed the rules and one that kept them; `change_texts` for a new
 revision and a new version; every text function; and a lookup that
+translates.
+
+`ui-library-uninstall` builds a Library over a built-in registry, the
+player's own mod, the mod being played, a map pack and two language packs,
+one of them in use: UNINSTALL on every installed package and on none
+other, in its place among the buttons; off for a map pack during a game
+and in each queue phase but failed and installed, with the note saying
+why; the step for every kind and use; the question's words with and
+without a kept copy, for a listed package and the player's own, CANCEL
+marked and UNINSTALL primary; the notices' words for the mod being played,
+the language in use and each problem, each with one OK; and a lookup that
 translates.
 
 `ui-library-search` checks that a name beats a tag, a tag an author or

@@ -368,6 +368,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::action_settings);
     case Action::close:
         return shown(text, words::action_close);
+    case Action::uninstall:
+        return shown(text, words::action_uninstall);
     }
     return {};
 }

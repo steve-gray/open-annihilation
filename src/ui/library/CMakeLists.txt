@@ -6,9 +6,10 @@
 # and download queue lines, and its words (library.hpp, text.hpp). It draws
 # nothing and reads no file, clock or network. The update question asked
 # before an update that may stop saved games loading, and Settings › Mods'
-# lines on updates (update_question.hpp).
+# lines on updates (update_question.hpp). UNINSTALL's rules, its question
+# and its notices (uninstall.hpp).
 add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp
-  src/update_question.cpp)
+  src/update_question.cpp src/uninstall.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).
 target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)
@@ -37,6 +38,16 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   add_test(NAME ui-library-update-question COMMAND oa-ui-library-update-question-test)
   set_tests_properties(ui-library-update-question PROPERTIES TIMEOUT 30)
+
+  # UNINSTALL: on for every installed package, off for a map pack in a game
+  # and while queued, what it leads to for the mod being played, the
+  # language pack in use and any other package, its question, its notices
+  # and the note that says why it is off.
+  add_executable(oa-ui-library-uninstall-test tests/uninstall_test.cpp)
+  target_link_libraries(oa-ui-library-uninstall-test PRIVATE oa-ui-library oa-ui-kit
+    oa-test-support oa-options)
+  add_test(NAME ui-library-uninstall COMMAND oa-ui-library-uninstall-test)
+  set_tests_properties(ui-library-uninstall PROPERTIES TIMEOUT 30)
 
   # The search: what ranks first, several words, a missing word, folding,
   # tag prefixes, the cap and ties.

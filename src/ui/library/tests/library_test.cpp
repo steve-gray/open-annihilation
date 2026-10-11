@@ -502,6 +502,7 @@ void test_installed_never_blocked() {
         const std::vector<std::pair<Action, bool>> expected = {
             {Action::play_now, false},
             {Action::roll_back, false},
+            {Action::uninstall, true},
             {Action::open_folder, true},
         };
         OA_CHECK(actions_of(library, *fixture) == expected);
@@ -510,6 +511,7 @@ void test_installed_never_blocked() {
         OA_CHECK_TEXT(lib::status_line(library, *second), "Playing");
         const std::vector<std::pair<Action, bool>> expected = {
             {Action::roll_back, false},
+            {Action::uninstall, true},
             {Action::open_folder, true},
         };
         OA_CHECK(actions_of(library, *second) == expected);
@@ -771,6 +773,7 @@ void test_entry_actions() {
                                                       {{Action::update, true},
                                                        {Action::play_now, true},
                                                        {Action::roll_back, true},
+                                                       {Action::uninstall, true},
                                                        {Action::open_folder, true}}
                                                   )
         );
@@ -780,12 +783,17 @@ void test_entry_actions() {
     if (own != nullptr)
         OA_CHECK(
             actions_of(library, *own) ==
-            Buttons({{Action::play_now, true}, {Action::open_folder, true}})
+            Buttons(
+                {{Action::play_now, true}, {Action::uninstall, true}, {Action::open_folder, true}}
+            )
         );
     // A map pack is never played.
     const lib::Entry* pack = at(library, core, Kind::map_pack, "example-pack");
     if (pack != nullptr)
-        OA_CHECK(actions_of(library, *pack) == Buttons({{Action::open_folder, true}}));
+        OA_CHECK(
+            actions_of(library, *pack) ==
+            Buttons({{Action::uninstall, true}, {Action::open_folder, true}})
+        );
     // A failure that cannot be retried offers GET again.
     const lib::Entry* failed = at(library, core, Kind::mod, "failed-mod");
     if (failed != nullptr) {
@@ -795,8 +803,12 @@ void test_entry_actions() {
     const lib::Entry* update_queued = at(library, core, Kind::mod, "update-queued");
     if (update_queued != nullptr)
         OA_CHECK(
-            actions_of(library, *update_queued) ==
-            Buttons({{Action::cancel, true}, {Action::play_now, true}, {Action::open_folder, true}})
+            actions_of(library, *update_queued) == Buttons(
+                                                       {{Action::cancel, true},
+                                                        {Action::play_now, true},
+                                                        {Action::uninstall, false},
+                                                        {Action::open_folder, true}}
+                                                   )
         );
     OA_CHECK_TEXT(lib::action_text(Action::update_all), "UPDATE ALL");
     OA_CHECK_TEXT(lib::action_text(Action::settings), "SETTINGS…");

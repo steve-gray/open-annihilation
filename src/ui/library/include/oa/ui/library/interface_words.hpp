@@ -196,6 +196,23 @@ inline constexpr std::string_view interface_words[] = {
     words::one_decimal,
     words::back_to_tab,
     words::fact_met,
+    words::action_uninstall,
+    words::uninstall_off_in_game,
+    words::uninstall_off_queued,
+    words::uninstall_title,
+    words::uninstall_ask,
+    words::uninstall_ask_kept,
+    words::uninstall_listed,
+    words::uninstall_own,
+    words::uninstall_playing,
+    words::uninstall_language,
+    words::uninstall_failed,
+    words::uninstall_failed_busy,
+    words::uninstall_failed_changed,
+    words::uninstall_failed_link,
+    words::uninstall_failed_outside,
+    words::uninstall_failed_not_moved,
+    words::uninstall_ok,
 };
 
 } // namespace oa::ui::library

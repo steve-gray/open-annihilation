@@ -813,6 +813,8 @@ library::Inputs Runtime::library_inputs() {
                         package_target_in_use(*package.kind, package.folder);
         if (package.has_backup)
             shown.kept = library::Kept{package.backup_version, package.backup_revision};
+        // The language pack the game shows its words from is never uninstalled.
+        shown.in_use = *kind == library::Kind::language && language_pack_in_use(package.folder);
         if (index < pictures.size())
             shown.badge = badge_of(pictures[index]);
         inputs.installed.push_back(std::move(shown));
@@ -1268,6 +1270,9 @@ struct Runtime::LibraryScreen final : LayerScreen {
             return true;
         case library::Action::details:
         case library::Action::back:
+            return false;
+        case library::Action::uninstall:
+            runtime_.library_entry_action(action, id);
             return false;
         }
         return false;
