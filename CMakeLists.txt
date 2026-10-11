@@ -1746,11 +1746,17 @@ if(OA_BUILD_PLATFORM)
       # that plays whole warns of nothing and starts its skirmish.
       set(oa_mod_warning_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/mod-warning")
       file(MAKE_DIRECTORY "${oa_mod_warning_dir}")
+      # Each run starts with no mod chosen: a run that stopped part way
+      # leaves its folders and the mod it last chose.
+      add_test(NAME mod-warning-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_mod_warning_dir}/Open Annihilation" "${oa_mod_warning_dir}/mod-warning.conf")
+      set_tests_properties(mod-warning-clean PROPERTIES FIXTURES_SETUP mod-warning-clean)
       add_test(NAME native-mod-warning COMMAND oa-game --game-dir "${OA_GAME_DIR}"
         --skip-intro --mute --check-mod-warning
         --preferences-file "${oa_mod_warning_dir}/mod-warning.conf"
         --user-folder "${oa_mod_warning_dir}/Open Annihilation")
       set_tests_properties(native-mod-warning PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        FIXTURES_REQUIRED mod-warning-clean
         WORKING_DIRECTORY "${oa_mod_warning_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # A made-up download check over the main menu: the code, OPEN THE CHECK
