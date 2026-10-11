@@ -319,9 +319,13 @@ latched the closing key and drew a backdrop.
   reads back (`read_whole_window`); otherwise the read-back holds the
   picture's area, as it always has. `oa_layer_check.hpp` gives the checks
   the frame expected with a screen open (`expected_layer_frame`), the pixels
-  a frame differs in outside the cursor's square (`layer_differences`), and
+  a frame differs in outside the cursor's square (`layer_differences`),
   pointer and finger events at a window pixel (`window_pointer_event`,
-  `window_finger_event`, `layer_window_pixel`).
+  `window_finger_event`, `layer_window_pixel`), and a screen of their own,
+  opaque or not, that fills one small rectangle and notes the information
+  key (`MarkScreen`), with which the layer's own check
+  (`OaLayer::check_clear_screens`) holds screens that are not opaque and
+  F1.
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
   under a modal screen, and the screens stamped at their places (one that
@@ -1627,7 +1631,17 @@ latched the closing key and drew a backdrop.
   that picture, the OA layer passing on what its screens do not take
   (screens of the check's own that are not modal, a text field's text and
   text input, `layer_key`, `close_above`), Escape doing nothing on the menu
-  itself and EXIT ending the run;
+  itself and EXIT ending the run; `oa_layer_check.cpp` the layer's own
+  check, run after the window sizes: in a 640x480 and a 1920x1080 window
+  a screen that is not opaque, alone, over an opaque screen and under one,
+  and under the cursor, changes no pixel of the window or of the frame
+  without the cursor but those it draws (a half blend within 2 of the
+  colour blended straight over what lies under it), darkens nothing, keeps
+  the cursor above it and lists its control to automation, while an opaque
+  one draws as before; F1 reaches a screen that takes the information key,
+  goes on past one that does not, and changes nothing in Settings; and in a
+  match F1 goes on to the game and such a screen changes only the pixels it
+  draws in the match's picture;
   `runtime_engine_settings_dialog_check.cpp` the dialog driven by the
   pointer, the wheel and the keys (every section, scrolling, each setting in
   effect at once, Vertical sync read back from the renderer, Font shadow

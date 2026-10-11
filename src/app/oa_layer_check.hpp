@@ -5,13 +5,17 @@
 // shows them: the window frame expected while a screen shows over the front
 // end, the pixels a presented frame differs in outside the software cursor's
 // square, and pointer and finger events at a window pixel, so that a check
-// presses a screen where the layer shows it at any window size.
+// presses a screen where the layer shows it at any window size; and a screen
+// only the checks push (MarkScreen), opaque or not, with which the layer's
+// own check (OaLayer::check_clear_screens) holds what the layer shows of a
+// screen that is not opaque, and where the information key goes.
 #pragma once
 
 #include "oa_layer.hpp"
 
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 
 #include <SDL3/SDL.h>
@@ -19,6 +23,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <string_view>
 
 namespace oa::app {
@@ -149,5 +155,149 @@ layer_window_pixel(const LayerPlacement& placement, oa::ui::kit::Point point) no
     SDL_TouchID touch,
     SDL_FingerID finger
 ) noexcept;
+
+/// The share of each pixel a mark screen's veil blends its colour over, in
+/// 256ths: half.
+inline constexpr uint32_t mark_veil_opacity = 128;
+
+/// How a check's mark screen (MarkScreen) shows and answers.
+struct MarkLook {
+    std::string name{"check-mark"}; ///< its name on the layer
+    bool opaque{};                  ///< it covers its whole place
+    bool modal{};                   ///< it takes every input
+    bool backdrop{};                ///< it asks for a backdrop
+    bool in_match{};                ///< it shows in a match too; otherwise on the front end alone
+    /// Its place, in points from the top left corner of the view's room;
+    /// empty covers the whole room.
+    oa::ui::kit::Rect area{};
+    oa::ui::kit::Rect mark{};                ///< the rectangle it fills, in its own points
+    oa::ui::frontend_renderer::Rgb colour{}; ///< the mark's colour
+    /// A rectangle it blends the mark's colour over at mark_veil_opacity, in
+    /// its own points; empty for none.
+    oa::ui::kit::Rect veil{};
+    bool takes_info{}; ///< it takes the information key; otherwise it lets it go on
+};
+
+/// The keys that reached a check's mark screen.
+struct MarkSeen {
+    int32_t infos{};      ///< presses of the information key
+    uint32_t info_key{};  ///< the SDL keycode the last of them came from
+    int32_t other_keys{}; ///< presses of every other key
+};
+
+/// A screen of the OA layer only the checks push, on the front end and, as
+/// its look says, in a match: it fills one small rectangle of a colour and
+/// may blend that colour over another, draws nothing else, lists the
+/// rectangle to automation as a button named mark, and notes the keys it is
+/// given, taking the information key or letting it go on. Every pointer
+/// event, turn of the wheel and other key goes on.
+class MarkScreen final : public LayerScreen {
+  public:
+
+    /// Makes the screen.
+    ///
+    /// @param look how it shows and answers
+    /// @param seen where it notes the keys that reach it
+    MarkScreen(MarkLook look, std::shared_ptr<MarkSeen> seen);
+
+    /// Returns how it shows and answers.
+    ///
+    /// @return the look
+    [[nodiscard]] const MarkLook& look() const noexcept { return look_; }
+
+    /// Returns its name.
+    ///
+    /// @return the look's name
+    [[nodiscard]] std::string_view name() const override { return look_.name; }
+
+    /// Returns its place at the view's scale: its area from the room's top
+    /// left corner, or the whole room in whole points.
+    ///
+    /// @param view what it is placed on
+    /// @return its place; empty in a match unless its look shows it there
+    [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Tells whether it takes every input.
+    ///
+    /// @return the look's modal
+    [[nodiscard]] bool modal() const override { return look_.modal; }
+
+    /// Tells whether it asks for a backdrop.
+    ///
+    /// @return the look's backdrop
+    [[nodiscard]] bool backdrop() const override { return look_.backdrop; }
+
+    /// Tells whether it covers its whole place.
+    ///
+    /// @return the look's opaque
+    [[nodiscard]] bool opaque() const override { return look_.opaque; }
+
+    /// Fills its mark with its colour, then blends the colour over its veil.
+    ///
+    /// @param canvas where it draws
+    void draw(const oa::ui::kit::Canvas& canvas) const override;
+
+    /// Lets every pointer event go on.
+    ///
+    /// @return pass
+    LayerAnswer pointer(
+        ScreenInputKind /*kind*/, uint8_t /*button*/, oa::ui::kit::Point /*at*/, int32_t /*reach*/
+    ) override {
+        return LayerAnswer::pass;
+    }
+
+    /// Notes a key: the information key is taken or goes on as the look
+    /// says; every other key goes on.
+    ///
+    /// @param pressed the key
+    /// @param sdl_key its SDL keycode
+    /// @return none for the information key it takes; otherwise pass
+    LayerAnswer key(oa::ui::kit::Key pressed, uint32_t sdl_key) override;
+
+    /// Lets the wheel go on.
+    ///
+    /// @return pass
+    LayerAnswer wheel(oa::ui::kit::Point /*at*/, float /*notches*/) override {
+        return LayerAnswer::pass;
+    }
+
+    /// Returns its one control: the mark, a button named mark.
+    ///
+    /// @return the list
+    [[nodiscard]] oa::ui::kit::DisplayList display_list() const override;
+
+    /// Returns no hover, press or focus.
+    ///
+    /// @return the interaction
+    [[nodiscard]] oa::ui::kit::Interaction interaction() const override { return {}; }
+
+    /// Changes nothing.
+    ///
+    /// @return none
+    LayerAnswer tick() override { return LayerAnswer::none; }
+
+    /// Returns 0: it always draws the same.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return 0; }
+
+    /// Has nothing to close.
+    void close(bool /*by_key*/) override {}
+
+  private:
+
+    MarkLook look_;                  ///< how it shows and answers
+    std::shared_ptr<MarkSeen> seen_; ///< where it notes the keys that reach it
+};
+
+/// Returns where a rectangle of a screen's points lies in the window: its
+/// place's left and top plus the rectangle's own times the scale the place
+/// gives a point.
+///
+/// @param placement where the layer shows the screen
+/// @param points the rectangle, in the screen's points
+/// @return the rectangle, in window pixels
+[[nodiscard]] oa::ui::display_layout::Rect
+layer_window_rect(const LayerPlacement& placement, const oa::ui::kit::Rect& points) noexcept;
 
 } // namespace oa::app

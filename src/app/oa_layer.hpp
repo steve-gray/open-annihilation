@@ -701,6 +701,22 @@ class OaLayer {
         std::span<const uint8_t> opacity = {}
     );
 
+    /// Checks, for --check-engine-settings, screens that are not opaque and
+    /// the information key (oa_layer_check.cpp). On the main menu in a 640
+    /// by 480 and a 1920 by 1080 window, such a screen changes no pixel of
+    /// the window, nor of the frame without the cursor, but those it draws,
+    /// alone, over an opaque screen and under one, and darkens nothing; the
+    /// cursor shows above it; opaque screens draw as before; automation
+    /// lists its controls; F1
+    /// reaches a screen that takes the information key, goes on past one
+    /// that does not, and changes nothing in Settings. In a match F1 goes on
+    /// to the game, and such a screen changes no pixel of the match's
+    /// picture but those it draws. The match's layer lays a pixel over its
+    /// own by its opacity, its colours straight.
+    ///
+    /// Throws std::runtime_error naming the first thing that failed.
+    void check_clear_screens();
+
   private:
 
     /// What the match's layer shows, at which size: it is drawn again only
