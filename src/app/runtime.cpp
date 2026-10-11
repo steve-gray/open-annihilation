@@ -494,6 +494,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_language_notice) {
+            check_language_notice();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_kill_board) {
             check_kill_board();
             flush_preferences();

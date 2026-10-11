@@ -402,6 +402,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-simulation-hash", &Options::check_simulation_hash, {}},
         {"--check-language-switch", &Options::check_language_switch, {}},
         {"--check-language-registry", &Options::check_language_registry, {}},
+        {"--check-language-notice", &Options::check_language_notice, {}},
         {"--check-patrol-reclaim", &Options::check_patrol_reclaim, {}},
         {"--check-reclaim-cursor", &Options::check_reclaim_cursor, {}},
         {"--check-build-preview", &Options::check_build_preview, {}},

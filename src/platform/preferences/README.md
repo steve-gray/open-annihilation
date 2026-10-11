@@ -130,6 +130,12 @@ download requests. The value `off` turns that registry's ID off: the ID
 that was stored is gone, and none is made while the key says `off`.
 Absent, or any other text, means none has been made yet.
 
+`open-annihilation.language-notice-dismissed` holds the tags of languages
+the player answered with Use English when the game asked, at the first
+start, about a language the operating system wanted that was not installed.
+The tags are separated by commas. A tag in the list is not asked about
+again. Absent, every such language is still asked about.
+
 The Open Annihilation settings (`oa/ui/engine_settings.hpp`) keep these keys,
 written when the player changes a setting and erased again by the settings
 dialog's Restore defaults. Values are decimal, but for the screen size's; a
@@ -166,6 +172,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.text-background` | 0 or 1 | 0 |
 | `open-annihilation.text-size` | percent of the game fonts' sizes, 50 to 300 | 80 |
 | `open-annihilation.language` | `system`, or a language's BCP-47 tag (`en`, `de`, `es`, `fr`, `it`) | `system` with the player's own file, else `en` |
+| `open-annihilation.language-notice-dismissed` | comma-separated BCP-47 tags of languages the player chose Use English for, when the game asked about a language the operating system wanted that was not installed | none dismissed; each such language is still asked about |
 | `open-annihilation.content-updates` | `automatically`, `library` (only when the Library opens) or `never`; any other text reads as `automatically` | `automatically` |
 
 The settings dialog's Select groups without Alt is the game's own
