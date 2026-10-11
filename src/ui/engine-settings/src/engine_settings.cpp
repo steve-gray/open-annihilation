@@ -451,6 +451,29 @@ std::optional<MenuScaling> menu_scaling_from_text(std::string_view text) noexcep
     return std::nullopt;
 }
 
+std::string_view interface_size_text(InterfaceSize size) noexcept {
+    switch (size) {
+    case InterfaceSize::automatic:
+        return "automatic";
+    case InterfaceSize::size_100:
+        return "100";
+    case InterfaceSize::size_200:
+        return "200";
+    case InterfaceSize::size_300:
+        return "300";
+    case InterfaceSize::size_400:
+        return "400";
+    }
+    return {};
+}
+
+std::optional<InterfaceSize> interface_size_from_text(std::string_view text) noexcept {
+    for (const InterfaceSize size : interface_size_choices)
+        if (text == interface_size_text(size))
+            return size;
+    return std::nullopt;
+}
+
 std::string_view touch_drag_text(TouchDrag drag) noexcept {
     switch (drag) {
     case TouchDrag::automatic:
@@ -535,6 +558,9 @@ EngineSettings read_settings(
     read_word(values, key::window_frame, window_frame_words, settings.window_frame);
     if (const auto number = stored_number(values, key::hud_scaling))
         settings.hud_scaling = *number > 0;
+    if (const auto found = values.find(std::string{key::interface_size}); found != values.end())
+        settings.interface_size =
+            interface_size_from_text(found->second).value_or(settings.interface_size);
     for (const TextSwitch& entry : text_switches)
         if (const auto number = stored_number(values, entry.key))
             settings.*entry.member = *number > 0;
@@ -783,6 +809,14 @@ void write_settings(
         switch_text(chosen.hud_scaling),
         chosen.hud_scaling != opened.hud_scaling,
         chosen.hud_scaling == defaults.hud_scaling,
+        restored
+    );
+    store(
+        values,
+        key::interface_size,
+        std::string{interface_size_text(chosen.interface_size)},
+        chosen.interface_size != opened.interface_size,
+        chosen.interface_size == defaults.interface_size,
         restored
     );
     for (const TextSwitch& entry : text_switches)

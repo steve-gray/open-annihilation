@@ -16,7 +16,8 @@ until then.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
   boxed line, and the one wrap.
 - `layout.hpp`: points, the Auto scale and the three size classes,
-  `metrics_of` (a class's metrics, which a screen takes its window's sizes
+  `layer_viewport` (the scale an Interface size gives a canvas, held to
+  what fits Compact's dialog), `metrics_of` (a class's metrics, which a screen takes its window's sizes
   from), rows, columns, grids, splits and scroll areas, and the display
   list.
 - `input.hpp`: a pointer and a finger's reach, the keys, Tab in a declared
@@ -198,7 +199,7 @@ else, and that each class's dialog and notices fit the least window of their
 class. `ui-kit-text` checks the UTF-8
 helpers, the estimated width, the stand-ins, and the wrap against copies of
 the six wraps it replaces. `ui-kit-layout` checks the Auto scale, the design's
-window sizes, that `metrics_of` gives each class its metrics, arrangements,
+window sizes, the Interface size's examples and Auto at each window, that `metrics_of` gives each class its metrics, arrangements,
 the scroll arithmetic and hit testing.
 `ui-kit-input` checks reach, the pointer, Tab, the arrows, the keys and
 their values, the wheel's fractions, the names, the parts automation lists
