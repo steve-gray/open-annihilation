@@ -1,0 +1,242 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// The badge pictures' cache: the requests the main thread makes, and the
+// worker's reads, fetches, checks and writes.
+#include "oa/app/content/pictures.hpp"
+
+#include "oa/app/mod_summary.hpp"
+#include "oa/base/sha256.hpp"
+#include "oa/base/threads.hpp"
+#include "oa/netgame/http/client.hpp"
+#include "oa/platform/files.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <map>
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+namespace oa::app::content {
+namespace {
+
+/// The ending of a picture's name, after its SHA-256.
+constexpr std::string_view picture_suffix = ".png";
+
+/// One picture asked for: the registry whose catalogue names it, and its address.
+using PictureKey = std::pair<std::string, std::string>;
+
+/// Where a picture asked for stands.
+enum class PictureState : uint8_t {
+    waiting,  ///< asked for; not read or fetched yet
+    fetching, ///< the worker is reading or fetching it
+    ready,    ///< decoded and checked; take hands it over
+};
+
+/// One picture asked for and not taken.
+struct PictureEntry {
+    PictureState state{PictureState::waiting}; ///< where it stands
+    ModBadge badge{};                          ///< the decoded picture, once ready
+};
+
+/// What reading or fetching one picture came to.
+enum class Obtained : uint8_t {
+    ready,     ///< checked and decoded
+    refused,   ///< its name, its bytes, its size or the server refuse it
+    held,      ///< a match is running, and the folder does not hold it
+    cancelled, ///< the cancel flag stopped the fetch
+};
+
+/// Reads a whole file of at most max_picture_bytes.
+///
+/// @param file the file
+/// @param[out] bytes its bytes
+/// @return false when it is missing, larger or cannot be read
+bool read_small_file(const std::filesystem::path& file, std::vector<uint8_t>& bytes) {
+    std::error_code error;
+    const uintmax_t size = std::filesystem::file_size(file, error);
+    if (error || size > max_picture_bytes)
+        return false;
+    std::ifstream in(file, std::ios::binary);
+    if (!in)
+        return false;
+    bytes.assign(static_cast<std::size_t>(size), 0);
+    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    return static_cast<std::size_t>(in.gcount()) == bytes.size();
+}
+
+/// Decodes a picture whose bytes hash to the SHA-256 its name gives.
+///
+/// @param bytes the file's bytes
+/// @param digest the SHA-256 its name gives
+/// @param[out] badge the decoded picture
+/// @return true when the bytes are that picture, no larger than
+///     max_picture_bytes, and decode
+bool checked_badge(
+    std::span<const uint8_t> bytes, const base::sha256::Digest& digest, ModBadge& badge
+) {
+    if (bytes.empty() || bytes.size() > max_picture_bytes)
+        return false;
+    if (base::sha256::digest_of(bytes) != digest)
+        return false;
+    badge = read_mod_badge(bytes);
+    return badge.width > 0 && badge.height > 0 && !badge.pixels.empty();
+}
+
+} // namespace
+
+std::optional<base::sha256::Digest> picture_digest(std::string_view url) noexcept {
+    const std::size_t slash = url.rfind('/');
+    const std::string_view name = slash == std::string_view::npos ? url : url.substr(slash + 1);
+    if (name.size() != base::sha256::hex_size + picture_suffix.size() ||
+        name.substr(base::sha256::hex_size) != picture_suffix)
+        return std::nullopt;
+    return base::sha256::parse_hex(name.substr(0, base::sha256::hex_size));
+}
+
+struct PictureCache::State {
+    std::filesystem::path folder{};               ///< where the pictures are kept; empty for none
+    const std::atomic<bool>* cancel{};            ///< set when the worker stops; may be null
+    mutable base::threads::Mutex mutex{};         ///< guards entries, refused and generation
+    std::map<PictureKey, PictureEntry> entries{}; ///< the pictures asked for and not taken
+    std::set<PictureKey> refused{};               ///< the pictures never asked for again
+    std::atomic<uint64_t> generation{0};          ///< moves on as a picture becomes ready
+
+    /// Reads or fetches one picture.
+    ///
+    /// @param url its address
+    /// @param http the worker's client
+    /// @param match_running a match is running
+    /// @param[out] badge the decoded picture, when ready
+    /// @return what it came to
+    Obtained obtain(
+        const std::string& url, netgame::http::Client& http, bool match_running, ModBadge& badge
+    ) const {
+        const std::optional<base::sha256::Digest> digest = picture_digest(url);
+        if (!digest)
+            return Obtained::refused;
+        const std::array<char, base::sha256::hex_size> hex = base::sha256::to_hex(*digest);
+        const std::string name = std::string(hex.data(), hex.size()) + std::string(picture_suffix);
+        std::vector<uint8_t> bytes;
+        if (!folder.empty() && read_small_file(folder / name, bytes) &&
+            checked_badge(bytes, *digest, badge))
+            return Obtained::ready;
+        if (match_running)
+            return Obtained::held;
+        netgame::http::Request request;
+        request.url = url;
+        request.limits.max_body_bytes = max_picture_bytes;
+        request.cancel = cancel;
+        const netgame::http::Response response = http.fetch(request, bytes);
+        if (response.failure == netgame::http::Failure::cancelled)
+            return Obtained::cancelled;
+        if (response.failure != netgame::http::Failure::none || response.status != 200)
+            return Obtained::refused;
+        if (!checked_badge(bytes, *digest, badge))
+            return Obtained::refused;
+        // A picture the folder cannot keep is still shown this time.
+        if (!folder.empty())
+            std::ignore = oa::platform::replace_file(folder / name, bytes, nullptr);
+        return Obtained::ready;
+    }
+};
+
+PictureCache::PictureCache(std::filesystem::path folder, const std::atomic<bool>* cancel)
+    : state_(std::make_unique<State>()) {
+    state_->folder = std::move(folder);
+    state_->cancel = cancel;
+}
+
+PictureCache::~PictureCache() = default;
+
+void PictureCache::request(std::string_view registry, std::string_view url) {
+    PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    if (state_->refused.count(key) != 0 || state_->entries.count(key) != 0)
+        return;
+    state_->entries.emplace(std::move(key), PictureEntry{});
+}
+
+std::optional<ModBadge> PictureCache::take(std::string_view registry, std::string_view url) {
+    const PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    const auto found = state_->entries.find(key);
+    if (found == state_->entries.end() || found->second.state != PictureState::ready)
+        return std::nullopt;
+    ModBadge badge = std::move(found->second.badge);
+    state_->entries.erase(found);
+    return badge;
+}
+
+void PictureCache::drop_all() {
+    base::threads::LockGuard guard(state_->mutex);
+    state_->entries.clear();
+}
+
+bool PictureCache::waiting() const {
+    base::threads::LockGuard guard(state_->mutex);
+    for (const auto& [key, entry] : state_->entries)
+        if (entry.state == PictureState::waiting)
+            return true;
+    return false;
+}
+
+uint64_t PictureCache::generation() const noexcept {
+    return state_->generation.load();
+}
+
+void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running) {
+    for (;;) {
+        if (state_->cancel != nullptr && state_->cancel->load())
+            return;
+        PictureKey key;
+        {
+            base::threads::LockGuard guard(state_->mutex);
+            auto next = state_->entries.begin();
+            while (next != state_->entries.end() && next->second.state != PictureState::waiting)
+                ++next;
+            if (next == state_->entries.end())
+                return;
+            next->second.state = PictureState::fetching;
+            key = next->first;
+        }
+        ModBadge badge;
+        const Obtained obtained = state_->obtain(key.second, http, match_running, badge);
+        base::threads::LockGuard guard(state_->mutex);
+        // drop_all may have forgotten the picture meanwhile; what was
+        // fetched stays in the folder.
+        const auto found = state_->entries.find(key);
+        switch (obtained) {
+        case Obtained::ready:
+            if (found != state_->entries.end()) {
+                found->second.state = PictureState::ready;
+                found->second.badge = std::move(badge);
+                state_->generation.fetch_add(1);
+            }
+            break;
+        case Obtained::refused:
+            state_->refused.insert(key);
+            if (found != state_->entries.end())
+                state_->entries.erase(found);
+            break;
+        case Obtained::held:
+        case Obtained::cancelled:
+            if (found != state_->entries.end() && found->second.state == PictureState::fetching)
+                found->second.state = PictureState::waiting;
+            return;
+        }
+    }
+}
+
+} // namespace oa::app::content
