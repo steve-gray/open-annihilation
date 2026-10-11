@@ -508,9 +508,10 @@ void every_part_lies_inside_the_dialog_and_apart() {
                 // the footer.
                 const auto rows = geometry::place_rows(page, locks);
                 // Downloads' rows come from the offer, which this dialog leaves
-                // empty: the check and the downloaded files, and no install ID.
+                // empty: the check, the downloaded files and the registries,
+                // and no install ID.
                 const std::size_t row_count =
-                    page == Page::downloads ? 2 : settings::page_settings(page).size();
+                    page == Page::downloads ? 3 : settings::page_settings(page).size();
                 CHECK(rows.rows.size() == row_count);
                 const auto open = geometry::open_rows(dialog);
                 CHECK(

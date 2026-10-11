@@ -272,4 +272,26 @@ void set_pack_languages(
 [[nodiscard]] const Language&
 chosen_language(std::string_view choice, const Language& system) noexcept;
 
+/// The lines a language's start-of-game notice shows in that language.
+/// English is written beside them. A language with no entry is told in
+/// English alone.
+struct PackNotice {
+    /// The body when the pack's size is known. "%s" stands where the size goes.
+    std::string_view body_sized{};
+    std::string_view body{};        ///< the body when the size is not known
+    std::string_view download{};    ///< the Download button, kept whole
+    std::string_view failed{};      ///< the line when the download failed
+    std::string_view retry{};       ///< the button after a failure, kept whole
+    std::string_view unavailable{}; ///< the line when the pack cannot be downloaded
+};
+
+/// Returns the notice lines the engine holds for a language.
+///
+/// The tag is matched without regard to the case of its letters, '_' read
+/// as '-'. The lines stay for the whole run.
+///
+/// @param tag a BCP-47 tag
+/// @return the lines; null when the engine holds none for that tag
+[[nodiscard]] const PackNotice* pack_notice(std::string_view tag) noexcept;
+
 } // namespace oa::data::languages

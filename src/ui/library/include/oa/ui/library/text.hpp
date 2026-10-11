@@ -154,6 +154,11 @@ inline constexpr std::string_view status_checking = "Checking";
 inline constexpr std::string_view status_installing = "Installing";
 inline constexpr std::string_view status_failed = "Failed";
 inline constexpr std::string_view byline = "by {author}";
+/// The byline when the registry has a download count for the package.
+inline constexpr std::string_view byline_with_downloads = "by {author} · {downloads}";
+/// One download, and every other count. `{count}` is grouped in threes.
+inline constexpr std::string_view download_count_one = "1 download";
+inline constexpr std::string_view download_count_many = "{count} downloads";
 
 // The note on updating while a mod is played.
 inline constexpr std::string_view note_finishes = "Finishes when you leave {name}.";
@@ -267,6 +272,16 @@ filled(const TextHooks& text, std::string_view pattern, std::initializer_list<Pl
 /// @param text how texts are looked up
 /// @return the size
 [[nodiscard]] std::string size_text(uint64_t bytes, const TextHooks& text = {});
+
+/// Writes how many times a package was downloaded.
+///
+/// One is "1 download". Every other number, including zero, is
+/// "{n} downloads", with the digits grouped in threes by commas
+/// ("12,400 downloads").
+///
+/// @param count the downloads
+/// @return the line
+[[nodiscard]] std::string downloads_text(uint64_t count);
 
 /// Writes a download's progress, both numbers in the unit and precision of the whole size.
 ///

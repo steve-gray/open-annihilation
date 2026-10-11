@@ -24,6 +24,7 @@
 #include "geometry.hpp"
 #include "language_page.hpp"
 #include "registered.hpp"
+#include "registries_page.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1024,6 +1025,25 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
 void add_section(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
     const layout::Sizes& sized = layout::sizes_of(dialog);
+    // Downloads' Registries part draws its own heading, with the link back,
+    // its rows and its note; the section's scroll bar stays the dialog's.
+    if (registries::shown(dialog)) {
+        kit::DisplayList part;
+        registries::add_part(part, dialog, building.fonts);
+        for (kit::Item& added : part.items)
+            list.items.push_back(std::move(added));
+        for (kit::Control& added : part.controls)
+            building.rows.push_back(std::move(added));
+        building.section_tab = std::move(part.tab_order);
+        if (open.limit > 0)
+            scroll_bar(
+                list,
+                open.area.well,
+                layout::scroll_thumb(open.area, open.scroll, open.limit, open.content_height),
+                dialog.hovered == scroll_bar_control || dialog.pressed == scroll_bar_control
+            );
+        return;
+    }
     const std::string heading =
         dialog.page == Page::registered
             ? registered_heading(dialog)
@@ -1119,6 +1139,50 @@ void add_footer(Building& building, const Dialog& dialog) {
     }};
     for (const FooterButton& footer : buttons) {
         const SourceRect rect = layout::footer_button(footer.control, dialog.size_class);
+        // The Registries part has ADD REGISTRY… in Restore defaults' place;
+        // during a game its lock stands there, and nothing takes a press.
+        if (footer.control == restore_control && registries::shown(dialog)) {
+            if (registries::adding_locked(dialog)) {
+                const SourceRect lock = registries::footer_lock(dialog);
+                mark(
+                    building.list,
+                    kit::Mark::padlock,
+                    {lock.x, lock.y + (lock.height - layout::padlock_height) / 2},
+                    kit::colour::lock,
+                    {}
+                );
+                const int32_t text_left = lock.x + layout::padlock_width + layout::padlock_gap;
+                text(
+                    building.list,
+                    DialogFont::small,
+                    layout::shown_text(registries::game_lock_text),
+                    {text_left, lock.y, lock.x + lock.width - text_left, lock.height},
+                    kit::Align::left,
+                    kit::colour::lock,
+                    {}
+                );
+                continue;
+            }
+            const bool held =
+                dialog.pressed == add_registry_control && dialog.hovered == add_registry_control;
+            const bool hovered = dialog.hovered == add_registry_control;
+            const std::string caption(layout::shown_text(registries::add_registry_text));
+            button(
+                building.list,
+                rect,
+                {caption, kit::ButtonStyle::plain, hovered, held, true},
+                add_registry_control,
+                {}
+            );
+            if (dialog.focused == add_registry_control)
+                focus_ring(building.list, rect, true, {});
+            kit::Control added = control_of(
+                add_registry_control, rect, named("add-registry"), kit::ControlKind::button
+            );
+            added.text = caption;
+            building.footer.push_back(std::move(added));
+            continue;
+        }
         const bool held = dialog.pressed == footer.control && dialog.hovered == footer.control;
         const bool hovered = dialog.hovered == footer.control;
         const std::string caption(layout::shown_text(footer.caption));

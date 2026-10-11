@@ -262,6 +262,50 @@ latched the closing key and drew a backdrop.
   else, closes it. A check that arrives during a game waits until the main
   menu, and leaving the main menu hides the window without cancelling the
   download. A new code refreshes the same window.
+- **Registries.** `runtime_registries.cpp` hosts the Add registry window,
+  a screen named `add-registry` (`Runtime::AddRegistryScreen`, modal, over
+  a backdrop, centred over the front end at the view's size class, nowhere
+  in a match) and drawn by `draw_add_registry`. ADD REGISTRY… in Settings ›
+  Downloads › Registries opens it empty (`open_add_registry`); a caller
+  with an address passes it, and its check starts at once. ADD MIRROR…
+  opens it for a mirror of a registry the player added
+  (`open_add_mirror`), with the keys the player trusts for that registry.
+  `take_registry_files`, once a frame beside `tell_mod_installs`, takes the
+  next `.oareg` file of the add-registry queue (`take_registry_file`) on
+  the settled main menu with no OA screen taking every input and no game
+  running, one at a time, reads it whole (at most
+  `oa::data::registry::max_descriptor_bytes`; a larger or unreadable file
+  is refused) through the platform's `take_opened_file` where it has one,
+  and opens the window filled in from it. A run nobody watches leaves the
+  files waiting, unless `--check-registries` asks for them. CHECK reads
+  the typed address with `parse_http_url` first: an https address, and any
+  other the reader refuses, is refused there with its sentence, and the
+  content service is never asked. Otherwise the window asks the content
+  service (`check_registry_url`, `check_mirror`, or `check_registry_file`
+  for a file) and polls `registry_check` each frame in its tick; CANCEL
+  closes it and drops the check, whose answer is never used. ADD calls
+  `add_checked_registry` or `add_checked_mirror`, closes the window and
+  gives an open Settings dialog the Registries part's registries again; a
+  refusal then, the registries having moved since the check, shows as any
+  other. The refusal sentences are one table in that file, `{name}` the
+  checked registry's name (for a mirror, the registry's own) or the
+  address without one. The Registries part's offer comes from the content
+  service's snapshot (`give_settings_registries`, at each opening of the
+  dialog), leaving out an added registry whose id a built-in one has
+  taken. OK makes the part's changes with `set_registry_enabled` and
+  `remove_registry` (`apply_registry_changes`); a refusal is logged with
+  `refusal_text` and said in the part's note the next time it opens. The
+  window's field keeps the system's text input started while it has the
+  focus (`text_field`); Space or a pad's A on it, and a press on it, start
+  that input again (`OaLayer::restart_text_input`), so that an on-screen
+  keyboard the player put away shows again. Ctrl+V, or Cmd+V on macOS,
+  gives a focused field of any of the layer's screens the clipboard's text
+  up to its first line break (`layer_paste`), which the window takes up to
+  its 2,048-byte limit. `native-registries` (`--check-registries`) writes
+  its own registry list under `--user-folder` before the content service
+  starts, switches its added registry off at OK and on at Cancel, removes
+  it at OK, refuses an https address without a check, and opens an
+  `.oareg` file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale on the kit canvas's crisp form, or at 150% on its smooth
   form in the modern fonts (`layer_drawing`), and lays them out at the size
@@ -2763,7 +2807,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
 - **Opening a package.** `--open FILE` and `--install-mod FILE`, repeated,
   and any bare argument naming a `.oamod`, `.oalang`, `.oamap` or `.oareg`
   file, any case, are files to open once the main menu shows. `post_opened_file`
-  sends a `.oareg` file to the add-registry queue and every other file to
+  sends a `.oareg` file to the add-registry queue, which opens the Add
+  registry window (see the OA layer's Registries), and every other file to
   the package inbox (`oa/app/package_install/inbox.hpp`); macOS's `-psn_`
   argument is skipped. A file the system opens in the game, or one dropped
   on the window, arrives as SDL's drop event: a watch on SDL's events
