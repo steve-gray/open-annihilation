@@ -333,6 +333,13 @@ settings dialog, the Game files screen and the folder chooser.
 | View | Information about the focused item, as F1. In the battle room it opens the focused player's card |
 | Right stick ↑ and ↓ | The wheel: steps the map and mission lists |
 | A twice quickly on a list row | Starts the campaign, mission or map, as a double click does |
+| Y, in the Library | Focuses the search. On every other screen Y does nothing |
+| X, in the Library | The selected entry's first action, when it is GET, UPDATE, CANCEL or RETRY and can be pressed. On every other screen X does nothing |
+| L1 and R1, in the Library | The previous and next tab |
+| B, in the Library | From the details page back to the list; otherwise closes the Library |
+| Right stick ↑ and ↓, in the Library | Scrolls the pane that has the focus, one notch at a time, as the wheel does |
+
+Left-handed play swaps L1 and R1 in the Library as it does in every menu. Y, X and B stay where they are.
 
 **Text.** A chat line, a save's name, the player's name or a marker's text
 opens Steam's on-screen keyboard in Game Mode, placed clear of the field
