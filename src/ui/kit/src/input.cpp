@@ -492,6 +492,18 @@ Reached reach(const DisplayList& list, Point finger, float within) noexcept {
     });
 }
 
+Reached
+reach(const DisplayList& list, Point finger, int32_t reach_px, DisabledControl disabled) noexcept {
+    if (disabled == DisabledControl::blocks)
+        for (const Control& control : list.controls)
+            if (contains(press_area(control), finger)) {
+                if (!control.enabled)
+                    return {no_control, finger};
+                break;
+            }
+    return reach(list, finger, reach_px);
+}
+
 void mark_states(DisplayList& list, const Interaction& interaction) noexcept {
     for (Item& item : list.items) {
         if (item.control == no_control) {
@@ -565,7 +577,21 @@ ControlId next_in_tab_order(const DisplayList& list, ControlId from, bool forwar
     return order[static_cast<std::size_t>((at + step) % count)];
 }
 
-ControlId focus_toward(const DisplayList& list, ControlId from, Direction direction) noexcept {
+namespace {
+
+/// Returns the control the focus moves to in a direction, as focus_toward says, judging
+/// each control where `place` puts it.
+///
+/// @param list the display list
+/// @param from the control the focus is on
+/// @param direction the way it moves
+/// @param place where a control is judged to lie, in points
+/// @param whole true when every control is a candidate, whether its scroll area shows it or not
+/// @return the control, or no_control when the focus stays
+template <typename Place>
+[[nodiscard]] ControlId focus_search(
+    const DisplayList& list, ControlId from, Direction direction, Place place, bool whole
+) noexcept {
     // How many gaps along the direction one gap across it costs, when nothing
     // lies in line with the focused control. The whole rule is this function,
     // so a playtest can tune it here.
@@ -574,6 +600,7 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
     const Control* origin = control_of(list, from);
     if (origin == nullptr)
         return no_control;
+    const Rect from_rect = place(*origin);
     // A control in no scroll area has no area of its own to search first:
     // every control is outside it.
     const bool in_area = origin->group >= 0;
@@ -595,22 +622,23 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
             if (same_group) {
                 if (control->group != origin->group)
                     continue;
-            } else if ((in_area && control->group == origin->group) || !in_view(*control)) {
+            } else if (
+                (in_area && control->group == origin->group) || (!whole && !in_view(*control))
+            ) {
                 continue;
             }
-            if (!beyond(origin->rect, control->rect, direction))
+            const Rect to_rect = place(*control);
+            if (!beyond(from_rect, to_rect, direction))
                 continue;
 
-            const bool in_beam = spans_overlap(
-                across_span(origin->rect, direction), across_span(control->rect, direction)
-            );
-            const int64_t along = gap_along(origin->rect, control->rect, direction);
-            const int64_t across = span_gap(
-                across_span(origin->rect, direction), across_span(control->rect, direction)
-            );
+            const bool in_beam =
+                spans_overlap(across_span(from_rect, direction), across_span(to_rect, direction));
+            const int64_t along = gap_along(from_rect, to_rect, direction);
+            const int64_t across =
+                span_gap(across_span(from_rect, direction), across_span(to_rect, direction));
             const int64_t rank =
                 in_beam ? along : along + static_cast<int64_t>(kAcrossWeight) * across;
-            const int64_t centres = centre_across(origin->rect, control->rect, direction);
+            const int64_t centres = centre_across(from_rect, to_rect, direction);
 
             bool better = !any;
             if (any) {
@@ -641,6 +669,31 @@ ControlId focus_toward(const DisplayList& list, ControlId from, Direction direct
             return inside;
     }
     return search(false);
+}
+
+} // namespace
+
+ControlId focus_toward(const DisplayList& list, ControlId from, Direction direction) noexcept {
+    return focus_search(
+        list, from, direction, [](const Control& control) noexcept { return control.rect; }, false
+    );
+}
+
+ControlId focus_toward(
+    const DisplayList& list, ControlId from, Direction direction, std::span<const ScrollArea> areas
+) noexcept {
+    const auto laid_whole = [areas](const Control& control) noexcept {
+        Rect rect = control.rect;
+        if (control.group >= 0 && static_cast<std::size_t>(control.group) < areas.size()) {
+            rect.y += areas[static_cast<std::size_t>(control.group)].offset;
+            return rect;
+        }
+        for (const ScrollArea& area : areas)
+            if (area.view.height > 0 && control.rect.y >= area.view.y + area.view.height)
+                rect.y += area.limit;
+        return rect;
+    };
+    return focus_search(list, from, direction, laid_whole, true);
 }
 
 namespace {
