@@ -583,9 +583,9 @@ void tab_follows_the_dialogs_focus_order() {
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
-    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 20, 21,
-                                                          10, 11, 12, 0,  1,  2,  3,  4,
-                                                          5,  6,  8,  9,  7}));
+    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 20,
+                                                          21, 10, 11, 12, 0,  1,  2,
+                                                          3,  4,  5,  6,  8,  9,  7}));
     // Developer with its first area open: its rows, UI kit gallery's SHOW
     // last of them, its list's headers, Show Active Only and Restore profile
     // values, then the rest.

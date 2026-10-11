@@ -53,8 +53,12 @@ struct EnginePageList {
 constexpr EnginePageList engine_page_list(bool touch, bool controller, bool game_files) noexcept {
     EnginePageList list{};
     const auto add = [&list](Page page) { list.pages[list.count++] = page; };
-    for (const Page page : {Page::controls, Page::common_tweaks, Page::language, Page::graphics,
-                            Page::user_interface})
+    for (const Page page :
+         {Page::controls,
+          Page::common_tweaks,
+          Page::language,
+          Page::graphics,
+          Page::user_interface})
         add(page);
     if (touch)
         add(Page::touch);

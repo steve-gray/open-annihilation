@@ -9,20 +9,26 @@
 
 namespace oa::app {
 
+#if defined(SDL_PLATFORM_MACOS)
 /// The window's live content size in points, from the system's window.
 ///
-/// On macOS this is the content rectangle of the window on screen. It can
-/// differ from the size last recorded when a resize was not delivered.
-/// Elsewhere, or when that window cannot be read, it returns false and
-/// leaves the sizes unchanged.
+/// This is the content rectangle of the window on screen. It can differ
+/// from the size last recorded when a resize was not delivered. When that
+/// window cannot be read, it returns false and leaves the sizes unchanged.
 ///
 /// @param window the window
 /// @param[out] width its content width, in points
 /// @param[out] height its content height, in points
 /// @return true when the size was read
-#if defined(SDL_PLATFORM_MACOS)
 [[nodiscard]] bool platform_window_content_size(SDL_Window* window, int& width, int& height);
 #else
+/// The window's live content size, which only macOS reads: elsewhere the
+/// size SDL reports is the size on screen.
+///
+/// @param window the window
+/// @param[out] width left unchanged
+/// @param[out] height left unchanged
+/// @return false
 [[nodiscard]] inline bool
 platform_window_content_size(SDL_Window* /*window*/, int& /*width*/, int& /*height*/) {
     return false;

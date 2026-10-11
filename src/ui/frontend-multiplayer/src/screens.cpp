@@ -1427,9 +1427,7 @@ void paint_plain_list_frames(const Resources& modal, Image& image) {
         const auto& control = modal.panel.controls[static_cast<std::size_t>(index)];
         if (control.type != ControlType::list_box || control.active == 0)
             continue;
-        paint_list_box_frame(
-            image.rgb, image.width, image.height, modal, control, palette, false
-        );
+        paint_list_box_frame(image.rgb, image.width, image.height, modal, control, palette, false);
     }
 }
 
@@ -1447,13 +1445,7 @@ void paint_plain_text_box(
     if (!res.plain_panel)
         return;
     paint_list_box_frame(
-        surface.rgb,
-        surface.width,
-        surface.height,
-        res,
-        control,
-        screen_palette(res.screen),
-        true
+        surface.rgb, surface.width, surface.height, res, control, screen_palette(res.screen), true
     );
 }
 
