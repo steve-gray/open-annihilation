@@ -13244,7 +13244,7 @@ class Runtime final : public menu::Host,
     std::string permitted_player_counts_text() override;
 
     /// Returns the selected map's description, the map object's summary text:
-    /// lowered and looked up in gamedata\translate.tdf, as 3.1c reads a map's
+    /// lowered and looked up in gamedata\\translate.tdf, as 3.1c reads a map's
     /// description, else as the map writes it.
     ///
     /// @return the description; empty without a selected map
