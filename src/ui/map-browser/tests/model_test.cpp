@@ -3,7 +3,7 @@
 
 // ui-map-browser: the map browser's model (merging the three sources, every
 // filter and their combination, the search, the order, the primary button
-// and the cards' words).
+// and the cards' words), then its screen (layout_test.cpp).
 #include "oa/test/check.hpp"
 #include "oa/ui/map_browser/model.hpp"
 
@@ -14,6 +14,9 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+/// Runs the screen's tests, in layout_test.cpp.
+void layout_tests();
 
 namespace {
 
@@ -308,5 +311,6 @@ int main() {
     combined_filters();
     primary();
     words();
+    layout_tests();
     return oa::test::check_exit_status();
 }
