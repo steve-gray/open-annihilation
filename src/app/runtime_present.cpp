@@ -843,16 +843,21 @@ void Runtime::present_software_cursor(bool match_layers) {
     if (!rendered.ok())
         return;
     const auto& frame = *rendered.frame;
-    if (match_cursor_tex_ == nullptr || match_cursor_tex_w_ != static_cast<int>(frame.width) ||
-        match_cursor_tex_h_ != static_cast<int>(frame.height)) {
+    // Above an OA screen the cursor is stamped into a texture the size of
+    // the picture, at the same whole pixels as the cursor in the picture,
+    // and enlarged with the picture. A texture of the cursor alone, scaled
+    // on its own rectangle, does not land on those pixels.
+    const bool over_layer = !match_layers && screen_ != Screen::match && oa_layer().shows(false);
+    const int canvas_w = over_layer ? output_texture_w_ : static_cast<int>(frame.width);
+    const int canvas_h = over_layer ? output_texture_h_ : static_cast<int>(frame.height);
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return;
+    if (match_cursor_tex_ == nullptr || match_cursor_tex_w_ != canvas_w ||
+        match_cursor_tex_h_ != canvas_h) {
         if (match_cursor_tex_ != nullptr)
             SDL_DestroyTexture(match_cursor_tex_);
         match_cursor_tex_ = SDL_CreateTexture(
-            sdl_.renderer,
-            SDL_PIXELFORMAT_ARGB8888,
-            SDL_TEXTUREACCESS_STREAMING,
-            static_cast<int>(frame.width),
-            static_cast<int>(frame.height)
+            sdl_.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, canvas_w, canvas_h
         );
         if (match_cursor_tex_ == nullptr)
             return;
@@ -864,37 +869,79 @@ void Runtime::present_software_cursor(bool match_layers) {
             match_cursor_tex_ = nullptr;
             return;
         }
-        match_cursor_tex_w_ = static_cast<int>(frame.width);
-        match_cursor_tex_h_ = static_cast<int>(frame.height);
+        match_cursor_tex_w_ = canvas_w;
+        match_cursor_tex_h_ = canvas_h;
     }
     void* pixels = nullptr;
     int pitch = 0;
     if (!SDL_LockTexture(match_cursor_tex_, nullptr, &pixels, &pitch))
         return;
     const auto& pal = match_palette_.size() >= 1024 ? match_palette_ : resources_.gui_palette;
-    for (uint32_t row = 0; row < frame.height; ++row) {
-        auto* dst = reinterpret_cast<uint32_t*>(
-            static_cast<uint8_t*>(pixels) + static_cast<std::size_t>(row) * pitch
-        );
-        for (uint32_t column = 0; column < frame.width; ++column) {
-            const auto offset = static_cast<std::size_t>(row) * frame.width + column;
-            if (offset >= frame.coverage.size() || frame.coverage[offset] == 0) {
-                dst[column] = 0;
-                continue;
-            }
-            const auto pal_i = static_cast<std::size_t>(frame.pixels[offset]) * 4U;
-            if (pal_i + 2 >= pal.size()) {
-                dst[column] = 0;
-                continue;
-            }
-            dst[column] = 0xff000000u | (static_cast<uint32_t>(pal[pal_i]) << 16) |
-                          (static_cast<uint32_t>(pal[pal_i + 1]) << 8) |
-                          static_cast<uint32_t>(pal[pal_i + 2]);
+    const auto cursor_texel = [&frame, &pal](std::size_t offset) {
+        if (offset >= frame.coverage.size() || frame.coverage[offset] == 0)
+            return 0u;
+        const auto pal_i = static_cast<std::size_t>(frame.pixels[offset]) * 4U;
+        if (pal_i + 2 >= pal.size())
+            return 0u;
+        return 0xff000000u | (static_cast<uint32_t>(pal[pal_i]) << 16) |
+               (static_cast<uint32_t>(pal[pal_i + 1]) << 8) | static_cast<uint32_t>(pal[pal_i + 2]);
+    };
+    if (over_layer) {
+        for (int row = 0; row < canvas_h; ++row) {
+            auto* dst = reinterpret_cast<uint32_t*>(
+                static_cast<uint8_t*>(pixels) + static_cast<std::size_t>(row) * pitch
+            );
+            std::fill(dst, dst + canvas_w, 0u);
         }
-        if (!gamma_identity_)
-            gamma_xrgb_row(dst, static_cast<int>(frame.width), gamma_table_);
+        // The same whole pixels tick_and_draw_cursor writes into the picture.
+        const int destination_x = static_cast<int>(cursor_x) - frame.origin_x;
+        const int destination_y = static_cast<int>(cursor_y) - frame.origin_y;
+        for (uint32_t row = 0; row < frame.height; ++row) {
+            const int y = destination_y + static_cast<int>(row);
+            if (y < 0 || y >= canvas_h)
+                continue;
+            auto* dst = reinterpret_cast<uint32_t*>(
+                static_cast<uint8_t*>(pixels) + static_cast<std::size_t>(y) * pitch
+            );
+            for (uint32_t column = 0; column < frame.width; ++column) {
+                const int x = destination_x + static_cast<int>(column);
+                if (x < 0 || x >= canvas_w)
+                    continue;
+                dst[x] = cursor_texel(static_cast<std::size_t>(row) * frame.width + column);
+            }
+            if (!gamma_identity_)
+                gamma_xrgb_row(dst, canvas_w, gamma_table_);
+        }
+    } else {
+        for (uint32_t row = 0; row < frame.height; ++row) {
+            auto* dst = reinterpret_cast<uint32_t*>(
+                static_cast<uint8_t*>(pixels) + static_cast<std::size_t>(row) * pitch
+            );
+            for (uint32_t column = 0; column < frame.width; ++column)
+                dst[column] = cursor_texel(static_cast<std::size_t>(row) * frame.width + column);
+            if (!gamma_identity_)
+                gamma_xrgb_row(dst, static_cast<int>(frame.width), gamma_table_);
+        }
     }
     SDL_UnlockTexture(match_cursor_tex_);
+    if (over_layer) {
+        // The picture's filter, over the picture's whole rectangle, so the
+        // cursor enlarges as it does inside the picture.
+        const SDL_ScaleMode mode = standard_frame_scale_mode(canvas_w);
+        const bool filtered = mode != SDL_SCALEMODE_NEAREST;
+        if (filtered)
+            std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, mode);
+        else
+            std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, SDL_SCALEMODE_NEAREST);
+        std::ignore = SDL_RenderTexture(sdl_.renderer, match_cursor_tex_, nullptr, nullptr);
+        // An older SDL draws a queued texture with the scale mode it has
+        // when the queue runs. Put NEAREST back only after this draw has run.
+        if (filtered && SDL_GetVersion() < SDL_VERSIONNUM(3, 2, 10))
+            std::ignore = SDL_FlushRenderer(sdl_.renderer);
+        if (filtered)
+            std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, SDL_SCALEMODE_NEAREST);
+        return;
+    }
     const SDL_FRect dest{
         cursor_x - static_cast<float>(frame.origin_x),
         cursor_y - static_cast<float>(frame.origin_y),
@@ -903,7 +950,8 @@ void Runtime::present_software_cursor(bool match_layers) {
     };
     // On a window at native density, and over a scaled frame, the cursor
     // over the match goes to the display's pixels with the match's layers;
-    // a mode the texture refuses leaves it as it was.
+    // any other frame keeps SDL's LINEAR. A mode the texture refuses leaves
+    // it as it was.
     if (native_density_window() || scaled_frame_width_ > 0)
         std::ignore = SDL_SetTextureScaleMode(
             match_cursor_tex_, match_layers ? one_to_one_scale_mode() : SDL_SCALEMODE_LINEAR

@@ -604,6 +604,114 @@ void Painter::draw_rgb(
     note_painted(touched);
 }
 
+namespace {
+
+/// One picture pixel a canvas pixel takes along an axis, and its weight.
+struct Tap {
+    int index{};     ///< the picture pixel
+    double weight{}; ///< its share
+};
+
+/// Returns the picture pixels each canvas pixel along an axis takes: the ones
+/// its span covers, weighted by how much of each, where the picture shrinks;
+/// the two nearest its centre, weighted by how near each is, where it grows.
+///
+/// @param source the picture's pixels along the axis, 1 or more
+/// @param target the canvas pixels along the axis, 1 or more
+/// @return for each canvas pixel, its taps
+std::vector<std::vector<Tap>> axis_taps(int source, int target) {
+    std::vector<std::vector<Tap>> taps(static_cast<std::size_t>(target));
+    const double ratio = static_cast<double>(source) / static_cast<double>(target);
+    for (int at = 0; at < target; ++at) {
+        auto& taken = taps[static_cast<std::size_t>(at)];
+        if (ratio >= 1.0) {
+            const double first = static_cast<double>(at) * ratio;
+            const double last = static_cast<double>(at + 1) * ratio;
+            const int lowest = static_cast<int>(std::floor(first));
+            const int highest = std::min(static_cast<int>(std::ceil(last)), source);
+            for (int index = lowest; index < highest; ++index) {
+                const double covered = std::min(last, static_cast<double>(index + 1)) -
+                                       std::max(first, static_cast<double>(index));
+                if (covered > 0.0)
+                    taken.push_back({index, covered});
+            }
+            continue;
+        }
+        // The canvas pixel's centre among the picture pixels' centres.
+        const double centre = (static_cast<double>(at) + 0.5) * ratio - 0.5;
+        const double below = std::floor(centre);
+        const double share = centre - below;
+        const int lower = std::clamp(static_cast<int>(below), 0, source - 1);
+        const int upper = std::clamp(static_cast<int>(below) + 1, 0, source - 1);
+        taken.push_back({lower, 1.0 - share});
+        taken.push_back({upper, share});
+    }
+    return taps;
+}
+
+} // namespace
+
+void Painter::draw_rgba(std::span<const uint8_t> rgba, int width, int height, Box box) noexcept {
+    constexpr std::size_t bytes_per_pixel = 4;
+    if (width <= 0 || height <= 0 || box.empty() ||
+        rgba.size() <
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * bytes_per_pixel)
+        return;
+    const Box part = intersect(box, clip_);
+    if (part.empty())
+        return;
+    const auto across = axis_taps(width, box.width);
+    const auto down = axis_taps(height, box.height);
+    Box touched{};
+    for (int row = part.y; row < part.y + part.height; ++row) {
+        const auto& row_taps = down[static_cast<std::size_t>(row - box.y)];
+        auto* pixel =
+            canvas_->rgba.data() + (static_cast<std::size_t>(row) * canvas_->width + part.x) * 4U;
+        int first = -1;
+        int last = -1;
+        for (int column = part.x; column < part.x + part.width; ++column, pixel += 4) {
+            const auto& column_taps = across[static_cast<std::size_t>(column - box.x)];
+            double weights = 0.0;
+            double alpha = 0.0;
+            std::array<double, 3> colour{};
+            for (const Tap& vertical : row_taps) {
+                for (const Tap& horizontal : column_taps) {
+                    const double weight = vertical.weight * horizontal.weight;
+                    const uint8_t* from =
+                        rgba.data() + (static_cast<std::size_t>(vertical.index) * width +
+                                       static_cast<std::size_t>(horizontal.index)) *
+                                          bytes_per_pixel;
+                    const double opacity = weight * from[3];
+                    weights += weight;
+                    alpha += opacity;
+                    for (std::size_t channel = 0; channel < 3; ++channel)
+                        colour[channel] += opacity * from[channel];
+                }
+            }
+            if (!(weights > 0.0) || !(alpha > 0.0))
+                continue;
+            const auto channel_of = [](double value) {
+                return static_cast<uint8_t>(std::clamp(std::lround(value), 0L, 255L));
+            };
+            const Rgba mixed{
+                channel_of(colour[0] / alpha),
+                channel_of(colour[1] / alpha),
+                channel_of(colour[2] / alpha),
+                channel_of(alpha / weights),
+            };
+            if (mixed.a == 0)
+                continue;
+            blend_pixel(pixel, mixed, 255U);
+            if (first < 0)
+                first = column;
+            last = column;
+        }
+        if (first >= 0)
+            touched = unite(touched, Box{first, row, last - first + 1, 1});
+    }
+    note_painted(touched);
+}
+
 void Painter::draw_icon(Icon icon, Area box, Rgba colour) noexcept {
     const float size = std::min(box.width, box.height);
     if (icon == Icon::none || size <= 0.0F)

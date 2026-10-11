@@ -8,9 +8,8 @@
 
 #include "oa/ui/kit/components_more.hpp"
 
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/chrome.hpp"
-
-#include "oa/ui/frontend_renderer/artless.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -21,8 +20,6 @@
 #include <vector>
 
 namespace oa::ui::kit {
-
-namespace renderer = oa::ui::frontend_renderer;
 
 namespace {
 
@@ -409,17 +406,13 @@ ButtonLook button_look(
 /// @param line the line
 /// @param text the text, as shown
 void draw_text_line(const Canvas& canvas, const PlacedLine& line, std::string_view text) {
-    if (canvas.surface == nullptr || canvas.fonts == nullptr)
-        return;
-    draw_boxed_text(
-        *canvas.surface,
-        canvas.placement,
-        *canvas.fonts,
+    box_text(
+        canvas,
         line.path ? FontRole::regular : FontRole::small,
         text,
         line.rect,
         Align::left,
-        rgb(line.failure ? colour::lock : colour::text)
+        line.failure ? colour::lock : colour::text
     );
 }
 
@@ -921,22 +914,17 @@ void draw_question(const Canvas& canvas, const Question& question) {
 }
 
 void draw_progress(const Canvas& canvas, const Rect& bar, int32_t done, int32_t whole) {
-    if (canvas.surface == nullptr || bar.width <= 0 || bar.height <= 0)
+    if (!can_draw(canvas) || bar.width <= 0 || bar.height <= 0)
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, bar, rgb(colour::well));
-    renderer::draw_outline(*canvas.surface, canvas.placement, bar, rgb(colour::control_border));
+    fill_rect(canvas, bar, colour::well);
+    outline_rect(canvas, bar, colour::control_border);
     if (whole <= 0)
         return;
     const int32_t inner = bar.width - 2;
     const auto filled =
         static_cast<int32_t>(int64_t{inner} * std::clamp(done, int32_t{0}, whole) / whole);
     if (filled > 0)
-        renderer::fill_source_rect(
-            *canvas.surface,
-            canvas.placement,
-            {bar.x + 1, bar.y + 1, filled, bar.height - 2},
-            rgb(colour::accent)
-        );
+        fill_rect(canvas, {bar.x + 1, bar.y + 1, filled, bar.height - 2}, colour::accent);
 }
 
 void add_progress(DisplayList& list, const Rect& bar, int32_t done, int32_t whole) {
