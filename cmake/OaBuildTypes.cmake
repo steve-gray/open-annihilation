@@ -46,6 +46,11 @@ endif()
 # before keeps up.
 if(MSVC)
   add_link_options("$<$<CONFIG:Check,Debug,RelWithDebInfo>:/PDBPAGESIZE:8192>")
+  # The optimised Check build's inlined code still exceeds a limit of the
+  # merged program database (LNK1140) even with 8 KiB pages, where Debug
+  # links. Check keeps its debug records in the object files instead, which
+  # backtraces in the build folder still read.
+  add_link_options("$<$<CONFIG:Check>:/DEBUG:FASTLINK>")
 endif()
 # Packages such as SDL3 export only their release configurations.
 set(CMAKE_MAP_IMPORTED_CONFIG_CHECK Release RelWithDebInfo ""
