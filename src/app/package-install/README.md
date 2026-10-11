@@ -44,8 +44,19 @@ one process: the packages waiting for the main menu (`post_package_file`,
 (`post_registry_file`, `take_registry_file`), `post_opened_file`, which sends
 a `.oareg` file there and every other opened file to the package queue, the
 change that waits for the run playing its target to end
-(`set_pending_change`, `finish_pending_change`) and its outcome, and the
-discard folders the start's recovery found.
+(`set_pending_change`, `pending_change_waiting`, `finish_pending_change`)
+and its outcome, and the discard folders the start's recovery found.
+`pending_change_target` names the folder the waiting change acts on, so
+that the Library can say an update waits until the player leaves the mod
+being played. `main()` calls `finish_pending_change` after every run: after
+a soft restart, before the next run reads the folder, and on the way out
+when the player quits, so that a change held for the mod being played is
+made then rather than lost. After a crash, the next start's
+`recover_changes` settles the staged files away and the folder keeps what
+it held. A package's outcome is reported once (`report_package_outcome`
+drops a second report of the same package): the game reports a mod held
+from the Library as installed when it holds it, and the report the change
+makes when it is put in place then reaches no one.
 
 `oa/app/package_install/prompts.hpp` builds every prompt the install shows
 (`oa::ui::engine_settings::Prompt`): its text through the interface
@@ -349,7 +360,11 @@ a replace that fails leaves the previous record as it was.
   phase held to its budget; `write_origin` replacing a record and refusing
   a missing folder, a link and a lock that is held; the folder hooks'
   records; catalogue outcomes kept, capped and taken once, including one a
-  pending change reports.
+  pending change reports; and an update held for the mod being played,
+  named by `pending_change_target` while it waits and put in place by
+  `finish_pending_change` as on the way out, the new version in the folder
+  and the old in `.backup`, then a staged update a stop left settled away
+  whole by `recover_changes`.
 - `app-package-install-kinds`: the kind table holds `oamod`, `oamap` and
   `oalang`, a file is a package by those extensions, the seven folder names
   of each, and a made-up kind built in the test installs, replaces, rolls
@@ -361,8 +376,9 @@ a replace that fails leaves the previous record as it was.
   folder, and each refusal, including a font that does not open after
   unpacking and an entry the shared names check refuses.
 
-The native checks `native-mod-install` and `native-language-install`
-(`docs/development/testing.md`) install packages in the game itself.
+The native checks `native-mod-install`, `native-library-install` and
+`native-language-install` (`docs/development/testing.md`,
+[src/app](../README.md#the-library)) install packages in the game itself.
 
 ## Limitations
 

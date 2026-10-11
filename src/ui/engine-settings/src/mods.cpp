@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Mods: the list of the mods the game can play, in the order it shows them,
-// each row's texts and place, and the Switch Mod question's text.
+// each row's texts and place, the Switch Mod question's text, and the Roll
+// Back Mod question as a prompt of its own.
 
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/engine_settings/prompt.hpp"
 
 #include "geometry.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -316,5 +318,27 @@ std::vector<std::string> question_text_lines(
 }
 
 } // namespace geometry
+
+Prompt
+roll_back_prompt(std::string_view title, std::string_view from, std::string_view to, bool playing) {
+    Prompt prompt;
+    prompt.title = std::string(geometry::shown_text(geometry::roll_back_heading_text));
+    std::string asked = geometry::filled(
+        geometry::roll_back_ask_text, {{"title", title}, {"from", from}, {"to", to}}
+    );
+    if (playing)
+        asked += " " + std::string(geometry::shown_text(geometry::roll_back_reload_text));
+    prompt.paragraphs.push_back({std::move(asked), false});
+    prompt.buttons.push_back(
+        {std::string(geometry::shown_text(geometry::no_text)), false, "cancel"}
+    );
+    prompt.buttons.push_back(
+        {std::string(geometry::shown_text(geometry::roll_back_text)), true, "roll-back"}
+    );
+    prompt.cancel_button = 0;
+    prompt.primary_button = 1;
+    prompt.marked = 0;
+    return prompt;
+}
 
 } // namespace oa::ui::engine_settings

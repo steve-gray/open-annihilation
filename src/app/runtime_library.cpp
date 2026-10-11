@@ -9,6 +9,7 @@
 
 #include "engine_settings_menu_host.hpp"
 #include "library_host.hpp"
+#include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 
 #include "oa/app/content/counts.hpp"
@@ -20,6 +21,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/mod_summary.hpp"
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
@@ -53,7 +55,6 @@
 #include <ostream>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -211,16 +212,6 @@ int64_t seconds_now() {
                std::chrono::system_clock::now().time_since_epoch()
     )
         .count();
-}
-
-/// Returns a folder as the settings keep it: absolute, normal, in UTF-8.
-///
-/// @param folder the folder
-/// @return its path
-std::string kept_folder(const fs::path& folder) {
-    std::error_code error;
-    const fs::path absolute = fs::absolute(folder, error);
-    return path_to_utf8((error ? folder : absolute).lexically_normal());
 }
 
 /// Returns the registry of a snapshot that has an id: the built-in one,
@@ -466,8 +457,36 @@ void Runtime::LibraryHost::look_again(Runtime& runtime) {
         work.wake.notify_all();
 }
 
-void Runtime::LibraryHost::rebuild(Runtime& /*runtime*/) {
+void Runtime::LibraryHost::rebuild(Runtime& runtime) {
     library::Inputs inputs = feed.inputs != nullptr ? feed.inputs(feed.context) : library::Inputs{};
+    // What the installer noted of the mods chosen here: a refused item fails
+    // with the installer's reason, and an item whose change waits for the
+    // player to leave the mod being played is held while it waits.
+    if (runtime.mod_install_state_) {
+        using Phase = library::QueueItem::Phase;
+        const std::optional<std::string> waiting = package_install::pending_change_target();
+        for (library::QueueItem& item : inputs.queue) {
+            if (item.kind != library::Kind::mod)
+                continue;
+            for (const ModInstallState::LibraryNote& note :
+                 runtime.mod_install_state_->library_notes) {
+                if (note.registry != item.registry || note.key != item.key)
+                    continue;
+                const bool installing =
+                    item.phase == Phase::checking || item.phase == Phase::installing;
+                if (!note.problem.empty() && (installing || item.phase == Phase::failed)) {
+                    item.phase = Phase::failed;
+                    item.problem = note.problem;
+                    item.retryable = true;
+                } else if (
+                    !note.held_target.empty() && waiting && *waiting == note.held_target &&
+                    (installing || item.phase == Phase::installed)
+                ) {
+                    item.phase = Phase::held;
+                }
+            }
+        }
+    }
     // An update queued from the Library keeps saying what it changes while
     // the queue lists it.
     std::vector<KeptUpdate> still;
@@ -1100,38 +1119,36 @@ struct Runtime::LibraryScreen final : LayerScreen {
         return LayerAnswer::redraw;
     }
 
-    /// Queues one entry's GET or UPDATE through the feed. An update keeps
-    /// what it changes for the queue line (KeptUpdate).
+    /// Forgets what the installer noted of an entry's earlier try, as the
+    /// player asks for it again.
+    ///
+    /// @param id the entry
+    void forget_note(const library::EntryId& id) {
+        if (runtime_.mod_install_state_)
+            runtime_.mod_install_state_->note_for_library(runtime_, {id.registry, id.key, {}, {}});
+    }
+
+    /// Queues one entry's GET through the feed; what the installer noted of
+    /// an earlier try is forgotten.
     ///
     /// @param host the host
     /// @param entry the entry
-    /// @param reason install or update
-    void enqueue(LibraryHost& host, const library::Entry& entry, content::DownloadReason reason) {
+    void get(LibraryHost& host, const library::Entry& entry) {
         if (host.feed.enqueue == nullptr || entry.id.registry.empty())
             return;
+        forget_note(entry.id);
         std::string why;
-        const std::optional<uint64_t> item =
-            host.feed.enqueue(host.feed.context, entry.id.registry, entry.id.key, reason, &why);
-        if (!item) {
-            if (!why.empty()) {
-                runtime_.status_ = why;
-                std::cerr << "open-annihilation: library: " << why << '\n';
-            }
-            return;
-        }
-        if (reason != content::DownloadReason::update || entry.update == nullptr ||
-            entry.installed == nullptr)
-            return;
-        const library::ChangeTexts change =
-            library::change_texts(*entry.installed, *entry.update, host.model.text);
-        host.kept_updates.push_back(
-            {entry.id.registry,
-             entry.id.kind,
-             entry.id.key,
-             entry.update->rules,
-             change.from,
-             change.to}
+        const std::optional<uint64_t> item = host.feed.enqueue(
+            host.feed.context,
+            entry.id.registry,
+            entry.id.key,
+            content::DownloadReason::install,
+            &why
         );
+        if (!item && !why.empty()) {
+            runtime_.status_ = why;
+            std::cerr << "open-annihilation: library: " << why << '\n';
+        }
     }
 
     /// Opens Settings over the Library, or, where Settings is under it, goes
@@ -1156,41 +1173,20 @@ struct Runtime::LibraryScreen final : LayerScreen {
         switch (action) {
         case library::Action::get:
             if (entry != nullptr)
-                enqueue(host, *entry, content::DownloadReason::install);
+                get(host, *entry);
             return false;
-        case library::Action::update:
-            if (entry != nullptr)
-                enqueue(host, *entry, content::DownloadReason::update);
-            return false;
-        case library::Action::update_all: {
-            // Every UPDATE that can act, in the order the list shows them.
-            std::vector<library::EntryId> due;
-            const auto take_due = [&due](const library::Entry& each) {
-                const bool queued = each.queued != nullptr &&
-                                    each.queued->phase != library::QueueItem::Phase::failed &&
-                                    each.queued->phase != library::QueueItem::Phase::installed;
-                if (each.state == library::State::update && each.can_act && !queued)
-                    due.push_back(each.id);
-            };
-            if (host.model.tab == library::Tab::updates)
-                for (const std::size_t index : host.model.visible)
-                    take_due(host.model.entries[index]);
-            else
-                for (const library::Entry& each : host.model.entries)
-                    take_due(each);
-            for (const library::EntryId& each : due)
-                if (const library::Entry* found = library::find_entry(host.model, each))
-                    enqueue(host, *found, content::DownloadReason::update);
-            return false;
-        }
         case library::Action::cancel:
             if (entry != nullptr && host.feed.cancel != nullptr)
                 host.feed.cancel(host.feed.context, id.registry, id.key);
             return false;
         case library::Action::retry:
-            if (entry != nullptr && host.feed.retry != nullptr)
+            if (entry != nullptr && host.feed.retry != nullptr) {
+                forget_note(id);
                 host.feed.retry(host.feed.context, id.registry, id.key);
+            }
             return false;
+        case library::Action::update:
+        case library::Action::update_all:
         case library::Action::roll_back:
         case library::Action::play_now:
             runtime_.library_entry_action(action, id);
@@ -1286,49 +1282,6 @@ std::size_t Runtime::library_update_count() {
 bool Runtime::library_registry_built_in(std::string_view registry) {
     const LibraryHost& host = library_host();
     return host.feed.built_in != nullptr && host.feed.built_in(host.feed.context, registry);
-}
-
-void Runtime::library_entry_action(library::Action action, const library::EntryId& entry) {
-    LibraryHost& host = library_host();
-    const library::Entry* found = library::find_entry(host.model, entry);
-    if (found == nullptr || found->installed == nullptr)
-        return;
-    const fs::path folder = found->installed->folder;
-    if (action == library::Action::play_now) {
-        std::string refusal;
-        if (!switch_to_mod_folder(folder, refusal)) {
-            status_ = refusal;
-            std::cerr << "open-annihilation: library: PLAY NOW: " << refusal << '\n';
-        }
-        return;
-    }
-    if (action != library::Action::roll_back)
-        return;
-    // Settings over the Library on Mods, the Roll Back Mod question asked
-    // for the folder; where Settings is under the Library, it comes back.
-    // The Library may be taking the input that asked, so it never closes
-    // anything but through return_to.
-    OaLayer& layer = oa_layer();
-    if (layer.find(kSettingsScreen) != nullptr)
-        layer.return_to(kSettingsScreen);
-    else
-        open_engine_settings_from_menu();
-    settings::Dialog* dialog = engine_settings_dialog();
-    if (dialog == nullptr)
-        return;
-    dialog->page = settings::Page::mods;
-    const std::string kept = kept_folder(folder);
-    for (std::size_t index = 0; index < dialog->mod_folders.size(); ++index) {
-        if (dialog->mod_folders[index] != kept)
-            continue;
-        dialog->switch_question = static_cast<int32_t>(index);
-        dialog->mod_question = settings::ModQuestion::roll_back;
-        dialog->question_marks_no = false;
-        dialog->hovered = settings::no_control;
-        dialog->pressed = settings::no_control;
-        dialog->dragging = false;
-        break;
-    }
 }
 
 void Runtime::tick_library() {
