@@ -632,6 +632,14 @@ void larger_classes_show_more() {
 void rows_name_their_entries() {
     const lib::Library library = with_ridge();
     const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* base = fixture::named(list, "library.row.base-game");
+    OA_CHECK(
+        base != nullptr && base->text == "Base Game (Disable Mods)" &&
+        base->kind == kit::ControlKind::list_item && !base->checked
+    );
+    OA_CHECK(
+        !library.visible.empty() && library.entries[library.visible.front()].id.key == "@base-game"
+    );
     const kit::Control* ridge = fixture::named(list, "library.row.fixture-core.ridge");
     OA_CHECK(
         ridge != nullptr && ridge->text == "Ridge" && ridge->kind == kit::ControlKind::list_item
@@ -704,16 +712,22 @@ void empty_and_offline_lists_say_why() {
     OA_EXPECT_NONE(fixture::outside_window(offline_list, {480, 324}), "offline");
     OA_EXPECT_NONE(meeting_controls(offline_list), "offline");
 
+    // No registry and no package: Mods still starts with the base game, so
+    // the empty-list line is not shown.
     lib::Library none;
     lib::refresh(none, {});
     lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
+    const kit::Control* base_row = fixture::named(none_list, "library.row.base-game");
+    OA_CHECK(
+        base_row != nullptr && base_row->text == "Base Game (Disable Mods)" && base_row->checked
+    );
     bool told = false;
     for (const kit::Item& item : none_list.items)
         told =
             told || (item.role == kit::Role::text &&
                      item.text == "Nothing here yet. Turn a registry on in Settings › Downloads.");
-    OA_CHECK(told);
+    OA_CHECK(!told);
 }
 
 /// Returns a state whose focus shows on a named control.

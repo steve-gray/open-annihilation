@@ -249,6 +249,18 @@ bool state_kept(Filter filter, const Entry& entry) {
     return false;
 }
 
+/// Tells whether the base game entry shows under a filter.
+///
+/// It shows on Mods, under All and Installed, and under no other tab or
+/// filter. New never holds it: it is not a package a registry published.
+///
+/// @param library the Library
+/// @param filter the filter
+/// @return true when the list keeps it
+bool shows_base_game(const Library& library, Filter filter) {
+    return library.tab == Tab::mods && (filter == Filter::all || filter == Filter::installed);
+}
+
 } // namespace
 
 std::string folded(std::string_view text) {
@@ -293,14 +305,20 @@ std::vector<bool> kept_by_filter(const Library& library, Filter filter) {
     if (filter != Filter::newest) {
         for (std::size_t index = 0; index < library.entries.size(); ++index) {
             const Entry& entry = library.entries[index];
-            kept[index] = tab_holds(library.tab, entry.id.kind) && state_kept(filter, entry);
+            if (is_base_game(entry.id))
+                kept[index] = shows_base_game(library, filter);
+            else
+                kept[index] = tab_holds(library.tab, entry.id.kind) && state_kept(filter, entry);
         }
         return kept;
     }
     // New: the tab's listings with a published day, newest first, then cut.
+    // The base game entry is not among them.
     std::vector<Candidate> dated;
     for (std::size_t index = 0; index < library.entries.size(); ++index) {
         const Entry& entry = library.entries[index];
+        if (is_base_game(entry.id))
+            continue;
         if (tab_holds(library.tab, entry.id.kind) && !published_day(entry).empty())
             dated.push_back({index, {}, Group::get, folded(entry_name(entry))});
     }
@@ -338,6 +356,13 @@ void update_visible(Library& library) {
         return searching ? before_with_search(library, left, right)
                          : before_without_search(library, left, right);
     });
+    // The base game entry leads the Mods list whenever the filter and the
+    // search keep it, ahead of the order the packages take.
+    const auto base_game = std::find_if(kept.begin(), kept.end(), [&](const Candidate& candidate) {
+        return is_base_game(library.entries[candidate.index].id);
+    });
+    if (base_game != kept.end() && base_game != kept.begin())
+        std::rotate(kept.begin(), base_game, base_game + 1);
     library.visible.clear();
     for (const Candidate& candidate : kept)
         library.visible.push_back(candidate.index);

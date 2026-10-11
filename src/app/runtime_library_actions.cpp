@@ -187,9 +187,12 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
         return;
     }
     const library::Entry* found = library::find_entry(host.model, entry);
-    if (found == nullptr || found->installed == nullptr)
+    // PLAY NOW on the base game entry is SWITCH OFF: the same question and
+    // the same stored "no mod". It is not an installed package.
+    const bool base_game = library::is_base_game(entry);
+    if (found == nullptr || (!base_game && found->installed == nullptr))
         return;
-    const fs::path folder = found->installed->folder;
+    const fs::path folder = base_game ? fs::path{} : found->installed->folder;
     OaLayer& layer = oa_layer();
     // The mod played changes only from the main menu, and never while the
     // command line chose it: PLAY NOW and SWITCH OFF are off then.
@@ -198,7 +201,7 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
     if (switching && (screen_ == Screen::match || match_ != nullptr || !options_.mod_dir.empty() ||
                       options_.base_game))
         return;
-    if (action == library::Action::play_now) {
+    if (action == library::Action::play_now && !base_game) {
         std::string refusal;
         if (!switch_to_mod_folder(folder, refusal)) {
             status_ = refusal;
@@ -220,9 +223,10 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
         }
         return;
     }
-    if (action == library::Action::switch_off) {
+    if (action == library::Action::switch_off ||
+        (action == library::Action::play_now && base_game)) {
         // The Switch Mod question of no mod: CANCEL leaves the mod played,
-        // SWITCH plays none.
+        // SWITCH plays none. PLAY NOW on the base game entry asks it too.
         oa::ui::kit::Question asked = library::switch_off_question(host.model.text);
         const int32_t switch_button = button_named(asked, library::switch_button_id);
         QuestionScreen::Host answers;

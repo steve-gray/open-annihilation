@@ -296,7 +296,10 @@ A row's circled check, installed and up to date, is no control. A click
 at a row's centre chooses it; a click at its icon's centre presses GET or
 UPDATE for that row, as the details' button does, asking the same
 questions. `<registry>` and `<key>` are the registry's id and the package's
-key, lower-cased, every other run of characters one `-`.
+key, lower-cased, every other run of characters one `-`. The base game
+entry is not a package. Its key is `@base-game`, and the row is
+`oa.library.row.base-game`: the `@` is not a letter or a digit, so the
+row's name does not keep it.
 
 ## Input
 

@@ -263,6 +263,12 @@ inline constexpr std::string_view note_playing_other =
 /// Why PLAY NOW and SWITCH OFF are off: --mod-dir or --base-game.
 inline constexpr std::string_view note_command_line = "The command line chose this run's mod.";
 
+/// The Mods list's first entry, which plays Total Annihilation 3.1c with no mod.
+inline constexpr std::string_view base_game_name = "Base Game (Disable Mods)";
+/// What that entry's details say under its name.
+inline constexpr std::string_view base_game_summary =
+    "Total Annihilation 3.1c as it was made, with no mod";
+
 // The download queue in the footer.
 inline constexpr std::string_view queue_package = "{name} {version}";
 inline constexpr std::string_view queue_downloading = "Downloading {package} · {progress}";

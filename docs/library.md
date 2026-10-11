@@ -235,7 +235,22 @@ count, on its row; Compact shows them under the status line.
 
 ## Choosing a mod
 
-The Mods tab lists every mod you can play: the ones you installed, from a
+The Mods list starts with **Base Game (Disable Mods)**, above every mod,
+under All and Installed, and whenever a search matches its name. Its
+details say "Total Annihilation 3.1c as it was made, with no mod". It is
+not a mod: All, New, Installed and Updates leave it out of their counts,
+New never lists it, and Active, Updates and Registries do not list it. It
+has no update, and its details never offer UPDATE, ROLL BACK, UNINSTALL or
+OPEN FOLDER.
+
+While no mod is played it is marked **PLAYING** and its details offer no
+action. While a mod is played its details offer **PLAY NOW**. That asks
+the same **SWITCH MOD** question as **SWITCH OFF** on the mod you play
+and, on **SWITCH**, reloads the game with no mod. It is greyed during a
+game and while the command line chose the run's mod, and the details then
+say "The command line chose this run's mod."
+
+The Mods tab then lists every mod you can play: the ones you installed, from a
 registry or a file, and every other folder the game can play as a mod,
 each marked "Your own copy": the folders in the game folder's `mods`
 folder and in your own Mods folder, `Documents/Open Annihilation/Mods`,
@@ -243,8 +258,8 @@ a folder without an `oamod.yaml`, which shows "N/A" for its version and
 "No oamod.yaml present" in its details and plays with the game's own
 rules, and a folder an earlier version's Pick Folder… chose, while it is
 still the mod you play. A mod of your own shows its `oamod.yaml`'s
-description in its details. The one you play is marked **PLAYING**; with
-no mod none is.
+description in its details. The one you play is marked **PLAYING**. With
+no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
 
 - **PLAY NOW**, on any other mod, plays it: the game reloads its data for
   that mod and returns to the main menu, without closing the window, and
