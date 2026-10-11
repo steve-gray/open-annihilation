@@ -8041,9 +8041,12 @@ class Runtime final : public menu::Host,
     /// without the cursor (frame_without_cursor_).
     ///
     /// On a window at native density the cursor over the match's layers is
-    /// drawn with them at the display's pixels (one_to_one_scale_mode), and
-    /// over any other frame with SDL's own LINEAR; on any other window its
-    /// texture keeps SDL's own filter.
+    /// drawn with them at the display's pixels (one_to_one_scale_mode). Above
+    /// an OA screen it is stamped into a texture the size of the picture, at
+    /// the same whole pixels as the cursor in the picture, and enlarged with
+    /// the picture's own scaling (standard_frame_scale_mode). Over any other
+    /// frame, on a window at native density or a scaled frame, it uses SDL's
+    /// own LINEAR; otherwise its texture keeps SDL's own filter.
     ///
     /// @param match_layers the cursor goes over the match's layers
     void present_software_cursor(bool match_layers);
