@@ -4465,6 +4465,11 @@ class Runtime final : public menu::Host,
     /// @param in_match the dialog was opened in a match; otherwise on the main menu
     void push_settings_screen(bool in_match);
 
+    /// Keeps the presence card's screen (runtime_presence_card.cpp) on the OA
+    /// layer while the multiplayer screens show: pushes it when the layer
+    /// has none. OaLayer::tick calls it once a frame.
+    void keep_presence_card_screen();
+
     /// Hands the settings screen on the OA layer an action of the dialog, as
     /// its own events do: its sound, the settings, and the layer taking the
     /// screen off when the dialog closes. Without the screen, the action
