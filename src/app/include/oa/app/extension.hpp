@@ -333,9 +333,11 @@ enum class OverlayFont : uint8_t {
 // pixels; `scale` of them make up one pixel of the game's 640x480 screen:
 // text is drawn `scale` times larger, and a readout the game draws n pixels
 // from an edge of the battlefield belongs n times `scale` from that edge
-// here.
+// here. The OA UI kit's components (kit_text_width to draw_hover_card) are
+// drawn at `scale`, one point of the kit to `scale` pixels, in the game's
+// fonts, as the kit draws OA's own screens at a whole scale.
 struct MatchOverlay {
-    void* painter{};        // passed back to font_height, draw_text and fill_rect
+    void* painter{};        // passed back to every call below
     const oa::Game* game{}; // the drawn match's Game block
     int left{};             // the battlefield's left edge
     int top{};              // the battlefield's top edge
@@ -372,6 +374,62 @@ struct MatchOverlay {
     /// @param height its height; 0 or less fills nothing
     /// @param palette_index the colour, a palette index
     void (*fill_rect)(void* painter, int x, int y, int width, int height, uint8_t palette_index){};
+    /// Returns a line of kit text's width, as draw_kit_text draws it.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param font the kit's font
+    /// @param text the text, UTF-8; read at once; null is empty
+    /// @return the width: the kit's width in points (kit::text_width) times
+    ///         `scale`; 0 while the kit's fonts are not loaded
+    int (*kit_text_width)(void* painter, oa::ui::kit::FontRole font, const char* text){};
+    /// Draws a line of kit text in the kit's text colour
+    /// (kit::colour::text), clipped to the battlefield.
+    ///
+    /// Nothing is drawn while the kit's fonts are not loaded.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param font the kit's font
+    /// @param x the line's left edge
+    /// @param y its top edge; the line is the font's line high (the kit's
+    ///        small_line or regular_line points, times `scale`), its capitals
+    ///        centred down it
+    /// @param text the text, UTF-8; read at once; null draws nothing
+    void (*draw_kit_text)(
+        void* painter, oa::ui::kit::FontRole font, int x, int y, const char* text
+    ){};
+    /// Draws a kit chip (kit::draw_chip), clipped to the battlefield: as wide
+    /// as kit::chip_width and kit::compact_metrics.chip_height high, in
+    /// points, times `scale`.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the chip's left edge
+    /// @param y its top edge
+    /// @param chip its text and state; read at once; null draws nothing
+    void (*draw_chip)(void* painter, int x, int y, const oa::ui::kit::ChipLook* chip){};
+    /// Draws a kit progress bar (kit::draw_progress), clipped to the
+    /// battlefield: a well in a border, filled in the accent from its left as
+    /// far as it has come, or, busy, striped across with no fill.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the bar's left edge
+    /// @param y its top edge
+    /// @param width its width, rounded down to whole points (`scale` pixels
+    ///        each); less than one point draws nothing
+    /// @param height its height, rounded down likewise
+    /// @param thousandths how far it has come, from 0 to 1000 (held to that
+    ///        range), or -1 to draw it busy
+    void (*draw_progress)(
+        void* painter, int x, int y, int width, int height, int32_t thousandths
+    ){};
+    /// Draws a kit hover card (kit::draw_hover_card), clipped to the
+    /// battlefield: kit::hover_card_size in points, times `scale`, its arrow
+    /// outside that rectangle.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the card's left edge, its arrow not counted
+    /// @param y its top edge, its arrow not counted
+    /// @param card what it shows; read at once; null draws nothing
+    void (*draw_hover_card)(void* painter, int x, int y, const oa::ui::kit::HoverCardLook* card){};
 };
 
 // A recording the engine asks an extension to replay: a file a director
