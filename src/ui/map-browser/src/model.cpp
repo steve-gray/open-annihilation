@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <functional>
 #include <optional>
@@ -14,6 +15,7 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -113,6 +115,54 @@ bool source_matches(Filters::Source source, const MapCard& card) noexcept {
     return true;
 }
 
+/// The counts a numplayers list names: each whole number from 2 to
+/// most_players, in the order written.
+///
+/// A token is one piece between commas, with spaces at its ends left out.
+/// Anything that is not a whole number in that range is left out.
+///
+/// @param numplayers the list; empty names none
+/// @return the counts, not yet sorted
+std::vector<int32_t> counts_named(std::string_view numplayers) {
+    std::vector<int32_t> counts;
+    std::size_t at = 0;
+    while (at <= numplayers.size()) {
+        const std::size_t comma = numplayers.find(',', at);
+        const std::string_view raw = numplayers.substr(
+            at, comma == std::string_view::npos ? std::string_view::npos : comma - at
+        );
+        std::string_view token = raw;
+        while (!token.empty() && (token.front() == ' ' || token.front() == '\t'))
+            token.remove_prefix(1);
+        while (!token.empty() && (token.back() == ' ' || token.back() == '\t'))
+            token.remove_suffix(1);
+        if (!token.empty()) {
+            int32_t value = 0;
+            const char* const first = token.data();
+            const char* const last = first + token.size();
+            const std::from_chars_result parsed = std::from_chars(first, last, value);
+            if (parsed.ec == std::errc{} && parsed.ptr == last && value >= 2 &&
+                value <= most_players)
+                counts.push_back(value);
+        }
+        if (comma == std::string_view::npos)
+            break;
+        at = comma + 1;
+    }
+    return counts;
+}
+
+/// Tells whether one count matches a players chip.
+///
+/// @param chip the chip
+/// @param count the count
+/// @return true when it matches
+bool count_matches(int32_t chip, int32_t count) noexcept {
+    if (chip >= many_players_chip)
+        return count >= many_players_chip && count <= most_players;
+    return count == chip;
+}
+
 } // namespace
 
 std::vector<MapCard> merge_cards(
@@ -172,10 +222,31 @@ std::optional<char> size_letter(std::string_view size) noexcept {
     return 'L';
 }
 
-bool players_match(int32_t chip, int32_t players) noexcept {
-    if (chip >= many_players_chip)
-        return players >= many_players_chip && players <= most_players;
-    return players == chip;
+BaseMapPlayers base_map_players(std::string_view numplayers, int32_t start_positions) {
+    BaseMapPlayers kept;
+    kept.counts = counts_named(numplayers);
+    std::sort(kept.counts.begin(), kept.counts.end());
+    kept.counts.erase(std::unique(kept.counts.begin(), kept.counts.end()), kept.counts.end());
+    kept.from_numplayers = !kept.counts.empty();
+    if (!kept.from_numplayers)
+        kept.counts.push_back(start_positions);
+    kept.players = kept.counts.back();
+    return kept;
+}
+
+int32_t shown_players(const MapCard& card) noexcept {
+    if (card.player_counts.empty())
+        return card.players;
+    return *std::max_element(card.player_counts.begin(), card.player_counts.end());
+}
+
+bool players_match(int32_t chip, const MapCard& card) noexcept {
+    if (card.player_counts.empty())
+        return count_matches(chip, card.players);
+    for (const int32_t count : card.player_counts)
+        if (count_matches(chip, count))
+            return true;
+    return false;
 }
 
 bool query_matches(const MapCard& card, std::string_view query) {
@@ -191,7 +262,7 @@ void apply_filters(Browser& browser) {
             continue;
         if (!filters.players.empty() &&
             std::none_of(filters.players.begin(), filters.players.end(), [&](int32_t chip) {
-                return players_match(chip, card.players);
+                return players_match(chip, card);
             }))
             continue;
         if (!filters.sizes.empty()) {

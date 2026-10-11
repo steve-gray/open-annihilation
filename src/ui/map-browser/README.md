@@ -27,11 +27,18 @@ layout names, and acts on what the screen returns.
   shows once, as installed (the Library offers its updates and other
   registries' copies), and two registries' copies of an online map show
   once, the first's.
+- `base_map_players(numplayers, start_positions)`: the counts a base map
+  keeps. Each whole number from 2 to 10 in its numplayers list, sorted and
+  without repeats, and the most of them; when that list names none, the
+  start-position count alone.
+- `shown_players(card)`: the most players a card shows, the largest of its
+  counts.
 - `apply_filters(browser)`: the cards that match the source (All, Base
   game, Installed packs, Online), any players chip that is on (2, 3 and 4
-  a map whose most players is that number, 5–10 one from 5 to 10), any size
-  chip that is on (S a longer side of at most 10, M 11 to 20, L above, in
-  the size field's own units) and the search (the title, the name or the
+  when that count is among the map's, 5–10 when any count is from 5 to 10),
+  any size chip that is on (S a longer side of at most 10, M 11 to 20, L
+  above, in the size field's own units) and the search (the title, the name
+  or the
   pack's name holds it, ignoring ASCII case). The base maps show first,
   then the installed, then those online, each by title. A selection that
   no longer shows is cleared.
@@ -50,8 +57,9 @@ layout names, and acts on what the screen returns.
   PLAYERS and SIZE), a scrolled grid of cards in 3, 4 or 6 columns
   (`kit::card_cells`, each card with `kit::add_card`: its picture or
   "Loading preview", its source chip, its title cut to one line and
-  "<players> · <W>×<H>"; a card that does not fit greyed with a "Doesn't
-  fit" chip), and the footer: the selected map's title and details
+  the most players it is for, then "<W>×<H>"; a card that does not fit
+  greyed with a "Doesn't fit" chip), and the footer: the selected map's
+  title and details
   ("<pack> <version> · <registry> · <players> players · <W>×<H> ·
   <download>"), its fit chips ("Fits TA 3.1c ✓", "Doesn't fit <mod>", "Fit
   with <mod> is checked when it's installed"…) and, for a map that does not
@@ -117,8 +125,11 @@ picture refers to its pixels, valid until the host decodes again.
 
 `ui-map-browser` (`tests/model_test.cpp`, `tests/layout_test.cpp`, in a
 synthetic font): merging, also when the pack is installed from another
-registry; every filter and their combination; the search; the order; the
-primary button's states; the cards' words. At each size class: 3, 4 and 6
+registry; every filter and their combination; a map for 2 and 4 players
+found by chips 2 and 4 and not by 3, its card and details reading 4; the
+numplayers list ("2, 4", "4", "2,3, 4", an empty value, "12", junk); the
+search; the order; the primary button's states; the cards' words. At each
+size class: 3, 4 and 6
 columns; nothing outside the window, scrolled to the top and the end,
 downloading and failed; the footer's buttons; every automation name, sound
 and unique, and two maps whose names give one word told apart by `-2`; the
