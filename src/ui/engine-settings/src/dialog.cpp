@@ -657,14 +657,20 @@ const layout::Row* row_of(const layout::Rows& rows, int32_t control) noexcept {
 /// Returns the control a press at a point acts on: the first of the
 /// dialog's display list's controls that a press reaches there (kit::hit).
 /// While the question shows its buttons come first, and while a drop-down
-/// list is open its items do.
+/// list is open its items do. On Mods a row's UPDATE that cannot be pressed
+/// lies over its row and takes a press there to no control, so that it never
+/// asks the Switch Mod question.
 ///
 /// @param dialog the dialog
 /// @param x the point's column
 /// @param y the point's row
 /// @return the control; no_control when none is there
 int32_t control_under(const Dialog& dialog, int32_t x, int32_t y) {
-    return kit::hit(layout::dialog_list(dialog, nullptr), {x, y});
+    return kit::hit(
+        layout::dialog_list(dialog, nullptr),
+        {x, y},
+        layout::mods_page(dialog) ? kit::DisabledControl::blocks : kit::DisabledControl::passes
+    );
 }
 
 /// Notes where the pointer is, so that the hover can follow the rows a
@@ -731,8 +737,10 @@ DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t contro
                    ? DialogAction::none
                    : scroll_to(dialog, open, layout::list_scroll_showing(open, control));
     if (layout::mods_page(dialog) && control >= layout::mods_folder_control(open.rows)) {
-        // A row's ROLL BACK brings its row into view.
-        const int32_t row = layout::roll_back_row(open.rows, control);
+        // A row's ROLL BACK or UPDATE brings its row into view.
+        int32_t row = layout::roll_back_row(open.rows, control);
+        if (row < 0)
+            row = layout::update_row(open.rows, control);
         if (row < 0)
             return DialogAction::none;
         return scroll_to(dialog, open, layout::scroll_showing(open, static_cast<std::size_t>(row)));
@@ -1193,6 +1201,25 @@ DialogAction ask_to_roll_back(Dialog& dialog, const layout::ScrolledRows& open, 
     return DialogAction::redraw;
 }
 
+/// Asks the host to start a row of Mods' update: its UPDATE was pressed. A
+/// row whose UPDATE is hidden or off, and every row while the page is
+/// locked, asks nothing.
+///
+/// @param[in,out] dialog the dialog
+/// @param index the row's place among Mods' rows
+/// @return DialogAction::update_mod, Dialog::update_folder naming the row's
+///         folder; else DialogAction::none
+DialogAction ask_to_update(Dialog& dialog, std::size_t index) {
+    const auto rows = mod_rows(dialog);
+    if (index >= rows.size() || !layout::shows_update(dialog, rows[index]))
+        return DialogAction::none;
+    const ModDetails* details = layout::update_details(dialog, rows[index]);
+    if (details == nullptr || !details->update_enabled)
+        return DialogAction::none;
+    dialog.update_folder = dialog.mod_folders[static_cast<std::size_t>(rows[index].offered)];
+    return DialogAction::update_mod;
+}
+
 /// Takes a key while the question shows: Y answers Yes; N and Escape answer
 /// No; Enter and Space answer the marked button; Left marks No, Right marks
 /// Yes, and Tab and Shift+Tab move the mark to the other button.
@@ -1438,6 +1465,17 @@ DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t 
                                                   : DialogAction::none;
         if (const int32_t row = layout::roll_back_row(open.rows, control); row >= 0)
             return ask_to_roll_back(dialog, open, static_cast<std::size_t>(row));
+        if (const int32_t row = layout::update_row(open.rows, control); row >= 0)
+            return ask_to_update(dialog, static_cast<std::size_t>(row));
+        if (control == layout::check_now_control(open.rows))
+            return layout::shows_check_now(dialog) ? DialogAction::check_for_updates
+                                                   : DialogAction::none;
+        if (control == layout::get_more_mods_control(open.rows)) {
+            if (!layout::shows_get_more_mods(dialog))
+                return DialogAction::none;
+            dialog.library_tab = LibraryTab::mods;
+            return DialogAction::open_library;
+        }
         return ask_to_switch(dialog, open, control);
     }
     // A row takes Space as its row spec says: a switch flips, a drop-down
@@ -2244,8 +2282,10 @@ namespace {
 
 /// Lists Mods' parts: the lock line while it is locked, each row wholly in
 /// the list's view (its badge, title, PLAYING tag, version and
-/// description; the row itself the control a press switches with),
-/// OPEN MODS FOLDER and the lines under it.
+/// description; the row itself the control a press switches with; a row
+/// with an update its update's lines and its UPDATE), the line on the check
+/// for updates and CHECK NOW, OPEN MODS FOLDER, GET MORE MODS… and the lines
+/// under them.
 ///
 /// @param dialog the dialog
 /// @param open Mods' rows
@@ -2316,7 +2356,49 @@ void mods_layout(
                                            : no_control
                 }
             );
+        // A row with an update: its lines in place of its description, and
+        // UPDATE, a control while it can be pressed.
+        const std::vector<std::string> lines = layout::update_lines(dialog, rows[index]);
+        for (std::size_t line = 0; line < lines.size() && line < row.hint_lines; ++line)
+            text(row.hints[line], lines[line], DialogFont::small);
+        if (layout::shows_update(dialog, rows[index])) {
+            const ModDetails* update = layout::update_details(dialog, rows[index]);
+            parts.push_back(
+                LayoutPart{
+                    layout::update_button(row, layout::offers_roll_back(dialog, rows[index])),
+                    std::string(layout::shown_text(layout::mod_update_caption)),
+                    DialogFont::small,
+                    0,
+                    update != nullptr && update->update_enabled
+                        ? layout::update_control(open.rows, index)
+                        : no_control
+                }
+            );
+        }
     }
+    // The line on the check for updates, and CHECK NOW after it.
+    if (const auto [place, words] = layout::check_line_text(dialog); !words.empty())
+        text(place, words, DialogFont::small);
+    if (layout::shows_check_now(dialog))
+        parts.push_back(
+            LayoutPart{
+                layout::check_now_link(dialog),
+                std::string(layout::shown_text(layout::check_now_text)),
+                DialogFont::small,
+                0,
+                layout::check_now_control(open.rows)
+            }
+        );
+    if (layout::shows_get_more_mods(dialog))
+        parts.push_back(
+            LayoutPart{
+                layout::get_more_mods_button(dialog),
+                std::string(layout::shown_text(layout::get_more_mods_text)),
+                DialogFont::small,
+                0,
+                layout::get_more_mods_control(open.rows)
+            }
+        );
     parts.push_back(
         LayoutPart{
             sized.mods_folder_button,

@@ -65,17 +65,19 @@ struct Building {
     std::vector<kit::Control> menu;       ///< an open drop-down list's items
     std::vector<kit::Control> developer;  ///< Developer's list's rows
     std::vector<kit::Control> footer_own; ///< Show Active Only and Restore profile values
-    std::vector<kit::Control> roll_backs; ///< Mods' rows' ROLL BACK buttons
+    std::vector<kit::Control> roll_backs; ///< Mods' rows' UPDATE and ROLL BACK buttons
     std::vector<kit::Control> rows;       ///< the open section's rows, or Mods' list
-    std::vector<kit::Control> folder;     ///< OPEN MODS FOLDER
-    std::vector<kit::Control> scroll;     ///< the scroll bar
-    std::vector<kit::Control> footer;     ///< Restore defaults, Cancel and OK
-    std::vector<kit::Control> nav;        ///< the sections' entries
+    /// OPEN MODS FOLDER, CHECK NOW and GET MORE MODS…
+    std::vector<kit::Control> folder;
+    std::vector<kit::Control> scroll; ///< the scroll bar
+    std::vector<kit::Control> footer; ///< Restore defaults, Cancel and OK
+    std::vector<kit::Control> nav;    ///< the sections' entries
     /// The open section's controls Tab stops on, in the declared order: its
-    /// rows that take a change (on Mods, each row and then its ROLL BACK),
-    /// then on Developer its list's rows that take input, Show Active Only
-    /// and Restore profile values while it is enabled, and on Mods OPEN MODS
-    /// FOLDER. The footer's buttons and the sections' entries follow them.
+    /// rows that take a change (on Mods, each row and then its UPDATE and
+    /// ROLL BACK), then on Developer its list's rows that take input, Show
+    /// Active Only and Restore profile values while it is enabled, and on
+    /// Mods OPEN MODS FOLDER, CHECK NOW and GET MORE MODS…. The footer's
+    /// buttons and the sections' entries follow them.
     std::vector<kit::ControlId> section_tab;
     kit::Canvas measure{};      ///< what texts are measured in
     const DialogFonts* fonts{}; ///< the fonts; null to estimate widths
@@ -500,8 +502,165 @@ std::vector<std::string> mod_words(const Dialog& dialog, const std::vector<ModRo
     return words;
 }
 
+/// Adds a row's update: its lines in the warning colour in place of its
+/// description, whole, and its UPDATE button at the right of the
+/// description line, as ROLL BACK is, left of ROLL BACK when the row shows
+/// both, disabled while UPDATE cannot be pressed. In a game, when the page is locked, the lines show and UPDATE
+/// does not.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+/// @param open Mods' rows
+/// @param index the row's place among them
+/// @param offered the row
+/// @param word the word automation names the row by (mod_words)
+/// @param in_view what the row is drawn clipped to
+void add_mod_update(
+    Building& building,
+    const Dialog& dialog,
+    const layout::ScrolledRows& open,
+    std::size_t index,
+    const ModRow& offered,
+    std::string_view word,
+    const SourceRect& in_view
+) {
+    kit::DisplayList& list = building.list;
+    const layout::Row& row = open.rows.rows[index];
+    const ModDetails* update = layout::update_details(dialog, offered);
+    if (update == nullptr)
+        return;
+    const std::vector<std::string> lines = layout::update_lines(dialog, offered);
+    const bool roll_back = layout::offers_roll_back(dialog, offered);
+    const bool shown = layout::shows_update(dialog, offered);
+    const SourceRect button_box = layout::update_button(row, roll_back);
+    // The lines keep left of UPDATE, or of ROLL BACK where UPDATE is hidden.
+    int32_t right = row.hints[0].x + row.hints[0].width;
+    if (shown)
+        right = button_box.x - layout::mod_roll_back_gap;
+    else if (roll_back)
+        right = layout::roll_back_button(row).x - layout::mod_roll_back_gap;
+    for (std::size_t line = 0; line < lines.size() && line < row.hint_lines; ++line) {
+        SourceRect place = row.hints[line];
+        place.width = std::max(right - place.x, int32_t{0});
+        text(
+            list,
+            DialogFont::small,
+            lines[line],
+            place,
+            kit::Align::left,
+            kit::colour::lock,
+            in_view
+        );
+    }
+    if (!shown)
+        return;
+    const int32_t control = layout::update_control(open.rows, index);
+    const bool enabled = update->update_enabled;
+    const bool over = enabled && (dialog.hovered == control || dialog.pressed == control);
+    const bool held = enabled && dialog.pressed == control;
+    const std::string caption(layout::shown_text(layout::mod_update_caption));
+    button(
+        list,
+        button_box,
+        {caption, kit::ButtonStyle::inset, over, held, enabled},
+        enabled ? control : no_control,
+        in_view
+    );
+    if (!enabled)
+        fade(list, button_box, in_view);
+    if (dialog.focused == control && enabled)
+        focus_ring(list, button_box, true, in_view);
+    kit::Control added = control_of(
+        control, button_box, named("mod." + std::string(word) + ".update"), kit::ControlKind::button
+    );
+    added.clip = open.area.view;
+    added.group = layout::mods_list_group;
+    added.text = caption;
+    added.enabled = enabled;
+    building.roll_backs.push_back(std::move(added));
+}
+
+/// Adds the line on the check for updates under Mods' list: the host's text
+/// in the hint colour, or the warning colour when the check failed, then
+/// " · " and CHECK NOW as a link while the host offers it and the page is
+/// not locked.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+/// @param open Mods' rows
+void add_check_line(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
+    kit::DisplayList& list = building.list;
+    const auto [place, shown_words] = layout::check_line_text(dialog);
+    if (!shown_words.empty())
+        text(
+            list,
+            DialogFont::small,
+            shown_words,
+            place,
+            kit::Align::left,
+            dialog.mods_check_warning ? kit::colour::lock : kit::colour::hint,
+            {}
+        );
+    if (!layout::shows_check_now(dialog))
+        return;
+    const SourceRect link = layout::check_now_link(dialog);
+    const std::string_view separator = layout::shown_text(layout::check_now_separator);
+    const auto small_width = width_in(building.fonts, DialogFont::small);
+    const int32_t separator_width = small_width(separator);
+    text(
+        list,
+        DialogFont::small,
+        separator,
+        {link.x - separator_width, link.y, separator_width, link.height},
+        kit::Align::left,
+        kit::colour::hint,
+        {}
+    );
+    const int32_t control = layout::check_now_control(open.rows);
+    const std::string caption(layout::shown_text(layout::check_now_text));
+    const bool hovered = dialog.hovered == control || dialog.pressed == control;
+    kit::Item& drawn = item(list, kit::Role::link, link, {});
+    drawn.text = caption;
+    drawn.control = control;
+    drawn.state.hovered = hovered;
+    drawn.look = kit::LinkLook{caption, hovered, true};
+    if (dialog.focused == control)
+        focus_ring(list, link, true, {});
+    kit::Control added = control_of(control, link, named("check-now"), kit::ControlKind::link);
+    added.text = caption;
+    building.folder.push_back(std::move(added));
+}
+
+/// Adds GET MORE MODS… right of OPEN MODS FOLDER, while the host offers it
+/// and the page is not locked; it is put after OPEN MODS FOLDER and CHECK
+/// NOW in Tab's order.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+/// @param open Mods' rows
+void add_get_more_mods(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
+    if (layout::shows_check_now(dialog))
+        building.section_tab.push_back(layout::check_now_control(open.rows));
+    if (!layout::shows_get_more_mods(dialog))
+        return;
+    const int32_t control = layout::get_more_mods_control(open.rows);
+    const SourceRect box = layout::get_more_mods_button(dialog);
+    const bool over = dialog.hovered == control || dialog.pressed == control;
+    const bool held = dialog.pressed == control;
+    const std::string caption(layout::shown_text(layout::get_more_mods_text));
+    button(building.list, box, {caption, kit::ButtonStyle::quiet, over, held, true}, control, {});
+    if (dialog.focused == control)
+        focus_ring(building.list, box, true, {});
+    kit::Control added = control_of(control, box, named("get-more-mods"), kit::ControlKind::button);
+    added.text = caption;
+    building.folder.push_back(std::move(added));
+    building.section_tab.push_back(control);
+}
+
 /// Adds Mods: the lock line while it is locked, the list of rows in its
-/// view with its scroll bar, OPEN MODS FOLDER and the lines under it.
+/// view with its scroll bar, each row's update and UPDATE where it has one,
+/// the line on the check for updates with CHECK NOW, OPEN MODS FOLDER and
+/// GET MORE MODS…, and the lines under them.
 ///
 /// @param[in,out] building the list
 /// @param dialog the dialog
@@ -628,18 +787,25 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
         // the right of its description, which is cut shorter for it.
         const bool roll_back = layout::offers_roll_back(dialog, rows[index]);
         const SourceRect roll_back_box = layout::roll_back_button(row);
-        SourceRect description = row.hints[0];
-        if (roll_back)
-            description.width = roll_back_box.x - layout::mod_roll_back_gap - description.x;
-        text(
-            list,
-            DialogFont::small,
-            layout::shown_text(layout::cut_text(shown.description, description.width, small_width)),
-            description,
-            kit::Align::left,
-            shown.has_profile ? kit::colour::hint : kit::colour::lock,
-            in_view
-        );
+        const ModDetails* update = layout::update_details(dialog, rows[index]);
+        if (update == nullptr) {
+            SourceRect description = row.hints[0];
+            if (roll_back)
+                description.width = roll_back_box.x - layout::mod_roll_back_gap - description.x;
+            text(
+                list,
+                DialogFont::small,
+                layout::shown_text(
+                    layout::cut_text(shown.description, description.width, small_width)
+                ),
+                description,
+                kit::Align::left,
+                shown.has_profile ? kit::colour::hint : kit::colour::lock,
+                in_view
+            );
+        } else {
+            add_mod_update(building, dialog, open, index, rows[index], words[index], in_view);
+        }
         if (roll_back) {
             const int32_t control = layout::roll_back_control(open.rows, index);
             const bool over = !locked && (dialog.hovered == control || dialog.pressed == control);
@@ -686,6 +852,9 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
             added.text = shown.title;
             building.rows.push_back(std::move(added));
             building.section_tab.push_back(row.control);
+            // UPDATE comes after its row, before ROLL BACK, while it can be pressed.
+            if (update != nullptr && update->update_enabled)
+                building.section_tab.push_back(layout::update_control(open.rows, index));
             if (roll_back)
                 building.section_tab.push_back(layout::roll_back_control(open.rows, index));
         }
@@ -700,6 +869,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
             bar_hot
         );
     }
+    add_check_line(building, dialog, open);
     const int32_t control = layout::mods_folder_control(open.rows);
     const SourceRect& folder_button = sized.mods_folder_button;
     const bool over = !locked && (dialog.hovered == control || dialog.pressed == control);
@@ -725,6 +895,7 @@ void add_mods(Building& building, const Dialog& dialog, const layout::ScrolledRo
         building.folder.push_back(std::move(added));
         building.section_tab.push_back(control);
     }
+    add_get_more_mods(building, dialog, open);
     text(
         list,
         DialogFont::small,

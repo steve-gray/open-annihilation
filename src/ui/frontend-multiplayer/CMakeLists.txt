@@ -12,7 +12,8 @@ add_library(oa-ui-frontend-multiplayer
   src/connect.cpp
   src/dialogs.cpp
   src/screens.cpp
-  src/presence_card.cpp)
+  src/presence_card.cpp
+  src/get_map.cpp)
 add_library(oa::ui::frontend_multiplayer ALIAS oa-ui-frontend-multiplayer)
 target_include_directories(oa-ui-frontend-multiplayer PUBLIC include)
 target_link_libraries(oa-ui-frontend-multiplayer
@@ -21,7 +22,8 @@ target_link_libraries(oa-ui-frontend-multiplayer
   PRIVATE oa-platform-shims oa-base-text oa-base-bytes oa-ui-frontend-renderer oa-ui-decoded oa-formats-hpi oa-data-defs-assets oa-formats-tnt oa-data-unit-definitions
     oa-formats-tdf
     oa-data-campaign-assets oa-data-defs oa-data-languages oa-netgame-sync oa-present oa-present-model
-    oa-base-game-loop oa-sim-messages oa-sim-mission-units oa-data-mod-profile)
+    oa-base-game-loop oa-sim-messages oa-sim-mission-units oa-data-mod-profile
+    oa-base-sha256 oa-data-map-pack oa-ui-library)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-frontend-multiplayer-lobby-test tests/lobby_test.cpp)
@@ -45,6 +47,18 @@ if(BUILD_TESTING)
     oa-ui-frontend-multiplayer oa-ui-kit oa-netgame oa-test-support)
   add_test(NAME ui-multiplayer-presence-card COMMAND oa-ui-frontend-multiplayer-presence-card-test)
   set_tests_properties(ui-multiplayer-presence-card PROPERTIES TIMEOUT 30)
+  # GET MAP: every state and line over hand-made records, packs and offers;
+  # with --data, the battle room's side over the installed GUI files: what a
+  # joiner reads of the host's map, the host's pack through
+  # multiplayer_bind_map_pack, and a pack map installed while the battle
+  # room shows.
+  add_executable(oa-ui-frontend-multiplayer-get-map-test tests/get_map_test.cpp)
+  target_link_libraries(oa-ui-frontend-multiplayer-get-map-test PRIVATE
+    oa-ui-frontend-multiplayer oa-netgame oa-ui-frontend-renderer oa-formats-hpi oa-test-game-data)
+  add_test(NAME ui-multiplayer-get-map COMMAND oa-ui-frontend-multiplayer-get-map-test)
+  add_test(NAME ui-multiplayer-get-map-data COMMAND oa-ui-frontend-multiplayer-get-map-test --data)
+  set_tests_properties(ui-multiplayer-get-map ui-multiplayer-get-map-data PROPERTIES TIMEOUT 30)
+  oa_game_data_tests(ui-multiplayer-get-map-data)
   add_executable(oa-ui-frontend-multiplayer-team-rules-test tests/team_rules_test.cpp)
   target_link_libraries(oa-ui-frontend-multiplayer-team-rules-test PRIVATE oa-ui-frontend-multiplayer)
   add_test(NAME ui-multiplayer-team-rules COMMAND oa-ui-frontend-multiplayer-team-rules-test)

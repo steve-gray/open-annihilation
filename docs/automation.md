@@ -184,6 +184,7 @@ centre would land on the line between Off and On.
 | Control | Name | Kind, and what it reports |
 |---|---|---|
 | The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, where it opens Settings, empty |
+| GET MAP in the battle room, while a joiner lacks the host's pack map | `oa.get-map`, `oa.get-map-text`, `oa.get-map-progress` | no dialog, listed only while they show: the button (its text "GET MAP"); a label, its text the line saying what it fetches; a label, its text how much of the download has come, as a percentage, while the bar shows in the button's place |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
 | A switch, and its halves | `oa.settings.<row>`, `oa.settings.<row>.off`, `oa.settings.<row>.on` | the switch a label with its text; the halves check boxes, checked on the half shown |
 | A level strip, and its levels | `oa.settings.<row>`, `oa.settings.<row>.<value>` | label; check boxes, checked on the level chosen |
