@@ -6,11 +6,12 @@
 # Developer Mode's list of the standard hacks among its sections (src/developer.cpp),
 # the one-off notices of Open Annihilation's own in the dialog's look
 # (engine_settings/notice.hpp), the prompts that ask with buttons of
-# their own in the same look (engine_settings/prompt.hpp), and the download
-# check (engine_settings/challenge.hpp).
+# their own in the same look (engine_settings/prompt.hpp), the download
+# check (engine_settings/challenge.hpp) and Downloads' Registries part
+# (src/registries_page.cpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/downloads_page.cpp src/language_page.cpp src/mods.cpp
-  src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
+  src/developer.cpp src/downloads_page.cpp src/registries_page.cpp src/language_page.cpp
+  src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
   src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
@@ -49,6 +50,13 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   target_include_directories(oa-ui-engine-settings-downloads-test PRIVATE src)
   add_test(NAME ui-engine-settings-downloads COMMAND oa-ui-engine-settings-downloads-test)
+  # Downloads' Registries part: rows, subtitles, removals, OK's changes,
+  # Escape, the locks in a game, and the part at every class.
+  add_executable(oa-ui-engine-settings-registries-test tests/registries_page_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-registries-test PRIVATE oa-ui-engine-settings
+    oa-test-support oa-options)
+  target_include_directories(oa-ui-engine-settings-registries-test PRIVATE src)
+  add_test(NAME ui-engine-settings-registries COMMAND oa-ui-engine-settings-registries-test)
   # The dialog's fonts from the installed game, and its texts in them.
   oa_add_game_data_test(ui-engine-settings-dialog-data oa-ui-engine-settings-dialog-test --data)
 

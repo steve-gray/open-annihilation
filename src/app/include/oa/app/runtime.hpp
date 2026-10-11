@@ -4292,6 +4292,22 @@ class Runtime final : public menu::Host,
     /// (--check-challenge).
     void check_challenge();
 
+    /// Gives the settings dialog the Registries part's registries, from the
+    /// registries in effect.
+    ///
+    /// @param[in,out] dialog the dialog
+    /// @param opening the dialog has just opened: the note says why the last
+    ///     OK could not change a registry, once; otherwise the note it shows stays
+    void give_settings_registries(oa::ui::engine_settings::Dialog& dialog, bool opening);
+
+    /// Makes the changes OK asks of the registries through the content
+    /// service. A refused change is logged, and the Registries part's note
+    /// says why the next time it opens.
+    ///
+    /// @param changes the changes (oa::ui::engine_settings::registry_changes)
+    void
+    apply_registry_changes(const std::vector<oa::ui::engine_settings::RegistryChange>& changes);
+
     /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 

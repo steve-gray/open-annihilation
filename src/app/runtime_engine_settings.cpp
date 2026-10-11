@@ -1228,6 +1228,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
         give_downloads(
             dialog, preference_values_, content_service(), downloads, content_downloads_folder()
         );
+        // The Registries part: every registry in effect, and why the last
+        // OK could not change one.
+        give_settings_registries(dialog, true);
     }
     // Your files shows the player's own folder.
     dialog.user_folder = path_to_utf8(user_folder_);
@@ -1402,6 +1405,9 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         tell_install_switches(content_downloads(), switches_opened, switches_chosen);
         if (check_changed)
             content_service().set_check_for_updates(check_mode(chosen_check));
+        // The Registries part's switches and removals, each through the
+        // content service, which writes the player's registry list.
+        apply_registry_changes(settings::registry_changes(*dialog));
         state.last_page = dialog->page;
         state.last_developer_list = dialog->developer;
         state.dialog.reset();
@@ -1482,6 +1488,10 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open, unless the mod played rolls back as the
         // run ends.
         return roll_back_mod_folder(*dialog);
+    case settings::DialogAction::add_registry:
+    case settings::DialogAction::add_mirror:
+        // The dialog stays open; no window answers these yet.
+        return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.
         std::string why;

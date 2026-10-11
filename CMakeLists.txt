@@ -939,6 +939,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_mod_warning.cpp
   src/app/runtime_presence_card.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_challenge.cpp
+  src/app/runtime_registries.cpp
   src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
   src/app/pack_map_source.cpp

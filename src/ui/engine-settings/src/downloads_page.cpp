@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Downloads: when Open Annihilation looks for content, each registry's
-// install ID, and the downloaded files. The rows are kit rows, built from
-// the host's offer each time the page is laid out or one of them is used.
+// install ID, the downloaded files, and the registries content comes from.
+// The rows are kit rows, built from the host's offer each time the page is
+// laid out or one of them is used. MANAGE… on the Registries row opens the
+// section's Registries part (registries_page.cpp).
 
 #include "downloads_page.hpp"
+#include "registries_page.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -62,18 +65,19 @@ struct RowModel {
 
 /// What a row of the page is.
 enum class Role : uint8_t {
-    check,    ///< Check for content updates
-    toggle,   ///< an install ID's switch
-    id_value, ///< an install ID's value and RESET
-    files,    ///< Downloaded files and EMPTY
+    check,      ///< Check for content updates
+    toggle,     ///< an install ID's switch
+    id_value,   ///< an install ID's value and RESET
+    files,      ///< Downloaded files and EMPTY
+    registries, ///< Registries and MANAGE…
 };
 
 /// Returns how many rows the page has.
 ///
 /// @param dialog the dialog
-/// @return the check, two rows per install ID, and the files
+/// @return the check, two rows per install ID, the files and the registries
 std::size_t row_count(const Dialog& dialog) noexcept {
-    return 2 + 2 * dialog.downloads.install_ids.size();
+    return 3 + 2 * dialog.downloads.install_ids.size();
 }
 
 /// Returns what the row at a place is.
@@ -85,6 +89,8 @@ Role role_of(const Dialog& dialog, std::size_t index) noexcept {
     if (index == 0)
         return Role::check;
     if (index + 1 >= row_count(dialog))
+        return Role::registries;
+    if (index + 2 >= row_count(dialog))
         return Role::files;
     return (index % 2) == 1 ? Role::toggle : Role::id_value;
 }
@@ -312,6 +318,16 @@ bool files_enabled(const RowModel& model) {
     return offer.kept_bytes > 0 && !offer.downloads_busy;
 }
 
+/// Returns the Registries row's value: how many registries are on of those
+/// listed, or the one built-in registry's name and "only" when it alone is
+/// on, as the player has the switches now.
+///
+/// @param model the row
+/// @return the value
+std::string registries_value(const RowModel& model) {
+    return registries::summary(*model.dialog);
+}
+
 /// Returns the lock RESET and EMPTY show during a game.
 ///
 /// @param model the row
@@ -406,6 +422,18 @@ kit::RowSpec<RowModel> spec_for(const RowModel& model) {
         spec.hint_is_status = game_running(locks_of(model));
         return spec;
     }
+    if (role == Role::registries) {
+        kit::RowSpec<RowModel> spec = kit::value_and_button(
+            "registries",
+            "Registries",
+            registries_value,
+            geometry::manage_text,
+            "manage",
+            manage_registries_action
+        );
+        spec.control_width = geometry::manage_button_width;
+        return spec;
+    }
     kit::RowSpec<RowModel> spec = kit::value_and_button(
         "downloaded-files",
         "Downloaded files",
@@ -444,14 +472,21 @@ RowModel model_of(Dialog& dialog, const geometry::Row& row) {
     return {&dialog, &dialog.locks, index};
 }
 
-/// Notes a RESET's registry when a row asks for one.
+/// Notes a RESET's registry when a row asks for one, and opens the
+/// Registries part for MANAGE…, which asks nothing of the host.
 ///
 /// @param[in,out] dialog the dialog
 /// @param model the row
 /// @param result what the row did
-void note_reset(Dialog& dialog, const RowModel& model, const kit::RowResult& result) {
+/// @return what the row asks of the dialog
+kit::RowResult note_reset(Dialog& dialog, const RowModel& model, const kit::RowResult& result) {
     if (result.event == kit::RowEvent::action && result.action == reset_install_id_action)
         note_registry(dialog, model);
+    if (result.event == kit::RowEvent::action && result.action == manage_registries_action) {
+        registries::show(dialog);
+        return {};
+    }
+    return result;
 }
 
 } // namespace
@@ -463,6 +498,14 @@ geometry::Rows place(
     kit::PlacedRows* placed
 ) {
     static_cast<void>(width);
+    // The Registries part shows in the rows' place: they are not placed.
+    if (registries::shown(dialog)) {
+        geometry::Rows none;
+        none.bottom = geometry::first_row_top;
+        if (placed != nullptr)
+            *placed = {};
+        return none;
+    }
     const std::size_t count = row_count(dialog);
     std::vector<kit::RowView> row_views;
     std::vector<bool> game_locked;
@@ -558,9 +601,7 @@ void apply_choice(Dialog& dialog, int32_t index) {
 kit::RowResult activate(Dialog& dialog, const geometry::Row& row) {
     RowModel model = model_of(dialog, row);
     const kit::RowSpec<RowModel> spec = spec_for(model);
-    const kit::RowResult result = kit::activate(spec, model, 0);
-    note_reset(dialog, model, result);
-    return result;
+    return note_reset(dialog, model, kit::activate(spec, model, 0));
 }
 
 kit::RowResult release(Dialog& dialog, const geometry::Row& row, int32_t x, int32_t y) {
@@ -571,9 +612,7 @@ kit::RowResult release(Dialog& dialog, const geometry::Row& row, int32_t x, int3
     placed.control_area = row.control_area;
     placed.view.kind = spec.kind;
     placed.view.control_width = spec.control_width;
-    const kit::RowResult result = kit::press(spec, model, placed, {x, y});
-    note_reset(dialog, model, result);
-    return result;
+    return note_reset(dialog, model, kit::press(spec, model, placed, {x, y}));
 }
 
 DialogAction step(Dialog& dialog, const geometry::Row& row, bool up) {
