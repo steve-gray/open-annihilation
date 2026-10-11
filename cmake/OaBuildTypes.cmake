@@ -40,6 +40,13 @@ if(oa_check_link_flags)
     endif()
   endforeach()
 endif()
+# The game's program database outgrew the linker's default 4 KiB pages in
+# 0.8 (LNK1140, limit exceeded for program database). 8 KiB pages double the
+# limit. A link option, not a cached flag, so that a build folder configured
+# before keeps up.
+if(MSVC)
+  add_link_options("$<$<CONFIG:Check,Debug,RelWithDebInfo>:/PDBPAGESIZE:8192>")
+endif()
 # Packages such as SDL3 export only their release configurations.
 set(CMAKE_MAP_IMPORTED_CONFIG_CHECK Release RelWithDebInfo ""
     CACHE STRING "Configurations of imported targets a Check build uses")
