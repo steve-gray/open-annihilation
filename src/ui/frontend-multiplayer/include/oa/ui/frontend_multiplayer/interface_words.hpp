@@ -29,6 +29,7 @@ inline constexpr std::string_view interface_words[] = {
     "Open Annihilation",
     "PLAYERS",
     "PREV",
+    "Platform",
     "Rules",
     "SELECT",
     "SETTINGS",

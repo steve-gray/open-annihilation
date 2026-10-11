@@ -4034,6 +4034,12 @@ open-annihilation: map pack <pack>: its maps may be mounted again
 The host's presence card says whether this machine has the host's pack
 (`PackState`): installed when a pack of its key has the record's SHA-256,
 another release when one has another, missing when none has its key.
+In the battle room the OA badge is that logo, drawn by the OA layer at the
+window's own pixels in the CD rectangle, with the rules dot crisp on it. A
+run without a renderer keeps the badge the 640 by 480 frame draws. The card
+lists the platform and architecture on a Platform line under Engine, leaving
+out a field the record leaves empty and the line when both are, and the mark
+by its title is the same logo.
 
 ## The automation endpoint
 

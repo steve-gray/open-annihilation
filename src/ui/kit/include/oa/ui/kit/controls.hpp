@@ -288,8 +288,9 @@ void add_card(
 [[nodiscard]] Rect hover_card_rect(const Rect& anchor, const Rect& frame, Point size) noexcept;
 
 /// Draws a hover card on the band inside a border of the lock colour: the
-/// header (the small OA mark, the title in the text colour and the aside
-/// right-aligned in the hint colour), each row (its label in the hint colour
+/// header (the logo when the canvas carries the icon, otherwise the small OA
+/// mark, the title in the text colour and the aside right-aligned in the hint
+/// colour), each row (its label in the hint colour
 /// in a column as wide as the widest label and hover_card_padding, its value
 /// in its colour, from the left when the label is empty), the block's lines
 /// in the quiet colour, every text in the small font and cut with "...", and

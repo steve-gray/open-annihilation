@@ -956,9 +956,17 @@ void draw_hover_card(const Canvas& canvas, const Rect& rect, const HoverCardLook
         int32_t pen = left;
         if (look.mark) {
             const Point mark = mark_size(Mark::oa_small);
-            draw_mark(
-                canvas, Mark::oa_small, {pen, row + (row_height - mark.y) / 2}, colour::accent
-            );
+            // The logo, when the canvas carries it, in a square as wide as the
+            // one-bit mark, so the header keeps that mark's width. Otherwise
+            // the one-bit mark.
+            if (renderer::picture_drawable(canvas.icon)) {
+                const int32_t side = std::max(mark.x, mark.y);
+                draw_picture(canvas, {pen, row + (row_height - side) / 2, side, side}, canvas.icon);
+            } else {
+                draw_mark(
+                    canvas, Mark::oa_small, {pen, row + (row_height - mark.y) / 2}, colour::accent
+                );
+            }
             pen += mark.x + padding;
         }
         int32_t aside_width = 0;
