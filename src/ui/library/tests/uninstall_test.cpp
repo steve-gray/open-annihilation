@@ -353,7 +353,7 @@ void test_steps() {
     OA_CHECK(step_of(core, Kind::language, "pt-BR") == UninstallStep::ask);
     // The mod being played and the language in use keep UNINSTALL on: it
     // shows the notice that says what comes first.
-    for (const std::pair<Kind, std::string_view> used :
+    for (const std::pair<Kind, std::string_view>& used :
          {std::pair{Kind::mod, std::string_view{"cinder"}},
           std::pair{Kind::language, std::string_view{"en-XA"}}}) {
         const lib::Entry* entry = at(library, core, used.first, used.second);
