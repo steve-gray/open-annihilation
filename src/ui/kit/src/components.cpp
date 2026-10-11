@@ -389,6 +389,26 @@ void paint_item(const Canvas& canvas, const Item& item) {
         if (const auto* look = std::get_if<ProgressLook>(&item.look))
             draw_progress(drawn, item.rect, look->done, look->whole);
         break;
+    case Role::header_bar:
+    case Role::badge:
+    case Role::header_text:
+    case Role::version:
+    case Role::title:
+    case Role::panel:
+    case Role::icon:
+    case Role::banner:
+    case Role::row:
+    case Role::divider:
+    case Role::button_main:
+    case Role::button_danger:
+    case Role::progress_track:
+    case Role::progress_fill:
+    case Role::progress_busy:
+    case Role::backdrop:
+    case Role::sheet:
+        // A screen drawn in the modern fonts draws these parts with its own
+        // painter; the crisp canvas has nothing to draw for them.
+        break;
     }
 }
 

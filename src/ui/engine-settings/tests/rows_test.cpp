@@ -63,7 +63,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 68> kExpected{{
+constexpr std::array<Expected, 69> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 2, 2, 7, 200, 0, false, Lock::none, nullptr},
@@ -132,11 +132,12 @@ constexpr std::array<Expected, 68> kExpected{{
     {Setting::zoomed_out_after, RowKind::choice, "After zoom", 2, 2, 7, 200, 0, false, Lock::none, &Locks::zoomed_out_after},
     {Setting::window_frame, RowKind::levels, "Window frame", 2, 2, 2, 85, 2, false, Lock::none, nullptr},
     {Setting::hud_scaling, RowKind::toggle, "HUD scaling", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::interface_size, RowKind::choice, "Interface size", 2, 2, 5, 200, 0, false, Lock::none, nullptr},
 }};
 // clang-format on
 
 static_assert(
-    kExpected.size() == static_cast<std::size_t>(Setting::hud_scaling) + 1,
+    kExpected.size() == static_cast<std::size_t>(Setting::interface_size) + 1,
     "every setting has its row"
 );
 
@@ -525,7 +526,7 @@ struct StoredChoice {
 };
 
 /// Every strip's and drop-down's setting, with its key.
-constexpr std::array<StoredChoice, 21> kStoredChoices{{
+constexpr std::array<StoredChoice, 22> kStoredChoices{{
     {Setting::max_zoom_out, settings::key::max_zoom_out},
     {Setting::max_zoom_in, settings::key::max_zoom_in},
     {Setting::view_past_map_edge, settings::key::view_past_map_edge},
@@ -547,6 +548,7 @@ constexpr std::array<StoredChoice, 21> kStoredChoices{{
     {Setting::zoomed_out_units, settings::key::zoomed_out_units},
     {Setting::zoomed_out_after, settings::key::zoomed_out_after},
     {Setting::window_frame, settings::key::window_frame},
+    {Setting::interface_size, settings::key::interface_size},
 }};
 
 void every_row_and_choice_has_an_id_of_one_word() {
@@ -621,6 +623,10 @@ void every_row_and_choice_has_an_id_of_one_word() {
     OA_CHECK(
         ids_of(Setting::zoomed_out_units) == (std::vector<std::string>{"rendered", "dots", "icons"})
     );
+    OA_CHECK(
+        ids_of(Setting::interface_size) ==
+        (std::vector<std::string>{"automatic", "100", "200", "300", "400"})
+    );
     OA_CHECK(!ids_of(Setting::language).empty() && ids_of(Setting::language)[0] == "system");
     // A tag's capitals and a value's slash become name form.
     OA_CHECK(geometry::word_form("zh-Hans", false) == "zh-hans");
@@ -647,12 +653,13 @@ void tab_follows_the_dialogs_focus_order() {
         tab_order(controls) ==
         (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 8, 7})
     );
-    // Graphics: After zoom, locked while units are drawn whole, takes none.
+    // Graphics: After zoom, locked while units are drawn whole, takes none;
+    // Interface size, the last row, does.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
     OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 19, 20,
-                                                          21, 23, 24, 9,  10, 11, 0,  1,
-                                                          2,  3,  4,  5,  6,  8,  7}));
+                                                          21, 23, 24, 25, 9,  10, 11, 0,
+                                                          1,  2,  3,  4,  5,  6,  8,  7}));
     // Developer with its first area open: its rows, its list's headers,
     // Show Active Only and Restore profile values, then the rest.
     settings::Dialog developer = controls;

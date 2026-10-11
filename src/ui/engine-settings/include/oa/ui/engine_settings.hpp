@@ -84,6 +84,9 @@ inline constexpr std::string_view zoomed_out_after = "open-annihilation.zoomed-o
 inline constexpr std::string_view window_frame = "open-annihilation.window-frame";
 /// 1 or 0 (EngineSettings::hud_scaling).
 inline constexpr std::string_view hud_scaling = "open-annihilation.hud-scaling";
+/// "automatic", or the percent "100", "200", "300" or "400"
+/// (EngineSettings::interface_size).
+inline constexpr std::string_view interface_size = "open-annihilation.interface-size";
 /// 1 or 0 (EngineSettings::modern_fonts).
 inline constexpr std::string_view modern_fonts = "open-annihilation.modern-fonts";
 /// 1 or 0 (EngineSettings::text_outline).
@@ -351,6 +354,50 @@ inline constexpr std::array<MenuScaling, 3> menu_scaling_choices{
     MenuScaling::whole_steps,
     MenuScaling::unfiltered,
 };
+
+/// Interface size: how large Open Annihilation's own screens (Settings, its
+/// notices and its prompts) are drawn outside a match. A size the window
+/// cannot hold the smallest layout at is drawn at the largest whole step
+/// that holds it.
+enum class InterfaceSize : uint8_t {
+    /// The window's own size: its height over 720, rounded, and never
+    /// below the display's density
+    automatic,
+    size_100, ///< one window pixel a point
+    size_200, ///< two window pixels a point
+    size_300, ///< three window pixels a point
+    size_400, ///< four window pixels a point
+};
+
+/// The Interface sizes, in the order the dialog offers them.
+inline constexpr std::array<InterfaceSize, 5> interface_size_choices{
+    InterfaceSize::automatic,
+    InterfaceSize::size_100,
+    InterfaceSize::size_200,
+    InterfaceSize::size_300,
+    InterfaceSize::size_400,
+};
+
+/// Returns the scale an Interface size chooses, as the OA layer takes it
+/// (oa::ui::kit::layer_viewport).
+///
+/// @param size the Interface size
+/// @return the scale in percent: 100, 200, 300 or 400; 0 for Auto
+[[nodiscard]] constexpr int32_t interface_size_percent(InterfaceSize size) noexcept {
+    switch (size) {
+    case InterfaceSize::size_100:
+        return 100;
+    case InterfaceSize::size_200:
+        return 200;
+    case InterfaceSize::size_300:
+        return 300;
+    case InterfaceSize::size_400:
+        return 400;
+    case InterfaceSize::automatic:
+        break;
+    }
+    return 0;
+}
 
 /// Explosion flash: how strongly the flash of each explosion lights the
 /// battlefield under it.
@@ -719,6 +766,11 @@ struct EngineSettings {
     /// original game's size on every window. The touch controls' layouts
     /// keep their own sizes either way.
     bool hud_scaling{true};
+    /// How large Open Annihilation's own screens are drawn outside a match:
+    /// the window's Auto scale, or a whole step the OA layer holds to what
+    /// fits the smallest layout in the window. It takes effect when the
+    /// dialog's OK is pressed, and changes no game text, HUD or menu.
+    InterfaceSize interface_size{InterfaceSize::automatic};
     /// Game text is drawn in the modern fonts, which hold the letters of
     /// many languages, rather than the game's own 8-bit fonts. On by default
     /// with the player's own preferences file (default_settings).
@@ -837,7 +889,7 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 /// Off, but On where the platform opens every window at native density.
 /// Explosion flash is Full everywhere, as 3.1c draws it. Zoomed out units
 /// are Rendered and After zoom 1/6 everywhere. Window frame is Hidden in
-/// play and HUD scaling On everywhere. Modern
+/// play, HUD scaling On and Interface size Auto everywhere. Modern
 /// fonts for game text are On with the player's own file and Off with a
 /// named one; their outline and shadow are On, their background Off and
 /// their size default_text_size everywhere. The language is the operating
@@ -912,7 +964,9 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 /// "1/2", "1/3", "1/4", "1/6", "1/8", "1/12" or "1/16"; any other value,
 /// "icons" among them, gives the default. Window frame reads
 /// "hidden-in-play" or "always-shown", and any other value gives the
-/// default. A stored value always wins over a Steam Deck's defaults.
+/// default. Interface size reads the words interface_size_text writes, and
+/// any other value, "150", "0" and an empty one among them, gives Auto. A
+/// stored value always wins over a Steam Deck's defaults.
 ///
 /// @param values the preferences
 /// @param inputs the platform, the preferences file and the installation
@@ -932,8 +986,9 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 /// and QUEUE and ADD as their words (menu_scaling_text, touch_drag_text,
 /// touch_latches_text), Explosion flash as "off", "reduced" or "full", the
 /// hold delay in milliseconds, Maximum zoom out, Maximum zoom in, View past
-/// the map's edge, Zoomed out units, After zoom, Window frame, Control size
-/// and the Controller section's choices as the words read_settings reads,
+/// the map's edge, Zoomed out units, After zoom, Window frame, Interface
+/// size (interface_size_text), Control size and the Controller section's
+/// choices as the words read_settings reads,
 /// Pointer speed and Gyro speed in percent, the mod and the picked folder as their
 /// paths, or erased
 /// for none; Restore defaults leaves the picked folder as it is. The picked
@@ -1044,6 +1099,18 @@ hardware_acceleration_from_text(std::string_view text) noexcept;
 /// @param text the word, in lower case as menu_scaling_text gives it
 /// @return the way; nothing for any other text
 [[nodiscard]] std::optional<MenuScaling> menu_scaling_from_text(std::string_view text) noexcept;
+
+/// Returns the word the preferences keep an Interface size as.
+///
+/// @param size the Interface size
+/// @return "automatic", "100", "200", "300" or "400"
+[[nodiscard]] std::string_view interface_size_text(InterfaceSize size) noexcept;
+
+/// Returns the Interface size a word names.
+///
+/// @param text the word, as interface_size_text gives it
+/// @return the size; nothing for any other text, "150" and "0" among them
+[[nodiscard]] std::optional<InterfaceSize> interface_size_from_text(std::string_view text) noexcept;
 
 /// Returns the word the preferences keep a way of One-finger drag as.
 ///
@@ -1216,7 +1283,7 @@ struct Locks {
 /// chosen from the main menu. Native pixel density is locked always_on where
 /// the platform opens every window at native density, else command_line
 /// while --native-density decides it, and never by a game: it takes effect
-/// from the next start. No game locks Menu scaling.
+/// from the next start. No game locks Menu scaling or Interface size.
 ///
 /// @param state the game the dialog opens over
 /// @return the locks

@@ -404,6 +404,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_challenge) {
+            check_challenge();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_renderer_ladder) {
             const int status = check_renderer_ladder();
             flush_preferences();
@@ -762,6 +767,7 @@ void Runtime::idle_tick() {
     tell_incomplete_mod();
     tick_content();
     tell_mod_installs();
+    tell_challenges();
     render();
     presentation_alpha_ = 1.0F;
     capture_film_frame();

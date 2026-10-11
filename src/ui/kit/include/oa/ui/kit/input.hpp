@@ -19,9 +19,9 @@ namespace oa::ui::kit {
 
 /// The keys a kit screen answers to. A host gives the platform's keys these
 /// meanings. The names and their order up to no are the settings dialog's
-/// keys, so a host can pass one through as the other; the editing keys after
-/// it are the kit's own. Enter also goes to a focused tab, and Home and End
-/// to a focused text field, as key says.
+/// keys, so a host can pass one through as the other; the editing keys and
+/// the information key after it are the kit's own. Enter also goes to a
+/// focused tab, and Home and End to a focused text field, as key says.
 enum class Key : uint8_t {
     enter,     ///< the focused button, link or list row; otherwise the screen accepts
     escape,    ///< the screen cancels
@@ -42,6 +42,10 @@ enum class Key : uint8_t {
     backspace,
     /// A focused text field deletes the character after its caret.
     delete_forward,
+    /// The information key: a screen that has more to tell about what the
+    /// pointer or the focus is on shows it, such as a card. The OA layer
+    /// gives it F1 outside a match; nothing on a kit screen otherwise.
+    info,
 };
 
 /// One of the four ways the arrows move the focus.
@@ -71,6 +75,21 @@ struct Reached {
 /// @param reach how far a control may lie from the finger, in points
 /// @return the control and the point the press takes
 [[nodiscard]] Reached reach(const DisplayList& list, Point finger, int32_t reach) noexcept;
+
+/// Returns where a finger's press lands, with a reach that may be a fraction
+/// of a point, as a screen at a fractional scale has it.
+///
+/// As the reach above: on a control, the finger's own point; otherwise the
+/// nearest point of the nearest enabled control whose press area lies no
+/// farther from the finger than the reach, the first in list order of equal
+/// distances; with nothing within reach, the finger's own point and no
+/// control. A reach of 0 or less does not search.
+///
+/// @param list the display list
+/// @param finger the finger, in the same points as the controls
+/// @param within how far a control may lie from the finger, in points
+/// @return the control and the point the press takes
+[[nodiscard]] Reached reach(const DisplayList& list, Point finger, float within) noexcept;
 
 /// What a pointer and the keys have done on a screen, between events.
 struct Interaction {
@@ -145,6 +164,15 @@ finger_down(Interaction& interaction, const DisplayList& list, Point finger, int
 [[nodiscard]] PointerOutcome
 pointer_up(Interaction& interaction, const DisplayList& list, Point point);
 
+/// Shows an interaction on the parts that draw its controls: a part is
+/// focused when it draws the focused control and a key has shown the focus,
+/// and pressed when it draws the held control. A part that draws no control
+/// is neither.
+///
+/// @param[in,out] list the display list; its items' focused and pressed states change
+/// @param interaction the focus and the held control
+void mark_states(DisplayList& list, const Interaction& interaction) noexcept;
+
 /// Returns the next control in the declared order.
 ///
 /// The order wraps around. From a control that is not in it, going forward
@@ -210,7 +238,8 @@ struct KeyOutcome {
 /// otherwise the screen accepts. Escape cancels. Page Up and Page Down
 /// scroll. Home and End go to a focused text field, which moves its caret,
 /// and otherwise scroll. Backspace and Delete go to a focused text field and
-/// otherwise do nothing. Yes and No do nothing.
+/// otherwise do nothing. Yes, No and Info do nothing: a screen that answers
+/// to Info does so before it calls key.
 ///
 /// @param[in,out] interaction the focus; a move shows it and sets the control
 /// @param list the display list
