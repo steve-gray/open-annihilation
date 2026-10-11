@@ -477,7 +477,7 @@ void check_frame(const fixture::NamedFrame& named) {
                 ) != nullptr
             );
         OA_CHECK(fixture::named(page, "library.action") != nullptr);
-        page_state.menu = lib::Menu::more;
+        page_state.menu = lib::MenuKind::more;
         const kit::DisplayList more = laid_out(library, page_state, frame);
         for (const lib::ActionButton& action : actions)
             OA_CHECK(
@@ -666,16 +666,16 @@ void tab_commands_change_tabs() {
     lib::ScreenState state;
     const kit::Frame regular = fixture::frames()[1].frame;
     kit::DisplayList list = laid_out(library, state, regular);
-    OA_CHECK(lib::library_command(library, state, list, lib::Command::next_tab).redraw);
+    OA_CHECK(lib::library_command(library, state, list, lib::ScreenCommand::next_tab).redraw);
     OA_CHECK(library.tab == lib::Tab::maps);
     list = laid_out(library, state, regular);
-    static_cast<void>(lib::library_command(library, state, list, lib::Command::previous_tab));
+    static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::previous_tab));
     OA_CHECK(library.tab == lib::Tab::mods);
     list = laid_out(library, state, regular);
-    static_cast<void>(lib::library_command(library, state, list, lib::Command::previous_tab));
+    static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::previous_tab));
     OA_CHECK(library.tab == lib::Tab::updates);
     list = laid_out(library, state, regular);
-    static_cast<void>(lib::library_command(library, state, list, lib::Command::next_tab));
+    static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::next_tab));
     OA_CHECK(library.tab == lib::Tab::mods);
 }
 
@@ -688,20 +688,20 @@ void controller_buttons() {
     lib::ScreenState state;
     kit::DisplayList list = laid_out(library, state, compact);
     lib::ScreenResult result =
-        lib::library_command(library, state, list, lib::Command::first_action);
+        lib::library_command(library, state, list, lib::ScreenCommand::first_action);
     OA_CHECK(result.action == lib::Action::update && result.entry == fixture::ridge_id());
 
     lib::select(library, {std::string(fixture::added), lib::Kind::mod, "hollow"});
-    result = lib::library_command(library, state, list, lib::Command::first_action);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::first_action);
     OA_CHECK(!result.action);
     lib::select(library, {std::string(fixture::core), lib::Kind::mod, "bastion"});
-    result = lib::library_command(library, state, list, lib::Command::first_action);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::first_action);
     OA_CHECK(!result.action);
     lib::select(library, {std::string(fixture::core), lib::Kind::mod, "ta-zero"});
-    result = lib::library_command(library, state, list, lib::Command::first_action);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::first_action);
     OA_CHECK(result.action == lib::Action::cancel);
 
-    result = lib::library_command(library, state, list, lib::Command::find);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::find);
     list = laid_out(library, state, compact);
     OA_CHECK(
         state.interaction.focus_shown && state.interaction.focused == id_of(list, "library.search")
@@ -713,10 +713,10 @@ void controller_buttons() {
     state = {};
     state.details_page = true;
     list = laid_out(library, state, compact);
-    result = lib::library_command(library, state, list, lib::Command::back);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::back);
     OA_CHECK(!result.action && !library.details_open && !state.details_page);
     list = laid_out(library, state, compact);
-    result = lib::library_command(library, state, list, lib::Command::back);
+    result = lib::library_command(library, state, list, lib::ScreenCommand::back);
     OA_CHECK(result.action == lib::Action::close);
 }
 
@@ -856,9 +856,9 @@ lib::ScreenResult click(
         return {};
     const kit::Point at = centre_of(*control);
     static_cast<void>(
-        lib::library_pointer(library, state, list, lib::PointerEvent::down, 1, at, finger_reach)
+        lib::library_pointer(library, state, list, lib::PointerKind::down, 1, at, finger_reach)
     );
-    return lib::library_pointer(library, state, list, lib::PointerEvent::up, 1, at, finger_reach);
+    return lib::library_pointer(library, state, list, lib::PointerKind::up, 1, at, finger_reach);
 }
 
 /// A click, a double click or a tap on a row selects it and gets nothing; at
@@ -924,14 +924,14 @@ void wheel_and_drag_scroll() {
     list = laid_out(library, state, compact);
     const std::optional<lib::EntryId> before = library.selected;
     static_cast<void>(
-        lib::library_pointer(library, state, list, lib::PointerEvent::down, 1, inside, 12)
+        lib::library_pointer(library, state, list, lib::PointerKind::down, 1, inside, 12)
     );
     static_cast<void>(lib::library_pointer(
-        library, state, list, lib::PointerEvent::move, 0, {inside.x, inside.y - 40}, 12
+        library, state, list, lib::PointerKind::move, 0, {inside.x, inside.y - 40}, 12
     ));
     OA_CHECK(state.list_scroll > 0);
     const lib::ScreenResult result = lib::library_pointer(
-        library, state, list, lib::PointerEvent::up, 1, {inside.x, inside.y - 40}, 12
+        library, state, list, lib::PointerKind::up, 1, {inside.x, inside.y - 40}, 12
     );
     OA_CHECK(!result.action && library.selected == before && !library.details_open);
 }
@@ -964,20 +964,20 @@ void filters_and_tags() {
     lib::ScreenState state;
     kit::DisplayList list = laid_out(library, state, all[0].frame);
     static_cast<void>(click(library, state, list, "library.filter"));
-    OA_CHECK(state.menu == lib::Menu::filter);
+    OA_CHECK(state.menu == lib::MenuKind::filter);
     list = laid_out(library, state, all[0].frame);
     OA_CHECK(fixture::named(list, "library.filter.installed") != nullptr);
     OA_CHECK(fixture::named(list, "library.filter.tag-balance") != nullptr);
     OA_EXPECT_NONE(name_problems(list), "filter menu open");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "filter menu open");
     static_cast<void>(click(library, state, list, "library.filter.installed"));
-    OA_CHECK(library.filter == lib::Filter::installed && state.menu == lib::Menu::none);
+    OA_CHECK(library.filter == lib::Filter::installed && state.menu == lib::MenuKind::none);
     list = laid_out(library, state, all[0].frame);
     static_cast<void>(click(library, state, list, "library.filter"));
     list = laid_out(library, state, all[0].frame);
     // A press outside an open drop-down closes it and does nothing else.
     const lib::ScreenResult outside = click(library, state, list, "library.close");
-    OA_CHECK(!outside.action && state.menu == lib::Menu::none);
+    OA_CHECK(!outside.action && state.menu == lib::MenuKind::none);
 
     lib::Library wide = with_ridge();
     lib::ScreenState wide_state;
@@ -1025,11 +1025,11 @@ void more_holds_the_rest() {
     state.details_page = true;
     kit::DisplayList list = laid_out(library, state, compact);
     static_cast<void>(click(library, state, list, "library.action"));
-    OA_CHECK(state.menu == lib::Menu::more);
+    OA_CHECK(state.menu == lib::MenuKind::more);
     list = laid_out(library, state, compact);
     const lib::ScreenResult result = click(library, state, list, "library.action.homepage");
     OA_CHECK(result.action == lib::Action::homepage && result.entry == fixture::ridge_id());
-    OA_CHECK(state.menu == lib::Menu::none);
+    OA_CHECK(state.menu == lib::MenuKind::none);
 }
 
 } // namespace

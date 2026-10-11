@@ -155,7 +155,7 @@ translator finds them together. Every word passes through `Library::text`
     the details page, else asks to close. On the search, typed text and the
     editing keys search as they are typed. An open drop-down takes Up,
     Down, Page Up, Page Down, Home, End, Enter, Space and Escape.
-  - **Commands** (`Command`), which a host maps: `find` (Ctrl+F, Cmd+F on
+  - **Commands** (`ScreenCommand`), which a host maps: `find` (Ctrl+F, Cmd+F on
     macOS, `/` outside the search, the controller's Y), `next_tab` and
     `previous_tab` (Ctrl+Tab and Ctrl+Shift+Tab, RB and LB), `back` (B: the
     details page to the list, else close) and `first_action` (X: the
@@ -300,7 +300,7 @@ fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
   catalogue for it.
 - The screens are not hosted yet: the OA layer's Library screen fills the
   inputs, places the window and maps the platform's keys and the
-  controller to `kit::Key` and `Command`.
+  controller to `kit::Key` and `ScreenCommand`.
 - Only rows that show have controls: a journey scrolls or searches before
   it presses a row that does not show.
 - A badge's letters are drawn in the kit's ink for the accent

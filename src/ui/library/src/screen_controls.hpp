@@ -110,7 +110,7 @@ struct MenuItem {
 /// @param tag_shown for each tag of tags_in_tab, whether it has its own chip or nav entry
 /// @return the items, top to bottom
 [[nodiscard]] std::vector<MenuItem>
-menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown);
+menu_items(const Library& library, MenuKind menu, const std::vector<bool>& tag_shown);
 
 /// Returns the item a drop-down shows as chosen.
 ///
@@ -119,7 +119,7 @@ menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown
 /// @param items its items
 /// @return the item's place, or -1 for none
 [[nodiscard]] int32_t
-chosen_item(const Library& library, Menu menu, const std::vector<MenuItem>& items);
+chosen_item(const Library& library, MenuKind menu, const std::vector<MenuItem>& items);
 
 /// The rows a pane's parts take.
 struct Extent {

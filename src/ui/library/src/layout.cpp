@@ -192,7 +192,7 @@ Window window_of(const kit::Frame& frame) {
 
 /// A drop-down whose menu is open, drawn over everything else.
 struct OpenMenu {
-    Menu menu{Menu::none};                   ///< which
+    MenuKind menu{MenuKind::none};           ///< which
     kit::Rect field{};                       ///< its field
     std::vector<controls::MenuItem> items{}; ///< its items
     int32_t chosen{-1};                      ///< the item shown as chosen, or -1
@@ -789,7 +789,7 @@ void add_drop_down(
     Building& building,
     std::vector<kit::Control>& group,
     const kit::Rect& rect,
-    Menu menu,
+    MenuKind menu,
     std::string_view caption,
     std::vector<controls::MenuItem> items,
     kit::ControlId id,
@@ -927,8 +927,8 @@ void add_compact_search_row(Building& building, const kit::Rect& row) {
     }
     const int32_t field_width = std::max(row.width - compact_filter_room, int32_t{0});
     add_search(building, {row.x, row.y, field_width, metrics.field_height});
-    std::vector<controls::MenuItem> items = controls::menu_items(library, Menu::filter, {});
-    const int32_t chosen = controls::chosen_item(library, Menu::filter, items);
+    std::vector<controls::MenuItem> items = controls::menu_items(library, MenuKind::filter, {});
+    const int32_t chosen = controls::chosen_item(library, MenuKind::filter, items);
     const std::string caption =
         chosen >= 0 ? items[static_cast<std::size_t>(chosen)].caption : std::string();
     add_drop_down(
@@ -938,7 +938,7 @@ void add_compact_search_row(Building& building, const kit::Rect& row) {
          row.y,
          compact_filter_room - metrics.button_gap,
          metrics.regular_line},
-        Menu::filter,
+        MenuKind::filter,
         caption,
         std::move(items),
         controls::filter_menu,
@@ -999,7 +999,7 @@ void add_chip_row(Building& building, const kit::Rect& row) {
         // Not every tag fits: TAGS ▾ takes the row's end and holds the rest.
         std::vector<bool> none(tags.size(), false);
         const std::vector<controls::MenuItem> every =
-            controls::menu_items(library, Menu::tags, none);
+            controls::menu_items(library, MenuKind::tags, none);
         limit = row_right -
                 drop_down_width(building, shown(library.text, words::tags_menu), every) -
                 metrics.chip_gap;
@@ -1024,7 +1024,8 @@ void add_chip_row(Building& building, const kit::Rect& row) {
     }
     if (std::find(tag_shown.begin(), tag_shown.end(), false) == tag_shown.end())
         return;
-    std::vector<controls::MenuItem> items = controls::menu_items(library, Menu::tags, tag_shown);
+    std::vector<controls::MenuItem> items =
+        controls::menu_items(library, MenuKind::tags, tag_shown);
     const std::string_view caption = shown(library.text, words::tags_menu);
     const int32_t width = std::min(drop_down_width(building, caption, items), row_right - left);
     add_drop_down(
@@ -1034,7 +1035,7 @@ void add_chip_row(Building& building, const kit::Rect& row) {
          row.y + (row.height - metrics.regular_line) / 2,
          width,
          metrics.regular_line},
-        Menu::tags,
+        MenuKind::tags,
         caption,
         std::move(items),
         controls::tags_menu,
@@ -1133,13 +1134,14 @@ void add_filter_pane(Building& building, const kit::Rect& pane) {
             kit::HeadingLook{std::string(shown(library.text, words::tags_menu))};
     if (std::find(tag_shown.begin(), tag_shown.end(), false) == tag_shown.end())
         return;
-    std::vector<controls::MenuItem> items = controls::menu_items(library, Menu::tags, tag_shown);
+    std::vector<controls::MenuItem> items =
+        controls::menu_items(library, MenuKind::tags, tag_shown);
     const std::string_view caption = shown(library.text, words::tags_menu);
     add_drop_down(
         building,
         building.top,
         {entry_left, top, entry_width, metrics.regular_line},
-        Menu::tags,
+        MenuKind::tags,
         caption,
         std::move(items),
         controls::tags_menu,
@@ -1888,12 +1890,12 @@ kit::DisplayList finish(Building& building, const Window& window) {
 namespace controls {
 
 std::vector<MenuItem>
-menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown) {
+menu_items(const Library& library, MenuKind menu, const std::vector<bool>& tag_shown) {
     std::vector<MenuItem> items;
     switch (menu) {
-    case Menu::none:
+    case MenuKind::none:
         break;
-    case Menu::filter: {
+    case MenuKind::filter: {
         for (std::size_t index = 0; index < filter_order.size(); ++index) {
             MenuItem item;
             item.caption = std::string(filter_text(filter_order[index], library.text));
@@ -1915,7 +1917,7 @@ menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown
         }
         break;
     }
-    case Menu::tags: {
+    case MenuKind::tags: {
         const std::vector<std::pair<std::string, std::size_t>> tags = tags_in_tab(library);
         for (std::size_t index = 0; index < tags.size(); ++index) {
             if (index < tag_shown.size() && tag_shown[index])
@@ -1932,7 +1934,7 @@ menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown
         }
         break;
     }
-    case Menu::more: {
+    case MenuKind::more: {
         const Entry* entry = selected_entry(library);
         if (entry == nullptr)
             break;
@@ -1950,8 +1952,8 @@ menu_items(const Library& library, Menu menu, const std::vector<bool>& tag_shown
     return items;
 }
 
-int32_t chosen_item(const Library& library, Menu menu, const std::vector<MenuItem>& items) {
-    if (menu == Menu::more)
+int32_t chosen_item(const Library& library, MenuKind menu, const std::vector<MenuItem>& items) {
+    if (menu == MenuKind::more)
         return -1;
     const std::vector<std::pair<std::string, std::size_t>> tags = tags_in_tab(library);
     for (std::size_t place = 0; place < items.size(); ++place) {
@@ -2275,7 +2277,7 @@ kit::DisplayList details_page_layout(
         left += width_points + metrics.button_gap;
     }
     if (actions.size() > compact_action_buttons) {
-        std::vector<controls::MenuItem> items = controls::menu_items(library, Menu::more, {});
+        std::vector<controls::MenuItem> items = controls::menu_items(library, MenuKind::more, {});
         const std::string_view caption = shown(library.text, words::more_menu);
         const int32_t width_points = drop_down_width(building, caption, items);
         add_drop_down(
@@ -2285,7 +2287,7 @@ kit::DisplayList details_page_layout(
              window.button_top + (metrics.button_height - metrics.regular_line) / 2,
              width_points,
              metrics.regular_line},
-            Menu::more,
+            MenuKind::more,
             caption,
             std::move(items),
             controls::more_menu,

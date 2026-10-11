@@ -202,15 +202,15 @@ bool compact_list_shows(const kit::DisplayList& list) {
 ///
 /// @param menu the menu
 /// @return its control
-kit::ControlId field_of(Menu menu) {
+kit::ControlId field_of(MenuKind menu) {
     switch (menu) {
-    case Menu::filter:
+    case MenuKind::filter:
         return controls::filter_menu;
-    case Menu::tags:
+    case MenuKind::tags:
         return controls::tags_menu;
-    case Menu::more:
+    case MenuKind::more:
         return controls::more_menu;
-    case Menu::none:
+    case MenuKind::none:
         break;
     }
     return kit::no_control;
@@ -259,7 +259,7 @@ void mark_item(ScreenState& state, int32_t count, int32_t marked) {
 /// @param[in,out] state the screen's state
 /// @param list the display list
 void after_browsing(const Library& library, ScreenState& state, const kit::DisplayList& list) {
-    state.menu = Menu::none;
+    state.menu = MenuKind::none;
     state.list_scroll = 0;
     state.details_scroll = 0;
     show_selection(library, state, list);
@@ -284,7 +284,7 @@ void search_for_field(Library& library, ScreenState& state, const kit::DisplayLi
 ///
 /// @param[in,out] state the screen's state
 void focus_search(ScreenState& state) {
-    state.menu = Menu::none;
+    state.menu = MenuKind::none;
     state.interaction.focused = controls::search;
     state.interaction.focus_shown = true;
 }
@@ -314,7 +314,7 @@ ScreenResult open_page(Library& library, ScreenState& state) {
     open_details(library);
     state.details_page = library.details_open;
     state.details_scroll = 0;
-    state.menu = Menu::none;
+    state.menu = MenuKind::none;
     if (state.interaction.focus_shown)
         state.interaction.focused = first_enabled_action(library).value_or(controls::back);
     return redrawn();
@@ -328,7 +328,7 @@ ScreenResult open_page(Library& library, ScreenState& state) {
 ScreenResult close_page(Library& library, ScreenState& state) {
     close_details(library);
     state.details_page = false;
-    state.menu = Menu::none;
+    state.menu = MenuKind::none;
     if (state.interaction.focus_shown)
         state.interaction.focused = controls::list;
     return redrawn();
@@ -396,7 +396,7 @@ int rows_shown(const Library& library, const ScreenState& state, const kit::Disp
 ScreenResult
 choose_item(Library& library, ScreenState& state, const kit::DisplayList& list, int32_t place) {
     const std::vector<controls::MenuItem> items = open_items(library, state, list);
-    state.menu = Menu::none;
+    state.menu = MenuKind::none;
     if (place < 0 || static_cast<std::size_t>(place) >= items.size())
         return redrawn();
     const controls::MenuItem& item = items[static_cast<std::size_t>(place)];
@@ -426,10 +426,11 @@ choose_item(Library& library, ScreenState& state, const kit::DisplayList& list, 
 /// @param list the display list
 /// @param menu the drop-down
 /// @return what the host is to do
-ScreenResult
-toggle_menu(const Library& library, ScreenState& state, const kit::DisplayList& list, Menu menu) {
+ScreenResult toggle_menu(
+    const Library& library, ScreenState& state, const kit::DisplayList& list, MenuKind menu
+) {
     if (state.menu == menu) {
-        state.menu = Menu::none;
+        state.menu = MenuKind::none;
         return redrawn();
     }
     state.menu = menu;
@@ -478,7 +479,7 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         return {};
     if (menu_item_control(id))
         return choose_item(library, state, list, id - controls::first_menu_item);
-    state.menu = id == field_of(state.menu) ? state.menu : Menu::none;
+    state.menu = id == field_of(state.menu) ? state.menu : MenuKind::none;
     if (id >= controls::first_tab && id < controls::first_tab + tab_count)
         return show_tab(library, state, list, static_cast<Tab>(id - controls::first_tab));
     if (id >= controls::first_filter && id < controls::first_filter + filter_count) {
@@ -517,11 +518,11 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         focus_search(state);
         return result;
     case controls::filter_menu:
-        return toggle_menu(library, state, list, Menu::filter);
+        return toggle_menu(library, state, list, MenuKind::filter);
     case controls::tags_menu:
-        return toggle_menu(library, state, list, Menu::tags);
+        return toggle_menu(library, state, list, MenuKind::tags);
     case controls::more_menu:
-        return toggle_menu(library, state, list, Menu::more);
+        return toggle_menu(library, state, list, MenuKind::more);
     case controls::update_all:
         result.action = Action::update_all;
         return result;
@@ -556,7 +557,7 @@ menu_key(Library& library, ScreenState& state, const kit::DisplayList& list, kit
     const int32_t page = kit::shown_choices(static_cast<std::size_t>(std::max(count, int32_t{0})));
     switch (pressed) {
     case kit::Key::escape:
-        state.menu = Menu::none;
+        state.menu = MenuKind::none;
         return redrawn();
     case kit::Key::up:
         mark_item(state, count, state.menu_marked - 1);
@@ -581,7 +582,7 @@ menu_key(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         return choose_item(library, state, list, state.menu_marked);
     case kit::Key::tab:
     case kit::Key::back_tab:
-        state.menu = Menu::none;
+        state.menu = MenuKind::none;
         return std::nullopt;
     default:
         return ScreenResult{};
@@ -693,14 +694,14 @@ ScreenResult library_pointer(
     Library& library,
     ScreenState& state,
     const kit::DisplayList& list,
-    PointerEvent kind,
+    PointerKind kind,
     uint8_t button,
     kit::Point at,
     int32_t finger_reach
 ) {
     kit::Interaction& interaction = state.interaction;
     switch (kind) {
-    case PointerEvent::move: {
+    case PointerKind::move: {
         if (state.drag.pane != Pane::none) {
             const int32_t across = at.x - state.drag.from.x;
             const int32_t along = at.y - state.drag.from.y;
@@ -727,7 +728,7 @@ ScreenResult library_pointer(
         const kit::PointerOutcome outcome = kit::pointer_move(interaction, list, at);
         ScreenResult result;
         result.redraw = outcome.result != kit::PointerResult::none;
-        if (state.menu != Menu::none && menu_item_control(outcome.control)) {
+        if (state.menu != MenuKind::none && menu_item_control(outcome.control)) {
             const int32_t marked = outcome.control - controls::first_menu_item;
             if (marked != state.menu_marked) {
                 state.menu_marked = marked;
@@ -736,16 +737,16 @@ ScreenResult library_pointer(
         }
         return result;
     }
-    case PointerEvent::down: {
+    case PointerKind::down: {
         if (button != 1)
             return {};
         state.drag = {};
-        if (state.menu != Menu::none) {
+        if (state.menu != MenuKind::none) {
             const kit::ControlId under =
                 finger_reach > 0 ? kit::reach(list, at, finger_reach).control : kit::hit(list, at);
             if (!menu_item_control(under) && under != field_of(state.menu)) {
                 // A press outside an open drop-down only closes it.
-                state.menu = Menu::none;
+                state.menu = MenuKind::none;
                 return redrawn();
             }
         }
@@ -764,7 +765,7 @@ ScreenResult library_pointer(
         result.redraw = outcome.result != kit::PointerResult::none;
         return result;
     }
-    case PointerEvent::up: {
+    case PointerKind::up: {
         if (button != 1)
             return {};
         const bool dragged = state.drag.scrolling;
@@ -795,7 +796,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         else
             interaction.focused = list.tab_order.empty() ? kit::no_control : list.tab_order.front();
     }
-    if (state.menu != Menu::none) {
+    if (state.menu != MenuKind::none) {
         if (const std::optional<ScreenResult> taken = menu_key(library, state, list, pressed))
             return *taken;
     }
@@ -957,7 +958,7 @@ ScreenResult library_text(
 ScreenResult library_wheel(
     Library& library, ScreenState& state, const kit::DisplayList& list, kit::Point at, float notches
 ) {
-    if (state.menu != Menu::none) {
+    if (state.menu != MenuKind::none) {
         for (const kit::Item& item : list.items) {
             const auto* look = std::get_if<kit::ChoiceMenuLook>(&item.look);
             if (item.role != kit::Role::choice_menu || look == nullptr ||
@@ -983,25 +984,25 @@ ScreenResult library_wheel(
 }
 
 ScreenResult library_command(
-    Library& library, ScreenState& state, const kit::DisplayList& list, Command command
+    Library& library, ScreenState& state, const kit::DisplayList& list, ScreenCommand command
 ) {
     switch (command) {
-    case Command::find:
+    case ScreenCommand::find:
         if (page_shows(list)) {
             close_details(library);
             state.details_page = false;
         }
         focus_search(state);
         return redrawn();
-    case Command::next_tab:
-    case Command::previous_tab: {
-        const int32_t step = command == Command::next_tab ? 1 : tab_count - 1;
+    case ScreenCommand::next_tab:
+    case ScreenCommand::previous_tab: {
+        const int32_t step = command == ScreenCommand::next_tab ? 1 : tab_count - 1;
         const auto tab = static_cast<Tab>((static_cast<int32_t>(library.tab) + step) % tab_count);
         return show_tab(library, state, list, tab);
     }
-    case Command::back:
-        if (state.menu != Menu::none) {
-            state.menu = Menu::none;
+    case ScreenCommand::back:
+        if (state.menu != MenuKind::none) {
+            state.menu = MenuKind::none;
             return redrawn();
         }
         if (page_shows(list))
@@ -1011,7 +1012,7 @@ ScreenResult library_command(
             result.action = Action::close;
             return result;
         }
-    case Command::first_action: {
+    case ScreenCommand::first_action: {
         const Entry* entry = selected_entry(library);
         if (entry == nullptr)
             return {};

@@ -26,7 +26,7 @@
 namespace oa::ui::library {
 
 /// One of the Library's drop-downs, which can be open.
-enum class Menu : uint8_t {
+enum class MenuKind : uint8_t {
     none,   ///< no drop-down is open
     filter, ///< Compact's filter: All, Installed, Updates, then each tag of the tab (library.filter)
     tags,   ///< the tags that do not fit as chips or in the filter pane (library.tags)
@@ -59,8 +59,8 @@ struct ScreenState {
     /// The search field's text and caret. Its text is the model's query: the
     /// input keeps them the same.
     kit::TextField search{};
-    Menu menu{Menu::none}; ///< the open drop-down
-    int32_t menu_first{};  ///< the open drop-down's first item shown, from 0
+    MenuKind menu{MenuKind::none}; ///< the open drop-down
+    int32_t menu_first{};          ///< the open drop-down's first item shown, from 0
     int32_t menu_marked{}; ///< the open drop-down's item the keys or the pointer mark, from 0
     /// Compact shows the selected entry's details page. It shows while this
     /// and the model's details_open are both set: a refresh that closes the
@@ -80,7 +80,7 @@ struct ScreenResult {
 };
 
 /// What a pointer did, as the OA layer passes it to a screen.
-enum class PointerEvent : uint8_t {
+enum class PointerKind : uint8_t {
     move, ///< it moved
     down, ///< a button or a finger pressed
     up,   ///< a button or a finger let go
@@ -90,7 +90,7 @@ enum class PointerEvent : uint8_t {
 /// host maps the platform's keys and buttons to these. The controller's
 /// D-pad and left stick are the kit's arrows, its A is Space, and its right
 /// stick is library_stick.
-enum class Command : uint8_t {
+enum class ScreenCommand : uint8_t {
     find,         ///< Ctrl+F (Cmd+F on macOS), `/` outside the search, and the controller's Y
     next_tab,     ///< Ctrl+Tab and the controller's RB
     previous_tab, ///< Ctrl+Shift+Tab and the controller's LB
@@ -192,7 +192,7 @@ ScreenResult library_pointer(
     Library& library,
     ScreenState& state,
     const kit::DisplayList& list,
-    PointerEvent kind,
+    PointerKind kind,
     uint8_t button,
     kit::Point at,
     int32_t finger_reach
@@ -252,7 +252,7 @@ ScreenResult library_wheel(
 /// @param command what was pressed
 /// @return what the host is to do
 ScreenResult library_command(
-    Library& library, ScreenState& state, const kit::DisplayList& list, Command command
+    Library& library, ScreenState& state, const kit::DisplayList& list, ScreenCommand command
 );
 
 /// Takes the controller's right stick: it scrolls the pane that holds the
