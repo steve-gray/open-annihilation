@@ -591,6 +591,8 @@ void keys_with_no_focus_show_an_end_of_the_order() {
     OA_CHECK(kit::key(interaction, list, kit::Key::end).result == kit::KeyResult::scroll);
     OA_CHECK(kit::key(interaction, list, kit::Key::yes).result == kit::KeyResult::none);
     OA_CHECK(kit::key(interaction, list, kit::Key::no).result == kit::KeyResult::none);
+    OA_CHECK(kit::key(interaction, list, kit::Key::info).result == kit::KeyResult::none);
+    OA_CHECK(!interaction.focus_shown);
 
     // The first control steps, and Left still only shows it.
     list.tab_order = {2, 1, 3, 4, 5};
@@ -672,6 +674,7 @@ void keys_on_a_stepping_control_stay_with_it() {
     OA_CHECK(kit::key(interaction, list, kit::Key::page_down).result == kit::KeyResult::scroll);
     OA_CHECK(kit::key(interaction, list, kit::Key::yes).result == kit::KeyResult::none);
     OA_CHECK(kit::key(interaction, list, kit::Key::no).result == kit::KeyResult::none);
+    OA_CHECK(kit::key(interaction, list, kit::Key::info).result == kit::KeyResult::none);
     OA_CHECK(interaction.focused == 2);
 }
 
@@ -1098,7 +1101,7 @@ void buttons_list_each_button_and_a_clip_narrows_a_control() {
 }
 
 /// The keys keep the settings dialog's values up to No, and the editing
-/// keys follow it.
+/// keys and the information key follow it.
 void the_keys_keep_their_values() {
     OA_CHECK(static_cast<int>(kit::Key::enter) == 0);
     OA_CHECK(static_cast<int>(kit::Key::escape) == 1);
@@ -1117,6 +1120,7 @@ void the_keys_keep_their_values() {
     OA_CHECK(static_cast<int>(kit::Key::no) == 14);
     OA_CHECK(static_cast<int>(kit::Key::backspace) == 15);
     OA_CHECK(static_cast<int>(kit::Key::delete_forward) == 16);
+    OA_CHECK(static_cast<int>(kit::Key::info) == 17);
 }
 
 /// Tells whether a field holds a text with its caret at a byte.
@@ -1258,7 +1262,8 @@ void editing_takes_whole_characters() {
           kit::Key::tab,
           kit::Key::page_up,
           kit::Key::yes,
-          kit::Key::no}) {
+          kit::Key::no,
+          kit::Key::info}) {
         OA_CHECK(!kit::edit_text(other, pressed));
         OA_CHECK(holds(other, "ab", 1));
     }

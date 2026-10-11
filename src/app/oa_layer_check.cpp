@@ -2,17 +2,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Helpers for the native checks of the OA layer's screens as the window
-// shows them (oa_layer_check.hpp).
+// shows them (oa_layer_check.hpp), the checks' mark screen, and the layer's
+// own check of screens that are not opaque and of the information key
+// (OaLayer::check_clear_screens), which --check-engine-settings runs.
 
 #include "oa_layer_check.hpp"
 
+#include "oa/app/automation_host.hpp"
+#include "oa/app/runtime.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace oa::app {
 
@@ -206,6 +218,818 @@ SDL_Event window_finger_event(
     event.tfinger.pressure = type == SDL_EVENT_FINGER_UP ? 0.0F : 1.0F;
     event.tfinger.windowID = window != nullptr ? SDL_GetWindowID(window) : 0;
     return event;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The checks' mark screen
+
+MarkScreen::MarkScreen(MarkLook look, std::shared_ptr<MarkSeen> seen)
+    : look_(std::move(look)), seen_(std::move(seen)) {
+}
+
+LayerPlacement MarkScreen::placement(const LayerView& view) const {
+    if (view.match && !look_.in_match)
+        return {};
+    const int32_t point_pixels = std::max(view.scale, int32_t{1});
+    if (look_.area.width <= 0 || look_.area.height <= 0) {
+        // The whole room, in whole points.
+        const int32_t width = view.room.width / point_pixels;
+        const int32_t height = view.room.height / point_pixels;
+        return {
+            {view.room.x, view.room.y, width * point_pixels, height * point_pixels}, width, height
+        };
+    }
+    return {
+        {view.room.x + look_.area.x * point_pixels,
+         view.room.y + look_.area.y * point_pixels,
+         look_.area.width * point_pixels,
+         look_.area.height * point_pixels},
+        look_.area.width,
+        look_.area.height
+    };
+}
+
+void MarkScreen::draw(const oa::ui::kit::Canvas& canvas) const {
+    if (canvas.surface == nullptr)
+        return;
+    const auto& mark = look_.mark;
+    artless::fill_source_rect(
+        *canvas.surface, canvas.placement, {mark.x, mark.y, mark.width, mark.height}, look_.colour
+    );
+    const auto& veil = look_.veil;
+    if (veil.width > 0 && veil.height > 0)
+        artless::blend_source_rect(
+            *canvas.surface,
+            canvas.placement,
+            {veil.x, veil.y, veil.width, veil.height},
+            look_.colour,
+            mark_veil_opacity
+        );
+}
+
+LayerAnswer MarkScreen::key(oa::ui::kit::Key pressed, uint32_t sdl_key) {
+    if (pressed != oa::ui::kit::Key::info) {
+        ++seen_->other_keys;
+        return LayerAnswer::pass;
+    }
+    ++seen_->infos;
+    seen_->info_key = sdl_key;
+    return look_.takes_info ? LayerAnswer::none : LayerAnswer::pass;
+}
+
+oa::ui::kit::DisplayList MarkScreen::display_list() const {
+    oa::ui::kit::DisplayList list;
+    oa::ui::kit::Control mark;
+    mark.id = 1;
+    mark.rect = look_.mark;
+    mark.name = "mark";
+    mark.kind = oa::ui::kit::ControlKind::button;
+    mark.focusable = false;
+    list.controls.push_back(std::move(mark));
+    return list;
+}
+
+oa::ui::display_layout::Rect
+layer_window_rect(const LayerPlacement& placement, const oa::ui::kit::Rect& points) noexcept {
+    const auto& shown = placement.shown;
+    if (placement.points_width <= 0 || placement.points_height <= 0)
+        return {shown.x, shown.y, 0, 0};
+    const int32_t across = shown.width / placement.points_width;
+    const int32_t down = shown.height / placement.points_height;
+    return {
+        shown.x + points.x * across,
+        shown.y + points.y * down,
+        points.width * across,
+        points.height * down
+    };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The layer's own check of screens that are not opaque, and of the information key
+
+namespace {
+
+namespace layout = oa::ui::display_layout;
+namespace kit = oa::ui::kit;
+
+/// Throws when a condition fails.
+///
+/// @param ok the condition
+/// @param what what failed
+void require(bool ok, std::string_view what) {
+    if (!ok)
+        throw std::runtime_error("OA layer check: " + std::string(what));
+}
+
+/// A point of the main menu's picture over none of its buttons, where the
+/// pointer rests while the check reads frames back.
+constexpr layout::Point kCheckPointer{4, 240};
+
+/// A window the check shows the main menu in, and the scale the layer gives
+/// a point there.
+struct CheckWindow {
+    int32_t width{};  ///< the window's width, in pixels
+    int32_t height{}; ///< the window's height, in pixels
+    int32_t scale{};  ///< window pixels a point
+};
+
+/// The windows: the picture's own 640 by 480, and 1920 by 1080 at 2×.
+constexpr std::array<CheckWindow, 2> kCheckWindows{{{640, 480, 1}, {1920, 1080, 2}}};
+
+/// The colour of the marks of the screens that are not opaque.
+constexpr artless::Rgb kClearColour{0xe0, 0x38, 0xb0};
+/// The colour of the opaque screen's mark.
+constexpr artless::Rgb kBoxColour{0x38, 0xc8, 0xe8};
+
+/// The opaque screen's size, in points.
+constexpr kit::Point kBoxSize{48, 32};
+
+/// How far a pixel a veil blends may differ, each channel, from the veil
+/// blended straight over what lies under it: its opacity is read back to
+/// the nearest 255th, and the window blends it in its own arithmetic.
+constexpr int32_t kVeilTolerance = 2;
+
+/// A screen the check expects the layer to show, and where.
+struct ExpectedScreen {
+    const MarkScreen* screen{}; ///< the screen
+    LayerPlacement placed{};    ///< where it shows, in window pixels
+    int32_t scale{};            ///< window pixels a point
+};
+
+/// Draws a screen straight onto a picture, as the layer means it to look:
+/// an opaque screen over black across its place, one that is not opaque
+/// over what the picture holds.
+///
+/// @param[in,out] picture the picture
+/// @param expected the screen and its place
+/// @param left the picture column its place starts at
+/// @param first_row the picture row its place starts at
+void draw_straight(
+    artless::Surface& picture, const ExpectedScreen& expected, int32_t left, int32_t first_row
+) {
+    const LayerPlacement& placed = expected.placed;
+    kit::Canvas canvas{};
+    canvas.surface = &picture;
+    canvas.placement = {
+        left, first_row, expected.scale, {0, 0, placed.points_width, placed.points_height}
+    };
+    if (expected.screen->opaque())
+        artless::fill_source_rect(
+            picture,
+            canvas.placement,
+            {0, 0, placed.points_width, placed.points_height},
+            artless::Rgb{0, 0, 0}
+        );
+    expected.screen->draw(canvas);
+}
+
+/// Returns the window pixel under the centre of a pixel of the front end's
+/// picture, as the layer stamps its screens onto the picture.
+///
+/// @param view where the picture lies in the window
+/// @param column the picture pixel's column
+/// @param row the picture pixel's row
+/// @return the window pixel
+layout::Point picture_centre(const LayerView& view, int32_t column, int32_t row) noexcept {
+    const auto along = [](int32_t pixel, int32_t start, int32_t length, int32_t size) {
+        return start + static_cast<int32_t>(
+                           (static_cast<int64_t>(2 * pixel + 1) * length) / (2 * int64_t{size})
+                       );
+    };
+    return {
+        along(column, view.picture.x, view.picture.width, view.picture_size.x),
+        along(row, view.picture.y, view.picture.height, view.picture_size.y)
+    };
+}
+
+/// Tells whether a rectangle holds a pixel.
+///
+/// @param rect the rectangle
+/// @param pixel the pixel
+/// @return true inside
+bool holds_pixel(const layout::Rect& rect, layout::Point pixel) noexcept {
+    return pixel.x >= rect.x && pixel.y >= rect.y && pixel.x < rect.x + rect.width &&
+           pixel.y < rect.y + rect.height;
+}
+
+/// A frame the check expects, and the pixels of it a veil blends.
+struct ExpectedFrame {
+    artless::Surface picture{};     ///< the frame
+    std::vector<uint8_t> blended{}; ///< one byte a pixel: nonzero where a veil blends
+};
+
+/// Returns the window expected with screens on the layer: the window with
+/// none, each screen drawn straight over it at its place, bottom first.
+///
+/// @param closed the window with no screen on the layer
+/// @param screens the screens, bottom first
+/// @return the window expected
+ExpectedFrame
+expected_window(const artless::Surface& closed, const std::vector<ExpectedScreen>& screens) {
+    ExpectedFrame expected{closed, {}};
+    expected.blended.assign(static_cast<std::size_t>(closed.width) * closed.height, 0);
+    for (const ExpectedScreen& screen : screens) {
+        draw_straight(expected.picture, screen, screen.placed.shown.x, screen.placed.shown.y);
+        const layout::Rect veil = layer_window_rect(screen.placed, screen.screen->look().veil);
+        for (int32_t row = std::max(veil.y, 0);
+             row < std::min(veil.y + veil.height, static_cast<int32_t>(closed.height));
+             ++row)
+            for (int32_t column = std::max(veil.x, 0);
+                 column < std::min(veil.x + veil.width, static_cast<int32_t>(closed.width));
+                 ++column)
+                expected.blended
+                    [static_cast<std::size_t>(row) * closed.width +
+                     static_cast<std::size_t>(column)] = 1;
+    }
+    return expected;
+}
+
+/// Returns the frame without the cursor expected with screens on the
+/// layer: the frame with none, and each pixel whose centre lies in a
+/// screen's place with the screens drawn straight over it there, bottom
+/// first.
+///
+/// @param closed the frame with no screen on the layer
+/// @param view where the picture lies in the window
+/// @param screens the screens, bottom first
+/// @return the frame expected
+ExpectedFrame expected_picture(
+    const artless::Surface& closed,
+    const LayerView& view,
+    const std::vector<ExpectedScreen>& screens
+) {
+    ExpectedFrame expected{closed, {}};
+    expected.blended.assign(static_cast<std::size_t>(closed.width) * closed.height, 0);
+    artless::Surface probe;
+    probe.width = 1;
+    probe.height = 1;
+    probe.rgb.assign(3U, 0);
+    for (int32_t row = 0; row < static_cast<int32_t>(closed.height); ++row)
+        for (int32_t column = 0; column < static_cast<int32_t>(closed.width); ++column) {
+            const layout::Point centre = picture_centre(view, column, row);
+            const std::size_t at =
+                static_cast<std::size_t>(row) * closed.width + static_cast<std::size_t>(column);
+            uint8_t* pixel = expected.picture.rgb.data() + at * 3U;
+            for (const ExpectedScreen& screen : screens) {
+                if (!holds_pixel(screen.placed.shown, centre))
+                    continue;
+                // The screen drawn onto the one pixel under that centre.
+                std::copy(pixel, pixel + 3, probe.rgb.begin());
+                draw_straight(
+                    probe,
+                    screen,
+                    screen.placed.shown.x - centre.x,
+                    screen.placed.shown.y - centre.y
+                );
+                std::copy(probe.rgb.begin(), probe.rgb.end(), pixel);
+                if (holds_pixel(
+                        layer_window_rect(screen.placed, screen.screen->look().veil), centre
+                    ))
+                    expected.blended[at] = 1;
+            }
+        }
+    return expected;
+}
+
+/// Counts the pixels in which a frame differs from the one expected:
+/// exactly, but by more than kVeilTolerance where a veil blends, every pixel
+/// compared but those in the square round the pointer.
+///
+/// @param presented the frame as read back
+/// @param expected the frame expected
+/// @param pointer where the pointer rests; a reach of 0 leaves out nothing
+/// @return the pixels that differ; every pixel when the sizes differ
+std::size_t differences(
+    const artless::Surface& presented, const ExpectedFrame& expected, const LayerPointer& pointer
+) {
+    const artless::Surface& wanted = expected.picture;
+    if (presented.width != wanted.width || presented.height != wanted.height ||
+        presented.rgb.size() != wanted.rgb.size())
+        return static_cast<std::size_t>(wanted.width) * wanted.height;
+    std::size_t differing = 0;
+    for (uint32_t y = 0; y < presented.height; ++y)
+        for (uint32_t x = 0; x < presented.width; ++x) {
+            const auto column = static_cast<int32_t>(x);
+            const auto row = static_cast<int32_t>(y);
+            if (column >= pointer.at.x - pointer.reach && column < pointer.at.x + pointer.reach &&
+                row >= pointer.at.y - pointer.reach && row < pointer.at.y + pointer.reach)
+                continue;
+            const std::size_t at = static_cast<std::size_t>(y) * presented.width + x;
+            const int32_t allowed = expected.blended[at] != 0 ? kVeilTolerance : 0;
+            for (std::size_t channel = 0; channel < 3U; ++channel)
+                if (std::abs(
+                        int32_t{presented.rgb[at * 3U + channel]} -
+                        int32_t{wanted.rgb[at * 3U + channel]}
+                    ) > allowed) {
+                    ++differing;
+                    break;
+                }
+        }
+    return differing;
+}
+
+/// Checks that a match's layer takes a screen that is not opaque by its
+/// opacity, src over, its colours straight; and an opaque one as before.
+void check_clear_stamp() {
+    constexpr int32_t stamp_side = 4;
+    constexpr std::array<std::array<uint8_t, 4>, stamp_side> under_columns{{
+        {0, 0, 0, 0},         // clear
+        {90, 90, 90, 255},    // opaque grey
+        {16, 18, 14, 128},    // half dark, as the backdrop
+        {250, 250, 250, 255}, // opaque white
+    }};
+    constexpr artless::Rgb colour{200, 40, 120};
+    // The opacity of each row of the source: clear, opaque, half and a quarter.
+    constexpr std::array<uint8_t, stamp_side> row_opacity{0, 255, 128, 64};
+    std::vector<uint8_t> layer_pixels(static_cast<std::size_t>(stamp_side * stamp_side) * 4U);
+    artless::Surface source;
+    source.width = static_cast<uint32_t>(stamp_side);
+    source.height = static_cast<uint32_t>(stamp_side);
+    std::vector<uint8_t> opacity(static_cast<std::size_t>(stamp_side * stamp_side));
+    for (int32_t row = 0; row < stamp_side; ++row)
+        for (int32_t column = 0; column < stamp_side; ++column) {
+            const auto at = static_cast<std::size_t>(row * stamp_side + column);
+            std::copy(
+                under_columns[static_cast<std::size_t>(column)].begin(),
+                under_columns[static_cast<std::size_t>(column)].end(),
+                layer_pixels.begin() + static_cast<std::ptrdiff_t>(at * 4U)
+            );
+            source.rgb.insert(source.rgb.end(), colour.begin(), colour.end());
+            opacity[at] = row_opacity[static_cast<std::size_t>(row)];
+        }
+    const layout::Rect whole{0, 0, stamp_side, stamp_side};
+
+    std::vector<uint8_t> laid = layer_pixels;
+    OaLayer::stamp(laid, stamp_side, stamp_side, source, whole, opacity);
+    for (std::size_t at = 0; at < opacity.size(); ++at) {
+        const uint8_t* under = layer_pixels.data() + at * 4U;
+        const uint8_t* now = laid.data() + at * 4U;
+        const double over = opacity[at] / 255.0;
+        const double kept = under[3] / 255.0 * (1.0 - over);
+        const double together = over + kept;
+        require(
+            std::abs(now[3] - std::lround(together * 255.0)) <= 1,
+            "a match's layer does not take a pixel's opacity laid over its own"
+        );
+        for (std::size_t channel = 0; channel < 3U; ++channel) {
+            const double straight =
+                together > 0.0 ? (colour[channel] * over + under[channel] * kept) / together
+                               : under[channel];
+            require(
+                std::abs(now[channel] - std::lround(straight)) <= 1,
+                "a match's layer does not lay a screen's colour over its own, straight"
+            );
+        }
+    }
+    // Over a clear pixel the colour stays as it is: never multiplied by its
+    // opacity.
+    require(
+        laid[(2 * stamp_side) * 4U] == colour[0] && laid[(2 * stamp_side) * 4U + 3U] == 128,
+        "a match's layer multiplied a colour by its opacity"
+    );
+
+    std::vector<uint8_t> copied = layer_pixels;
+    OaLayer::stamp(copied, stamp_side, stamp_side, source, whole);
+    for (std::size_t at = 0; at < opacity.size(); ++at)
+        require(
+            copied[at * 4U] == colour[0] && copied[at * 4U + 1U] == colour[1] &&
+                copied[at * 4U + 2U] == colour[2] && copied[at * 4U + 3U] == 255U,
+            "a match's layer does not copy an opaque screen whole"
+        );
+}
+
+} // namespace
+
+void OaLayer::check_clear_screens() {
+    require(
+        runtime_.sdl_.renderer != nullptr && runtime_.sdl_.window != nullptr,
+        "needs the SDL presenter"
+    );
+    require(runtime_.gamma_identity_, "compares frames at a display gamma that changes no colour");
+    require(screens_.empty() && queue_.empty(), "screens were on the layer before the check");
+    std::cout << "OA layer check: screens that are not opaque, and the information key\n";
+
+    // F1 is the information key outside a match, and the game's in one.
+    require(
+        layer_key(SDLK_F1, SDL_KMOD_NONE) == kit::Key::info &&
+            layer_key(SDLK_F1, SDL_KMOD_SHIFT) == kit::Key::info,
+        "F1 is not the information key outside a match"
+    );
+    require(
+        !layer_key(SDLK_F1, SDL_KMOD_NONE, true).has_value() &&
+            layer_key(SDLK_ESCAPE, SDL_KMOD_NONE, true) == kit::Key::escape,
+        "F1 does not go on to the game in a match"
+    );
+    check_clear_stamp();
+
+    const auto previous_tick = runtime_.fake_frontend_tick_;
+    runtime_.fake_frontend_tick_ = 1000U;
+    int kept_width = 0;
+    int kept_height = 0;
+    require(
+        SDL_GetWindowSize(runtime_.sdl_.window, &kept_width, &kept_height) && kept_width > 0 &&
+            kept_height > 0,
+        "the window has no size"
+    );
+
+    // Every frame read back holds the whole window.
+    struct WholeWindow {
+        OaLayer& layer;
+
+        ~WholeWindow() { layer.read_whole_window(false); }
+    } whole_window{*this};
+
+    read_whole_window(true);
+
+    for (const CheckWindow& checked : kCheckWindows) {
+        const std::string size_name =
+            std::to_string(checked.width) + 'x' + std::to_string(checked.height);
+        const std::string on = " on the " + size_name + " window";
+        require(
+            SDL_SetWindowSize(runtime_.sdl_.window, checked.width, checked.height) &&
+                SDL_SyncWindow(runtime_.sdl_.window),
+            "the window did not take " + size_name
+        );
+        runtime_.load(Screen::main_menu);
+        require(runtime_.screen_ == Screen::main_menu, "the main menu did not open" + on);
+        runtime_.send_check_pointer(SDL_EVENT_MOUSE_MOTION, kCheckPointer, 0);
+        const LayerView seen = view();
+        require(
+            seen.scale == checked.scale && seen.room.x == 0 && seen.room.y == 0 &&
+                seen.room.width == checked.width && seen.room.height == checked.height,
+            "the layer does not place its screens over the whole window at " +
+                std::to_string(checked.scale) + "x" + on
+        );
+        // The window's frame and the frame without the cursor, drawn from
+        // the same sparks.
+        const auto sparks = runtime_.menu_sparks_;
+        const auto read_frames =
+            [this, &sparks](artless::Surface& window_read, artless::Surface& picture_read) {
+                runtime_.menu_sparks_ = sparks;
+                picture_read = runtime_.frame_without_cursor();
+                runtime_.menu_sparks_ = sparks;
+                runtime_.capture_frame_ = &window_read;
+                runtime_.render();
+                runtime_.capture_frame_ = nullptr;
+            };
+        artless::Surface closed_window;
+        artless::Surface closed_picture;
+        read_frames(closed_window, closed_picture);
+        require(
+            closed_window.width == static_cast<uint32_t>(checked.width) &&
+                closed_window.height == static_cast<uint32_t>(checked.height),
+            "the read-back does not hold the whole window" + on
+        );
+        const LayerPointer resting = window_pointer(seen, kCheckPointer);
+        const LayerPointer no_cursor{};
+
+        // The window and the frame without the cursor hold the closed ones
+        // with every screen on the layer drawn straight over them.
+        const auto shows_straight = [&](std::string_view what) {
+            std::vector<ExpectedScreen> expected_screens;
+            for (const auto& held : screens_) {
+                const auto* marked = dynamic_cast<const MarkScreen*>(held.get());
+                require(marked != nullptr, "a screen other than the check's is on the layer");
+                expected_screens.push_back({marked, marked->placement(seen), seen.scale});
+            }
+            artless::Surface window_now;
+            artless::Surface picture_now;
+            read_frames(window_now, picture_now);
+            const std::size_t window_differing =
+                differences(window_now, expected_window(closed_window, expected_screens), resting);
+            require(
+                window_differing == 0,
+                "the window does not show " + std::string(what) + on + ": " +
+                    std::to_string(window_differing) + " pixels differ"
+            );
+            const std::size_t picture_differing = differences(
+                picture_now, expected_picture(closed_picture, seen, expected_screens), no_cursor
+            );
+            require(
+                picture_differing == 0,
+                "the frame without the cursor does not show " + std::string(what) + on + ": " +
+                    std::to_string(picture_differing) + " pixels differ"
+            );
+        };
+        // A point of the view's room over a part of the picture, a share of
+        // its width and height in.
+        const auto room_point = [&seen](int32_t eighths_across, int32_t eighths_down) {
+            return kit::Point{
+                (seen.picture.x + seen.picture.width * eighths_across / 8 - seen.room.x) /
+                    seen.scale,
+                (seen.picture.y + seen.picture.height * eighths_down / 8 - seen.room.y) / seen.scale
+            };
+        };
+        const kit::Point upper = room_point(3, 2);
+        const kit::Point middle = room_point(4, 4);
+
+        // A screen that is not opaque over the whole window, modal and
+        // asking for a backdrop: only its mark and its veil change the
+        // window, and nothing darkens. Automation lists its mark where the
+        // window shows it.
+        MarkLook clear{};
+        clear.name = "check-clear";
+        clear.modal = true;
+        clear.backdrop = true;
+        clear.mark = {upper.x, upper.y, 12, 8};
+        clear.veil = {upper.x + 20, upper.y, 12, 8};
+        clear.colour = kClearColour;
+        push(std::make_unique<MarkScreen>(clear, std::make_shared<MarkSeen>()));
+        const LayerPlacement covering = placement_of(clear.name);
+        require(
+            covering.shown.x == 0 && covering.shown.y == 0 &&
+                covering.shown.width == checked.width && covering.shown.height == checked.height,
+            "the screen that is not opaque does not cover the window" + on
+        );
+        shows_straight("a screen that is not opaque");
+        {
+            std::vector<AutomationControl> controls;
+            automation_controls(controls);
+            const layout::Rect marked = layer_window_rect(covering, clear.mark);
+            const auto listed = std::find_if(
+                controls.begin(), controls.end(), [](const AutomationControl& control) {
+                    return control.name == "oa.mark" && control.dialog == "oa.check-clear";
+                }
+            );
+            require(
+                listed != controls.end() && listed->window_pixels && listed->visible &&
+                    listed->window_x == marked.x && listed->window_y == marked.y &&
+                    listed->window_width == marked.width && listed->window_height == marked.height,
+                "automation does not list the mark of a screen that is not opaque where the "
+                "window shows it" +
+                    on
+            );
+        }
+        close(find(clear.name));
+
+        // The software cursor shows above a screen that is not opaque: a mark
+        // across the cursor's square changes no pixel outside the square,
+        // and the cursor still shows over the mark inside it.
+        {
+            MarkLook under_cursor{};
+            under_cursor.name = "check-cursor";
+            under_cursor.colour = kClearColour;
+            const int32_t point_pixels = seen.scale;
+            const int32_t left = std::max(resting.at.x - resting.reach, 0) / point_pixels;
+            const int32_t first_row = std::max(resting.at.y - resting.reach, 0) / point_pixels;
+            under_cursor.mark = {
+                left,
+                first_row,
+                (resting.at.x + resting.reach + point_pixels - 1) / point_pixels - left,
+                (resting.at.y + resting.reach + point_pixels - 1) / point_pixels - first_row
+            };
+            push(std::make_unique<MarkScreen>(under_cursor, std::make_shared<MarkSeen>()));
+            shows_straight("a screen that is not opaque under the cursor");
+            const auto* cursor_screen = dynamic_cast<const MarkScreen*>(find(under_cursor.name));
+            require(
+                cursor_screen != nullptr, "the screen under the cursor is not on the layer" + on
+            );
+            artless::Surface window_now;
+            artless::Surface picture_now;
+            read_frames(window_now, picture_now);
+            const std::size_t cursor_pixels = differences(
+                window_now,
+                expected_window(
+                    closed_window, {{cursor_screen, cursor_screen->placement(seen), seen.scale}}
+                ),
+                no_cursor
+            );
+            require(
+                cursor_pixels > 0, "the cursor does not show above a screen that is not opaque" + on
+            );
+            close(find(under_cursor.name));
+        }
+
+        // An opaque screen draws as before: its whole place, black where it
+        // draws nothing.
+        MarkLook box{};
+        box.name = "check-box";
+        box.opaque = true;
+        box.area = {middle.x, middle.y, kBoxSize.x, kBoxSize.y};
+        box.mark = {4, 4, 12, 8};
+        box.colour = kBoxColour;
+        push(std::make_unique<MarkScreen>(box, std::make_shared<MarkSeen>()));
+        shows_straight("an opaque screen");
+        {
+            // The same picture as the layer's own expectation of an opaque
+            // screen (expected_layer_frame) gives.
+            const LayerPlacement boxed = placement_of(box.name);
+            artless::Surface drawing;
+            drawing.width = static_cast<uint32_t>(boxed.shown.width);
+            drawing.height = static_cast<uint32_t>(boxed.shown.height);
+            drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
+            const auto* box_screen = dynamic_cast<const MarkScreen*>(find(box.name));
+            require(box_screen != nullptr, "the opaque screen is not on the layer" + on);
+            draw_straight(drawing, {box_screen, boxed, seen.scale}, 0, 0);
+            artless::Surface window_now;
+            artless::Surface picture_now;
+            read_frames(window_now, picture_now);
+            const std::size_t differing = layer_differences(
+                window_now, expected_layer_frame(closed_window, drawing, boxed, 0), resting
+            );
+            require(
+                differing == 0,
+                "the window does not show an opaque screen as before" + on + ": " +
+                    std::to_string(differing) + " pixels differ"
+            );
+        }
+
+        // A screen that is not opaque over the opaque one: its mark half over
+        // it, half over the picture, and its veil over the opaque screen.
+        MarkLook over = clear;
+        over.name = "check-over";
+        over.modal = false;
+        over.backdrop = false;
+        over.mark = {middle.x - 6, middle.y + 12, 12, 8};
+        over.veil = {middle.x + 24, middle.y + 12, 12, 8};
+        push(std::make_unique<MarkScreen>(over, std::make_shared<MarkSeen>()));
+        shows_straight("a screen that is not opaque over an opaque one");
+        close(find(over.name));
+        close(find(box.name));
+
+        // And under it: the opaque screen covers it where they meet.
+        push(std::make_unique<MarkScreen>(over, std::make_shared<MarkSeen>()));
+        push(std::make_unique<MarkScreen>(box, std::make_shared<MarkSeen>()));
+        shows_straight("an opaque screen over one that is not opaque");
+        close(find(box.name));
+        close(find(over.name));
+        require(screens_.empty(), "the check's screens did not close" + on);
+        std::cout << "OA layer check: screens that are not opaque leave every other pixel at "
+                  << checked.scale << "x" << on << '\n';
+    }
+
+    // The information key, on the main menu.
+    {
+        const auto tap = [this](SDL_Keycode code) {
+            bool running = true;
+            for (const bool down : {true, false}) {
+                SDL_Event event{};
+                event.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+                event.key.windowID = SDL_GetWindowID(runtime_.sdl_.window);
+                event.key.key = code;
+                event.key.scancode = SDL_GetScancodeFromKey(code, nullptr);
+                event.key.mod = SDL_KMOD_NONE;
+                event.key.down = down;
+                runtime_.dispatch_event(event, running);
+            }
+            require(running, "a key ended the run");
+        };
+        ScreenInput f1{};
+        f1.kind = ScreenInputKind::key_down;
+        f1.key = SDLK_F1;
+        require(!take_input(f1), "F1 did not go on with no screen on the layer");
+
+        // A screen that takes the information key is given F1 as it, and
+        // the layer takes F1.
+        MarkLook taking{};
+        taking.name = "check-info";
+        taking.mark = {0, 0, 8, 8};
+        taking.colour = kClearColour;
+        taking.takes_info = true;
+        auto taken = std::make_shared<MarkSeen>();
+        push(std::make_unique<MarkScreen>(taking, taken));
+        tap(SDLK_F1);
+        require(
+            taken->infos == 1 && taken->info_key == SDLK_F1 && taken->other_keys == 0,
+            "F1 did not reach a screen that takes the information key as that key"
+        );
+        require(
+            take_input(f1) && taken->infos == 2,
+            "the layer did not take F1 that a screen took as the information key"
+        );
+        close(find(taking.name));
+
+        // One that lets it go on sees it, and F1 goes on to the game.
+        MarkLook passing = taking;
+        passing.name = "check-info-pass";
+        passing.takes_info = false;
+        auto passed = std::make_shared<MarkSeen>();
+        push(std::make_unique<MarkScreen>(passing, passed));
+        require(
+            !take_input(f1) && passed->infos == 1 && passed->info_key == SDLK_F1,
+            "F1 did not go on past a screen that lets the information key go on"
+        );
+        close(find(passing.name));
+
+        // Settings has nothing more to tell: F1 changes nothing in it, and
+        // nothing under it sees F1.
+        runtime_.open_engine_settings_from_menu();
+        const auto* dialog = runtime_.engine_settings_dialog();
+        require(
+            dialog != nullptr && find("settings") != nullptr,
+            "Settings did not open on the main menu"
+        );
+        const auto focused = dialog->focused;
+        const auto page = dialog->page;
+        tap(SDLK_F1);
+        require(
+            runtime_.engine_settings_dialog() == dialog && dialog->focused == focused &&
+                dialog->page == page,
+            "F1 changed Settings"
+        );
+        require(take_input(f1), "F1 went on past Settings");
+        tap(SDLK_ESCAPE);
+        require(
+            runtime_.engine_settings_dialog() == nullptr && find("settings") == nullptr,
+            "Escape did not close Settings"
+        );
+        std::cout << "OA layer check: F1 reaches a screen that takes the information key, goes on "
+                     "past one that does not and past an empty layer, and changes nothing in "
+                     "Settings\n";
+    }
+
+    // In a match, over the in-game menu: F1 is the game's, which no screen
+    // is given, and a screen that is not opaque, modal and asking for a
+    // backdrop, is stamped into the match's picture by its opacity, changing
+    // no other pixel and darkening nothing.
+    {
+        runtime_.start_benchmark_skirmish();
+        require(
+            runtime_.screen_ == Screen::match && view().match, "the check's match did not start"
+        );
+        runtime_.show_match_pause_menu();
+        require(runtime_.ingame_menu_column_shown(), "the in-game menu's column does not show");
+        runtime_.render();
+        const auto composed = [this] {
+            artless::Surface frame;
+            runtime_.compose_match_frame(frame);
+            return frame;
+        };
+        const artless::Surface closed_match = composed();
+        require(
+            differences(
+                composed(),
+                {closed_match,
+                 std::vector<uint8_t>(
+                     static_cast<std::size_t>(closed_match.width) * closed_match.height, 0
+                 )},
+                {}
+            ) == 0,
+            "the match's frame changes from one composition to the next"
+        );
+        const LayerView seen = view();
+        // Right of the side column, clear of the in-game menu.
+        const kit::Point beside{seen.match_layout->left - seen.room.x + 40, 40 - seen.room.y};
+
+        MarkLook taking{};
+        taking.name = "check-match-info";
+        taking.in_match = true;
+        taking.area = {beside.x, beside.y + 40, 8, 8};
+        taking.mark = {0, 0, 8, 8};
+        taking.colour = kClearColour;
+        taking.takes_info = true;
+        auto taken = std::make_shared<MarkSeen>();
+        push(std::make_unique<MarkScreen>(taking, taken));
+        require(
+            placement_of(taking.name).shown.width > 0, "the check's screen does not show in a match"
+        );
+        ScreenInput f1{};
+        f1.kind = ScreenInputKind::key_down;
+        f1.key = SDLK_F1;
+        require(
+            !take_input(f1) && taken->infos == 0,
+            "F1 did not go on to the game in a match past a screen that takes the information key"
+        );
+        close(find(taking.name));
+
+        MarkLook clear{};
+        clear.name = "check-match-clear";
+        clear.in_match = true;
+        clear.modal = true;
+        clear.backdrop = true;
+        clear.mark = {beside.x, beside.y, 12, 8};
+        clear.veil = {beside.x + 20, beside.y, 12, 8};
+        clear.colour = kClearColour;
+        push(std::make_unique<MarkScreen>(clear, std::make_shared<MarkSeen>()));
+        const auto* clear_screen = dynamic_cast<const MarkScreen*>(find(clear.name));
+        require(clear_screen != nullptr, "the check's screen is not on the layer in a match");
+        const LayerPlacement covering = clear_screen->placement(seen);
+        require(
+            covering.shown.width == seen.room.width && covering.shown.height == seen.room.height,
+            "the screen that is not opaque does not cover the match"
+        );
+        const std::size_t differing = differences(
+            composed(), expected_window(closed_match, {{clear_screen, covering, 1}}), {}
+        );
+        require(
+            differing == 0,
+            "the match's frame does not show a screen that is not opaque: " +
+                std::to_string(differing) + " pixels differ"
+        );
+        close(find(clear.name));
+        runtime_.leave_match();
+        std::cout << "OA layer check: in a match F1 goes on to the game, and a screen that is not "
+                     "opaque changes only the pixels it draws\n";
+    }
+
+    require(
+        SDL_SetWindowSize(runtime_.sdl_.window, kept_width, kept_height) &&
+            SDL_SyncWindow(runtime_.sdl_.window),
+        "the window did not take its size back"
+    );
+    runtime_.load(Screen::main_menu);
+    forget_latched_key();
+    runtime_.fake_frontend_tick_ = previous_tick;
 }
 
 } // namespace oa::app
