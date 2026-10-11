@@ -955,6 +955,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_engine_settings_menu.cpp
   src/app/runtime_engine_settings_match.cpp
   src/app/oa_layer.cpp
+  src/app/runtime_library.cpp
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/language_packs.cpp
@@ -993,6 +994,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
+  src/app/runtime_library_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1029,7 +1031,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
-  oa-ui-frontend-multiplayer)
+  oa-ui-frontend-multiplayer oa-ui-library)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).
@@ -1444,9 +1446,10 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_scroll_bars_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # The Open Annihilation settings through the SDL presenter: the OA
-      # button on the main menu and under Resume in the in-game menu, the
-      # dialog over each, its sections, controls and keys, its scrolling,
-      # OK, Cancel and Restore defaults, the preferences it writes, the locks
+      # button on the main menu, which opens the Library, and under Resume in
+      # the in-game menu, the dialog over each, its sections, controls and
+      # keys, its scrolling, OK, Cancel and Restore defaults, the preferences
+      # it writes, the locks
       # a game, the command line and the renderer put on it, and each setting
       # taking effect. --force-capable lifts the software renderer's lock on
       # Vertical sync, which the dialog turns On and reads back from the
@@ -1572,6 +1575,24 @@ if(OA_BUILD_PLATFORM)
         --user-folder "${oa_mod_install_dir}/Open Annihilation")
       set_tests_properties(native-mod-install PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_install_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The Library over a feed of made-up packages, with no network: the
+      # main menu's OA button as before with no update waiting, opening the
+      # Library on Mods, its dot and the Library on Updates with two, GET and
+      # CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
+      # recorded openers, ROLL BACK's question in Settings, PLAY NOW's soft
+      # restart, Settings over the Library and the Library over Settings,
+      # the shortcut and the in-match OA button opening Settings, at 640x480
+      # and 1920x1080. Its data and the player's folder stay in the build tree.
+      set(oa_library_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library")
+      file(MAKE_DIRECTORY "${oa_library_dir}")
+      add_test(NAME native-library COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library
+        --preferences-file "${oa_library_dir}/library.conf"
+        --user-folder "${oa_library_dir}/Open Annihilation"
+        --data-dir "${oa_library_dir}/data")
+      set_tests_properties(native-library PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # The pseudo language pack installed through the game: a dropped file
       # asked and installed, the same package declined, then a catalogue

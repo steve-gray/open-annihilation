@@ -588,6 +588,11 @@ struct Options {
     // Shows a made-up download check over the main menu, opens its page,
     // retries it and cancels it, and keeps it hidden during a skirmish.
     bool check_challenge = false;
+    // Opens the Library from the main menu's OA button over a feed of
+    // made-up packages, wears the button's dot while updates wait, carries
+    // out the Library's actions, opens Settings over it and it over
+    // Settings, and keeps the in-match OA button on Settings.
+    bool check_library = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

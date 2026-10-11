@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The kit's controls, pinned to literal colours, and paint against a direct
-// draw. The geometry literals were computed with the settings dialog's
-// functions at ecf703fb, the commit this ticket started from.
+// The kit's controls, pinned to literal colours, the OA button's attention
+// dot, and paint against a direct draw. The geometry literals were computed
+// with the settings dialog's functions at ecf703fb, the commit this ticket
+// started from.
 
 #include "oa/formats/fnt.hpp"
 #include "oa/test/check.hpp"
@@ -520,6 +521,97 @@ void oa_button_and_mark_match() {
     expect(nothing, 0, 0, 0x00, 0x00, 0x00);
 }
 
+/// Tells whether two surfaces of one size differ only inside a rectangle,
+/// and do differ there.
+///
+/// @param left one surface
+/// @param right the other
+/// @param inside the rectangle, in pixels
+/// @return true when every differing pixel lies inside it and at least one does
+bool differ_only_inside(
+    const renderer::Surface& left, const renderer::Surface& right, const kit::Rect& inside
+) {
+    if (left.width != right.width || left.height != right.height)
+        return false;
+    bool differs = false;
+    for (uint32_t y = 0; y < left.height; ++y)
+        for (uint32_t x = 0; x < left.width; ++x) {
+            const std::size_t at = (static_cast<std::size_t>(y) * left.width + x) * 3;
+            if (left.rgb[at] == right.rgb[at] && left.rgb[at + 1] == right.rgb[at + 1] &&
+                left.rgb[at + 2] == right.rgb[at + 2])
+                continue;
+            const auto column = static_cast<int32_t>(x);
+            const auto row = static_cast<int32_t>(y);
+            if (column < inside.x || row < inside.y || column >= inside.x + inside.width ||
+                row >= inside.y + inside.height)
+                return false;
+            differs = true;
+        }
+    return differs;
+}
+
+void oa_button_wears_the_dot() {
+    // The dot is 7 points across, 2 in from the top and right edges.
+    OA_CHECK(kit::oa_button_dot(32).x == 23 && kit::oa_button_dot(32).y == 2);
+    OA_CHECK(kit::oa_button_dot(24).x == 15 && kit::oa_button_dot(24).y == 2);
+    OA_CHECK(kit::oa_button_dot(24).width == 7 && kit::oa_button_dot(24).height == 7);
+    for (const int32_t side : {24, 32}) {
+        for (const auto state :
+             {kit::OaButtonState::idle, kit::OaButtonState::hovered, kit::OaButtonState::pressed}) {
+            for (const int32_t scale : {1, 2}) {
+                for (const bool with_icon : {false, true}) {
+                    renderer::Surface plain = black(40 * scale, 40 * scale);
+                    renderer::Surface without = black(40 * scale, 40 * scale);
+                    renderer::Surface dotted = black(40 * scale, 40 * scale);
+                    kit::Canvas canvas = canvas_on(plain, scale);
+                    if (with_icon)
+                        canvas.icon = red_icon();
+                    // Without the dot the button is drawn as it always was.
+                    kit::draw_oa_button(canvas, side, state);
+                    canvas.surface = &without;
+                    kit::draw_oa_button(canvas, side, state, false);
+                    same(plain, without);
+                    canvas.surface = &dotted;
+                    kit::draw_oa_button(canvas, side, state, true);
+                    const kit::Rect dot = kit::oa_button_dot(side);
+                    OA_CHECK(differ_only_inside(
+                        plain,
+                        dotted,
+                        {dot.x * scale, dot.y * scale, dot.width * scale, dot.height * scale}
+                    ));
+                    // The ring's top point and the face's middle, at the scale.
+                    expect(dotted, (dot.x + 3) * scale, dot.y * scale, 0x3a, 0x40, 0x34);
+                    expect(dotted, (dot.x + 1) * scale, (dot.y + 1) * scale, 0x3a, 0x40, 0x34);
+                    expect(dotted, (dot.x + 3) * scale, (dot.y + 3) * scale, 0xe0, 0xb0, 0x4f);
+                    expect(
+                        dotted,
+                        (dot.x + 3) * scale + scale - 1,
+                        (dot.y + 1) * scale,
+                        0xe0,
+                        0xb0,
+                        0x4f
+                    );
+                }
+            }
+        }
+    }
+    // The display list's look draws the same dot.
+    renderer::Surface direct = black(48, 48);
+    renderer::Surface painted = black(48, 48);
+    kit::Canvas shifted = canvas_on(direct, 1);
+    shifted.placement.x = 4;
+    shifted.placement.y = 6;
+    kit::draw_oa_button(shifted, 32, kit::OaButtonState::hovered, true);
+    kit::Item oa;
+    oa.role = kit::Role::oa_button;
+    oa.rect = {4, 6, 32, 32};
+    oa.look = kit::OaButtonLook{32, kit::OaButtonState::hovered, true};
+    kit::DisplayList list;
+    list.items.push_back(oa);
+    kit::paint(canvas_on(painted, 1), list);
+    same(direct, painted);
+}
+
 void clip_hides_what_it_misses() {
     const kit::ButtonLook look = button("A", kit::ButtonStyle::accent, false, false);
     renderer::Surface missed = black(80, 40);
@@ -905,6 +997,7 @@ int main() {
     choice_lock_and_scroll_match();
     a_menu_draws_a_divider_an_aside_and_a_greyed_row();
     oa_button_and_mark_match();
+    oa_button_wears_the_dot();
     clip_hides_what_it_misses();
     paint_matches_the_direct_draw(1);
     paint_matches_the_direct_draw(2);

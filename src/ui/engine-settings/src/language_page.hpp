@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The Language page: its row, the menu of installed languages and the packs
-// available to download, and the field's state while a pack is on its way.
+// available to download, the field's state while a pack is on its way, and
+// the link to the Library's Languages.
 // The page reads Dialog::available_languages. It does not call the runtime,
 // the content service or the fonts.
 #pragma once
@@ -104,6 +105,16 @@ void set_language(SettingsModel& model, int32_t index);
     spec.control_width = choice_width;
     spec.hint_text = &language_hint;
     spec.hint_lines = &language_hint_lines;
+    return spec;
+}
+
+/// MORE IN THE LIBRARY…: a link under Language's row, its hint saying the
+/// Library holds more languages. The section lists it while the dialog says
+/// the Library can open over it (Dialog::library_link).
+[[nodiscard]] inline constexpr kit::RowSpec<SettingsModel> more_in_library_row() noexcept {
+    kit::RowSpec<SettingsModel> spec =
+        kit::link<SettingsModel>("more-in-library", "MORE IN THE LIBRARY…", open_library_action);
+    spec.hint = {"More languages are in the Library.", {}};
     return spec;
 }
 

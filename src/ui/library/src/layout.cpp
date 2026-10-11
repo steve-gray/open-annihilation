@@ -65,6 +65,10 @@ constexpr std::size_t compact_action_buttons = 3;
 constexpr int32_t actions_per_line = 3;
 /// The most letters a badge shows.
 constexpr std::size_t badge_letter_count = 3;
+/// The face behind a badge's letters when its package has no picture. The
+/// kit's row draws the letters in the ink for the accent (colour::on_accent),
+/// which reads on this light grey at every size class.
+constexpr kit::Colour badge_face = kit::colour::hint;
 /// The most bytes one word of an automation name keeps.
 constexpr std::size_t most_name_word_bytes = 40;
 /// A full progress bar, in the bar's own units.
@@ -609,7 +613,7 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     kit::ListRowLook look;
     look.badge = badge_picture(entry);
     look.badge_text = badge_letters(entry_name(entry));
-    look.badge_colour = kit::colour::list_selected;
+    look.badge_colour = badge_face;
     look.title = std::string(entry_name(entry));
     look.chip = entry_chip(library, entry);
     const std::string version = entry_version(library, entry);
@@ -1269,7 +1273,7 @@ void add_badge(
             kit::colour::control_border;
         return;
     }
-    add_item(building.list, kit::Role::fill, rect, clip).colour = kit::colour::list_selected;
+    add_item(building.list, kit::Role::fill, rect, clip).colour = badge_face;
     const std::string letters = badge_letters(entry_name(entry));
     add_text(
         building,

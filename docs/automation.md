@@ -183,7 +183,7 @@ centre would land on the line between Off and On.
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; its caption, empty while it has none |
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, where it opens Settings, empty |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
 | A switch, and its halves | `oa.settings.<row>`, `oa.settings.<row>.off`, `oa.settings.<row>.on` | the switch a label with its text; the halves check boxes, checked on the half shown |
 | A level strip, and its levels | `oa.settings.<row>`, `oa.settings.<row>.<value>` | label; check boxes, checked on the level chosen |
@@ -192,6 +192,7 @@ centre would land on the line between Off and On.
 | A slider | `oa.settings.<row>` | slider; its text the value shown |
 | A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
 | Your files' buttons | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
+| Language's MORE IN THE LIBRARY… (main menu only) | `oa.settings.more-in-library` | button |
 | A mod's row and its ROLL BACK | `oa.settings.mod.<mod>.switch`, `oa.settings.mod.<mod>.roll-back`; OPEN MODS FOLDER `oa.settings.open-mods-folder` | check box, checked on the mod played; button |
 | Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
 | Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
@@ -246,14 +247,16 @@ included.
 **An example journey.** Turning the mouse wheel's zoom off and letting the
 map zoom out to the whole map, from the main menu:
 
-1. click `oa.button`; wait until `oa.settings.ok` is listed;
+1. click `oa.button`, which opens the Library; wait until
+   `oa.library.settings` is listed, click it, and wait until
+   `oa.settings.ok` is listed;
 2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
    (its `checked` turns true);
 3. click `oa.settings.max-zoom-out`, then
    `oa.settings.max-zoom-out.whole-map`;
 4. click `oa.settings.ok`: `prefs` then holds
    `open-annihilation.wheel-zoom` `0` and `open-annihilation.max-zoom-out`
-   `whole-map`.
+   `whole-map`; click `oa.library.close` to go back to the main menu.
 
 ## Input
 
