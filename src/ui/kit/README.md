@@ -86,6 +86,18 @@ until then.
   };
   ```
 
+  A row bound to a preference is a `PreferenceRow` (`RowSpec<PreferenceModel>`).
+  `preference_toggle`, `preference_choice`, `preference_slider` and
+  `preference_text_field` take the row's id, its label, its key, its default
+  text and its hint; a choice also takes its choices' ids and captions, a
+  slider its range and step. The model holds an
+  `oa::platform::preferences::Values`. A missing or malformed stored value
+  reads as the default. A toggle stores `1` or `0`, a choice one of its
+  choices' ids, a slider a decimal on its step, and a text field the player's
+  text up to 256 bytes. A key is dotted words of a to z, 0 to 9 and hyphens,
+  at least two words, at most 64 bytes, and it does not start with
+  `open-annihilation.`. `preference_key_problem` names a key that is refused.
+
   `view_of` reads a row's `RowView` from its spec and the model through the
   caller's text function; `place_rows` places a column of views,
   `rows_scroll` and `scroll` scroll it, and `add_rows` lists what the rows

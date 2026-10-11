@@ -155,6 +155,8 @@ std::string_view page_slug(Page page) {
         return "mod-tools";
     case Page::mod_chat:
         return "mod-chat";
+    case Page::registered:
+        return "registered";
     }
     return "page";
 }

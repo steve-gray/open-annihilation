@@ -263,6 +263,7 @@ void check_game_files_options(Options& options) {
         {options.check_frontend_controls, "--check-frontend-controls"},
         {options.check_scroll_bars, "--check-scroll-bars"},
         {options.check_engine_settings, "--check-engine-settings"},
+        {options.check_registered_kit, "--check-registered-kit"},
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_map_packs, "--check-map-packs"},
@@ -515,6 +516,7 @@ void check_director_options(Options& options) {
         {options.check_interpolation, "--check-interpolation"},
         {options.check_unit_playout, "--check-unit-playout"},
         {options.check_engine_settings, "--check-engine-settings"},
+        {options.check_registered_kit, "--check-registered-kit"},
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_map_packs, "--check-map-packs"},
@@ -580,6 +582,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_interpolation, "--check-interpolation"},
             {options.check_unit_playout, "--check-unit-playout"},
             {options.check_engine_settings, "--check-engine-settings"},
+            {options.check_registered_kit, "--check-registered-kit"},
             {options.check_user_folder, "--check-user-folder"},
             {options.check_mod_switch, "--check-mod-switch"},
             {options.check_map_packs, "--check-map-packs"},
@@ -718,6 +721,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-frontend-controls", &Options::check_frontend_controls},
     {"--check-scroll-bars", &Options::check_scroll_bars},
     {"--check-engine-settings", &Options::check_engine_settings},
+    {"--check-registered-kit", &Options::check_registered_kit},
     {"--check-user-folder", &Options::check_user_folder},
     {"--check-mod-switch", &Options::check_mod_switch},
     {"--check-map-packs", &Options::check_map_packs},
@@ -1209,6 +1213,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-multiplayer-menu] "
                    "[--check-load-save] [--check-frontend-controls] "
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
+                   "[--check-registered-kit] "
                    "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
                    "[--check-mod-warning] "
                    "[--check-mod-install] [--check-language-install] "
@@ -1374,9 +1379,9 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
     result.fixed_clock =
         result.headless_check || result.check_match_layers || result.check_render_tiers ||
         result.check_match_dialogs || result.check_load_save || result.check_frontend_controls ||
-        result.check_scroll_bars || result.check_engine_settings || result.check_user_folder ||
-        result.check_mod_switch || result.check_mod_warning || result.check_mod_install ||
-        result.check_language_install || result.check_renderer_ladder ||
+        result.check_scroll_bars || result.check_engine_settings || result.check_registered_kit ||
+        result.check_user_folder || result.check_mod_switch || result.check_mod_warning ||
+        result.check_mod_install || result.check_language_install || result.check_renderer_ladder ||
         result.check_match_orders || result.check_factory_orders || result.check_unit_speech ||
         result.check_download_builds || result.check_stockpile_builds ||
         result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||

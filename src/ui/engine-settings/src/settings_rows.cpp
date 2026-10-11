@@ -188,6 +188,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kModGuardRows,
     kModToolsRows,
     kModChatRows,
+    {},
 };
 /// Each section's name, as its list entry shows it, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageNames{
@@ -205,6 +206,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Guarding",
     "Build tools",
     "Snap & chat",
+    "",
 };
 /// Each section's heading, in capitals, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageHeadings{
@@ -222,6 +224,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "GUARDING BUILDERS",
     "BUILD TOOLS",
     "SNAP & CHAT",
+    "",
 };
 /// Each section's name in kebab case, Page's enumerator with '_' as '-',
 /// in Page's order.
@@ -240,9 +243,10 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "mod-guard",
     "mod-tools",
     "mod-chat",
+    "registered",
 };
 static_assert(
-    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
+    static_cast<std::size_t>(Page::registered) + 1 == page_count,
     "every section has its rows, its name, its heading and its word"
 );
 

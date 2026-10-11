@@ -368,6 +368,18 @@ dialog's tests and the game's checks show rows and locks of their own in
 place of a section's, on Developer in place of its list and the list's
 footer too; a host never sets it.
 
+A registered page (`set_registered_pages`) is listed after the engine's own
+sections, under a divider that names its owner, in the order it was
+registered. Pages of one owner share that divider. The divider is a margin,
+a one-pixel rule, a margin and the owner's name in the small font. The page
+itself is laid out from its preference rows (`PreferenceRow`), at the
+dialog's size class, the same way the engine's rows are. OK writes each key
+whose stored text changed and the host calls the page's `applied` once the
+preferences are saved. Cancel drops the changes. Restore defaults puts the
+open registered page's rows back to their defaults. A mod's options dialog
+lists none of them. With no registered page the section list is the engine's
+own, Developer pinned at the foot.
+
 The host hands both drawing functions the Open Annihilation icon as an
 RGBA picture: the game's window icon without its clear margin. They scale
 it with `draw_picture` to its place at the surface's own resolution, so a
@@ -732,7 +744,10 @@ list's rows and Show Active Only. The scroll groups are the section's rows
 with their ROLL BACK (`mods_list_group`); the entries, the footer, OPEN MODS
 FOLDER, Show Active Only and Restore profile values are in none.
 
-The names: the section entries `settings.nav.<page>` (`mods`, `controls`,
+The names: a registered page's entry is `settings.nav.<id>`, its id as
+registered (`settings.nav.check.page`), and its rows `settings.<id>.<row>`
+(`settings.check.page.toggle`, whose halves are `.off` and `.on`). The
+engine's section entries are `settings.nav.<page>` (`mods`, `controls`,
 `common-tweaks`, `language`, `graphics`, `touch`, `controller`,
 `developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
 `mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,

@@ -189,9 +189,15 @@ latched the closing key and drew a backdrop.
   that screen (the Mods page's refused ROLL BACK over Settings). One nobody
   asked for at that moment, such as a notice or an install's question,
   joins with `show_when_free`: the screens wait first in, first out, and the
-  first is pushed while no modal screen shows, at once, after an input or a
-  tick, or when a screen is closed, so that two never show at once and none
-  opens over Settings. A screen waiting is ticked too, and leaves the queue
+  first is pushed while no modal screen shows, no frontend message box is
+  open and no match is being played, at once, after an input or a tick, or
+  when a screen is closed, so that two never show at once, none opens over
+  Settings and none is drawn over a match. A registered notice or prompt is
+  never held back because nobody is watching. A question a screen asks about
+  its own content is pushed, not queued. The engine's own unsolicited
+  notices and prompts are still suppressed in an unwatched run by the code
+  that raises them, unless that run's check asks for them. A screen waiting
+  is ticked too, and leaves the queue
   when its tick closes it. `find(name)` finds a screen on the stack and
   `waiting(name)` one in the queue.
 - **Notices and questions.** `NoticeScreen` holds a `kit::Notice`, and
@@ -219,6 +225,24 @@ latched the closing key and drew a backdrop.
   under it asked. The saves notice, the mod warning and the found folder's
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
+- **Registered pages, screens, notices and prompts.** Code outside the
+  engine's own screens registers them on the layer for this runtime
+  (`registered_settings`, `registered_screens`, `oa/ui/screen_registry/kit.hpp`).
+  A settings page is listed by the engine's Settings dialog, under a divider
+  naming its owner, after the engine's own sections, and laid out from its
+  preference rows. OK writes the keys that changed and, once the preferences
+  are saved, calls the page's `applied`; Cancel writes nothing, and a mod's
+  options dialog lists no registered page. `open_registered_screen(name)`
+  opens a kit screen by name: modal, over a backdrop, filling the front end's
+  room, laid out and drawn with the kit. Its automation dialog is `oa.<name>`
+  and its parts are named by its own layout. An unknown name opens nothing
+  and returns false. `act` returning 2 pops the screen, and `closed` runs
+  once as it leaves. `queue_notice` and `queue_prompt` build a notice (its
+  word `registered`) or a prompt (its word `prompt`) and put it on this same
+  queue, so a registered one and an engine one wait for each other and two
+  are never shown at once. A prompt's `answered` is called once, with the
+  button pressed, or with −1 from `drop_pending_prompts` when the runtime
+  ends with the prompt still queued or shown. Calling that drop twice is safe.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale and lays them out at the size class of the points left
   over (`LayerView`, from `view`, worked out afresh whenever the window's

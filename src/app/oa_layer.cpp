@@ -24,6 +24,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
@@ -37,6 +38,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -769,7 +771,9 @@ int32_t NoticeScreen::shown_height() const {
 }
 
 LayerPlacement NoticeScreen::placement(const LayerView& view) const {
-    if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
+    if (view.match || layer_.screen_fonts() == nullptr)
+        return {};
+    if (!any_menu_ && view.game_screen != over_)
         return {};
     // As tall as its text makes it at the view's class.
     kit::Notice sized = notice_;
@@ -870,7 +874,9 @@ int32_t QuestionScreen::shown_height() const {
 }
 
 LayerPlacement QuestionScreen::placement(const LayerView& view) const {
-    if (view.match || view.game_screen != over_ || layer_.screen_fonts() == nullptr)
+    if (view.match || layer_.screen_fonts() == nullptr)
+        return {};
+    if (!any_menu_ && view.game_screen != over_)
         return {};
     // As tall as its text makes it at the view's class.
     kit::Question sized = question_;
@@ -1082,7 +1088,17 @@ void Runtime::register_oa_layer() {
 OaLayer::OaLayer(Runtime& runtime) noexcept : runtime_(runtime) {
 }
 
-OaLayer::~OaLayer() = default;
+struct OaLayer::RegisteredPrompt {
+    uint32_t id{};
+    void (*answered)(void* user, uint32_t id, int32_t button){};
+    void* user{};
+    bool done{};
+    QuestionScreen* screen{};
+};
+
+OaLayer::~OaLayer() {
+    drop_pending_prompts();
+}
 
 int OaLayer::overlay_event(ScreenContext* context, void*) {
     if (context == nullptr || context->input == nullptr || context->host == nullptr)
@@ -1471,13 +1487,355 @@ void OaLayer::drop_waiting(const LayerScreen* screen) {
 }
 
 void OaLayer::show_waiting() {
-    // One at a time: the first waiting is pushed while no modal screen
-    // shows, and the next waits while it shows.
-    while (!queue_.empty() && top_modal(view()) == nullptr) {
+    // One at a time. Nothing is promoted over a modal screen, a frontend
+    // message box, or a match being played. The next waits while one shows.
+    while (!queue_.empty() && runtime_.screen_ != Screen::match &&
+           oa::ui::frontend_dialogs::dialog_count() == 0 && top_modal(view()) == nullptr) {
         std::unique_ptr<LayerScreen> next = std::move(queue_.front());
         queue_.erase(queue_.begin());
         push(std::move(next));
     }
+}
+
+namespace {
+
+/// Tells whether a notice's or a prompt's paragraphs can be copied.
+///
+/// @param paragraphs the paragraphs; null only while none are given
+/// @param count how many paragraphs are given
+/// @return false when a paragraph is missing
+bool paragraphs_ok(const char* const* paragraphs, std::size_t count) noexcept {
+    if (count == 0)
+        return true;
+    if (paragraphs == nullptr)
+        return false;
+    for (std::size_t index = 0; index < count; ++index)
+        if (paragraphs[index] == nullptr)
+            return false;
+    return true;
+}
+
+/// A registered kit screen: modal, over a backdrop, filling the front end's
+/// room. Its layout is the descriptor's, drawn with the kit. act returning 2
+/// closes it; closed runs once, from close.
+class RegisteredKitScreen final : public LayerScreen {
+  public:
+
+    /// Makes the screen from a descriptor copied at the open.
+    ///
+    /// @param name the screen's name, copied
+    /// @param desc the descriptor; its function pointers and model are copied
+    RegisteredKitScreen(std::string name, KitScreenDesc desc)
+        : name_(std::move(name)), desc_(desc) {}
+
+    /// Returns the screen's name.
+    ///
+    /// @return the name
+    [[nodiscard]] std::string_view name() const override { return name_; }
+
+    /// Returns the front end's room, in window pixels, as wide and tall as
+    /// the frame's area in points. Empty in a match, or while the room or
+    /// the area is empty.
+    ///
+    /// @param seen what the screen is placed on
+    /// @return its place
+    [[nodiscard]] LayerPlacement placement(const LayerView& seen) const override {
+        if (seen.match || seen.room.width <= 0 || seen.room.height <= 0 ||
+            seen.frame.area.width <= 0 || seen.frame.area.height <= 0)
+            return {};
+        return {seen.room, seen.frame.area.width, seen.frame.area.height};
+    }
+
+    /// Tells that the screen takes every input.
+    ///
+    /// @return true
+    [[nodiscard]] bool modal() const override { return true; }
+
+    /// Tells that what lies under the screen darkens.
+    ///
+    /// @return true
+    [[nodiscard]] bool backdrop() const override { return true; }
+
+    /// Lays the screen out from its descriptor when the frame changes.
+    ///
+    /// @param seen what the screen is placed on
+    void lay_out(const LayerView& seen) override {
+        if (desc_.lay_out == nullptr)
+            return;
+        if (has_frame_ && seen.frame.area.width == frame_.area.width &&
+            seen.frame.area.height == frame_.area.height &&
+            seen.frame.size_class == frame_.size_class &&
+            seen.frame.scale_percent == frame_.scale_percent)
+            return;
+        frame_ = seen.frame;
+        has_frame_ = true;
+        list_ = desc_.lay_out(desc_.model, frame_);
+        ++revision_;
+    }
+
+    /// Draws the screen's display list with the kit.
+    ///
+    /// @param canvas where it draws
+    void draw(const kit::Canvas& canvas) const override { kit::paint(canvas, list_); }
+
+    /// Takes a pointer's move, press or release. A release over the control
+    /// it held is a press of that control (act, with enter). A hover or a
+    /// press only redraws.
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button
+    /// @param at the pointer, in the screen's points
+    /// @param finger_reach a finger's reach in the screen's points; 0 for a mouse
+    /// @return what the screen did
+    LayerAnswer
+    pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) override {
+        kit::PointerOutcome outcome{};
+        switch (kind) {
+        case ScreenInputKind::pointer_move:
+            outcome = kit::pointer_move(interaction_, list_, at);
+            break;
+        case ScreenInputKind::pointer_down:
+            if (button != SDL_BUTTON_LEFT)
+                return LayerAnswer::none;
+            outcome = finger_reach > 0 ? kit::finger_down(interaction_, list_, at, finger_reach)
+                                       : kit::pointer_down(interaction_, list_, at);
+            break;
+        case ScreenInputKind::pointer_up:
+            if (button != SDL_BUTTON_LEFT)
+                return LayerAnswer::none;
+            outcome = kit::pointer_up(interaction_, list_, at);
+            break;
+        default:
+            return LayerAnswer::none;
+        }
+        if (outcome.result == kit::PointerResult::activated)
+            return take_act({outcome.control, kit::Key::enter});
+        if (outcome.result == kit::PointerResult::redraw) {
+            ++revision_;
+            return LayerAnswer::redraw;
+        }
+        return LayerAnswer::none;
+    }
+
+    /// Takes a key. A move of the focus redraws and does not call act. A key
+    /// the focused control takes calls act with that control. Any other key
+    /// calls act with no control.
+    ///
+    /// @param pressed the key
+    /// @return what the screen did
+    LayerAnswer key(kit::Key pressed, uint32_t /*sdl_key*/) override {
+        const kit::KeyOutcome outcome = kit::key(interaction_, list_, pressed);
+        if (outcome.result == kit::KeyResult::redraw) {
+            ++revision_;
+            return LayerAnswer::redraw;
+        }
+        if (outcome.result == kit::KeyResult::to_control)
+            return take_act({outcome.control, outcome.key});
+        return take_act({kit::no_control, outcome.key});
+    }
+
+    /// Takes a turn of the wheel, which the screen swallows.
+    ///
+    /// @return none
+    LayerAnswer wheel(kit::Point /*at*/, float /*notches*/) override { return LayerAnswer::none; }
+
+    /// Returns the screen's display list.
+    ///
+    /// @return the list
+    [[nodiscard]] kit::DisplayList display_list() const override { return list_; }
+
+    /// Returns the screen's hover, press and focus.
+    ///
+    /// @return the interaction
+    [[nodiscard]] kit::Interaction interaction() const override { return interaction_; }
+
+    /// Has nothing to do once a frame.
+    ///
+    /// @return none
+    LayerAnswer tick() override { return LayerAnswer::none; }
+
+    /// Returns the screen's revision.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return revision_; }
+
+    /// Tells the descriptor the screen closed, once.
+    void close(bool /*by_key*/) override {
+        if (closed_ || desc_.closed == nullptr)
+            return;
+        closed_ = true;
+        desc_.closed(desc_.model);
+    }
+
+  private:
+
+    /// Gives one action to the descriptor. 0 changes nothing, 1 lays the
+    /// screen out again, and 2 closes it. The layer calls close, which tells
+    /// the descriptor; this does not.
+    ///
+    /// @param action the press or the key
+    /// @return what the screen answers
+    LayerAnswer take_act(const KitScreenAction& action) {
+        if (desc_.act == nullptr)
+            return LayerAnswer::none;
+        const int result = desc_.act(desc_.model, action);
+        if (result == 2)
+            return LayerAnswer::close;
+        if (result == 1) {
+            if (desc_.lay_out != nullptr && has_frame_)
+                list_ = desc_.lay_out(desc_.model, frame_);
+            ++revision_;
+            return LayerAnswer::redraw;
+        }
+        return LayerAnswer::none;
+    }
+
+    std::string name_;               ///< the screen's name
+    KitScreenDesc desc_{};           ///< the descriptor, copied at the open
+    kit::DisplayList list_{};        ///< what it draws, from lay_out
+    kit::Interaction interaction_{}; ///< the pointer and the focus
+    kit::Frame frame_{};             ///< the frame it was laid out for
+    bool has_frame_{};               ///< frame_ was set by lay_out
+    uint64_t revision_{};            ///< counts the changes to its look
+    bool closed_{};                  ///< closed has been called
+};
+
+} // namespace
+
+uint32_t OaLayer::take_request_id() noexcept {
+    const uint32_t id = next_request_ == 0 ? 1U : next_request_;
+    next_request_ = id == std::numeric_limits<uint32_t>::max() ? 1U : id + 1U;
+    return id;
+}
+
+bool OaLayer::open_registered_screen(std::string_view name) {
+    const KitScreenDesc* found = nullptr;
+    for (uint32_t index = 0; index < kit_screens_.screen_count; ++index) {
+        const char* registered = kit_screens_.screens[index].name;
+        if (registered != nullptr && name == registered) {
+            found = &kit_screens_.screens[index];
+            break;
+        }
+    }
+    if (found == nullptr || found->lay_out == nullptr)
+        return false;
+    push(std::make_unique<RegisteredKitScreen>(std::string(name), *found));
+    return true;
+}
+
+uint32_t OaLayer::queue_notice(const NoticeRequest& request) {
+    if (request.title == nullptr || !paragraphs_ok(request.paragraphs, request.paragraph_count))
+        return 0;
+    kit::Notice notice;
+    notice.title = request.title;
+    notice.word = "registered";
+    notice.paragraphs.reserve(request.paragraph_count);
+    for (std::size_t index = 0; index < request.paragraph_count; ++index)
+        notice.paragraphs.push_back(kit::Paragraph{request.paragraphs[index], false});
+    const uint32_t id = take_request_id();
+    auto screen = std::make_unique<NoticeScreen>(
+        *this, Screen::main_menu, std::move(notice), NoticeScreen::Host{}
+    );
+    screen->show_on_any_menu();
+    show_when_free(std::move(screen));
+    return id;
+}
+
+uint32_t OaLayer::queue_prompt(const PromptRequest& request) {
+    if (request.title == nullptr || !paragraphs_ok(request.paragraphs, request.paragraph_count))
+        return 0;
+    if (request.button_count < 1 || request.button_count > most_prompt_buttons ||
+        request.buttons == nullptr)
+        return 0;
+    for (std::size_t index = 0; index < request.button_count; ++index)
+        if (request.buttons[index] == nullptr)
+            return 0;
+    if (request.button_ids != nullptr) {
+        for (std::size_t index = 0; index < request.button_count; ++index) {
+            const char* word = request.button_ids[index];
+            if (word == nullptr || !kit::row_word(word))
+                return 0;
+        }
+    }
+    const auto buttons = static_cast<int32_t>(request.button_count);
+    if (request.cancel_button < -1 || request.cancel_button >= buttons ||
+        request.primary_button < -1 || request.primary_button >= buttons)
+        return 0;
+
+    const uint32_t id = take_request_id();
+    auto ticket = std::make_shared<RegisteredPrompt>();
+    ticket->id = id;
+    ticket->answered = request.answered;
+    ticket->user = request.user;
+    prompts_.push_back(ticket);
+
+    kit::Question question;
+    question.title = request.title;
+    question.paragraphs.reserve(request.paragraph_count);
+    for (std::size_t index = 0; index < request.paragraph_count; ++index)
+        question.paragraphs.push_back(kit::Paragraph{request.paragraphs[index], false});
+    question.buttons.reserve(request.button_count);
+    for (std::size_t index = 0; index < request.button_count; ++index) {
+        kit::QuestionButton button;
+        button.caption = request.buttons[index];
+        if (request.button_ids != nullptr)
+            button.id = request.button_ids[index];
+        if (static_cast<int32_t>(index) == request.primary_button)
+            button.accent = true;
+        question.buttons.push_back(std::move(button));
+    }
+    question.cancel_button = request.cancel_button;
+    question.primary_button = request.primary_button;
+
+    QuestionScreen::Host host;
+    host.answer = [ticket](int32_t button) {
+        if (ticket->done)
+            return true;
+        ticket->done = true;
+        if (ticket->answered != nullptr)
+            ticket->answered(ticket->user, ticket->id, button);
+        return true;
+    };
+    host.closed = [ticket](const QuestionScreen&) { ticket->screen = nullptr; };
+    auto screen = std::make_unique<QuestionScreen>(
+        *this, Screen::main_menu, std::move(question), std::move(host)
+    );
+    ticket->screen = screen.get();
+    screen->show_on_any_menu();
+    show_when_free(std::move(screen));
+    return id;
+}
+
+void OaLayer::drop_pending_prompts() {
+    const std::vector<std::shared_ptr<RegisteredPrompt>> pending = prompts_;
+    for (const auto& ticket : pending) {
+        if (!ticket || ticket->done)
+            continue;
+        ticket->done = true;
+        if (ticket->answered != nullptr)
+            ticket->answered(ticket->user, ticket->id, -1);
+    }
+    for (const auto& ticket : pending) {
+        if (!ticket)
+            continue;
+        QuestionScreen* screen = ticket->screen;
+        ticket->screen = nullptr;
+        if (screen != nullptr && (holds(screen) || queued(screen)))
+            close(screen);
+    }
+    std::vector<std::shared_ptr<RegisteredPrompt>> kept;
+    for (auto& ticket : prompts_) {
+        bool dropped = false;
+        for (const auto& old : pending) {
+            if (old == ticket) {
+                dropped = true;
+                break;
+            }
+        }
+        if (!dropped)
+            kept.push_back(std::move(ticket));
+    }
+    prompts_ = std::move(kept);
 }
 
 void OaLayer::tick() {

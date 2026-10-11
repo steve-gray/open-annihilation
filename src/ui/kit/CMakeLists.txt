@@ -16,7 +16,7 @@ add_library(oa::ui::kit ALIAS oa-ui-kit)
 target_include_directories(oa-ui-kit PUBLIC include)
 target_compile_features(oa-ui-kit PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-kit PUBLIC oa-ui-paint oa-ui-frontend-renderer oa-present oa-formats-fnt
-  oa-formats-hpi PRIVATE oa-base-text oa-ui-decoded oa-options)
+  oa-formats-hpi oa-platform-preferences PRIVATE oa-base-text oa-ui-decoded oa-options)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-kit-theme-test tests/theme_test.cpp)

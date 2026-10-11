@@ -173,6 +173,8 @@ std::string_view page_slug(settings::Page page) {
     case settings::Page::mod_tools:
     case settings::Page::mod_chat:
         return "mod";
+    case settings::Page::registered:
+        return "registered";
     }
     return "page";
 }

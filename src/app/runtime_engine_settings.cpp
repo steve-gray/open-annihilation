@@ -6,6 +6,7 @@
 // main menu and in a match.
 
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/prompts.hpp"
@@ -1107,6 +1108,30 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
         dialog.developer.hacks_open = state.last_developer_list->hacks_open;
         dialog.developer.active_only = state.last_developer_list->active_only;
     }
+    // Registered pages join the engine's dialog after it is open, so open
+    // does not wipe them. A mod's options never lists them. The rows stay
+    // the registry's caller.
+    if (oa_layer_ != nullptr) {
+        const SettingsRegistry& registry = oa_layer_->registered_settings();
+        std::vector<settings::RegisteredPage> pages;
+        pages.reserve(registry.page_count);
+        for (uint32_t index = 0; index < registry.page_count; ++index) {
+            const SettingsPageDesc& desc = registry.pages[index];
+            settings::RegisteredPage page;
+            if (desc.id != nullptr)
+                page.id = desc.id;
+            if (desc.title != nullptr)
+                page.title = desc.title;
+            if (desc.owner != nullptr)
+                page.owner = desc.owner;
+            page.rows = desc.rows;
+            page.row_count = desc.row_count;
+            page.applied = desc.applied;
+            page.state = desc.state;
+            pages.push_back(std::move(page));
+        }
+        settings::set_registered_pages(dialog, pages, preference_values_);
+    }
     return dialog;
 }
 
@@ -1222,6 +1247,12 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         if (screen_size_moved)
             chosen.screen_size = EngineSettingsState::stored_screen_size(*this, chosen.screen_size);
         apply_engine_settings(chosen);
+        // Changed registered keys join the values write_settings keeps, and
+        // their owners are told once the flush succeeds.
+        const std::vector<settings::RegisteredWrite> registered =
+            settings::registered_writes(*dialog);
+        for (const settings::RegisteredWrite& write : registered)
+            preference_values_[write.key] = write.value;
         const auto failure = save_engine_settings(dialog->opened, chosen, dialog->restored);
         state.last_page = dialog->page;
         state.last_developer_list = dialog->developer;
@@ -1233,6 +1264,10 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             // plays: the game stays as it is and says so.
             EngineSettingsState::report_failed_save(*this, *failure);
             return true;
+        }
+        for (const settings::RegisteredWrite& write : registered) {
+            if (write.applied != nullptr)
+                write.applied(write.state, write.key.c_str(), write.value.c_str());
         }
         // SWITCH reloads the game for the mod now stored, back on the main
         // menu: the loop ends after this frame and main() starts afresh.
