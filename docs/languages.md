@@ -40,6 +40,26 @@ game's own default, so that a check plays the same on every machine. 3.1c
 takes its language from the command line or the registry and never asks
 the operating system; the engine differs there on purpose.
 
+## Choosing the language at start
+
+When the language setting names a language that is not installed and is
+only offered as a download, the game shows a notice over the main menu
+once that menu has settled. The same notice shows when the setting is
+System default and the computer's language is one of those, until the
+player answers Use English for it.
+
+The title is the language's own name. The text is in that language, where
+the game has the words, and in English. Download asks for the language
+pack and shows how far the download has come. When the pack is installed
+the notice closes and that language is the one the game shows. Use English
+leaves the game in English. When the setting names the language, Use
+English stores English. When the setting is System default, Use English
+remembers that language so the notice does not return. Escape closes the
+notice until the next start.
+
+The remembered languages are `open-annihilation.language-notice-dismissed`,
+a comma-separated list of tags.
+
 ## Language names before their pack
 
 A language's own name, and the notice that its pack is not installed yet,

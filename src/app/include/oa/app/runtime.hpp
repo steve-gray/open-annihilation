@@ -3903,6 +3903,15 @@ class Runtime final : public menu::Host,
     /// due, unless --check-user-folder asks for it.
     void tell_saves_moved();
 
+    /// Shows the notice that a language is only available as a download,
+    /// over the settled main menu, once that menu has been up for a frame
+    /// and stays, with no dialog and no settings over it. A run nobody
+    /// watches shows none unless the user-folder check asks for a notice.
+    /// 3.1c's command line naming the language shows none. Download queues
+    /// the pack; Use English records the answer; Escape closes it for this
+    /// run only.
+    void tell_missing_language();
+
     /// Returns the folder of the mod played: the mod folder laid over the
     /// game folder, else the folder of the profile --mod names, else the game
     /// folder whose own profile plays.
@@ -4298,6 +4307,66 @@ class Runtime final : public menu::Host,
     /// retries it and cancels it, and keeps it hidden during a skirmish
     /// (--check-challenge).
     void check_challenge();
+
+    /// The Add registry window as a screen of the OA layer
+    /// (runtime_registries.cpp).
+    struct AddRegistryScreen;
+
+    /// Opens the Add registry window over Settings or the main menu, to add a
+    /// registry by its address: ADD REGISTRY… in Settings › Downloads, and a
+    /// caller with an address, whose check starts at once. Nothing opens
+    /// while the window already shows.
+    ///
+    /// @param url the address to check at once; none opens the window empty
+    void open_add_registry(std::optional<std::string> url);
+
+    /// Opens the Add registry window for a mirror of a registry the player
+    /// added (ADD MIRROR…). Nothing opens for a registry that is built in or
+    /// not in effect.
+    ///
+    /// @param registry_id the registry's id
+    void open_add_mirror(std::string_view registry_id);
+
+    /// Takes the next .oareg file the game was opened with and opens the Add
+    /// registry window filled in from it: one at a time, on the settled main
+    /// menu, with no OA screen that takes every input showing and no game
+    /// running. A run nobody watches leaves the files waiting, unless
+    /// --check-registries asks for them. Called once a frame beside
+    /// tell_mod_installs.
+    void take_registry_files();
+
+    /// Gives the settings dialog the Registries part's registries, from the
+    /// registries in effect.
+    ///
+    /// @param[in,out] dialog the dialog
+    /// @param opening the dialog has just opened: the note says why the last
+    ///     OK could not change a registry, once; otherwise the note it shows stays
+    void give_settings_registries(oa::ui::engine_settings::Dialog& dialog, bool opening);
+
+    /// Makes the changes OK asks of the registries through the content
+    /// service. A refused change is logged, and the Registries part's note
+    /// says why the next time it opens.
+    ///
+    /// @param changes the changes (oa::ui::engine_settings::registry_changes)
+    void
+    apply_registry_changes(const std::vector<oa::ui::engine_settings::RegistryChange>& changes);
+
+    /// Counts the checks the Add registry windows have asked the content
+    /// service for in this process, which --check-registries reads.
+    ///
+    /// @return the checks asked
+    [[nodiscard]] uint64_t registry_checks_asked() const noexcept;
+
+    /// Writes the registries check's own registry list and descriptor under
+    /// the player's folder before the content service starts
+    /// (--check-registries).
+    void prepare_registries_check();
+
+    /// Lists, switches and removes an added registry in Settings › Downloads,
+    /// refuses an https address without asking the content service, and opens
+    /// an .oareg file the run posts, which is refused once its catalogue
+    /// cannot be reached (--check-registries).
+    void check_registries();
 
     /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
@@ -10881,6 +10950,15 @@ class Runtime final : public menu::Host,
     /// naming what differed.
     void check_language_registry();
 
+    /// Shows the missing-language notice over the main menu and presses
+    /// Use English. With the language set to Simplified Chinese and no pack,
+    /// the notice names that language, Use English stores English and the
+    /// notice does not return. With System default and the operating system
+    /// asking for Simplified Chinese, Use English remembers that language
+    /// and a second pass shows no notice. Throws std::runtime_error naming
+    /// what differed.
+    void check_language_notice();
+
     /// Checks the commander's build pages against the side column on windows of several sizes.
     ///
     /// On each window from 640x480 to 5120x2880 a skirmish starts, the commander
@@ -13761,6 +13839,18 @@ class Runtime final : public menu::Host,
     init::MapListState map_list_state_{};
     std::map<uintptr_t, int32_t> map_list_objects_;
     std::map<std::string, std::string> preference_values_;
+    /// The missing-language notice for this run (runtime_language_notice.cpp).
+    friend class LanguageNoticeHost;
+
+    struct LanguageNoticeRun {
+        uint32_t main_menu_frames{}; ///< settled main-menu frames since the case last applied
+        bool closed_for_run{};       ///< Escape or B closed it; it stays closed
+        std::string tag;             ///< the language the notice is about
+        bool system_case{};          ///< the operating system asked, not the setting
+        bool download_failed{};      ///< Download was asked and did not queue
+    };
+
+    LanguageNoticeRun language_notice_run_{};
     fs::path preference_path_;
     std::string first_map_name_;
     std::vector<std::string> eligible_map_names_;

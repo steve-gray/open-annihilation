@@ -5,7 +5,7 @@
 # built from plain inputs, with its tabs, filters, search, selection, details
 # and download queue lines, and its words (library.hpp, text.hpp). It draws
 # nothing and reads no file, clock or network.
-add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp)
+add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).
 target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)

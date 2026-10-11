@@ -377,6 +377,14 @@ struct WindowPosition {
 /// @return the position, in window pixels
 [[nodiscard]] WindowPosition window_position(const LayerView& view, float x, float y) noexcept;
 
+/// Tells whether a key's press pastes into a focused text field of the OA
+/// layer: V with Ctrl, or on macOS with Cmd too.
+///
+/// @param sdl_key the SDL keycode
+/// @param modifiers SDL_Keymod bits
+/// @return true for the paste shortcut
+[[nodiscard]] bool layer_paste(uint32_t sdl_key, uint16_t modifiers) noexcept;
+
 /// Returns the key a press means to a screen of the OA layer: Enter, Escape,
 /// the arrows, Space, Tab and Shift+Tab, Page Up and Page Down, Home and End,
 /// Y and N, Backspace and Delete, and, outside a match, F1 as the
@@ -629,6 +637,13 @@ class OaLayer {
     /// Ticks every screen once a frame, taking off those that close, and
     /// keeps the system's text input over the focused text field.
     void tick();
+
+    /// Starts the system's text input again over the focused text field the
+    /// layer keeps it started over, as Space or a pad's A on a field asks, so
+    /// that an on-screen keyboard the player put away shows again. Without
+    /// such a field it does nothing: the field the input lands on starts it
+    /// once the input is taken.
+    void restart_text_input();
 
     /// Returns the key that closed a screen until it is released.
     ///

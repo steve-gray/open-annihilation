@@ -129,6 +129,18 @@ uint64_t now_ms() {
                                      .count());
 }
 
+/// The first reading at which a delay has passed in full. A reading drops
+/// the part of a millisecond already gone, so a wait counted from it could
+/// end up to a millisecond short; one more millisecond keeps every delay at
+/// least as long as asked.
+///
+/// @param now a reading of now_ms
+/// @param delay_ms the delay, in milliseconds; 0 for none
+/// @return the reading at which the delay has passed
+uint64_t after_delay(uint64_t now, uint32_t delay_ms) {
+    return delay_ms == 0 ? now : now + delay_ms + 1;
+}
+
 /// Folds one ASCII letter to lower case.
 ///
 /// @param c the character
@@ -845,7 +857,7 @@ void arm(Conn& conn, Wire wire, uint64_t now) {
     outgoing.limit = std::min(wire.limit, outgoing.bytes.size());
     outgoing.piece_bytes = wire.piece_bytes;
     outgoing.piece_delay_ms = wire.piece_delay_ms;
-    outgoing.ready_at = now + wire.head_delay_ms;
+    outgoing.ready_at = after_delay(now, wire.head_delay_ms);
     outgoing.close_after = wire.close_after;
     outgoing.active = true;
     conn.outgoing = std::move(outgoing);
@@ -1107,7 +1119,7 @@ void write_outgoing(Conn& conn, uint64_t now) {
             out.piece_sent += out.sent - body_before;
             if (out.piece_sent >= out.piece_bytes && out.sent < out.limit) {
                 out.piece_sent = 0;
-                out.ready_at = now_ms() + out.piece_delay_ms;
+                out.ready_at = after_delay(now_ms(), out.piece_delay_ms);
                 return;
             }
         }

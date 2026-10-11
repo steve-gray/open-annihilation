@@ -790,9 +790,14 @@ std::string byline(const Entry& entry, const TextHooks& text) {
         return {};
     const std::string& author =
         entry.listing->author.empty() ? entry.listing->publisher : entry.listing->author;
+    std::string counts;
+    if (entry.listing->downloads)
+        counts = downloads_text(*entry.listing->downloads);
     if (author.empty())
-        return {};
-    return filled(text, words::byline, {{"author", author}});
+        return counts;
+    if (counts.empty())
+        return filled(text, words::byline, {{"author", author}});
+    return filled(text, words::byline_with_downloads, {{"author", author}, {"downloads", counts}});
 }
 
 std::string playing_note(const Library& library) {
