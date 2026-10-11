@@ -991,15 +991,21 @@ void test_named_refusals(
         fs::create_directories(part.parent_path());
         fs::copy_file(served.root / "v1" / "p" / (vale.hex + ".oamod"), part);
         fs::permissions(part, fs::perms::none);
-        const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+        // Root (the Linux check lanes) and Windows read a file whatever its
+        // POSIX permissions say; there the refusal cannot be made, so it is
+        // not checked.
+        const bool unreadable = !std::ifstream(part, std::ios::binary).is_open();
+        if (unreadable) {
+            const Captured refused = mirror_at(served.server.url("/registry.yaml"), dest);
+            exited("cannot read", refused, oa::tool::exit_failed);
+            OA_CHECK(contains(refused.err, "the file could not be read"));
+            OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
+            served.server.expect_loopback();
+        }
         std::error_code restore;
         fs::permissions(
             part, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::add, restore
         );
-        exited("cannot read", refused, oa::tool::exit_failed);
-        OA_CHECK(contains(refused.err, "the file could not be read"));
-        OA_CHECK(!fs::exists(dest / "v1" / "catalogue.json"));
-        served.server.expect_loopback();
     }
 }
 
