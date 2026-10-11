@@ -31,6 +31,7 @@ def main() -> int:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if listed.returncode != 0:
         print(listed.stderr, end="")
@@ -62,6 +63,7 @@ def main() -> int:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if refused.returncode != 2 or "interface-words" not in refused.stderr:
         print(f"interface-words without --json exited {refused.returncode}")
