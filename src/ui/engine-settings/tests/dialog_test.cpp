@@ -70,6 +70,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -1113,6 +1114,301 @@ void language_drop_down_locks_by_the_command_line() {
     CHECK(dialog.chosen.language == "es");
 }
 
+/// One pack the test lists under AVAILABLE TO DOWNLOAD.
+settings::AvailableLanguage
+downloadable(std::string tag, std::string endonym, std::string english_name, std::string aside) {
+    settings::AvailableLanguage pack;
+    pack.tag = std::move(tag);
+    pack.endonym = std::move(endonym);
+    pack.english_name = std::move(english_name);
+    pack.aside = std::move(aside);
+    return pack;
+}
+
+/// The parts of an open list, in the order the layout lists them.
+std::vector<const settings::LayoutPart*>
+listed_in(const std::vector<settings::LayoutPart>& parts, const renderer::SourceRect& list) {
+    std::vector<const settings::LayoutPart*> found;
+    for (const settings::LayoutPart& part : parts)
+        if (inside(part.rect, list))
+            found.push_back(&part);
+    return found;
+}
+
+/// Language with two packs available to download, at one size class: the
+/// open list, its names, the divider, stepping, the download and the field.
+void available_languages_at(oa::ui::kit::SizeClass size_class) {
+    const std::string simplified = "\347\256\200\344\275\223\344\270\255\346\226\207";
+    const std::string portuguese = "Portugu\u00EAs (Brasil)";
+    const std::string team_aside = "4.0 MB \u21E9";
+    const std::string ridge_aside = "community \u00B7 92% \u00B7 1.1 MB";
+    const auto offer = [&](settings::Dialog& dialog) {
+        dialog.size_class = size_class;
+        dialog.available_languages = {
+            downloadable("zh-Hans", simplified, "Chinese (Simplified)", team_aside),
+            downloadable("pt-BR", portuguese, "Portuguese (Brazil)", ridge_aside),
+        };
+    };
+
+    auto dialog = language_dialog();
+    offer(dialog);
+    CHECK(geometry::choice_count(dialog, Setting::language) == 9);
+    CHECK(geometry::choice_text(dialog, Setting::language, 0) == "System default (Deutsch)");
+    CHECK(geometry::choice_text(dialog, Setting::language, 5) == "Italiano");
+    CHECK(geometry::choice_text(dialog, Setting::language, 6) == "AVAILABLE TO DOWNLOAD");
+    CHECK(geometry::choice_text(dialog, Setting::language, 7) == simplified);
+    CHECK(geometry::choice_text(dialog, Setting::language, 8) == portuguese);
+    // A stored available tag shows that row. "pt" is not "pt-BR".
+    dialog.chosen.language = "zh-Hans";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 7);
+    dialog.chosen.language = "pt";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 0);
+    dialog.chosen.language = "pt-BR";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 8);
+    dialog.chosen.language = "system";
+
+    // Nothing is downloading: the hint is the page's own two lines.
+    auto closed = settings::dialog_layout(dialog);
+    CHECK(
+        find_part(closed, "The game's own text and unit names, where its", settings::no_control) !=
+        nullptr
+    );
+    CHECK(find_part(closed, "data has them in the language.", settings::no_control) != nullptr);
+    CHECK(find_part(closed, "Downloads, then switches to it.", settings::no_control) == nullptr);
+
+    const auto field = geometry::open_rows(dialog).rows.rows[0].control_area;
+    const auto list = geometry::choice_list(field, 9, size_class);
+    CHECK(click(dialog, centre(field)) == DialogAction::redraw);
+    CHECK(dialog.download_request.empty());
+    CHECK(dialog.focused == settings::no_control);
+    auto parts = settings::dialog_layout(dialog);
+    const auto menu = listed_in(parts, list);
+    const std::array<std::string, 9> window{{
+        "System default (Deutsch)",
+        "English",
+        "Deutsch",
+        "Espa\xC3\xB1ol",
+        "Fran\xC3\xA7"
+        "ais",
+        "Italiano",
+        "AVAILABLE TO DOWNLOAD",
+        simplified,
+        team_aside,
+    }};
+    CHECK(menu.size() == window.size());
+    for (std::size_t index = 0; index < menu.size() && index < window.size(); ++index)
+        CHECK(menu[index]->text == window[index]);
+    CHECK(menu.size() == window.size() && menu[6]->control == settings::no_control);
+    CHECK(menu.size() == window.size() && menu[6]->font == settings::DialogFont::small);
+    CHECK(menu.size() == window.size() && menu[6]->tracking == geometry::heading_tracking);
+    CHECK(find_part(parts, portuguese, settings::no_control) == nullptr);
+    CHECK(find_part(parts, ridge_aside, settings::no_control) == nullptr);
+    for (std::size_t left = 0; left < parts.size(); ++left)
+        for (std::size_t right = left + 1; right < parts.size(); ++right)
+            CHECK(!overlap(parts[left].rect, parts[right].rect));
+
+    dialog.list_first = 1;
+    parts = settings::dialog_layout(dialog);
+    CHECK(find_part(parts, ridge_aside, settings::no_control) != nullptr);
+    CHECK(find_part(parts, team_aside, settings::no_control) != nullptr);
+    const oa::ui::kit::DisplayList display = geometry::dialog_list(dialog, nullptr);
+    const std::string problem = oa::ui::kit::name_problem(display);
+    if (!problem.empty())
+        std::cerr << "available languages: " << problem << '\n';
+    CHECK(problem.empty());
+    bool saw_simplified = false;
+    bool saw_portuguese = false;
+    for (const oa::ui::kit::AutomationEntry& entry : oa::ui::kit::automation_parts(display, {})) {
+        CHECK(entry.text != "AVAILABLE TO DOWNLOAD");
+        CHECK(entry.name != "settings.language.7");
+        if (entry.name == "settings.language.zh-hans")
+            saw_simplified = true;
+        if (entry.name == "settings.language.pt-br")
+            saw_portuguese = true;
+    }
+    CHECK(saw_simplified && saw_portuguese);
+    for (const oa::ui::kit::Control& control : display.controls) {
+        CHECK(control.text != "AVAILABLE TO DOWNLOAD");
+        CHECK(control.name != "settings.language.7");
+    }
+
+    // Down from Italiano skips the divider. Home and End reach the ends.
+    CHECK(dialog.list_marked == 0);
+    for (int32_t step = 0; step < 5; ++step)
+        CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 5);
+    CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 7);
+    CHECK(settings::dialog_key(dialog, DialogKey::up) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 5);
+    CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 8);
+    CHECK(settings::dialog_key(dialog, DialogKey::home) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 0);
+    CHECK(settings::dialog_key(dialog, DialogKey::page_down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 8);
+    CHECK(settings::dialog_key(dialog, DialogKey::page_up) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 0);
+    // A key that is not a choice, and opening the list, download nothing.
+    CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::none);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::none);
+    CHECK(dialog.download_request.empty() && dialog.open_list == settings::first_row_control);
+    CHECK(settings::dialog_wheel(dialog, list.x + 4, list.y + 4, -1.0F) == DialogAction::redraw);
+    CHECK(dialog.list_first == 1);
+
+    for (int32_t step = 0; step < 6; ++step)
+        static_cast<void>(settings::dialog_key(dialog, DialogKey::down));
+    CHECK(dialog.list_marked == 7);
+    CHECK(settings::dialog_key(dialog, DialogKey::enter) == DialogAction::download_language);
+    CHECK(dialog.chosen.language == "zh-Hans" && dialog.download_request == "zh-Hans");
+    CHECK(dialog.open_list == settings::no_control && dialog.focused == settings::no_control);
+
+    // Left and Right on the closed field stay among the installed languages.
+    auto stepped = language_dialog();
+    offer(stepped);
+    CHECK(settings::dialog_key(stepped, DialogKey::tab) == DialogAction::redraw);
+    for (int32_t step = 0; step < 5; ++step)
+        CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::changed);
+    CHECK(stepped.chosen.language == "it");
+    CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::redraw);
+    CHECK(stepped.chosen.language == "it" && stepped.download_request.empty());
+    geometry::set_choice(stepped, Setting::language, 7);
+    CHECK(stepped.chosen.language == "zh-Hans" && stepped.download_request.empty());
+    CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::redraw);
+    CHECK(stepped.chosen.language == "zh-Hans");
+    CHECK(settings::dialog_key(stepped, DialogKey::left) == DialogAction::changed);
+    CHECK(stepped.chosen.language == "it");
+
+    // Choosing a failed pack again asks for the download once more.
+    auto retry = language_dialog();
+    offer(retry);
+    retry.chosen.language = "zh-Hans";
+    retry.available_languages[0].state = settings::AvailableLanguage::State::failed;
+    retry.available_languages[0].failure = "the pack was refused";
+    const auto retry_field = geometry::open_rows(retry).rows.rows[0].control_area;
+    // The list opens on the language already chosen, so Enter retries it.
+    CHECK(click(retry, centre(retry_field)) == DialogAction::redraw);
+    CHECK(retry.list_marked == 7);
+    CHECK(settings::dialog_key(retry, DialogKey::enter) == DialogAction::download_language);
+    CHECK(retry.download_request == "zh-Hans" && retry.chosen.language == "zh-Hans");
+
+    // The divider is not a press. A pack with downloads off refuses a click.
+    auto pressed = language_dialog();
+    offer(pressed);
+    const auto pressed_field = geometry::open_rows(pressed).rows.rows[0].control_area;
+    const auto pressed_list = geometry::choice_list(pressed_field, 9, size_class);
+    CHECK(click(pressed, centre(pressed_field)) == DialogAction::redraw);
+    CHECK(click(pressed, centre(geometry::choice_item(pressed_list, 6))) == DialogAction::none);
+    CHECK(pressed.open_list == settings::first_row_control && pressed.chosen.language == "system");
+    pressed.available_languages[1].choosable = false;
+    pressed.list_first = 1;
+    const auto refused = centre(geometry::choice_item(pressed_list, 7));
+    CHECK(click(pressed, refused) == DialogAction::redraw);
+    CHECK(pressed.open_list == settings::first_row_control && pressed.chosen.language == "system");
+    CHECK(pressed.download_request.empty());
+
+    // An endonym the fonts cannot draw shows its English name.
+    auto english = language_dialog();
+    offer(english);
+    english.available_languages[0].endonym_drawable = false;
+    CHECK(geometry::choice_text(english, Setting::language, 7) == "Chinese (Simplified)");
+    english.chosen.language = "zh-Hans";
+    english.available_languages[0].state = settings::AvailableLanguage::State::downloading;
+    english.available_languages[0].percent = 40;
+    CHECK(
+        find_part(
+            settings::dialog_layout(english),
+            "Chinese (Simplified) \u00B7 40%",
+            settings::no_control
+        ) != nullptr
+    );
+
+    // Each state in the closed field, and the hint after a failure.
+    struct ShownState {
+        settings::AvailableLanguage::State state;
+        uint8_t percent;
+        std::string field;
+        std::string hint;
+    };
+
+    const ShownState states[] = {
+        {settings::AvailableLanguage::State::offered,
+         0,
+         simplified,
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::waiting,
+         0,
+         simplified + " \u00B7 waiting",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::downloading,
+         40,
+         simplified + " \u00B7 40%",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::installing,
+         0,
+         simplified + " \u00B7 installing",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::failed,
+         0,
+         simplified + " \u00B7 failed",
+         "The download failed: the pack was refused. Choose it again to try again."},
+    };
+    for (const auto& state : states) {
+        auto shown = language_dialog();
+        offer(shown);
+        shown.chosen.language = "zh-Hans";
+        shown.available_languages[0].state = state.state;
+        shown.available_languages[0].percent = state.percent;
+        shown.available_languages[0].failure = "the pack was refused";
+        const auto laid = settings::dialog_layout(shown);
+        CHECK(find_part(laid, state.field, settings::no_control) != nullptr);
+        CHECK(find_part(laid, state.hint, settings::no_control) != nullptr);
+        CHECK(find_part(laid, "data has them in the language.", settings::no_control) == nullptr);
+        CHECK(find_part(laid, simplified + " \u00B7 offered", settings::no_control) == nullptr);
+    }
+}
+
+void available_languages_list_download_and_show_their_state() {
+    CHECK(settings::download_size_text(312000) == "312 kB");
+    CHECK(settings::download_size_text(999999) == "999 kB");
+    CHECK(settings::download_size_text(1000000) == "1.0 MB");
+    CHECK(settings::download_size_text(4012345) == "4.0 MB");
+    CHECK(settings::download_size_text(99999999) == "99.9 MB");
+    CHECK(settings::download_size_text(188000000) == "188 MB");
+    CHECK(
+        settings::language_download_aside(true, "OA team", std::nullopt, 4012345, true) ==
+        "4.0 MB \u21E9"
+    );
+    CHECK(
+        settings::language_download_aside(true, "Ridge", 0.92, 1100000, true) ==
+        "community \u00B7 92% \u00B7 1.1 MB"
+    );
+    CHECK(
+        settings::language_download_aside(true, "Ridge", std::nullopt, 1100000, true) ==
+        "community \u00B7 1.1 MB"
+    );
+    CHECK(
+        settings::language_download_aside(false, "OA team", 0.92, 4012345, true) ==
+        "not reviewed \u00B7 92% \u00B7 4.0 MB"
+    );
+    CHECK(
+        settings::language_download_aside(true, "OA team", std::nullopt, 4012345, false) ==
+        "downloads off"
+    );
+    // With nothing to download the page is unchanged: six choices, no divider.
+    auto plain = language_dialog();
+    CHECK(geometry::choice_count(plain, Setting::language) == 6);
+    CHECK(
+        find_part(settings::dialog_layout(plain), "AVAILABLE TO DOWNLOAD", settings::no_control) ==
+        nullptr
+    );
+    for (const oa::ui::kit::SizeClass size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large})
+        available_languages_at(size_class);
+}
+
 void drop_down_lists_scroll_and_open_over_their_field() {
     // A list of more items than it shows is as tall as most_shown_choices,
     // and opens over its field when it would reach below the footer's line.
@@ -2100,7 +2396,7 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     CHECK(settings::page_control(Page::developer) == 7);
     CHECK(settings::page_control(Page::game_files) == 8);
     CHECK(settings::most_listed_pages == 9);
-    CHECK(settings::page_count == 14);
+    CHECK(settings::page_count == 15);
     CHECK(settings::restore_control == 9);
     CHECK(settings::cancel_control == 10);
     CHECK(settings::ok_control == 11);
@@ -9168,6 +9464,208 @@ void the_larger_classes_press_each_control_where_it_is_drawn() {
     }
 }
 
+/// The nav's texts, top to bottom: entries and owner names. The footer's
+/// captions sit in the same columns and are not part of the list.
+std::vector<std::string> nav_texts(const settings::Dialog& dialog) {
+    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    std::vector<settings::LayoutPart> nav;
+    for (const auto& part : settings::dialog_layout(dialog)) {
+        if (part.text.empty() || part.rect.y < geometry::list_first_top ||
+            part.rect.y >= sized.footer_rule_row || part.rect.x >= sized.content_left)
+            continue;
+        nav.push_back(part);
+    }
+    std::sort(
+        nav.begin(),
+        nav.end(),
+        [](const settings::LayoutPart& left, const settings::LayoutPart& right) {
+            return left.rect.y < right.rect.y;
+        }
+    );
+    std::vector<std::string> texts;
+    for (const auto& part : nav)
+        texts.push_back(part.text);
+    return texts;
+}
+
+/// Registered pages: two owners in order under labelled dividers, sixteen
+/// pages scrolling at Compact with Tab reaching every entry, each page's
+/// rows inside the dialog at every size class, Tab in row order, OK writing
+/// a changed toggle and choice, Cancel writing nothing, and Restore defaults
+/// putting the page's keys back. A mod's options list none of them.
+void registered_pages_list_under_their_owners_and_write_on_ok() {
+    namespace kit = oa::ui::kit;
+    static const kit::PreferenceRow kToggle =
+        kit::preference_toggle("toggle", "Toggle", "check.toggle", "1");
+    static const std::array<std::string_view, 2> kModeIds{"quiet", "loud"};
+    static const std::array<std::string_view, 2> kModeCaptions{"Quiet", "Loud"};
+    static const kit::PreferenceRow kMode =
+        kit::preference_choice("mode", "Mode", "check.mode", "quiet", kModeIds, kModeCaptions);
+    static const std::array<kit::PreferenceRow, 2> kRows{kToggle, kMode};
+    static const kit::PreferenceRow kOne = kit::preference_toggle("one", "One", "alpha.one", "1");
+
+    const auto page_of = [](std::string id,
+                            std::string title,
+                            std::string owner,
+                            const kit::PreferenceRow* rows,
+                            std::size_t count) {
+        settings::RegisteredPage page;
+        page.id = std::move(id);
+        page.title = std::move(title);
+        page.owner = std::move(owner);
+        page.rows = rows;
+        page.row_count = count;
+        return page;
+    };
+
+    settings::Dialog listed = opened(Page::mods);
+    const std::array<settings::RegisteredPage, 3> owners{
+        page_of("alpha.one", "One", "Alpha", &kOne, 1),
+        page_of("alpha.two", "Two", "Alpha", &kOne, 1),
+        page_of("beta.three", "Three", "Beta", &kOne, 1),
+    };
+    settings::set_registered_pages(listed, owners, {});
+    const auto texts = nav_texts(listed);
+    const auto developer = std::find(texts.begin(), texts.end(), "Developer");
+    CHECK(developer != texts.end());
+    const std::vector<std::string> tail(developer + 1, texts.end());
+    CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta", "Three"}));
+
+    settings::Dialog options = opened_mod_options(Page::mod_keys);
+    settings::set_registered_pages(options, owners, {});
+    CHECK(options.registered_pages.empty());
+    for (const auto& text : nav_texts(options))
+        CHECK(text != "Alpha" && text != "Beta");
+
+    std::array<settings::RegisteredPage, 16> many{};
+    for (std::size_t index = 0; index < many.size(); ++index) {
+        many[index] =
+            page_of("n" + std::to_string(index), "Page " + std::to_string(index), "Pack", &kOne, 1);
+    }
+    settings::Dialog crowded = opened(Page::mods);
+    settings::set_registered_pages(crowded, many, {});
+    std::set<int32_t> reached;
+    for (int32_t press = 0; press < 200; ++press) {
+        if (settings::dialog_key(crowded, DialogKey::tab) != DialogAction::redraw)
+            break;
+        if (crowded.focused < settings::restore_control)
+            reached.insert(crowded.focused);
+    }
+    for (const Page page : settings::dialog_pages(settings::DialogKind::engine))
+        CHECK(reached.count(settings::page_control(page)) == 1);
+    for (std::size_t index = 0; index < many.size(); ++index)
+        CHECK(reached.count(settings::registered_nav_control(index)) == 1);
+    const int32_t last = settings::registered_nav_control(many.size() - 1);
+    for (int32_t press = 0; press < 200 && crowded.focused != last; ++press)
+        CHECK(settings::dialog_key(crowded, DialogKey::tab) == DialogAction::redraw);
+    CHECK(crowded.focused == last);
+    CHECK(crowded.nav_scroll > 0);
+    CHECK(find_part(settings::dialog_layout(crowded), {}, crowded.focused) != nullptr);
+    crowded.nav_scroll = 0;
+    CHECK(
+        settings::dialog_wheel(crowded, geometry::edge + 4, geometry::body_top + 4, -1.0F) ==
+        DialogAction::redraw
+    );
+    CHECK(crowded.nav_scroll > 0);
+
+    const settings::RegisteredPage sample =
+        page_of("check.page", "Check", "Check", kRows.data(), kRows.size());
+    for (const auto size_class :
+         {kit::SizeClass::compact, kit::SizeClass::regular, kit::SizeClass::large}) {
+        settings::Dialog dialog = opened(Page::mods);
+        dialog.size_class = size_class;
+        settings::set_registered_pages(dialog, std::span(&sample, 1), {});
+        dialog.page = Page::registered;
+        check_parts_inside_and_apart(dialog);
+        const auto parts = settings::dialog_layout(dialog);
+        CHECK(find_part(parts, "Toggle", settings::no_control) != nullptr);
+        CHECK(find_part(parts, "Mode", settings::no_control) != nullptr);
+        CHECK(find_part(parts, "Check", settings::no_control) != nullptr);
+    }
+
+    settings::Dialog dialog = opened(Page::mods);
+    settings::set_registered_pages(dialog, std::span(&sample, 1), {});
+    dialog.page = Page::registered;
+    dialog.focused = settings::no_control;
+    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::first_row_control);
+    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::first_row_control + 1);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
+    CHECK(dialog.registered_values.values.at("check.mode") == "loud");
+
+    const settings::LayoutPart* off = nullptr;
+    for (const auto& part : settings::dialog_layout(dialog)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (off == nullptr || part.rect.x < off->rect.x)
+            off = &part;
+    }
+    CHECK(off != nullptr);
+    CHECK(click(dialog, centre(off->rect)) == DialogAction::changed);
+    CHECK(dialog.registered_values.values.at("check.toggle") == "0");
+    const auto* ok = find_part(settings::dialog_layout(dialog), {}, settings::ok_control);
+    CHECK(ok != nullptr);
+    CHECK(click(dialog, centre(ok->rect)) == DialogAction::accepted);
+    const auto writes = settings::registered_writes(dialog);
+    bool wrote_toggle = false;
+    bool wrote_mode = false;
+    for (const auto& write : writes) {
+        if (write.key == "check.toggle" && write.value == "0")
+            wrote_toggle = true;
+        if (write.key == "check.mode" && write.value == "loud")
+            wrote_mode = true;
+    }
+    CHECK(wrote_toggle && wrote_mode);
+
+    settings::Dialog cancelled = opened(Page::mods);
+    settings::set_registered_pages(cancelled, std::span(&sample, 1), {});
+    cancelled.page = Page::registered;
+    const settings::LayoutPart* cancel_off = nullptr;
+    for (const auto& part : settings::dialog_layout(cancelled)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (cancel_off == nullptr || part.rect.x < cancel_off->rect.x)
+            cancel_off = &part;
+    }
+    CHECK(cancel_off != nullptr);
+    CHECK(click(cancelled, centre(cancel_off->rect)) == DialogAction::changed);
+    const auto* cancel =
+        find_part(settings::dialog_layout(cancelled), {}, settings::cancel_control);
+    CHECK(cancel != nullptr);
+    CHECK(click(cancelled, centre(cancel->rect)) == DialogAction::cancelled);
+    CHECK(settings::registered_writes(cancelled).empty());
+    CHECK(cancelled.registered_values.values.count("check.toggle") == 0);
+
+    settings::Dialog restored = opened(Page::mods);
+    settings::set_registered_pages(restored, std::span(&sample, 1), {});
+    restored.page = Page::registered;
+    const settings::LayoutPart* restore_off = nullptr;
+    for (const auto& part : settings::dialog_layout(restored)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (restore_off == nullptr || part.rect.x < restore_off->rect.x)
+            restore_off = &part;
+    }
+    CHECK(restore_off != nullptr);
+    CHECK(click(restored, centre(restore_off->rect)) == DialogAction::changed);
+    restored.focused = settings::restore_control;
+    CHECK(settings::dialog_key(restored, DialogKey::space) == DialogAction::changed);
+    CHECK(restored.registered_values.values.at("check.toggle") == "1");
+    CHECK(restored.registered_values.values.at("check.mode") == "quiet");
+
+    const auto list = geometry::dialog_list(dialog, nullptr);
+    bool named_toggle = false;
+    bool named_nav = false;
+    for (const auto& control : list.controls) {
+        if (control.name == "settings.check.page.toggle")
+            named_toggle = true;
+        if (control.name == "settings.nav.check.page")
+            named_nav = true;
+    }
+    CHECK(named_toggle && named_nav);
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -9184,6 +9682,7 @@ int main(int argc, char** argv) {
         language_drop_down_names_each_language_in_itself();
         language_drop_down_opens_marks_and_chooses();
         language_drop_down_locks_by_the_command_line();
+        available_languages_list_download_and_show_their_state();
         drop_down_lists_scroll_and_open_over_their_field();
         path_tails_keep_the_last_components_that_fit();
         text_size_runs_from_half_to_three_times_in_tenths();
@@ -9276,6 +9775,7 @@ int main(int argc, char** argv) {
         the_larger_classes_show_more_graphics_rows();
         the_larger_classes_keep_the_footer_buttons();
         the_larger_classes_press_each_control_where_it_is_drawn();
+        registered_pages_list_under_their_owners_and_write_on_ok();
     }
     if (failures != 0)
         return 1;

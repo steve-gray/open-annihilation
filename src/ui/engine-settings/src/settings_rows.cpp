@@ -10,6 +10,7 @@
 #include "stored_words.hpp"
 
 #include "geometry.hpp"
+#include "language_page.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/ui/kit/text.hpp"
@@ -190,6 +191,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kModGuardRows,
     kModToolsRows,
     kModChatRows,
+    {},
 };
 /// Each section's name, as its list entry shows it, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageNames{
@@ -207,6 +209,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Guarding",
     "Build tools",
     "Snap & chat",
+    "",
 };
 /// Each section's heading, in capitals, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageHeadings{
@@ -224,6 +227,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "GUARDING BUILDERS",
     "BUILD TOOLS",
     "SNAP & CHAT",
+    "",
 };
 /// Each section's name in kebab case, Page's enumerator with '_' as '-',
 /// in Page's order.
@@ -242,9 +246,10 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "mod-guard",
     "mod-tools",
     "mod-chat",
+    "registered",
 };
 static_assert(
-    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
+    static_cast<std::size_t>(Page::registered) + 1 == page_count,
     "every section has its rows, its name, its heading and its word"
 );
 
@@ -944,67 +949,6 @@ struct SnapRadius {
         return {&count, &get, &set, &stop_caption<&get, &set, &text>, nullptr};
     }
 };
-
-// Language: System default, then the languages the game draws.
-
-/// Returns the Language drop-down's items: System default and the languages offered.
-int32_t language_count(const SettingsModel&) {
-    return 1 + static_cast<int32_t>(offered_languages().size());
-}
-
-/// Returns the item of the language chosen; System default for one not offered.
-int32_t language_index(const SettingsModel& model) {
-    const auto offered = offered_languages();
-    for (std::size_t index = 0; index < offered.size(); ++index)
-        if (offered[index]->tag == model.settings->language)
-            return static_cast<int32_t>(index) + 1;
-    return 0;
-}
-
-/// Returns the language the operating system's preferred locales choose.
-///
-/// @param model the model
-/// @return the dialog's system language, or English
-const languages::Language& system_language(const SettingsModel& model) {
-    if (model.dialog != nullptr && model.dialog->system_language != nullptr)
-        return *model.dialog->system_language;
-    return languages::english();
-}
-
-/// Sets the language to an item, held to the items.
-void set_language(SettingsModel& model, int32_t index) {
-    const int32_t choice = on_stops(index, language_count(model));
-    EngineSettings& settings = *model.settings;
-    settings.language =
-        choice == 0 ? std::string(languages::system_choice)
-                    : std::string(offered_languages()[static_cast<std::size_t>(choice - 1)]->tag);
-    // A language drawn in the modern fonts turns them on, and keeps them on
-    // after it.
-    if (languages::chosen_language(settings.language, system_language(model)).needs ==
-        languages::TextNeeds::modern_fonts)
-        settings.modern_fonts = true;
-}
-
-/// Returns an item's id: the word the preferences keep it as, System
-/// default's languages::system_choice and a language's tag, in name form.
-std::string language_id(const SettingsModel& model, int32_t index) {
-    if (index < 0 || index >= language_count(model))
-        return {};
-    if (index == 0)
-        return word_form(languages::system_choice, false);
-    return word_form(offered_languages()[static_cast<std::size_t>(index - 1)]->tag, false);
-}
-
-/// Returns an item's text: System default naming the system's language, or a
-/// language named in itself.
-std::string language_caption(const SettingsModel& model, int32_t index) {
-    if (index < 0 || index >= language_count(model))
-        return {};
-    if (index == 0)
-        return std::string(shown_text("System default")) + " (" +
-               std::string(system_language(model).endonym) + ")";
-    return std::string(offered_languages()[static_cast<std::size_t>(index - 1)]->endonym);
-}
 
 // Use modern fonts for game text, and the Interface sizes it offers.
 
@@ -1840,26 +1784,6 @@ constexpr Spec hardware_acceleration_row() noexcept {
     );
     spec.hint_is_status = true;
     return changing(spec, &hardware_acceleration_hint, &lines<2>);
-}
-
-/// Language: System default and the languages the game draws.
-constexpr Spec language_row() noexcept {
-    return wide(
-        kit::choice(
-            "language",
-            "Language",
-            Stepper{
-                &language_count,
-                &language_index,
-                &set_language,
-                &language_caption,
-                nullptr,
-                &language_id
-            },
-            {"The game's own text and unit names, where its", "data has them in the language."}
-        ),
-        choice_width
-    );
 }
 
 // The patrol, guard and background sliders' stops.

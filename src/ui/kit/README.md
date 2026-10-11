@@ -122,6 +122,18 @@ until then.
   };
   ```
 
+  A row bound to a preference is a `PreferenceRow` (`RowSpec<PreferenceModel>`).
+  `preference_toggle`, `preference_choice`, `preference_slider` and
+  `preference_text_field` take the row's id, its label, its key, its default
+  text and its hint; a choice also takes its choices' ids and captions, a
+  slider its range and step. The model holds an
+  `oa::platform::preferences::Values`. A missing or malformed stored value
+  reads as the default. A toggle stores `1` or `0`, a choice one of its
+  choices' ids, a slider a decimal on its step, and a text field the player's
+  text up to 256 bytes. A key is dotted words of a to z, 0 to 9 and hyphens,
+  at least two words, at most 64 bytes, and it does not start with
+  `open-annihilation.`. `preference_key_problem` names a key that is refused.
+
   `view_of` reads a row's `RowView` from its spec and the model through the
   caller's text function; `place_rows` places a column of views,
   `rows_scroll` and `scroll` scroll it, and `add_rows` lists what the rows
@@ -323,10 +335,13 @@ form. Its text checks read the bundled fonts beside the test.
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item
-control listed once, a row of buttons' buttons and a clipped control's
-press area), and a text field's typing and editing over characters of one
-to four bytes. `ui-kit-components` checks each control's
-pixels, that `paint` matches a direct draw, and the controls' geometry.
+control listed once, a menu with a divider naming the other items by their
+ids and naming the divider not at all, a row of buttons' buttons and a
+clipped control's press area), and a text field's typing and editing over
+characters of one to four bytes. `ui-kit-components` checks each control's
+pixels, that `paint` matches a direct draw, and the controls' geometry,
+including a menu row that is a divider, one with a right-aligned aside and
+one that cannot be chosen.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
 `ui-kit-controls` checks each new control's pixels in the tokens above with
@@ -358,7 +373,11 @@ The metrics hold the settings dialog's, its notices' and its prompts' sizes
 for each class (`regular_metrics`, `large_metrics`, `metrics_of`); the
 Library's and the map browser's are theirs to add. A drop-down's open menu
 keeps above the footer line it is given (`choice_menu`), the Compact
-settings dialog's unless a larger dialog gives its own. The smooth form lays
+settings dialog's unless a larger dialog gives its own. A menu item may be
+a divider, drawn as a section heading and skipped by the focus, with no
+automation name; an item may carry a right-aligned aside, clipped before it
+meets the label; and an item may be greyed so a press does not choose it
+(`ChoiceMenuRow`). The smooth form lays
 the screens out in the game's fonts' widths and draws them in the modern
 fonts, so a text that would not fit its box is drawn a little smaller; the
 only fractional scale the layer offers is 150%. The arrows' rule is one function, its weight named, and is to be

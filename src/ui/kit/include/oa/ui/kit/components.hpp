@@ -135,6 +135,28 @@ inline constexpr int32_t compact_footer_line =
 /// @return the item's rectangle, inside the menu's border
 [[nodiscard]] Rect choice_item(const Rect& menu, int32_t place) noexcept;
 
+/// Returns the shown item under a point.
+///
+/// @param menu the menu
+/// @param x the point's column, in points
+/// @param y the point's row, in points
+/// @return the item's place among those shown, from 0; -1 when the point is
+///     on the border or outside the menu
+[[nodiscard]] int32_t choice_item_at(const Rect& menu, int32_t x, int32_t y) noexcept;
+
+/// Moves a marked item by a number of choices, skipping a divider it would
+/// land on, one further in the same direction.
+///
+/// Home and End are a move to the ends, which are not dividers. A step of 0
+/// stays. A landing that cannot leave a divider stays where it was.
+///
+/// @param look the menu, whose items name the dividers
+/// @param marked the item marked now, from 0
+/// @param step how many choices to move, negative towards the first
+/// @return the item to mark
+[[nodiscard]] int32_t
+choice_mark_toward(const ChoiceMenuLook& look, int32_t marked, int32_t step) noexcept;
+
 /// Draws the padlock and a lock's text, ending at the area's right.
 ///
 /// @param canvas where it is drawn

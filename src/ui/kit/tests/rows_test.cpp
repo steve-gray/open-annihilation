@@ -1510,6 +1510,71 @@ void a_page_painted_draws_its_switch_as_the_model_has_it() {
 
 } // namespace
 
+/// Each preference row writes its key and reads it back. A missing or
+/// malformed stored value reads as the default. A malformed key is refused.
+void preference_rows_round_trip_and_refuse_bad_keys() {
+    OA_CHECK(kit::preference_key_problem("check.toggle") == nullptr);
+    OA_CHECK(kit::preference_key_problem("ridge.mode") == nullptr);
+    OA_CHECK(kit::preference_key_problem("open-annihilation.language") != nullptr);
+    OA_CHECK(kit::preference_key_problem("Section|Key") != nullptr);
+    OA_CHECK(kit::preference_key_problem("toggle") != nullptr);
+    OA_CHECK(kit::preference_key_problem("Check.Toggle") != nullptr);
+    OA_CHECK(kit::preference_key_problem("") != nullptr);
+    OA_CHECK(kit::preference_key_problem(std::string(65, 'a') + ".b") != nullptr);
+
+    kit::PreferenceModel model;
+    const kit::PreferenceRow toggle =
+        kit::preference_toggle("toggle", "Toggle", "check.toggle", "1", {"A switch"});
+    OA_CHECK(kit::row_on(toggle, model));
+    model.values["check.toggle"] = "nope";
+    OA_CHECK(kit::row_on(toggle, model));
+    kit::set_row_on(toggle, model, false);
+    OA_CHECK(model.values["check.toggle"] == "0" && !kit::row_on(toggle, model));
+    kit::set_row_on(toggle, model, true);
+    OA_CHECK(model.values["check.toggle"] == "1" && kit::row_on(toggle, model));
+
+    constexpr std::array<std::string_view, 2> ids{"quiet", "loud"};
+    constexpr std::array<std::string_view, 2> captions{"Quiet", "Loud"};
+    const kit::PreferenceRow choice =
+        kit::preference_choice("mode", "Mode", "check.mode", "quiet", ids, captions, {"A choice"});
+    OA_CHECK(kit::row_index(choice, model) == 0);
+    OA_CHECK(kit::row_caption(choice, model, 1) == "Loud");
+    OA_CHECK(kit::row_choice_id(choice, model, 1) == "loud");
+    model.values["check.mode"] = "sideways";
+    OA_CHECK(kit::row_index(choice, model) == 0);
+    kit::set_row_index(choice, model, 1);
+    OA_CHECK(model.values["check.mode"] == "loud" && kit::row_index(choice, model) == 1);
+    const kit::RowView choice_view = kit::view_of(choice, model, {});
+    OA_CHECK(choice_view.value == "Loud" && choice_view.choice_ids[1] == "loud");
+
+    const kit::PreferenceRow slider =
+        kit::preference_slider("rate", "Rate", "check.rate", "0.5", 0.0, 1.0, 0.5, {"A slider"});
+    OA_CHECK(kit::row_count(slider, model) == 3);
+    OA_CHECK(kit::row_index(slider, model) == 1);
+    OA_CHECK(kit::row_caption(slider, model, kit::row_index(slider, model)) == "0.5");
+    model.values["check.rate"] = "0.25";
+    OA_CHECK(kit::row_index(slider, model) == 1);
+    kit::set_row_index(slider, model, 2);
+    OA_CHECK(model.values["check.rate"] == "1" && kit::row_index(slider, model) == 2);
+
+    const kit::PreferenceRow field =
+        kit::preference_text_field("note", "Note", "check.note", "hello", {"A field"});
+    OA_CHECK(kit::view_of(field, model, {}).text == "hello");
+    model.values["check.note"] = std::string(kit::preference_text_most + 1, 'x');
+    OA_CHECK(kit::view_of(field, model, {}).text == "hello");
+    model.values["check.note"] = "";
+    std::size_t caret = 0;
+    OA_CHECK(kit::type(field, model, caret, "ab").event == kit::RowEvent::changed);
+    OA_CHECK(model.values["check.note"] == "ab" && caret == 2);
+    const std::string full(kit::preference_text_most, 'z');
+    model.values["check.note"] = full;
+    caret = full.size();
+    OA_CHECK(kit::type(field, model, caret, "q").event == kit::RowEvent::none);
+    OA_CHECK(model.values["check.note"] == full);
+    OA_CHECK(kit::edit(field, model, caret, kit::Key::backspace).event == kit::RowEvent::changed);
+    OA_CHECK(model.values["check.note"].size() == kit::preference_text_most - 1);
+}
+
 int main() {
     every_kind_lies_by_the_rows_rules();
     rows_shaped_as_controls_lie_where_the_dialog_places_them();
@@ -1532,5 +1597,6 @@ int main() {
     a_text_field_takes_typing_and_editing();
     a_link_acts_and_a_text_row_takes_nothing();
     a_page_painted_draws_its_switch_as_the_model_has_it();
+    preference_rows_round_trip_and_refuse_bad_keys();
     return oa::test::check_exit_status();
 }

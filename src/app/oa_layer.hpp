@@ -28,6 +28,7 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/screen_registry.hpp"
+#include "oa/ui/screen_registry/kit.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -378,8 +379,12 @@ automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 ///
 /// A screen somebody asked for joins at once (push); one nobody asked for
 /// at that moment, such as a notice or an install's question, waits in a
-/// queue, first in, first out, until no modal screen shows
-/// (show_when_free), so that two never show at once.
+/// queue, first in, first out (show_when_free), so that two never show at
+/// once. The first waiting screen is pushed while the layer has no modal
+/// screen up, no frontend message box is up, and no match is being played.
+/// A registered request joins that same queue and is never held back because
+/// nobody is watching. A question a screen asks about its own content is
+/// pushed over that screen and is not queued.
 ///
 /// On the front end the screens are laid out at the size class of the
 /// window's canvas and drawn at its whole scale (view), centred in the
@@ -407,8 +412,9 @@ class OaLayer {
     /// @param runtime the runtime it hosts screens for
     explicit OaLayer(Runtime& runtime) noexcept;
 
-    /// Lets the screens, and those waiting, go without closing them, and
-    /// destroys the textures.
+    /// Answers each registered prompt still queued or shown with −1, lets the
+    /// screens and those waiting go without closing the others, and destroys
+    /// the textures. Calling drop_pending_prompts first, and again here, is safe.
     ~OaLayer();
 
     OaLayer(const OaLayer&) = delete;
@@ -423,9 +429,10 @@ class OaLayer {
 
     /// Shows a screen nobody asked for at this moment, such as a notice or an
     /// install's question, once the layer is free: the screens wait first in,
-    /// first out, and the first is pushed while no modal screen shows, at
-    /// once, after an input or a tick, or when a screen is closed
-    /// (close); one at a time while each shows.
+    /// first out, and the first is pushed while no modal screen shows, no
+    /// frontend message box is up and no match is being played, at once,
+    /// after an input or a tick, or when a screen is closed (close); one at
+    /// a time while each shows.
     ///
     /// @param screen the screen; null is ignored
     void show_when_free(std::unique_ptr<LayerScreen> screen);
@@ -743,6 +750,43 @@ class OaLayer {
         const oa::ui::display_layout::MatchLayout& match_layout, bool fit = false
     ) noexcept;
 
+    /// Returns the settings pages registered for this runtime.
+    ///
+    /// @return the registry; the caller keeps each page's rows alive
+    [[nodiscard]] SettingsRegistry& registered_settings() noexcept { return settings_pages_; }
+
+    /// Returns the kit screens registered for this runtime.
+    ///
+    /// @return the registry
+    [[nodiscard]] KitScreenRegistry& registered_screens() noexcept { return kit_screens_; }
+
+    /// Opens a registered kit screen by name on this layer: modal, over a
+    /// backdrop, filling the front end's room, laid out from its descriptor
+    /// and drawn with the kit. An unknown name opens nothing.
+    ///
+    /// @param name the screen's name
+    /// @return true when the screen was opened
+    bool open_registered_screen(std::string_view name);
+
+    /// Queues a registered notice on this layer's one queue. Its word is
+    /// "registered", so it does not take the engine notice's name.
+    ///
+    /// @param request the notice; its strings are copied
+    /// @return an id that is never 0; 0 when the request is malformed
+    uint32_t queue_notice(const NoticeRequest& request);
+
+    /// Queues a registered prompt on this layer's one queue. Its word is
+    /// "prompt". answered is called once, with the button pressed, or with
+    /// −1 from drop_pending_prompts when the prompt is still queued or shown.
+    ///
+    /// @param request the prompt; its strings are copied
+    /// @return an id that is never 0; 0 when the request is malformed
+    uint32_t queue_prompt(const PromptRequest& request);
+
+    /// Answers every registered prompt still queued or shown with −1, once,
+    /// and takes it off. The runtime's end calls this. Calling it twice is safe.
+    void drop_pending_prompts();
+
     /// Copies a surface into a rectangle of a layer of straight colours and
     /// opacity, each layer pixel taking the surface pixel it lands on
     /// (nearest): fully opaque, or, with the surface's opacity, laid over
@@ -868,8 +912,13 @@ class OaLayer {
     void drop_waiting(const LayerScreen* screen);
 
     /// Pushes the waiting screens, first in first, while no modal screen
-    /// shows.
+    /// shows, no frontend message box is open and no match is being played.
     void show_waiting();
+
+    /// Returns the next id for a registered notice or prompt. Never 0.
+    ///
+    /// @return the id
+    uint32_t take_request_id() noexcept;
 
     /// Takes the input the in-game OA button answers to: the shortcut,
     /// Ctrl+F2 while the profile offers the mod options, and the pointer
@@ -961,6 +1010,16 @@ class OaLayer {
     /// The fonts generation of the language's faces the modern fonts hold
     /// (Runtime::follow_language_fonts); empty before they took any.
     mutable std::optional<uint64_t> smooth_fonts_generation_{};
+    /// Settings pages registered for this runtime.
+    SettingsRegistry settings_pages_{};
+    /// Kit screens registered for this runtime.
+    KitScreenRegistry kit_screens_{};
+    /// The next id queue_notice and queue_prompt hand out. Never 0.
+    uint32_t next_request_{1};
+    /// One registered prompt still to answer.
+    struct RegisteredPrompt;
+    /// Registered prompts still queued or shown. drop_pending_prompts answers each.
+    std::vector<std::shared_ptr<RegisteredPrompt>> prompts_{};
 };
 
 /// A notice of Open Annihilation's own (kit::Notice) as a screen of the OA
@@ -1007,6 +1066,9 @@ class NoticeScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
+    /// Shows the notice on any menu screen. It still shows in no match.
+    void show_on_any_menu() noexcept { any_menu_ = true; }
+
     /// Returns the notice's word (kit::notice_word_of): "notice" unless it
     /// gives its own.
     ///
@@ -1020,7 +1082,8 @@ class NoticeScreen final : public LayerScreen {
     /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
-    /// @return its place; empty in a match, over another screen, or without fonts
+    /// @return its place; empty in a match, over another screen unless it shows
+    ///     on any menu, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
 
     /// Lays the notice out at the view's size class (kit::Notice::size_class).
@@ -1113,6 +1176,7 @@ class NoticeScreen final : public LayerScreen {
     oa::ui::kit::Notice notice_; ///< the notice
     Host host_;                  ///< what its host does
     uint64_t revision_{};        ///< counts the changes to its look
+    bool any_menu_{};            ///< shows on any menu, never in a match
 };
 
 /// A question of Open Annihilation's own (kit::Question) as a screen of the
@@ -1178,6 +1242,9 @@ class QuestionScreen final : public LayerScreen {
     /// @return the screen
     [[nodiscard]] Screen over() const noexcept { return over_; }
 
+    /// Shows the question on any menu screen. It still shows in no match.
+    void show_on_any_menu() noexcept { any_menu_ = true; }
+
     /// Returns the question's word (kit::question_word_of): "prompt" unless
     /// it gives its own.
     ///
@@ -1191,7 +1258,8 @@ class QuestionScreen final : public LayerScreen {
     /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
-    /// @return its place; empty in a match, over another screen, or without fonts
+    /// @return its place; empty in a match, over another screen unless it shows
+    ///     on any menu, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
 
     /// Lays the question out at the view's size class
@@ -1290,6 +1358,7 @@ class QuestionScreen final : public LayerScreen {
     uint64_t revision_{};            ///< counts the changes to its look
     /// The size class the layer lays the question out at (lay_out).
     oa::ui::kit::SizeClass size_class_{oa::ui::kit::SizeClass::compact};
+    bool any_menu_{}; ///< shows on any menu, never in a match
 };
 
 } // namespace oa::app

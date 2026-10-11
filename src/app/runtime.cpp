@@ -369,6 +369,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_registered_kit) {
+            check_registered_kit();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_user_folder) {
             check_user_folder();
             flush_preferences();
@@ -761,6 +766,8 @@ void Runtime::idle_tick() {
     tell_found_install();
     tell_incomplete_mod();
     tick_content();
+    // A catalogue that moved on adds its language packs to the registry.
+    note_catalogue_languages();
     tell_mod_installs();
     tell_challenges();
     render();

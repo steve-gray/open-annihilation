@@ -6,6 +6,7 @@
 // main menu and in a match.
 
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/prompts.hpp"
@@ -1101,11 +1102,38 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     dialog.user_folder = path_to_utf8(user_folder_);
     // The languages whose packs turn Unicode chat on.
     dialog.unicode_chat_languages = unicode_chat_language_tags();
+    // Languages a catalogue offers that are not installed, and where a
+    // download of one of them stands.
+    std::ignore = refresh_settings_languages(dialog);
     // Developer Mode opens as it was left: its open areas and hacks and its filter.
     if (state.last_developer_list) {
         dialog.developer.areas_open = state.last_developer_list->areas_open;
         dialog.developer.hacks_open = state.last_developer_list->hacks_open;
         dialog.developer.active_only = state.last_developer_list->active_only;
+    }
+    // Registered pages join the engine's dialog after it is open, so open
+    // does not wipe them. A mod's options never lists them. The rows stay
+    // the registry's caller.
+    if (oa_layer_ != nullptr) {
+        const SettingsRegistry& registry = oa_layer_->registered_settings();
+        std::vector<settings::RegisteredPage> pages;
+        pages.reserve(registry.page_count);
+        for (uint32_t index = 0; index < registry.page_count; ++index) {
+            const SettingsPageDesc& desc = registry.pages[index];
+            settings::RegisteredPage page;
+            if (desc.id != nullptr)
+                page.id = desc.id;
+            if (desc.title != nullptr)
+                page.title = desc.title;
+            if (desc.owner != nullptr)
+                page.owner = desc.owner;
+            page.rows = desc.rows;
+            page.row_count = desc.row_count;
+            page.applied = desc.applied;
+            page.state = desc.state;
+            pages.push_back(std::move(page));
+        }
+        settings::set_registered_pages(dialog, pages, preference_values_);
     }
     return dialog;
 }
@@ -1224,6 +1252,12 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         if (screen_size_moved)
             chosen.screen_size = EngineSettingsState::stored_screen_size(*this, chosen.screen_size);
         apply_engine_settings(chosen);
+        // Changed registered keys join the values write_settings keeps, and
+        // their owners are told once the flush succeeds.
+        const std::vector<settings::RegisteredWrite> registered =
+            settings::registered_writes(*dialog);
+        for (const settings::RegisteredWrite& write : registered)
+            preference_values_[write.key] = write.value;
         const auto failure = save_engine_settings(dialog->opened, chosen, dialog->restored);
         state.last_page = dialog->page;
         state.last_developer_list = dialog->developer;
@@ -1235,6 +1269,10 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             // plays: the game stays as it is and says so.
             EngineSettingsState::report_failed_save(*this, *failure);
             return true;
+        }
+        for (const settings::RegisteredWrite& write : registered) {
+            if (write.applied != nullptr)
+                write.applied(write.state, write.key.c_str(), write.value.c_str());
         }
         // SWITCH reloads the game for the mod now stored, back on the main
         // menu: the loop ends after this frame and main() starts afresh.
@@ -1271,6 +1309,25 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open, unless the mod played rolls back as the
         // run ends.
         return roll_back_mod_folder(*dialog);
+    case settings::DialogAction::download_language: {
+        // The dialog stays open. The language applies when the pack arrives.
+        std::string why;
+        const bool queued = download_language(dialog->download_request, why);
+        for (settings::AvailableLanguage& pack : dialog->available_languages) {
+            if (pack.tag != dialog->download_request)
+                continue;
+            if (queued) {
+                pack.state = settings::AvailableLanguage::State::waiting;
+                pack.percent = 0;
+                pack.failure.clear();
+            } else {
+                pack.state = settings::AvailableLanguage::State::failed;
+                pack.failure = std::move(why);
+            }
+            break;
+        }
+        return false;
+    }
     }
     return false;
 }

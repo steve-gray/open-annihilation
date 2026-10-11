@@ -547,6 +547,11 @@ struct Options {
     // its sections, controls, keys, OK, Cancel and Restore defaults, the
     // preferences it writes, and each setting taking effect.
     bool check_engine_settings = false;
+    // Drives a settings page, a kit screen, a notice and a prompt registered
+    // from inside the engine: the page under its owner's divider at three
+    // window sizes, the screen opened by name, and the notice, the prompt
+    // and the saves notice one at a time. Needs --preferences-file.
+    bool check_registered_kit = false;
     // Drives the player's own folder through the SDL presenter: the saved
     // games moved once from beside the preferences file, the main menu's
     // notice of the move shown once and closed, and the settings' Your files
