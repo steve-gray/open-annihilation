@@ -21,6 +21,7 @@
 #include "oa/netgame/records.hpp"
 #include "oa/present/palette_tables.hpp"
 #include "oa/ui/frontend_renderer.hpp"
+#include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/data/unit_definitions.hpp"
 #include "oa/test/game_assets.hpp"
@@ -863,9 +864,13 @@ int32_t first_row_knob(const mp::Control& list, const mp::Control& bar) {
     );
 }
 
-constexpr uint32_t kKeyUp = 0x40000052;
+constexpr uint32_t kKeyTab = 0x09;
+constexpr uint32_t kKeyRight = 0x4000004F;
+constexpr uint32_t kKeyLeft = 0x40000050;
 constexpr uint32_t kKeyDown = 0x40000051;
+constexpr uint32_t kKeyUp = 0x40000052;
 constexpr uint32_t kKeyReturn = 0x0d;
+constexpr uint16_t kKeyShift = 0x0001;
 constexpr uint32_t kKeyEscape = 0x1b;
 constexpr uint32_t kKeyN = 'n';
 constexpr uint32_t kKeyY = 'y';
@@ -2061,6 +2066,356 @@ void check_presence_badges(Driver& d) {
     expect(
         mp::multiplayer_presence_badges(spots, 1) == 1 && spots[0].slot == 0,
         "a list of one takes the first badge"
+    );
+}
+
+/// Draws the current screen again, without a tick.
+void redraw(Driver& d) {
+    const auto* screen = d.desc(d.current);
+    screen->draw(&d.ctx, screen->state);
+}
+
+/// A colour of one pixel of the drawn screen.
+Rgb pixel_at(const Driver& d, int32_t x, int32_t y) {
+    if (x < 0 || y < 0 || x >= static_cast<int32_t>(d.surface.width) ||
+        y >= static_cast<int32_t>(d.surface.height))
+        return {};
+    const auto at =
+        (static_cast<std::size_t>(y) * d.surface.width + static_cast<std::size_t>(x)) * 3U;
+    return {d.surface.rgb[at], d.surface.rgb[at + 1], d.surface.rgb[at + 2]};
+}
+
+/// One stop Tab reached, and whether that control is a list or a player's row.
+struct FocusStop {
+    std::string name;
+    bool list = false;
+    int32_t slot = -1;
+};
+
+/// The name of the focused control, or empty when nothing is focused.
+std::string focused_name() {
+    const auto& panel = mp::multiplayer_panel();
+    if (panel.focus <= 0 || panel.focus >= panel.count)
+        return {};
+    return std::string(mp::control_name(panel.controls[static_cast<std::size_t>(panel.focus)]));
+}
+
+/// The slot whose OA badge the battle room would hand to the information key.
+///
+/// @return the focused row's slot when that row shows a badge; otherwise none
+int32_t focused_badge_slot() {
+    const int32_t slot = mp::multiplayer_focused_player_slot();
+    if (slot < 0)
+        return mp::presence_card_no_slot;
+    mp::PresenceBadgeSpot spots[mp::kSlotCount]{};
+    const auto count = mp::multiplayer_presence_badges(spots, mp::kSlotCount);
+    for (int32_t index = 0; index < count; ++index)
+        if (spots[index].slot == slot)
+            return slot;
+    return mp::presence_card_no_slot;
+}
+
+/// Seats a remote player and, when a record is given, marks the row as OA.
+///
+/// @param lobby the battle room
+/// @param player_id the player's id
+/// @param name the name the row shows
+/// @param record the presence record; empty leaves a player with no OA badge
+/// @return the slot, or -1 when the player is not seated
+int32_t seat_remote(
+    mp::Lobby& lobby, uint32_t player_id, const char* name, const std::vector<uint8_t>& record
+) {
+    if (!mp::lobby_add_player(lobby, player_id, name))
+        return -1;
+    const auto slot = mp::slot_for_player_id(lobby, player_id);
+    auto* info = slot >= 0 ? mp::slot_info(lobby, slot) : nullptr;
+    if (info == nullptr)
+        return -1;
+    info->state = mp::kInfoStatePlaying;
+    info->color = static_cast<uint8_t>(slot);
+    info->version_major = 3;
+    info->version_minor = 1;
+    if (record.empty())
+        return slot;
+    info->engine_signature[0] = oa::netgame::engine_signature_first;
+    info->engine_signature[1] = oa::netgame::engine_signature_second;
+    mp::LobbyEvent event{};
+    event.kind = mp::LobbyEventKind::record;
+    event.player_id = player_id;
+    std::copy(record.begin(), record.end(), event.data);
+    event.size = static_cast<uint16_t>(record.size());
+    if (!mp::lobby_apply_event(lobby, event))
+        return -1;
+    return slot;
+}
+
+/// Presses Tab until the focused control has a name, or the walk is exhausted.
+///
+/// @param d the screens
+/// @param name the control's name
+/// @return true when that control is focused
+bool tab_until_name(Driver& d, std::string_view name) {
+    for (int guard = 0; guard < 64; ++guard) {
+        if (focused_name() == name)
+            return true;
+        d.key(kKeyTab);
+    }
+    return focused_name() == name;
+}
+
+/// Presses Tab until a player's row is focused, or the walk is exhausted.
+///
+/// @param d the screens
+/// @param slot the row's slot
+/// @return true when that row is focused
+bool tab_until_slot(Driver& d, int32_t slot) {
+    for (int guard = 0; guard < 64; ++guard) {
+        if (mp::multiplayer_focused_player_slot() == slot)
+            return true;
+        d.key(kKeyTab);
+    }
+    return mp::multiplayer_focused_player_slot() == slot;
+}
+
+/// Tab and the arrow keys reach each remote player's row, skip the local
+/// row, and F1 on a focused OA row opens its card.
+void check_player_row_focus(Driver& d) {
+    struct Guard {
+        ~Guard() { mp::multiplayer_bind_presence_record(nullptr, 0); }
+    } guard;
+
+    mp::multiplayer_reset();
+    const auto host_record = presence_with_hash(0x11);
+    mp::multiplayer_bind_presence_record(host_record.data(), host_record.size());
+    if (!host_battleroom(d, "Rows", "Host"))
+        return;
+    auto& lobby = mp::multiplayer_lobby();
+    const auto local = lobby.game->local_player_index;
+    const auto* own = control("PLAYER" + std::to_string(local));
+    expect(own != nullptr && own->type == mp::ControlType::label, "the local row stays a label");
+    const auto first_oa = presence_with_hash(0x21);
+    const auto second_oa = presence_with_hash(0x22);
+    const int32_t kirby = seat_remote(lobby, 0x4321, "Kirby", first_oa);
+    const int32_t mira = seat_remote(lobby, 0x4322, "Mira", second_oa);
+    const int32_t classic = seat_remote(lobby, 0x4323, "OldSchool", {});
+    expect(
+        kirby >= 0 && mira >= 0 && classic >= 0 && kirby != local && mira != local &&
+            classic != local,
+        "two OA players and one without a badge join other rows"
+    );
+    if (kirby < 0 || mira < 0 || classic < 0)
+        return;
+    d.frame();
+    expect(focused_name() == "MESSAGE", "the chat line keeps the focus as the room opens");
+    expect(mp::multiplayer_focused_player_slot() < 0, "no player's row is focused yet");
+
+    const auto* kirby_row = control("PLAYER" + std::to_string(kirby));
+    expect(kirby_row != nullptr, "the first OA player's row is a control");
+    if (kirby_row == nullptr)
+        return;
+    const auto kirby_box = badge_box(*kirby_row);
+    redraw(d);
+    const Rgb ring_before = pixel_at(d, kirby_box.x - 1, kirby_box.y);
+    const auto sent_before = mp::multiplayer_loopback().sent_count;
+
+    std::vector<FocusStop> walked;
+    bool back_at_chat = false;
+    for (int guard = 0; guard < 64 && !back_at_chat; ++guard) {
+        d.key(kKeyTab);
+        FocusStop stop;
+        stop.name = focused_name();
+        const auto& panel = mp::multiplayer_panel();
+        if (panel.focus > 0 && panel.focus < panel.count) {
+            const auto& focused = panel.controls[static_cast<std::size_t>(panel.focus)];
+            stop.list = focused.type == mp::ControlType::list_box;
+        }
+        stop.slot = mp::multiplayer_focused_player_slot();
+        if (stop.name == "MESSAGE")
+            back_at_chat = true;
+        else
+            walked.push_back(stop);
+    }
+    if (!back_at_chat) {
+        std::fprintf(stderr, "focus walk:");
+        for (const auto& stop : walked)
+            std::fprintf(stderr, " %s", stop.name.c_str());
+        std::fprintf(stderr, "\n");
+    }
+    expect(back_at_chat, "Tab returns to the chat line");
+    bool saw_local = false;
+    bool saw_kirby = false;
+    bool saw_mira = false;
+    bool saw_classic = false;
+    bool lists_before_rows = true;
+    bool seen_row = false;
+    for (const auto& stop : walked) {
+        if (stop.slot == local)
+            saw_local = true;
+        if (stop.slot == kirby)
+            saw_kirby = true;
+        if (stop.slot == mira)
+            saw_mira = true;
+        if (stop.slot == classic)
+            saw_classic = true;
+        if (stop.list && seen_row)
+            lists_before_rows = false;
+        if (stop.slot >= 0)
+            seen_row = true;
+    }
+    expect(
+        saw_kirby && saw_mira && saw_classic && !saw_local && lists_before_rows,
+        "Tab reaches each remote row after the lists and skips the local row"
+    );
+    expect(mp::multiplayer_loopback().sent_count == sent_before, "moving the focus sends nothing");
+
+    d.key(kKeyTab, kKeyShift);
+    expect(
+        mp::multiplayer_focused_player_slot() == classic,
+        "Shift+Tab from the chat line focuses the last remote row, and names its slot"
+    );
+    d.key(kKeyDown);
+    expect(focused_name() == "MESSAGE", "Down from the last remote row returns to the chat line");
+    d.key(kKeyLeft);
+    d.key(kKeyRight);
+    expect(focused_name() == "MESSAGE", "Left and Right stay in the chat line");
+    d.key(kKeyUp);
+    expect(
+        mp::multiplayer_focused_player_slot() == classic,
+        "the pad's Up from the chat line focuses the last remote row"
+    );
+    d.key(kKeyLeft);
+    expect(
+        mp::multiplayer_focused_player_slot() == mira,
+        "the pad's Left moves to the remote row above"
+    );
+
+    bool stayed_in_list = true;
+    for (const auto& stop : walked) {
+        if (!stop.list)
+            continue;
+        if (!tab_until_name(d, stop.name))
+            stayed_in_list = false;
+        const auto& panel = mp::multiplayer_panel();
+        const auto* list = panel.focus > 0 && panel.focus < panel.count
+                               ? &panel.controls[static_cast<std::size_t>(panel.focus)]
+                               : nullptr;
+        if (list == nullptr || list->list_item_height == 0)
+            continue;
+        const auto selection = list->list_selection;
+        d.key(kKeyDown);
+        d.key(kKeyUp);
+        if (focused_name() != stop.name || list->list_selection != selection)
+            stayed_in_list = false;
+    }
+    expect(stayed_in_list, "Up and Down stay inside a list and move its selection");
+
+    expect(
+        tab_until_slot(d, kirby) && mp::multiplayer_focused_player_slot() == kirby,
+        "the focused OA row's slot is the one multiplayer_focused_player_slot names"
+    );
+    redraw(d);
+    const Rgb ring_focused = pixel_at(d, kirby_box.x - 1, kirby_box.y);
+    expect(
+        ring_focused != ring_before, "a focused row is drawn with the battle room's focus marker"
+    );
+    mp::PresenceCardTrigger trigger;
+    expect(trigger.key_info(focused_badge_slot()), "F1 on the focused OA row is taken");
+    expect(trigger.open_slot() == kirby, "F1 opens that player's card");
+    expect(
+        tab_until_slot(d, mira) && trigger.focus(focused_badge_slot()),
+        "the card follows the focus to the other OA row"
+    );
+    expect(trigger.open_slot() == mira, "the card is now the other player's");
+    expect(tab_until_slot(d, classic), "Tab reaches the row with no OA badge");
+    mp::PresenceCardTrigger classic_key;
+    expect(
+        focused_badge_slot() == mp::presence_card_no_slot &&
+            !classic_key.key_info(focused_badge_slot()),
+        "F1 on a focused row with no OA badge opens no card"
+    );
+    expect(tab_until_name(d, "MESSAGE"), "Tab returns to the chat line again");
+    redraw(d);
+    expect(
+        pixel_at(d, kirby_box.x - 1, kirby_box.y) == ring_before,
+        "with the focus back on the chat line the row's focus marker is gone"
+    );
+
+    // Return and the pad's A are the information key on a focused row.
+    mp::PresenceCardTrigger row_key;
+
+    struct RowKeyGuard {
+        ~RowKeyGuard() { mp::multiplayer_bind_row_key(nullptr); }
+    } row_key_guard;
+
+    mp::multiplayer_bind_row_key(&row_key);
+    const auto kirby_status = mp::slot_player(lobby, kirby).status;
+    const auto kirby_used = mp::slot_player(lobby, kirby).in_use;
+    const auto kirby_id = mp::slot_player(lobby, kirby).player_id;
+    const auto mira_status = mp::slot_player(lobby, mira).status;
+    const auto classic_status = mp::slot_player(lobby, classic).status;
+    const auto sent_at_keys = mp::multiplayer_loopback().sent_count;
+    expect(tab_until_slot(d, classic), "the row with no badge is focused for Return");
+    d.key(kKeyReturn);
+    expect(
+        row_key.open_slot() == mp::presence_card_no_slot &&
+            mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, classic).status == classic_status &&
+            mp::multiplayer_loopback().sent_count == sent_at_keys,
+        "Return on a focused row with no OA badge does nothing and sends nothing"
+    );
+    expect(tab_until_slot(d, kirby), "the first OA row is focused for Return");
+    d.key(kKeyReturn);
+    expect(
+        row_key.open_slot() == kirby && mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, kirby).status == kirby_status &&
+            mp::slot_player(lobby, kirby).in_use == kirby_used &&
+            mp::slot_player(lobby, kirby).player_id == kirby_id &&
+            mp::slot_player(lobby, mira).status == mira_status &&
+            mp::multiplayer_loopback().sent_count == sent_at_keys,
+        "Return on a focused OA row opens its card and does not reject the player"
+    );
+
+    int32_t computer = -1;
+    for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
+        if (mp::slot_player(lobby, slot).status == mp::kSlotOpen) {
+            computer = slot;
+            break;
+        }
+    }
+    expect(computer >= 0, "an open slot can hold an AI");
+    if (computer >= 0) {
+        mp::lobby_add_computer(lobby, computer);
+        d.frame();
+        const auto sent_at_ai = mp::multiplayer_loopback().sent_count;
+        const auto ai_status = mp::slot_player(lobby, computer).status;
+        expect(
+            tab_until_slot(d, computer) && ai_status == mp::kSlotComputer,
+            "the AI's row can take the focus"
+        );
+        d.key(kKeyReturn);
+        expect(
+            row_key.open_slot() == kirby &&
+                mp::slot_player(lobby, computer).status == mp::kSlotComputer &&
+                mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+                mp::multiplayer_loopback().sent_count == sent_at_ai,
+            "Return on a focused AI row does not cycle it, close the card or send anything"
+        );
+    }
+
+    const auto rejects_before = rejects_sent();
+    expect(tab_until_slot(d, kirby), "the OA row is focused again before the click");
+    expect(d.click(("PLAYER" + std::to_string(kirby)).c_str()), "the host clicks that row");
+    expect(
+        mp::multiplayer_modal_kind() == mp::ModalKind::confirm &&
+            mp::slot_for_player_id(lobby, kirby_id) == kirby && rejects_sent() == rejects_before,
+        "a click on the row still asks before rejecting, and sends no reject"
+    );
+    expect(d.click("CHOICE2"), "the question is declined");
+    expect(
+        mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, kirby).player_id == kirby_id &&
+            mp::slot_player(lobby, kirby).status == kirby_status,
+        "declining the question leaves the player in the room"
     );
 }
 
@@ -3436,6 +3791,7 @@ int main() {
     check_pack_maps(d);
     check_bound_base_maps(d);
     check_presence_badges(d);
+    check_player_row_focus(d);
 
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);

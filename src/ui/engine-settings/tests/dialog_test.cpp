@@ -665,8 +665,8 @@ void every_control_is_pressed_where_it_is_drawn() {
                 continue;
             // A disabled button is drawn and takes no press. EMPTY is disabled
             // while nothing is kept.
-            const oa::ui::kit::Control* control =
-                oa::ui::kit::control_of(geometry::dialog_list(dialog, nullptr), part.control);
+            const auto list = geometry::dialog_list(dialog, nullptr);
+            const oa::ui::kit::Control* control = oa::ui::kit::control_of(list, part.control);
             if (control == nullptr || !control->enabled)
                 continue;
             const Point point = centre(part.rect);
@@ -9520,8 +9520,8 @@ void the_larger_classes_press_each_control_where_it_is_drawn() {
             for (const auto& part : settings::dialog_layout(dialog)) {
                 if (part.control == settings::no_control)
                     continue;
-                const oa::ui::kit::Control* control =
-                    oa::ui::kit::control_of(geometry::dialog_list(dialog, nullptr), part.control);
+                const auto list = geometry::dialog_list(dialog, nullptr);
+                const oa::ui::kit::Control* control = oa::ui::kit::control_of(list, part.control);
                 if (control == nullptr || !control->enabled)
                     continue;
                 const Point point = centre(part.rect);
