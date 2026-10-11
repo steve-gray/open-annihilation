@@ -13,6 +13,13 @@ until then.
   `large_metrics`, which give the settings dialog, its notices and its
   prompts more room (their sizes, the padding, the nav list's width and the
   characters a host's line under a row holds) and keep every other size.
+  The Game files screen's and the folder chooser's tokens (`screen_colour`)
+  are one family with the dialog's. Three that nearly matched the dialog's
+  are now the dialog's: `text` is `colour::text` (e7e8df, was e8eae4),
+  `line` is `colour::control_border` (3a4034, was 3a4037) and `amber` is
+  `colour::lock` (e0b04f, was e8b44c). `background`, `green`, `ink` and
+  `button_text` were the dialog's already; `panel` (232721), `dim` (9aa094)
+  and `red` (e06c5c, the kit's `colour::danger`) are the screens' own.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
   boxed line, and the one wrap; `fitting_start`, where the wrap breaks a word
   wider than a line; `fit`, a line shortened to a width with the `ellipsis`;
@@ -232,8 +239,9 @@ focused button, link, list row or tab.
 
 ## Tests
 
-`ui-kit-theme` checks every token against the value it replaces, the
-Compact metrics against 0.7.3's numbers, Regular's and Large's against the
+`ui-kit-theme` checks every token against the value it replaces (the
+screen's text, line and amber against the dialog's text, control border and
+lock), the Compact metrics against 0.7.3's numbers, Regular's and Large's against the
 design's table of sizes and that they differ from Compact's in nothing
 else, and that each class's dialog and notices fit the least window of their
 class. `ui-kit-text` checks the UTF-8
@@ -290,8 +298,7 @@ Library's and the map browser's are theirs to add. A drop-down's open menu
 keeps above the footer line it is given (`choice_menu`), the Compact
 settings dialog's unless a larger dialog gives its own. The canvas draws at
 whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
-tuned after controller playtests (D30). The screens' colour family converges
-with U13 and U14. The look of the list rows, chips, fields, tabs, cards,
+tuned after controller playtests (D30). The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's
 tokens; it is reviewed in the gallery (U12) and pinned by golden frames
 (U17). A field takes typed text and the editing keys; it has no selection,
