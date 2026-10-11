@@ -197,8 +197,6 @@ class LayerScreen {
     /// the view's size class on the front end. The layer calls it before it
     /// places, draws or hands input to the screen, and whenever the view's
     /// class may have changed. A screen of one layout ignores it.
-    ///
-    /// @param view what the screen is placed on
     virtual void lay_out(const LayerView& /*view*/) {}
 
     /// Takes a pointer's move, press or release.
@@ -814,7 +812,8 @@ class OaLayer {
     /// the window, nor of the frame without the cursor, but those it draws,
     /// alone, over an opaque screen and under one, and darkens nothing; the
     /// cursor shows above it; opaque screens draw as before; automation
-    /// lists its controls; F1
+    /// lists its controls; the cursor's square matches the one drawn in the
+    /// picture with no screen open; F1
     /// reaches a screen that takes the information key, goes on past one
     /// that does not, and changes nothing in Settings. In a match F1 goes on
     /// to the game, and such a screen changes no pixel of the match's

@@ -2929,6 +2929,14 @@ if(TARGET oa-game)
   # The built-in registry descriptors, beside the fonts
   # (cmake/OaRegistries.cmake).
   oa_copy_registries(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
+  # The engine ships no language packs. Builds before 0.8 copied zh-Hans into
+  # the languages folder beside the game, and the game reads a pack there as
+  # the packager's, so a build folder that held one would still offer it.
+  # The folder is removed after each link.
+  add_custom_command(TARGET oa-game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    VERBATIM)
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")
 set(oa_notice_files "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/ATTRIBUTIONS.md"
