@@ -528,6 +528,40 @@ std::size_t differences(
     return differing;
 }
 
+/// Counts the pixels of the cursor's square in which two window frames differ.
+///
+/// @param with_screen the window while an OA screen shows
+/// @param closed the window with no OA screen open
+/// @param pointer where the pointer rests, and how far the cursor may draw
+/// @return the pixels of the square that differ; every pixel of it when the
+///     frames' sizes differ
+std::size_t cursor_square_differences(
+    const artless::Surface& with_screen, const artless::Surface& closed, const LayerPointer& pointer
+) noexcept {
+    if (with_screen.width != closed.width || with_screen.height != closed.height ||
+        with_screen.rgb.size() != closed.rgb.size())
+        return static_cast<std::size_t>(pointer.reach) * 2U *
+               static_cast<std::size_t>(pointer.reach) * 2U;
+    std::size_t differing = 0;
+    const int32_t left = std::max(pointer.at.x - pointer.reach, 0);
+    const int32_t top = std::max(pointer.at.y - pointer.reach, 0);
+    const int32_t right =
+        std::min(pointer.at.x + pointer.reach, static_cast<int32_t>(with_screen.width));
+    const int32_t bottom =
+        std::min(pointer.at.y + pointer.reach, static_cast<int32_t>(with_screen.height));
+    for (int32_t row = top; row < bottom; ++row)
+        for (int32_t column = left; column < right; ++column) {
+            const std::size_t at = (static_cast<std::size_t>(row) * with_screen.width +
+                                    static_cast<std::size_t>(column)) *
+                                   3U;
+            if (with_screen.rgb[at] != closed.rgb[at] ||
+                with_screen.rgb[at + 1] != closed.rgb[at + 1] ||
+                with_screen.rgb[at + 2] != closed.rgb[at + 2])
+                ++differing;
+        }
+    return differing;
+}
+
 /// Checks that a match's layer takes a screen that is not opaque by its
 /// opacity, src over, its colours straight; and an opaque one as before.
 void check_clear_stamp() {
@@ -682,6 +716,28 @@ void OaLayer::check_clear_screens() {
         );
         const LayerPointer resting = window_pointer(seen, kCheckPointer);
         const LayerPointer no_cursor{};
+
+        // A screen that draws nothing still presents the cursor above the
+        // layer. Its square matches the cursor drawn in the picture when no
+        // screen shows, at the picture's own scaling.
+        {
+            MarkLook bare{};
+            bare.name = "check-cursor-scale";
+            push(std::make_unique<MarkScreen>(bare, std::make_shared<MarkSeen>()));
+            require(shows(false), "a screen that draws nothing does not show" + on);
+            artless::Surface window_now;
+            artless::Surface picture_now;
+            read_frames(window_now, picture_now);
+            const std::size_t cursor_differing =
+                cursor_square_differences(window_now, closed_window, resting);
+            require(
+                cursor_differing == 0,
+                "the cursor above a screen does not keep the picture's scaling" + on + ": " +
+                    std::to_string(cursor_differing) + " pixels of its square differ"
+            );
+            close(find(bare.name));
+            require(!shows(false), "the screen under the cursor stayed open" + on);
+        }
 
         // The window and the frame without the cursor hold the closed ones
         // with every screen on the layer drawn straight over them.

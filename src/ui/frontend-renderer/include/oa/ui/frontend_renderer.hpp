@@ -202,7 +202,7 @@ enum class MainMenuLayout : uint8_t { with_overlay, base_game };
 /// The button's caption was translated whole as its GUI file was read; each
 /// stage's caption is then translated on its own, as 3.1c translates them
 /// on the panel's first draw, so that "Easy|Medium|Hard" shows each word as
-/// gamedata\translate.tdf gives it.
+/// gamedata\\translate.tdf gives it.
 ///
 /// @param button the button's fields
 /// @param stage the button's stage

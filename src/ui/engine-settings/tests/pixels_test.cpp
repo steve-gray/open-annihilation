@@ -145,6 +145,8 @@ std::string_view page_slug(Page page) {
         return "developer";
     case Page::game_files:
         return "game-files";
+    case Page::downloads:
+        return "downloads";
     case Page::mod_keys:
         return "mod-keys";
     case Page::mod_patrol:
