@@ -4,8 +4,11 @@
 # The Library's model: every package the player can get or has installed,
 # built from plain inputs, with its tabs, filters, search, selection, details
 # and download queue lines, and its words (library.hpp, text.hpp). It draws
-# nothing and reads no file, clock or network.
-add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp)
+# nothing and reads no file, clock or network. The update question asked
+# before an update that may stop saved games loading, and Settings › Mods'
+# lines on updates (update_question.hpp).
+add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp
+  src/update_question.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).
 target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)
@@ -24,6 +27,16 @@ if(BUILD_TESTING)
     oa-options)
   add_test(NAME ui-library COMMAND oa-ui-library-test)
   set_tests_properties(ui-library PROPERTIES TIMEOUT 30)
+
+  # The update question: when it is asked (never for a built-in registry's
+  # update, one that keeps the rules, or a language or map pack), its words
+  # for a new revision and a new version, UPDATE ALL's, its buttons, and
+  # Settings › Mods' lines on updates and on the check for updates.
+  add_executable(oa-ui-library-update-question-test tests/update_question_test.cpp)
+  target_link_libraries(oa-ui-library-update-question-test PRIVATE oa-ui-library oa-ui-kit
+    oa-test-support oa-options)
+  add_test(NAME ui-library-update-question COMMAND oa-ui-library-update-question-test)
+  set_tests_properties(ui-library-update-question PROPERTIES TIMEOUT 30)
 
   # The search: what ranks first, several words, a missing word, folding,
   # tag prefixes, the cap and ties.

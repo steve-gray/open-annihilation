@@ -100,6 +100,52 @@ translator finds them together. Every word passes through `Library::text`
   "revision 3" and "revision 4", or the versions), and the names of tabs,
   filters, states and buttons.
 
+### The update question
+
+`update_question.hpp` holds the question asked before an update that may
+stop saved games loading, and the one place its rule lives. The Library's
+UPDATE and UPDATE ALL and Settings › Mods' UPDATE all go through it (the
+app's `Runtime::request_update`), so both screens and the tests share its
+words.
+
+- `asks_before_update(entry, update)` is true only for a mod
+  (`Kind::mod`) from a registry the player added (`!Entry::built_in`, which
+  `refresh` takes from `Registry::built_in`) whose update changes the rules
+  (`UpdateNote::Rules::changes`) or whose rules cannot be known
+  (`unknown`), since saved games load only under the same rules hash. It is
+  false for an update that keeps the rules, for a language or map pack,
+  whose rules are always the same, and for every built-in registry's
+  package: downloads from the official registry never ask. Their rules
+  change shows on the row and in the Rules fact instead, before UPDATE, and
+  in the queue line after it.
+- `update_question(entry, update, playing)` writes the question, or nothing
+  when it is not asked: "Update {name}"; the heading "{name} 4.8 ·
+  revision 3 → 4" for a new revision, or "{name} 4.8 → 4.9" for a new
+  version; the body, "Revision 4 changes the game's rules. Saved games from
+  revision 3 won't load under revision 4. Revision 3 is kept, and ROLL BACK
+  brings it back.", or for an unknown rules hash "OA can't tell whether
+  revision 4 changes the game's rules. …", with "It finishes when you leave
+  {name}." for the mod being played; and the facts Rules ("9c1f 4e0b →
+  51d2 07aa", or "unknown") and Download (`size_text`).
+- `update_all_question(entries)` writes UPDATE ALL's one question over the
+  entries whose updates ask, or nothing when none does: "Update all", and
+  "N updates change the game's rules: …", naming up to three, then "and N
+  more" ("1 update changes …" for one). The others start at once.
+- `update_prompt(question)` makes the kit question that asks it: the
+  heading, the body and each fact ("Rules: …") as its paragraphs, then NOT
+  NOW (`not-now`) and UPDATE (`update`), NOT NOW marked at first and
+  answering Escape, B and N, UPDATE with the primary look. Its word is the
+  kit's default, so automation lists `oa.prompt.not-now`,
+  `oa.prompt.update` and `oa.prompt.body`.
+- Settings › Mods' lines, which the app gives the page: `update_line` on a
+  row's update ("Revision 4 available · 3.2 MB", "Version 4.9 changes the
+  rules · 3.2 MB", "Revision 4 may change the rules · 3.2 MB"),
+  `update_progress` on one the queue holds ("Updating · 28%", "Waiting ·
+  finishes when you leave {name}") and `update_check_line` on the check for
+  updates ("Checked for updates 4 min ago" with `age_text`, "Not checked
+  for updates yet", "Checking for updates…", "Couldn't check for updates"
+  marked as a warning, or "No registries are on." without CHECK NOW).
+
 ### The screens
 
 - `library_layout(library, state, frame, fonts)` returns the display list of
@@ -246,6 +292,19 @@ stay valid until the model's next refresh.
 - A press on a row only selects it, and at Compact opens its details.
 
 ## Tests
+
+`ui-library-update-question` builds Libraries over a built-in and an added
+registry: `asks_before_update` and `update_question` for an added
+registry's mod whose rules change or are unknown (asked), one that keeps
+them, the built-in registry's whose rules change and whose are unknown, and
+a language and a map pack (never asked); the design's words exactly, with
+the sample numbers; a new version and an unknown rules hash; the mod being
+played; UPDATE ALL over a built-in and an added registry's rules-changing
+mods naming only the added one, none to ask, and five named as three and
+"2 more"; the kit question's paragraphs, NOT NOW marked and UPDATE primary,
+its automation names and its text fitting at every class; Settings › Mods'
+lines for each kind of update, each queue phase and each state of the
+check; and a lookup that translates.
 
 `ui-library` builds Libraries over made-up registries and packages: the
 state of a listing alone, a package installed alone, matched with and
