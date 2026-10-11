@@ -2951,6 +2951,8 @@ endif()
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
 add_subdirectory(src/ui/map-previews)
+# The map browser: MORE MAPS… over the map lists opens it on the OA layer.
+add_subdirectory(src/ui/map-browser)
 add_subdirectory(src/netgame)
 # Catalogues are fetched with the HTTP client src/netgame adds, so this
 # library follows that directory. oa-game is linked earlier in this file,
