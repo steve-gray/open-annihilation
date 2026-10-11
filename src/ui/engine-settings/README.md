@@ -944,6 +944,26 @@ its primary one; Left, Up and Shift+Tab mark the one before, Right, Down
 and Tab the one after; a finger's press takes the nearest button within
 reach (`prompt_pointer_*`, `prompt_finger_down`, `prompt_key`).
 
+`challenge.hpp` is the download check in the same look. At Compact, Regular
+and Large it is that class's notice wide, 400, 520 or 600 points, and as
+tall as its text from that class's least notice height to its greatest.
+The title is Downloads and the heading is "Check that you're a person".
+The text names the registry and the page, without the page's scheme or
+query. The code sits centred in a framed field in the accent colour, in
+the largest font, with two extra columns after each glyph but the last.
+Under it the window says the check updates by itself, or, once the check
+has run out, that it ran out. CANCEL is always there. OPEN THE CHECK is
+there while the check waits and this computer can open a page; TRY AGAIN
+is there once the check has run out. Focus starts on OPEN THE CHECK, or
+TRY AGAIN, or CANCEL. Enter presses the marked button and Escape is
+CANCEL; a pad's A and B arrive as those keys. A finger within the kit's
+reach holds the nearest button (`challenge_text`, `challenge_height`,
+`challenge_list`, `challenge_settle`, `challenge_key`,
+`challenge_pointer_move`, `challenge_pointer_down`, `challenge_pointer_up`,
+`challenge_finger_down`, `draw_challenge`). The parts automation lists are
+`challenge.code`, `challenge.status`, `challenge.open`,
+`challenge.try-again` and `challenge.cancel`.
+
 ## Dependencies
 
 The dialog, its notices and its prompts draw through the OA UI kit
@@ -952,6 +972,13 @@ dialog's rows are the kit's declared rows (`oa/ui/kit/rows.hpp`), drawn
 from its display list.
 
 ## Tests
+
+`ui-engine-settings-challenge` checks the words for a check that waits, one
+that has passed and one that has run out, with and without a page that can
+be opened here, the buttons and the starting focus, Enter, Escape, Left
+then Enter, a pointer release and a finger within reach, and that every
+part, including the focus ring, lies inside the window at Compact, Regular
+and Large, with each control named once.
 
 `ui-engine-settings-rows` holds every setting's row, written out as
 literals, to the table: its kind, label, hint lines without and with the
@@ -1146,6 +1173,9 @@ nor a key asking to switch. `native-mod-switch` switches the mod ten times
 through the question, each a soft restart.
 
 ## Limitations
+
+The kit's painter does not draw a text item's tracking, so the code is
+drawn after the rest of the window, with the tracking the item names.
 
 The arrows' scoring rule is the kit's (`kit::focus_toward`), to be
 revisited after controller playtests (D30). Because a row's control lies
