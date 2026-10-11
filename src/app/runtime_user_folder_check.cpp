@@ -895,7 +895,7 @@ void Runtime::check_user_folder() {
     oa_layer().close_top();
 
     // The Mods folder's mods are offered beside the game folder's, a folder
-    // without an oamod.yaml among them, each with what Mods shows of it.
+    // without an oamod.yaml among them, each with what the Library shows of it.
     write_file(
         user_folder_ / "Mods" / "Check Mod" / std::string(mod_profile_name),
         "id: check\nname: Check Mod Title\nversion: \"3.2\"\ndescription: A check's mod.\n"
@@ -912,7 +912,7 @@ void Runtime::check_user_folder() {
     const auto details_of = [&settings_state](const fs::path& folder) {
         const auto& offered = settings_state.mod_folders;
         const auto found = std::find(offered.begin(), offered.end(), path_to_utf8(folder));
-        require(found != offered.end(), "the Mods page does not offer the Mods folder's mods");
+        require(found != offered.end(), "the Library does not offer the Mods folder's mods");
         const auto index = static_cast<std::size_t>(std::distance(offered.begin(), found));
         return std::pair{settings_state.mod_names[index], settings_state.mod_details[index]};
     };
@@ -920,18 +920,18 @@ void Runtime::check_user_folder() {
     require(
         titled == "Check Mod Title" && titled_details.version == "3.2" &&
             titled_details.description == "A check's mod." && titled_details.has_profile,
-        "the Mods page does not show the oamod.yaml's name, version and description"
+        "the Library does not show the oamod.yaml's name, version and description"
     );
     const auto [plain, plain_details] = details_of(listed.back());
     require(
         plain == "Plain Folder" && plain_details.version == "N/A" &&
             plain_details.description == "No oamod.yaml present" && !plain_details.has_profile,
-        "the Mods page does not show a folder without an oamod.yaml by its name"
+        "the Library does not show a folder without an oamod.yaml by its name"
     );
     fake_frontend_tick_ = previous_tick;
     send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
     std::cout << "user folder check: Your files showed " << path_to_utf8(user_folder_)
-              << " and its Saves, Screenshots and Mods; the Mods page lists Mods' mods\n";
+              << " and its Saves, Screenshots and Mods; the Library lists Mods' mods\n";
 
     // Nothing is left behind for the next run.
     fs::remove_all(user_folder_, error);

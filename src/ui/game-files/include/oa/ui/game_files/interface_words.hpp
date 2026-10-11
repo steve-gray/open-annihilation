@@ -94,8 +94,8 @@ inline constexpr std::string_view interface_words[] = {
     "It holds no Total Annihilation archives (.hpi, .ufo, .ccx or rev31.gp3 files) and no "
     "installer of the Total Annihilation demo (1997).",
     "It is removed at the next start of Open Annihilation.",
-    "It is still copied, so it can be fixed in your file manager; the Mods page plays only mods "
-    "that work.",
+    "It is still copied, so it can be fixed in your file manager; the Library's Mods tab plays "
+    "only mods that work.",
     "Its mod profile cannot be used:",
     "KEEP",
     "KEEP COPYING",

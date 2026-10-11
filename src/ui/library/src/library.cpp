@@ -935,7 +935,7 @@ std::string status_line(const Library& library, const Entry& entry) {
     }
     case State::installed:
     case State::playing:
-        // A folder with no oamod.yaml says so, as Settings › Mods said it.
+        // A folder with no oamod.yaml says so in its status.
         if (entry.installed != nullptr && entry.installed->without_manifest)
             return std::string(shown(text, words::status_without_manifest));
         return std::string(shown(

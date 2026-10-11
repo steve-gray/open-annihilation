@@ -1733,9 +1733,10 @@ if(OA_BUILD_PLATFORM)
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED "language-install-pack;language-install-clean")
       # A folder without a profile whose second side lacks its LOGO: the
-      # Mods page refuses it. A folder without a profile, and a profile,
-      # whose second side's intgaf and font name files no folder holds: the
-      # Mods page switches to each, the main menu warns once of both files
+      # Library's PLAY NOW refuses it. A folder without a profile, and a
+      # profile, whose second side's intgaf and font name files no folder
+      # holds: the Library's PLAY NOW switches to each, the main menu warns
+      # once of both files
       # and that its games still start, and a skirmish on that side starts
       # and plays. A mod folder whose unit files are missing: the main menu
       # warns once that its games cannot start, and Skirmish's Start warns

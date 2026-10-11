@@ -360,7 +360,7 @@ here: it needs a paid developer team.
   progress (iOS 26), continuing a copy without choosing the folder again, importing a .zip,
   "Open in Open Annihilation", drag and drop, and VoiceOver for the engine-drawn screens. Changes
   made in Manage take effect from the next start: the game reloads itself without ending for a
-  switch of mod (the settings' Mods page), but that reload does not take them up yet.
+  switch of mod (the Library's PLAY NOW), but that reload does not take them up yet.
 
 - No resume after iOS ends the game in the background: a match played alone pauses with the
   in-game menu when the game leaves the screen, and is lost if iOS then ends the process.
