@@ -37,6 +37,10 @@
 data from your own copy of the original game. Support for
 **Total Annihilation: Kingdoms** is on the [roadmap](#roadmap).
 
+The main menu shows **Open Annihilation** and this build's version under
+the logo. A mod that names its own version text shows that instead, and
+the demo, whose game data names no revision, shows neither.
+
 No game data is included. You need an installed copy of Total Annihilation
 with the 3.1 update, such as the GOG edition. To explore the project without
 the full game, you can use the content of the free Total Annihilation demo
