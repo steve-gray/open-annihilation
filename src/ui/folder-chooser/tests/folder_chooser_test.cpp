@@ -3,9 +3,10 @@
 
 // The chooser's list and browser laid out at 1280x800 (the Steam Deck's
 // screen) and 852x393 (a phone, with its safe area), the focus order, the
-// keys, presses and scrolling. Every layout of every case at both sizes
-// keeps the digest layout-digests.txt records, the file the test is given;
-// --write-digests prints that file's content.
+// keys, presses and scrolling, read from the kit's parts and controls. Every
+// layout of every case at both sizes keeps the digest layout-digests.txt
+// records, the file the test is given; --write-digests prints that file's
+// content.
 #include "oa/base/sha256.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/folder_chooser.hpp"
@@ -28,8 +29,10 @@ namespace {
 
 namespace chooser = oa::ui::folder_chooser;
 namespace gf = oa::ui::game_files;
+namespace kit = oa::ui::kit;
 using chooser::Target;
 using chooser::TargetKind;
+using kit::Control;
 
 /// The Steam Deck's screen, one canvas pixel a point.
 chooser::Viewport deck_viewport() {
@@ -94,16 +97,22 @@ chooser::Point centre(chooser::Rect box) {
     return {box.x + box.width / 2, box.y + box.height / 2};
 }
 
-/// Finds a target's box.
+/// Finds a target's box: the list's control for it.
 ///
 /// @param layout the layout
 /// @param target the target
-/// @return the box; none when the target is not laid out
-const chooser::HitBox* find(const chooser::Layout& layout, Target target) {
-    for (const chooser::HitBox& hit : layout.targets)
-        if (hit.target == target)
-            return &hit;
-    return nullptr;
+/// @return the control; none when the target is not laid out
+const Control* find(const chooser::Layout& layout, Target target) {
+    return kit::control_of(layout.paint.list, chooser::control_id(target));
+}
+
+/// Tells whether two boxes are the same.
+///
+/// @param a a box
+/// @param b another
+/// @return true when they are
+bool same_box(chooser::Rect a, chooser::Rect b) {
+    return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
 }
 
 /// Tells whether a box lies in another.
@@ -118,7 +127,10 @@ bool inside(chooser::Rect inner, chooser::Rect outer) {
 }
 
 /// Checks what every layout keeps: each control at least 44 points high, inside the safe area
-/// across, and a focus order of the enabled targets in their order.
+/// across, and a focus order of the enabled targets in their order. The list's controls are
+/// the parts that draw a target, one each, the top one first, as the part lies and with its
+/// state; those in the scrolling region are its scroll area, and the Tab order is the focus
+/// order.
 ///
 /// @param layout the layout
 /// @param viewport its canvas
@@ -130,17 +142,37 @@ void check_controls(const chooser::Layout& layout, const chooser::Viewport& view
         viewport.height - viewport.safe.top - viewport.safe.bottom,
     };
     const int least = static_cast<int>(gf::min_button_points * viewport.px_per_point);
-    OA_CHECK(!layout.targets.empty());
+    const kit::DisplayList& list = layout.paint.list;
+    OA_CHECK(!list.controls.empty());
     std::vector<Target> enabled;
-    for (const chooser::HitBox& hit : layout.targets) {
-        OA_CHECK(hit.box.height >= least);
-        OA_CHECK(hit.box.x >= safe.x && hit.box.x + hit.box.width <= safe.x + safe.width);
-        if (hit.clip.height <= 0)
-            OA_CHECK(inside(hit.box, safe));
-        if (hit.enabled)
-            enabled.push_back(hit.target);
+    std::vector<kit::ControlId> drawn;
+    for (const kit::Item& part : list.items) {
+        if (part.control == kit::no_control)
+            continue;
+        drawn.push_back(part.control);
+        OA_CHECK(part.rect.height >= least);
+        OA_CHECK(part.rect.x >= safe.x && part.rect.x + part.rect.width <= safe.x + safe.width);
+        if (part.clip.height <= 0)
+            OA_CHECK(inside(part.rect, safe));
+        if (!part.state.disabled)
+            enabled.push_back(chooser::target_of(part.control));
+        const Control* control = kit::control_of(list, part.control);
+        OA_CHECK(control != nullptr);
+        if (control == nullptr)
+            continue;
+        OA_CHECK(same_box(control->rect, part.rect) && same_box(control->clip, part.clip));
+        OA_CHECK(control->enabled == !part.state.disabled);
+        OA_CHECK(control->group == (part.clip.height > 0 ? 0 : -1));
     }
     OA_CHECK(enabled == layout.focus_order);
+    // One control for each part that draws a target, the last drawn tested first.
+    OA_CHECK(list.controls.size() == drawn.size());
+    for (std::size_t index = 0; index < list.controls.size() && index < drawn.size(); ++index)
+        OA_CHECK(list.controls[index].id == drawn[drawn.size() - 1 - index]);
+    std::vector<Target> tabbed;
+    for (const kit::ControlId id : list.tab_order)
+        tabbed.push_back(chooser::target_of(id));
+    OA_CHECK(tabbed == layout.focus_order);
     // Every painted item but the scrolled ones lies on the canvas.
     for (const oa::ui::kit::Item& item : layout.paint.list.items)
         if (item.clip.height <= 0)
@@ -162,17 +194,17 @@ void check_list() {
             {TargetKind::quit, 0},
         };
         OA_CHECK(layout.focus_order == order);
-        const chooser::HitBox* unusable = find(layout, {TargetKind::install, 1});
+        const Control* unusable = find(layout, {TargetKind::install, 1});
         OA_CHECK(unusable != nullptr && !unusable->enabled);
         if (unusable != nullptr && unusable->clip.height <= 0)
             OA_CHECK(
-                chooser::hit_test(layout, centre(unusable->box), 100).kind == TargetKind::none
+                chooser::hit_test(layout, centre(unusable->rect), 100).kind == TargetKind::none
             );
         for (const Target& target : order) {
-            const chooser::HitBox* hit = find(layout, target);
+            const Control* hit = find(layout, target);
             OA_CHECK(hit != nullptr);
-            if (hit != nullptr && (hit->clip.height <= 0 || inside(hit->box, hit->clip)))
-                OA_CHECK(chooser::hit_test(layout, centre(hit->box), 0) == target);
+            if (hit != nullptr && (hit->clip.height <= 0 || inside(hit->rect, hit->clip)))
+                OA_CHECK(chooser::hit_test(layout, centre(hit->rect), 0) == target);
         }
         // No dialog offered (Game Mode): no row for it.
         chooser::Model game_mode = list_model();
@@ -206,7 +238,7 @@ void check_browser() {
         const chooser::UiState state;
         const chooser::Layout refused = chooser::lay_out(browse_model(false), state, viewport, {});
         check_controls(refused, viewport);
-        const chooser::HitBox* choose = find(refused, {TargetKind::choose, 0});
+        const Control* choose = find(refused, {TargetKind::choose, 0});
         OA_CHECK(choose != nullptr && !choose->enabled);
         OA_CHECK(
             std::find(
@@ -223,16 +255,16 @@ void check_browser() {
         OA_CHECK(refused.focus_order.back() == (Target{TargetKind::back, 0}));
         // Thirty folders do not fit: the rows scroll, the buttons stay.
         OA_CHECK(refused.scroll_max_points > 0);
-        const chooser::HitBox* back = find(refused, {TargetKind::back, 0});
+        const Control* back = find(refused, {TargetKind::back, 0});
         OA_CHECK(back != nullptr && back->clip.height <= 0);
         const chooser::Layout usable = chooser::lay_out(browse_model(true), state, viewport, {});
         check_controls(usable, viewport);
         OA_CHECK(usable.focus_order.back() == (Target{TargetKind::choose, 0}));
-        const chooser::HitBox* play = find(usable, {TargetKind::choose, 0});
+        const Control* play = find(usable, {TargetKind::choose, 0});
         OA_CHECK(play != nullptr && play->enabled);
         if (play != nullptr)
             OA_CHECK(
-                chooser::hit_test(usable, centre(play->box), 0) == (Target{TargetKind::choose, 0})
+                chooser::hit_test(usable, centre(play->rect), 0) == (Target{TargetKind::choose, 0})
             );
         // Escape goes back to the list.
         chooser::UiState keys;
@@ -245,7 +277,7 @@ void check_browser() {
         root.folder = "/";
         root.has_parent = false;
         const chooser::Layout top = chooser::lay_out(root, state, viewport, {});
-        const chooser::HitBox* parent = find(top, {TargetKind::parent, 0});
+        const Control* parent = find(top, {TargetKind::parent, 0});
         OA_CHECK(parent != nullptr && !parent->enabled);
         // An empty folder says so.
         chooser::Model empty = browse_model(false);
@@ -293,8 +325,8 @@ void check_keys() {
     layout = chooser::lay_out(model, state, viewport, {});
     const Target focused = layout.focus_order[static_cast<std::size_t>(state.focus)];
     OA_CHECK(focused == (Target{TargetKind::entry, 20}));
-    const chooser::HitBox* shown = find(layout, focused);
-    OA_CHECK(shown != nullptr && inside(shown->box, shown->clip));
+    const Control* shown = find(layout, focused);
+    OA_CHECK(shown != nullptr && inside(shown->rect, shown->clip));
     OA_CHECK(
         chooser::key(layout, state, chooser::Key::enter).command == chooser::Command::enter_folder
     );
@@ -322,8 +354,8 @@ void check_keys() {
         layout.focus_order[static_cast<std::size_t>(state.focus)] == (Target{TargetKind::entry, 29})
     );
     layout = chooser::lay_out(model, state, viewport, {});
-    const chooser::HitBox* last = find(layout, {TargetKind::entry, 29});
-    OA_CHECK(state.scroll_points > 0 && last != nullptr && inside(last->box, last->clip));
+    const Control* last = find(layout, {TargetKind::entry, 29});
+    OA_CHECK(state.scroll_points > 0 && last != nullptr && inside(last->rect, last->clip));
     static_cast<void>(chooser::key(layout, state, chooser::Key::down));
     const TargetKind below = layout.focus_order[static_cast<std::size_t>(state.focus)].kind;
     OA_CHECK(below == TargetKind::back || below == TargetKind::choose);
@@ -352,11 +384,11 @@ void check_presses() {
     const chooser::Viewport viewport = deck_viewport();
     chooser::UiState state;
     chooser::Layout layout = chooser::lay_out(list_model(), state, viewport, {});
-    const chooser::HitBox* browse = find(layout, {TargetKind::browse, 0});
+    const Control* browse = find(layout, {TargetKind::browse, 0});
     OA_CHECK(browse != nullptr);
     if (browse == nullptr)
         return;
-    const chooser::Rect browse_box = browse->box;
+    const chooser::Rect browse_box = browse->rect;
     chooser::press_down(layout, state, centre(browse_box));
     OA_CHECK(state.pressed >= 0);
     layout = chooser::lay_out(list_model(), state, viewport, {});
@@ -379,33 +411,33 @@ void check_presses() {
         chooser::Command::none
     );
     // A disabled row takes nothing, not even the nearest target.
-    const chooser::HitBox* unusable = find(layout, {TargetKind::install, 1});
+    const Control* unusable = find(layout, {TargetKind::install, 1});
     OA_CHECK(unusable != nullptr);
     if (unusable != nullptr) {
-        chooser::press_down(layout, state, centre(unusable->box));
+        chooser::press_down(layout, state, centre(unusable->rect));
         OA_CHECK(state.pressed == -1);
         OA_CHECK(
-            chooser::press_up(layout, state, centre(unusable->box)).command ==
+            chooser::press_up(layout, state, centre(unusable->rect)).command ==
             chooser::Command::none
         );
     }
     // A press just outside the Quit button reaches it.
-    const chooser::HitBox* quit = find(layout, {TargetKind::quit, 0});
+    const Control* quit = find(layout, {TargetKind::quit, 0});
     OA_CHECK(quit != nullptr);
     if (quit != nullptr) {
         const chooser::Point near{
-            quit->box.x + quit->box.width / 2, quit->box.y + quit->box.height + 10
+            quit->rect.x + quit->rect.width / 2, quit->rect.y + quit->rect.height + 10
         };
         chooser::press_down(layout, state, near);
         OA_CHECK(chooser::press_up(layout, state, near).command == chooser::Command::quit);
         OA_CHECK(chooser::hit_test(layout, near, 0).kind == TargetKind::none);
     }
     // The usable folder's row plays it.
-    const chooser::HitBox* install = find(layout, {TargetKind::install, 0});
+    const Control* install = find(layout, {TargetKind::install, 0});
     OA_CHECK(install != nullptr);
     if (install != nullptr) {
-        chooser::press_down(layout, state, centre(install->box));
-        const chooser::Outcome played = chooser::press_up(layout, state, centre(install->box));
+        chooser::press_down(layout, state, centre(install->rect));
+        const chooser::Outcome played = chooser::press_up(layout, state, centre(install->rect));
         OA_CHECK(played.command == chooser::Command::play_install && played.index == 0);
     }
     // A pointer press hides the focus the keys showed.
@@ -429,8 +461,8 @@ void check_scroll() {
     // Scrolled to the end, the last folder shows whole in the rows.
     state.scroll_points = layout.scroll_max_points;
     const chooser::Layout end = chooser::lay_out(browse_model(false), state, viewport, {});
-    const chooser::HitBox* last = find(end, {TargetKind::entry, 29});
-    OA_CHECK(last != nullptr && inside(last->box, last->clip));
+    const Control* last = find(end, {TargetKind::entry, 29});
+    OA_CHECK(last != nullptr && inside(last->rect, last->clip));
     // A layout that does not scroll keeps the scroll at 0.
     const chooser::Layout still = chooser::lay_out(list_model(), {}, deck_viewport(), {});
     OA_CHECK(still.scroll_max_points == 0);
@@ -444,7 +476,7 @@ void check_empty_layout() {
     const chooser::Layout layout{};
     OA_CHECK(chooser::hit_test(layout, {}, 0).kind == TargetKind::none);
     chooser::Viewport nothing;
-    OA_CHECK(chooser::lay_out(list_model(), {}, nothing, {}).targets.empty());
+    OA_CHECK(chooser::lay_out(list_model(), {}, nothing, {}).paint.list.controls.empty());
 }
 
 /// One case of the recorded layouts: a model and what the chooser keeps between frames.
@@ -829,11 +861,13 @@ std::string format_layout(const chooser::Layout& layout) {
         written += " clip " + rect_text(item.clip);
         written += "\n";
     }
-    for (const chooser::HitBox& hit : layout.targets) {
-        written += "target " + target_text(hit.target);
-        written += " box " + rect_text(hit.box);
-        written += " enabled " + std::to_string(hit.enabled ? 1 : 0);
-        written += " clip " + rect_text(hit.clip);
+    for (const kit::Item& part : layout.paint.list.items) {
+        if (part.control == kit::no_control)
+            continue;
+        written += "target " + target_text(chooser::target_of(part.control));
+        written += " box " + rect_text(part.rect);
+        written += " enabled " + std::to_string(part.state.disabled ? 0 : 1);
+        written += " clip " + rect_text(part.clip);
         written += "\n";
     }
     return written;
