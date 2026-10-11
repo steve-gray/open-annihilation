@@ -1489,8 +1489,12 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // run ends.
         return roll_back_mod_folder(*dialog);
     case settings::DialogAction::add_registry:
+        // The window opens over the dialog, which stays open. What it adds
+        // stays whether the dialog ends with OK or Cancel.
+        open_add_registry(std::nullopt);
+        return false;
     case settings::DialogAction::add_mirror:
-        // The dialog stays open; no window answers these yet.
+        open_add_mirror(dialog->mirror_request);
         return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.

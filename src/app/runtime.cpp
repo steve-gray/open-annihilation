@@ -769,6 +769,9 @@ void Runtime::idle_tick() {
     // A catalogue that moved on adds its language packs to the registry.
     note_catalogue_languages();
     tell_mod_installs();
+    // An .oareg file the game was opened with opens the Add registry window
+    // once the main menu is free.
+    take_registry_files();
     tell_challenges();
     render();
     presentation_alpha_ = 1.0F;

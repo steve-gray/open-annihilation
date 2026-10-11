@@ -617,9 +617,9 @@ The switches and the removals live on the dialog (`registry_chosen`,
 built-in one, and each switch that differs from the one it was given;
 Cancel puts them back. ADD REGISTRY… asks the host with
 `DialogAction::add_registry`, ADD MIRROR… with `DialogAction::add_mirror`
-and the registry on `Dialog::mirror_request`; what the host adds then
-comes in with a later offer as it was added, so that Cancel does not
-remove it. In a game ADD REGISTRY…
+and the registry on `Dialog::mirror_request`; both open the Add registry
+window, which adds at once, and a later offer brings what it added in as
+it was added, so that Cancel does not remove it. In a game ADD REGISTRY…
 and ADD MIRROR… give way to the padlock and "Choose from the main menu.";
 the switches and REMOVE stay.
 
@@ -1089,6 +1089,50 @@ its primary one; Left, Up and Shift+Tab mark the one before, Right, Down
 and Tab the one after; a finger's press takes the nearest button within
 reach (`prompt_pointer_*`, `prompt_finger_down`, `prompt_key`).
 
+`add_registry.hpp` is the Add registry window in the same look, over
+Settings or the main menu. At Compact, Regular and Large it is that
+class's notice wide and as tall as its words from the class's least notice
+height to its greatest. A registry comes to it by its address
+(`AddRegistry::Mode::by_url`), from an `.oareg` file (`from_file`) or as a
+mirror of a registry the player added (`mirror`), and it stands in one of
+four phases. The host makes `ProbeView`, plain strings, from what the
+content service found, and the window shows:
+
+- editing: the title Add registry (Add mirror and the heading "Mirror of
+  {name}" for a mirror), the address field (`add-registry.url`,
+  "http://…" while it is empty; a file shows "From {file}" in its place),
+  CANCEL and CHECK (`add-registry.cancel`, `add-registry.check`);
+- checking: "Checking {address}…" and CANCEL;
+- ready, adding a registry: its name in the heading role
+  (`add-registry.name`), Address (`add-registry.address`), Packages
+  ("{n} · {kinds}", the kinds as mods, maps and languages), Key or Keys
+  (each fingerprint, at most three, then "+N more"; `add-registry.key`),
+  or for a registry that names no key the amber "Unsigned · accepted in
+  Developer mode only" in its place, Downloads (direct, with download
+  keys, or with download keys · needs an install ID), the amber warning
+  "Not reviewed by the OA team. Only add registries you trust. OA checks
+  every package it downloads.", CANCEL and ADD (`add-registry.add`);
+- ready, adding a mirror: Address, "Checked against the keys you trust for
+  {name}" and those keys (at most three), CANCEL and ADD MIRROR
+  (`add-registry.add`);
+- refused: the refusal in amber (`add-registry.refusal`), the field
+  editable again with CANCEL and CHECK, or a file's "From {file}" with
+  CANCEL alone.
+
+The name, the address, the keys and the refusal are labels: areas neither
+enabled nor focusable, their text what they show. The focus starts on the
+field while it takes typing and on CANCEL otherwise, so that Enter or a
+pad's A never trusts a registry first. On the field Enter is CHECK, Space
+(a pad's A) and a press start the system's text input
+(`AddRegistryAction::start_typing`), and Backspace, Delete, Left, Right,
+Home and End edit it; Escape is CANCEL. Typed or pasted text is taken up
+to its first line break and only while the field stays within
+`oa::formats::url::max_url_bytes`, cut at a character's start; editing a
+refused address goes back to editing (`add_registry_list`,
+`add_registry_settle`, `add_registry_field`, `add_registry_text`,
+`add_registry_key`, `add_registry_pointer_*`, `add_registry_finger_down`,
+`draw_add_registry`).
+
 `challenge.hpp` is the download check in the same look. At Compact, Regular
 and Large it is that class's notice wide, 400, 520 or 600 points, and as
 tall as its text from that class's least notice height to its greatest.
@@ -1125,19 +1169,24 @@ then Enter, a pointer release and a finger within reach, and that every
 part, including the focus ring, lies inside the window at Compact, Regular
 and Large, with each control named once.
 
-`ui-engine-settings-registries` holds the Registries part: the Registries
-row's value ("2 on of 3", "Core Prime only", None) and MANAGE…, the
-avatars, ages and subtitles of a built-in registry checked, never checked
-and unreachable and of an added one with mirrors and unreachable, the note
-with one, two and no built-in registries and the notice over it, built-in
-registries without REMOVE or ADD MIRROR…, REMOVE marking a row and UNDO
-taking it back, Cancel putting switches and removals back, the changes OK
-yields and that nothing applies before it, a new registry in the offer
-keeping the player's other choices and surviving Cancel, Escape and the
-link going back to Downloads with the focus on MANAGE…, ADD REGISTRY… and
-ADD MIRROR… asking the host, the locks in a game, and every part inside
-the dialog and apart at Compact, Regular and Large with nine registries
-scrolled to either end. Every name is unique.
+`ui-engine-settings-registries` holds the Registries part and the Add
+registry window. The part: the Registries row's value ("2 on of 3", "Core
+Prime only", None) and MANAGE…, the avatars, ages and subtitles of a
+built-in registry checked, never checked and unreachable and of an added
+one with mirrors and unreachable, the note with one, two and no built-in
+registries and the notice over it, built-in registries without REMOVE or
+ADD MIRROR…, REMOVE marking a row and UNDO taking it back, Cancel putting
+switches and removals back, the changes OK yields and that nothing applies
+before it, a new registry in the offer keeping the player's other choices
+and surviving Cancel, Escape and the link going back to Downloads with the
+focus on MANAGE…, ADD REGISTRY… and ADD MIRROR… asking the host, the locks
+in a game, and every part inside the dialog and apart at Compact, Regular
+and Large with nine registries scrolled to either end. The window: its
+words, field and buttons in every mode and phase, the keys over three and
+the unsigned line, the focus starting on CANCEL once ready, Enter and
+Space on CANCEL never adding, typing and a paste cut at its line break and
+at 2,048 bytes, a refused address going back to editing, the pointer, and
+every part inside the window at every class. Every name is unique.
 
 `ui-engine-settings-rows` holds every setting's row, written out as
 literals, to the table: its kind, label, hint lines without and with the

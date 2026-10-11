@@ -4292,6 +4292,32 @@ class Runtime final : public menu::Host,
     /// (--check-challenge).
     void check_challenge();
 
+    /// The Add registry window as a screen of the OA layer
+    /// (runtime_registries.cpp).
+    struct AddRegistryScreen;
+
+    /// Opens the Add registry window over Settings or the main menu, to add a
+    /// registry by its address: ADD REGISTRY… in Settings › Downloads, and a
+    /// caller with an address, whose check starts at once. Nothing opens
+    /// while the window already shows.
+    ///
+    /// @param url the address to check at once; none opens the window empty
+    void open_add_registry(std::optional<std::string> url);
+
+    /// Opens the Add registry window for a mirror of a registry the player
+    /// added (ADD MIRROR…). Nothing opens for a registry that is built in or
+    /// not in effect.
+    ///
+    /// @param registry_id the registry's id
+    void open_add_mirror(std::string_view registry_id);
+
+    /// Takes the next .oareg file the game was opened with and opens the Add
+    /// registry window filled in from it: one at a time, on the settled main
+    /// menu, with no OA screen that takes every input showing and no game
+    /// running. A run nobody watches leaves the files waiting. Called once a
+    /// frame beside tell_mod_installs.
+    void take_registry_files();
+
     /// Gives the settings dialog the Registries part's registries, from the
     /// registries in effect.
     ///

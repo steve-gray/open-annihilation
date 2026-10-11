@@ -1,0 +1,249 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// The Add registry window: a kit window in a notice's chrome that shows what
+// the player is about to trust before they trust it. A registry is added by
+// its address, from an .oareg file, or as a mirror of one the player added;
+// all three lead to the same window. The host checks the registry and makes
+// the change; the window holds plain strings and only says which press asked
+// for what. Nothing here reads a registry, a file or the network.
+#pragma once
+
+#include "oa/ui/kit/input.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/text.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace oa::ui::kit {
+struct Canvas;
+}
+
+namespace oa::ui::engine_settings {
+
+/// The address field, named add-registry.url.
+inline constexpr oa::ui::kit::ControlId add_registry_url_control = 1;
+/// CHECK, which asks the host to check the address typed, named add-registry.check.
+inline constexpr oa::ui::kit::ControlId add_registry_check_control = 2;
+/// ADD, or ADD MIRROR for a mirror, named add-registry.add.
+inline constexpr oa::ui::kit::ControlId add_registry_add_control = 3;
+/// CANCEL, named add-registry.cancel.
+inline constexpr oa::ui::kit::ControlId add_registry_cancel_control = 4;
+/// The registry's name: a label (an area neither enabled nor focusable),
+/// named add-registry.name.
+inline constexpr oa::ui::kit::ControlId add_registry_name_control = 5;
+/// The address line: a label named add-registry.address.
+inline constexpr oa::ui::kit::ControlId add_registry_address_control = 6;
+/// The key lines, or the line an unsigned registry shows in their place: a
+/// label named add-registry.key.
+inline constexpr oa::ui::kit::ControlId add_registry_key_control = 7;
+/// The refusal: a label named add-registry.refusal.
+inline constexpr oa::ui::kit::ControlId add_registry_refusal_control = 8;
+
+/// The most key fingerprints the window lists; the rest are counted.
+inline constexpr std::size_t shown_fingerprints = 3;
+
+/// What the window shows of a check: the plain strings the host makes from
+/// the content service's answer.
+struct ProbeView {
+    std::string name;       ///< the registry's name; empty when no descriptor was read
+    std::string address;    ///< the address the player is shown: a host, and a port that is not 80
+    std::size_t packages{}; ///< the packages its catalogue lists
+    /// The kinds of package the catalogue holds, each as the window names
+    /// it: "mods", "maps" or "languages".
+    std::vector<std::string> kinds;
+    /// The keys' fingerprints, as a player compares them. For a mirror, the
+    /// keys the player already trusts for the registry.
+    std::vector<std::string> fingerprints;
+    /// How packages are downloaded: "direct", "with download keys", or
+    /// "with download keys · needs an install ID".
+    std::string downloads;
+    bool is_signed{true}; ///< false for a registry that names no key
+    std::string refusal;  ///< why it cannot be added, one sentence; empty when it can
+};
+
+/// One Add registry window, as the host last told it and the player left it.
+struct AddRegistry {
+    /// How the registry came to the window.
+    enum class Mode : uint8_t {
+        by_url,    ///< the player types its address
+        from_file, ///< an .oareg file the game was opened with
+        mirror,    ///< the player types a mirror's address for a registry they added
+    };
+    /// Where the window stands.
+    enum class Phase : uint8_t {
+        editing,  ///< the address field takes typing; CHECK or Enter checks it
+        checking, ///< the host is checking; only CANCEL
+        ready,    ///< the check holds: what would be trusted, and ADD
+        refused,  ///< the check or the change was refused, and why
+    };
+
+    Mode mode{Mode::by_url};     ///< how the registry came
+    std::string url;             ///< the address field's text: the player's own, never looked up
+    std::size_t caret{};         ///< the caret, in bytes from the field's start
+    std::string file_name;       ///< the .oareg file's name, for Mode::from_file
+    std::string mirror_of;       ///< the name of the registry a mirror is for, for Mode::mirror
+    Phase phase{Phase::editing}; ///< where it stands
+    ProbeView shown;             ///< what the check found, and why it refused
+    /// The address the host is checking, which "Checking {address}…" names.
+    std::string checking;
+    /// The size class it is laid out at. Its width and its height limits are
+    /// that class's notice width and heights.
+    oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
+    oa::ui::kit::Interaction interaction{}; ///< the hover, the press and the focus
+};
+
+/// What an event on the window asks of its host.
+enum class AddRegistryAction : uint8_t {
+    none,   ///< nothing
+    redraw, ///< only the look changed: a hover, a press, the focus, the field
+    /// CHECK or Enter: check AddRegistry::url (AddRegistry::checking says
+    /// nothing yet; the host sets it)
+    check,
+    add,    ///< ADD or ADD MIRROR: make the change the check allowed
+    cancel, ///< CANCEL or Escape: close the window and drop any check
+    /// Space on the field, a pad's A, or a press on it: start the system's
+    /// text input over the field, so that an on-screen keyboard appears
+    start_typing,
+};
+
+/// Returns the window's width at a size class: that class's notice width.
+///
+/// @param size_class the class
+/// @return the width, in points
+[[nodiscard]] int32_t add_registry_width(oa::ui::kit::SizeClass size_class) noexcept;
+
+/// Returns the window's height: its header, what its phase shows and its
+/// footer, from its class's least notice height to its greatest.
+///
+/// @param window the window
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return the height, in points
+[[nodiscard]] int32_t
+add_registry_height(const AddRegistry& window, const oa::ui::kit::Fonts* fonts = nullptr);
+
+/// Returns what the window draws and where its controls are.
+///
+/// The header's title is "Add registry", or "Add mirror" for a mirror, whose
+/// heading reads "Mirror of {name}". The address field (add-registry.url),
+/// with "http://…" while it is empty, shows for an address or a mirror and
+/// takes typing while editing or refused; a file shows "From {file}" in its
+/// place. Editing offers CANCEL and CHECK. Checking says "Checking
+/// {address}…" over CANCEL. Ready to add a registry: its name in the
+/// heading role, then Address, Packages ("{n} · {kinds}"), Key (each
+/// fingerprint, at most three, then "+N more"), or for an unsigned registry
+/// the amber "Unsigned · accepted in Developer mode only" in Key's place,
+/// Downloads, and the amber warning, over CANCEL and ADD. Ready to add a
+/// mirror: Address, "Checked against the keys you trust for {name}" and
+/// those keys, over CANCEL and ADD MIRROR. Refused: the refusal in amber,
+/// over CANCEL, and CHECK while the field takes typing. The name, the
+/// address, the keys and the refusal are labels.
+///
+/// @param window the window and the pointer's place on it
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return the display list, in points from the window's top left corner
+[[nodiscard]] oa::ui::kit::DisplayList
+add_registry_list(const AddRegistry& window, const oa::ui::kit::Fonts* fonts = nullptr);
+
+/// Puts the focus where its phase starts it, and shows it: on the field
+/// while it takes typing, otherwise on CANCEL, so that trusting a registry
+/// is never what Enter or a pad's A does first.
+///
+/// @param[in,out] window the window
+void add_registry_settle(AddRegistry& window) noexcept;
+
+/// Tells whether the field takes typing: an address or a mirror, while
+/// editing or refused.
+///
+/// @param window the window
+/// @return true while it does
+[[nodiscard]] bool add_registry_editable(const AddRegistry& window) noexcept;
+
+/// Returns the field while it takes typing and has the focus, over which
+/// the host keeps the system's text input started.
+///
+/// @param window the window
+/// @return the field's rectangle, in points; none otherwise
+[[nodiscard]] std::optional<oa::ui::kit::Rect>
+add_registry_field(const AddRegistry& window) noexcept;
+
+/// Takes typed or pasted text into the field at its caret: only the text
+/// before its first line break, and no more than leaves the field within
+/// oa::formats::url::max_url_bytes, cut at a character's start. A refused
+/// address goes back to editing once the player changes it.
+///
+/// @param[in,out] window the window
+/// @param utf8 the text, in UTF-8
+/// @return redraw when the field changed; none while it takes no typing
+[[nodiscard]] AddRegistryAction add_registry_text(AddRegistry& window, std::string_view utf8);
+
+/// Takes a key. Escape is CANCEL. On the field, Enter is CHECK, Space
+/// starts typing, and Backspace, Delete, Left, Right, Home and End edit it.
+/// Enter and Space press a focused button. Tab and the arrows move the focus.
+///
+/// @param[in,out] window the window
+/// @param pressed the key
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return what the host does
+[[nodiscard]] AddRegistryAction add_registry_key(
+    AddRegistry& window, oa::ui::kit::Key pressed, const oa::ui::kit::Fonts* fonts = nullptr
+);
+
+/// Moves the pointer: the control under it lights.
+///
+/// @param[in,out] window the window
+/// @param at the pointer, in points from the window's top left corner
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return redraw when the look changed, otherwise none
+[[nodiscard]] AddRegistryAction add_registry_pointer_move(
+    AddRegistry& window, oa::ui::kit::Point at, const oa::ui::kit::Fonts* fonts = nullptr
+);
+
+/// Presses the pointer's button: a press on a control holds it.
+///
+/// @param[in,out] window the window
+/// @param at the pointer, in points from the window's top left corner
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return redraw when a control is held, otherwise none
+[[nodiscard]] AddRegistryAction add_registry_pointer_down(
+    AddRegistry& window, oa::ui::kit::Point at, const oa::ui::kit::Fonts* fonts = nullptr
+);
+
+/// Presses where a finger landed: the control within reach takes it, and
+/// the later release is moved by the same distance.
+///
+/// @param[in,out] window the window
+/// @param at the finger, in points from the window's top left corner
+/// @param reach how far a control may lie from the finger, in points
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return redraw when a control is held, otherwise none
+[[nodiscard]] AddRegistryAction add_registry_finger_down(
+    AddRegistry& window,
+    oa::ui::kit::Point at,
+    int32_t reach,
+    const oa::ui::kit::Fonts* fonts = nullptr
+);
+
+/// Releases the pointer. A release over the control the press held presses
+/// it; a release over the field focuses it and starts typing.
+///
+/// @param[in,out] window the window
+/// @param at the pointer, in points from the window's top left corner
+/// @param fonts the fonts the text is measured in; null estimates each character
+/// @return the control's action, redraw when the release missed it, otherwise none
+[[nodiscard]] AddRegistryAction add_registry_pointer_up(
+    AddRegistry& window, oa::ui::kit::Point at, const oa::ui::kit::Fonts* fonts = nullptr
+);
+
+/// Draws the window at the canvas's origin, in the canvas's fonts.
+///
+/// @param canvas where it is drawn
+/// @param window the window
+void draw_add_registry(const oa::ui::kit::Canvas& canvas, const AddRegistry& window);
+
+} // namespace oa::ui::engine_settings

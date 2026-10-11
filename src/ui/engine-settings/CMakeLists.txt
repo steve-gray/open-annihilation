@@ -7,18 +7,20 @@
 # the one-off notices of Open Annihilation's own in the dialog's look
 # (engine_settings/notice.hpp), the prompts that ask with buttons of
 # their own in the same look (engine_settings/prompt.hpp), the download
-# check (engine_settings/challenge.hpp) and Downloads' Registries part
-# (src/registries_page.cpp).
+# check (engine_settings/challenge.hpp), Downloads' Registries part
+# (src/registries_page.cpp) and the Add registry window
+# (engine_settings/add_registry.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
   src/developer.cpp src/downloads_page.cpp src/registries_page.cpp src/language_page.cpp
-  src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
-  src/settings_rows.cpp)
+  src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp src/add_registry.cpp
+  src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-data-languages oa-data-limits
   oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi
-  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-options oa-base-text)
+  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-formats-url oa-options
+  oa-base-text)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-engine-settings-test tests/engine_settings_test.cpp)
@@ -50,8 +52,9 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   target_include_directories(oa-ui-engine-settings-downloads-test PRIVATE src)
   add_test(NAME ui-engine-settings-downloads COMMAND oa-ui-engine-settings-downloads-test)
-  # Downloads' Registries part: rows, subtitles, removals, OK's changes,
-  # Escape, the locks in a game, and the part at every class.
+  # Downloads' Registries part and the Add registry window: rows, subtitles,
+  # removals, OK's changes, Escape, the locks in a game, the window's texts
+  # and buttons in every mode and phase, its focus, and both at every class.
   add_executable(oa-ui-engine-settings-registries-test tests/registries_page_test.cpp)
   target_link_libraries(oa-ui-engine-settings-registries-test PRIVATE oa-ui-engine-settings
     oa-test-support oa-options)
