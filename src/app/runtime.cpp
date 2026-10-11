@@ -756,6 +756,8 @@ void Runtime::idle_tick() {
     tell_found_install();
     tell_incomplete_mod();
     tick_content();
+    // A catalogue that moved on adds its language packs to the registry.
+    note_catalogue_languages();
     tell_mod_installs();
     render();
     presentation_alpha_ = 1.0F;

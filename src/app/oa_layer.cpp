@@ -668,7 +668,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// Brings the dialog up to date: Hardware acceleration's status follows
     /// the renderer, Touch shows once a finger turns the touch controls on,
     /// and Controller once a gamepad sends input, with its Steam Input
-    /// notice while that applies. Off the main menu the main menu's dialog
+    /// notice while that applies. Language's rows follow the catalogues and
+    /// the download queue, so a match draws the field again as a pack
+    /// arrives. Off the main menu the main menu's dialog
     /// closes as Cancel; once the in-game menu's column no longer shows under
     /// it, the match's closes as OK.
     ///
@@ -701,6 +703,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
                       *dialog, runtime_.pad_used(), runtime_.pad_steam_input()
                   ) == settings::DialogAction::redraw ||
                   changed;
+        // The front end draws every frame. A match draws this dialog again
+        // only when the revision moves, so a download's progress has to.
+        changed = runtime_.refresh_settings_languages(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;
