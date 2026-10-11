@@ -607,7 +607,6 @@ void each_section_shows_its_rows() {
          {"OPEN ANNIHILATION",
           "SETTINGS",
           "v0.2.0",
-          "Mods",
           "Controls",
           "Common Tweaks",
           "Language",
@@ -2440,17 +2439,17 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     CHECK(settings::most_listed_pages == 9);
     CHECK(settings::page_count == 15);
     CHECK(settings::restore_control == 9);
-    CHECK(settings::cancel_control == 11);
-    CHECK(settings::ok_control == 12);
-    CHECK(settings::scroll_bar_control == 13);
-    CHECK(settings::first_row_control == 14);
+    CHECK(settings::cancel_control == 10);
+    CHECK(settings::ok_control == 11);
+    CHECK(settings::scroll_bar_control == 12);
+    CHECK(settings::first_row_control == 13);
     // Developer's three rows come first, Enable Developer Mode, Show
     // performance statistics and UI kit gallery, then its footer's switch
     // and button, then its list's rows.
-    CHECK(settings::developer_mode_control == 14);
-    CHECK(settings::active_only_control == 17);
-    CHECK(settings::restore_profile_control == 18);
-    CHECK(settings::first_hack_list_control == 19);
+    CHECK(settings::developer_mode_control == 13);
+    CHECK(settings::active_only_control == 16);
+    CHECK(settings::restore_profile_control == 17);
+    CHECK(settings::first_hack_list_control == 18);
 
     // Every row's number comes after every fixed control's, and each is its own.
     Scrolling all(nine_rows());
@@ -4647,14 +4646,14 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // is printed, so that a change meant to move these parts can pin them
     // again.
     const std::array<std::pair<Page, uint64_t>, 8> kBefore{{
-        {Page::controls, 0xf7fe7c7fe8fb1f61ULL},
-        {Page::common_tweaks, 0x26be62ade4cc1d58ULL},
-        {Page::language, 0xe5b0ea2cdf3c0de1ULL},
-        {Page::graphics, 0x036a24fc33540bf0ULL},
-        {Page::touch, 0x71adeef7c5e2c0c0ULL},
-        {Page::controller, 0x7589ee6b065155bcULL},
-        {Page::game_files, 0x6495f47d3e37541bULL},
-        {Page::downloads, 0x24a20260d8eb73e3ULL},
+        {Page::controls, 0x28271777ddff25e5ULL},
+        {Page::common_tweaks, 0xb8e27fad9ac36aa7ULL},
+        {Page::language, 0xe5ac6d8b66b4b25dULL},
+        {Page::graphics, 0x7a552016b09b10bbULL},
+        {Page::touch, 0xb27a733bdd308d31ULL},
+        {Page::controller, 0x57f2f717a852aa51ULL},
+        {Page::game_files, 0x2e02ed15ec8855baULL},
+        {Page::downloads, 0xffdcea419111c8d8ULL},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -7397,8 +7396,8 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(all.size() == settings::most_listed_pages);
     const auto files = settings::dialog_pages(settings::DialogKind::engine, false, true, true);
     CHECK(
-        files.size() == 9 && files[5] == Page::controller && files[6] == Page::game_files &&
-        files[7] == Page::downloads && files[8] == Page::developer
+        files.size() == 8 && files[4] == Page::controller && files[5] == Page::game_files &&
+        files[6] == Page::downloads && files[7] == Page::developer
     );
     const auto mods = settings::dialog_pages(settings::DialogKind::mod_options, true, true, true);
     CHECK(std::equal(mods.begin(), mods.end(), kModPages.begin(), kModPages.end()));

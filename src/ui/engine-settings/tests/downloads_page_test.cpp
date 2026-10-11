@@ -275,13 +275,13 @@ void section_list_puts_downloads_before_developer() {
                 OA_CHECK(
                     geometry::list_item(Page::downloads, touch, game_files, controller).y ==
                     geometry::list_first_top +
-                        (5 + optionals) * (geometry::list_item_height + geometry::list_item_gap)
+                        (4 + optionals) * (geometry::list_item_height + geometry::list_item_gap)
                 );
                 OA_CHECK(
                     geometry::list_item(Page::developer, touch, game_files, controller).y == 262
                 );
                 OA_CHECK(geometry::list_divider().y == 256);
-                OA_CHECK(settings::page_control(Page::downloads) == 9);
+                OA_CHECK(settings::page_control(Page::downloads) == 8);
                 const settings::Dialog dialog = opened({}, touch, controller, game_files);
                 OA_CHECK(dialog.page == Page::downloads);
                 OA_CHECK(layout_has(dialog, "Downloads"));
