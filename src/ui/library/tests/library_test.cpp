@@ -3,18 +3,21 @@
 
 // The Library's model over made-up registries and packages: every state,
 // every reason GET or UPDATE is off, built-in and added registries, a key
-// installed from another registry, tabs, filters and tags, the order with no
-// search, the update count, the selection across refreshes, the buttons, the
-// facts with the sample numbers, the status lines, the bylines, the playing
-// note, the queue lines and every text.
+// installed from another registry, tabs, each tab's own filter, New, the
+// filters' counts and tags, the order with no search, the update count, the
+// Active tab's setup, the selection across refreshes, the buttons, the facts
+// with the sample numbers, the status lines, the bylines, the playing note,
+// the queue lines and every text.
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/text.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -194,13 +197,14 @@ lib::Inputs base_inputs() {
     return inputs;
 }
 
-/// Builds a Library from inputs.
+/// Builds a Library from inputs, on its Mods tab.
 ///
 /// @param inputs the inputs
 /// @return the Library
 lib::Library built(lib::Inputs inputs) {
     lib::Library library;
     lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::mods);
     return library;
 }
 
@@ -577,7 +581,7 @@ void test_tabs_filters_tags() {
     lib::Library library = built(std::move(inputs));
 
     using Keys = std::vector<std::string>;
-    OA_CHECK(library.tab == lib::Tab::mods && library.filter == lib::Filter::all);
+    OA_CHECK(library.tab == lib::Tab::mods && lib::shown_filter(library) == lib::Filter::all);
     const Keys every_mod = {
         "gamma-mod@fixture-core",
         "beta-mod@fixture-core",
@@ -601,19 +605,77 @@ void test_tabs_filters_tags() {
     lib::set_filter(library, lib::Filter::updates);
     OA_CHECK(visible_keys(library) == Keys({"gamma-mod@fixture-core"}));
 
-    // The Updates tab shows every kind's updates and ignores the filter and tag.
+    // Each tab keeps its own filter: the Updates tab opens on Updates, of
+    // every kind, whatever Mods shows.
     lib::set_filter(library, lib::Filter::installed);
-    lib::set_tag(library, "units");
     lib::set_tab(library, lib::Tab::updates);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::updates);
     const Keys every_update = {
         "example-pack@example-maps",
         "gamma-mod@fixture-core",
     };
     OA_CHECK(visible_keys(library) == every_update);
-    OA_CHECK(lib::update_count(library) == 2);
+    OA_CHECK(lib::update_count(library) == 2 && lib::updates_shown(library) == 2);
+    lib::set_tab(library, lib::Tab::mods);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::installed);
+    OA_CHECK(visible_keys(library) == installed_mods);
+
+    // The Updates tab's filters work as the others do, across every kind.
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::all);
+    const Keys every_entry = {
+        "example-pack@example-maps",
+        "gamma-mod@fixture-core",
+        "beta-mod@fixture-core",
+        "delta-mod@fixture-core",
+        "alpha-mod@fixture-core",
+        "xx@fixture-core",
+    };
+    OA_CHECK(visible_keys(library) == every_entry);
+    OA_CHECK(lib::updates_shown(library) == 2);
+    lib::set_filter(library, lib::Filter::installed);
+    OA_CHECK(
+        visible_keys(library) == Keys({
+                                     "example-pack@example-maps",
+                                     "gamma-mod@fixture-core",
+                                     "beta-mod@fixture-core",
+                                     "delta-mod@fixture-core",
+                                 })
+    );
+    lib::set_tag(library, "total-conversion");
+    OA_CHECK(visible_keys(library) == Keys({"gamma-mod@fixture-core"}));
+    lib::set_tag(library, "");
+    lib::set_filter(library, lib::Filter::updates);
+
+    // Each filter's count is of the tab's entries it keeps, whatever the tag and the search.
+    lib::set_tab(library, lib::Tab::mods);
+    for (const std::string_view tag : {std::string_view(), std::string_view("units")}) {
+        lib::set_tag(library, tag);
+        for (const std::string_view query : {std::string_view(), std::string_view("gamma")}) {
+            lib::set_query(library, query);
+            OA_CHECK(lib::filter_count(library, lib::Filter::all) == 4);
+            OA_CHECK(lib::filter_count(library, lib::Filter::newest) == 0);
+            OA_CHECK(lib::filter_count(library, lib::Filter::installed) == 3);
+            OA_CHECK(lib::filter_count(library, lib::Filter::updates) == 1);
+        }
+    }
+    lib::set_query(library, "");
+    lib::set_tag(library, "");
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::installed), "Installed (3)");
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::newest), "New (0)");
+    lib::set_tab(library, lib::Tab::updates);
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::all), "All (6)");
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::updates), "Updates (2)");
+    lib::set_tab(library, lib::Tab::maps);
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::all), "All (1)");
+    lib::set_tab(library, lib::Tab::active);
+    OA_CHECK(library.visible.empty() && !library.selected);
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 0);
+    OA_CHECK(lib::tags_in_tab(library).empty());
 
     lib::set_tab(library, lib::Tab::mods);
     lib::set_filter(library, lib::Filter::all);
+    lib::set_tag(library, "units");
     OA_CHECK(visible_keys(library) == Keys({"alpha-mod@fixture-core"}));
     lib::set_tag(library, "balance");
     OA_CHECK(visible_keys(library) == Keys({"beta-mod@fixture-core", "alpha-mod@fixture-core"}));
@@ -634,8 +696,185 @@ void test_tabs_filters_tags() {
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::updates, true), "Upd");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::updates, false), "Updates");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::mods, true), "Mods");
+    OA_CHECK_TEXT(lib::tab_text(lib::Tab::active, true), "Active");
+    OA_CHECK_TEXT(lib::tab_text(lib::Tab::active, false), "Active");
     OA_CHECK_TEXT(lib::filter_text(lib::Filter::installed), "Installed");
+    OA_CHECK_TEXT(lib::filter_text(lib::Filter::newest), "New");
     OA_CHECK_TEXT(lib::state_text(State::playing), "PLAYING");
+}
+
+void test_opens_on_active() {
+    lib::Inputs inputs = base_inputs();
+    inputs.listings.push_back(listing(core, Kind::mod, "alpha-mod", "Alpha Mod"));
+    lib::Library library;
+    lib::refresh(library, inputs);
+    // A Library opens on Active, which lists no entry and selects none.
+    OA_CHECK(library.tab == lib::Tab::active);
+    OA_CHECK(library.visible.empty() && !library.selected);
+    lib::open_details(library);
+    OA_CHECK(!library.details_open);
+    lib::set_query(library, "alpha");
+    OA_CHECK(library.visible.empty());
+    lib::set_query(library, "");
+    lib::set_tab(library, lib::Tab::mods);
+    OA_CHECK(
+        (library.selected == lib::EntryId{std::string(core), Kind::mod, "alpha-mod"}) &&
+        library.visible.size() == 1
+    );
+    // A refresh keeps the tab shown.
+    lib::refresh(library, inputs);
+    OA_CHECK(library.tab == lib::Tab::mods);
+}
+
+void test_new_filter() {
+    lib::Inputs inputs = base_inputs();
+    // Twelve dated mods, two of them on one day, and one with no day; the
+    // undated one was released most often, which says nothing of when.
+    const std::vector<std::pair<std::string, std::string>> dated = {
+        {"m01", "2026-01-05"},
+        {"m02", "2026-02-11"},
+        {"m03", "2026-03-02"},
+        {"m04", "2026-04-20"},
+        {"m05", "2026-05-01"},
+        {"m06", "2026-06-15"},
+        {"m07", "2026-07-07"},
+        {"m08", "2026-08-30"},
+        {"zz-tie", "2026-09-09"},
+        {"aa-tie", "2026-09-09"},
+        {"m11", "2026-10-01"},
+        {"m12", "2026-10-11"},
+    };
+    for (const auto& [key, day] : dated) {
+        lib::Listing made = listing(core, Kind::mod, key, key);
+        made.published = day;
+        inputs.listings.push_back(std::move(made));
+    }
+    lib::Listing undated = listing(core, Kind::mod, "undated", "Undated");
+    undated.release = 90;
+    undated.revision = 40;
+    inputs.listings.push_back(undated);
+    lib::Listing pack = listing(example, Kind::map_pack, "fresh-pack", "Fresh Pack");
+    pack.published = "2026-10-12";
+    pack.tags = {"desert"};
+    inputs.listings.push_back(pack);
+    inputs.installed.push_back(installed(core, Kind::mod, "m01", "m01"));
+    lib::Library library = built(std::move(inputs));
+
+    using Keys = std::vector<std::string>;
+    lib::set_filter(library, lib::Filter::newest);
+    // The ten with the latest days, newest first, ties by name.
+    const Keys newest_mods = {
+        "m12@fixture-core",
+        "m11@fixture-core",
+        "aa-tie@fixture-core",
+        "zz-tie@fixture-core",
+        "m08@fixture-core",
+        "m07@fixture-core",
+        "m06@fixture-core",
+        "m05@fixture-core",
+        "m04@fixture-core",
+        "m03@fixture-core",
+    };
+    OA_CHECK(visible_keys(library) == newest_mods);
+    OA_CHECK(lib::filter_count(library, lib::Filter::newest) == lib::newest_count);
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 13);
+    OA_CHECK_TEXT(lib::filter_caption(library, lib::Filter::newest), "New (10)");
+    // A search narrows New and leaves its count; an old one is never found there.
+    lib::set_query(library, "m0");
+    OA_CHECK(
+        visible_keys(library) == Keys({
+                                     "m08@fixture-core",
+                                     "m07@fixture-core",
+                                     "m06@fixture-core",
+                                     "m05@fixture-core",
+                                     "m04@fixture-core",
+                                     "m03@fixture-core",
+                                 })
+    );
+    OA_CHECK(lib::filter_count(library, lib::Filter::newest) == lib::newest_count);
+    lib::set_query(library, "undated");
+    OA_CHECK(library.visible.empty());
+    lib::set_query(library, "");
+
+    // New on Maps holds maps alone; on Updates, every kind.
+    lib::set_tab(library, lib::Tab::maps);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::all);
+    lib::set_filter(library, lib::Filter::newest);
+    OA_CHECK(visible_keys(library) == Keys({"fresh-pack@example-maps"}));
+    using Counts = std::vector<std::pair<std::string, std::size_t>>;
+    OA_CHECK(lib::tags_in_tab(library) == Counts({{"desert", 1}}));
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::newest);
+    const std::vector<std::string> every_kind = visible_keys(library);
+    OA_CHECK(every_kind.size() == lib::newest_count);
+    OA_CHECK(!every_kind.empty() && every_kind.front() == "fresh-pack@example-maps");
+    OA_CHECK(
+        std::find(every_kind.begin(), every_kind.end(), "m03@fixture-core") == every_kind.end()
+    );
+    // Mods kept its own New.
+    lib::set_tab(library, lib::Tab::mods);
+    OA_CHECK(visible_keys(library) == newest_mods);
+}
+
+void test_active_setup() {
+    lib::Inputs inputs = base_inputs();
+    lib::Listing ridge = listing(core, Kind::mod, "ridge", "Ridge");
+    ridge.badge = lib::Badge{std::vector<uint8_t>(4 * 4 * 4, 0x80), 4, 4};
+    inputs.listings.push_back(ridge);
+    lib::Installed ridge_installed = installed(core, Kind::mod, "ridge", "Ridge (folder)");
+    ridge_installed.version = "4.8";
+    ridge_installed.revision = 3;
+    ridge_installed.playing = true;
+    inputs.installed.push_back(ridge_installed);
+    inputs.playing_mod = lib::PlayingMod{"Ridge (settings)", "4.8", std::nullopt};
+    inputs.language = {"Deutsch", "Deutsch (Fixture)", "1.2"};
+    inputs.map_packs.push_back({"zeta pack", {{"Last Map", 1, "8x8"}}});
+    inputs.map_packs.push_back({"Alpha Pack", {{"Ridgeline", 4, "16x16"}, {"Twin", 2, "12x12"}}});
+    lib::Library library = built(inputs);
+
+    // The installed mod marked playing comes first, by its listing's name and badge.
+    lib::ActiveSetup setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.mod_name, "Ridge");
+    OA_CHECK_TEXT(setup.mod_version, "4.8 · rev 3");
+    OA_CHECK_TEXT(setup.mod_line, "Ridge 4.8 · rev 3");
+    OA_CHECK(setup.mod_badge != nullptr && setup.mod_badge->width == 4);
+    OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
+    OA_CHECK(setup.packs.size() == 2);
+    if (setup.packs.size() == 2) {
+        OA_CHECK_TEXT(setup.packs[0].name, "Alpha Pack");
+        OA_CHECK_TEXT(setup.packs[1].name, "zeta pack");
+        OA_CHECK(setup.packs[0].maps.size() == 2);
+        if (setup.packs[0].maps.size() == 2) {
+            OA_CHECK_TEXT(setup.packs[0].maps[0].players, "4 players");
+            OA_CHECK_TEXT(setup.packs[0].maps[0].line, "Ridgeline · 4 players · 16x16");
+            OA_CHECK_TEXT(setup.packs[0].maps[1].name, "Twin");
+        }
+        if (!setup.packs[1].maps.empty())
+            OA_CHECK_TEXT(setup.packs[1].maps[0].line, "Last Map · 1 player · 8x8");
+    }
+
+    // Without one, the mod the app says is played; a pack without a version is named alone.
+    inputs.installed[0].playing = false;
+    inputs.language = {"Deutsch", "Deutsch (Fixture)", ""};
+    lib::refresh(library, inputs);
+    setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.mod_line, "Ridge (settings) 4.8");
+    OA_CHECK(setup.mod_badge == nullptr);
+    OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture)");
+
+    // No mod, a language the game holds itself, English, and no map packs.
+    inputs.playing_mod.reset();
+    inputs.language = {"Français", "", ""};
+    inputs.map_packs.clear();
+    lib::refresh(library, inputs);
+    setup = lib::active_setup(library);
+    OA_CHECK(setup.mod_name.empty() && setup.mod_badge == nullptr);
+    OA_CHECK_TEXT(setup.mod_line, "No mod is played");
+    OA_CHECK_TEXT(setup.language_line, "Français · built in");
+    OA_CHECK(setup.packs.empty());
+    inputs.language = {};
+    lib::refresh(library, inputs);
+    OA_CHECK_TEXT(lib::active_setup(library).language_line, "English · built in");
 }
 
 void test_order_without_search() {
@@ -1317,6 +1556,9 @@ int main() {
     test_installed_never_blocked();
     test_registries();
     test_tabs_filters_tags();
+    test_opens_on_active();
+    test_new_filter();
+    test_active_setup();
     test_order_without_search();
     test_selection();
     test_entry_actions();
