@@ -530,6 +530,69 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                 room.width,
                 room.height
             );
+        } else if (action == "window") {
+            // The window resized, and the match laid out at that size before
+            // the resize is handled, as a size taken at the start is. A
+            // headless match has no window, so it is laid out at the size
+            // directly. The open settings dialog, when there is one, is
+            // reported where it shows then.
+            int width = 0;
+            int height = 0;
+            if (!(line >> width >> height) || width <= 0 || height <= 0)
+                throw std::runtime_error(where + ": window takes WIDTH HEIGHT");
+            if (sdl_.window != nullptr) {
+                if (!SDL_SetWindowSize(sdl_.window, width, height))
+                    throw std::runtime_error(
+                        where + ": SDL_SetWindowSize: " + std::string(SDL_GetError())
+                    );
+                follow_window_output();
+            } else {
+                // A headless match has no window. The layout at this size is
+                // the one a resize of a window of this size leaves.
+                match_layout_ = lay_out_match(width, height);
+            }
+            if (engine_settings_dialog() == nullptr) {
+                std::printf("stage: window %dx%d\n", width, height);
+            } else {
+                const LayerPlacement placed = oa_layer().placement_of("settings");
+                std::printf(
+                    "stage: window %dx%d settings at %d,%d %dx%d\n",
+                    width,
+                    height,
+                    placed.shown.x,
+                    placed.shown.y,
+                    placed.shown.width,
+                    placed.shown.height
+                );
+            }
+        } else if (action == "interface-size") {
+            // Interface size set to a word the preferences keep ("100",
+            // "automatic"), with the dialog already open, as choosing it
+            // does: the dialog stays open and is reported where it shows then.
+            namespace settings = oa::ui::engine_settings;
+            std::string word;
+            if (!(line >> word))
+                throw std::runtime_error(where + ": interface-size takes a size");
+            const std::optional<settings::InterfaceSize> size =
+                settings::interface_size_from_text(word);
+            if (!size)
+                throw std::runtime_error(where + ": interface-size has no size " + word);
+            settings::Dialog* dialog = engine_settings_dialog();
+            if (dialog == nullptr)
+                throw std::runtime_error(where + ": the settings dialog is not open");
+            dialog->chosen.interface_size = *size;
+            take_settings_screen_action(settings::DialogAction::changed);
+            if (engine_settings_dialog() == nullptr)
+                throw std::runtime_error(where + ": choosing an Interface size closed the dialog");
+            const LayerPlacement placed = oa_layer().placement_of("settings");
+            std::printf(
+                "stage: interface-size %s at %d,%d %dx%d\n",
+                word.c_str(),
+                placed.shown.x,
+                placed.shown.y,
+                placed.shown.width,
+                placed.shown.height
+            );
         } else if (action == "gallery") {
             // The settings dialog opened beside the in-game menu at
             // Developer, and the UI kit gallery's SHOW taken as the dialog

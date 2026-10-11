@@ -7251,6 +7251,31 @@ class Runtime final : public menu::Host,
     /// @param height texture height
     void ensure_texture(int width, int height);
 
+    /// Asks SDL to take the size of the window the player sees, when that
+    /// size was never delivered.
+    ///
+    /// On macOS a resize that a full-screen change skipped leaves the
+    /// recorded size behind the window on screen. The recorded size is then
+    /// set to the live content size, once for that size, and the resize is
+    /// delivered as any other. A full-screen, maximised or minimised window
+    /// is left as it is. Elsewhere this does nothing.
+    void sync_live_window_size();
+
+    /// Lays a match out at the window's size when the layout is still the
+    /// size of an earlier window.
+    ///
+    /// The layout is taken when a resize is handled (apply_output_mode). A
+    /// size that changed without one, or one not yet handled, is laid out
+    /// here, so the first frame of a game and every OA screen use the same
+    /// scale a resize of this window would. sync_live_window_size runs
+    /// first, so the size is the window on screen.
+    void follow_window_output();
+
+    /// Returns the canvas size apply_output_mode would lay a match out at.
+    ///
+    /// @return the width and height, in canvas pixels; 0 when there is none
+    [[nodiscard]] SDL_Point match_canvas_point() const;
+
     /// Sets the SDL presentation for the current screen.
     ///
     /// A match lays the battlefield and chrome out for the window's pixel size,
@@ -14012,6 +14037,16 @@ class Runtime final : public menu::Host,
     // applied.
     FullScreenSwitch full_screen_switch_{};
     oa::ui::display_layout::MatchLayout match_layout_{};
+    // The canvas size apply_output_mode last laid a match out at
+    // (match_canvas_point). 0 until a match is laid out, and 0 again off one,
+    // so a size that changed with no resize still lays the next match out.
+    int followed_canvas_width_ = 0;
+    int followed_canvas_height_ = 0;
+    // The live content size last asked of the window (sync_live_window_size),
+    // so a size the system's window keeps and the recorded size does not is
+    // asked once. 0 until then.
+    int nudged_window_width_ = 0;
+    int nudged_window_height_ = 0;
     // The scaled frame the match was last laid out at (scaled_frame_size);
     // 0 by 0 when it is laid out at the window's size.
     int scaled_frame_width_ = 0;

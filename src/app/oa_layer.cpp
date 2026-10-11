@@ -1709,9 +1709,10 @@ LayerView OaLayer::view() const {
     LayerView seen{};
     seen.match = runtime_.screen_ == Screen::match;
     seen.game_screen = runtime_.screen_;
-    // The Interface size the settings in effect choose (taken when the
-    // dialog's OK is pressed). 150% is drawn in the modern fonts, and is 100%
-    // while they are off or cannot be opened.
+    // The Interface size in effect, chosen in Settings as it is chosen.
+    // Cancel puts back the size the dialog opened with, and OK keeps it.
+    // 150% is drawn in the modern fonts, and is 100% while they are off or
+    // cannot be opened.
     const settings::EngineSettings& current = runtime_.engine_settings_state().current;
     settings::InterfaceSize chosen = current.interface_size;
     if (chosen == settings::InterfaceSize::size_150)
@@ -1820,6 +1821,10 @@ void OaLayer::lay_out_screens() {
         screen->lay_out(seen);
     for (const auto& screen : queue_)
         screen->lay_out(seen);
+}
+
+void OaLayer::lay_out_for_size() {
+    lay_out_screens();
 }
 
 bool OaLayer::shows(bool match) const {
