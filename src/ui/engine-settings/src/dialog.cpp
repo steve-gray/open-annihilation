@@ -352,10 +352,10 @@ ScrolledRows open_rows(const Dialog& dialog) {
     if (developer_page(dialog)) {
         // Developer's rows stay at its top; its list scrolls under them in a
         // view of its own, with the end gap under its last row.
-        open.area = sized.developer_scroll;
+        open.area = developer_list_scroll(dialog);
         open.list = place_list(dialog, 0);
-        open.content_height = open.list.bottom + end_gap - sized.developer_view.y;
-        open.limit = std::max(open.content_height - sized.developer_view.height, int32_t{0});
+        open.content_height = open.list.bottom + end_gap - open.area.view.y;
+        open.limit = std::max(open.content_height - open.area.view.height, int32_t{0});
         open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
         scroll_list(open.list, open.scroll);
         return open;
@@ -388,6 +388,23 @@ ScrolledRows open_rows(const Dialog& dialog) {
     open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
     scroll_rows(open.rows, open.scroll);
     return open;
+}
+
+ScrollArea developer_list_scroll(const Dialog& dialog) {
+    const Sizes& sized = sizes_of(dialog);
+    ScrollArea area = sized.developer_scroll;
+    const Rows rows = place_section(
+        dialog, Page::developer, shown_locks(dialog), dialog.section_hooks, &estimated_width
+    );
+    const int32_t lower = std::clamp(
+        rows.bottom - sized.developer_list_rule, int32_t{0}, sized.developer_view.height
+    );
+    for (SourceRect* rect : {&area.view, &area.well, &area.hit}) {
+        rect->y += lower;
+        rect->height -= lower;
+    }
+    area.page_step = std::max(area.page_step - lower, hint_line_height);
+    return area;
 }
 
 int32_t scroll_showing(const ScrolledRows& open, std::size_t index) noexcept {
@@ -1320,13 +1337,15 @@ DialogAction open_folder(Dialog& dialog, FolderButton button) noexcept {
 }
 
 /// Takes what a row's button asks for: MANAGE… the Game files screen, a
-/// button of Your files its folder.
+/// button of Your files its folder, SHOW the UI kit gallery.
 ///
 /// @param[in,out] dialog the dialog
-/// @param action the button's action (manage_game_files_action, or
-///     first_folder_action and its place)
+/// @param action the button's action (manage_game_files_action,
+///     first_folder_action and its place, or show_gallery_action)
 /// @return what it asks of the host
 DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
+    if (action == layout::show_gallery_action)
+        return DialogAction::show_gallery;
     if (action == downloads::reset_install_id_action)
         return DialogAction::reset_install_id;
     if (action == downloads::empty_downloads_action)
@@ -2147,7 +2166,7 @@ void developer_layout(
         }
     }
     for (LayoutPart& part : rows)
-        if (wholly_in(part.rect, sized.developer_view))
+        if (wholly_in(part.rect, open.area.view))
             parts.push_back(std::move(part));
     // The list's footer, which never scrolls.
     text_part(

@@ -41,7 +41,7 @@ using Stepper = kit::Stepper<SettingsModel>;
 using Hint = std::array<std::string_view, 2>;
 
 /// The number of settings: Setting's enumerators.
-constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::interface_size) + 1;
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::kit_gallery) + 1;
 
 // ---------------------------------------------------------------------------
 // The sections' rows.
@@ -139,10 +139,11 @@ constexpr std::array<Setting, 3> kGameFilesRows{
     Setting::game_files_backed_up,
     Setting::game_files_location,
 };
-/// Developer's rows, over its list.
+/// Developer's rows, over its list: the gallery after the statistics.
 constexpr std::array<Setting, developer_row_count> kDeveloperRows{
     Setting::developer_mode,
     Setting::frame_stats,
+    Setting::kit_gallery,
 };
 /// The mod's keys.
 constexpr std::array<Setting, 3> kModKeysRows{
@@ -1743,6 +1744,47 @@ constexpr Spec game_files_summary_row() noexcept {
     return changing(spec, &game_files_summary_hint, &lines<2>);
 }
 
+/// Returns UI kit gallery's hint as shown, broken into lines between words
+/// as wide as the dialog's class lets a line be.
+///
+/// @param model the model
+/// @return the lines; at least one
+std::vector<std::string> kit_gallery_hint_lines(const SettingsModel& model) {
+    std::vector<std::string> broken = break_lines(
+        shown_text(kit_gallery_hint_text), line_characters(model), kit_gallery_hint_most_lines
+    );
+    if (broken.empty())
+        broken.emplace_back();
+    return broken;
+}
+
+/// Returns a line of UI kit gallery's hint.
+std::string kit_gallery_hint(const SettingsModel& model, std::size_t line) {
+    const std::vector<std::string> broken = kit_gallery_hint_lines(model);
+    return line < broken.size() ? broken[line] : std::string{};
+}
+
+/// Returns how many lines UI kit gallery's hint takes: one at Regular and
+/// Large, two at Compact.
+std::size_t kit_gallery_hint_count(const SettingsModel& model) {
+    return kit_gallery_hint_lines(model).size();
+}
+
+/// The UI kit gallery row: SHOW opens the gallery of every part of Open
+/// Annihilation's own screens. It keeps no setting.
+constexpr Spec kit_gallery_row() noexcept {
+    const Spec spec = kit::value_and_button<SettingsModel>(
+        "kit-gallery",
+        "UI kit gallery",
+        nullptr,
+        "SHOW",
+        "show",
+        show_gallery_action,
+        {kit_gallery_hint_text, {}}
+    );
+    return changing(spec, &kit_gallery_hint, &kit_gallery_hint_count);
+}
+
 /// The Your files row: the player's own folder and its three folders' buttons.
 constexpr Spec user_folder_row() noexcept {
     Spec spec = kit::buttons<SettingsModel>(
@@ -2117,6 +2159,8 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = wide(kit::choice("interface-size", "Interface size", kInterfaceSizeStepper,
                               {"How large Open Annihilation's own screens", "are drawn. Auto suits the window's height."}),
                   choice_width)},
+    {.setting = S::kit_gallery,
+     .spec = kit_gallery_row()},
 }};
 // clang-format on
 
@@ -2191,6 +2235,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "window-frame",
     "hud-scaling",
     "interface-size",
+    "kit-gallery",
 };
 
 /// Tells whether every row stands at its setting's place and is named by

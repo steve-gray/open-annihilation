@@ -260,9 +260,60 @@ inline constexpr int32_t developer_row_padding = row_padding / 2;
 /// its label line and one hint line.
 inline constexpr int32_t developer_row_height = 1 + developer_row_padding + label_line_height +
                                                 hint_gap + hint_line_height + developer_row_padding;
-/// The row of the line over the list, under Developer's rows.
-inline constexpr int32_t developer_list_rule =
-    first_row_top + developer_row_count * developer_row_height;
+/// UI kit gallery's hint, in English, which the dialog shows through the
+/// interface catalogue: one line at Regular and Large, two at Compact.
+inline constexpr std::string_view kit_gallery_hint_text =
+    "Every part of OA's own screens, in each of its states, at this size.";
+/// The most lines UI kit gallery's hint takes.
+inline constexpr std::size_t kit_gallery_hint_most_lines = 2;
+
+/// Counts the lines a text of single-byte characters takes broken between
+/// words into lines of at most a number of characters, as break_lines
+/// breaks such a text: at its last space where a word would pass the line's
+/// end, a word longer than a line cut there.
+///
+/// @param text the text, of single-byte characters and no location mark
+/// @param characters the most characters a line holds, 1 or more
+/// @return the lines; 0 for a text of spaces alone
+[[nodiscard]] constexpr std::size_t
+lines_between_words(std::string_view text, std::size_t characters) noexcept {
+    characters = characters > 0 ? characters : 1;
+    std::size_t lines = 0;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        while (start < text.size() && text[start] == ' ')
+            ++start;
+        if (start >= text.size())
+            break;
+        std::size_t end = start + characters < text.size() ? start + characters : text.size();
+        if (end < text.size() && text[end] != ' ') {
+            const std::size_t space = text.substr(start, end - start).rfind(' ');
+            if (space != std::string_view::npos && space > 0)
+                end = start + space;
+        }
+        ++lines;
+        start = end;
+    }
+    return lines;
+}
+
+/// Returns the row of the line over Developer's list at a size class: under
+/// its rows, each a label line and one hint line, but UI kit gallery's,
+/// whose hint in English takes as many lines as the class's lines hold.
+/// Where the rows end lower still, as in another language or in the modern
+/// fonts, the list starts under them (developer_list_scroll).
+///
+/// @param hint_line_characters the most characters a hint line holds at the class
+/// @return the row
+[[nodiscard]] constexpr int32_t developer_rule_for(std::size_t hint_line_characters) noexcept {
+    std::size_t gallery_lines = lines_between_words(kit_gallery_hint_text, hint_line_characters);
+    gallery_lines = gallery_lines < 1 ? 1 : gallery_lines;
+    gallery_lines =
+        gallery_lines > kit_gallery_hint_most_lines ? kit_gallery_hint_most_lines : gallery_lines;
+    return first_row_top + developer_row_count * developer_row_height +
+           static_cast<int32_t>(gallery_lines - 1) * hint_line_height;
+}
+
 /// The rows between the footer's line, its two rows and the dialog's footer.
 inline constexpr int32_t developer_footer_gap = 4;
 /// Restore profile values' width.
@@ -323,7 +374,9 @@ struct Sizes {
     /// The rows Page Up and Page Down scroll: the view less three hint
     /// lines, so that what showed at one edge still shows at the other.
     int32_t page_step{};
-    ScrollArea section_scroll{};     ///< where a section's rows scroll
+    ScrollArea section_scroll{}; ///< where a section's rows scroll
+    /// The row of the line over Developer's list, under its rows (developer_rule_for).
+    int32_t developer_list_rule{};
     int32_t developer_footer_rule{}; ///< the row of the line over the footer under Developer's list
     SourceRect developer_view{}; ///< the view Developer's list scrolls in, between its two lines
     SourceRect developer_view_clip{};    ///< what Developer's list is drawn clipped to
@@ -435,13 +488,14 @@ struct Sizes {
     sized.scroll_hit = {sized.content_right, sized.view.y, sized.padding, sized.view.height};
     sized.page_step = sized.view.height - 3 * hint_line_height;
     sized.section_scroll = {sized.view, sized.scroll_well, sized.scroll_hit, sized.page_step};
+    sized.developer_list_rule = developer_rule_for(sized.hint_line_characters);
     sized.developer_footer_rule = sized.footer_rule_row - 2 - button_height - developer_footer_gap -
                                   label_line_height - developer_footer_gap;
     sized.developer_view = {
         sized.content_left,
-        developer_list_rule + 1,
+        sized.developer_list_rule + 1,
         sized.content_width,
-        sized.developer_footer_rule - developer_list_rule - 1
+        sized.developer_footer_rule - sized.developer_list_rule - 1
     };
     sized.developer_view_clip = {
         sized.developer_view.x - focus_inset,
@@ -600,6 +654,8 @@ inline constexpr int32_t page_step = compact_sizes.page_step;
 /// Where a section's rows scroll at Compact; Developer's list scrolls in
 /// developer_scroll.
 inline constexpr ScrollArea section_scroll = compact_sizes.section_scroll;
+/// The row of the line over Developer's list, under its rows, at Compact.
+inline constexpr int32_t developer_list_rule = compact_sizes.developer_list_rule;
 /// The row of the line over the footer under Developer's list, at Compact.
 inline constexpr int32_t developer_footer_rule = compact_sizes.developer_footer_rule;
 /// The view Developer's list scrolls in, between the two lines, at Compact.
@@ -1386,6 +1442,18 @@ inline constexpr int32_t first_menu_item_control = question_no_control - 1;
 /// @param scroll the rows the list is scrolled by from its top; not clamped
 /// @return the list
 [[nodiscard]] List place_list(const Dialog& dialog, int32_t scroll = 0);
+
+/// Returns where Developer's list scrolls: its size class's
+/// (Sizes::developer_scroll), whose top is the row under the class's
+/// developer_list_rule, moved down to the row under Developer's rows
+/// wherever they end lower, as in a language whose hints take more lines or
+/// while a hint's lines lie further apart in the modern fonts. Its height,
+/// its well and the margin a press holds the bar in shrink by as much, and
+/// its page step.
+///
+/// @param dialog the dialog, on Developer
+/// @return the view, the well, the margin and the page step
+[[nodiscard]] ScrollArea developer_list_scroll(const Dialog& dialog);
 
 /// Moves a placed list up, every part of every row with it.
 ///

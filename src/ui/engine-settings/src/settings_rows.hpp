@@ -46,6 +46,9 @@ inline constexpr oa::ui::kit::ActionId manage_game_files_action = 0;
 /// What Your files' first button asks for; each next button's is one more,
 /// in FolderButton's order.
 inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
+/// What SHOW, Developer's UI kit gallery's button, asks for: the gallery.
+/// After Your files' three and Downloads' RESET and EMPTY.
+inline constexpr oa::ui::kit::ActionId show_gallery_action = 6;
 
 /// Returns a setting's row spec.
 ///
