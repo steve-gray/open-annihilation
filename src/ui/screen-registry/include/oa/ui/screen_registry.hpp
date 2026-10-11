@@ -1,14 +1,18 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Registration tables for frontend screens, overlays, dispatcher steps and
-// dispatcher queries.
+// Registration tables for frontend screens, overlays, dispatcher steps,
+// dispatcher queries and kit screens.
 //
 // Packages describe their screens with plain descriptor structs and register
 // them from one function listed in screens.inc, or from the extension's
 // register_screens. The application owns the registry and hands packages a
-// ScreenContext; packages never see Runtime.
+// ScreenContext; packages never see Runtime. A kit screen
+// (screen_registry/kit.hpp) is laid out with the OA UI kit and hosted on the
+// OA layer, which opens it by name (ScreenServices::open_kit_screen).
 #pragma once
+
+#include "oa/ui/screen_registry/kit.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -82,6 +86,11 @@ struct ScreenServices {
     void (*play_sound)(void* host, const char* name){};
     int (*read_number)(void* host, const char* section, const char* key, uint32_t* value){};
     void (*write_number)(void* host, const char* section, const char* key, uint32_t value){};
+    // Reads the setting `key` of `section` into `out`, with its terminating
+    // zero, when it is stored and fits in `capacity` bytes; returns 1 then,
+    // and 0 otherwise. A null section reads `key` as a whole preference key,
+    // as a Settings page's row binds one (kit::PreferenceRow::key), such as
+    // "kit.example". Read at once.
     int (*read_string)(
         void* host, const char* section, const char* key, char* out, std::size_t capacity
     ){};
@@ -129,6 +138,43 @@ struct ScreenServices {
     // the current event or frame has been handled; requests before then run
     // one pass, and none runs while a match is on screen.
     void (*run_frontend)(void* host){};
+    /// Opens a kit screen registered under a name (kit_screen_register) on
+    /// the OA layer, over the front end: modal, over a backdrop, laid out by
+    /// its lay_out for the layer's size class and scale, and focused,
+    /// reached and answered by the kit, as OA's own screens are. Called on
+    /// the thread that runs main().
+    ///
+    /// @param host ScreenContext::host
+    /// @param name the screen's name; read at once
+    /// @return 1 when the screen was opened; 0 for a null name or one no kit
+    ///         screen has
+    int (*open_kit_screen)(void* host, const char* name){};
+    /// Queues a notice on the OA layer's one queue of notices and prompts,
+    /// the engine's and every extension's, which shows one at a time: the
+    /// notice shows when nothing before it is shown, over the menus, and
+    /// closes with its OK. Called on the thread that runs main().
+    ///
+    /// @param host ScreenContext::host
+    /// @param request the notice; it and the strings it names are copied at
+    ///        once
+    /// @return the request's id, never 0; 0 when it is refused: a null
+    ///         request, title or paragraph
+    uint32_t (*show_notice)(void* host, const NoticeRequest* request){};
+    /// Queues a prompt on the OA layer's one queue of notices and prompts,
+    /// as show_notice queues a notice. Its answered is called once, on the
+    /// thread that runs main(), with the button pressed, from 0 (Escape
+    /// presses cancel_button), or with -1 when the runtime ends with the
+    /// prompt still queued or shown. Called on the thread that runs main().
+    ///
+    /// @param host ScreenContext::host
+    /// @param request the prompt; it and the strings it names are copied at
+    ///        once, and its user is handed to answered
+    /// @return the request's id, never 0; 0 when it is refused: a null
+    ///         request, title, paragraph or caption, no button or more than
+    ///         most_prompt_buttons, a button id that is not one word of a to
+    ///         z, 0 to 9 and hyphens, or a cancel or primary button that is
+    ///         neither -1 nor one of the buttons
+    uint32_t (*ask_prompt)(void* host, const PromptRequest* request){};
 };
 
 // What screens, overlays and dispatcher steps are called with. host and
@@ -210,6 +256,11 @@ struct ScreenRegistry {
     QueryDesc queries[kMaxQueries]{};
     uint32_t query_count{};
     const char* rejected{}; // name of the first rejected registration
+    /// The kit screens registered (kit_screen_register), in registration
+    /// order, which ScreenServices::open_kit_screen opens by name.
+    KitScreenDesc kit_screens[kMaxKitScreens]{};
+    /// How many kit screens are registered.
+    uint32_t kit_screen_count{};
 };
 
 /// Adds a screen to the registry.
@@ -260,6 +311,20 @@ bool step_register(
 bool query_register(
     ScreenRegistry* registry, oa::ui::frontend_state::Query query, ScreenQueryFn run, void* state
 );
+
+/// Adds a kit screen to the registry, which ScreenServices::open_kit_screen
+/// then opens by its name on the OA layer.
+///
+/// The description is copied; its name and model, and what they name, must
+/// live as long as the runtime. Returns false and records the name in
+/// `rejected` ("(unnamed)" for a null or empty one) for a name that is not
+/// dotted words of a to z, 0 to 9 and hyphens of at most 48 bytes, a name
+/// another kit screen has, a screen with no lay_out or act, or a full table.
+///
+/// @param[in,out] registry registry to add to; null takes nothing
+/// @param screen the kit screen's description, copied
+/// @return true when registered
+bool kit_screen_register(ScreenRegistry* registry, const KitScreenDesc& screen);
 
 /// Finds a registered screen.
 ///

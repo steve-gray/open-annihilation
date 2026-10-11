@@ -20,7 +20,8 @@
 // before it. When several extensions fill a hook, the combined table calls
 // them by these rules:
 // - every extension, in list order: check_options, startup,
-//   register_screens, ready, check_multiplayer_menu, frame, match_game,
+//   register_screens, register_settings_pages, ready,
+//   check_multiplayer_menu, frame, match_game,
 //   match_event, check_console, draw_loading, draw_match_hud,
 //   draw_match_overlay, pause_changed, load_progress, speed_changed and
 //   app_mode_set; also message_hooks, console_host and team_panel_host,
@@ -104,6 +105,10 @@
 // beside the rules of each layer.
 #pragma once
 
+#include "oa/ui/kit/looks.hpp"
+#include "oa/ui/kit/text.hpp"
+#include "oa/ui/screen_registry/kit.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -123,7 +128,8 @@
 /// leaving it null; when or in which order the engine calls it; what it may
 /// keep or must free; its error behaviour; a type, enumerator or bit the
 /// table uses; or a function an extension calls to read a value the engine
-/// resolved. A change to wording alone keeps it. Version 2 is the first
+/// resolved. A change to wording alone keeps it. A change to the OA UI kit's
+/// public headers follows the rule version 15 states below. Version 2 is the first
 /// with the layered layout's names: this header is oa/app/extension.hpp and
 /// the types the table names are in their modules' namespaces. Version 3
 /// replaces offers_multiplayer with select_multiplayer, which MULTI calls
@@ -199,8 +205,18 @@
 /// that clock. simulation_hash reads the simulation hash the run plays
 /// under: the profile in play, with every Developer Mode override that
 /// changes the simulation, or the plain baseline when the game plays 3.1c. A
-/// running match keeps the hash it started with.
-#define OA_EXTENSION_API_VERSION 14
+/// running match keeps the hash it started with. Version 15 adds the OA UI
+/// kit to the contract: register_settings_pages; kit screens in
+/// ScreenRegistry and open_kit_screen, show_notice and ask_prompt in
+/// ScreenServices; and the kit's text, chips, progress bars and hover card in
+/// MatchOverlay. From this version the kit's public headers, oa/ui/kit/*.hpp,
+/// are part of the contract. Changes to them before the first release that
+/// carries version 15 (0.8.0) keep 15; from that release on, any change to
+/// them raises the version, while the kit is provisional too (it changes as
+/// the engine's screens need). ScreenServices::read_string also reads a whole
+/// preference key, as a Settings page's row binds one, when its section is
+/// null.
+#define OA_EXTENSION_API_VERSION 15
 
 namespace oa {
 struct Game;
@@ -328,9 +344,11 @@ enum class OverlayFont : uint8_t {
 // pixels; `scale` of them make up one pixel of the game's 640x480 screen:
 // text is drawn `scale` times larger, and a readout the game draws n pixels
 // from an edge of the battlefield belongs n times `scale` from that edge
-// here.
+// here. The OA UI kit's components (kit_text_width to draw_hover_card) are
+// drawn at `scale`, one point of the kit to `scale` pixels, in the game's
+// fonts, as the kit draws OA's own screens at a whole scale.
 struct MatchOverlay {
-    void* painter{};        // passed back to font_height, draw_text and fill_rect
+    void* painter{};        // passed back to every call below
     const oa::Game* game{}; // the drawn match's Game block
     int left{};             // the battlefield's left edge
     int top{};              // the battlefield's top edge
@@ -367,6 +385,62 @@ struct MatchOverlay {
     /// @param height its height; 0 or less fills nothing
     /// @param palette_index the colour, a palette index
     void (*fill_rect)(void* painter, int x, int y, int width, int height, uint8_t palette_index){};
+    /// Returns a line of kit text's width, as draw_kit_text draws it.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param font the kit's font
+    /// @param text the text, UTF-8; read at once; null is empty
+    /// @return the width: the kit's width in points (kit::text_width) times
+    ///         `scale`; 0 while the kit's fonts are not loaded
+    int (*kit_text_width)(void* painter, oa::ui::kit::FontRole font, const char* text){};
+    /// Draws a line of kit text in the kit's text colour
+    /// (kit::colour::text), clipped to the battlefield.
+    ///
+    /// Nothing is drawn while the kit's fonts are not loaded.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param font the kit's font
+    /// @param x the line's left edge
+    /// @param y its top edge; the line is the font's line high (the kit's
+    ///        small_line or regular_line points, times `scale`), its capitals
+    ///        centred down it
+    /// @param text the text, UTF-8; read at once; null draws nothing
+    void (*draw_kit_text)(
+        void* painter, oa::ui::kit::FontRole font, int x, int y, const char* text
+    ){};
+    /// Draws a kit chip (kit::draw_chip), clipped to the battlefield: as wide
+    /// as kit::chip_width and kit::compact_metrics.chip_height high, in
+    /// points, times `scale`.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the chip's left edge
+    /// @param y its top edge
+    /// @param chip its text and state; read at once; null draws nothing
+    void (*draw_chip)(void* painter, int x, int y, const oa::ui::kit::ChipLook* chip){};
+    /// Draws a kit progress bar (kit::draw_progress), clipped to the
+    /// battlefield: a well in a border, filled in the accent from its left as
+    /// far as it has come, or, busy, striped across with no fill.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the bar's left edge
+    /// @param y its top edge
+    /// @param width its width, rounded down to whole points (`scale` pixels
+    ///        each); less than one point draws nothing
+    /// @param height its height, rounded down likewise
+    /// @param thousandths how far it has come, from 0 to 1000 (held to that
+    ///        range), or -1 to draw it busy
+    void (*draw_progress)(
+        void* painter, int x, int y, int width, int height, int32_t thousandths
+    ){};
+    /// Draws a kit hover card (kit::draw_hover_card), clipped to the
+    /// battlefield: kit::hover_card_size in points, times `scale`, its arrow
+    /// outside that rectangle.
+    ///
+    /// @param painter MatchOverlay::painter
+    /// @param x the card's left edge, its arrow not counted
+    /// @param y its top edge, its arrow not counted
+    /// @param card what it shows; read at once; null draws nothing
+    void (*draw_hover_card)(void* painter, int x, int y, const oa::ui::kit::HoverCardLook* card){};
 };
 
 // A recording the engine asks an extension to replay: a file a director
@@ -501,16 +575,37 @@ struct Extension {
     /// @param[in,out] runtime the runtime being built
     void (*startup)(void* context, Runtime& runtime){};
 
-    /// Registers the extension's screens, overlays and dispatcher steps.
+    /// Registers the extension's screens, overlays, dispatcher steps and kit
+    /// screens.
     ///
     /// Called once while the runtime is built, after the engine's own
-    /// screen packages (screens.inc) register. A registration the registry
-    /// rejects stops the start once this hook returns.
+    /// screen packages (screens.inc) register. A kit screen
+    /// (kit_screen_register) is opened by name through
+    /// ScreenServices::open_kit_screen, with the services an overlay's or a
+    /// screen's ScreenContext gives. A registration the registry rejects
+    /// stops the start once this hook returns.
     ///
     /// @param context Extension::context
     /// @param[in,out] registry the runtime's registry; the state a
     ///        registration names must live as long as the runtime
     void (*register_screens)(void* context, ScreenRegistry* registry){};
+
+    /// Registers the extension's Settings pages.
+    ///
+    /// Called once while each runtime is built, right after register_screens.
+    /// Each page the extension takes into the registry
+    /// (settings_page_register) is listed in Settings' nav after the
+    /// engine's own sections, under a divider with its owner's name, and is
+    /// drawn, scaled, focused, saved and restored to its defaults as the
+    /// engine's own pages are. A page the registry refuses stops the start
+    /// once this hook returns, with "settings page registration rejected:
+    /// <reason>".
+    ///
+    /// @param context Extension::context
+    /// @param[in,out] registry the runtime's Settings pages; it lives as long
+    ///        as the runtime, and so must the rows of every page taken and
+    ///        what each page's state names
+    void (*register_settings_pages)(void* context, SettingsRegistry* registry){};
 
     /// Finishes the extension's start once every screen exists.
     ///

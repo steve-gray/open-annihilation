@@ -3,6 +3,7 @@
 
 // Multiplayer screens: resources, input routing, dialogs and drawing.
 #include "oa/ui/frontend_multiplayer/screens.hpp"
+#include "oa/ui/frontend_multiplayer/get_map.hpp"
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/decoded.hpp"
 
@@ -332,6 +333,14 @@ bool prepare_listed(const std::string& name) {
         return false;
     }
     clear_pack_refusal();
+    // Mounted again after it was not: the files may be another release's
+    // now, as after GET MAP installs the host's. A map context bound to the
+    // map by this name reads them again, its hashes among them.
+    if (!state.pack_prepared &&
+        oa::formats::tdf::compare_nocase(
+            data::campaign::campaign_mission_name(&state.map_context), name.c_str()
+        ) == 0)
+        state.map_context.mission_name[0] = '\0';
     state.pack_prepared = true;
     return true;
 }
@@ -560,11 +569,50 @@ const char* maps_name(void*) {
     return map != nullptr ? map->name.c_str() : "";
 }
 
+/// Lists a pack map the source lists now and the battle room's list does not
+/// yet: one installed since the list was read, as GET MAP installs the host's.
+///
+/// @param name the map's name
+void list_new_pack_map(const char* name) {
+    auto& state = ui();
+    const bool listed = std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
+        return info.name == name;
+    });
+    if (listed || g_map_source.count == nullptr || g_map_source.at == nullptr)
+        return;
+    const int32_t count = g_map_source.count(g_map_source.context);
+    for (int32_t index = 0; index < count; ++index) {
+        LobbyPackMap pack{};
+        if (!g_map_source.at(g_map_source.context, index, &pack) || pack.name == nullptr ||
+            std::strcmp(pack.name, name) != 0)
+            continue;
+        // The selected map keeps its place by name as the list is sorted again.
+        const std::string selected =
+            state.map >= 0 && static_cast<std::size_t>(state.map) < state.maps.size()
+                ? state.maps[static_cast<std::size_t>(state.map)].name
+                : std::string();
+        MapInfo info;
+        info.name = pack.name;
+        info.description = pack.description != nullptr ? pack.description : "";
+        info.size = pack.size != nullptr ? pack.size : "";
+        info.memory = pack.memory_mb;
+        state.maps.push_back(std::move(info));
+        std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
+            return a.name < b.name;
+        });
+        for (std::size_t at = 0; at < state.maps.size() && !selected.empty(); ++at)
+            if (state.maps[at].name == selected)
+                state.map = static_cast<int32_t>(at);
+        return;
+    }
+}
+
 bool maps_select(void*, const char* name) {
     auto& state = ui();
     load_maps();
     if (name == nullptr)
         return false;
+    list_new_pack_map(name);
     for (std::size_t index = 0; index < state.maps.size(); ++index) {
         if (state.maps[index].name != name)
             continue;
@@ -3700,6 +3748,21 @@ bool multiplayer_offer_map(const char* name) noexcept {
             return false;
     }
     return mapselect_offer(state.lobby, state.mapselect, state.modal.panel, wanted);
+}
+
+bool multiplayer_battle_room_map(BattleRoomMap* out) noexcept {
+    if (out == nullptr)
+        return false;
+    auto& state = ui();
+    // As the badges: the battle room shows, with no dialog over it.
+    if (!state.showing || state.screen != kScreenBattleroom || !state.base.loaded ||
+        &front() != &state.base) {
+        *out = BattleRoomMap{};
+        return false;
+    }
+    return battle_room_map(
+        state.lobby, state.base.panel, state.base.offset_x, state.base.offset_y, out
+    );
 }
 
 int32_t multiplayer_focused_player_slot() noexcept {

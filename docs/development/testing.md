@@ -845,6 +845,36 @@ message log's face at a text size, that a face's rows at that size are the
 ones the fonts report, that settings written and read come back, and that
 the field's place is handed to a stub in the window's coordinates.
 
+### The kit for an extension
+
+An extension builds Settings pages, kit screens, notices, prompts and
+match-overlay components from the OA UI kit through its table
+(`register_settings_pages`, kit screens in the `ScreenRegistry`,
+`open_kit_screen`, `show_notice` and `ask_prompt` in the screen services,
+and the overlay's kit calls, version 15 of the extension table).
+`screen-registry` checks the registrations: a page and a kit screen taken,
+and the refusals, the first of which is kept. `app-extension-list` checks
+that `register_settings_pages` is called for every extension in list order,
+and `extension-hooks-game` that the game calls it. In a build configured
+with `-DOA_RECORD_EXTENSION_HOOKS=ON`, `extension-kit`
+(`tests/extension/check_kit_fixture.py`) runs the Kit fixture, a test
+extension (`tests/extension/kit_fixture.cpp`) that uses the kit through the
+table alone, over the installation `OA_GAME_DIR` names. In a 640x480, a
+1280x720 and a 1920x1080 window, on the dummy drivers with `--fark`, it
+opens Settings by the OA button and requires the fixture's page listed below
+Developer, its controls inside the window with no two overlapping, Tab
+through them in the order the page declares, and OK storing a change and
+calling the page's `applied`. It opens the fixture's kit screen with
+`--kit-fixture-screen` and requires its dialog, its controls inside the
+window, its tab order and CLOSE; and it asks the fixture's prompt with
+`--kit-fixture-prompt` and requires Yes to reach the answer. Then a
+headless match with `--snapshot` must show the fixture's chip edged in the
+outline colour it prints, where it prints it, from the battlefield's
+corner; with the chip's setting stored Off the fixture draws none. Its
+output names each window size. `native-registered-kit` checks the same
+hosts with a page, a screen, a notice and a prompt registered from inside
+the engine, with their size class and scale.
+
 ### Other builds
 
 - **Core only**, without SDL or game data: configure with

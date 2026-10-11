@@ -17,6 +17,7 @@
 
 #include "oa/app/runtime.hpp"
 #include "oa/netgame/presence.hpp"
+#include "oa/ui/frontend_multiplayer/get_map.hpp"
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/kit/components.hpp"
@@ -146,7 +147,11 @@ class PresenceCardScreen final : public LayerScreen {
     ///
     /// @param layer the layer it shows on, whose fonts it is drawn in and
     ///     which tells it when a modal screen shows
-    explicit PresenceCardScreen(OaLayer& layer) : layer_(layer) {
+    /// @param pack_state what this machine has of the host's map pack
+    PresenceCardScreen(
+        OaLayer& layer, std::function<mp::PackState(const oa::netgame::PresenceMapPack&)> pack_state
+    )
+        : layer_(layer), pack_state_(std::move(pack_state)) {
         mp::multiplayer_bind_row_key(&trigger_);
     }
 
@@ -443,10 +448,8 @@ class PresenceCardScreen final : public LayerScreen {
 
     OaLayer& layer_;                    ///< the layer it shows on
     mp::PresenceCardTrigger trigger_{}; ///< when the card opens and closes
-    /// What this machine has of the host's map pack; not known here.
-    std::function<mp::PackState(const oa::netgame::PresenceMapPack&)> pack_state_{
-        [](const oa::netgame::PresenceMapPack&) { return mp::PackState::unknown; }
-    };
+    /// What this machine has of the host's map pack (Runtime::local_map_pack).
+    std::function<mp::PackState(const oa::netgame::PresenceMapPack&)> pack_state_{};
     LayerView view_{};                 ///< the view it was last laid out for
     bool have_view_{};                 ///< view_ holds a view of the front end
     std::vector<BadgePlace> badges_{}; ///< the badges the battle room shows now
@@ -465,7 +468,20 @@ void Runtime::keep_presence_card_screen() {
     OaLayer& layer = oa_layer();
     if (layer.find(presence_card_screen_name) != nullptr)
         return;
-    layer.push(std::make_unique<PresenceCardScreen>(layer));
+    // The host's card says whether this machine has the host's map pack: its
+    // release, by the record's SHA-256, another release, or none of it.
+    layer.push(
+        std::make_unique<PresenceCardScreen>(
+            layer, [this](const oa::netgame::PresenceMapPack& pack) {
+                const mp::HostPack host = mp::host_pack_of(pack);
+                const mp::LocalPack local = local_map_pack(host.id, host.sha256);
+                if (!local.installed)
+                    return mp::PackState::missing;
+                return local.sha256 == host.sha256 ? mp::PackState::installed
+                                                   : mp::PackState::other_release;
+            }
+        )
+    );
 }
 
 } // namespace oa::app

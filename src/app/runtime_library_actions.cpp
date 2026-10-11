@@ -4,8 +4,11 @@
 // What the Library's entries ask of the game: ROLL BACK, which asks the Mods
 // page's Roll Back Mod question over the Library and rolls the folder back as
 // the Mods page does; PLAY NOW, which switches the game to the mod; and
-// UPDATE and UPDATE ALL, which queue updates through request_update, the one
-// place an update reaches the download queue.
+// UPDATE and UPDATE ALL, which start updates through request_update, the one
+// place an update reaches the download queue. Settings › Mods' UPDATE comes
+// here too. An update that may stop saved games loading, of a mod from a
+// registry the player added, asks the update question first
+// (oa::ui::library::asks_before_update); every other starts at once.
 
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
@@ -16,8 +19,10 @@
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/update_question.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -75,8 +80,28 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
         else
             for (const library::Entry& each : host.model.entries)
                 take_due(each);
-        for (const library::EntryId& each : due)
+        // The updates that ask first are asked about once, together; every
+        // other starts at once, in list order, every built-in registry's
+        // among them, whatever the question's answer.
+        std::vector<library::Entry> asking;
+        std::vector<library::EntryId> asked_for;
+        std::vector<library::EntryId> at_once;
+        for (const library::EntryId& each : due) {
+            const library::Entry* found = library::find_entry(host.model, each);
+            if (found != nullptr && found->update != nullptr &&
+                library::asks_before_update(*found, *found->update)) {
+                asking.push_back(*found);
+                asked_for.push_back(each);
+            } else {
+                at_once.push_back(each);
+            }
+        }
+        const std::optional<library::UpdateQuestion> question =
+            library::update_all_question(asking, host.model.text);
+        for (const library::EntryId& each : at_once)
             std::ignore = request_update(each);
+        if (question)
+            ask_before_updates(library::update_prompt(*question, host.model.text), asked_for);
         return;
     }
     const library::Entry* found = library::find_entry(host.model, entry);
@@ -143,11 +168,43 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
     );
 }
 
-bool Runtime::request_update(const library::EntryId& entry) {
+void Runtime::ask_before_updates(
+    const oa::ui::kit::Question& question, const std::vector<library::EntryId>& entries
+) {
+    int32_t update_button = -1;
+    for (std::size_t place = 0; place < question.buttons.size(); ++place)
+        if (question.buttons[place].id == library::update_button_id)
+            update_button = static_cast<int32_t>(place);
+    QuestionScreen::Host answers;
+    answers.answer = [this, entries, update_button](int32_t button) {
+        if (button == update_button)
+            for (const library::EntryId& each : entries)
+                std::ignore = request_update(each, true);
+        return true;
+    };
+    // It goes with the main menu, as the Library and the settings it asks
+    // over do.
+    answers.tick = [this] { return screen_ != Screen::main_menu; };
+    OaLayer& layer = oa_layer();
+    layer.push(std::make_unique<QuestionScreen>(layer, Screen::main_menu, question, answers));
+}
+
+bool Runtime::request_update(const library::EntryId& entry, bool answered) {
     LibraryHost& host = library_host();
     const library::Entry* found = library::find_entry(host.model, entry);
     if (found == nullptr || host.feed.enqueue == nullptr || entry.registry.empty())
         return false;
+    // The update question, where asks_before_update says the update asks:
+    // pushed at once over the screen that asked. Its UPDATE comes back here
+    // answered; NOT NOW leaves the update.
+    if (!answered && found->update != nullptr) {
+        const bool playing = found->installed != nullptr && found->installed->playing;
+        if (const std::optional<library::UpdateQuestion> asked =
+                library::update_question(*found, *found->update, playing, host.model.text)) {
+            ask_before_updates(library::update_prompt(*asked, host.model.text), {entry});
+            return true;
+        }
+    }
     // What the installer noted of an earlier try is done with.
     if (mod_install_state_)
         mod_install_state_->note_for_library(*this, {entry.registry, entry.key, {}, {}});

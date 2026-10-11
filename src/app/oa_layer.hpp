@@ -904,14 +904,10 @@ class OaLayer {
     /// @return the registry; the caller keeps each page's rows alive
     [[nodiscard]] SettingsRegistry& registered_settings() noexcept { return settings_pages_; }
 
-    /// Returns the kit screens registered for this runtime.
-    ///
-    /// @return the registry
-    [[nodiscard]] KitScreenRegistry& registered_screens() noexcept { return kit_screens_; }
-
-    /// Opens a registered kit screen by name on this layer: modal, over a
-    /// backdrop, filling the front end's room, laid out from its descriptor
-    /// and drawn with the kit. An unknown name opens nothing.
+    /// Opens a kit screen the runtime's ScreenRegistry holds
+    /// (kit_screen_register) by name on this layer: modal, over a backdrop,
+    /// filling the front end's room, laid out from its descriptor and drawn
+    /// with the kit. An unknown name opens nothing.
     ///
     /// @param name the screen's name
     /// @return true when the screen was opened
@@ -1172,8 +1168,6 @@ class OaLayer {
     mutable std::optional<uint64_t> smooth_fonts_generation_{};
     /// Settings pages registered for this runtime.
     SettingsRegistry settings_pages_{};
-    /// Kit screens registered for this runtime.
-    KitScreenRegistry kit_screens_{};
     /// The next id queue_notice and queue_prompt hand out. Never 0.
     uint32_t next_request_{1};
     /// One registered prompt still to answer.

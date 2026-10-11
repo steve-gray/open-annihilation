@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace oa::app::automation {
 namespace {
@@ -203,6 +204,13 @@ void collect_controls(const Endpoint& endpoint, std::vector<AutomationControl>& 
     if (multiplayer_screen(check.screen(check.context))) {
         if (mp::multiplayer_showing())
             multiplayer_controls(controls);
+        // Open Annihilation's own screens over these, such as GET MAP in the
+        // battle room, take the pointer first; the host lists them in the
+        // window's pixels.
+        std::vector<AutomationControl> own;
+        if (host.controls != nullptr)
+            host.controls(host.context, &own);
+        controls.insert(controls.begin(), own.begin(), own.end());
     } else {
         host.controls(host.context, &controls);
         // A dialog's controls come first among the screen's: they take the

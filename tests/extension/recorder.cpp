@@ -12,6 +12,11 @@
 // "<hook>[ <enumerator>] <count>" line each in name order, together with
 // the follower's (follower.cpp), whose hooks start with "follower.".
 //
+// The recorder registers one Settings page, Recorder, whose one toggle is
+// bound to recorder.toggle, from register_settings_pages; with
+// --record-refused-page it gives the page an id the registry refuses, and
+// the start stops.
+//
 // --check-multiplayer-menu runs network play's check of the multiplayer
 // screens first; the recorder's check_multiplayer_menu then says that it
 // ran. The recorder also adds one member to Runtime
@@ -35,6 +40,8 @@
 
 #include "oa/app/check_host.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/ui/kit/rows.hpp"
+#include "oa/ui/screen_registry/kit.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -58,13 +65,16 @@ uint32_t Runtime::count_recorder_member_call() {
 
 namespace {
 
+namespace kit = oa::ui::kit;
+
 // The version of the extension table's contract the recorder follows, and
 // the hooks the table holds after its context at that version. A change to
 // the table raises OA_EXTENSION_API_VERSION (extension.hpp); both follow it.
 // Version 14 adds only functions an extension calls rather than hooks, so the
-// hook count is unchanged.
-constexpr uint32_t kExtensionApiVersionRecorded = 14;
-constexpr std::size_t kHookCount = 40;
+// hook count is unchanged. Version 15 adds register_settings_pages, which the
+// recorder records and registers its own page from.
+constexpr uint32_t kExtensionApiVersionRecorded = 15;
+constexpr std::size_t kHookCount = 41;
 static_assert(
     extension_api_version == kExtensionApiVersionRecorded,
     "the extension table's contract changed: record every hook here, "
@@ -82,6 +92,9 @@ constexpr std::string_view kRecordOption = "--record-hooks";
 constexpr std::string_view kQuitOption = "--record-quit";
 // The option that has the recorder take the headless run for the check host.
 constexpr std::string_view kCheckHostOption = "--record-check-host";
+// The option that has the recorder register a Settings page the registry
+// refuses, which stops the start.
+constexpr std::string_view kRefusedPageOption = "--record-refused-page";
 // The after_pump frames --record-quit waits before the sound and frontend
 // services, and before quit.
 constexpr uint64_t kServicesFrame = 5;
@@ -97,6 +110,7 @@ struct Recorder {
     void* host{};                             // ScreenContext::host, kept from the overlay
     const ScreenServices* services{};         // ScreenContext::services, kept likewise
     bool check_host{};                        // --record-check-host was given
+    bool refused_page{};                      // --record-refused-page was given
 };
 
 /// Returns the recorder of this process.
@@ -217,7 +231,8 @@ const char* event_name(MatchEvent event) {
 /// @param name the option as given
 /// @param values takes the arguments after it
 /// @param[out] effects option_effect bits; left 0
-/// @return true for --record-hooks, --record-quit and --record-check-host
+/// @return true for --record-hooks, --record-quit, --record-check-host and
+///         --record-refused-page
 bool take_option(
     void* /*context*/, const char* name, const OptionValues& values, uint32_t& /*effects*/
 ) {
@@ -233,6 +248,10 @@ bool take_option(
     }
     if (std::string_view(name) == kCheckHostOption) {
         recorder().check_host = true;
+        return true;
+    }
+    if (std::string_view(name) == kRefusedPageOption) {
+        recorder().refused_page = true;
         return true;
     }
     return false;
@@ -287,6 +306,36 @@ void register_screens(void* /*context*/, ScreenRegistry* registry) {
     overlay.screen = kScreenAny;
     overlay.create = keep_services;
     (void)overlay_register(registry, &overlay);
+}
+
+/// Returns the recorder's Settings page's rows: one toggle bound to
+/// recorder.toggle.
+///
+/// @return the rows, which live until the process exits
+const kit::PreferenceRow* recorder_page_rows() {
+    static const kit::PreferenceRow rows[] = {
+        kit::preference_toggle("toggle", "Recorder toggle", "recorder.toggle", "0"),
+    };
+    return rows;
+}
+
+/// Counts the registration of the Settings pages and registers the
+/// recorder's own page, whose one toggle is bound to recorder.toggle; with
+/// --record-refused-page, under an id the registry refuses
+/// (Extension::register_settings_pages).
+///
+/// @param context Extension::context (unused)
+/// @param[in,out] registry the runtime's Settings pages
+void register_settings_pages(void* /*context*/, SettingsRegistry* registry) {
+    record("register_settings_pages");
+    SettingsPageDesc page{};
+    page.id = recorder().refused_page ? "Recorder options" : "recorder.options";
+    page.title = "Recorder";
+    page.owner = "Recorder";
+    page.rows = recorder_page_rows();
+    page.row_count = 1;
+    // A page the registry refuses stops the start once this returns.
+    (void)settings_page_register(registry, page);
 }
 
 /// Uses the kept screen services on the frames --record-quit names.
@@ -904,6 +953,7 @@ void oa_extension_init_recorder(oa::app::Extension* table) {
     table->text = text;
     table->startup = RecorderExtension::startup;
     table->register_screens = register_screens;
+    table->register_settings_pages = register_settings_pages;
     table->ready = RecorderExtension::ready;
     table->frontend_entry = frontend_entry;
     table->run_mode = RecorderExtension::run_mode;

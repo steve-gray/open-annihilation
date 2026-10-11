@@ -14,6 +14,11 @@ namespace {
 
 /// Bit 0 of the developer flags: Developer Mode is on. Every other bit is 0.
 constexpr uint8_t developer_mode_flag = 0x01;
+/// Bit 0 of the content flags: the machine can fetch content. Bits 1 to 7
+/// are sent as 0 and ignored when read.
+constexpr uint8_t content_fetches_flag = 0x01;
+/// The content field's value: one byte of flags.
+constexpr std::size_t content_value_bytes = 1;
 
 constexpr std::size_t digest_bytes = 32;
 constexpr std::size_t version_text_max = 32;
@@ -314,6 +319,13 @@ void write_engine(uint8_t* out, std::size_t* used, const PresenceEngine& engine)
     put_string(out, used, engine.architecture);
 }
 
+/// Writes the content field: its header and its one byte of flags.
+void write_content(uint8_t* out, std::size_t* used, const PresenceContent& content) noexcept {
+    put_u8(out, used, static_cast<uint8_t>(PresenceTag::content));
+    put_u16(out, used, static_cast<uint16_t>(content_value_bytes));
+    put_u8(out, used, content.fetches ? content_fetches_flag : 0);
+}
+
 void write_mod(uint8_t* out, std::size_t* used, const PresenceMod& mod) noexcept {
     put_u8(out, used, static_cast<uint8_t>(PresenceTag::mod));
     put_u16(out, used, static_cast<uint16_t>(mod_value_bytes(mod)));
@@ -486,6 +498,8 @@ WireError encode_presence(
     std::size_t fixed = presence_record_header_bytes;
     if (record.engine)
         fixed += presence_field_header_bytes + engine_value_bytes(*record.engine);
+    if (record.content)
+        fixed += presence_field_header_bytes + content_value_bytes;
     if (record.mod)
         fixed += presence_field_header_bytes + mod_value_bytes(*record.mod);
     if (record.mod_origin)
@@ -546,6 +560,8 @@ WireError encode_presence(
     put_u8(local, &used, record.version);
     if (record.engine)
         write_engine(local, &used, *record.engine);
+    if (record.content)
+        write_content(local, &used, *record.content);
     if (record.mod)
         write_mod(local, &used, *record.mod);
     if (record.mod_origin)
@@ -606,6 +622,7 @@ WireError decode_presence(const uint8_t* record, std::size_t size, PresenceRecor
     bool saw_view = false;
     bool saw_developer = false;
     bool saw_pack = false;
+    bool saw_content = false;
     std::size_t at = presence_record_header_bytes;
     while (at < size) {
         assert(at + presence_field_header_bytes <= size);
@@ -672,6 +689,13 @@ WireError decode_presence(const uint8_t* record, std::size_t size, PresenceRecor
             PresenceMapPack pack;
             if (read_map_pack(value, &pack))
                 decoded.map_pack = std::move(pack);
+        } else if (tag == static_cast<uint8_t>(PresenceTag::content)) {
+            if (saw_content)
+                continue;
+            saw_content = true;
+            // One byte of flags; a value of any other size is left out.
+            if (value.size == content_value_bytes)
+                decoded.content = PresenceContent{(value.data[0] & content_fetches_flag) != 0};
         }
     }
     *out = std::move(decoded);

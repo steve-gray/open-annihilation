@@ -5,8 +5,11 @@
 // own sections are listed here so this module does not depend on the
 // settings dialog.
 
+#include "oa/ui/screen_registry.hpp"
 #include "oa/ui/screen_registry/kit.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -123,8 +126,11 @@ const char* rows_problem(const SettingsPageDesc& page) noexcept {
 int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& page) {
     if (registry == nullptr)
         return 0;
+    // The first refusal is kept, as ScreenRegistry keeps its first, so that
+    // a page taken after it does not hide it.
     const auto refuse = [registry](const char* reason) {
-        registry->rejected = reason;
+        if (registry->rejected == nullptr)
+            registry->rejected = reason;
         return 0;
     };
     if (registry->page_count >= kMaxSettingsPages)
@@ -153,35 +159,29 @@ int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& p
     stored.owner = registry->owners[index].c_str();
     registry->pages[index] = stored;
     ++registry->page_count;
-    registry->rejected = nullptr;
     return 1;
 }
 
-int kit_screen_register(KitScreenRegistry* registry, const KitScreenDesc& screen) {
+bool kit_screen_register(ScreenRegistry* registry, const KitScreenDesc& screen) {
     if (registry == nullptr)
-        return 0;
-    const auto refuse = [registry](const char* reason) {
-        registry->rejected = reason;
-        return 0;
+        return false;
+    // The first refusal is kept, as the registry's other tables keep theirs.
+    const auto refuse = [registry, &screen] {
+        if (registry->rejected == nullptr)
+            registry->rejected =
+                screen.name != nullptr && screen.name[0] != '\0' ? screen.name : "(unnamed)";
+        return false;
     };
-    if (registry->screen_count >= kMaxKitScreens)
-        return refuse("the registry is full");
-    if (const char* problem = id_problem(screen.name))
-        return refuse(problem);
-    if (screen.lay_out == nullptr || screen.act == nullptr)
-        return refuse("a screen has no binding");
-    for (uint32_t index = 0; index < registry->screen_count; ++index)
-        if (registry->names[index] == screen.name)
-            return refuse("a screen name is taken");
-
-    const uint32_t index = registry->screen_count;
-    registry->names[index] = screen.name;
-    KitScreenDesc stored = screen;
-    stored.name = registry->names[index].c_str();
-    registry->screens[index] = stored;
-    ++registry->screen_count;
-    registry->rejected = nullptr;
-    return 1;
+    if (registry->kit_screen_count >= kMaxKitScreens || id_problem(screen.name) != nullptr ||
+        screen.lay_out == nullptr || screen.act == nullptr)
+        return refuse();
+    for (uint32_t index = 0; index < registry->kit_screen_count; ++index) {
+        const char* taken = registry->kit_screens[index].name;
+        if (taken != nullptr && std::string_view(taken) == screen.name)
+            return refuse();
+    }
+    registry->kit_screens[registry->kit_screen_count++] = screen;
+    return true;
 }
 
 } // namespace oa::app

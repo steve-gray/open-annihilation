@@ -8,6 +8,7 @@
 
 #include "map_packs.hpp"
 
+#include "oa/app/content/downloads.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -17,8 +18,10 @@
 #include "oa/formats/hpi.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <initializer_list>
@@ -57,6 +60,11 @@ struct Runtime::PackMapState {
     std::string mounted_name{};
     /// The pack id of that map.
     std::string mounted_id{};
+    /// The pack whose maps are not mounted while GET MAP installs it; empty
+    /// when none is held (hold_pack_maps).
+    std::string held_id{};
+    /// The queue item that downloads and installs the held pack.
+    uint64_t held_item{};
 };
 
 namespace {
@@ -66,6 +74,9 @@ constexpr std::string_view kRefusedText = "Doesn't fit {game}: {reason}";
 
 /// The interface's name for the base game, when no mod is played.
 constexpr std::string_view kBaseGameText = "Total Annihilation 3.1c";
+
+/// Why a held pack's map is not mounted: its download is being installed.
+constexpr std::string_view kHeldReason = "its pack is being downloaded";
 
 /// The number of hex digits of a pack's SHA-256 in its layer's label.
 constexpr std::size_t kLabelDigestDigits = 8;
@@ -154,6 +165,15 @@ const fit::Fit& Runtime::pack_map_fit(const PackMap& map) {
 
 bool Runtime::prepare_pack_map(std::string_view name, std::string* reason) {
     auto& state = pack_map_state();
+    // GET MAP is replacing this pack's folder: none of its maps is mounted
+    // until the install ends.
+    if (const auto split = pack::split_pack_map_name(name); split && pack_maps_held(split->id)) {
+        if (state.mounted_id == split->id)
+            release_pack_map();
+        if (reason != nullptr)
+            *reason = std::string(kHeldReason);
+        return false;
+    }
     // A map already mounted stays as it is: a joiner asks every frame.
     if (!state.mounted_name.empty() && state.mounted_name == name && assets_.pack_layer_mounted())
         return true;
@@ -244,6 +264,40 @@ void Runtime::release_pack_map() {
         std::cerr << "open-annihilation: map pack layer " << label.value_or(std::string())
                   << ": unmounted\n";
     }
+}
+
+void Runtime::hold_pack_maps(std::string_view id, uint64_t item) {
+    auto& state = pack_map_state();
+    state.held_id = std::string(id);
+    state.held_item = id.empty() ? 0 : item;
+}
+
+bool Runtime::pack_maps_held(std::string_view id) {
+    if (!pack_map_state_ || pack_map_state_->held_id.empty() || pack_map_state_->held_id != id)
+        return false;
+    namespace content = oa::app::content;
+    const uint64_t item = pack_map_state_->held_item;
+    const std::vector<content::DownloadView> items = content_downloads().view();
+    const auto found =
+        std::find_if(items.begin(), items.end(), [item](const content::DownloadView& view) {
+            return view.item == item;
+        });
+    const bool ended = found == items.end() || found->state == content::DownloadState::done ||
+                       found->state == content::DownloadState::failed ||
+                       found->state == content::DownloadState::cancelled;
+    if (!ended)
+        return true;
+    std::cerr << "open-annihilation: map pack " << pack_map_state_->held_id
+              << ": its maps may be mounted again\n";
+    pack_map_state_->held_id.clear();
+    pack_map_state_->held_item = 0;
+    return false;
+}
+
+const PackMap* Runtime::mounted_pack_map() {
+    if (!pack_map_state_ || pack_map_state_->mounted_name.empty() || !assets_.pack_layer_mounted())
+        return nullptr;
+    return map_packs().find(pack_map_state_->mounted_name);
 }
 
 std::optional<std::string> Runtime::pack_map_refusal(std::string_view name) const {

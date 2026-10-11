@@ -239,6 +239,63 @@ inline constexpr std::string_view back_to_tab = "‹ {tab}";
 /// After a fact's value that is met.
 inline constexpr std::string_view fact_met = "✓";
 
+// The question asked before an update that may stop saved games loading
+// (update_question.hpp).
+inline constexpr std::string_view question_title = "Update {name}";
+inline constexpr std::string_view question_title_all = "Update all";
+/// The heading of an update to a new revision of the same version.
+inline constexpr std::string_view question_heading_revision =
+    "{name} {version} · revision {from} → {to}";
+/// The heading of an update to a new version.
+inline constexpr std::string_view question_heading_version = "{name} {from} → {to}";
+/// `{to}` and `{from}` are change_texts' ("revision 4", or the version
+/// "4.9"); `{To}` and `{From}` are the same with a capital first letter.
+inline constexpr std::string_view question_changes =
+    "{To} changes the game's rules. Saved games from {from} won't load under {to}. {From} is "
+    "kept, and ROLL BACK brings it back.";
+inline constexpr std::string_view question_unknown =
+    "OA can't tell whether {to} changes the game's rules. If it does, saved games from {from} "
+    "won't load under it. {From} is kept, and ROLL BACK brings it back.";
+/// After the body, for the mod being played.
+inline constexpr std::string_view question_finishes = "It finishes when you leave {name}.";
+/// UPDATE ALL's body for one update whose rules change, and for several.
+inline constexpr std::string_view question_all_one =
+    "1 update changes the game's rules: {names}. Saved games from its current version won't "
+    "load under the new one. It is kept, and ROLL BACK brings it back.";
+inline constexpr std::string_view question_all_many =
+    "{count} updates change the game's rules: {names}. Saved games from their current versions "
+    "won't load under the new ones. Each is kept, and ROLL BACK brings it back.";
+/// The names UPDATE ALL's body lists, then how many more it does not.
+inline constexpr std::string_view question_names_more = "{names} and {count} more";
+/// The question's Rules fact: the rules hashes before and after.
+inline constexpr std::string_view question_rules = "{from} → {to}";
+inline constexpr std::string_view question_rules_unknown = "unknown";
+inline constexpr std::string_view fact_download = "Download";
+/// One fact of the question, as a line of its text.
+inline constexpr std::string_view question_fact = "{label}: {value}";
+inline constexpr std::string_view action_not_now = "NOT NOW";
+
+// Settings › Mods: a row's line on its update, and the line on the last
+// check for updates (update_question.hpp).
+inline constexpr std::string_view mods_revision_available =
+    "Revision {revision} available · {size}";
+inline constexpr std::string_view mods_version_available = "Version {version} available · {size}";
+inline constexpr std::string_view mods_revision_changes =
+    "Revision {revision} changes the rules · {size}";
+inline constexpr std::string_view mods_version_changes =
+    "Version {version} changes the rules · {size}";
+inline constexpr std::string_view mods_revision_may_change =
+    "Revision {revision} may change the rules · {size}";
+inline constexpr std::string_view mods_version_may_change =
+    "Version {version} may change the rules · {size}";
+/// An update on its way, how far its download has come.
+inline constexpr std::string_view mods_updating = "Updating · {percent}%";
+inline constexpr std::string_view mods_checked = "Checked for updates {age}";
+inline constexpr std::string_view mods_never_checked = "Not checked for updates yet";
+inline constexpr std::string_view mods_checking = "Checking for updates…";
+inline constexpr std::string_view mods_check_failed = "Couldn't check for updates";
+inline constexpr std::string_view mods_no_registries = "No registries are on.";
+
 } // namespace words
 
 /// One place of a pattern and its value.
