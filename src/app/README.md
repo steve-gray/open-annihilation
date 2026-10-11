@@ -248,6 +248,25 @@ latched the closing key and drew a backdrop.
   are never shown at once. A prompt's `answered` is called once, with the
   button pressed, or with −1 from `drop_pending_prompts` when the runtime
   ends with the prompt still queued or shown. Calling that drop twice is safe.
+- **The UI kit gallery.** Settings › Developer's UI kit gallery row asks
+  for it (`DialogAction::show_gallery`), and `take_engine_settings_action`
+  opens it with `OaLayer::open_gallery`: a `GalleryScreen` named
+  `gallery`, modal over a backdrop and opaque, over the whole window, the
+  settings dialog staying open under it. On the front end it takes the
+  view's scale and size class (the Interface size, or the Auto scale) and
+  centres the room's points at that scale in the window; in a match it
+  takes `OaLayer::match_gallery`: the match canvas's points at the layer's
+  scale on it, capped by the side column's scale, so that 640x480 is
+  Compact at 1×, 1280x720 Large at 1× and 1920x1080 Regular at 2× with HUD
+  scaling On, the room right of the column playing no part. Its model is
+  its own (`kit::GalleryModel`); it reads and changes no setting. Its
+  events go to `kit::gallery_act`, and it is laid out again
+  (`kit::gallery_layout`) whenever the model or the frame changes; Escape
+  and CLOSE take it off, back to Developer, and it leaves when the settings
+  dialog does. Its automation dialog is `oa.gallery`, its controls
+  `oa.gallery.<section>.<n>` (`oa.gallery.toggle.1.on`,
+  `oa.gallery.drop-down.1`) and `oa.gallery.close`
+  ([src/ui/kit](../ui/kit/README.md#gallery)).
 - **The download check.** `Runtime::tell_challenges`, once a frame beside
   `tell_mod_installs`, reads the download queue when its generation moves.
   While the main menu shows, including under the Library or Settings, one
@@ -1607,7 +1626,15 @@ runtime goes).
   to 5 points right of it, and the header's rows 6 to 22, at the dialog's
   scale: at 640x480 `at 144,78 480x324, version at 540,84 76x16`, and at
   1920x1080 a dialog of 960x648 and a version room of 152x32;
-  `native-stage` checks it. A save/load run ends by
+  `native-stage` checks it. `gallery` opens the settings dialog beside the
+  in-game menu at Developer and takes its UI kit gallery row's SHOW as the
+  dialog takes it, so that the UI kit gallery covers the window; it stops
+  with `<where>: the gallery did not open` unless the gallery is then the
+  top screen, and prints `stage: gallery at X,Y WxH CLASS Nx`, where it
+  shows in the match canvas's pixels, its size class and its scale: at
+  640x480 `at 0,0 640x480 Compact 1x`, at 1280x720 `at 0,0 1280x720 Large
+  1x` and at 1920x1080 `at 0,0 1920x1080 Regular 2x`. Its text holds no
+  version, so a golden frame of it takes the whole window. A save/load run ends by
   reporting the live units by type, the veterans by veterancy level, the
   stockpiled rounds, the buildings by facing and each player's health.
 - `runtime_stage.cpp` and `stage_state.hpp`: the parts of a stage that play
@@ -1893,6 +1920,22 @@ runtime goes).
   then it sets the extensions' overlays aside
   (`Runtime::set_extension_overlays_aside`) until it ends, so that every
   frame it compares is the engine's own drawing over TA's own layout.
+  `--check-kit-gallery` (`native-kit-gallery`, `runtime_kit_gallery_check.cpp`)
+  needs `--preferences-file`, empties it first and sets the extensions'
+  overlays aside as `--check-engine-settings` does, its ctest's
+  `kit-gallery-clean` removing a previous run's file before the game reads
+  it. On 640x480, 1280x720 and 1920x1080 windows it loads the main menu,
+  opens Settings with its shortcut, clicks Developer's entry and then SHOW
+  where the window shows them, and requires the UI kit gallery on top at
+  Compact 1×, Large 1× and Regular 2×, covering the window; the window,
+  every pixel but the cursor's square, as the gallery drawn offscreen at
+  that class and scale (`layer_drawing`) over the main menu darkened by
+  Settings' backdrop and the gallery's (`expected_layer_frame`); Tab taking
+  the focus to every control the gallery declares, once each, in its order;
+  and Escape bringing Settings › Developer back. With `--snapshot` it writes
+  `<stem>-kit-gallery-<W>x<H>.ppm`, the window as it shows the gallery, and
+  prints `kit gallery check: <Compact|Regular|Large>, <n>x, on the <W>x<H>
+  window` for each and `kit gallery check: passed`.
   `native-engine-settings-determinism`
   (`tools/check_native_engine_settings.py`) checks that every setting at its
   default plays the game as it plays without any, and that the settings that

@@ -35,7 +35,9 @@ until then.
   `fractional_scale_percent`, where Compact fits at one and a half), `metrics_of` (a class's metrics, which a screen takes its window's sizes
   from), `to_canvas` (points as canvas pixels, each edge rounded to the
   nearest pixel on its own), rows, columns, grids, splits and scroll
-  areas, and the display list. A screen drawn in the modern fonts (the Game files screen and the
+  areas, and the display list, whose `Role`s are listed in `all_roles`, in
+  their order, with `canvas_draws` telling which `paint` draws (every role
+  but those of a screen drawn in the modern fonts). A screen drawn in the modern fonts (the Game files screen and the
   folder chooser) lays its parts out in canvas pixels at a scale that may
   be a fraction (`Typesetter`, `canvas_pixels`, `canvas_font`) with:
   - `text_part`, a text wrapped to a room in a `Lettering` (size, weight,
@@ -166,6 +168,11 @@ until then.
   `press`, `drag`, `choose`, `type` and `edit` change the model as a row's
   control is used.
 
+- `gallery.hpp`: the UI kit gallery (see [Gallery](#gallery)):
+  `GalleryModel`, `gallery_layout`, `draw_gallery`, `gallery_act` and
+  `gallery_text_field`, and its fixed samples' `gallery_version` and
+  `gallery_languages`.
+
 ### The parts of a screen drawn in the modern fonts
 
 The display list's `Item` has what such a screen draws besides the crisp
@@ -223,6 +230,60 @@ origin in points.
 
 The layout, the hit tests and the display list are the same on both forms:
 the game's fonts measure the texts in points whichever form draws them.
+
+## Gallery
+
+The gallery shows every component of the kit at the scale and size class of
+its frame, once working on its own model and once in each fixed state, so
+that a change to a shared component shows up there, and in its one golden
+frame for each class, before it shows up across the screens.
+
+- **What it shows.** One window over the whole frame: the face, the header
+  (the OA mark, "Open Annihilation", "UI kit gallery" and the class and
+  scale, such as "Large · 1x", in the lock colour), the footer band with
+  CLOSE, and the edge. Between them the sections, each under its heading
+  and a rule: Window chrome (an OA window over a darkened screen, its
+  header saying `v1.2.3`, never the build's version), Tabs, Buttons (the
+  four looks, a link), Toggle, Level strip, Drop-down (one shown open with
+  an aside), Slider, Search field (and a plain text field), Chips (every
+  state), Progress, Nav list, List rows, Scroll list, Card grid, Hover card,
+  Section, label and hint, Lock, Notice, Question and OA mark (the OA
+  button with and without its dot, the mark alone, the icon and every
+  one-bit mark). They flow into the shortest column: one at Compact, two
+  at Regular, three at Large, and scroll between the header and the footer
+  where they are taller than it. A notice, a question and the window
+  chrome's sample are drawn from their own origin (`GalleryPanel`), as the
+  kit draws their header and footer from a canvas's origin.
+- **Working and fixed samples.** Each interactive component appears once
+  working on `GalleryModel`, named `gallery.<section>.<n>` from 1: tabs
+  switch, the button, the link and the OA button count presses, the switch
+  flips, the strip steps, the drop-down opens and chooses a language, the
+  slider moves and drags, the search field takes typing, filter chips turn
+  on and off, nav entries, rows and cards are chosen, and the scroll list
+  scrolls. CLOSE is `gallery.close`, last in Tab's order. Each appears
+  again in each fixed state, which takes no input: idle, hovered, pressed,
+  focused (with the focus ring), disabled (its disabled look, or the
+  locked fade over it), and locked where it has a lock. The sample texts
+  are fixed: "Sample Mod" by "the sample team", "Example Maps", "Another
+  Mod", "Third Mod", English, Deutsch, Español and Français. Nothing in the
+  gallery reads or changes a setting.
+- **How its test guards the kit.** `ui-kit-gallery` lays it out at Compact
+  (640 by 480 points at 1x), Large (1280 by 720 at 1x) and Regular (960 by
+  540 points at 2x), and fails when a role of `all_roles` that `paint`
+  draws has no part in it, naming the role: a component added to the kit
+  without a sample in the gallery breaks it. Every component role whose
+  parts draw a control shows idle, hovered, pressed, focused and disabled;
+  every part lies in the frame or its scroll area; no two controls
+  overlap; Tab visits every focusable control once in the declared order;
+  Down goes to the nearest control below; the names are sound and start
+  with `gallery.`; no text holds the build's version; and toggling,
+  choosing and typing change the model alone.
+- **How to open it.** Settings › Developer's UI kit gallery row: SHOW
+  (`oa.settings.kit-gallery.show`) opens it on the OA layer, modal, over
+  the whole window, on the main menu or in a match; Escape or CLOSE goes
+  back to Developer. The automation endpoint names it `oa.gallery`. The
+  native check `native-kit-gallery` and a stage's `gallery` line open it
+  too ([src/app/README.md](../../app/README.md)).
 
 ## State
 
@@ -398,6 +459,13 @@ kinds, Tab order and drawing order of the display list; the ids of a
 drop-down's items and a strip's levels, and the parts they name; rows of two models
 in one column; every event on every kind; and the page painted.
 
+`ui-kit-gallery` checks the gallery at Compact, Large and Regular, as
+[Gallery](#gallery) says: every drawn role of `all_roles` present, five
+states of every component role that takes input, every part in the frame
+or its scroll area, no two controls overlapping, Tab and Down, the names,
+no text holding the build's version (which the test is given), and the
+working samples changing the model alone; and that it draws.
+
 ## Limitations
 
 The metrics hold the settings dialog's, its notices' and its prompts' sizes
@@ -414,10 +482,15 @@ fonts, so a text that would not fit its box is drawn a little smaller; the
 only fractional scale the layer offers is 150%. The arrows' rule is one function, its weight named, and is to be
 tuned after controller playtests (D30). The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's
-tokens; it is reviewed in the gallery (U12) and pinned by golden frames
-(U17). A field takes typed text and the editing keys; it has no selection,
+tokens; it is reviewed in the gallery ([Gallery](#gallery)) and pinned by
+golden frames (U17). A field takes typed text and the editing keys; it has no selection,
 no clipboard and no press that places the caret.
 A row of buttons takes up to three, with Your files' widths. A link is as
 wide as its line unless its spec gives a width. The rows do not draw a
 drop-down's open menu, a scroll bar or the rule a scrolled view keeps at
-its top: the screen draws them, as the settings dialog does.
+its top: the screen draws them, as the settings dialog does. The gallery
+shows the parts of a screen drawn in the modern fonts (`header_bar` to
+`sheet`) nowhere, since `paint` draws nothing for them: the Game files
+screen and the folder chooser show them. Its notice and question are
+Compact's at every class, the width a column holds, and its fixed samples
+keep Compact's sizes, as every component does.
