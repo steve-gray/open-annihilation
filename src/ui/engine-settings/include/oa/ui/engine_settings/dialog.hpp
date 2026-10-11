@@ -59,7 +59,6 @@ inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop
 /// settings, then the mod options' (ui.options-dialog), which a dialog of
 /// each kind lists alone.
 enum class Page : uint8_t {
-    mods,          ///< Mods: the mods the game can play, the one played first
     controls,      ///< Controls
     common_tweaks, ///< Common Tweaks: the player's own folder, the unit limit and pathfinding
     language,      ///< Language: the language and how game text is drawn
@@ -96,11 +95,11 @@ enum class Page : uint8_t {
 
 /// The number of sections, of every kind of dialog, counting Downloads and
 /// the registered page.
-inline constexpr std::size_t page_count = 16;
-/// The most sections a dialog lists: the engine's settings' ten with
-/// Touch, Controller and Game files, seven without them; a mod's options have
+inline constexpr std::size_t page_count = 15;
+/// The most sections a dialog lists: the engine's settings' nine with
+/// Touch, Controller and Game files, six without them; a mod's options have
 /// five.
-inline constexpr std::size_t most_listed_pages = 10;
+inline constexpr std::size_t most_listed_pages = 9;
 
 /// Which settings a dialog shows.
 enum class DialogKind : uint8_t {
@@ -124,8 +123,8 @@ enum class DialogKind : uint8_t {
 /// @param controller a gamepad has sent input in this run
 ///     (Dialog::controller), so that the engine's settings list Controller
 ///     after Touch and before Game files and Developer
-/// @return seven sections for the engine's settings, one more for each of
-///     Touch, Controller and Game files listed, ten with all three; five
+/// @return six sections for the engine's settings, one more for each of
+///     Touch, Controller and Game files listed, nine with all three; five
 ///     for a mod's options and one for Language alone, whatever the others
 ///     say
 [[nodiscard]] std::span<const Page> dialog_pages(
@@ -196,9 +195,6 @@ enum class Setting : uint8_t {
     /// the game through Steam Input (Dialog::steam_input), saying so; it
     /// changes no setting
     pad_steam_input_notice,
-    /// Mods: the list of the mods the game can play, one row each, which
-    /// switches the game to the one chosen once the player confirms it
-    mod,
     snap_override_key, ///< the mod's snap override key: a slider of option_keys
     autoclick_key,     ///< the mod's autoclick key: a slider of option_keys
     rotate_build_key,  ///< the mod's rotate key: a slider of option_keys
@@ -267,12 +263,6 @@ enum class Setting : uint8_t {
 
 /// No control: what Dialog::hovered, pressed and focused hold when they name none.
 inline constexpr int32_t no_control = -1;
-/// The Switch Mod question's SWITCH button, or the Roll Back Mod question's
-/// ROLL BACK, while the question shows (Dialog::switch_question). The question's buttons count down from
-/// no_control, where no section, row or button of the dialog takes a number.
-inline constexpr int32_t question_yes_control = no_control - 1;
-/// The question's CANCEL button, while the question shows.
-inline constexpr int32_t question_no_control = no_control - 2;
 /// The first section's entry in the list; each section's entry is its
 /// place among its kind of dialog's sections with Touch and Controller
 /// (page_control), whether or not the dialog lists them.
@@ -351,7 +341,7 @@ inline constexpr int32_t add_registry_control = restore_control;
 }
 
 /// The first registered page's entry. Each next page's counts down from it,
-/// under the question's buttons and an open list's items.
+/// under an open list's items.
 inline constexpr int32_t first_registered_nav_control = -10000;
 
 /// Returns a registered page's entry's control.
@@ -364,9 +354,9 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
-/// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8 and
-/// Downloads 9 in every dialog of the engine's settings, and a dialog
-/// without Touch has no control 5, one without Controller no control 6.
+/// listed, so that Touch is 4, Controller 5, Developer 6, Game files 7 and
+/// Downloads 8 in every dialog of the engine's settings, and a dialog
+/// without Touch has no control 4, one without Controller no control 5.
 /// The registered page has no entry of this form; its entries are
 /// registered_nav_control.
 ///
@@ -383,8 +373,7 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 /// The keys the dialog answers to: the kit's keys, which a host gives the
 /// platform's keys the meanings of. dialog_key says what each does in the
 /// dialog; Backspace and Delete, which edit a kit screen's text, do nothing
-/// here, nor in the dialog's drop-down lists, its question, notices and
-/// prompts.
+/// here, nor in the dialog's drop-down lists, notices and prompts.
 using DialogKey = oa::ui::kit::Key;
 
 /// The buttons of the Your files row, left to right: each opens a folder of
@@ -505,19 +494,11 @@ enum class DialogAction : uint8_t {
     /// MANAGE… was pressed: the host opens the Game files screen and keeps
     /// the dialog open
     manage_game_files,
-    /// SWITCH on the Switch Mod question: keep Dialog::chosen in effect,
-    /// its Mod setting now the mod chosen, save it, close the dialog, and
-    /// reload the game for that mod, back on the main menu
-    switch_mod,
-    /// A button of Your files, or Mods' OPEN MODS FOLDER: open the folder
-    /// Dialog::folder_to_open names in the system's file manager, making it
-    /// first when it is missing; the dialog stays open. A folder that cannot
-    /// be opened is told to the dialog with set_folder_notice.
+    /// A button of Your files: open the folder Dialog::folder_to_open names
+    /// in the system's file manager, making it first when it is missing; the
+    /// dialog stays open. A folder that cannot be opened is told to the
+    /// dialog with set_folder_notice.
     open_folder,
-    /// ROLL BACK on the Roll Back Mod question: swap the folder
-    /// Dialog::roll_back_folder names with the version its .backup keeps;
-    /// the dialog stays open, and a failure is told with set_folder_notice
-    roll_back_mod,
     /// RESET on an install ID: the host makes a new ID for
     /// Dialog::install_id_registry and the dialog stays open. Cancel does
     /// not put the old ID back.
@@ -536,20 +517,12 @@ enum class DialogAction : uint8_t {
     /// registry window for a mirror of Dialog::mirror_request, over the
     /// dialog, which stays open.
     add_mirror,
-    /// MORE IN THE LIBRARY… or Mods' GET MORE MODS… was pressed: the host
-    /// opens the Library on Dialog::library_tab over the dialog, which stays
-    /// open under it
+    /// MORE IN THE LIBRARY… was pressed: the host opens the Library on
+    /// Dialog::library_tab over the dialog, which stays open under it
     open_library,
     /// SHOW on Developer's UI kit gallery: the host opens the gallery over
     /// the dialog, which stays open under it
     show_gallery,
-    /// UPDATE on a row of Mods: the host starts the update of the mod in
-    /// Dialog::update_folder (ModDetails::update_entry names it), asking
-    /// first where an update asks; the dialog stays open
-    update_mod,
-    /// CHECK NOW under Mods' list: the host asks the registries for their
-    /// lists again; the dialog stays open
-    check_for_updates,
 };
 
 /// One of the Library's tabs, as the dialog asks the host to open it
@@ -626,67 +599,6 @@ struct HackArea {
 
 struct Dialog;
 
-/// What Mods shows of a mod folder besides its title: read from its
-/// oamod.yaml and the oamod.png beside it.
-struct ModDetails {
-    std::string version;     ///< shown at the row's top right; "N/A" without an oamod.yaml
-    std::string description; ///< the row's second line
-    /// The folder holds an oamod.yaml; without one its files layer over the
-    /// game folder's and the game plays by 3.1c's own rules.
-    bool has_profile{true};
-    uint32_t badge_width{};            ///< the badge's columns; 0 shows the blank placeholder
-    uint32_t badge_height{};           ///< the badge's rows
-    std::vector<uint8_t> badge_pixels; ///< RGBA, top row first
-    /// The version the folder holds now, as a roll back names it ("1.0", or
-    /// "1.0 revision 3" beside a kept version of the same version); empty
-    /// when the folder keeps no earlier version, and its row shows no ROLL
-    /// BACK.
-    std::string roll_back_from{};
-    /// The version its .backup keeps, named as roll_back_from is.
-    std::string roll_back_to{};
-    /// The id its oamod.yaml gives, by which automation names its row;
-    /// empty without one, and the row is named by its folder's name.
-    std::string profile_id{};
-    /// What a newer release in its registry's list is, which the row shows
-    /// in the warning colour in place of its description, whole: "Revision 4
-    /// available · 3.2 MB", or "Version 4.9 available · 3.2 MB" when the
-    /// version changes; "Revision 4 changes the rules · 3.2 MB" when the
-    /// update changes the rules saved games are tied to, and "Revision 4 may
-    /// change the rules · 3.2 MB" when that cannot be known. Read only while
-    /// update_offered is set.
-    std::string update_text{};
-    /// A newer release is offered: the row shows its update's line and an
-    /// UPDATE button. Unset, the row draws as it did before updates.
-    bool update_offered{};
-    /// UPDATE can be pressed; unset, it shows disabled with update_blocked
-    /// as the row's line.
-    bool update_enabled{};
-    /// Why UPDATE cannot be pressed, in the player's words, such as "Not
-    /// during a game"; empty when it can.
-    std::string update_blocked{};
-    /// Where the update stands while the download queue holds it, which the
-    /// row shows in place of update_text: "Updating · 28%", or "Waiting ·
-    /// finishes when you leave {title}"; empty while it is not queued.
-    std::string update_progress{};
-    /// Which package the update is, as the host names it: the dialog keeps
-    /// it and never reads it.
-    std::string update_entry{};
-};
-
-/// What the question over Mods asks about its row.
-enum class ModQuestion : uint8_t {
-    switch_mod, ///< Switch Mod: SWITCH plays the row's mod
-    roll_back,  ///< Roll Back Mod: ROLL BACK swaps the row's folder and its .backup
-};
-
-/// One row of Mods, in the order Mods lists them: the mod played, then No
-/// Mod when it is not the one played, then every other mod by title.
-struct ModRow {
-    /// The mod folder's place among Dialog::mod_folders; no_mod_row for No Mod.
-    int32_t offered{};
-    bool playing{}; ///< the game plays it now
-};
-
 /// One language pack a registry offers that is not installed. The host fills
 /// it; the Language page reads it and does not ask the content service or
 /// the fonts itself.
@@ -744,17 +656,6 @@ struct AvailableLanguage {
     uint64_t bytes,
     bool downloads_on
 );
-
-/// ModRow::offered for No Mod.
-inline constexpr int32_t no_mod_row = -1;
-/// Dialog::switch_question while no question shows.
-inline constexpr int32_t no_question = -2;
-
-/// Returns Mods' rows in the order it lists them.
-///
-/// @param dialog the dialog
-/// @return one row for No Mod and one for each offered mod folder
-[[nodiscard]] std::vector<ModRow> mod_rows(const Dialog& dialog);
 
 /// One registry's install ID, as Downloads shows it. The host fills this
 /// from the registries that use an install ID, built-in first, and never
@@ -873,7 +774,7 @@ struct Dialog {
     Locks locks{};                     ///< what cannot be changed now
     AccelerationStatus acceleration{}; ///< Hardware acceleration's status
     std::string version;               ///< the header's version text
-    Page page{Page::mods};             ///< the section shown
+    Page page{Page::controls};         ///< the section shown
     bool restored{};                   ///< Restore defaults was pressed
     /// The times the player asked, since the dialog opened, for the graphics
     /// card to be tried afresh: each press of Restore defaults, and each
@@ -923,33 +824,6 @@ struct Dialog {
     /// as "Custom"; empty when there is none. The game sets it with the
     /// stops.
     std::optional<ScreenSize> custom_screen_size;
-    /// The names of the offered mod folders, in the order of Inputs::mod_folders.
-    std::vector<std::string> mod_names;
-    /// The offered mod folders' paths, in the same order (Inputs::mod_folders).
-    std::vector<std::string> mod_folders;
-    /// What Mods shows of each offered mod folder, in the same order; a
-    /// folder without one shows its name alone.
-    std::vector<ModDetails> mod_details;
-    /// The mod folder the game plays now, as an absolute UTF-8 path; empty
-    /// for none. Mods lists it first, marked PLAYING.
-    std::string playing_mod_folder;
-    /// The mod the question over Mods asks about (mod_question), as
-    /// ModRow::offered names it (no_mod_row for No Mod): the one the Switch
-    /// Mod question offers to switch to, or the one the Roll Back Mod
-    /// question offers to roll back; no_question while no question shows.
-    /// The question lies over the dialog and takes every pointer event and
-    /// key. A row of Mods whose ModDetails::roll_back_from is set shows a
-    /// ROLL BACK button, whose control is OPEN MODS FOLDER's and one more
-    /// for each row before it and itself.
-    int32_t switch_question{no_question};
-    /// The question's button the keys mark, which Enter and Space press:
-    /// CANCEL when set, else SWITCH or ROLL BACK.
-    bool question_marks_no{};
-    /// What the question asks about the row switch_question names.
-    ModQuestion mod_question{ModQuestion::switch_mod};
-    /// The folder the last DialogAction::roll_back_mod asks to roll back, as
-    /// an absolute UTF-8 path, the row's in mod_folders.
-    std::string roll_back_folder;
     /// The player's own folder, as an absolute UTF-8 path, which the Your
     /// files row shows; the host sets it once the dialog has opened. Empty
     /// shows no path.
@@ -1019,22 +893,6 @@ struct Dialog {
     bool library_link{};
     /// The tab DialogAction::open_library asks the host to open the Library on.
     LibraryTab library_tab{LibraryTab::mods};
-    /// The line under Mods' list on the check for updates, which the host
-    /// sets, such as "Checked for updates 4 min ago"; empty shows none.
-    std::string mods_check_text;
-    /// mods_check_text is drawn in the warning colour: the check failed.
-    bool mods_check_warning{};
-    /// CHECK NOW follows mods_check_text, a link that asks for
-    /// DialogAction::check_for_updates. Hidden while the page is locked.
-    bool mods_check_offered{};
-    /// GET MORE MODS… shows right of OPEN MODS FOLDER, asking for the
-    /// Library on Mods (DialogAction::open_library): a host sets it on the
-    /// main menu, where the Library can open over the dialog. Hidden while
-    /// the page is locked.
-    bool mods_library_offered{};
-    /// The folder the last DialogAction::update_mod names, as an absolute
-    /// UTF-8 path, the row's in mod_folders.
-    std::string update_folder;
     /// The row whose drop-down list is open: its control; no_control while
     /// no list is open. An open list takes every pointer event and key.
     int32_t open_list{no_control};
@@ -1162,19 +1020,6 @@ dialog_text_width(const DialogFonts& fonts, DialogFont font, std::string_view te
 /// @return the fonts
 [[nodiscard]] DialogFonts load_dialog_fonts(oa::AssetStore& assets);
 
-/// What Mods lists besides No Mod.
-struct ModOffer {
-    /// The offered mod folders' titles, as Mods shows them.
-    std::span<const std::string> names{};
-    /// Their paths, in the same order, as Inputs::mod_folders holds them.
-    std::span<const std::string> folders{};
-    /// What Mods shows of each, in the same order; missing ones show the
-    /// title alone.
-    std::span<const ModDetails> details{};
-    /// The mod folder the game plays now; empty for none.
-    std::string_view playing{};
-};
-
 /// Gives the engine's dialog the registered pages to list, and the preference
 /// values their rows read. A dialog that is not the engine's settings keeps
 /// none. The rows stay the caller's for as long as the dialog shows them.
@@ -1206,7 +1051,6 @@ void set_registered_pages(
 /// @param acceleration Hardware acceleration's status
 /// @param highest_offered_unit the unit limit slider's highest stop, in units
 ///     per player (highest_offered_unit_limit)
-/// @param mods the mods Mods lists besides No Mod
 /// @param profile_hacks every standard hack as the profile the game plays
 ///     resolves it, in the registry's order (DeveloperList::profile); empty
 ///     gives every one off, as 3.1c plays it
@@ -1230,7 +1074,6 @@ void open_dialog(
     Page page,
     const AccelerationStatus& acceleration = {},
     uint16_t highest_offered_unit = highest_unit_limit,
-    const ModOffer& mods = {},
     std::span<const oa::data::mod_profile::HackState> profile_hacks = {},
     const oa::data::languages::Language* system_language = nullptr,
     bool touch = false,
@@ -1312,8 +1155,7 @@ void open_language_text_dialog(
 
 /// Tells the dialog why the folder its last DialogAction::open_folder asked
 /// for could not be opened, or that it was; the Your files row's second hint
-/// line, or the line under Mods' list, shows the reason in amber until
-/// another folder opens.
+/// line shows the reason in amber until another folder opens.
 ///
 /// @param[in,out] dialog the dialog
 /// @param reason why it could not be opened, in a few words; empty when it
@@ -1382,8 +1224,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// follows its row only, wherever the pointer goes, and the open section
 /// scrolls with the thumb. Over an open drop-down list it marks the item
 /// under it. While a finger's press is held, the point is moved as the
-/// press was (dialog_finger_down). While a question shows, it hovers the
-/// question's buttons only.
+/// press was (dialog_finger_down).
 ///
 /// @param[in,out] dialog the dialog
 /// @param x the pointer's column, in source pixels from the dialog's left edge
@@ -1399,9 +1240,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// thumb's middle jumps to the pointer, the section scrolls with it and the
 /// drag starts there. While a drop-down list is open, a press on one of its
 /// items holds the item, and a press anywhere else, its field included,
-/// closes the list and does nothing more. While a question shows, a press
-/// on one of its buttons holds the button, and a press anywhere else does
-/// nothing.
+/// closes the list and does nothing more.
 ///
 /// @param[in,out] dialog the dialog
 /// @param x the pointer's column, in source pixels from the dialog's left edge
@@ -1412,8 +1251,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// Presses with a finger: as dialog_pointer_down, but a press with no
 /// control under it takes the nearest control whose pressable part lies
 /// within `reach` of it, pressed at that part's point nearest the finger;
-/// while a drop-down list is open, the nearest of its items, and while the
-/// Switch Mod question shows, the nearer of its buttons. The press's
+/// while a drop-down list is open, the nearest of its items. The press's
 /// moves and its release are then moved as far as the press was
 /// (Dialog::finger_shift_x and finger_shift_y), so that a release where the
 /// finger landed acts on the control it took. With nothing within reach it
@@ -1431,8 +1269,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// acts on it; over a drop-down's field, it opens the field's list, marking
 /// the item chosen. A release over the list item the press held chooses the
 /// item and closes the list. A finger's release is moved as its press was
-/// (dialog_finger_down). A release over the question's button the press
-/// held answers the question.
+/// (dialog_finger_down).
 ///
 /// @param[in,out] dialog the dialog
 /// @param x the pointer's column, in source pixels from the dialog's left edge
@@ -1447,12 +1284,12 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// move the focus to the next and the previous control in the declared
 /// order, round from one end to the other: the open section's rows that
 /// take a change (on Developer, then its list's rows, Show Active Only and,
-/// while Developer Mode is on, Restore profile values; on Mods, each row
-/// followed by its ROLL BACK, then OPEN MODS FOLDER), the footer's buttons,
-/// then the sections' entries. Up and Down move the focus to the control
-/// above or below, by where the controls lie (oa::ui::kit::focus_toward):
-/// the open section's rows, Developer's list and Mods' list are each
-/// searched first from within, rows they do not show included. Left and
+/// while Developer Mode is on, Restore profile values), the footer's
+/// buttons, then the sections' entries. Up and Down move the focus to the
+/// control above or below, by where the controls lie
+/// (oa::ui::kit::focus_toward): the open section's rows and Developer's
+/// list are each searched first from within, rows they do not show
+/// included. Left and
 /// Right step a focused control that takes steps: a switch, a strip, a
 /// slider or a drop-down, Your files' mark, a row of Developer's list, Show
 /// Active Only. From any other control they move the focus to the control
@@ -1471,11 +1308,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// marked item and close the list; Escape closes it unchanged; Tab and
 /// Shift+Tab close it and move the focus. In Developer Mode's list, Space
 /// opens or closes an area or a hack, and Left and Right close and open an
-/// area or turn a hack off and on. While a question shows, the keys answer
-/// it: Y, or Enter or Space while SWITCH is marked, answers SWITCH; N,
-/// Escape, or Enter or Space while CANCEL is marked, answers CANCEL; Left,
-/// Right, Tab and Shift+Tab move the mark. Y and N do nothing else. On
-/// Mods, Space on a row other than the one played asks the question.
+/// area or turn a hack off and on. Y and N do nothing.
 ///
 /// @param[in,out] dialog the dialog
 /// @param key the key's meaning
@@ -1489,7 +1322,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 /// another section shows. A turn outside the dialog, or while a press is
 /// held, does nothing. While a drop-down list is open, a turn over it
 /// scrolls a list that holds more items than it shows, an item a notch,
-/// and the section stays. While a question shows, a turn does nothing.
+/// and the section stays.
 ///
 /// @param[in,out] dialog the dialog
 /// @param x the pointer's column, in source pixels from the dialog's left edge
@@ -1508,7 +1341,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 [[nodiscard]] bool dialog_contains(int32_t x, int32_t y) noexcept;
 
 /// Returns the most the open section scrolls at the dialog's size class, or
-/// on Developer and Mods their lists: the rows' height less their view's. A
+/// on Developer its list: the rows' height less their view's. A
 /// larger class shows more of the same rows, and scrolls less.
 ///
 /// @param dialog the dialog
@@ -1556,27 +1389,25 @@ namespace geometry {
 /// Returns what the dialog draws, in the order it draws it, and its
 /// controls, in the order a press tries them, each named for automation:
 /// the window's face, the header, the section list, the open section's
-/// heading and rows (the kit's rows, or Mods' list, or Developer's rows,
-/// list and footer), the footer band and buttons, the edge, an open
-/// drop-down list and the question. Tab follows the declared order: the
-/// open section's rows that take a change (on Developer, then its list's
-/// rows, Show Active Only and, while Developer Mode is on, Restore profile
-/// values; on Mods, each row followed by its ROLL BACK, then OPEN MODS
-/// FOLDER), the footer's buttons, then the sections' entries. A row's
-/// control lies across the section at its control's line, so that the
-/// arrows keep to the column of rows, and a press reaches the control
-/// itself where the view shows it. The controls that take Left and Right
-/// as steps say so; the open section's rows, Developer's list and Mods'
-/// list each have a scroll group, and the entries and the footer none.
+/// heading and rows (the kit's rows, or Developer's rows, list and
+/// footer), the footer band and buttons, the edge and an open drop-down
+/// list. Tab follows the declared order: the open section's rows that take
+/// a change (on Developer, then its list's rows, Show Active Only and,
+/// while Developer Mode is on, Restore profile values), the footer's
+/// buttons, then the sections' entries. A row's control lies across the
+/// section at its control's line, so that the arrows keep to the column of
+/// rows, and a press reaches the control itself where the view shows it.
+/// The controls that take Left and Right as steps say so; the open
+/// section's rows and Developer's list each have a scroll group, and the
+/// entries and the footer none.
 ///
 /// The controls are named for automation, which lists them after oa.
 /// (docs/automation.md): settings.nav.<section>, settings.<row> and its
 /// parts, settings.<row>.<item> while a drop-down is open,
-/// settings.mod.<mod>.switch and .roll-back, settings.open-mods-folder,
 /// settings.hack-area.<area>, settings.hack.<hack> and its parameters,
 /// settings.active-only, settings.restore-profile-values,
-/// settings.question.yes and .no, settings.restore-defaults,
-/// settings.cancel, settings.ok and settings.scroll-bar. Each word is one
+/// settings.restore-defaults, settings.cancel, settings.ok and
+/// settings.scroll-bar. Each word is one
 /// of the code's, never a text as shown.
 ///
 /// @param dialog the dialog

@@ -143,18 +143,4 @@ void draw_prompt(
 /// @param prompt the prompt
 void draw_prompt(const oa::ui::kit::Canvas& canvas, const Prompt& prompt);
 
-/// Returns the Mods page's Roll Back Mod question as a prompt of its own, in
-/// the words the page asks it, for a screen that asks it over itself: the
-/// page's heading, what it asks of the mod, with the reload line for the mod
-/// the game plays, and CANCEL and ROLL BACK, named cancel and roll-back to
-/// automation, CANCEL marked first. Escape and N answer CANCEL, Y ROLL BACK.
-///
-/// @param title the mod's title
-/// @param from the version the folder holds, as ModDetails::roll_back_from names it
-/// @param to the version its .backup keeps, as ModDetails::roll_back_to names it
-/// @param playing the folder is the mod the game plays
-/// @return the prompt
-[[nodiscard]] Prompt
-roll_back_prompt(std::string_view title, std::string_view from, std::string_view to, bool playing);
-
 } // namespace oa::ui::engine_settings

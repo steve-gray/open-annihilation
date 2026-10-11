@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The Mods page's rows over scratch folders: a profile's name, version and
+// Mod folders' summaries over scratch folders: a profile's name, version and
 // description read without resolving it, a folder without a profile, with a
 // damaged one or one that cannot be listed; and badges of every colour type,
 // scaled down to the badge's side, and refused when damaged, cut short, too

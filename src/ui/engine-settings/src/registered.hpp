@@ -19,7 +19,7 @@
 namespace oa::ui::engine_settings {
 
 /// The scroll group of the section list while registered pages are listed.
-/// The engine's own rows, Developer's list and Mods' list keep 0, 1 and 2.
+/// The engine's own rows and Developer's list keep 0 and 1.
 inline constexpr int32_t registered_nav_group = 3;
 
 /// Tells whether the dialog lists registered pages in a scrolling section list.
@@ -51,7 +51,7 @@ struct NavPiece {
     std::string text;            ///< the entry's caption or the owner's name
     bool registered{};           ///< the entry is a registered page
     std::size_t index{};         ///< the registered page's index, when registered
-    Page page{Page::mods};       ///< the engine section, when the entry is one
+    Page page{Page::controls};   ///< the engine section, when the entry is one
 };
 
 /// The section list while registered pages are listed, before it scrolls.

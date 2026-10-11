@@ -43,7 +43,8 @@ enum class CardTone : uint8_t {
 
 /// One line of the card: a label and its value, both already translated.
 struct PresenceCardLine {
-    std::string label{}; ///< "Engine", "Mod", "Rules", "Game", "View", "Dev mode" or "Map"
+    std::string
+        label{}; ///< "Engine", "Platform", "Mod", "Rules", "Game", "View", "Dev mode" or "Map"
     std::string value{}; ///< what the player's presence record says
     CardTone tone{};     ///< the value's colour
 };
@@ -51,7 +52,6 @@ struct PresenceCardLine {
 /// What the card of one player's OA badge says, every word translated.
 struct PresenceCard {
     std::string title{};                   ///< the player's name in capitals
-    std::string aside{};                   ///< "<platform> · <architecture>"; empty without them
     std::vector<PresenceCardLine> lines{}; ///< the lines, top to bottom
     std::vector<std::string>
         hacks{};              ///< the first game hacks' ids, at most presence_card_listed_hacks
@@ -78,7 +78,9 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 /// "Engine: Open Annihilation (before 0.8)". With a record the lines are, in
 /// order:
 /// - Engine: "Open Annihilation <version>", " (development build)" in place
-///   of a version's "-<label>"; the aside says "<platform> · <architecture>";
+///   of a version's "-<label>";
+/// - Platform, under Engine: "<platform> · <architecture>". A field the
+///   record leaves empty is left out, and the line goes when both are empty;
 /// - Mod: "<name> <version> · rev <packaging revision>", or "Total
 ///   Annihilation 3.1c" for a record without a mod;
 /// - Rules: "The host's" on the host's card; otherwise "Differ from the
@@ -110,7 +112,8 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 
 /// Returns the kit's hover card for a presence card.
 ///
-/// The card has the OA mark, the card's title and aside in its header, one
+/// The card has the OA mark and the card's title in its header, and nothing
+/// at the header's right. It has one
 /// row a line (its value in the text colour, the lock colour for amber or
 /// the accent for lime), and the hack ids and "· <n> more" as its block. It
 /// is presence_card_compact_width, presence_card_regular_width or

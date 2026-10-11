@@ -19,6 +19,7 @@
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/uninstall.hpp"
 #include "screen_controls.hpp"
 
 #include <algorithm>
@@ -115,6 +116,8 @@ std::string_view action_word(Action action) {
         return "roll-back";
     case Action::play_now:
         return "play-now";
+    case Action::switch_off:
+        return "switch-off";
     case Action::open_folder:
         return "open-folder";
     case Action::homepage:
@@ -123,10 +126,14 @@ std::string_view action_word(Action action) {
         return "details";
     case Action::back:
         return "back";
+    case Action::check_now:
+        return "check-now";
     case Action::settings:
         return "settings";
     case Action::close:
         return "close";
+    case Action::uninstall:
+        return "uninstall";
     }
     return "action";
 }
@@ -1491,7 +1498,7 @@ kit::Colour status_colour(const Entry& entry) {
     return entry.state == State::update || !entry.can_act ? kit::colour::lock : kit::colour::hint;
 }
 
-/// Appends the playing note, when the model has one, under a row.
+/// Appends the details' note (details_note), when the model has one, under a row.
 ///
 /// @param[in,out] building the layout
 /// @param left its left column
@@ -1508,7 +1515,7 @@ int32_t add_note(
     const kit::Rect& clip,
     int32_t scroll_group
 ) {
-    const std::string note = playing_note(*building.library);
+    const std::string note = details_note(*building.library);
     if (note.empty())
         return top;
     const std::vector<std::string> lines = wrapped(building, kit::FontRole::small, note, width, 0);
@@ -1592,10 +1599,10 @@ int32_t add_details_content(
     int32_t top = first + std::max(details_badge_side, status_bottom - first) +
                   building.metrics->paragraph_gap;
 
-    if (entry.listing != nullptr && !entry.listing->summary.empty()) {
-        const std::vector<std::string> summary = wrapped(
-            building, kit::FontRole::small, entry.listing->summary, width, wide_summary_lines
-        );
+    // The listing's summary, or a mod of the player's own's description.
+    if (const std::string_view about = entry_summary(entry); !about.empty()) {
+        const std::vector<std::string> summary =
+            wrapped(building, kit::FontRole::small, about, width, wide_summary_lines);
         top = add_lines(building, summary, left, top, width, kit::colour::list_text, view) +
               metrics.paragraph_gap;
     }
@@ -1618,7 +1625,8 @@ int32_t add_details_content(
              each,
              metrics.button_height},
             action.text,
-            index == 0,
+            // UNINSTALL is never drawn as the main button.
+            index == 0 && action.action != Action::uninstall,
             action.enabled,
             controls::action_control(action.action),
             named("action." + std::string(action_word(action.action))),
@@ -1961,7 +1969,8 @@ void add_active(Building& building, const kit::Rect& area) {
 }
 
 /// Appends the footer's band, the queue's words at its left and its buttons
-/// at its right: SETTINGS…, DETAILS at Compact but on the Active tab, and CLOSE.
+/// at its right: CHECK NOW, SETTINGS…, DETAILS at Compact but on the Active
+/// tab, and CLOSE.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -1983,7 +1992,10 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
         bool enabled{};
     };
 
-    std::vector<FooterButton> buttons{{Action::settings, controls::settings, true}};
+    std::vector<FooterButton> buttons{
+        {Action::check_now, controls::check_now, can_check_now(library)},
+        {Action::settings, controls::settings, true},
+    };
     if (compact && library.tab != Tab::active)
         buttons.push_back({Action::details, controls::details, library.selected.has_value()});
     buttons.push_back({Action::close, controls::close, true});
@@ -2570,10 +2582,9 @@ kit::DisplayList details_page_layout(
             top += metrics.small_line;
         }
         top += metrics.paragraph_gap;
-        if (entry->listing != nullptr && !entry->listing->summary.empty()) {
-            const std::vector<std::string> summary = wrapped(
-                into, kit::FontRole::small, entry->listing->summary, width, compact_summary_lines
-            );
+        if (const std::string_view about = entry_summary(*entry); !about.empty()) {
+            const std::vector<std::string> summary =
+                wrapped(into, kit::FontRole::small, about, width, compact_summary_lines);
             top = add_lines(into, summary, view.x, top, width, kit::colour::list_text, view) +
                   metrics.paragraph_gap;
         }
@@ -2626,7 +2637,7 @@ kit::DisplayList details_page_layout(
             building.footer,
             {left, window.button_top, width_points, metrics.button_height},
             action.text,
-            index == 0,
+            index == 0 && action.action != Action::uninstall,
             action.enabled,
             controls::action_control(action.action),
             named("action." + std::string(action_word(action.action))),

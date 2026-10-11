@@ -28,6 +28,7 @@
 #include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
@@ -42,6 +43,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -66,6 +68,7 @@ namespace kit = oa::ui::kit;
 namespace artless = oa::ui::frontend_renderer;
 namespace paint = oa::ui::paint;
 namespace text_font = oa::platform::text_font;
+namespace mp = oa::ui::frontend_multiplayer;
 
 namespace {
 
@@ -961,9 +964,6 @@ struct Runtime::SettingsScreen final : LayerScreen {
         // The front end draws every frame. A match draws this dialog again
         // only when the revision moves, so a download's progress has to.
         changed = runtime_.refresh_settings_languages(*dialog) || changed;
-        // Mods' updates and its line on the check for updates follow the
-        // Library's model and the registries.
-        changed = runtime_.refresh_settings_mods(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;
@@ -981,14 +981,13 @@ struct Runtime::SettingsScreen final : LayerScreen {
             std::ignore = runtime_.take_engine_settings_action(settings::DialogAction::cancelled);
     }
 
-    /// Puts an action of the dialog in effect and plays its sound: OK and
-    /// SWITCH play the opening sound, Cancel its own.
+    /// Puts an action of the dialog in effect and plays its sound: OK plays
+    /// the opening sound, Cancel its own.
     ///
     /// @param action what the dialog's event asked
     /// @return close when the dialog closed; none when it asked nothing
     LayerAnswer take_action(settings::DialogAction action) {
-        if (action == settings::DialogAction::accepted ||
-            action == settings::DialogAction::switch_mod)
+        if (action == settings::DialogAction::accepted)
             runtime_.play_ui_sound(kOpenSound, 0);
         else if (action == settings::DialogAction::cancelled)
             runtime_.play_ui_sound(kCancelSound, 0);
@@ -1557,8 +1556,13 @@ void Runtime::register_oa_layer() {
     layer.tick = OaLayer::overlay_tick;
     layer.draw = OaLayer::overlay_draw;
     // A refused overlay is recorded in the registry, and register_screens
-    // reports it once every screen and overlay is in.
-    overlay_register(&screens_, &layer);
+    // reports it once every screen and overlay is in. The frame keeps its
+    // own badge until the overlay is registered.
+    if (overlay_register(&screens_, &layer)) {
+        mp::multiplayer_bind_layer_presence_badges(&oa_layer(), [](void* context) -> bool {
+            return context != nullptr && static_cast<OaLayer*>(context)->draws_presence_badges();
+        });
+    }
 }
 
 OaLayer::OaLayer(Runtime& runtime) noexcept : runtime_(runtime) {
@@ -1573,6 +1577,7 @@ struct OaLayer::RegisteredPrompt {
 };
 
 OaLayer::~OaLayer() {
+    mp::multiplayer_bind_layer_presence_badges(nullptr, nullptr);
     drop_pending_prompts();
 }
 
@@ -2707,6 +2712,222 @@ void OaLayer::present(const SDL_FRect* picture_area) {
         present_front_end(*picture_area);
 }
 
+bool OaLayer::draws_presence_badges() noexcept {
+    return runtime_.sdl_.renderer != nullptr && runtime_.screen_ != Screen::match &&
+           artless::picture_drawable(runtime_.engine_settings_icon());
+}
+
+void OaLayer::present_presence_badges(const LayerView& seen, int output_width, int output_height) {
+    if (!draws_presence_badges() || output_width <= 0 || output_height <= 0 ||
+        seen.picture_size.x <= 0 || seen.picture_size.y <= 0 || seen.picture.width <= 0 ||
+        seen.picture.height <= 0)
+        return;
+    // The same list the frame uses, so a dialog that hides the frame's badge
+    // hides this one too.
+    std::array<mp::PresenceBadgeSpot, 10> spots{};
+    const int32_t count =
+        mp::multiplayer_presence_badges(spots.data(), static_cast<int32_t>(spots.size()));
+    if (count <= 0)
+        return;
+    const artless::RgbaPicture icon = runtime_.engine_settings_icon();
+    std::vector<PresenceBadgeDrawn> drawn;
+    drawn.reserve(static_cast<std::size_t>(count));
+    for (int32_t spot_index = 0; spot_index < count; ++spot_index) {
+        const mp::PresenceBadgeSpot& spot = spots[static_cast<std::size_t>(spot_index)];
+        drawn.push_back({spot.slot, spot.x, spot.y, spot.width, spot.height, spot.rules_differ});
+    }
+    const bool unchanged =
+        badges_uploaded_ && drawn == badges_drawn_ && same_rect(badges_picture_, seen.picture) &&
+        badges_picture_size_.x == seen.picture_size.x &&
+        badges_picture_size_.y == seen.picture_size.y && badges_icon_width_ == icon.width &&
+        badges_icon_height_ == icon.height && badges_gamma_ == runtime_.gamma_table_;
+    if (!unchanged) {
+        const auto window_x = [&seen](int32_t column) -> int32_t {
+            const int64_t mapped =
+                static_cast<int64_t>(seen.picture.x) +
+                static_cast<int64_t>(column) * seen.picture.width / seen.picture_size.x;
+            return static_cast<int32_t>(mapped);
+        };
+        const auto window_y = [&seen](int32_t row) -> int32_t {
+            const int64_t mapped =
+                static_cast<int64_t>(seen.picture.y) +
+                static_cast<int64_t>(row) * seen.picture.height / seen.picture_size.y;
+            return static_cast<int32_t>(mapped);
+        };
+        const int32_t window_width = static_cast<int32_t>(output_width);
+        const int32_t window_height = static_cast<int32_t>(output_height);
+        layout::Rect bounds{};
+        const auto cover = [&bounds, window_width, window_height](
+                               int32_t left, int32_t top, int32_t right, int32_t bottom
+                           ) {
+            left = std::max(left, int32_t{0});
+            top = std::max(top, int32_t{0});
+            right = std::min(right, window_width);
+            bottom = std::min(bottom, window_height);
+            if (right <= left || bottom <= top)
+                return;
+            bounds = union_rect(bounds, {left, top, right - left, bottom - top});
+        };
+        for (const PresenceBadgeDrawn& badge : drawn) {
+            if (badge.width > 0 && badge.height > 0)
+                cover(
+                    window_x(badge.x),
+                    window_y(badge.y),
+                    window_x(badge.x + badge.width),
+                    window_y(badge.y + badge.height)
+                );
+            if (!badge.rules_differ)
+                continue;
+            const int32_t ring_left = badge.x + badge.width + mp::presence_badge_dot_overhang -
+                                      mp::presence_badge_dot_ring;
+            const int32_t ring_top = badge.y - mp::presence_badge_dot_overhang;
+            cover(
+                window_x(ring_left),
+                window_y(ring_top),
+                window_x(ring_left + mp::presence_badge_dot_ring),
+                window_y(ring_top + mp::presence_badge_dot_ring)
+            );
+        }
+        if (empty_rect(bounds)) {
+            badges_uploaded_ = false;
+            return;
+        }
+        std::vector<uint8_t> rgba(
+            static_cast<std::size_t>(bounds.width) * static_cast<std::size_t>(bounds.height) * 4U, 0
+        );
+        const auto pixel_at = [&rgba, &bounds](int32_t x, int32_t y) -> uint8_t* {
+            if (x < bounds.x || y < bounds.y || x >= bounds.x + bounds.width ||
+                y >= bounds.y + bounds.height)
+                return nullptr;
+            return rgba.data() + (static_cast<std::size_t>(y - bounds.y) *
+                                      static_cast<std::size_t>(bounds.width) +
+                                  static_cast<std::size_t>(x - bounds.x)) *
+                                     4U;
+        };
+        for (const PresenceBadgeDrawn& badge : drawn) {
+            const int32_t left = window_x(badge.x);
+            const int32_t top = window_y(badge.y);
+            const int32_t right = window_x(badge.x + badge.width);
+            const int32_t bottom = window_y(badge.y + badge.height);
+            const int32_t badge_width = right - left;
+            const int32_t badge_height = bottom - top;
+            if (badge_width <= 0 || badge_height <= 0)
+                continue;
+            paint::Canvas logo = paint::make_canvas(badge_width, badge_height);
+            paint::Painter painter(logo);
+            painter.draw_rgba(
+                icon.pixels,
+                static_cast<int>(icon.width),
+                static_cast<int>(icon.height),
+                paint::Box{0, 0, badge_width, badge_height}
+            );
+            for (int32_t logo_row = 0; logo_row < badge_height; ++logo_row) {
+                for (int32_t logo_column = 0; logo_column < badge_width; ++logo_column) {
+                    uint8_t* dest = pixel_at(left + logo_column, top + logo_row);
+                    if (dest == nullptr)
+                        continue;
+                    const uint8_t* from =
+                        logo.rgba.data() + (static_cast<std::size_t>(logo_row) *
+                                                static_cast<std::size_t>(badge_width) +
+                                            static_cast<std::size_t>(logo_column)) *
+                                               4U;
+                    dest[0] = from[0];
+                    dest[1] = from[1];
+                    dest[2] = from[2];
+                    dest[3] = from[3];
+                }
+            }
+        }
+        // Each canvas pixel of the dot fills the window pixels it maps to,
+        // nearest, so the ring stays a hard edge at any window size. The
+        // four corners of the ring, and of the face inside it, are left out.
+        constexpr uint8_t ring_red = 0x0d;
+        constexpr uint8_t ring_green = 0x10;
+        constexpr uint8_t ring_blue = 0x0e;
+        constexpr uint8_t face_red = 0xe2;
+        constexpr uint8_t face_green = 0xb2;
+        constexpr uint8_t face_blue = 0x3d;
+        const auto corner = [](int32_t at, int32_t size) { return at == 0 || at == size - 1; };
+        const auto stamp =
+            [&](int32_t column, int32_t row, uint8_t red, uint8_t green, uint8_t blue) {
+                const int32_t left = window_x(column);
+                const int32_t right = window_x(column + 1);
+                const int32_t top = window_y(row);
+                const int32_t bottom = window_y(row + 1);
+                for (int32_t pixel_row = top; pixel_row < bottom; ++pixel_row) {
+                    for (int32_t pixel_column = left; pixel_column < right; ++pixel_column) {
+                        uint8_t* dest = pixel_at(pixel_column, pixel_row);
+                        if (dest == nullptr)
+                            continue;
+                        dest[0] = red;
+                        dest[1] = green;
+                        dest[2] = blue;
+                        dest[3] = 255U;
+                    }
+                }
+            };
+        for (const PresenceBadgeDrawn& badge : drawn) {
+            if (!badge.rules_differ)
+                continue;
+            const int32_t ring_left = badge.x + badge.width + mp::presence_badge_dot_overhang -
+                                      mp::presence_badge_dot_ring;
+            const int32_t ring_top = badge.y - mp::presence_badge_dot_overhang;
+            for (int32_t dot_row = 0; dot_row < mp::presence_badge_dot_ring; ++dot_row) {
+                for (int32_t dot_column = 0; dot_column < mp::presence_badge_dot_ring;
+                     ++dot_column) {
+                    if (corner(dot_column, mp::presence_badge_dot_ring) &&
+                        corner(dot_row, mp::presence_badge_dot_ring))
+                        continue;
+                    stamp(
+                        ring_left + dot_column, ring_top + dot_row, ring_red, ring_green, ring_blue
+                    );
+                }
+            }
+            constexpr int32_t face = mp::presence_badge_dot_ring - 2;
+            for (int32_t dot_row = 0; dot_row < face; ++dot_row) {
+                for (int32_t dot_column = 0; dot_column < face; ++dot_column) {
+                    if (corner(dot_column, face) && corner(dot_row, face))
+                        continue;
+                    stamp(
+                        ring_left + 1 + dot_column,
+                        ring_top + 1 + dot_row,
+                        face_red,
+                        face_green,
+                        face_blue
+                    );
+                }
+            }
+        }
+        if (!runtime_.gamma_identity_)
+            runtime_.apply_gamma_rgb(rgba.data(), rgba.size() / 4U, 4);
+        const auto limit = runtime_.render_texture_limit();
+        badge_texture_.ensure(
+            runtime_.sdl_.renderer,
+            SDL_PIXELFORMAT_RGBA32,
+            bounds.width,
+            bounds.height,
+            limit,
+            SDL_BLENDMODE_BLEND
+        );
+        badge_texture_.update(rgba.data(), bounds.width * 4, 4);
+        badges_drawn_ = std::move(drawn);
+        badges_picture_ = seen.picture;
+        badges_picture_size_ = seen.picture_size;
+        badges_icon_width_ = icon.width;
+        badges_icon_height_ = icon.height;
+        badges_gamma_ = runtime_.gamma_table_;
+        badge_bounds_ = bounds;
+        badges_uploaded_ = true;
+    }
+    const SDL_FRect at{
+        static_cast<float>(badge_bounds_.x),
+        static_cast<float>(badge_bounds_.y),
+        static_cast<float>(badge_bounds_.width),
+        static_cast<float>(badge_bounds_.height)
+    };
+    badge_texture_.draw(runtime_.sdl_.renderer, nullptr, &at);
+}
+
 void OaLayer::present_front_end(const SDL_FRect& area) {
     SDL_Renderer* sdl_renderer = runtime_.sdl_.renderer;
     lay_out_screens();
@@ -2800,6 +3021,8 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
             SDL_RenderFillRects(sdl_renderer, bars.data(), static_cast<int>(bars.size()));
         }
     }
+    // Under the screens, so an open card covers the badge it describes.
+    present_presence_badges(seen, output_width, output_height);
     if (look.pieces.empty())
         return;
     const auto limit = runtime_.render_texture_limit();
@@ -3264,9 +3487,15 @@ void OaLayer::present_match() {
 }
 
 void OaLayer::destroy_textures() noexcept {
-    if (texture_.tile_count() == 0)
+    const bool screens = texture_.tile_count() != 0;
+    const bool badges = badge_texture_.tile_count() != 0;
+    if (!screens && !badges)
         return;
-    texture_.reset();
+    if (screens)
+        texture_.reset();
+    if (badges)
+        badge_texture_.reset();
+    badges_uploaded_ = false;
     uploaded_.reset();
     front_uploaded_.reset();
 }

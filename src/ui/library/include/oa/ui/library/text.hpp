@@ -53,12 +53,15 @@ inline constexpr std::string_view action_cancel = "CANCEL";
 inline constexpr std::string_view action_retry = "RETRY";
 inline constexpr std::string_view action_roll_back = "ROLL BACK";
 inline constexpr std::string_view action_play_now = "PLAY NOW";
+inline constexpr std::string_view action_switch_off = "SWITCH OFF";
 inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
 inline constexpr std::string_view action_back = "BACK";
+inline constexpr std::string_view action_check_now = "CHECK NOW";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
+inline constexpr std::string_view action_uninstall = "UNINSTALL";
 
 // Why GET or UPDATE is off.
 inline constexpr std::string_view blocked_in_match = "Not during a game";
@@ -72,6 +75,48 @@ inline constexpr std::string_view hacks_and_more = "{hacks} · {count} more";
 /// The comma between two names of a list. Callers write the joining space
 /// after the lookup, so the looked-up text can be a catalogue section.
 inline constexpr std::string_view list_separator = ",";
+
+// UNINSTALL (uninstall.hpp): why it is off, its question and its notices.
+/// Why UNINSTALL is off for a map pack while a game is played.
+inline constexpr std::string_view uninstall_off_in_game =
+    "Map packs can't be uninstalled during a game.";
+/// Why UNINSTALL is off while the package is in the download queue.
+inline constexpr std::string_view uninstall_off_queued =
+    "It is in the download queue: CANCEL it before you uninstall it.";
+/// The question's title, and the notices'.
+inline constexpr std::string_view uninstall_title = "Uninstall {name}";
+/// What the question asks, with the folder under the player's folder, as
+/// "Mods/ridge"; the second for a package that keeps a copy to roll back to.
+inline constexpr std::string_view uninstall_ask =
+    "Uninstall {name}? Its folder, {folder}, is removed.";
+inline constexpr std::string_view uninstall_ask_kept =
+    "Uninstall {name}? Its folder, {folder}, is removed, and with it the copy ROLL BACK keeps.";
+/// After the question: for a package a registry lists, and for the player's own.
+inline constexpr std::string_view uninstall_listed = "GET installs it again.";
+inline constexpr std::string_view uninstall_own =
+    "No registry lists it, so the Library cannot get it again.";
+/// The notice for the mod being played.
+inline constexpr std::string_view uninstall_playing =
+    "You are playing {name}. Switch it off first with SWITCH OFF, then uninstall it.";
+/// The notice for the language pack in use.
+inline constexpr std::string_view uninstall_language =
+    "The game is shown in {name}. Choose another language in Settings › Language first, then "
+    "uninstall it.";
+/// The notice when an uninstall removed nothing, then one of the reasons below.
+inline constexpr std::string_view uninstall_failed = "{name} was not uninstalled. {reason}";
+inline constexpr std::string_view uninstall_failed_busy =
+    "Open Annihilation, or another copy of it, is still changing its folder. Try again in a "
+    "moment.";
+inline constexpr std::string_view uninstall_failed_changed =
+    "Its folder changed since the Library listed it. Try again.";
+inline constexpr std::string_view uninstall_failed_link =
+    "Its folder is a link, and OA never removes what a link leads to. OPEN FOLDER shows it.";
+inline constexpr std::string_view uninstall_failed_outside =
+    "Its folder is not in your own Open Annihilation folder, and OA removes nothing outside it.";
+inline constexpr std::string_view uninstall_failed_not_moved =
+    "Its folder could not be moved; another program may be using it. Close it, then try again.";
+/// The notices' one button.
+inline constexpr std::string_view uninstall_ok = "OK";
 
 // Sizes, binary units.
 /// A number with one decimal.
@@ -166,6 +211,8 @@ inline constexpr std::string_view status_version_available =
 inline constexpr std::string_view status_update_available = "Update available · {size} to download";
 inline constexpr std::string_view status_installed = "Installed";
 inline constexpr std::string_view status_playing = "Playing";
+/// The status of a mod folder with no oamod.yaml, installed or played.
+inline constexpr std::string_view status_without_manifest = "No oamod.yaml present";
 inline constexpr std::string_view status_not_installed = "Not installed · {size}";
 inline constexpr std::string_view status_waiting = "Waiting to download";
 inline constexpr std::string_view status_downloading = "Downloading · {progress}";
@@ -185,6 +232,8 @@ inline constexpr std::string_view download_count_many = "{count} downloads";
 inline constexpr std::string_view note_finishes = "Finishes when you leave {name}.";
 inline constexpr std::string_view note_playing_other =
     "You are playing {playing}. Updating {name} doesn't restart the game.";
+/// Why PLAY NOW and SWITCH OFF are off: --mod-dir or --base-game.
+inline constexpr std::string_view note_command_line = "The command line chose this run's mod.";
 
 // The download queue in the footer.
 inline constexpr std::string_view queue_package = "{name} {version}";
@@ -318,31 +367,25 @@ inline constexpr std::string_view fact_download = "Download";
 inline constexpr std::string_view question_fact = "{label}: {value}";
 inline constexpr std::string_view action_not_now = "NOT NOW";
 
-// Settings › Mods: a row's line on its update, and the line on the last
-// check for updates (update_question.hpp). The revision lines are for a
-// revision above 0 of the version installed; the update lines for an
-// update that keeps the version and names no revision above 0.
-inline constexpr std::string_view mods_revision_available =
-    "Revision {revision} available · {size}";
-inline constexpr std::string_view mods_version_available = "Version {version} available · {size}";
-inline constexpr std::string_view mods_revision_changes =
-    "Revision {revision} changes the rules · {size}";
-inline constexpr std::string_view mods_version_changes =
-    "Version {version} changes the rules · {size}";
-inline constexpr std::string_view mods_revision_may_change =
-    "Revision {revision} may change the rules · {size}";
-inline constexpr std::string_view mods_version_may_change =
-    "Version {version} may change the rules · {size}";
-inline constexpr std::string_view mods_update_available = "Update available · {size}";
-inline constexpr std::string_view mods_update_changes = "Update changes the rules · {size}";
-inline constexpr std::string_view mods_update_may_change = "Update may change the rules · {size}";
-/// An update on its way, how far its download has come.
-inline constexpr std::string_view mods_updating = "Updating · {percent}%";
-inline constexpr std::string_view mods_checked = "Checked for updates {age}";
-inline constexpr std::string_view mods_never_checked = "Not checked for updates yet";
-inline constexpr std::string_view mods_checking = "Checking for updates…";
-inline constexpr std::string_view mods_check_failed = "Couldn't check for updates";
-inline constexpr std::string_view mods_no_registries = "No registries are on.";
+// The questions about the mod played (mod_questions.hpp): SWITCH OFF's
+// Switch Mod question, the note that PLAY NOW could not switch, and ROLL
+// BACK's Roll Back Mod question.
+inline constexpr std::string_view switch_title = "SWITCH MOD";
+/// What the Switch Mod question asks, with the mod's title in its place.
+inline constexpr std::string_view switch_ask =
+    "Switch to {title} now? The game reloads its data for the new mod and returns to the main "
+    "menu. Your other settings are kept.";
+/// The title the Switch Mod question gives the game played with no mod.
+inline constexpr std::string_view no_mod = "No Mod";
+inline constexpr std::string_view action_switch = "SWITCH";
+inline constexpr std::string_view action_ok = "OK";
+inline constexpr std::string_view roll_back_title = "ROLL BACK MOD";
+/// What the Roll Back Mod question asks, with the mod's title and the versions.
+inline constexpr std::string_view roll_back_ask =
+    "Roll back {title} to {to}? {from} is kept in its place, and ROLL BACK again brings it back.";
+/// What the Roll Back Mod question adds for the mod the game plays.
+inline constexpr std::string_view roll_back_reload =
+    "The game reloads its data for the mod and returns to the main menu.";
 
 } // namespace words
 

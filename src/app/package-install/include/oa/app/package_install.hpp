@@ -8,7 +8,9 @@
 // player is asked (the kind's plan); its files are unpacked into a staging
 // folder inside that root, a piece at a time (Unpacking), then put in place
 // by renames on the same volume (commit_change), which keep the version an
-// update replaced in the package's .backup folder, one version back. A crash
+// update replaced in the package's .backup folder, one version back. An
+// uninstall moves a package's folder aside whole in one rename
+// (uninstall_package). A crash
 // at any point leaves folders that the next start settles to the state
 // before the change or after it (recover_changes), and the folders a change
 // drops are deleted a little at a time (Discarder). One table of kinds says
@@ -250,6 +252,9 @@ struct InstalledPackage {
     /// The manifest's author.name, as written; empty when it has none or the
     /// kind's manifest names no author.
     std::string author{};
+    /// The manifest's description, as written; empty when it has none or the
+    /// kind's manifest gives none.
+    std::string description{};
 };
 
 /// Tells whether two reads of a folder found the same: kind, id, version
@@ -674,6 +679,58 @@ void rename_exclusively(
     const std::filesystem::path& root,
     std::string_view target,
     Change change,
+    const ChangeOptions& options = {}
+);
+
+/// What an uninstall did.
+struct UninstallResult {
+    /// The package's folder, with the copy ROLL BACK keeps inside it, left
+    /// the root folder whole: it is now the discard folder `discards` names.
+    bool removed{};
+    /// Why it removed nothing: unsafe_name, busy, link, changed or not_placed.
+    Refusal refusal{Refusal::none};
+    std::string detail{}; ///< English, for the log
+    /// The discard folder the package's folder became, to delete (Discarder).
+    std::vector<std::filesystem::path> discards{};
+};
+
+/// Tells whether a name is one plain folder of a root that an uninstall may
+/// act on: 1 to 255 bytes, no separator, colon or control character, not "."
+/// or "..", and not starting with '.', as the installer's own folders do.
+///
+/// @param target the folder's name, UTF-8
+/// @return true when it is
+[[nodiscard]] bool plain_folder_name(std::string_view target) noexcept;
+
+/// Uninstalls a package: moves its folder in a kind's root, and with it the
+/// copy ROLL BACK keeps inside it (.backup), aside to a discard folder in
+/// one rename on the same volume, tried again for a while as a change's
+/// renames are. The Discarder then deletes that folder a little at a time,
+/// removing links and junctions and never entering them, and the next
+/// start's recover_changes deletes whatever a stop left of it. The discard
+/// folder's name starts with the kind's prefix, so nothing ever reads it as
+/// a package: the root holds the package whole, or not at all.
+///
+/// Removes nothing, and says why, for a target that is not a plain folder
+/// name (unsafe_name); while another copy of the game holds the root
+/// (busy); for a target that is a link or junction (link), which is never
+/// followed; for one that is missing, not a folder, holds no package of the
+/// kind or not what `options.expected` names (changed); while the target's
+/// staging, old, replaced or restore folder lies in the root, which an
+/// unfinished change or recovery would put back (busy); and when the rename
+/// fails (not_placed), the folder then staying whole where it was. Once the
+/// folder has moved, the root is synced and, on macOS, the drive's cache
+/// written to its storage.
+///
+/// @param kind the kind
+/// @param root the kind's root folder in the player's folder
+/// @param target the package's folder in the root, a plain folder name
+/// @param options the hooks, the waits and what the target must hold
+/// @return what it did
+[[nodiscard]] UninstallResult uninstall_package(
+    const PackageKind& kind,
+    const std::filesystem::path& root,
+    std::string_view target,
     const ChangeOptions& options = {}
 );
 

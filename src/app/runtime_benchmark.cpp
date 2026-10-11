@@ -458,7 +458,6 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                 {},
                 settings::highest_unit_limit,
                 {},
-                {},
                 nullptr,
                 touch
             );
