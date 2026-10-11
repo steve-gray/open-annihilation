@@ -462,6 +462,9 @@ struct Options {
     // checks English comes first, the built-in languages follow in their
     // order, and the pseudo pack is installed and shown.
     bool check_language_registry = false;
+    // Shows the notice for a language that is only available, over the main
+    // menu, and checks Use English records the answer.
+    bool check_language_notice = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;
@@ -593,6 +596,16 @@ struct Options {
     // Shows a made-up download check over the main menu, opens its page,
     // retries it and cancels it, and keeps it hidden during a skirmish.
     bool check_challenge = false;
+    // Lists, switches and removes an added registry in Settings › Downloads,
+    // refuses an https address without asking the content service, and opens
+    // an .oareg file the run posts. It writes its own registry list under
+    // --user-folder before the content service starts.
+    bool check_registries = false;
+    // Opens the Library from the main menu's OA button over a feed of
+    // made-up packages, wears the button's dot while updates wait, carries
+    // out the Library's actions, opens Settings over it and it over
+    // Settings, and keeps the in-match OA button on Settings.
+    bool check_library = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

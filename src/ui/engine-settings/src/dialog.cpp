@@ -11,6 +11,7 @@
 #include "geometry.hpp"
 #include "language_page.hpp"
 #include "registered.hpp"
+#include "registries_page.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -172,7 +173,11 @@ std::string_view shown_text(std::string_view english) {
 }
 
 RowContext row_context(const Dialog& dialog) noexcept {
-    return RowContext{dialog.steam_input, dialog.steam_deck_panel_hz};
+    return RowContext{
+        dialog.steam_input,
+        dialog.steam_deck_panel_hz,
+        dialog.library_link && dialog.kind == DialogKind::engine
+    };
 }
 
 kit::RowView row_view(
@@ -276,6 +281,7 @@ Rows place_rows(
     Dialog shown;
     shown.steam_input = context.steam_input;
     shown.steam_deck_panel_hz = context.steam_deck_panel_hz;
+    shown.library_link = context.library_link;
     Rows placed = place_section(shown, page, locks, section, &estimated_width);
     scroll_rows(placed, scroll);
     return placed;
@@ -333,6 +339,9 @@ Locks shown_locks(const Dialog& dialog) noexcept {
 }
 
 ScrolledRows open_rows(const Dialog& dialog) {
+    // Downloads' Registries part scrolls its own content in the section's view.
+    if (registries::shown(dialog))
+        return registries::scrolled(dialog);
     const Sizes& sized = sizes_of(dialog);
     ScrolledRows open{};
     open.area = sized.section_scroll;
@@ -712,6 +721,9 @@ DialogAction scroll_to(Dialog& dialog, layout::ScrolledRows& open, int32_t offse
 DialogAction show_row(Dialog& dialog, layout::ScrolledRows& open, int32_t control) {
     if (control < first_row_control || dialog.pressed != no_control)
         return DialogAction::none;
+    // A control of the Registries part brings its registry's row into view.
+    if (registries::shown(dialog))
+        return scroll_to(dialog, open, registries::scroll_showing(dialog, open, control));
     // Developer's rows and its footer's switch and button stay where they
     // are; its list's rows scroll.
     if (layout::developer_page(dialog))
@@ -1303,6 +1315,7 @@ DialogAction cancel(Dialog& dialog) noexcept {
     dialog.open_list = no_control;
     dialog.chosen = dialog.opened;
     dialog.install_id_chosen = dialog.install_id_opened;
+    dialog.registry_chosen = dialog.registry_opened;
     dialog.registered_values = dialog.registered_opened;
     dialog.pressed = no_control;
     dialog.dragging = false;
@@ -1318,6 +1331,7 @@ DialogAction show_page(Dialog& dialog, Page page) noexcept {
     dialog.open_list = no_control;
     dialog.list_pressed = -1;
     dialog.page = page;
+    dialog.downloads_part = DownloadsPart::main;
     dialog.wheel_rows = 0.0F;
     if (dialog.focused >= first_row_control || registered_nav_index(dialog, dialog.focused) >= 0)
         dialog.focused = page == Page::registered ? registered_nav_control(dialog.registered_page)
@@ -1337,13 +1351,35 @@ DialogAction open_folder(Dialog& dialog, FolderButton button) noexcept {
 }
 
 /// Takes what a row's button asks for: MANAGE… the Game files screen, a
-/// button of Your files its folder, SHOW the UI kit gallery.
+/// button of Your files its folder, MORE IN THE LIBRARY… the Library's
+/// Languages, SHOW the UI kit gallery.
 ///
 /// @param[in,out] dialog the dialog
 /// @param action the button's action (manage_game_files_action,
-///     first_folder_action and its place, or show_gallery_action)
+///     first_folder_action and its place, open_library_action or
+///     show_gallery_action)
 /// @return what it asks of the host
 DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
+    static_assert(
+        layout::open_library_action != downloads::reset_install_id_action &&
+            layout::open_library_action != downloads::empty_downloads_action &&
+            layout::open_library_action != layout::manage_game_files_action &&
+            (layout::open_library_action < layout::first_folder_action ||
+             layout::open_library_action >=
+                 layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
+        "MORE IN THE LIBRARY… asks for an action no other row's button asks for"
+    );
+    static_assert(
+        layout::show_gallery_action != downloads::reset_install_id_action &&
+            layout::show_gallery_action != downloads::empty_downloads_action &&
+            layout::show_gallery_action != downloads::manage_registries_action &&
+            layout::show_gallery_action != layout::manage_game_files_action &&
+            layout::show_gallery_action != layout::open_library_action &&
+            (layout::show_gallery_action < layout::first_folder_action ||
+             layout::show_gallery_action >=
+                 layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
+        "SHOW asks for an action no other row's button asks for"
+    );
     if (action == layout::show_gallery_action)
         return DialogAction::show_gallery;
     if (action == downloads::reset_install_id_action)
@@ -1352,6 +1388,10 @@ DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
         return DialogAction::empty_downloads;
     if (action == layout::manage_game_files_action)
         return DialogAction::manage_game_files;
+    if (action == layout::open_library_action) {
+        dialog.library_tab = LibraryTab::languages;
+        return DialogAction::open_library;
+    }
     const kit::ActionId button = action - layout::first_folder_action;
     if (button < 0 || button >= static_cast<kit::ActionId>(folder_button_count))
         return DialogAction::none;
@@ -1366,6 +1406,10 @@ DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
 /// @param control the control
 /// @return what it asks of the host
 DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t control) {
+    // The Registries part's link, switches and buttons, and ADD REGISTRY…
+    // in Restore defaults' place.
+    if (const std::optional<DialogAction> part = registries::activate(dialog, control))
+        return *part;
     if (control == restore_control)
         return restore_defaults(dialog);
     if (control == cancel_control)
@@ -1847,6 +1891,8 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     if (const std::optional<DialogAction> registered =
             press_registered_row(dialog, control, {x, y}))
         return *registered;
+    if (const std::optional<DialogAction> part = registries::release(dialog, control, x, y))
+        return *part;
     if (layout::developer_page(dialog)) {
         if (control == active_only_control) {
             const layout::SourceRect& active = layout::sizes_of(dialog).active_only_switch;
@@ -1904,6 +1950,9 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
     case DialogKey::enter:
         return accept(dialog);
     case DialogKey::escape:
+        // In Downloads' Registries part, Escape goes back to Downloads.
+        if (registries::shown(dialog))
+            return registries::back(dialog);
         return cancel(dialog);
     case DialogKey::tab:
     case DialogKey::back_tab:
@@ -1957,6 +2006,9 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
     if (key == DialogKey::left || key == DialogKey::right) {
         if (const std::optional<DialogAction> stepped =
                 step_registered_row(dialog, dialog.focused, key == DialogKey::right))
+            return or_shown(*stepped);
+        if (const std::optional<DialogAction> stepped =
+                registries::step(dialog, dialog.focused, key == DialogKey::right))
             return or_shown(*stepped);
     }
     const layout::Row* row = row_of(rows, dialog.focused);
@@ -2389,6 +2441,8 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                 no_control,
             }
         );
+    else if (registries::shown(dialog))
+        registries::append_layout(dialog, parts);
     else
         text_part(
             sized.heading,
@@ -2554,6 +2608,31 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         {ok_control, layout::ok_text},
     }};
     for (const auto& [control, caption] : buttons) {
+        // The Registries part has ADD REGISTRY… in Restore defaults' place,
+        // and during a game the lock that stands for it.
+        if (control == restore_control && registries::shown(dialog)) {
+            if (!registries::adding_locked(dialog)) {
+                parts.push_back(
+                    LayoutPart{
+                        layout::footer_button(control, dialog.size_class),
+                        std::string(layout::shown_text(registries::add_registry_text)),
+                        DialogFont::small,
+                        0,
+                        add_registry_control,
+                    }
+                );
+                continue;
+            }
+            const layout::SourceRect lock = registries::footer_lock(dialog);
+            control_part({lock.x, lock.y, layout::padlock_width, lock.height}, no_control);
+            const int32_t text_left = lock.x + layout::padlock_width + layout::padlock_gap;
+            text_part(
+                {text_left, lock.y, lock.x + lock.width - text_left, lock.height},
+                registries::game_lock_text,
+                DialogFont::small
+            );
+            continue;
+        }
         parts.push_back(
             LayoutPart{
                 layout::footer_button(control, dialog.size_class),

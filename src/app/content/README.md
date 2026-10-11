@@ -7,7 +7,7 @@ be used. The main thread reads an immutable snapshot. There is no UI.
 
 The same module stores the player's download settings: one install ID per
 registry, when to check for catalogue updates, and the size of the
-downloaded files.
+downloaded files, and keeps the packages' badge pictures the Library shows.
 
 ## Entry points
 
@@ -71,6 +71,38 @@ downloaded files.
   remembers one registry's install ID. `report_install` records what the
   installer did with a file the queue handed over.
 
+`oa/app/content/counts.hpp`, same namespace:
+
+- `parse_counts` reads `GET <api>/counts` as the registry specification
+  writes it: shape `counts` 1, a UTC `generated`, and `packages` of
+  `kind`, `id` and `downloads`. A package of a kind the catalogue does
+  not know is left out. A document over 1 MiB, a `counts` other than 1,
+  a `generated` that is not a UTC time, or a download count that is not
+  a whole number from 0 up, is refused.
+- `fetch_counts` is that GET, with `/counts` added to the API's path,
+  a 15 second limit and a 1 MiB limit. The request adds no header and
+  no query. `counts_due` is true for a registry that hands out download
+  keys, names an API, and whose catalogue check is newer than the check
+  its counts were last fetched for. It is never true for a registry
+  whose packages are fetched from the catalogue's own address.
+- `save_counts` and `load_counts` keep the last good table at
+  `<data>/content/counts/<registry id>.json`. The Library's worker
+  reads that file at the first look and fetches when `counts_due` says
+  so. A failed fetch leaves the last table in place and logs once for
+  that registry.
+
+`oa/app/content/pictures.hpp`, same namespace:
+
+- `PictureCache` keeps the badge pictures a catalogue names
+  (`/v1/i/<sha256>.png`, resolved against the host that served the
+  catalogue). `request` asks for one, `take` hands a ready one over decoded
+  (`read_mod_badge`, at most 64 by 64), and `drop_all` forgets what waits;
+  these are the main thread's and touch no file or network.
+  `fetch_waiting` is the worker's: it reads each picture from the folder,
+  or fetches it, checks it and writes it there. `picture_digest` reads the
+  SHA-256 a picture's name gives. The Library's worker owns one
+  ([src/app](../README.md#the-library)).
+
 The runtime owns one service and one queue from start to quit
 (`start_content`, `tick_content`, `content_service`, `content_downloads`
 in `src/app/runtime_content.cpp`). `queue_download` is how the game adds
@@ -97,7 +129,11 @@ catalogues stay in memory.
 The install ID and the update setting live in the preference values the
 caller passes (`open-annihilation.install-id.<registry id>`,
 `open-annihilation.content-updates`). Downloaded files are
-`<data>/content/downloads/`.
+`<data>/content/downloads/`. Badge pictures are
+`<data>/content/pictures/<sha256>.png`, each written whole through a file
+beside it renamed over it. Download counts are
+`<data>/content/counts/<registry id>.json`, one file per registry, replaced
+whole. A failed fetch does not remove that file.
 
 ## Updates
 
@@ -158,6 +194,18 @@ made while the stored value is `off`. `empty_downloads` removes only
 package files and their partial downloads in that folder, never a folder,
 never `queue.yaml` and never a file a download is using.
 
+A badge picture is used only when its bytes hash to the SHA-256 its name
+gives and it is at most 256 KiB (`max_picture_bytes`), whether it was read
+from the pictures folder or fetched; a file in the folder that does not
+hash to its name is fetched again and written over. A picture's request
+carries no install ID, and none is fetched while a match runs.
+
+Download counts are display only. They are fetched for a registry that
+hands out keys, after a catalogue check finds a usable catalogue, and
+never for a registry whose packages are fetched from the catalogue's own
+address. The counts request carries no install ID. A failed fetch keeps
+the last counts.
+
 ## Tests
 
 `app-content-refresh-rules` covers when a refresh is due, which registries
@@ -181,6 +229,21 @@ again, and a listing that changes no file.
 `app-content-downloads` fetches from a local fixture: resume, a match,
 a challenge, mirrors and the saved queue.
 
+`app-content-counts` reads the registry specification's counts example,
+refuses a document that is too large, the wrong shape, a bad time or a
+count that is not a whole number, skips a kind it does not know, fetches
+from a local fixture with no install ID in the request, keeps a saved
+table when the fetch fails, and says a fetch is due only when a key-issuing
+registry's catalogue check moves on.
+
+`app-content-pictures` fetches badge pictures from a local fixture: a good
+one, written to the folder; one whose bytes hash to another name, one over
+256 KiB and one the server does not have, each refused, kept nowhere and
+not asked for again; one the folder holds, read with no request; one in the
+folder that does not hash to its name, fetched and written over; none
+requested while a match runs, and fetched once it ends; and no request
+carrying an install ID.
+
 ## Downloads
 
 One package is fetched at a time, on a worker of its own. Nothing is
@@ -203,6 +266,9 @@ catalogue's file address. No refusal and no challenge falls through to
 a mirror.
 
 ## Limitations
+
+A badge picture refused, or one that could not be fetched, is not asked for
+again while its cache lives: until the game starts afresh.
 
 A refresh in flight when the game quits is dropped. A check that has not
 finished is dropped with it.

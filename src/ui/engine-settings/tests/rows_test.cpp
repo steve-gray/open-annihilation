@@ -63,7 +63,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 70> kExpected{{
+constexpr std::array<Expected, 71> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 2, 2, 7, 200, 0, false, Lock::none, nullptr},
@@ -133,6 +133,7 @@ constexpr std::array<Expected, 70> kExpected{{
     {Setting::window_frame, RowKind::levels, "Window frame", 2, 2, 2, 85, 2, false, Lock::none, nullptr},
     {Setting::hud_scaling, RowKind::toggle, "HUD scaling", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::interface_size, RowKind::choice, "Interface size", 2, 2, 5, 200, 0, false, Lock::none, nullptr},
+    {Setting::more_in_library, RowKind::link, "", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::kit_gallery, RowKind::value_and_button, "UI kit gallery", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
 }};
 // clang-format on

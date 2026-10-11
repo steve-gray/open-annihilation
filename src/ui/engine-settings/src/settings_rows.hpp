@@ -46,9 +46,14 @@ inline constexpr oa::ui::kit::ActionId manage_game_files_action = 0;
 /// What Your files' first button asks for; each next button's is one more,
 /// in FolderButton's order.
 inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
+/// What MORE IN THE LIBRARY…, Language's link, asks for: the Library on
+/// Languages. It follows Your files' buttons and Downloads' RESET and EMPTY
+/// (downloads_page.hpp).
+inline constexpr oa::ui::kit::ActionId open_library_action = 6;
 /// What SHOW, Developer's UI kit gallery's button, asks for: the gallery.
-/// After Your files' three and Downloads' RESET and EMPTY.
-inline constexpr oa::ui::kit::ActionId show_gallery_action = 6;
+/// It follows MORE IN THE LIBRARY… and Downloads' MANAGE…
+/// (downloads_page.hpp).
+inline constexpr oa::ui::kit::ActionId show_gallery_action = 8;
 
 /// Returns a setting's row spec.
 ///

@@ -6,18 +6,22 @@
 # Developer Mode's list of the standard hacks among its sections (src/developer.cpp),
 # the one-off notices of Open Annihilation's own in the dialog's look
 # (engine_settings/notice.hpp), the prompts that ask with buttons of
-# their own in the same look (engine_settings/prompt.hpp), and the download
-# check (engine_settings/challenge.hpp).
+# their own in the same look (engine_settings/prompt.hpp), the download
+# check (engine_settings/challenge.hpp), Downloads' Registries part
+# (src/registries_page.cpp), the Add registry window
+# (engine_settings/add_registry.hpp) and the missing-language notice
+# (engine_settings/language_notice.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/downloads_page.cpp src/language_page.cpp src/mods.cpp
-  src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
-  src/settings_rows.cpp)
+  src/developer.cpp src/downloads_page.cpp src/registries_page.cpp src/language_page.cpp
+  src/language_notice.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
+  src/add_registry.cpp src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-data-languages oa-data-limits
   oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi
-  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-options oa-base-text)
+  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-formats-url oa-options
+  oa-base-text)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-engine-settings-test tests/engine_settings_test.cpp)
@@ -29,6 +33,21 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-engine-settings-prompt-test PRIVATE oa-ui-engine-settings
     oa-test-support oa-options)
   add_test(NAME ui-engine-settings-prompt COMMAND oa-ui-engine-settings-prompt-test)
+
+  # The missing-language notice: its parts, wrap, greyed Download, focus and reach.
+  # With --data, the Chinese body is measured in the fonts it is drawn in.
+  add_executable(oa-ui-engine-settings-language-notice-test tests/language_notice_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-language-notice-test PRIVATE oa-ui-engine-settings
+    oa-platform-text-font oa-test-game-data oa-test-support oa-options)
+  # The fonts sit beside this program. The directory is its own, so they are
+  # not beside the pixel tests, which refuse to draw when fonts are there.
+  set_target_properties(oa-ui-engine-settings-language-notice-test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/language-notice")
+  oa_copy_text_fonts(oa-ui-engine-settings-language-notice-test
+    "$<TARGET_FILE_DIR:oa-ui-engine-settings-language-notice-test>")
+  add_test(NAME ui-engine-settings-language-notice COMMAND oa-ui-engine-settings-language-notice-test)
+  oa_add_game_data_test(ui-engine-settings-language-notice-data
+    oa-ui-engine-settings-language-notice-test --data)
 
   # The download check: its words, buttons, focus, keys and placement.
   add_executable(oa-ui-engine-settings-challenge-test tests/challenge_test.cpp)
@@ -49,6 +68,14 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   target_include_directories(oa-ui-engine-settings-downloads-test PRIVATE src)
   add_test(NAME ui-engine-settings-downloads COMMAND oa-ui-engine-settings-downloads-test)
+  # Downloads' Registries part and the Add registry window: rows, subtitles,
+  # removals, OK's changes, Escape, the locks in a game, the window's texts
+  # and buttons in every mode and phase, its focus, and both at every class.
+  add_executable(oa-ui-engine-settings-registries-test tests/registries_page_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-registries-test PRIVATE oa-ui-engine-settings
+    oa-test-support oa-options)
+  target_include_directories(oa-ui-engine-settings-registries-test PRIVATE src)
+  add_test(NAME ui-engine-settings-registries COMMAND oa-ui-engine-settings-registries-test)
   # The dialog's fonts from the installed game, and its texts in them.
   oa_add_game_data_test(ui-engine-settings-dialog-data oa-ui-engine-settings-dialog-test --data)
 

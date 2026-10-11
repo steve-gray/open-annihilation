@@ -231,6 +231,15 @@ class LayerScreen {
     /// @return what the screen did
     virtual LayerAnswer key(oa::ui::kit::Key pressed, uint32_t sdl_key) = 0;
 
+    /// Takes a key's press before the layer maps it to the kit's keys: a
+    /// screen's own shortcuts, such as the Library's Ctrl+F. The layer hands
+    /// the press to key only when this answers pass.
+    ///
+    /// @return what the screen did; pass, as every screen without shortcuts answers
+    virtual LayerAnswer shortcut(uint32_t /*sdl_key*/, uint16_t /*modifiers*/) {
+        return LayerAnswer::pass;
+    }
+
     /// Takes a turn of the wheel.
     ///
     /// @param at the pointer, in the screen's points
@@ -352,6 +361,14 @@ struct WindowPosition {
 /// @param y the input's row
 /// @return the position, in window pixels
 [[nodiscard]] WindowPosition window_position(const LayerView& view, float x, float y) noexcept;
+
+/// Tells whether a key's press pastes into a focused text field of the OA
+/// layer: V with Ctrl, or on macOS with Cmd too.
+///
+/// @param sdl_key the SDL keycode
+/// @param modifiers SDL_Keymod bits
+/// @return true for the paste shortcut
+[[nodiscard]] bool layer_paste(uint32_t sdl_key, uint16_t modifiers) noexcept;
 
 /// Returns the key a press means to a screen of the OA layer: Enter, Escape,
 /// the arrows, Space, Tab and Shift+Tab, Page Up and Page Down, Home and End,
@@ -484,6 +501,13 @@ class OaLayer {
     /// @param name the screen's name
     void close_above(std::string_view name);
 
+    /// Brings the topmost screen of a name back to the top: every screen above
+    /// it is closed (close), a screen that is taking an input or its tick once
+    /// that is done. With no such screen, nothing.
+    ///
+    /// @param name the screen's name
+    void return_to(std::string_view name);
+
     /// Returns the top screen.
     ///
     /// @return the screen; null while the stack is empty
@@ -584,6 +608,13 @@ class OaLayer {
     /// Ticks every screen once a frame, taking off those that close, and
     /// keeps the system's text input over the focused text field.
     void tick();
+
+    /// Starts the system's text input again over the focused text field the
+    /// layer keeps it started over, as Space or a pad's A on a field asks, so
+    /// that an on-screen keyboard the player put away shows again. Without
+    /// such a field it does nothing: the field the input lands on starts it
+    /// once the input is taken.
+    void restart_text_input();
 
     /// Returns the key that closed a screen until it is released.
     ///

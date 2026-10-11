@@ -35,6 +35,8 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
+#include "oa/ui/library/library.hpp"
+#include "oa/ui/library/text.hpp"
 #include "oa/ui/paint/painter.hpp"
 
 #include <SDL3/SDL.h>
@@ -695,6 +697,36 @@ match_layer_viewport(const layout::MatchLayout& match_layout, int32_t interface_
             100;
     canvas.scale_percent = percent;
     return canvas;
+}
+
+/// Returns one of the Library's words in the language shown.
+///
+/// @param english the word, in English as the Library's text.hpp writes it
+/// @return its translation, or the English
+std::string_view library_word(void* /*context*/, std::string_view english) {
+    return oa::data::languages::interface_text(english);
+}
+
+/// Returns the main menu's OA button's text for automation: "Library", or
+/// "Library · 1 update" and "Library · N updates" while updates wait, in
+/// the language shown.
+///
+/// @param updates the updates that wait (Runtime::library_update_count)
+/// @return the text
+std::string library_button_text(std::size_t updates) {
+    namespace words = oa::ui::library::words;
+    const oa::ui::library::TextHooks lookup{nullptr, library_word};
+    std::string text(oa::ui::library::shown(lookup, words::title_library));
+    if (updates == 0)
+        return text;
+    const std::string count = std::to_string(updates);
+    text += " \u00B7 ";
+    text += oa::ui::library::filled(
+        lookup,
+        updates == 1 ? words::update_count_one : words::update_count_many,
+        {{"count", count}}
+    );
+    return text;
 }
 
 } // namespace
@@ -1432,6 +1464,16 @@ WindowPosition window_position(const LayerView& view, float x, float y) noexcept
     };
 }
 
+bool layer_paste(uint32_t sdl_key, uint16_t modifiers) noexcept {
+    if (sdl_key != SDLK_V)
+        return false;
+#ifdef SDL_PLATFORM_MACOS
+    if ((modifiers & SDL_KMOD_GUI) != 0)
+        return true;
+#endif
+    return (modifiers & SDL_KMOD_CTRL) != 0;
+}
+
 std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers, bool in_match) noexcept {
     switch (sdl_key) {
     case SDLK_RETURN:
@@ -1592,6 +1634,17 @@ void OaLayer::close_above(std::string_view name) {
             return;
         remove(screens_.back().get(), false);
     }
+}
+
+void OaLayer::return_to(std::string_view name) {
+    const LayerScreen* named = find(name);
+    if (named == nullptr)
+        return;
+    std::vector<const LayerScreen*> above;
+    for (auto it = screens_.rbegin(); it != screens_.rend() && it->get() != named; ++it)
+        above.push_back(it->get());
+    for (const LayerScreen* screen : above)
+        close(screen);
 }
 
 LayerScreen* OaLayer::top() const noexcept {
@@ -1876,10 +1929,25 @@ OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInpu
     }
     case ScreenInputKind::wheel:
         return screen.wheel(point, input.wheel_y);
-    case ScreenInputKind::key_down:
+    case ScreenInputKind::key_down: {
+        const LayerAnswer own = screen.shortcut(input.key, input.modifiers);
+        if (own != LayerAnswer::pass)
+            return own;
         if (const auto pressed = layer_key(input.key, input.modifiers, seen.match))
             return screen.key(*pressed, input.key);
+        // The paste shortcut gives a focused field the clipboard's text up to
+        // its first line break, as typed text arrives.
+        if (layer_paste(input.key, input.modifiers) && screen.text_field()) {
+            char* clipboard = SDL_GetClipboardText();
+            std::string pasted = clipboard != nullptr ? clipboard : "";
+            SDL_free(clipboard);
+            pasted = pasted.substr(0, pasted.find_first_of("\r\n"));
+            if (pasted.empty())
+                return LayerAnswer::none;
+            return screen.text(pasted);
+        }
         return LayerAnswer::pass;
+    }
     case ScreenInputKind::text:
         return screen.text(
             input.text != nullptr ? std::string_view(input.text) : std::string_view()
@@ -2360,6 +2428,13 @@ bool OaLayer::take_match_button(const ScreenInput& input) {
         return true;
     }
     return false;
+}
+
+void OaLayer::restart_text_input() {
+    if (!text_field_)
+        return;
+    runtime_.stop_text_input();
+    runtime_.start_text_input(*text_field_);
 }
 
 void OaLayer::sync_text_input() {
@@ -3130,19 +3205,24 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         static_cast<int32_t>(runtime_.surface_.width),
         static_cast<int32_t>(runtime_.surface_.height)
     );
-    // The OA button, on the main menu's picture or in the in-game menu's column.
+    // The OA button, on the main menu's picture or in the in-game menu's
+    // column. On the main menu it opens the Library, and says how many
+    // updates wait there.
     std::optional<layout::Rect> button_at;
+    std::string button_text;
     if (seen.match) {
         if (match_button_shown(runtime_))
             button_at = match_button_rect(runtime_.match_layout_, match_fits_safe_area(runtime_));
     } else if (Runtime::EngineSettingsMenuHost::button_shown(runtime_)) {
         const auto square = Runtime::EngineSettingsMenuHost::button_rect(runtime_);
         button_at = layout::Rect{square.x, square.y, square.width, square.height};
+        button_text = library_button_text(runtime_.library_update_count());
     }
     if (button_at) {
         AutomationControl button;
         button.name = std::string(kAutomationPrefix) + "button";
         button.kind = AutomationControlKind::button;
+        button.text = std::move(button_text);
         button.visible = true;
         // Under a modal screen it takes no press.
         button.enabled = modal == nullptr;

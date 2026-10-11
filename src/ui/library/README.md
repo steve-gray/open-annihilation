@@ -82,13 +82,19 @@ translator finds them together. Every word passes through `Library::text`
     revision 3 won't load under revision 4"), since a built-in registry's
     update asks no question that would say it. From says "Not reviewed by
     the OA team" for an added registry;
+  - the byline names the author, or the publisher when there is no author.
+    When the listing carries a download count it continues
+    " · 12,400 downloads". With no author and no publisher the count is
+    the whole line ("1 download"). A listing with no count shows nothing
+    more. The count does not change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
     Ridge.").
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
-  "188 MB"), download progress, ages, the header's list age, rules hashes
+  "188 MB"), download counts (`downloads_text`: "1 download",
+  "12,400 downloads"), download progress, ages, the header's list age, rules hashes
   ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), engine
   requirements, what an update changes from and to (`change_texts`:
   "revision 3" and "revision 4", or the versions), and the names of tabs,
@@ -131,8 +137,9 @@ translator finds them together. Every word passes through `Library::text`
     the summary), and the details.
 
   A badge is the package's picture, or its letters (`badge_letters`: a
-  word's first three, or the first of up to three words) on
-  `colour::list_selected`, at 20 points in Compact's rows, 28 in Regular's
+  word's first three, or the first of up to three words) in the kit's ink
+  for the accent (`colour::on_accent`) on `colour::hint`, which reads at
+  every class, at 20 points in Compact's rows, 28 in Regular's
   and Large's, and 40 in the details. The Rules and From facts are shown
   whole at every class; the other facts take at most two lines at Compact
   and three in the details pane. The list and the details scroll, each with
@@ -250,7 +257,7 @@ registry; tabs, filters and tags with their counts; the order with no
 search; the update count; the selection across refreshes and browsing; the
 buttons of every state; the facts with the sample numbers, the Rules fact
 for an unchanged, changed and unknown rules hash in both lengths; status
-lines, bylines and the playing note; the queue lines, after an update that
+lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
 changed the rules and one that kept them; `change_texts` for a new
 revision and a new version; every text function; and a lookup that
 translates.
@@ -298,14 +305,12 @@ fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
 - An update that cannot be installed is described with the detail its
   update note carries, as the app wrote it; the model does not reread the
   catalogue for it.
-- The screens are not hosted yet: the OA layer's Library screen fills the
-  inputs, places the window and maps the platform's keys and the
-  controller to `kit::Key` and `ScreenCommand`.
+- The OA layer's Library screen ([src/app](../../app/README.md#the-library))
+  fills the inputs, places the window and maps the keyboard's own keys to
+  `ScreenCommand`; the controller's Y, X, LB, RB and right stick do not
+  reach `library_command` and `library_stick` yet.
 - Only rows that show have controls: a journey scrolls or searches before
   it presses a row that does not show.
-- A badge's letters are drawn in the kit's ink for the accent
-  (`colour::on_accent`) on `colour::list_selected`, which shows them only
-  faintly; the row's look is the kit's.
 - Large shows as many tags in its filter pane as fit, and TAGS ▾ holds the
   rest; the filter pane does not scroll.
 - The scroll bars show where the panes are scrolled but take no press: the

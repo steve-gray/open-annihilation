@@ -6,6 +6,7 @@
 // main menu and in a match.
 
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
@@ -1228,6 +1229,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
         give_downloads(
             dialog, preference_values_, content_service(), downloads, content_downloads_folder()
         );
+        // The Registries part: every registry in effect, and why the last
+        // OK could not change one.
+        give_settings_registries(dialog, true);
     }
     // Your files shows the player's own folder.
     dialog.user_folder = path_to_utf8(user_folder_);
@@ -1236,6 +1240,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     // Languages a catalogue offers that are not installed, and where a
     // download of one of them stands.
     std::ignore = refresh_settings_languages(dialog);
+    // On the main menu Language links to the Library, which opens over the
+    // dialog; never in a match.
+    dialog.library_link = screen_ == Screen::main_menu;
     // Developer Mode opens as it was left: its open areas and hacks and its filter.
     if (state.last_developer_list) {
         dialog.developer.areas_open = state.last_developer_list->areas_open;
@@ -1402,6 +1409,9 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         tell_install_switches(content_downloads(), switches_opened, switches_chosen);
         if (check_changed)
             content_service().set_check_for_updates(check_mode(chosen_check));
+        // The Registries part's switches and removals, each through the
+        // content service, which writes the player's registry list.
+        apply_registry_changes(settings::registry_changes(*dialog));
         state.last_page = dialog->page;
         state.last_developer_list = dialog->developer;
         state.dialog.reset();
@@ -1483,10 +1493,29 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             content_downloads_folder()
         );
         return false;
-    case settings::DialogAction::roll_back_mod:
+    case settings::DialogAction::roll_back_mod: {
         // The dialog stays open, unless the mod played rolls back as the
-        // run ends.
-        return roll_back_mod_folder(*dialog);
+        // run ends. The Library looks for updates again, since the version
+        // put back may have one.
+        const bool closed = roll_back_mod_folder(*dialog);
+        if (library_)
+            library_->look_again(*this);
+        return closed;
+    }
+    case settings::DialogAction::add_registry:
+        // The window opens over the dialog, which stays open. What it adds
+        // stays whether the dialog ends with OK or Cancel.
+        open_add_registry(std::nullopt);
+        return false;
+    case settings::DialogAction::add_mirror:
+        open_add_mirror(dialog->mirror_request);
+        return false;
+    case settings::DialogAction::open_library:
+        // MORE IN THE LIBRARY…: the Library opens over the dialog, which
+        // stays open under it; where the Library is under the dialog
+        // already, the dialog closes back to it.
+        open_library(library_tab_of(dialog->library_tab));
+        return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.
         std::string why;

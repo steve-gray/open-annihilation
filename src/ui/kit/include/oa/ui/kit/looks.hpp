@@ -142,6 +142,7 @@ enum class OaButtonState : uint8_t {
 struct OaButtonLook {
     int32_t side{};                           ///< the square's side, in points
     OaButtonState state{OaButtonState::idle}; ///< how it looks
+    bool dot{};                               ///< it wears the attention dot (draw_oa_button)
 };
 
 /// Where the keyboard focus outline is drawn.

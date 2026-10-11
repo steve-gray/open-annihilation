@@ -84,7 +84,14 @@ until then.
   `blend_rect`, `outline_rect`, `bevel_rect`, `rule_rect`, `box_text`,
   `measure_text`, `draw_picture`, `draw_mark`, `clipped` and `placed_at`.
 - `components.hpp`: the controls, drawn through the canvas's primitives on
-  either form. One button, five looks. `paint` draws a display list.
+  either form. One button, five looks. `paint` draws a display list. The
+  OA button (`draw_oa_button`, `OaButtonLook`) may wear the kit's attention
+  dot, as the main menu's does while updates wait: a disc
+  `oa_button_dot_side` (7) points across in the warning token
+  (`colour::lock`), its outer point a ring in the outline token
+  (`colour::control_border`), `oa_button_dot_inset` (2) points in from the
+  button's top and right edges (`oa_button_dot`), at the canvas's scale.
+  Without the dot the button is drawn exactly as before.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
   the nav list, and a section's heading, row, rule and locked fade.
 - `controls.hpp`: the controls of the Library, the map browser and the
@@ -360,7 +367,10 @@ control listed once, a menu with a divider naming the other items by their
 ids and naming the divider not at all, a row of buttons' buttons and a
 clipped control's press area), and a text field's typing and editing over
 characters of one to four bytes. `ui-kit-components` checks each control's
-pixels, that `paint` matches a direct draw, and the controls' geometry,
+pixels, the OA button's dot at 24 and 32 points in every look, with and
+without the icon, at 1× and 2× (the button drawn without it unchanged, and
+with it differing only inside the dot's square), that `paint` matches a
+direct draw, and the controls' geometry,
 including a menu row that is a divider, one with a right-aligned aside and
 one that cannot be chosen.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's

@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The main menu's OA button, an overlay on the main menu under the
-// extensions' overlays, and the settings dialog it opens over the darkened
-// main menu as a screen of the OA layer (oa_layer.hpp). Also the shortcut and
-// the requests that open the settings on whichever screen can show them.
+// extensions' overlays, which opens the Library over the darkened main menu
+// (runtime_library.cpp) and wears a dot while updates wait there; and the
+// settings dialog as a screen of the OA layer (oa_layer.hpp), which the
+// shortcut, the requests and the Library's SETTINGS… open on whichever
+// screen can show them.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
@@ -14,17 +16,21 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/looks.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
 namespace artless = oa::ui::frontend_renderer;
+namespace kit = oa::ui::kit;
 
 namespace {
 
@@ -119,11 +125,12 @@ int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*)
         host.button_hovered = over;
         if (input.button != SDL_BUTTON_LEFT || !host.button_pressed)
             return 0;
-        // A press opens the dialog when it is released over the button;
-        // released elsewhere it does nothing.
+        // A press opens the Library when it is released over the button,
+        // on Updates while updates wait; released elsewhere it does
+        // nothing. The shortcut and the Library's SETTINGS… open Settings.
         host.button_pressed = false;
         if (over)
-            runtime.open_engine_settings_from_menu();
+            runtime.open_library(std::nullopt);
         return 1;
     }
     default:
@@ -140,13 +147,16 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
     if (!runtime.oa_layer().modal_shown(false) && host.button_hovered)
         look = host.button_pressed ? settings::ButtonLook::pressed : settings::ButtonLook::hovered;
     const auto rect = button_rect(runtime);
-    settings::draw_oa_button(
-        *context->surface,
-        {rect.x, rect.y, 1},
+    // The dot shows while the Library has updates that can be installed;
+    // without it the button is drawn as it always was.
+    kit::draw_oa_button(
+        {context->surface,
+         {rect.x, rect.y, 1},
+         runtime.engine_settings_fonts(),
+         runtime.engine_settings_icon()},
         rect.width,
-        look,
-        *runtime.engine_settings_fonts(),
-        runtime.engine_settings_icon()
+        static_cast<kit::OaButtonState>(look),
+        runtime.library_update_count() > 0
     );
 }
 

@@ -165,9 +165,10 @@ logs it.
 `oa_layer.hpp` and `oa_layer.cpp` are one host for Open Annihilation's own
 screens over every screen of the game: `OaLayer`, which every screen
 reaches through `Runtime::oa_layer()`. It holds the settings dialog on the
-main menu and in a match (`Runtime::SettingsScreen`), the in-game menu's OA
-button, and the notices and questions of the engine's own (`NoticeScreen`,
-`QuestionScreen`). It replaces the main menu's and the match's own hosts of
+main menu and in a match (`Runtime::SettingsScreen`), the Library on the
+main menu (`Runtime::LibraryScreen`, [The Library](#the-library)), the
+in-game menu's OA button, and the notices and questions of the engine's own
+(`NoticeScreen`, `QuestionScreen`). It replaces the main menu's and the match's own hosts of
 the dialog, and the notices' and the installs' prompts' own overlays, which
 each mapped the pointer, told a finger from a mouse, mapped the keys,
 latched the closing key and drew a backdrop.
@@ -184,7 +185,10 @@ latched the closing key and drew a backdrop.
   `close_above(name)`; `close` tells it it leaves, and a screen whose own
   model is still open closes it there as its Cancel would. A host may close
   a screen while that screen takes an input or its tick: it leaves once the
-  call is done, as if it had answered `close`.
+  call is done, as if it had answered `close`. `return_to(name)` brings a
+  screen on the stack back to the top by closing every screen above it in
+  that way, so that a screen asking for one already under it goes back to
+  it rather than stacking a second.
 - **Pushed or queued.** A screen somebody asked for at that moment joins at
   once with `push`: Settings, or a question a screen asks of its own over
   that screen (the Mods page's refused ROLL BACK over Settings). One nobody
@@ -258,6 +262,50 @@ latched the closing key and drew a backdrop.
   else, closes it. A check that arrives during a game waits until the main
   menu, and leaving the main menu hides the window without cancelling the
   download. A new code refreshes the same window.
+- **Registries.** `runtime_registries.cpp` hosts the Add registry window,
+  a screen named `add-registry` (`Runtime::AddRegistryScreen`, modal, over
+  a backdrop, centred over the front end at the view's size class, nowhere
+  in a match) and drawn by `draw_add_registry`. ADD REGISTRY… in Settings ›
+  Downloads › Registries opens it empty (`open_add_registry`); a caller
+  with an address passes it, and its check starts at once. ADD MIRROR…
+  opens it for a mirror of a registry the player added
+  (`open_add_mirror`), with the keys the player trusts for that registry.
+  `take_registry_files`, once a frame beside `tell_mod_installs`, takes the
+  next `.oareg` file of the add-registry queue (`take_registry_file`) on
+  the settled main menu with no OA screen taking every input and no game
+  running, one at a time, reads it whole (at most
+  `oa::data::registry::max_descriptor_bytes`; a larger or unreadable file
+  is refused) through the platform's `take_opened_file` where it has one,
+  and opens the window filled in from it. A run nobody watches leaves the
+  files waiting, unless `--check-registries` asks for them. CHECK reads
+  the typed address with `parse_http_url` first: an https address, and any
+  other the reader refuses, is refused there with its sentence, and the
+  content service is never asked. Otherwise the window asks the content
+  service (`check_registry_url`, `check_mirror`, or `check_registry_file`
+  for a file) and polls `registry_check` each frame in its tick; CANCEL
+  closes it and drops the check, whose answer is never used. ADD calls
+  `add_checked_registry` or `add_checked_mirror`, closes the window and
+  gives an open Settings dialog the Registries part's registries again; a
+  refusal then, the registries having moved since the check, shows as any
+  other. The refusal sentences are one table in that file, `{name}` the
+  checked registry's name (for a mirror, the registry's own) or the
+  address without one. The Registries part's offer comes from the content
+  service's snapshot (`give_settings_registries`, at each opening of the
+  dialog), leaving out an added registry whose id a built-in one has
+  taken. OK makes the part's changes with `set_registry_enabled` and
+  `remove_registry` (`apply_registry_changes`); a refusal is logged with
+  `refusal_text` and said in the part's note the next time it opens. The
+  window's field keeps the system's text input started while it has the
+  focus (`text_field`); Space or a pad's A on it, and a press on it, start
+  that input again (`OaLayer::restart_text_input`), so that an on-screen
+  keyboard the player put away shows again. Ctrl+V, or Cmd+V on macOS,
+  gives a focused field of any of the layer's screens the clipboard's text
+  up to its first line break (`layer_paste`), which the window takes up to
+  its 2,048-byte limit. `native-registries` (`--check-registries`) writes
+  its own registry list under `--user-folder` before the content service
+  starts, switches its added registry off at OK and on at Cancel, removes
+  it at OK, refuses an https address without a check, and opens an
+  `.oareg` file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale on the kit canvas's crisp form, or at 150% on its smooth
   form in the modern fonts (`layer_drawing`), and lays them out at the size
@@ -335,7 +383,9 @@ latched the closing key and drew a backdrop.
   screen's points by its placement (`layer_point`): floor((pixel − left) /
   scale). A finger's press gets the reach of the touch controls in the
   screen's points, the pick distance over the window pixels a point takes;
-  a mouse's none; keys go through `layer_key`. Outside a match F1 is the
+  a mouse's none; keys go first to the screen's own shortcuts (`shortcut`,
+  which every screen but the Library answers `pass`), then through
+  `layer_key`. Outside a match F1 is the
   kit's information key, `Key::info`, which a screen with more to tell
   about what the pointer or the focus is on takes; a screen that answers
   `pass` lets F1 go on to the game as before, and Settings does. In a
@@ -408,10 +458,95 @@ latched the closing key and drew a backdrop.
   cursor (`present`).
 - **Automation** lists what the layer shows (`automation_controls`), as
   [docs/automation.md](../../docs/automation.md#oas-own-screens) describes:
-  `oa.button`, then the screens from the top down to the first modal one,
+  `oa.button` (on the main menu its text says how many updates wait in the
+  Library), then the screens from the top down to the first modal one,
   each control and part named `oa.` and its kit name, with its exact
   rectangle in the window's pixels and that rectangle mapped back onto the
   canvas.
+
+## The Library
+
+`library_host.hpp` and `runtime_library.cpp` host the Library
+([src/ui/library](../ui/library/README.md)) as a screen of the OA layer on
+the main menu, named `library`: modal over a backdrop, laid out at the
+view's size class (`library::window_size`, `library_layout`) and centred
+in the window at its scale. Its model, its screen's state and its feed are
+the host's (`Runtime::LibraryHost`, made on first use, joined as the
+runtime goes).
+
+- **How it opens.** The main menu's OA button opens it
+  (`Runtime::open_library`) when a press is released over it, on Updates
+  while updates wait and on Mods otherwise, with the button's sound;
+  Settings › Language's MORE IN THE LIBRARY… opens it on Languages over
+  Settings (`DialogAction::open_library`). It opens only where the
+  settings do: on the main menu, never over a message box, a frame a
+  package owns or the saves notice. The layer never holds two Libraries or
+  two Settings: opening one already on the stack goes back to it
+  (`OaLayer::return_to`), so Library › SETTINGS… › MORE IN THE LIBRARY…
+  returns to the first Library. Cmd+, (Ctrl+, elsewhere), the macOS
+  menu's Settings… and the in-game OA button still open Settings.
+  `close_library` closes it and what stands over it. Each opening asks the
+  content service for a refresh (`RefreshReason::library_opened`), which
+  the player's setting and the once-a-minute limit govern; an unattended
+  run asks nothing.
+- **The feed** (`LibraryFeed`) gives the Library its inputs and takes its
+  downloads. The runtime's own builds `Runtime::library_inputs` from the
+  content service's snapshot (each registry, built in when its origin is
+  built-in, its downloads off when it needs an install ID the player turned
+  off, and each catalogue entry), the installed packages and updates the
+  worker last found, the download queue (each item's state as the Library
+  names it; a cancelled one left out) and the run (this build's version,
+  the mod played, a match). GET and UPDATE go to `queue_download`, CANCEL
+  and RETRY to the queue's latest item of that package, and
+  `library_registry_built_in` answers from the same snapshot as the inputs'
+  `Registry::built_in`. An update queued from the Library keeps what it
+  changes (`KeptUpdate`) for its queue line while the queue lists it.
+  `tick_library` rebuilds the model, at most once a frame on the main
+  menu, whenever the feed's generation moves (the service's, the queue's,
+  the worker's searches and its pictures, added).
+- **The worker** (`LibraryWork`) is one thread of the Library's own, made
+  from `oa-base-threads` and started at its first job. After a catalogue
+  refresh (the service's generation moved), a package the queue installed,
+  and a roll back in Settings, it lists the player's packages
+  (`list_installed`), matches each to the catalogues, adopts each file
+  install a catalogue lists (`adopt_match`), finds the updates
+  (`find_updates`) and reads each installed mod's own picture; the main
+  thread reads what it last found under its lock and never does that work
+  itself. It also reads and fetches the badge pictures
+  (`content::PictureCache`, with its own HTTP client and no install ID)
+  for the rows the Library shows, never while a match runs. The host's
+  destructor stops it and joins it within a second, a fetch included.
+- **The dot.** The main menu's OA button wears the kit's attention dot
+  (`kit::draw_oa_button`) while `library_update_count` is above 0: the
+  updates the Library's last model counts as installable, so the dot shows
+  from the first frame the cached catalogue offers one. With none the
+  button is drawn byte for byte as before.
+- **The actions.** OPEN FOLDER shows the package's folder
+  (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
+  both recorded in a run nobody watches. SETTINGS… opens Settings over the
+  Library, CLOSE closes it, UPDATE ALL queues every update that can act in
+  list order. PLAY NOW and ROLL BACK go through
+  `library_entry_action`: PLAY NOW switches the game to the installed
+  mod's folder (`switch_to_mod_folder`, a refusal shown in the status
+  line), and ROLL BACK opens Settings over the Library on Mods with the
+  Roll Back Mod question asked for its folder. The Library's own keys are
+  Cmd+F (Ctrl+F elsewhere) and `/` outside the search for Find, and
+  Ctrl+Tab and Ctrl+Shift+Tab for the tabs; Cmd+, opens Settings over it.
+- **The check.** `native-library` (`--check-library`,
+  `runtime_library_check.cpp`) gives the Library a feed of made-up
+  packages and no network, with its data and the player's folder in the
+  build tree, at 640x480 and 1920x1080: the button drawn as before with no
+  update, the Library opened on Mods and closed, the dot and
+  `oa.button`'s "Library · 2 updates" with two, the Library on Updates,
+  GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
+  recorded openers, ROLL BACK's question, PLAY NOW's soft restart,
+  Settings over the Library and the Library over Settings, never two of
+  either, the shortcut opening Settings, and in a skirmish the in-game OA
+  button opening Settings and the Library opening nowhere.
+- **Limitations.** The controller's Y, X, LB, RB and right stick do not
+  reach the Library's own commands yet: the D-pad, A, B and the shoulder
+  buttons' Tab drive it as the kit's keys. The installer's questions for
+  catalogue installs, the mod being played and download counts come later.
 
 ## Files
 
@@ -1661,11 +1796,12 @@ latched the closing key and drew a backdrop.
   `runtime_engine_settings_menu.cpp` hold the main menu's OA button, an
   overlay at the picture's bottom-right corner (its top-right corner while
   an extension's overlay stands over the main menu) under the extensions'
-  overlays, drawn into the main menu's picture; the dialog it opens is
-  centred over the darkened menu and takes every input while it shows. A
-  press released over the button, Cmd+, on macOS or Ctrl+, elsewhere, and
-  the macOS application menu's Settings… item open it; nothing opens over a
-  message box or a frame a package owns. Enter is OK and Escape is Cancel;
+  overlays, drawn into the main menu's picture, which opens the Library
+  ([The Library](#the-library)) and wears a dot while updates wait there.
+  The dialog is centred over the darkened menu and takes every input while
+  it shows. Cmd+, on macOS or Ctrl+, elsewhere, the macOS application
+  menu's Settings… item and the Library's SETTINGS… open it; nothing opens
+  over a message box or a frame a package owns. Enter is OK and Escape is Cancel;
   the key that closed the dialog does nothing more until it is released, so
   that a held key never reaches the main menu, where Escape itself does
   nothing. Another screen replacing the main menu closes the dialog as
@@ -2611,7 +2747,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
 - **Opening a package.** `--open FILE` and `--install-mod FILE`, repeated,
   and any bare argument naming a `.oamod`, `.oalang`, `.oamap` or `.oareg`
   file, any case, are files to open once the main menu shows. `post_opened_file`
-  sends a `.oareg` file to the add-registry queue and every other file to
+  sends a `.oareg` file to the add-registry queue, which opens the Add
+  registry window (see the OA layer's Registries), and every other file to
   the package inbox (`oa/app/package_install/inbox.hpp`); macOS's `-psn_`
   argument is skipped. A file the system opens in the game, or one dropped
   on the window, arrives as SDL's drop event: a watch on SDL's events
