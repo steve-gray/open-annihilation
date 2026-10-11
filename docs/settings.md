@@ -2,13 +2,17 @@
 
 Open Annihilation adds settings of its own to the game: which mod to play,
 a few controls, the unit limit, the language and fonts of the game's text,
-graphics, touch and gamepad controls, and Developer Mode. They live in one
-dialog, apart from the game's own options, which stay in 3.1c's Options
-menu. This page shows each section of the dialog and says what every
-setting does, its default, when it takes effect and when you might change
-it.
+graphics and the size of Open Annihilation's own screens, touch and gamepad
+controls, downloads and the registries they come from, and Developer Mode.
+They live in one dialog, apart from the game's own options, which stay in
+3.1c's Options menu. This page shows each section of the dialog and says
+what every setting does, its default, when it takes effect and when you
+might change it.
 
-The pictures show each section at its defaults on a Mac.
+The pictures show each section at its defaults on a Mac, opened from the
+main menu, with Core Prime's list of content checked a few minutes before.
+The top and middle of Graphics, and Controller, are pictures from 0.7, from
+before Downloads joined the column on the left.
 
 ## Contents
 
@@ -22,6 +26,7 @@ The pictures show each section at its defaults on a Mac.
 - [Touch](#touch)
 - [Controller](#controller)
 - [Game files](#game-files)
+- [Downloads](#downloads)
 - [Developer](#developer)
 - [For one run: the command line](#for-one-run-the-command-line)
 - [Where the settings are kept](#where-the-settings-are-kept)
@@ -30,7 +35,8 @@ The pictures show each section at its defaults on a Mac.
 
 The settings open from:
 
-- the **OA** button at the bottom right of the main menu;
+- **SETTINGS…** at the foot of the Library, which the **OA** button at the
+  bottom right of the main menu opens ([the Library](library.md));
 - the **OA** button under **Resume** in the in-game menu (F2);
 - **Cmd+,** on macOS, or **Settings…** in the application menu;
 - **Ctrl+,** on Windows and Linux.
@@ -42,7 +48,8 @@ multiplayer game keeps running, and the dialog's header says so in amber:
 The column on the left lists the sections: Mods, Controls, Common Tweaks,
 Language and Graphics, then Touch while the game has touch controls,
 Controller once a gamepad has been used, and Game files in the main menu
-on an iPhone or an iPad, and Developer at its foot under a divider. A
+on an iPhone or an iPad, then Downloads, and Developer at its foot under a
+divider. A
 section taller than the dialog, such as Graphics, scrolls with the mouse
 wheel, its scroll bar, Page Up, Page Down, Home and End.
 
@@ -63,7 +70,9 @@ keep it. A row's hint says when a setting takes effect later instead:
   alone the mod you play, which changes only through the Mods section's
   question, the changes Developer Mode keeps for the standard hacks, and
   any setting that is locked. It also has the graphics card tried afresh (see
-  [Hardware acceleration](#graphics)). Cancel still puts everything back.
+  [Hardware acceleration](#graphics)), turns every install ID in Downloads
+  back on and sets Check for content updates to Automatically; the
+  registries stay as they are. Cancel still puts everything back.
 
 The keyboard works the whole dialog:
 
@@ -94,7 +103,7 @@ A setting that cannot change now is faded, with a padlock and the reason:
 
 ## Mods
 
-![The Mods section: No Mod, marked PLAYING, with the version 3.1c and the line "The game's own rules, as 3.1c plays them.", and below it a mod titled Example Mod, version 1.0; under the list the OPEN MODS FOLDER button and a line naming the folders listed.](images/settings/mods.png)
+![The Mods section: No Mod, marked PLAYING, with the version 3.1c and the line "The game's own rules, as 3.1c plays them."; under the list the line "Checked for updates 4 min ago · CHECK NOW", the OPEN MODS FOLDER and GET MORE MODS… buttons, and a line naming the folders listed.](images/settings/mods.png)
 
 Mods chooses the mod the game plays, or **No Mod** for 3.1c's own rules,
 which is the default. It is a list rather than a column of settings: a row
@@ -114,28 +123,56 @@ line that describes it. A mod without a badge shows an empty dashed square.
   reloads the game for that mod and returns to the main menu, without
   closing the window. **Cancel** (Escape) leaves everything as it was. The
   mod chosen is played at every later start too.
+- **An update.** When a registry lists a newer release of a mod you
+  installed from it, the mod's row says so in amber in place of its
+  description, with the download's size: "Revision 4 available · 3.2 MB" or
+  "Version 4.9 available · 41.0 MB", or "Revision 4 changes the rules ·
+  3.2 MB" when the update changes the game's rules, which saved games are
+  tied to, and "… may change the rules · …" when OA cannot tell. **UPDATE**,
+  beside ROLL BACK, starts it. An update from Core Prime's registry starts
+  at once; one from a registry you added asks first when it changes the
+  rules or may change them ([which downloads ask first](library.md#which-downloads-ask-first)).
+  While it downloads the line says how far it has come ("Updating · 28%"),
+  and an update to the mod being played waits until you leave that mod
+  ("Waiting · finishes when you leave *title*"). Nothing updates until you
+  press UPDATE, here or in the [Library](library.md).
 - **ROLL BACK** shows on a mod's row when its folder keeps the version an
-  update replaced. It swaps the two versions back, and a second press
-  undoes the first.
+  update replaced. It asks first (**ROLL BACK MOD**: "Roll back *title* to
+  *the kept version*? *The installed version* is kept in its place, and
+  ROLL BACK again brings it back.", with **CANCEL** and **ROLL BACK**); it
+  swaps the two versions, and a second ROLL BACK undoes the first. For the
+  mod being played it adds "The game reloads its data for the mod and
+  returns to the main menu.". Rolling back an update makes that update show
+  again.
+- **Checked for updates 4 min ago · CHECK NOW**, under the list, says when
+  the registries' lists were last checked: "Not checked for updates yet",
+  "Checking for updates…", "Couldn't check for updates" in amber, or "No
+  registries are on.". **CHECK NOW** checks every registry that is on, at
+  once, whatever Check for content updates in [Downloads](#downloads)
+  says.
 - **Open Mods Folder** opens your Mods folder in the system's file manager,
   where a mod's folder goes to be listed.
+- **Get More Mods…**, beside it on the main menu, opens the Library on its
+  Mods tab, over the settings.
 
 During a game the section is locked ("Locked during a game. Choose the mod
-from the main menu."): a game keeps the mod it started with. It is locked
-too while `--mod-dir` or `--base-game` chose the run's mod ("The command
-line chose this run's mod.").
+from the main menu."): a game keeps the mod it started with, and UPDATE,
+CHECK NOW and GET MORE MODS… are not shown. It is locked too while
+`--mod-dir` or `--base-game` chose the run's mod ("The command line chose
+this run's mod.").
 
 Change it to play a mod, or to go back to the game as 3.1c plays it.
-[Mod support](mods/README.md) covers
+[The Library](library.md) finds, installs and updates mods from Core
+Prime's registry and those you add. [Mod support](mods/README.md) covers
 [installing a mod](mods/README.md#installing-a-mod),
 [installing a .oamod file](mods/README.md#installing-a-oamod-file) and
 [choosing one](mods/README.md#choosing-a-mod) in full.
 
 ## Controls
 
-![The top of the Controls section: Mouse wheel zoom On, Maximum zoom out at Automatic and Maximum zoom in at 4x.](images/settings/controls-1.png)
+![The top of the Controls section: Mouse wheel zoom On, Maximum zoom out at Automatic, Maximum zoom in at 4x and the top of View past the map's edge at 50%.](images/settings/controls-1.png)
 
-![The rest of the Controls section, scrolled to its end: Maximum zoom in at 4x, Escape opens the game menu On and Select groups without Alt Off.](images/settings/controls-2.png)
+![The rest of the Controls section, scrolled to its end: Maximum zoom in at 4x, View past the map's edge at 50%, Escape opens the game menu On and Select groups without Alt Off.](images/settings/controls-2.png)
 
 Each of these takes effect at once.
 
@@ -206,7 +243,7 @@ Each of these takes effect at once.
 
 ## Common Tweaks
 
-![The Common Tweaks section: Your files showing /Users/player/Documents/Open Annihilation with its SAVES, SCREENSHOTS and MODS buttons, Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/common-tweaks.png)
+![The Common Tweaks section: Your files showing …/Users/player/Documents/Open Annihilation with its SAVES, SCREENSHOTS and MODS buttons, Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/common-tweaks.png)
 
 - **Your files** is not a setting: it shows where your saved games,
   screenshots, films, recordings and mods go, the Open Annihilation folder
@@ -239,9 +276,11 @@ replay they show "Set by the host".
 
 ## Language
 
-![The top of the Language section: Language set to System default (English), Use modern fonts for game text On and Text size at 80%.](images/settings/language-1.png)
+![The top of the Language section: Language set to System default (English), the MORE IN THE LIBRARY… link with the line "More languages are in the Library.", Use modern fonts for game text On and the Text size row.](images/settings/language-1.png)
 
-![The rest of the Language section, scrolled: Text size at 80%, Font outline On, Font shadow On and Game text background Off.](images/settings/language-2.png)
+![The Language section with the Language list open: System default (English), English, Deutsch, Español, Français and Italiano, then under AVAILABLE TO DOWNLOAD 简体中文 with its size, 3.5 MB, and the download mark.](images/settings/language-list.png)
+
+![The rest of the Language section, scrolled to its end: Text size at 80%, Font outline On, Font shadow On, Game text background Off and Enable Unicode Multiplayer Chat Off.](images/settings/language-2.png)
 
 The Language section says which language the game's text is shown in and
 how that text is drawn. None of these changes the game itself, so no game
@@ -257,21 +296,29 @@ locks them, and players in different languages play together.
   panels as they open. Choose a language to play in one other than your
   system's. 3.1c's own command line, such as `open-annihilation german`,
   decides it for the run.
-  A catalogue can offer further languages. They are listed under
-  AVAILABLE TO DOWNLOAD, each with its size: whole kB under 1,000,000
-  bytes, one decimal of MB under 100 MB, and whole MB from there on. A
-  pack the OA team published shows that size and a download mark. A
+  A registry's list can offer further languages. They are listed under
+  AVAILABLE TO DOWNLOAD, after the installed ones, each with its size:
+  whole kB under 1,000,000 bytes, one decimal of MB under 100 MB, and whole
+  MB from there on. A pack the OA team published shows that size and a
+  download mark. A
   community pack shows "community", the share of the game it translates
   when the catalogue gives one, and its size. A pack from a registry that
   was added shows "not reviewed" where a community pack shows
   "community". A registry whose downloads are off shows "downloads off",
-  and its language stays greyed. Choosing one starts its download at
-  once, and the field shows how far it has got. The language applies when
-  the pack arrives. OK keeps the choice. Cancel restores the language the
-  dialog opened with. A download already started still installs, and the
-  game keeps the language it had.
+  and its language stays greyed. Choosing one from the open list starts
+  its download at once, with no question, and the field shows how far it
+  has got (" · waiting", " · 40%", " · installing", or " · failed", which
+  choosing it again retries); the hint says "Downloads, then switches to
+  it." The language applies when the pack arrives, with no restart. OK
+  keeps the choice. Cancel restores the language the dialog opened with. A
+  download already started still installs, and the game keeps the language
+  it had. The arrow keys move among System default and the installed
+  languages only.
   [Languages](languages.md) says what the game data and the language packs
   translate.
+- **More in the Library…**, under Language on the main menu, opens the
+  Library on its Languages tab, over the settings, for every language pack
+  the registries offer ([the Library](library.md)).
 - **Use modern fonts for game text**, On by default. The game's text is
   drawn in modern fonts, which hold the letters of many languages and stay
   sharp at any size, in place of the game's own 8-bit fonts. Turn it off
@@ -311,7 +358,7 @@ the game draws its text and how the modern fonts draw it.
 
 ![The middle of the Graphics section: Vertical sync Off, Menu scaling Sharp, Native pixel density Off and Explosion flash Full.](images/settings/graphics-2.png)
 
-![The rest of the Graphics section, scrolled to its end: After zoom at 1/6, locked until Zoomed out units is Dots, Window frame Hidden in play, and HUD scaling On.](images/settings/graphics-3.png)
+![The rest of the Graphics section, scrolled to its end: After zoom at 1/6, Window frame Hidden in play, HUD scaling On and Interface size at Auto.](images/settings/graphics-3.png)
 
 - **Maximum frame rate**, 30 to 120 frames a second in steps of 5, 120 by
   default. It caps how many pictures the game draws a second; the game
@@ -460,6 +507,34 @@ the game draws its text and how the modern fonts draw it.
   room they leave. Clicks and the minimap follow either way, and at
   640x480 the two look the same. The touch controls keep their own sizes.
   It takes effect at once, in a game too.
+- **Interface size**, Auto, 100%, 150%, 200%, 300% or 400%, Auto by
+  default: how large Open Annihilation's own screens are drawn. These are
+  the settings, their notices and questions, the Library, the map browser,
+  GET MAP in the battle room, the Add registry window, the check that you
+  are a person, the battle room's player cards and the UI kit gallery. The 3.1c screens
+  keep Menu scaling, the game's text keeps Text size and the side panel and
+  bars keep HUD scaling.
+  - **Auto** draws them at the window's height in pixels divided by 720,
+    rounded: 1x below 1080 lines, 2x at 1080 and 1440, 3x at 2160, and
+    never below the display's own pixel density, so a phone keeps the
+    smallest layout.
+  - **A size you choose** is used as far as the smallest layout still fits
+    the window, so 400% on a 1920x1080 window draws at 3x. 150% is offered
+    only while Use modern fonts for game text is On, because the game's
+    own fonts draw only at whole steps; turning the modern fonts off while
+    it is chosen sets 100%.
+
+  At that size each screen lays itself out for the room the window leaves
+  it: the Compact layout, the 480x324 dialog of earlier versions, while
+  fewer than 960x540 points are left; Regular, 720x486, from 960x540; and
+  Large, 960x600, from 1280x720. So at 1920x1080 Auto draws Regular at 2x,
+  and at 2560x1440 Large at 2x. A 640x480 window draws exactly as earlier
+  versions did. In a match the settings sit beside the side column, at no
+  more than its scale, and take their layout from the room beside it: a
+  1920x1080 match shows Compact at 2x where the menus show Regular. It
+  takes effect when you press OK, and is never locked. Choose a larger
+  size if OA's screens are small to read on a large display, or a smaller
+  one to see more of a list at once.
 
 Some computers start with other defaults, which Restore defaults puts back
 and which a value you choose always replaces:
@@ -561,9 +636,61 @@ section for the Total Annihilation files copied onto the device:
 [Game files](game-files.md#managing-the-game-files) describes managing
 them.
 
+## Downloads
+
+![The top of the Downloads section: Check for content updates at Automatically, Install ID On with its hint, the ID's row reading "Made at your first download" with a RESET button, and Downloaded files.](images/settings/downloads-1.png)
+
+![The rest of the Downloads section, scrolled to its end: Install ID On, "Made at your first download", Downloaded files reading "Nothing kept" with an EMPTY button, and Registries reading "Core Prime only" with a MANAGE… button.](images/settings/downloads-2.png)
+
+Downloads says when Open Annihilation looks for new content, holds the
+install ID a registry asks for, keeps the files downloads leave behind, and
+lists the registries content comes from. [Downloads and privacy](downloads.md)
+explains each of them, and what a download sends and records.
+
+- **Check for content updates**, Automatically, Only when I open the
+  Library or Never, Automatically by default: when OA fetches the
+  registries' lists, which say what can be downloaded and which updates
+  wait. Automatically fetches a registry's list as the game starts when the
+  list it has is more than 6 hours old, and when the Library opens; Only
+  when I open the Library, only then; Never, only when you ask
+  ([when OA checks](downloads.md#when-oa-checks-for-content)). Whichever
+  you choose, OA installs nothing until you press a button. It takes
+  effect when you press OK.
+- **Install ID**, On by default: a random number that lets Core Prime stop
+  automated downloads, made at your first download from its registry.
+  Turned off, you can browse the Library, but downloads from that registry
+  are off; installed content keeps working. The row under it shows the ID
+  in part, as "7f3a90d2 · · · c91e", or "Made at your first download"
+  before one is made, or "Off"; **RESET** replaces the ID with a new random
+  one at once. Each registry that asks for an install ID has its own,
+  labelled "Install ID · *registry*" when there is more than one. The
+  switch takes effect at OK; RESET acts at once, and Cancel does not undo
+  it.
+- **Downloaded files**: how much the download folder keeps for resuming and
+  repairs, or "Nothing kept". **EMPTY** removes those files at once; it is
+  greyed while nothing is kept, or while a download is using them.
+- **Registries**: which registries are on, "Core Prime only", "2 on of 3"
+  or "None", and **MANAGE…**, which shows the Registries part:
+
+![The Registries part of the Downloads section: the heading DOWNLOADS · REGISTRIES beside a ‹ DOWNLOADS link, the Core Prime row with its CP mark, a Built in label, "1 package · checked 4 min ago" and its switch On, a note that content from registries other than Core Prime isn't reviewed by the OA team, and ADD REGISTRY… in the footer.](images/settings/downloads-registries.png)
+
+The Registries part lists Core Prime's registry, which is built in and can
+be turned off but not removed, then each registry you added, with its
+address, how many packages it lists and "not reviewed". Each has a switch;
+an added registry also has **REMOVE** ("Removed when you press OK", with
+**UNDO**) and **ADD MIRROR…**. **ADD REGISTRY…** takes Restore defaults'
+place in the footer. The switches and removals take effect at OK, and
+Cancel puts them back; a registry or mirror you add is added at once.
+**‹ DOWNLOADS** goes back. [Registries](downloads.md#registries) explains
+adding one, mirrors and what "not reviewed" means.
+
+During a game RESET and EMPTY are locked ("Locked during a game."), and so
+are ADD REGISTRY… and ADD MIRROR… ("Choose from the main menu."); the rest
+can still change.
+
 ## Developer
 
-![The Developer section: Enable Developer Mode Off and Show performance statistics Off, then the list of standard hacks by area, each area closed and showing how many of its hacks are on, and under the list Show Active Only and RESTORE PROFILE VALUES.](images/settings/developer.png)
+![The Developer section: Enable Developer Mode Off, Show performance statistics Off and UI kit gallery with its SHOW button, then the list of standard hacks by area, each area closed and showing how many of its hacks are on, and under the list Show Active Only and RESTORE PROFILE VALUES.](images/settings/developer.png)
 
 The Developer section sits at the foot of the column, under the divider.
 
@@ -586,6 +713,12 @@ The Developer section sits at the foot of the column, under the divider.
   battlefield at, and the display's size, refresh rate and scale (2x on a
   Retina display), as the `+stats` console command shows them. It works whether or not Developer Mode is
   on, and takes effect at once.
+- **UI kit gallery** is not a setting: **SHOW** opens the gallery over the
+  settings, every part of Open Annihilation's own screens in each of its
+  states, at the size and layout the window gives them now (see Interface
+  size, in [Graphics](#graphics)). **CLOSE** goes back to the settings.
+  It is for checking how OA's screens look, and for people building
+  them ([the UI kit](extensions/ui-kit.md)).
 
 Under them the section lists every standard hack, grouped by area, with a
 switch for each and a control for each of its values. **Show Active Only**
@@ -629,6 +762,9 @@ options. The installation guides say where it is
 [Linux](installation/linux.md#where-it-keeps-its-files)), and
 [user preferences](../src/platform/preferences/README.md) lists every key.
 A setting you have never changed is not written, and follows its default.
+The registries you add, and the built-in ones you turn off, are kept apart,
+in `Registries.yaml` in your own Open Annihilation folder
+([where it is all kept](downloads.md#where-it-is-all-kept)).
 To turn Hardware acceleration off for good without starting the game, for
 a graphics driver that stops it, set
 `open-annihilation.hardware-acceleration` to `off` in that file; `basic`
