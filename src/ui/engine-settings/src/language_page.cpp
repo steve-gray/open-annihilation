@@ -258,7 +258,7 @@ std::string language_hint(const SettingsModel& model, std::size_t line) {
             if (line != 0)
                 return {};
             if (pending->state == AvailableLanguage::State::failed)
-                return std::string(shown_text("The download failed: ")) + pending->failure +
+                return std::string(shown_text("The download failed")) + ": " + pending->failure +
                        std::string(shown_text(". Choose it again to try again."));
             return "Downloads, then switches to it.";
         }

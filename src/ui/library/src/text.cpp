@@ -142,8 +142,10 @@ std::string
 range_text(const formats::oamod::EngineRange& range, bool compact, const TextHooks& text) {
     std::string joined;
     for (const auto& [comparison, version] : range.terms) {
-        if (!joined.empty())
+        if (!joined.empty()) {
             joined += shown(text, words::list_separator);
+            joined.push_back(' ');
+        }
         const std::string number = formats::oamod::engine_version_text(version);
         joined += filled(text, comparison_pattern(comparison, compact), {{"version", number}});
     }

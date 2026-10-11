@@ -1953,8 +1953,18 @@ inline constexpr std::string_view open_mods_folder_text = "OPEN MODS FOLDER";
 inline constexpr std::string_view get_more_mods_text = "GET MORE MODS…";
 /// The link after the line on the check for updates.
 inline constexpr std::string_view check_now_text = "CHECK NOW";
-/// Between the line on the check for updates and CHECK NOW.
-inline constexpr std::string_view check_now_separator = " · ";
+/// The dot between the line on the check for updates and CHECK NOW.
+/// The line draws a space on each side, so the looked-up text can be a
+/// catalogue section and the player still sees " · ".
+inline constexpr std::string_view check_now_separator = "·";
+
+/// The check line's separator as it is drawn: a space, the looked-up dot, a space.
+///
+/// @return the text the line shows
+[[nodiscard]] inline std::string check_separator_shown() {
+    return std::string(" ") + std::string(shown_text(check_now_separator)) + " ";
+}
+
 /// A mod row's UPDATE caption.
 inline constexpr std::string_view mod_update_caption = "UPDATE";
 /// The lines under Mods' list, naming the folders it lists.

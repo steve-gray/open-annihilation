@@ -91,8 +91,10 @@ std::string names_text(const std::vector<std::string>& names, const TextHooks& t
     std::string joined;
     const std::size_t listed = std::min(names.size(), named_updates);
     for (std::size_t index = 0; index < listed; ++index) {
-        if (index != 0)
+        if (index != 0) {
             joined += shown(text, words::list_separator);
+            joined.push_back(' ');
+        }
         joined += names[index];
     }
     if (names.size() <= listed)

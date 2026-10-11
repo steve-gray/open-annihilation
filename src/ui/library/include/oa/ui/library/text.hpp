@@ -63,8 +63,9 @@ inline constexpr std::string_view blocked_base = "Needs the base game {base}";
 inline constexpr std::string_view blocked_hacks = "Needs hacks this OA lacks: {hacks}";
 /// The missing hacks named, then how many more are not.
 inline constexpr std::string_view hacks_and_more = "{hacks} · {count} more";
-/// Between two names of a list.
-inline constexpr std::string_view list_separator = ", ";
+/// The comma between two names of a list. Callers write the joining space
+/// after the lookup, so the looked-up text can be a catalogue section.
+inline constexpr std::string_view list_separator = ",";
 
 // Sizes, binary units.
 /// A number with one decimal.

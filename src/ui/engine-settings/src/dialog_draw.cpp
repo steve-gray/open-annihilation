@@ -604,7 +604,7 @@ void add_check_line(Building& building, const Dialog& dialog, const layout::Scro
     if (!layout::shows_check_now(dialog))
         return;
     const SourceRect link = layout::check_now_link(dialog);
-    const std::string_view separator = layout::shown_text(layout::check_now_separator);
+    const std::string separator = layout::check_separator_shown();
     const auto small_width = width_in(building.fonts, DialogFont::small);
     const int32_t separator_width = small_width(separator);
     text(
