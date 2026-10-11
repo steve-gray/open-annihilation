@@ -920,6 +920,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
     }
     case kit::Key::yes:
     case kit::Key::no:
+    case kit::Key::info:
         return {};
     case kit::Key::tab:
     case kit::Key::back_tab:

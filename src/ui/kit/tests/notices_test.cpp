@@ -913,8 +913,11 @@ constexpr std::array<kit::Key, 15> every_key{
     kit::Key::no,
 };
 
-/// The keys a text field takes, which a notice and a question do not.
-constexpr std::array<kit::Key, 2> editing_keys{kit::Key::backspace, kit::Key::delete_forward};
+/// The keys a notice and a question do nothing with: the editing keys a
+/// text field takes, and the information key.
+constexpr std::array<kit::Key, 3> ignored_keys{
+    kit::Key::backspace, kit::Key::delete_forward, kit::Key::info
+};
 
 void every_key_on_a_notice() {
     using kit::NoticeAction;
@@ -969,8 +972,8 @@ void every_key_on_a_notice() {
         OA_CHECK(kit::notice_key(on_open, every_key[index]) == from_open[index].action);
         OA_CHECK(on_open.marked == from_open[index].marked);
     }
-    // The editing keys do nothing, from either mark.
-    for (const kit::Key key : editing_keys)
+    // The editing keys and the information key do nothing, from either mark.
+    for (const kit::Key key : ignored_keys)
         for (const kit::ControlId mark : {kit::notice_ok, kit::notice_open}) {
             kit::Notice notice = short_notice();
             notice.marked = mark;
@@ -1075,8 +1078,9 @@ void every_key_on_a_question() {
         kit::Question none{};
         OA_CHECK(kit::question_key(none, key).action == QuestionAction::none);
     }
-    // The editing keys do nothing on one, two or three buttons.
-    for (const kit::Key key : editing_keys)
+    // The editing keys and the information key do nothing on one, two or
+    // three buttons.
+    for (const kit::Key key : ignored_keys)
         for (const kit::Question& start :
              {question_of({"OK"}),
               question_of({"CANCEL", "REPLACE"}),
