@@ -131,8 +131,9 @@ translator finds them together. Every word passes through `Library::text`
     the summary), and the details.
 
   A badge is the package's picture, or its letters (`badge_letters`: a
-  word's first three, or the first of up to three words) on
-  `colour::list_selected`, at 20 points in Compact's rows, 28 in Regular's
+  word's first three, or the first of up to three words) in the kit's ink
+  for the accent (`colour::on_accent`) on `colour::hint`, which reads at
+  every class, at 20 points in Compact's rows, 28 in Regular's
   and Large's, and 40 in the details. The Rules and From facts are shown
   whole at every class; the other facts take at most two lines at Compact
   and three in the details pane. The list and the details scroll, each with
@@ -303,9 +304,6 @@ fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
   controller to `kit::Key` and `ScreenCommand`.
 - Only rows that show have controls: a journey scrolls or searches before
   it presses a row that does not show.
-- A badge's letters are drawn in the kit's ink for the accent
-  (`colour::on_accent`) on `colour::list_selected`, which shows them only
-  faintly; the row's look is the kit's.
 - Large shows as many tags in its filter pane as fit, and TAGS ▾ holds the
   rest; the filter pane does not scroll.
 - The scroll bars show where the panes are scrolled but take no press: the

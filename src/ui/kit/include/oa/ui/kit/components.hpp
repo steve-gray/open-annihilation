@@ -189,13 +189,40 @@ void draw_lock(const Canvas& canvas, const Rect& area, const LockLook& look);
 /// @param hot the pointer is over the bar, or a press on it is held
 void draw_scroll_bar(const Canvas& canvas, const Rect& well, const Rect& thumb, bool hot);
 
+/// The side of the attention dot the OA button wears, ring included, in points.
+inline constexpr int32_t oa_button_dot_side = 7;
+
+/// The dot's gap to the OA button's top and right edges, in points.
+inline constexpr int32_t oa_button_dot_inset = 2;
+
+/// Returns where the OA button's attention dot lies: oa_button_dot_side
+/// points square, oa_button_dot_inset points in from the button's top and
+/// right edges.
+///
+/// @param side the button's side, in points
+/// @return the dot's square, from the button's top left corner, in points
+[[nodiscard]] constexpr Rect oa_button_dot(int32_t side) noexcept {
+    return {
+        side - oa_button_dot_inset - oa_button_dot_side,
+        oa_button_dot_inset,
+        oa_button_dot_side,
+        oa_button_dot_side
+    };
+}
+
 /// Draws the OA button at the canvas's origin: a bevelled square, the icon
-/// inset when the canvas has one, and otherwise the OA mark.
+/// inset when the canvas has one, and otherwise the OA mark. With the dot,
+/// the kit's attention dot is drawn over its top right corner
+/// (oa_button_dot): a disc oa_button_dot_side points across in the warning
+/// token (colour::lock) whose outer point is a ring in the outline token
+/// (colour::control_border). Without it, nothing else is drawn.
 ///
 /// @param canvas where it is drawn; its icon is the button's
 /// @param side the square's side, in points
 /// @param state how it looks
-void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state);
+/// @param dot it wears the attention dot, as the main menu's does while
+///     updates are waiting
+void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, bool dot = false);
 
 /// Draws the OA mark alone at the canvas's origin: the icon filling the
 /// square, or without one the mark the OA button shows at rest. A side of
