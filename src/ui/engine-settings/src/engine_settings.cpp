@@ -329,6 +329,13 @@ static_assert(on_stop(62, lowest_frame_rate, highest_frame_rate, frame_rate_step
 static_assert(on_stop(63, lowest_frame_rate, highest_frame_rate, frame_rate_step) == 65);
 static_assert(on_stop(240, lowest_frame_rate, highest_frame_rate, frame_rate_step) == 120);
 
+/// Check for content updates' words, in the order the Downloads page lists them.
+constexpr std::array<ChoiceWord<ContentCheck>, 3> content_check_words{{
+    {ContentCheck::automatically, "automatically"},
+    {ContentCheck::when_library_opens, "library"},
+    {ContentCheck::never, "never"},
+}};
+
 } // namespace
 
 EngineSettings default_settings(const Inputs& inputs) {
@@ -622,6 +629,8 @@ EngineSettings read_settings(
     if (!inputs.profile_id.empty())
         if (const auto found = values.find(overrides_key(inputs.profile_id)); found != values.end())
             settings.hack_overrides = mod_profile::read_overrides(found->second);
+    // Unknown text leaves the default read_settings started from.
+    read_word(values, key::content_check, content_check_words, settings.content_check);
     return settings;
 }
 
@@ -987,6 +996,15 @@ void write_settings(
             chosen.*entry.member == defaults.*entry.member,
             restored
         );
+    store_word(
+        values,
+        key::content_check,
+        content_check_words,
+        opened.content_check,
+        chosen.content_check,
+        defaults.content_check,
+        restored
+    );
     // Restore defaults keeps the overrides: Restore profile values clears them.
     if (!profile_id.empty() && chosen.hack_overrides != opened.hack_overrides) {
         if (chosen.hack_overrides.empty())

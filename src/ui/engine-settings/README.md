@@ -65,6 +65,7 @@ the locks a running game puts on them (`settings_locks`).
 | | Left-handed | Off, On | Off | `open-annihilation.pad-left-handed` |
 | | Control size, Hold delay, QUEUE and ADD | Touch's own rows, shared | | as in Touch |
 | Game files, listed only in the main menu's dialog where the platform brings game files in | Include in device backups | Off, On | Off | `open-annihilation.game-files-backed-up` |
+| Downloads, listed in every dialog of the engine's settings, before Developer | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
 | Developer | Enable Developer Mode | Off, On | Off | `open-annihilation.developer-mode` |
 | | Show performance statistics | Off, On | Off | `open-annihilation.frame-stats` |
 | | The overrides of the profile's standard hacks, in Developer Mode's list | any hack on or off, with its parameters | none | `open-annihilation.hack-overrides.<id>`, the id of the profile the game plays, `ta-3.1c` without a mod, `folder:<path>` for a mod folder without a profile |
@@ -494,16 +495,18 @@ focus, and a press on it leaves the focus where it is. While a press is held
 the wheel and the scroll keys do nothing, so only a drag of the scroll bar
 scrolls then. No scroll changes a setting or moves the focus.
 
-Controls are numbered: the sections' entries 0 to 8, each its place in the
-list with Touch and Controller whether or not they are listed (Touch 5,
-Controller 6, Developer 7, so a dialog without Touch has no control 5 and
-one without Controller no control 6), and Game files 8 after Developer, so
-that Touch, Controller and Developer keep their numbers in every dialog (a
-mod's options' 0 to 4); Restore defaults 9, Cancel 10, OK 11, the scroll bar
-12, and the open section's rows from 13, with no upper end. The list draws
-its entries by their place in the list it shows, and the focus walks that
-list, so the dialog without Touch, Controller or Game files draws and
-answers exactly as it did before they were added.
+Controls are numbered: the sections' entries 0 to 9, each its place among
+the sections with Touch, Controller, Game files and Downloads whether or
+not the first three are listed (Touch 5, Controller 6, Developer 7, Game
+files 8, Downloads 9, so a dialog without Touch has no control 5, one
+without Controller no control 6, and one without Game files no control 8).
+Touch, Controller and Developer keep their numbers in every dialog (a
+mod's options' 0 to 4). Restore defaults is 10, Cancel 11, OK 12, the
+scroll bar 13, and the open section's rows from 14, with no upper end. The
+list draws its entries by their place in the list it shows, and the focus
+walks that list, so the dialog without Touch, Controller or Game files
+draws and answers exactly as it did before they were added. Downloads is
+always in that list.
 
 The Touch section is listed only while the game has touch controls:
 `Dialog::touch`, which the host gives `open_dialog` and keeps with
@@ -526,7 +529,7 @@ Pointer speed, Pointer acceleration, Trackpad glide, Right stick, Magnetism
 Left-handed, then Touch's own Control size, Hold delay and QUEUE and ADD.
 
 The Game files section is listed, between Controller (or Touch, or
-Graphics) and Developer, only where the host says so (`Dialog::game_files`, given to
+Graphics) and Downloads, only where the host says so (`Dialog::game_files`, given to
 `open_dialog`): the main menu's dialog of a game whose platform brings game
 files in. A dialog asked to open on Game files without it opens on its
 first section, Mods. Its three rows:
@@ -550,6 +553,33 @@ first section, Mods. Its three rows:
   second half. It takes no press and no focus.
 
 The host's texts keep to their lines' columns as they are drawn.
+
+The Downloads section is listed in every dialog of the engine's settings,
+after Game files where that is listed and otherwise after Controller, Touch
+or Graphics, and before the line above Developer. Its rows come from the
+host's offer (`set_downloads_offer`), not from a fixed list of settings:
+
+- Check for content updates: a drop-down of Automatically, Only when I
+  open the Library, and Never. It is a setting (`content_check`). A change
+  takes effect at OK. Cancel puts the opened choice back, and Restore
+  defaults sets Automatically.
+- One install ID for each registry the offer names, built-in first. The
+  switch is labelled Install ID, or Install ID · {name} when more than one
+  registry uses an ID. Its hint names that registry. Off, the value reads
+  Off. On, with an ID stored, it reads the first 8 hex digits, a gap, and
+  the last 4 (7f3a90d2 · · · c91e). With none stored yet it reads Made at
+  your first download. RESET, beside the value, is disabled while the
+  switch is off or no ID is stored. Turning the switch off or on takes
+  effect at OK and Cancel puts it back. RESET acts at once, names the
+  registry on `Dialog::install_id_registry`, and is not undone by Cancel.
+- Downloaded files: the size kept for resuming and repairs, or Nothing
+  kept. EMPTY acts at once. It is disabled when nothing is kept, and while
+  a download is queued, running or paused the value names that the files
+  are in use and EMPTY stays disabled.
+
+In a game the page still shows. RESET and EMPTY are locked: the padlock
+and "Locked during a game." stand where those buttons were, and neither
+button is drawn. The check and the switches stay editable.
 
 `open_language_text_dialog` opens a dialog of the third kind,
 `DialogKind::language_text`: Language alone, its entry at the top
@@ -900,9 +930,9 @@ values clears them. The host keeps which areas and hacks are open and the
 filter while the game runs (`DeveloperList`).
 
 Developer's controls are numbered from the open section's first row's:
-Enable Developer Mode 11, Show performance statistics 12, Show Active Only
-13, Restore profile values 14, and the list's rows that take input from
-15, in the list's order. Every header takes the focus and a press, which
+Enable Developer Mode 14, Show performance statistics 15, Show Active Only
+16, Restore profile values 17, and the list's rows that take input from
+18, in the list's order. Every header takes the focus and a press, which
 opens or closes it; a press on a hack's switch sets it. Space opens or
 closes an area or a hack and flips a switch; Left and Right close and open
 an area, turn a hack or a switch Off and On, and move a slider a stop.
@@ -1063,6 +1093,17 @@ buttons, Mods' names for folders of one word and for a profile's id, and
 the Tab orders of Controls, Graphics, Developer with an area open and Mods
 with two mods as literals.
 
+`ui-engine-settings-downloads` holds the Downloads section: its place before
+Developer for every combination of Touch, Controller and Game files, its
+rows for none, one and three registries (three scroll at Compact), the
+labels and hints filled with the registries' names, an install ID shown as
+its first 8 and last 4 hex digits, each state's value text, RESET and EMPTY
+disabled when they cannot act, those two locked during a game while the
+check and the switches stay editable, Cancel putting the switches and the
+check back after RESET and EMPTY have already asked the host, Restore
+defaults, every part inside the dialog at Compact, Regular and Large, and
+the controls' names unique.
+
 `ui-engine-settings-dialog` checks the names the automation endpoint lists
 for the dialog, `oa.` before each name and part `kit::automation_parts`
 gives, on every section of the engine's settings with Touch, Controller and
@@ -1191,9 +1232,9 @@ its entry down, and a finger's press taking the nearest control within
 reach (15 points off a switch takes it, 30 points off nothing, a mouse
 press 15 points off nothing) at several scales, a slider dragged from under
 its track and an open list's nearest item; Game files: listed only with
-its flag, between Touch or Graphics and Developer, the line and
-Developer under it, its entry numbered 8 with Touch 5, Controller 6 and
-Developer 7, the
+its flag, between Touch or Graphics and Downloads, the line and
+Developer under it, its entry numbered 8 with Touch 5, Controller 6,
+Developer 7 and Downloads 9, the
 focus walking it, its three rows and their texts, MANAGE… returning
 `manage_game_files` to a click, to Space and to a finger beside it, the
 switch by either half and the keys, Restore defaults and Cancel, where the

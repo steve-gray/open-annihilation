@@ -149,6 +149,9 @@ inline constexpr std::string_view game_files_backed_up = "open-annihilation.game
 /// oa::data::mod_profile::overrides_text writes it
 /// (EngineSettings::hack_overrides).
 inline constexpr std::string_view hack_overrides = "open-annihilation.hack-overrides.";
+/// "automatically", "library" or "never" (EngineSettings::content_check).
+/// When Open Annihilation looks for new content and updates.
+inline constexpr std::string_view content_check = "open-annihilation.content-updates";
 } // namespace key
 
 /// Path nodes the path search may visit in a game tick, all players
@@ -703,6 +706,14 @@ inline constexpr ControlSize steam_deck_control_size = ControlSize::larger;
     return static_cast<uint32_t>(lowest + (held - lowest + step / 2) / step * step);
 }
 
+/// When Open Annihilation looks for new content and updates. It never
+/// installs anything until the player says so.
+enum class ContentCheck : uint8_t {
+    automatically,      ///< at start and when the Library opens
+    when_library_opens, ///< only when the Library opens
+    never,              ///< only when the player asks
+};
+
 /// The settings, as the dialog shows them and the game puts them in effect.
 struct EngineSettings {
     /// Path nodes the path search may visit in a game tick, all players
@@ -839,6 +850,9 @@ struct EngineSettings {
     /// The mod's own options, which only a dialog opened for them changes;
     /// read_settings and write_settings leave them out.
     ModOptions mod_options{};
+    /// When Open Annihilation looks for new content and updates. It takes
+    /// effect when OK is pressed; Cancel and Restore defaults apply.
+    ContentCheck content_check{ContentCheck::automatically};
 
     friend bool operator==(const EngineSettings&, const EngineSettings&) = default;
 };
