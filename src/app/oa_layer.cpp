@@ -1265,12 +1265,12 @@ LayerView OaLayer::view() const {
         viewport.width - viewport.safe.left - viewport.safe.right,
         viewport.height - viewport.safe.top - viewport.safe.bottom
     };
-    // The Interface size the settings in effect choose, or the Auto scale,
-    // no larger than lets Compact's dialog fit the room, and at least 1; the
-    // class from the points left over.
-    viewport = kit::layer_viewport(
-        viewport, settings::interface_size_percent(runtime_.engine_settings().interface_size)
-    );
+    // The Interface size the settings in effect choose (taken when the
+    // dialog's OK is pressed), or the Auto scale, no larger than lets
+    // Compact's dialog fit the room, and at least 1; the class from the
+    // points left over.
+    const settings::InterfaceSize chosen = runtime_.engine_settings_state().current.interface_size;
+    viewport = kit::layer_viewport(viewport, settings::interface_size_percent(chosen));
     seen.scale = viewport.scale_percent / 100;
     seen.frame = kit::frame_of(viewport);
     return seen;
