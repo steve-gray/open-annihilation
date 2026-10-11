@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Settings pages, kit screens, notices and prompts declared outside the
-// engine's own screens. The engine hosts them. The extension table does not
-// name these types (src/ui/screen-registry/README.md).
+// engine's own screens: by an extension through its table (extension.hpp,
+// from version 15), or by the engine's own code. The engine hosts them
+// (src/ui/screen-registry/README.md). Kit screens are registered in the
+// ScreenRegistry (screen_registry.hpp).
 #pragma once
 
 #include "oa/ui/kit/components_more.hpp"
@@ -51,7 +53,8 @@ struct SettingsRegistry {
     SettingsPageDesc pages[kMaxSettingsPages]{};
     /// How many pages were taken.
     uint32_t page_count{};
-    /// Why the last registration was refused; null when the last one was taken.
+    /// Why the first registration the registry refused was refused; null
+    /// while it has refused none. A page taken later leaves it as it is.
     const char* rejected{};
     /// Copies of the pages' ids, which pages[i].id points at.
     std::string ids[kMaxSettingsPages]{};
@@ -63,10 +66,16 @@ struct SettingsRegistry {
 
 /// Takes a settings page into a registry.
 ///
+/// The page's id, title and owner are copied; its rows and state are kept
+/// by the caller for the runtime's life. A malformed or taken id, an engine
+/// section's word, a missing title or owner, a row with no binding or a full
+/// registry refuses the page.
+///
 /// @param registry the registry; null refuses the page
 /// @param page the page
-/// @return 1 when the page is taken; 0 when it is refused, and registry->rejected
-///     then names the reason when registry is not null
+/// @return 1 when the page is taken; 0 when it is refused, and
+///     registry->rejected then names the reason when registry is not null
+///     and refused nothing before
 int settings_page_register(SettingsRegistry* registry, const SettingsPageDesc& page);
 
 /// What a kit screen's host tells its act: a press on a control, or a key
@@ -79,11 +88,14 @@ struct KitScreenAction {
     oa::ui::kit::Key key{};
 };
 
-/// One kit screen a registration asks the engine to open by name.
+/// One kit screen a registration asks the engine to open by name
+/// (kit_screen_register, ScreenServices::open_kit_screen). The engine calls
+/// lay_out, act and closed on the thread that runs main().
 struct KitScreenDesc {
-    /// The screen's name, in a page id's form. Its automation dialog is oa.<name>.
+    /// The screen's name, in a page id's form. Its automation dialog is
+    /// oa.<name>. It lives as long as the runtime.
     const char* name{};
-    /// Handed to lay_out, act and closed.
+    /// Handed to lay_out, act and closed. It lives as long as the runtime.
     void* model{};
     /// Lays the screen out. Its controls' kit names start with the screen's name.
     oa::ui::kit::DisplayList (*lay_out)(void* model, const oa::ui::kit::Frame& frame){};
@@ -93,26 +105,6 @@ struct KitScreenDesc {
     /// Called when the screen closes. Null calls nothing.
     void (*closed)(void* model){};
 };
-
-/// The kit screens registered for one runtime.
-struct KitScreenRegistry {
-    /// The screens taken, in registration order.
-    KitScreenDesc screens[kMaxKitScreens]{};
-    /// How many screens were taken.
-    uint32_t screen_count{};
-    /// Why the last registration was refused; null when the last one was taken.
-    const char* rejected{};
-    /// Copies of the screens' names, which screens[i].name points at.
-    std::string names[kMaxKitScreens]{};
-};
-
-/// Takes a kit screen into a registry.
-///
-/// @param registry the registry; null refuses the screen
-/// @param screen the screen
-/// @return 1 when the screen is taken; 0 when it is refused, and
-///     registry->rejected then names the reason when registry is not null
-int kit_screen_register(KitScreenRegistry* registry, const KitScreenDesc& screen);
 
 /// A notice a registration asks the engine to show.
 struct NoticeRequest {

@@ -20,7 +20,13 @@
 // built-in update to it asks nothing and waits, held, for the player to
 // leave the mod, CANCEL on that line drops it and the update is taken again
 // and held, and PLAY NOW switches to another mod; the third finds the
-// update put in place as the mod was switched.
+// update put in place as the mod was switched, then asks for made-up updates:
+// an added registry's whose rules change asks the update question first,
+// from the Library and from Settings › Mods, NOT NOW leaving it and UPDATE
+// queuing it, and one that keeps the rules is queued at once; the built-in
+// registry's whose rules change, or cannot be known, are queued at once from
+// both, their rows and Rules facts saying so before; and UPDATE ALL queues
+// the built-in one at once and asks about the added one only.
 
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
@@ -42,6 +48,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/update_question.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -85,6 +92,10 @@ constexpr std::string_view kCinder = "cinder";
 constexpr std::string_view kLattice = "lattice";
 /// A made-up mod whose profile does not resolve.
 constexpr std::string_view kDunes = "dunes";
+/// A made-up mod of an added registry whose update changes the rules.
+constexpr std::string_view kEmber = "ember";
+/// A made-up mod of an added registry whose update keeps the rules.
+constexpr std::string_view kFlint = "flint";
 /// The most frames a step of the check runs before it gives up.
 constexpr int kMostFrames = 400;
 /// What the download queue says of a package the installer refused, which
@@ -102,11 +113,20 @@ void require(bool ok, std::string_view what) {
         throw std::runtime_error("library install check: " + std::string(what));
 }
 
+/// One package the fixture feed was asked to queue.
+struct FeedQueued {
+    std::string registry{};           ///< its registry
+    std::string key{};                ///< its key
+    content::DownloadReason reason{}; ///< why
+};
+
 /// The fixture feed the check gives the Library: its inputs, which the check
-/// changes as the download queue and the player's folder would.
+/// changes as the download queue and the player's folder would, and what it
+/// was asked to queue, which it records and starts no download for.
 struct InstallFeed {
-    library::Inputs inputs{}; ///< what the Library is built from
-    uint64_t generation{1};   ///< moves whenever the check changes inputs
+    library::Inputs inputs{};         ///< what the Library is built from
+    uint64_t generation{1};           ///< moves whenever the check changes inputs
+    std::vector<FeedQueued> queued{}; ///< what it was asked to queue, in order
 };
 
 /// The fixture's inputs.
@@ -123,6 +143,25 @@ library::Inputs feed_inputs(void* context) {
 /// @return the generation
 uint64_t feed_generation(void* context) {
     return static_cast<InstallFeed*>(context)->generation;
+}
+
+/// Records a package the fixture was asked to queue.
+///
+/// @param context the fixture
+/// @param registry the registry's id
+/// @param key the package's key
+/// @param reason why
+/// @return a queue item's number: one more for each package recorded
+std::optional<uint64_t> feed_enqueue(
+    void* context,
+    std::string_view registry,
+    std::string_view key,
+    content::DownloadReason reason,
+    std::string* /*why*/
+) {
+    auto& fixture = *static_cast<InstallFeed*>(context);
+    fixture.queued.push_back({std::string(registry), std::string(key), reason});
+    return static_cast<uint64_t>(fixture.queued.size());
 }
 
 /// Tells whether a registry of the fixture's inputs is built in: the
@@ -295,7 +334,7 @@ void Runtime::check_library_install() {
     } own_back{host, own};
 
     host.feed = LibraryFeed{
-        &fixture, feed_inputs, feed_generation, nullptr, nullptr, nullptr, feed_built_in
+        &fixture, feed_inputs, feed_generation, feed_enqueue, nullptr, nullptr, feed_built_in
     };
     host.own_feed = false;
     host.refreshed = false;
@@ -1027,6 +1066,255 @@ void Runtime::check_library_install() {
             !state.discarder.busy() && !reserved_left(mods),
             "the held update left a folder of its own in Mods"
         );
+
+        // 12. The update question. Ember and Flint come from check-added;
+        // Ridge, and Lattice, played, from check-builtin. Ember's update
+        // changes the rules and Flint's keeps them; Ridge's changes them
+        // and Lattice's cannot be known.
+        open_the_library();
+        const fs::path ember_file = packages / "ember.oamod";
+        write_package(ember_file, profile_text(kEmber, "Ember", "2.0", 1), 1);
+        post_catalogue(ember_file, kAdded, kEmber, "Ember", 1);
+        installs_quietly("check-added's Ember", kAdded, kEmber);
+        const fs::path flint_file = packages / "flint.oamod";
+        write_package(flint_file, profile_text(kFlint, "Flint", "1.0", 1), 1);
+        post_catalogue(flint_file, kAdded, kFlint, "Flint", 1);
+        installs_quietly("check-added's Flint", kAdded, kFlint);
+        oa::base::sha256::Digest old_rules{};
+        old_rules[0] = 0x9c;
+        oa::base::sha256::Digest new_rules{};
+        new_rules[0] = 0x51;
+        const auto fixture_update = [&](std::string_view registry,
+                                        std::string_view key,
+                                        std::string_view version,
+                                        int64_t revision,
+                                        library::UpdateNote::Rules rules) {
+            library::UpdateNote update;
+            update.registry = std::string(registry);
+            update.kind = library::Kind::mod;
+            update.key = std::string(key);
+            update.to_release = 9;
+            update.to_version = std::string(version);
+            update.to_revision = revision;
+            update.size = 3355443;
+            update.rules = rules;
+            update.from_rules = old_rules;
+            if (rules == library::UpdateNote::Rules::changes)
+                update.to_rules = new_rules;
+            else if (rules == library::UpdateNote::Rules::same)
+                update.to_rules = old_rules;
+            fixture.inputs.updates.push_back(std::move(update));
+        };
+        fixture.queued.clear();
+        fixture.inputs.queue.clear();
+        fixture.inputs.updates.clear();
+        fixture_update(kAdded, kEmber, "2.0", 2, library::UpdateNote::Rules::changes);
+        fixture_update(kAdded, kFlint, "1.0", 2, library::UpdateNote::Rules::same);
+        fixture_update(kBuiltIn, kRidge, "1.0", 6, library::UpdateNote::Rules::changes);
+        fixture_update(kBuiltIn, kLattice, "3.0", 2, library::UpdateNote::Rules::unknown);
+        list_installed();
+        frames();
+        const auto queued_now = [&](std::string_view registry, std::string_view key) {
+            return !fixture.queued.empty() && fixture.queued.back().registry == registry &&
+                   fixture.queued.back().key == key &&
+                   fixture.queued.back().reason == content::DownloadReason::update;
+        };
+        const auto asked = [&]() -> const QuestionScreen* {
+            return dynamic_cast<const QuestionScreen*>(oa_layer().top());
+        };
+        const auto asks_update = [&](std::string_view title, std::string_view over) {
+            const QuestionScreen* question = asked();
+            require(
+                question != nullptr && question->question().title == title &&
+                    oa_layer().find(over) != nullptr,
+                std::string("the update question ") + std::string(title) + " was not asked over " +
+                    std::string(over)
+            );
+            const settings::Prompt& shown = question->question();
+            require(
+                shown.buttons.size() == 2 && shown.buttons[0].id == library::not_now_button_id &&
+                    shown.buttons[1].id == library::update_button_id && shown.buttons[1].accent &&
+                    shown.marked == 0,
+                "the update question is not NOT NOW, marked, then UPDATE, primary"
+            );
+            frame();
+            require(
+                named("oa.prompt.not-now").has_value() && named("oa.prompt.update").has_value() &&
+                    named("oa.prompt.body").has_value(),
+                "automation does not list the update question's oa.prompt.not-now, update and body"
+            );
+        };
+
+        // From the Library: Ember asks first, NOT NOW leaving it and UPDATE
+        // queuing it; Flint is queued at once.
+        show_entry("oa.library.row.check-added.ember");
+        press_action("update");
+        asks_update("Update Ember", library_screen_name);
+        {
+            const settings::Prompt& shown = asked()->question();
+            require(
+                shown.paragraphs.size() == 4 &&
+                    shown.paragraphs[0].text == "Ember 2.0 · revision 1 → 2" &&
+                    shown.paragraphs[1].text.starts_with(
+                        "Revision 2 changes the game's rules. Saved games from revision 1 won't "
+                        "load under revision 2."
+                    ) &&
+                    shown.paragraphs[2].text == "Rules: 9c00 0000 → 5100 0000" &&
+                    shown.paragraphs[3].text == "Download: 3.2 MB",
+                "the update question does not say what Ember's update does"
+            );
+        }
+        tap(SDLK_ESCAPE);
+        require(
+            top_is(library_screen_name) && fixture.queued.empty(),
+            "NOT NOW on the update question queued Ember's update"
+        );
+        press_action("update");
+        asks_update("Update Ember", library_screen_name);
+        click_named("oa.prompt.update");
+        require(
+            top_is(library_screen_name) && fixture.queued.size() == 1 && queued_now(kAdded, kEmber),
+            "UPDATE on the update question did not queue Ember's update"
+        );
+        show_entry("oa.library.row.check-added.flint");
+        press_action("update");
+        require(
+            top_is(library_screen_name) && fixture.queued.size() == 2 && queued_now(kAdded, kFlint),
+            "an added registry's update that keeps the rules was not queued at once"
+        );
+
+        // The built-in registry's: their Rules facts say what they do, and
+        // UPDATE queues them at once with no question.
+        const auto rules_say = [&](std::string_view part) {
+            const std::optional<AutomationControl> rules = named("oa.library.rules");
+            return rules.has_value() && rules->text.find(part) != std::string::npos;
+        };
+        show_entry("oa.library.row.check-builtin.ridge");
+        require(
+            rules_say("changes the game's rules"),
+            "the Library's Rules fact does not say Ridge's update changes the game's rules"
+        );
+        press_action("update");
+        require(
+            top_is(library_screen_name) && fixture.queued.size() == 3 &&
+                queued_now(kBuiltIn, kRidge),
+            "the built-in registry's update that changes the rules asked or was not queued"
+        );
+        show_entry("oa.library.row.check-builtin.lattice");
+        require(
+            rules_say("unknown"),
+            "the Library's Rules fact does not say Lattice's rules are unknown"
+        );
+        press_action("update");
+        require(
+            top_is(library_screen_name) && fixture.queued.size() == 4 &&
+                queued_now(kBuiltIn, kLattice),
+            "the built-in registry's update with unknown rules asked or was not queued"
+        );
+
+        // From Settings › Mods: the rows say what the updates do; the
+        // built-in registry's are queued at once, and Ember asks over the
+        // dialog.
+        close_the_library();
+        open_engine_settings_from_menu();
+        frames();
+        require(top_is("settings") && engine_settings_dialog() != nullptr, "Settings did not open");
+        click_named("oa.settings.nav.mods");
+        frames();
+        {
+            const settings::Dialog* dialog = engine_settings_dialog();
+            const auto line_of = [&](const fs::path& folder) -> std::string {
+                for (std::size_t index = 0;
+                     index < dialog->mod_folders.size() && index < dialog->mod_details.size();
+                     ++index)
+                    if (dialog->mod_folders[index] == kept_path(folder) &&
+                        dialog->mod_details[index].update_offered)
+                        return dialog->mod_details[index].update_text;
+                return {};
+            };
+            require(
+                dialog != nullptr && dialog->page == settings::Page::mods &&
+                    line_of(ridge) == "Revision 6 changes the rules · 3.2 MB" &&
+                    line_of(mods / std::string(kLattice)) ==
+                        "Revision 2 may change the rules · 3.2 MB" &&
+                    line_of(mods / std::string(kEmber)) == "Revision 2 changes the rules · 3.2 MB",
+                "Settings › Mods' rows do not say what their updates do"
+            );
+            require(
+                !dialog->mods_check_text.empty() && dialog->mods_library_offered,
+                "Settings › Mods shows no line on the check for updates, or no GET MORE MODS…"
+            );
+        }
+        click_named("oa.settings.mod.ridge.update");
+        require(
+            top_is("settings") && fixture.queued.size() == 5 && queued_now(kBuiltIn, kRidge),
+            "UPDATE on Ridge's row asked or did not queue its update"
+        );
+        click_named("oa.settings.mod.lattice.update");
+        require(
+            top_is("settings") && fixture.queued.size() == 6 && queued_now(kBuiltIn, kLattice),
+            "UPDATE on Lattice's row asked or did not queue its update"
+        );
+        click_named("oa.settings.mod.ember.update");
+        asks_update("Update Ember", "settings");
+        tap(SDLK_ESCAPE);
+        require(
+            top_is("settings") && fixture.queued.size() == 6,
+            "NOT NOW on the update question over Settings queued Ember's update"
+        );
+        std::cout << "library install check: built-in update queued with no question\n";
+
+        // UPDATE ALL: the built-in registry's updates, and the added one's
+        // that keeps the rules, at once in list order; one question about
+        // Ember alone, NOT NOW leaving it.
+        tap(SDLK_ESCAPE);
+        frame();
+        require(engine_settings_dialog() == nullptr, "Escape did not close Settings");
+        fixture.queued.clear();
+        list_installed();
+        open_library(library::Tab::updates);
+        frames();
+        require(top_is(library_screen_name), "the Library did not open on Updates");
+        click_named("oa.library.action.update-all");
+        {
+            const QuestionScreen* question = asked();
+            require(
+                question != nullptr && question->question().title == "Update all" &&
+                    question->question().paragraphs.size() == 1 &&
+                    question->question().paragraphs[0].text.starts_with(
+                        "1 update changes the game's rules: Ember."
+                    ),
+                "UPDATE ALL did not ask about Ember alone"
+            );
+            bool ember = false;
+            bool ridge_queued = false;
+            bool lattice_queued = false;
+            for (const FeedQueued& each : fixture.queued) {
+                ember = ember || each.key == kEmber;
+                ridge_queued = ridge_queued || (each.registry == kBuiltIn && each.key == kRidge);
+                lattice_queued =
+                    lattice_queued || (each.registry == kBuiltIn && each.key == kLattice);
+            }
+            require(
+                !ember && ridge_queued && lattice_queued && fixture.queued.size() == 3,
+                "UPDATE ALL did not queue the built-in registry's updates and Flint's at once"
+            );
+        }
+        tap(SDLK_ESCAPE);
+        require(
+            top_is(library_screen_name) && fixture.queued.size() == 3,
+            "NOT NOW on UPDATE ALL's question queued Ember's update"
+        );
+        click_named("oa.library.action.update-all");
+        click_named("oa.prompt.update");
+        require(
+            fixture.queued.size() == 7 && queued_now(kAdded, kEmber),
+            "UPDATE on UPDATE ALL's question did not queue Ember's update"
+        );
+        fixture.inputs.updates.clear();
+        ++fixture.generation;
+        close_the_library();
+
         // The next start of the check plays No Mod again.
         preference_values_.erase(std::string(settings::key::mod_directory));
         preferences_dirty_ = true;

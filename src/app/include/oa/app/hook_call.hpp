@@ -65,6 +65,7 @@ OA_HOOK_ENTRY(Extension, switch_handler, raise);
 OA_HOOK_ENTRY(Extension, text, raise);
 OA_HOOK_ENTRY(Extension, startup, raise);
 OA_HOOK_ENTRY(Extension, register_screens, raise);
+OA_HOOK_ENTRY(Extension, register_settings_pages, raise);
 OA_HOOK_ENTRY(Extension, ready, raise);
 OA_HOOK_ENTRY(Extension, frontend_entry, raise);
 OA_HOOK_ENTRY(Extension, frontend_states, raise);

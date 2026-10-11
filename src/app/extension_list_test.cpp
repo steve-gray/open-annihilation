@@ -190,6 +190,9 @@ void fill(Extension* table, Probe& probe) {
     table->register_screens = [](void* context, ScreenRegistry*) {
         record(context, "register_screens");
     };
+    table->register_settings_pages = [](void* context, SettingsRegistry*) {
+        record(context, "register_settings_pages");
+    };
     table->ready = [](void* context, Runtime&) { record(context, "ready"); };
     table->frontend_entry = [](void* context, FrontendEntry& entry) {
         record(context, "frontend_entry");
@@ -410,6 +413,7 @@ void test_every_in_order() {
     table.check_options(context);
     table.startup(context, runtime);
     table.register_screens(context, nullptr);
+    table.register_settings_pages(context, nullptr);
     table.ready(context, runtime);
     table.check_multiplayer_menu(context, runtime);
     table.frame(context, runtime, FrameStage::pump);
@@ -428,6 +432,7 @@ void test_every_in_order() {
          {"check_options",
           "startup",
           "register_screens",
+          "register_settings_pages",
           "ready",
           "check_multiplayer_menu",
           "frame",

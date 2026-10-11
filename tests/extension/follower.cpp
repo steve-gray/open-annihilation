@@ -107,6 +107,9 @@ void fill(Extension* table) {
         count_order("startup", calls("startup") == 1);
     };
     table->register_screens = [](void*, ScreenRegistry*) { count("register_screens"); };
+    table->register_settings_pages = [](void*, SettingsRegistry*) {
+        count("register_settings_pages");
+    };
     table->ready = [](void*, Runtime&) { count("ready"); };
     table->frontend_entry = [](void*, FrontendEntry&) { count("frontend_entry"); };
     table->run_mode = [](void*, Runtime&, RunPhase phase, int&) {

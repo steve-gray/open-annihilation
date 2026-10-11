@@ -144,6 +144,10 @@ struct EntryId;
 struct Inputs;
 } // namespace oa::ui::library
 
+namespace oa::ui::kit {
+struct Question;
+} // namespace oa::ui::kit
+
 namespace oa::data::map_fit {
 struct Fit;
 } // namespace oa::data::map_fit
@@ -155,6 +159,7 @@ class FontStack;
 namespace oa::ui::frontend_multiplayer {
 struct LobbyMapSource;
 struct LobbyPackMap;
+struct LocalPack;
 } // namespace oa::ui::frontend_multiplayer
 
 namespace oa::app {
@@ -3744,8 +3749,34 @@ class Runtime final : public menu::Host,
     /// its oamod.yaml and oamod.png give (read_mod_summary): the game
     /// folder's mods folder's, the player's own Mods folder's, the folder an
     /// earlier version's Pick Folder... stored while it is the mod stored and
-    /// still a folder, and the one played, each once.
+    /// still a folder, and the one played, each once. Each folder the
+    /// Library's model lists with an update has its update's fields too
+    /// (give_mod_updates).
     void list_offered_mods();
+
+    /// Gives each offered mod folder what Mods shows of its update, from the
+    /// Library's model as its worker last found the updates and the download
+    /// queue last stood (ModDetails::update_offered and the fields after
+    /// it): the folder matched by its path to an installed package, and that
+    /// package's update. Nothing is read from a file or the network; with no
+    /// Library host yet every folder shows no update.
+    ///
+    /// @param folders the offered folders, as Dialog::mod_folders holds them
+    /// @param[in,out] details what Mods shows of each, in the same order
+    void give_mod_updates(
+        const std::vector<std::string>& folders,
+        std::vector<oa::ui::engine_settings::ModDetails>& details
+    );
+
+    /// Brings an open engine dialog's Mods page up to date with the Library's
+    /// model and the content service: each row's update (give_mod_updates),
+    /// the line on the check for updates with whether CHECK NOW follows it,
+    /// and whether GET MORE MODS… shows (on the main menu). The settings
+    /// screen calls it every frame; it reads only what is in memory.
+    ///
+    /// @param dialog the open dialog
+    /// @return true when what Mods shows changed
+    bool refresh_settings_mods(oa::ui::engine_settings::Dialog& dialog);
 
     /// Ends the run after this frame for main() to start the game afresh
     /// with the mod the settings stored (soft_restart_requested).
@@ -4100,6 +4131,30 @@ class Runtime final : public menu::Host,
     ///
     /// Main thread only, never while a match loads or runs.
     void release_pack_map();
+
+    /// Keeps a map pack's maps from being mounted while GET MAP installs it
+    /// (runtime_get_map.cpp): prepare_pack_map refuses them until the
+    /// download's queue item ends, done, failed or cancelled, or another
+    /// hold replaces this one.
+    ///
+    /// @param id the pack's id; empty lets any hold go
+    /// @param item the queue item that downloads and installs it
+    void hold_pack_maps(std::string_view id, uint64_t item);
+
+    /// Tells whether a pack's maps are held from being mounted
+    /// (hold_pack_maps). A hold whose queue item has ended, or is no longer
+    /// in the queue, is let go here.
+    ///
+    /// @param id the pack's id
+    /// @return true while they are held
+    [[nodiscard]] bool pack_maps_held(std::string_view id);
+
+    /// Returns the installed pack map whose files are mounted
+    /// (prepare_pack_map).
+    ///
+    /// @return the map; null while no pack map's files are mounted, or when
+    ///     the installed packs no longer list it
+    [[nodiscard]] const PackMap* mounted_pack_map();
 
     /// Returns why a pack map was last refused.
     ///
@@ -4480,8 +4535,12 @@ class Runtime final : public menu::Host,
     /// Library, and ROLL BACK on it rolls the folder back
     /// (roll_back_mod_folder); PLAY NOW switches the game to the installed
     /// mod's folder (switch_to_mod_folder); a refusal of either shows in the
-    /// status line. UPDATE asks request_update, and UPDATE ALL asks it for
-    /// each update that can be installed, in the order the list shows them.
+    /// status line. UPDATE asks request_update. UPDATE ALL asks it at once for
+    /// each update that can be installed and asks nothing first
+    /// (oa::ui::library::asks_before_update), in the order the list shows
+    /// them, and asks the update question once about the others
+    /// (update_all_question), whose UPDATE asks request_update for each of
+    /// them in that order and whose NOT NOW leaves them.
     ///
     /// @param action Action::roll_back, play_now, update or update_all; any
     ///     other does nothing
@@ -4489,12 +4548,32 @@ class Runtime final : public menu::Host,
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
 
-    /// Queues an entry's update with the download queue: the one place an
-    /// update reaches it. A refusal shows in the status line.
+    /// Starts an entry's update: the one place an update reaches the download
+    /// queue, from the Library's UPDATE and UPDATE ALL and Settings › Mods'
+    /// UPDATE. An update that asks first (oa::ui::library::update_question:
+    /// an added registry's mod whose rules hash changes or cannot be known)
+    /// pushes the update question at once over the screen that asked, NOT NOW
+    /// marked; its UPDATE queues the update, and NOT NOW, Escape or B leaves
+    /// it. Any other update, every built-in registry's among them, is queued
+    /// at once. A refusal shows in the status line.
     ///
     /// @param entry the entry
-    /// @return true when the update was queued
-    bool request_update(const oa::ui::library::EntryId& entry);
+    /// @param answered the player answered UPDATE on the update question for
+    ///     it already (ask_before_updates): it is queued with no question.
+    ///     Only that question's own UPDATE passes true.
+    /// @return true when the update was queued or its question asked
+    bool request_update(const oa::ui::library::EntryId& entry, bool answered = false);
+
+    /// Pushes the update question at once over the screen that asked, the
+    /// Library or Settings, never queued behind it: on the main menu, NOT
+    /// NOW marked. Its UPDATE asks request_update for each entry, in order,
+    /// as answered; NOT NOW, Escape or B leaves them all.
+    ///
+    /// @param question the kit question (oa::ui::library::update_prompt)
+    /// @param entries the entries its UPDATE starts, in list order
+    void ask_before_updates(
+        const oa::ui::kit::Question& question, const std::vector<oa::ui::library::EntryId>& entries
+    );
 
     /// Brings the Library up to date once a frame: on the main menu its
     /// worker finds the updates again after a catalogue refresh or an
@@ -4519,6 +4598,38 @@ class Runtime final : public menu::Host,
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();
+
+    // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
+    // over the skirmish map list and over the host's map list in the battle
+    // room opens it.
+
+    /// The MORE MAPS… button over a map list, a screen of the OA layer named
+    /// more-maps.
+    struct MoreMapsScreen;
+
+    /// The map browser, a screen of the OA layer named map-browser.
+    struct MapBrowserScreen;
+
+    /// Keeps MORE MAPS… on the OA layer while the skirmish map list (SELMAP)
+    /// shows, or the host's map dialog in the battle room: pushes it when the
+    /// layer has none. OaLayer::tick calls it once a frame.
+    void keep_more_maps_screen();
+
+    /// Writes --check-map-browser's registry list into the player's folder,
+    /// every built-in registry turned off, before the content service reads
+    /// it, so that the check fetches nothing.
+    void prepare_map_browser_check();
+
+    /// Runs --check-map-browser: the map pack check's two packs in the
+    /// player's own folder, and at 640x480, 1280x720, 1920x1080 and 2560x1440
+    /// SELMAP's MORE MAPS… and the map browser: its size class, scale and
+    /// columns, everything inside its window, the installed packs' two maps,
+    /// the search, the clashing map greyed with its reason, and Select moving
+    /// SELMAP's selection. Writes each size's frame as map-browser-<w>x<h>.png
+    /// in the working folder.
+    ///
+    /// Throws std::runtime_error naming the first step that failed.
+    void check_map_browser();
 
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
     /// which does not respond until it is closed, then refreshes the section's rows
@@ -4554,6 +4665,12 @@ class Runtime final : public menu::Host,
     /// Runs --check-registered-kit: a registered settings page, kit screen,
     /// notice and prompt, hosted from inside the engine.
     void check_registered_kit();
+
+    /// Runs --check-kit-gallery: the UI kit gallery opened from Settings ›
+    /// Developer on 640x480, 1280x720 and 1920x1080 windows, its size class,
+    /// scale, pixels and focus, and Escape back to Developer
+    /// (runtime_kit_gallery_check.cpp).
+    void check_kit_gallery();
 
     /// Checks that set_unit_limit stores the unit limit preference and clamps
     /// it as the setting does (part of --check-engine-settings).
@@ -4688,6 +4805,36 @@ class Runtime final : public menu::Host,
     /// layer while the multiplayer screens show: pushes it when the layer
     /// has none. OaLayer::tick calls it once a frame.
     void keep_presence_card_screen();
+
+    /// GET MAP over the battle room, as a screen of the OA layer
+    /// (runtime_get_map.cpp).
+    struct GetMapScreen;
+
+    /// Keeps GET MAP's screen (runtime_get_map.cpp) on the OA layer while the
+    /// multiplayer screens show: pushes it when the layer has none.
+    /// OaLayer::tick calls it once a frame.
+    void keep_get_map_screen();
+
+    /// Returns what this machine has of a map pack (runtime_get_map.cpp):
+    /// from the installed packs, whose SHA-256, registry and release come
+    /// from each pack folder's origin record.
+    ///
+    /// @param id the pack's id
+    /// @param sha256 a release's SHA-256, 64 lower-case hex digits: a pack of
+    ///     that id with this SHA-256 is the one answered, else the first of
+    ///     that id
+    /// @return the pack; not installed when no installed pack has that id
+    [[nodiscard]] oa::ui::frontend_multiplayer::LocalPack
+    local_map_pack(std::string_view id, std::string_view sha256) const;
+
+    /// Tells whether this machine may download from a registry
+    /// (runtime_get_map.cpp): it is on, not set aside for a built-in
+    /// registry of its id, allowed by Developer Mode, and its downloads are
+    /// on, that is its install ID is not off where the registry needs one.
+    ///
+    /// @param view the registry
+    /// @return true when a download from it may be queued
+    [[nodiscard]] bool registry_fetches(const content::RegistryView& view) const;
 
     /// Hands the settings screen on the OA layer an action of the dialog, as
     /// its own events do: its sound, the settings, and the layer taking the

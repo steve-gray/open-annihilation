@@ -374,6 +374,11 @@ void combine_hooks(ExtensionListState& state) {
     combine(state, &Extension::register_screens, [](void* context, ScreenRegistry* registry) {
         call_every(context, &Extension::register_screens, registry);
     });
+    combine(
+        state, &Extension::register_settings_pages, [](void* context, SettingsRegistry* registry) {
+            call_every(context, &Extension::register_settings_pages, registry);
+        }
+    );
     combine(state, &Extension::ready, [](void* context, Runtime& runtime) {
         call_every(context, &Extension::ready, runtime);
     });

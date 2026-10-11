@@ -5,8 +5,9 @@
 // waiting for it, their input and ticks, its drawing over the front end's
 // picture and over a match, the overlay that hands it the game's input and
 // frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
-// on the main menu and in a match, and the screens of a notice and a
-// question (NoticeScreen, QuestionScreen). On the front end the screens are
+// on the main menu and in a match, the screens of a notice and a question
+// (NoticeScreen, QuestionScreen), and the UI kit gallery over the whole
+// window (GalleryScreen). On the front end the screens are
 // laid out at the size class of the window's canvas and drawn at its scale
 // in the window's own pixels: crisp at a whole scale, smooth at 150%.
 
@@ -30,6 +31,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/gallery.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -637,6 +639,12 @@ void place_control(
 /// The prefix of every name and dialog the layer lists to automation.
 constexpr std::string_view kAutomationPrefix = "oa.";
 
+/// GET MAP's screen over the battle room (runtime_get_map.cpp). Its button,
+/// its line and its bar ("get-map", "get-map-text" and "get-map-progress")
+/// stand on the battle room as the OA button stands on the main menu, so
+/// automation lists them as it lists that button, with no dialog.
+constexpr std::string_view kGetMapScreen = "get-map";
+
 /// Returns a quotient rounded down, for a numerator below 0 too.
 ///
 /// @param numerator the numerator
@@ -663,6 +671,38 @@ kit::SizeClass front_class(const LayerView& view) noexcept {
 /// @return its place
 LayerPlacement centred_box(const LayerView& view, int32_t box_height) noexcept {
     return centred_placement(view, kit::metrics_of(front_class(view)).notice_width, box_height);
+}
+
+/// Returns the match's canvas at the layer's scale on it, as the in-match
+/// Settings and the gallery start from: the Interface size's step, 150%, or
+/// for Auto the Auto scale of its height (kit::layer_viewport), never above
+/// the side column's scale, which HUD scaling caps: the largest whole step
+/// at or below it instead, and at least 1.
+///
+/// @param match_layout the match's layout
+/// @param interface_percent the Interface size in effect, in percent; 0 for Auto
+/// @return the canvas, its pixels, density and safe insets, at that scale
+kit::Viewport
+match_layer_viewport(const layout::MatchLayout& match_layout, int32_t interface_percent) noexcept {
+    kit::Viewport canvas;
+    canvas.width = match_layout.width;
+    canvas.height = match_layout.height;
+    canvas.density = static_cast<float>(match_layout.px_per_point);
+    canvas.safe = {
+        match_layout.safe.left,
+        match_layout.safe.top,
+        match_layout.safe.right,
+        match_layout.safe.bottom
+    };
+    int32_t percent = kit::layer_viewport(canvas, interface_percent).scale_percent;
+    // A hair under a whole step counts as that step.
+    constexpr double kWhole = 1e-9;
+    if (static_cast<double>(percent) > match_layout.scale * 100.0 + kWhole)
+        percent =
+            std::max(int32_t{1}, static_cast<int32_t>(std::floor(match_layout.scale + kWhole))) *
+            100;
+    canvas.scale_percent = percent;
+    return canvas;
 }
 
 /// Returns one of the Library's words in the language shown.
@@ -877,9 +917,10 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// and Controller once a gamepad sends input, with its Steam Input
     /// notice while that applies. Language's rows follow the catalogues and
     /// the download queue, so a match draws the field again as a pack
-    /// arrives. Off the main menu the main menu's dialog
-    /// closes as Cancel; once the in-game menu's column no longer shows under
-    /// it, the match's closes as OK.
+    /// arrives, and Mods' updates and its line on the check for updates
+    /// follow the Library's model and the registries. Off the main menu the
+    /// main menu's dialog closes as Cancel; once the in-game menu's column no
+    /// longer shows under it, the match's closes as OK.
     ///
     /// @return close when the dialog closed
     LayerAnswer tick() override {
@@ -913,6 +954,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
         // The front end draws every frame. A match draws this dialog again
         // only when the revision moves, so a download's progress has to.
         changed = runtime_.refresh_settings_languages(*dialog) || changed;
+        // Mods' updates and its line on the check for updates follow the
+        // Library's model and the registries.
+        changed = runtime_.refresh_settings_mods(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;
@@ -1175,6 +1219,145 @@ LayerAnswer QuestionScreen::take(kit::QuestionAnswer outcome, uint32_t sdl_key) 
         ++revision_;
         return LayerAnswer::redraw;
     case kit::QuestionAction::none:
+        break;
+    }
+    return LayerAnswer::none;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The UI kit gallery as a screen of the layer
+
+GalleryScreen::GalleryScreen(OaLayer& layer, bool in_match) noexcept
+    : layer_(layer), in_match_(in_match) {
+}
+
+kit::Frame GalleryScreen::frame_for(const LayerView& view) const {
+    kit::Frame given{};
+    if (view.match != in_match_ || layer_.screen_fonts() == nullptr)
+        return given;
+    if (view.match) {
+        if (view.match_layout == nullptr)
+            return given;
+        given = OaLayer::match_gallery(*view.match_layout, view.interface_percent);
+    } else {
+        // The view's room at its scale, and the class of its points.
+        given = view.frame;
+        given.scale_percent = view.scale_percent;
+    }
+    given.area.x = 0;
+    given.area.y = 0;
+    return given;
+}
+
+LayerPlacement GalleryScreen::placement(const LayerView& view) const {
+    const kit::Frame given = frame_for(view);
+    if (given.area.width <= 0 || given.area.height <= 0)
+        return {};
+    if (!view.match)
+        return centred_placement(view, given.area.width, given.area.height);
+    // The match's canvas at the gallery's own scale, centred in its safe area.
+    const auto safe = OaLayer::match_safe_area(*view.match_layout);
+    const kit::Rect drawn = kit::to_canvas(given.area, given.scale_percent);
+    return {
+        {safe.x + (safe.width - drawn.width) / 2,
+         safe.y + (safe.height - drawn.height) / 2,
+         drawn.width,
+         drawn.height},
+        given.area.width,
+        given.area.height,
+        given.scale_percent
+    };
+}
+
+void GalleryScreen::lay_out(const LayerView& view) {
+    const kit::Frame given = frame_for(view);
+    const kit::Fonts* fonts = layer_.screen_fonts();
+    if (fonts == nullptr || given.area.width <= 0 || given.area.height <= 0)
+        return;
+    if (given.area.width == frame_.area.width && given.area.height == frame_.area.height &&
+        given.size_class == frame_.size_class && given.scale_percent == frame_.scale_percent)
+        return;
+    frame_ = given;
+    layout_ = kit::gallery_layout(model_, frame_, *fonts);
+    ++revision_;
+}
+
+void GalleryScreen::draw(const kit::Canvas& canvas) const {
+    if (!kit::can_draw(canvas) || canvas.fonts == nullptr)
+        return;
+    kit::draw_gallery(canvas, layout_);
+}
+
+LayerAnswer
+GalleryScreen::pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) {
+    kit::GalleryEvent event;
+    event.at = at;
+    event.reach = finger_reach;
+    switch (kind) {
+    case ScreenInputKind::pointer_move:
+        event.kind = kit::GalleryEventKind::pointer_move;
+        break;
+    case ScreenInputKind::pointer_down:
+        if (button != SDL_BUTTON_LEFT)
+            return LayerAnswer::none;
+        event.kind = kit::GalleryEventKind::pointer_down;
+        break;
+    case ScreenInputKind::pointer_up:
+        if (button != SDL_BUTTON_LEFT)
+            return LayerAnswer::none;
+        event.kind = kit::GalleryEventKind::pointer_up;
+        break;
+    default:
+        return LayerAnswer::none;
+    }
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::key(kit::Key pressed, uint32_t /*sdl_key*/) {
+    if (pressed == kit::Key::info)
+        return LayerAnswer::none;
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::key;
+    event.key = pressed;
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::wheel(kit::Point at, float notches) {
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::wheel;
+    event.at = at;
+    event.notches = notches;
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::text(std::string_view utf8) {
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::text;
+    event.text = utf8;
+    return take(event);
+}
+
+std::optional<kit::Rect> GalleryScreen::text_field() const {
+    return kit::gallery_text_field(model_, layout_);
+}
+
+LayerAnswer GalleryScreen::tick() {
+    // The gallery shows over the settings dialog, and leaves with it.
+    return layer_.find("settings") == nullptr ? LayerAnswer::close : LayerAnswer::none;
+}
+
+LayerAnswer GalleryScreen::take(const kit::GalleryEvent& event) {
+    const kit::Fonts* fonts = layer_.screen_fonts();
+    if (fonts == nullptr || frame_.area.width <= 0 || frame_.area.height <= 0)
+        return LayerAnswer::none;
+    switch (kit::gallery_act(model_, frame_, *fonts, event)) {
+    case kit::GalleryResult::close:
+        return LayerAnswer::close;
+    case kit::GalleryResult::redraw:
+        layout_ = kit::gallery_layout(model_, frame_, *fonts);
+        ++revision_;
+        return LayerAnswer::redraw;
+    case kit::GalleryResult::none:
         break;
     }
     return LayerAnswer::none;
@@ -2075,12 +2258,20 @@ uint32_t OaLayer::take_request_id() noexcept {
     return id;
 }
 
+GalleryScreen& OaLayer::open_gallery() {
+    auto screen = std::make_unique<GalleryScreen>(*this, view().match);
+    GalleryScreen& opened = *screen;
+    push(std::move(screen));
+    return opened;
+}
+
 bool OaLayer::open_registered_screen(std::string_view name) {
+    const ScreenRegistry& registry = runtime_.screens_;
     const KitScreenDesc* found = nullptr;
-    for (uint32_t index = 0; index < kit_screens_.screen_count; ++index) {
-        const char* registered = kit_screens_.screens[index].name;
+    for (uint32_t index = 0; index < registry.kit_screen_count; ++index) {
+        const char* registered = registry.kit_screens[index].name;
         if (registered != nullptr && name == registered) {
-            found = &kit_screens_.screens[index];
+            found = &registry.kit_screens[index];
             break;
         }
     }
@@ -2209,6 +2400,8 @@ void OaLayer::tick() {
     // The window's size, and with it the screens' class, may have changed.
     lay_out_screens();
     runtime_.keep_presence_card_screen();
+    runtime_.keep_more_maps_screen();
+    runtime_.keep_get_map_screen();
     // A tick may close a screen, or open another. The screens waiting are
     // ticked too, so that one whose screen of the game goes leaves the queue.
     std::vector<LayerScreen*> ticking;
@@ -2722,6 +2915,12 @@ renderer::Surface OaLayer::match_button_face(
     return face;
 }
 
+kit::Frame OaLayer::match_gallery(
+    const layout::MatchLayout& match_layout, int32_t interface_percent
+) noexcept {
+    return kit::frame_of(match_layer_viewport(match_layout, interface_percent));
+}
+
 MatchDialogPlace OaLayer::match_dialog(
     const layout::MatchLayout& match_layout, int32_t interface_percent, bool fit
 ) noexcept {
@@ -2742,27 +2941,7 @@ MatchDialogPlace OaLayer::match_dialog(
         place.scale_percent = 0;
         return place;
     }
-    // The layer's scale on the match's canvas: the Interface size's, or the
-    // Auto scale of its height.
-    kit::Viewport canvas;
-    canvas.width = match_layout.width;
-    canvas.height = match_layout.height;
-    canvas.density = static_cast<float>(match_layout.px_per_point);
-    canvas.safe = {
-        match_layout.safe.left,
-        match_layout.safe.top,
-        match_layout.safe.right,
-        match_layout.safe.bottom
-    };
-    int32_t percent = kit::layer_viewport(canvas, interface_percent).scale_percent;
-    // Never above the side column's scale, which HUD scaling caps: the
-    // largest whole step at or below it instead, and at least 1. A hair
-    // under a whole step counts as that step.
-    constexpr double kWhole = 1e-9;
-    if (static_cast<double>(percent) > match_layout.scale * 100.0 + kWhole)
-        percent =
-            std::max(int32_t{1}, static_cast<int32_t>(std::floor(match_layout.scale + kWhole))) *
-            100;
+    int32_t percent = match_layer_viewport(match_layout, interface_percent).scale_percent;
     // Compact's dialog fits the area right of the column at the scale, or
     // the scale is the largest whole step at which it does, and at least 1.
     const int32_t area_width = std::max(match_layout.width - match_layout.left, 0);
@@ -3112,7 +3291,9 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
             continue;
-        const std::string dialog = std::string(kAutomationPrefix) + std::string(screen.name());
+        const std::string dialog = screen.name() == kGetMapScreen ? std::string()
+                                                                  : std::string(kAutomationPrefix) +
+                                                                        std::string(screen.name());
         const kit::DisplayList list = screen.display_list();
         for (const kit::AutomationEntry& entry :
              kit::automation_parts(list, screen.interaction())) {

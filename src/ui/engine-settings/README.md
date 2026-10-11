@@ -68,6 +68,7 @@ the locks a running game puts on them (`settings_locks`).
 | Downloads, listed in every dialog of the engine's settings, before Developer | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
 | Developer | Enable Developer Mode | Off, On | Off | `open-annihilation.developer-mode` |
 | | Show performance statistics | Off, On | Off | `open-annihilation.frame-stats` |
+| | UI kit gallery: SHOW opens the gallery of every part of OA's own screens (`DialogAction::show_gallery`) | | | none |
 | | The overrides of the profile's standard hacks, in Developer Mode's list | any hack on or off, with its parameters | none | `open-annihilation.hack-overrides.<id>`, the id of the profile the game plays, `ta-3.1c` without a mod, `folder:<path>` for a mod folder without a profile |
 
 Mouse wheel zoom, while on, also leaves a profile's megamap off for the
@@ -324,8 +325,10 @@ page.
 Mods chooses the mod folder the game plays, layered over the game folder
 as `--mod-dir` would play it. It lists one row a mod, in a view of its own
 that scrolls by the wheel, its scroll bar, Page Up, Page Down, Home and End
-while the rows are taller than it, with OPEN MODS FOLDER and the two lines
-naming the folders listed fixed under it. The mod the game plays comes
+while the rows are taller than it, with the line on the check for updates,
+OPEN MODS FOLDER and GET MORE MODS… in one row, and the two lines naming
+the folders listed fixed under it (see [Updates](#updates)). The mod the
+game plays comes
 first, marked PLAYING (`ModOffer::playing`); then No Mod, when another mod
 plays; then every mod folder the host offers (`ModOffer::names`,
 `ModOffer::folders`), by its title, whatever the case of its letters
@@ -362,7 +365,8 @@ cannot be opened is said, in amber, in place of the second line under it
 During a game (`Locks::mod`, `Lock::in_game`) Mods is locked: "Locked
 during a game. Choose the mod from the main menu." shows over the list
 beside a padlock, the rows other than the one played are dimmed, no row
-takes a press or the focus, and OPEN MODS FOLDER is disabled. While
+takes a press or the focus, OPEN MODS FOLDER is disabled, and UPDATE,
+CHECK NOW and GET MORE MODS… are hidden. While
 `--mod-dir` or `--base-game` decides the run's mod
 (`GameState::mod_from_command_line`, `Lock::command_line`), it is locked
 the same way, with "The command line chose this run's mod." A stored mod
@@ -932,8 +936,10 @@ Developer's `settings.active-only`,
 `settings.restore-profile-values`, `settings.hack-area.<area>`,
 `settings.hack.<hack id>` and `settings.hack.<hack id>.<parameter>`, with
 `.<value>` for a set's value, `.<n>` for a list's item and `.length` for
-its length; Mods' rows `settings.mod.<mod>.switch` and their ROLL BACK
-`settings.mod.<mod>.roll-back`, `<mod>` being `no-mod` for No Mod and
+its length; Mods' rows `settings.mod.<mod>.switch`, their UPDATE
+`settings.mod.<mod>.update` and their ROLL BACK
+`settings.mod.<mod>.roll-back`, CHECK NOW `settings.check-now` and GET MORE
+MODS… `settings.get-more-mods`, `<mod>` being `no-mod` for No Mod and
 otherwise the mod's profile id (`ModDetails::profile_id`) or, for a folder
 without one, the folder's last component, in lower case, every character
 outside `a`–`z`, `0`–`9` and `-` a `-` (`geometry::word_form`), a second
@@ -974,9 +980,21 @@ It lies in the Developer section, which holds, top to bottom, in the
 dialog's own fonts, colours, switches and sliders:
 
 - at its top, **Enable Developer Mode**, an Off/On switch, Off by default,
-  with its hint, and under it **Show performance statistics**, which
-  Developer Mode leaves alone: two rows that never scroll, with half the
-  clear pixels of a section's rows round them, so that the list has room;
+  with its hint, under it **Show performance statistics**, which
+  Developer Mode leaves alone, and under that **UI kit gallery**, its hint
+  "Every part of OA's own screens, in each of its states, at this size."
+  and a **SHOW** button (`settings.kit-gallery.show` to automation) that
+  asks the host to show the UI kit gallery over the dialog
+  (`DialogAction::show_gallery`; [src/ui/kit](../kit/README.md#gallery)),
+  the dialog staying open under it and no setting changing: three rows
+  that never scroll, with half the clear pixels of a section's rows round
+  them, so that the list has room. Each takes a label line and one hint
+  line, but the gallery's hint takes two at Compact, where its line holds
+  fewer characters: the list starts 51 points lower than with two rows at
+  Compact, and 39 at Regular and Large (`developer_rule_for`). Where the
+  rows end lower still, as in a language whose hints take more lines or
+  while hints lie further apart in the modern fonts, the list starts under
+  them (`developer_list_scroll`);
 - under them, the list of every standard hack of the registry
   (`oa::data::mod_profile::standard_hacks`), in a view of its own that
   scrolls as a long section does, with its scroll bar in the margin, and
@@ -1092,6 +1110,58 @@ own, for a screen that asks it over itself, such as the Library: the
 heading and what it does in the page's words, with the reload line for the
 mod the game plays, and CANCEL and ROLL BACK, named `cancel` and
 `roll-back` to automation, CANCEL marked.
+
+## Updates
+
+Mods shows what its registries' lists say of each mod, as the host gives
+it; the page reads no catalogue, file or queue of its own, and links no
+library for it.
+
+- **A row with an update** (`ModDetails::update_offered`) shows, in amber
+  in place of its description, the host's line on it (`update_text`):
+  "Revision 4 available · 3.2 MB", "Version 4.9 available · 3.2 MB", or,
+  when the update changes the rules saved games are tied to, "Revision 4
+  changes the rules · 3.2 MB", and "… may change the rules · …" when that
+  cannot be known. While the download queue holds it the line is where it
+  stands (`update_progress`: "Updating · 28%", or "Waiting · finishes when
+  you leave {title}"), and while UPDATE cannot be pressed
+  (`update_enabled` unset) it is why (`update_blocked`). The line is shown
+  whole, never cut: it is broken between words into the lines it needs in
+  the room left of the row's buttons, counted in characters (a class's
+  `hint_line_characters` to its content column, so a row is as tall
+  whatever the fonts), and the row grows by a line for each after the
+  first (`update_lines`, `place_mod_rows`). Its UPDATE button, 60 by 12,
+  sits at the right of the description line as ROLL BACK does, left of
+  ROLL BACK by `mod_roll_back_gap` when the row has both
+  (`update_button`); it is dimmed and takes no press while UPDATE cannot
+  be pressed, and a press on it then reaches no control, not the row under
+  it. UPDATE names the row's folder (`Dialog::update_folder`) and asks the
+  host to start the update (`DialogAction::update_mod`); the host maps the
+  row back to its package by `update_entry`, and asks the update question
+  first where an update asks it (src/app's `request_update`). A row without
+  an update draws exactly as before.
+- **The line on the check for updates** (`mods_check_line`) lies under the
+  list, directly over OPEN MODS FOLDER: the list's view is one hint line
+  shorter for it. It shows the host's text (`Dialog::mods_check_text`:
+  "Checked for updates 4 min ago", "Checking for updates…", "Couldn't check
+  for updates" in amber with `mods_check_warning`, or "No registries are
+  on."), then " · " and CHECK NOW, a link, while the host offers it
+  (`mods_check_offered`). CHECK NOW lies after the text at the small font's
+  estimated width, so a press lands where it is drawn whatever the fonts,
+  and asks the host to check (`DialogAction::check_for_updates`).
+- **GET MORE MODS…** lies right of OPEN MODS FOLDER, 6 columns apart and as
+  tall, as wide as its caption at the kit's estimated width with the kit's
+  button padding, while the host offers it (`mods_library_offered`, on the
+  main menu). It asks for the Library on Mods (`DialogAction::open_library`
+  with `LibraryTab::mods`).
+
+Tab walks a row, then its UPDATE while it can be pressed, then its ROLL
+BACK; then OPEN MODS FOLDER, CHECK NOW and GET MORE MODS…. Right from a row
+reaches its UPDATE, then its ROLL BACK. UPDATE's control comes after every
+ROLL BACK's (`update_control`), and CHECK NOW's and GET MORE MODS…'s after
+those, so OPEN MODS FOLDER and ROLL BACK keep their numbers. Regular and
+Large place the same parts in their own sizes: the check line under the
+list, and the two buttons in one row under it.
 
 ## Your files and the notice
 
@@ -1290,11 +1360,36 @@ presses (`oa.settings.wheel-zoom.off`, `oa.settings.max-zoom-out.whole-map`,
 `ui-engine-settings-pixels` and `ui-engine-settings-pixels-data` hold the
 dialog, its notices, its prompts and the OA button to the pictures they
 drew when the kit was taken out of the dialog: a SHA-256 of each scene,
-with a stand-in font and with the installed game's fonts.
+with a stand-in font and with the installed game's fonts. The Developer
+scenes (at its top, with Developer Mode on and its first area open, and at
+scale 2) were recorded again when UI kit gallery joined Developer's rows,
+which moved its list down; no other scene changed.
+
+`ui-engine-settings-dialog` also holds UI kit gallery's row: its label,
+its hint in two lines at Compact and one at Regular and Large, and SHOW,
+which asks for the gallery by a press and by Space and changes no
+setting; Developer's list exactly the row's height lower than with two
+rows at every class; and every other section's Compact parts, as a digest
+of each, as they were before the row was added.
 
 The dialog's tests cover ROLL BACK: shown only on a row whose folder keeps
 a version, its control and focus, its question by pointer and keys, and
-inert while locked. `ui-engine-settings-prompt` lays out prompts of one, two and three buttons,
+inert while locked.
+
+`ui-engine-settings-mods-updates` builds Mods with made-up mods' updates:
+rows with and without one, a row without one drawn item for item as
+before; an update that changes the rules and one whose rules cannot be
+known, their lines whole beside UPDATE and ROLL BACK at Compact with a
+title of 24 characters, the row a line taller; a blocked update, which
+says why and takes no press, and an update the queue holds; UPDATE and
+ROLL BACK apart at every class; the line on the check for updates in each
+state with and without CHECK NOW; UPDATE, CHECK NOW and GET MORE MODS…
+pressed, keyed and reached by a finger, and absent when not offered;
+UPDATE, CHECK NOW and GET MORE MODS… hidden in a game; Tab's order, the
+arrows and the names; every part inside the dialog at Compact, Regular and
+Large at every scroll; and a page with no updates, whose parts are
+today's at Compact but for the list's shorter view, the check line and
+GET MORE MODS…. `ui-engine-settings-prompt` lays out prompts of one, two and three buttons,
 their keys, a pointer's press and release and a finger's within reach, the
 progress bar's part and a text found cut, and at each size class a notice
 and a three-button prompt within the class's width and heights, their

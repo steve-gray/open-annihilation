@@ -243,6 +243,10 @@ enum class Setting : uint8_t {
     /// Library on Languages, listed only while Dialog::library_link is set;
     /// it changes no setting
     more_in_library,
+    /// UI kit gallery: Developer's row whose SHOW opens the gallery of every
+    /// part of Open Annihilation's own screens (DialogAction::show_gallery);
+    /// it changes no setting
+    kit_gallery,
 };
 
 /// Returns the settings a section shows, top to bottom.
@@ -286,9 +290,9 @@ inline constexpr int32_t scroll_bar_control = ok_control + 1;
 /// The open section's first row's control; the next rows' follow it, one
 /// for each row the section has.
 inline constexpr int32_t first_row_control = scroll_bar_control + 1;
-/// Developer's rows, over its list: Enable Developer Mode, then Show
-/// performance statistics.
-inline constexpr int32_t developer_row_count = 2;
+/// Developer's rows, over its list: Enable Developer Mode, Show
+/// performance statistics, then UI kit gallery.
+inline constexpr int32_t developer_row_count = 3;
 /// Developer's Enable Developer Mode switch, its first row's control.
 inline constexpr int32_t developer_mode_control = first_row_control;
 /// Developer's Show Active Only switch, under its list.
@@ -532,9 +536,20 @@ enum class DialogAction : uint8_t {
     /// registry window for a mirror of Dialog::mirror_request, over the
     /// dialog, which stays open.
     add_mirror,
-    /// MORE IN THE LIBRARY… was pressed: the host opens the Library on
-    /// Dialog::library_tab over the dialog, which stays open under it
+    /// MORE IN THE LIBRARY… or Mods' GET MORE MODS… was pressed: the host
+    /// opens the Library on Dialog::library_tab over the dialog, which stays
+    /// open under it
     open_library,
+    /// SHOW on Developer's UI kit gallery: the host opens the gallery over
+    /// the dialog, which stays open under it
+    show_gallery,
+    /// UPDATE on a row of Mods: the host starts the update of the mod in
+    /// Dialog::update_folder (ModDetails::update_entry names it), asking
+    /// first where an update asks; the dialog stays open
+    update_mod,
+    /// CHECK NOW under Mods' list: the host asks the registries for their
+    /// lists again; the dialog stays open
+    check_for_updates,
 };
 
 /// One of the Library's tabs, as the dialog asks the host to open it
@@ -632,6 +647,30 @@ struct ModDetails {
     /// The id its oamod.yaml gives, by which automation names its row;
     /// empty without one, and the row is named by its folder's name.
     std::string profile_id{};
+    /// What a newer release in its registry's list is, which the row shows
+    /// in the warning colour in place of its description, whole: "Revision 4
+    /// available · 3.2 MB", or "Version 4.9 available · 3.2 MB" when the
+    /// version changes; "Revision 4 changes the rules · 3.2 MB" when the
+    /// update changes the rules saved games are tied to, and "Revision 4 may
+    /// change the rules · 3.2 MB" when that cannot be known. Read only while
+    /// update_offered is set.
+    std::string update_text{};
+    /// A newer release is offered: the row shows its update's line and an
+    /// UPDATE button. Unset, the row draws as it did before updates.
+    bool update_offered{};
+    /// UPDATE can be pressed; unset, it shows disabled with update_blocked
+    /// as the row's line.
+    bool update_enabled{};
+    /// Why UPDATE cannot be pressed, in the player's words, such as "Not
+    /// during a game"; empty when it can.
+    std::string update_blocked{};
+    /// Where the update stands while the download queue holds it, which the
+    /// row shows in place of update_text: "Updating · 28%", or "Waiting ·
+    /// finishes when you leave {title}"; empty while it is not queued.
+    std::string update_progress{};
+    /// Which package the update is, as the host names it: the dialog keeps
+    /// it and never reads it.
+    std::string update_entry{};
 };
 
 /// What the question over Mods asks about its row.
@@ -980,6 +1019,22 @@ struct Dialog {
     bool library_link{};
     /// The tab DialogAction::open_library asks the host to open the Library on.
     LibraryTab library_tab{LibraryTab::mods};
+    /// The line under Mods' list on the check for updates, which the host
+    /// sets, such as "Checked for updates 4 min ago"; empty shows none.
+    std::string mods_check_text;
+    /// mods_check_text is drawn in the warning colour: the check failed.
+    bool mods_check_warning{};
+    /// CHECK NOW follows mods_check_text, a link that asks for
+    /// DialogAction::check_for_updates. Hidden while the page is locked.
+    bool mods_check_offered{};
+    /// GET MORE MODS… shows right of OPEN MODS FOLDER, asking for the
+    /// Library on Mods (DialogAction::open_library): a host sets it on the
+    /// main menu, where the Library can open over the dialog. Hidden while
+    /// the page is locked.
+    bool mods_library_offered{};
+    /// The folder the last DialogAction::update_mod names, as an absolute
+    /// UTF-8 path, the row's in mod_folders.
+    std::string update_folder;
     /// The row whose drop-down list is open: its control; no_control while
     /// no list is open. An open list takes every pointer event and key.
     int32_t open_list{no_control};

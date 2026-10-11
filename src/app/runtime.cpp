@@ -219,9 +219,12 @@ Runtime::Runtime(
     // The registries and their catalogues, after the player's folder and
     // Developer mode are known. The registries check writes its own list
     // first.
-    if constexpr (self_checks_built)
+    if constexpr (self_checks_built) {
         if (options_.check_registries)
             prepare_registries_check();
+        if (options_.check_map_browser)
+            prepare_map_browser_check();
+    }
     start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
     // system's fonts when the profile's text rendering asks for it.
@@ -378,6 +381,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_kit_gallery) {
+            check_kit_gallery();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_user_folder) {
             check_user_folder();
             flush_preferences();
@@ -390,6 +398,11 @@ int Runtime::run() {
         }
         if (options_.check_map_packs) {
             check_map_packs();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_map_browser) {
+            check_map_browser();
             flush_preferences();
             return 0;
         }

@@ -555,6 +555,11 @@ struct Options {
     // window sizes, the screen opened by name, and the notice, the prompt
     // and the saves notice one at a time. Needs --preferences-file.
     bool check_registered_kit = false;
+    // Opens the UI kit gallery from Settings › Developer on 640x480,
+    // 1280x720 and 1920x1080 windows: its size class and scale, its pixels
+    // over the darkened main menu, Tab through every control, and Escape
+    // back to Developer. Needs --preferences-file.
+    bool check_kit_gallery = false;
     // Drives the player's own folder through the SDL presenter: the saved
     // games moved once from beside the preferences file, the main menu's
     // notice of the move shown once and closed, and the settings' Your files
@@ -570,6 +575,12 @@ struct Options {
     // fits mounted alone while chosen and for its match and unmounted after,
     // and the one that clashes with the game refused with its reason.
     bool check_map_packs = false;
+    // Writes the map pack check's two packs into the player's own folder,
+    // with every built-in registry off, and at four window sizes opens
+    // SELMAP's MORE MAPS… and requires the map browser's size class,
+    // columns and window, its installed maps, its search, the clashing map
+    // greyed with its reason, and Select moving SELMAP's selection.
+    bool check_map_browser = false;
     // Switches to a made-up mod whose unit files are missing and to one
     // that plays whole, each a soft restart, and requires the first's
     // warning once over the main menu and over a refused Skirmish start,

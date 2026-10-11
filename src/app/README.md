@@ -231,9 +231,11 @@ latched the closing key and drew a backdrop.
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
 - **Registered pages, screens, notices and prompts.** Code outside the
-  engine's own screens registers them on the layer for this runtime
-  (`registered_settings`, `registered_screens`, `oa/ui/screen_registry/kit.hpp`).
-  A settings page is listed by the engine's Settings dialog, under a divider
+  engine's own screens registers them for this runtime: a settings page in
+  the layer's registry (`registered_settings`), a kit screen in the
+  runtime's `ScreenRegistry` (`kit_screen_register`), as
+  `oa/ui/screen_registry/kit.hpp` describes them. An extension registers
+  them through its table ([Extensions](#extensions), version 15). A settings page is listed by the engine's Settings dialog, under a divider
   naming its owner, after the engine's own sections, and laid out from its
   preference rows. OK writes the keys that changed and, once the preferences
   are saved, calls the page's `applied`; Cancel writes nothing, and a mod's
@@ -248,6 +250,25 @@ latched the closing key and drew a backdrop.
   are never shown at once. A prompt's `answered` is called once, with the
   button pressed, or with −1 from `drop_pending_prompts` when the runtime
   ends with the prompt still queued or shown. Calling that drop twice is safe.
+- **The UI kit gallery.** Settings › Developer's UI kit gallery row asks
+  for it (`DialogAction::show_gallery`), and `take_engine_settings_action`
+  opens it with `OaLayer::open_gallery`: a `GalleryScreen` named
+  `gallery`, modal over a backdrop and opaque, over the whole window, the
+  settings dialog staying open under it. On the front end it takes the
+  view's scale and size class (the Interface size, or the Auto scale) and
+  centres the room's points at that scale in the window; in a match it
+  takes `OaLayer::match_gallery`: the match canvas's points at the layer's
+  scale on it, capped by the side column's scale, so that 640x480 is
+  Compact at 1×, 1280x720 Large at 1× and 1920x1080 Regular at 2× with HUD
+  scaling On, the room right of the column playing no part. Its model is
+  its own (`kit::GalleryModel`); it reads and changes no setting. Its
+  events go to `kit::gallery_act`, and it is laid out again
+  (`kit::gallery_layout`) whenever the model or the frame changes; Escape
+  and CLOSE take it off, back to Developer, and it leaves when the settings
+  dialog does. Its automation dialog is `oa.gallery`, its controls
+  `oa.gallery.<section>.<n>` (`oa.gallery.toggle.1.on`,
+  `oa.gallery.drop-down.1`) and `oa.gallery.close`
+  ([src/ui/kit](../ui/kit/README.md#gallery)).
 - **The download check.** `Runtime::tell_challenges`, once a frame beside
   `tell_mod_installs`, reads the download queue when its generation moves.
   While the main menu shows, including under the Library or Settings, one
@@ -533,8 +554,15 @@ runtime goes).
   Library and CLOSE closes it. UPDATE, UPDATE ALL, PLAY NOW and ROLL BACK
   go through `library_entry_action` (`runtime_library_actions.cpp`):
   UPDATE calls `Runtime::request_update`, the one place an update reaches
-  the download queue (`DownloadReason::update`), and UPDATE ALL calls it
-  for every update that can act and is not queued, in list order; PLAY NOW
+  the download queue (`DownloadReason::update`), as Settings › Mods' UPDATE
+  does. An added registry's mod whose rules hash changes or cannot be known
+  (`library::asks_before_update`) asks the update question first
+  (`update_question`), pushed at once over the screen that asked, NOT NOW
+  marked; its UPDATE queues the update and NOT NOW leaves it. Every other
+  update, every built-in registry's among them, is queued at once. UPDATE
+  ALL calls it at once for every update that can act, is not queued and
+  asks nothing, in list order, and asks one question about the others
+  (`update_all_question`), whose UPDATE queues them in list order; PLAY NOW
   switches the game to the installed mod's folder (`switch_to_mod_folder`,
   the soft restart); ROLL BACK asks the Mods page's Roll Back Mod question
   in its own words (`settings::roll_back_prompt`, with the reload line for
@@ -610,6 +638,85 @@ runtime goes).
   being played, which waits for the run to end in its place; the download
   queue has counted the update installed by then. CANCEL on the held line
   does not drop that roll back.
+
+## The map browser
+
+OA's map browser shows every map a player could play as one grid of cards:
+the base maps the start's scan found (`BaseMapSummary`), the installed pack
+maps (`map_packs()`), and the pack maps the catalogues offer (the content
+service's snapshot, entries of kind `oamap`). Its model and screen are
+[src/ui/map-browser](../ui/map-browser/README.md); `runtime_map_browser.cpp`
+hosts them on the OA layer.
+
+- **MORE MAPS….** A screen of the layer of its own (`more-maps`, not modal,
+  no backdrop), kept on the layer while the skirmish setup's map picker
+  (SELMAP) shows, or the host's map dialog in the battle room
+  (`multiplayer_map_list_rect`), by `keep_more_maps_screen`, which
+  `OaLayer::tick` calls once a frame, and taken off when they close. It is
+  one kit button, `oa.more-maps` to automation, directly under the picker's
+  MAPNAMES list with its right edge on the list's, or above the list when
+  that place meets another gadget of the picker, at the layer's scale. It
+  hides while a message box shows. It takes a press or a tap on the button,
+  the controller's Y and Cmd+F (Ctrl+F elsewhere), which the pickers leave
+  unused, and answers `pass` to everything else, a pointer move that only
+  changes its hover included, so the picker sees every other click, key and
+  move as before.
+- **The browser.** Pressing MORE MAPS… pushes the browser (`map-browser`),
+  modal over a backdrop, centred at its size class's dialog size; it closes
+  when its picker closes or a match starts. The controller's A and B are
+  Enter and Escape there, the D-pad the arrows, Y gives the search the
+  focus and the right stick scrolls the grid. Its cards: base maps, which fit;
+  installed pack maps, whose fit is P08's `pack_map_fit`, checked as each
+  card comes into view or is selected (a failure is the mod's fit while a
+  mod plays, the game's otherwise); and online maps, whose fit is the
+  catalogue's `compatible` table, `ta-3.1c` for the game and
+  `<id>@<release>` for the mod being played, its release from the mod
+  folder's origin record when it came from a catalogue, and unknown
+  otherwise. An online map whose name an installed pack already gives shows
+  once, as installed.
+- **Pictures.** The browser keeps its own preview cache
+  (`oa::ui::map_previews::PreviewCache`): the layout asks for the cards in
+  view and the row after them, and each frame the browser forgets the rest
+  (`new_frame`), decodes up to four (`pump`) and lays itself out again
+  before anything draws. A base map's picture is its terrain file's header
+  and minimap; an installed pack's is its preview file; an online map's is
+  the catalogue picture the Library's worker reads or fetches through its
+  picture cache (`PictureCache::request`, `take_bytes`), checked against its
+  SHA-256 name, never during a match.
+- **Select.** Select moves the picker's selection to the map and closes the
+  browser; the player still chooses the map with the picker's LOAD. In
+  SELMAP a pack installed since the list was made joins it after the base
+  maps first, then `preview_map_index` selects and previews it; in the
+  battle room `multiplayer_offer_map` builds the screens' map list again
+  when it lacks the map, fills the dialog's list, selects the row and
+  previews it, sending nothing.
+- **Download and select.** An online map's pack is queued as the Library's
+  GET queues it (`queue_download`, reason `install`), never during a match;
+  the browser stays open with the download's progress in its footer, and
+  once the installer has put the pack in place and `map_packs()` lists the
+  map, it acts as Select. A failure, the installer's refusal among them,
+  shows its reason in the footer, and the button comes back. Cancel closes
+  the browser and changes nothing; a download under way goes on in the
+  queue, which the Library shows.
+- **The check.** `native-map-browser` (`--check-map-browser`,
+  `runtime_map_browser_check.cpp`) writes the map pack check's two packs
+  (`write_map_pack_check_packs`) into its own `--user-folder`, turns every
+  built-in registry off there before the content service starts
+  (`prepare_map_browser_check`), and at 640x480, 1280x720, 1920x1080 and
+  2560x1440 opens SELMAP and presses MORE MAPS…. It requires the layer's
+  size class and scale (Compact 1x, Large 1x, Regular 2x, Large 2x) and the
+  grid's columns (3, 6, 4, 6); MORE MAPS… over none of SELMAP's gadgets;
+  every card and control inside the browser's window; Online empty;
+  Installed packs showing the two check maps alone; the clashing map's card
+  greyed, "New names" in the footer and Select disabled; the search "isle"
+  leaving one map; and Select on `check_isle@oa-check-isles` closing the
+  browser with SELMAP's selection on it. It writes each size's frame as
+  `map-browser-<w>x<h>.png` in its folder for review. A FIXTURES_SETUP test
+  (`map-browser-clean`) clears its folders before each run.
+- **Limitations.** The fit of an installed pack map is checked on the main
+  thread as its card comes into view, once per pack. A map pack installed
+  while SELMAP is open joins its list as Select or Download and select
+  chooses it.
 
 ## Files
 
@@ -1670,7 +1777,15 @@ runtime goes).
   to 5 points right of it, and the header's rows 6 to 22, at the dialog's
   scale: at 640x480 `at 144,78 480x324, version at 540,84 76x16`, and at
   1920x1080 a dialog of 960x648 and a version room of 152x32;
-  `native-stage` checks it. A save/load run ends by
+  `native-stage` checks it. `gallery` opens the settings dialog beside the
+  in-game menu at Developer and takes its UI kit gallery row's SHOW as the
+  dialog takes it, so that the UI kit gallery covers the window; it stops
+  with `<where>: the gallery did not open` unless the gallery is then the
+  top screen, and prints `stage: gallery at X,Y WxH CLASS Nx`, where it
+  shows in the match canvas's pixels, its size class and its scale: at
+  640x480 `at 0,0 640x480 Compact 1x`, at 1280x720 `at 0,0 1280x720 Large
+  1x` and at 1920x1080 `at 0,0 1920x1080 Regular 2x`. Its text holds no
+  version, so a golden frame of it takes the whole window. A save/load run ends by
   reporting the live units by type, the veterans by veterancy level, the
   stockpiled rounds, the buildings by facing and each player's health.
 - `runtime_stage.cpp` and `stage_state.hpp`: the parts of a stage that play
@@ -1956,6 +2071,25 @@ runtime goes).
   then it sets the extensions' overlays aside
   (`Runtime::set_extension_overlays_aside`) until it ends, so that every
   frame it compares is the engine's own drawing over TA's own layout.
+  `--check-kit-gallery` (`native-kit-gallery`, `runtime_kit_gallery_check.cpp`)
+  needs `--preferences-file`, empties it first and sets the extensions'
+  overlays aside as `--check-engine-settings` does, its ctest's
+  `kit-gallery-clean` removing a previous run's file before the game reads
+  it. On 640x480, 1280x720 and 1920x1080 windows it loads the main menu,
+  opens Settings with its shortcut, clicks Developer's entry and then SHOW
+  where the window shows them, and requires the UI kit gallery on top at
+  Compact 1×, Large 1× and Regular 2×, covering the window, its controls
+  listed to the automation endpoint in dialog `oa.gallery`
+  (`oa.gallery.close`, `oa.gallery.toggle.1.on`, `oa.gallery.drop-down.1`);
+  the window,
+  every pixel but the cursor's square, as the gallery drawn offscreen at
+  that class and scale (`layer_drawing`) over the main menu darkened by
+  Settings' backdrop and the gallery's (`expected_layer_frame`); Tab taking
+  the focus to every control the gallery declares, once each, in its order;
+  and Escape bringing Settings › Developer back. With `--snapshot` it writes
+  `<stem>-kit-gallery-<W>x<H>.ppm`, the window as it shows the gallery, and
+  prints `kit gallery check: <Compact|Regular|Large>, <n>x, on the <W>x<H>
+  window` for each and `kit gallery check: passed`.
   `native-engine-settings-determinism`
   (`tools/check_native_engine_settings.py`) checks that every setting at its
   default plays the game as it plays without any, and that the settings that
@@ -3311,7 +3445,7 @@ the Mouse wheel zoom setting is off and closing when it is turned on.
 
 `extension.hpp` is the table of hooks through which libraries linked into
 `oa-game` extend it: long options and game switches, start-up and
-shutdown, screens, the frontend's entry (its game name and nickname), run
+shutdown, screens, Settings pages, the frontend's entry (its game name and nickname), run
 modes, per-frame work, match events, the Pause key, the speed keys and
 the GAME slider, the frontend's application modes, the loading's
 progress, the team panels' host (a tournament game withholds CONTROL),
@@ -3509,6 +3643,36 @@ every Developer Mode override that changes the simulation, or the plain
 baseline when the game plays 3.1c. A running match keeps the hash it
 started with. It is not a hook, and no extension fills it.
 
+Version 15 adds the OA UI kit (`src/ui/kit`) to the contract, so that an
+extension's pages, screens, notices and prompts look, scale, focus and
+answer as OA's own do. `register_settings_pages`, called right after
+`register_screens` while each runtime is built, hands the extension the
+runtime's `SettingsRegistry`: each page it takes (`settings_page_register`,
+a `SettingsPageDesc` of preference rows bound to the extension's own keys)
+is listed in Settings under a divider with its owner's name, after the
+engine's sections, and saved, restored and reported to its `applied` as the
+engine's pages are; a page the registry refuses stops the start with
+"settings page registration rejected: <reason>". `register_screens` may
+also register kit screens (`kit_screen_register`, a `KitScreenDesc` with
+`lay_out`, `act` and `closed`) in the `ScreenRegistry`, beside its screens
+and overlays. Three entries appended to `ScreenServices` reach the OA layer
+from a screen's or an overlay's context: `open_kit_screen` opens a kit
+screen by name, modal over the front end; `show_notice` and `ask_prompt`
+copy a `NoticeRequest` or `PromptRequest` at once and queue it with the
+engine's own, so two never show at once, a prompt's `answered` called once
+on the main thread with the button pressed, or −1 when the runtime ends
+with it still waiting. `read_string` with a null section reads a whole
+preference key, as a page's row binds one. `MatchOverlay` gains
+`kit_text_width`, `draw_kit_text`, `draw_chip`, `draw_progress` (−1
+thousandths draws it busy) and `draw_hover_card`, which draw the kit's
+components crisp at the HUD's scale in the game's fonts, clipped to the
+battlefield. From this version the kit's public headers,
+`oa/ui/kit/*.hpp`, are part of the contract: a change to one before 0.8.0,
+the first release that carries version 15, keeps 15 and updates the
+engine's followers and the test extensions in the same change; from that
+release on, any change to one raises the version. The kit is provisional
+all the same: it changes as the engine's screens need.
+
 `app-extension-list` checks each rule of the combined table over two test
 extensions, and `tests/extension/` tests the boundary itself.
 `extension-layout-mismatch` links a unit that sees `Runtime` with members
@@ -3530,7 +3694,11 @@ key reaches `pause_changed`, its speed keys `speed_changed` and its menus
 `--check-match-dialogs`'s close requests `close_requested` and its GAME
 slider `speed_changed`, a `--generate-script` run over a file no
 extension replays `open_recording`, asking the follower first, and the
-end of a headless skirmish `release_runtime`, the follower first.
+end of a headless skirmish `release_runtime`, the follower first. The
+recorder registers a Settings page of its own from
+`register_settings_pages`; with `--record-refused-page` it gives that page
+an id the registry refuses, and the start stops with the registry's
+reason.
 With `--record-quit STATUS` the recorder keeps the screen services an
 overlay is given, stops the sounds, plays BGM on the alternate route,
 asks for a frontend pass and ends the run through `quit`, which must exit
@@ -3545,9 +3713,16 @@ hooks to check what the engine does with their answers: a close request
 answered or declined, quit's status, one frontend pass for two requests,
 a query binding, the launch's nickname, the return label kept as a match
 starts and quit leaving a match, with the preferences open over it,
-first. CI builds that configuration as a job of its own, but has no game
-installation: there `extension-hooks-game` skips, and only the option
-hooks and the hook list are checked. The rest of the hook coverage runs
+first. The same configuration registers a third test extension, the Kit
+fixture (`kit_fixture.cpp`), which uses the OA UI kit through the table
+alone: a Settings page, a kit screen, a prompt and the overlay's kit calls.
+`extension-kit` (`tests/extension/check_kit_fixture.py`) drives it through
+the automation endpoint in 640x480, 1280x720 and 1920x1080 windows, and
+finds its chip in a headless match's frame
+([testing.md](../../docs/development/testing.md#the-kit-for-an-extension)).
+CI builds that configuration as a job of its own, but has no game
+installation: there `extension-hooks-game` and `extension-kit` skip, and
+only the option hooks and the hook list are checked. The rest of the hook coverage runs
 only where `OA_GAME_DIR` is set; run it there before changing the table.
 
 A check an extension runs, from `run_mode` or `check_multiplayer_menu`,
@@ -3667,7 +3842,8 @@ this build's version (`0.8.0`, with `-` and the version label after it in a
 development build), the platform and architecture, the mod (its id, name,
 version and packaging revision) and where it was published, the sim hash,
 the game and view hacks that are on with their counts, Developer Mode with
-its overrides, and on the host the map pack of its selected map.
+its overrides, whether the machine can fetch content, and on the host the
+map pack of its selected map.
 `follow_presence`, run every frame, reads the facts from `presence_facts`
 (`oa/app/presence_facts.hpp`, which `--check-simulation-hash` checks) while
 the multiplayer screens show, writes the record within 1024 bytes less the
@@ -3685,6 +3861,18 @@ none. The record is read again only when the mod or its folder changes. The
 host's map pack comes from `LobbyMaps::pack`, which the map packs bind
 through `multiplayer_bind_map_pack`; the battle room asks it once each time
 the selected map changes, and until it is bound no record names a pack.
+Network play binds it from the map packs' source (`pack_map_source`, whose
+`pack` answers for the pack map whose files are mounted, on the host the
+selected map's): the pack's id as the key, the release and SHA-256 of its
+folder's origin record, the registry, the address the registry's descriptor
+was read from (empty for a built-in registry, one added from a file and one
+no longer in effect) and the pack's name and version. A pack installed from
+a file has no catalogue origin and is named by no record. Whether the
+machine can fetch content is the record's content field (tag 0x30, one byte
+of flags, bit 0): `PresenceFacts::fetches_content`, true when the content
+service has a downloads folder and at least one registry that is on,
+allowed by Developer Mode and whose downloads are on (its install ID not
+off where it needs one). A setup block carries none of it.
 The battle room sends the record to every human player whose own setup
 block carries the signature (`presence_peer`), on joining, when the record
 changes and once to each such player who arrives later, from the local
@@ -3700,6 +3888,77 @@ version, and prints how many of the setup blocks each machine holds of the
 other's players carry no presence bytes.
 [docs/development/testing.md](../../docs/development/testing.md#network-play)
 lists its tests.
+
+### GET MAP in the battle room
+
+A joiner whose host is an OA machine playing a pack map gets the host's
+release of the pack in one press (`runtime_get_map.cpp`). The screen
+`get-map` of the OA layer, which is not modal, has no backdrop and is not
+opaque, is kept on the layer while the multiplayer screens show
+(`keep_get_map_screen`, from `OaLayer::tick`). Each frame it reads the
+battle room (`multiplayer_battle_room_map`): the host's map name, read
+within its field, the map pack of the presence record the host's player
+last sent, and the MAPNAME label's rectangle. It shows only on a joiner,
+only when the map's name is a pack map's, the host's record names that
+pack, and this machine does not have the record's SHA-256: never for a base
+map, a host that sends no record (a 3.1c host or OA 0.7), or a pack
+installed at the host's release. A 3.1c player sees the missing-map line as
+before. What it shows (`get_map_state` and `get_map_text`,
+`oa/ui/frontend_multiplayer/get_map.hpp`) comes from the packs installed
+(`local_map_pack`, from each pack folder's origin record), the registries in
+effect and their merged catalogue, and the download queue:
+
+| State | Line | Button |
+|---|---|---|
+| get | "{pack} {version} · {size} from {registry}" | GET MAP |
+| add_registry_first | "Add {registry} to get {pack}" | GET MAP |
+| other_release_get | "You have release {mine} of {pack}; the host plays release {theirs}." | GET MAP |
+| other_release_gone | the same line | none |
+| gone | "The host's release of {pack} is no longer offered by {registry}." | none |
+| downloads_off | "Downloads from {registry} are off (Settings › Downloads)." | none |
+| downloading | "Downloading {pack} · {done} of {size}" | the download's bar |
+| failed | "Couldn't get {pack}: {reason}" | GET MAP, to try again |
+
+The words come from the interface's catalogue. The line stands under the
+map name's box and the button, or the bar in its place, above it at its
+right, drawn with the kit at the layer's scale; the 3.1c gadgets are left as
+they are. The button is pressed with the pointer or a finger, and so with a
+gamepad's pointer, as the main menu's OA button is. Automation lists the
+button as `oa.get-map`, the line as `oa.get-map-text` and the bar as
+`oa.get-map-progress`, with no dialog, as it lists the OA button, and only
+while they show; on the multiplayer screens the endpoint lists the OA
+layer's controls before the panel's.
+
+Pressing GET MAP for a registry the player has not added opens the Add
+registry window with the address the record names, which checks it at once
+and adds the registry only on the player's ADD; GET MAP goes on by itself
+once the registry is added and its catalogue lists the pack at the record's
+SHA-256, asking for that catalogue once if it has not been read. Otherwise
+it requires the catalogue's SHA-256 for the pack to be the record's, queues
+that release (`queue_download`, reason `offered-in-lobby`), and, when the
+mounted pack layer is another release of this pack, unmounts it. The queue
+checks the file against that SHA-256 and the installer puts the pack in
+place, replacing another release (kept as `.backup`). Until the queue item
+ends the pack's maps are held (`hold_pack_maps`): `prepare_pack_map`
+refuses them, so no folder is replaced while its layer is mounted. Once
+the installed packs list the map, the battle room's own selection of the
+host's map finds it (`maps_select` lists a pack map the source has gained
+since the list was read, and a pack map mounted again is read again, its
+hashes among it) and the map name stops flashing. Nothing readies the
+player. A download that fails says why on the line; one cancelled leaves
+GET MAP as it was. The log says what happened:
+
+```
+open-annihilation: GET MAP: offering to add the registry <registry> for <pack>
+open-annihilation: GET MAP: downloading <pack> release <release> from <registry>
+open-annihilation: GET MAP: installed <pack>
+open-annihilation: GET MAP: couldn't get <pack>: <why>
+open-annihilation: map pack <pack>: its maps may be mounted again
+```
+
+The host's presence card says whether this machine has the host's pack
+(`PackState`): installed when a pack of its key has the record's SHA-256,
+another release when one has another, missing when none has its key.
 
 ## The automation endpoint
 

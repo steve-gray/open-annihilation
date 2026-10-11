@@ -14,6 +14,7 @@
 #include "oa/netgame/recorder_messages.hpp"
 #include "oa/netgame/unicode_chat.hpp"
 #include "oa/ui/frontend_multiplayer/dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/get_map.hpp"
 #include "oa/ui/frontend_multiplayer/team_rules.hpp"
 #include "oa/sim/messages.hpp"
 #include "oa/sim/mission_units/map_units.hpp"
@@ -3884,6 +3885,42 @@ int32_t map_memory_mb(int32_t terrain_bytes) noexcept {
     if (terrain_bytes < k48_bytes)
         return 48;
     return terrain_bytes < k64_bytes ? 64 : 128;
+}
+
+// ---------------------------------------------------------------------------
+// GET MAP: the host's map as a joiner sees it
+
+bool battle_room_map(
+    Lobby& lobby, const Panel& panel, int32_t offset_x, int32_t offset_y, BattleRoomMap* out
+) noexcept {
+    if (out == nullptr)
+        return false;
+    try {
+        *out = BattleRoomMap{};
+        const Control* label = panel_control(panel, "MAPNAME");
+        const auto host_slot = lobby.game != nullptr ? lobby_host_slot(lobby) : kNoSlot;
+        if (label == nullptr || host_slot == kNoSlot)
+            return false;
+        const PlayerSetupInfo& host_block = info_of(lobby, slot_player(lobby, host_slot));
+        // The name the host sent, read no further than its field.
+        out->host_map = std::string(text_view(host_block.map_name, sizeof host_block.map_name));
+        out->joiner = !host_is_local(lobby);
+        const auto stored = lobby_presence_record(lobby, host_slot);
+        netgame::PresenceRecord decoded;
+        if (!stored.empty() &&
+            netgame::decode_presence(stored.data(), stored.size(), &decoded) ==
+                netgame::WireError::ok &&
+            decoded.map_pack)
+            out->host_pack = host_pack_of(*decoded.map_pack);
+        out->label_x = label->x + offset_x;
+        out->label_y = label->y + offset_y;
+        out->label_width = label->width;
+        out->label_height = label->height;
+        return true;
+    } catch (const std::exception&) {
+        *out = BattleRoomMap{};
+        return false;
+    }
 }
 
 } // namespace oa::ui::frontend_multiplayer

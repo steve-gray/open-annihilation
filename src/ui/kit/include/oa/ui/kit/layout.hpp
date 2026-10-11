@@ -14,6 +14,7 @@
 #include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <span>
 #include <stdint.h>
@@ -386,7 +387,8 @@ using ControlId = int32_t;
 /// No control.
 inline constexpr ControlId no_control = -1;
 
-/// What an item of a display list is. Later components append roles.
+/// What an item of a display list is. Later components append roles, each
+/// to all_roles and canvas_draws as well.
 enum class Role : uint8_t {
     fill,        ///< a flat rectangle
     blend,       ///< a rectangle blended by the item's opacity
@@ -446,6 +448,124 @@ enum class Role : uint8_t {
     backdrop,       ///< the dimming behind a sheet; no press reaches a part under it
     sheet,          ///< a sheet over a backdrop: a panel with a shadow
 };
+
+/// Every role, in the order Role declares them. A role appended to Role is
+/// appended here too, and canvas_draws says whether the kit's canvas draws
+/// it: the static_assert under canvas_draws holds the list to the
+/// enumeration, and the compiler holds canvas_draws to every role. The
+/// gallery's test reads this list, so a role the gallery shows no part of
+/// fails it.
+inline constexpr std::array all_roles{
+    Role::fill,          Role::blend,
+    Role::outline,       Role::bevel,
+    Role::rule,          Role::text,
+    Role::picture,       Role::mark,
+    Role::button,        Role::toggle,
+    Role::levels,        Role::slider,
+    Role::choice,        Role::choice_menu,
+    Role::lock,          Role::scroll_bar,
+    Role::focus_ring,    Role::oa_button,
+    Role::oa_mark,       Role::header,
+    Role::footer_band,   Role::nav,
+    Role::heading,       Role::row_frame,
+    Role::locked_fade,   Role::list_row,
+    Role::chip,          Role::field,
+    Role::tabs,          Role::card,
+    Role::hover_card,    Role::link,
+    Role::progress,      Role::header_bar,
+    Role::badge,         Role::header_text,
+    Role::version,       Role::title,
+    Role::panel,         Role::icon,
+    Role::banner,        Role::row,
+    Role::divider,       Role::button_main,
+    Role::button_danger, Role::progress_track,
+    Role::progress_fill, Role::progress_busy,
+    Role::backdrop,      Role::sheet,
+};
+
+/// Tells whether the kit's canvas draws a role (paint, in either form): it
+/// draws every role but the parts of a screen drawn in the modern fonts,
+/// header_bar to sheet, which that screen's own painter draws. A role added
+/// to Role must be named here, or the switch does not compile with the
+/// warnings the engine builds with.
+///
+/// @param role the role
+/// @return true when paint draws it
+[[nodiscard]] constexpr bool canvas_draws(Role role) noexcept {
+    switch (role) {
+    case Role::fill:
+    case Role::blend:
+    case Role::outline:
+    case Role::bevel:
+    case Role::rule:
+    case Role::text:
+    case Role::picture:
+    case Role::mark:
+    case Role::button:
+    case Role::toggle:
+    case Role::levels:
+    case Role::slider:
+    case Role::choice:
+    case Role::choice_menu:
+    case Role::lock:
+    case Role::scroll_bar:
+    case Role::focus_ring:
+    case Role::oa_button:
+    case Role::oa_mark:
+    case Role::header:
+    case Role::footer_band:
+    case Role::nav:
+    case Role::heading:
+    case Role::row_frame:
+    case Role::locked_fade:
+    case Role::list_row:
+    case Role::chip:
+    case Role::field:
+    case Role::tabs:
+    case Role::card:
+    case Role::hover_card:
+    case Role::link:
+    case Role::progress:
+        return true;
+    case Role::header_bar:
+    case Role::badge:
+    case Role::header_text:
+    case Role::version:
+    case Role::title:
+    case Role::panel:
+    case Role::icon:
+    case Role::banner:
+    case Role::row:
+    case Role::divider:
+    case Role::button_main:
+    case Role::button_danger:
+    case Role::progress_track:
+    case Role::progress_fill:
+    case Role::progress_busy:
+    case Role::backdrop:
+    case Role::sheet:
+        return false;
+    }
+    return false;
+}
+
+/// Tells whether all_roles holds its roles in Role's order: each entry's
+/// value is its place.
+///
+/// @return true when it does
+[[nodiscard]] constexpr bool all_roles_in_order() noexcept {
+    for (std::size_t place = 0; place < all_roles.size(); ++place)
+        if (static_cast<std::size_t>(all_roles[place]) != place)
+            return false;
+    return true;
+}
+
+// The last role is named here: a role appended to Role is appended to
+// all_roles and named here in sheet's place.
+static_assert(
+    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::sheet) + 1,
+    "all_roles names every role of Role once, in its order"
+);
 
 /// A mark a screen drawn in the modern fonts places in a part: an icon, a
 /// banner's or a button's. Its own painter draws it, as strokes on a square;

@@ -3,8 +3,9 @@
 
 // What this machine is playing, for the presence it tells other machines:
 // the platform and architecture, Developer Mode, the simulation hash, whether
-// the rules differ from 3.1c, the mod and where it was published, and which
-// standard hacks are on. The header includes no other header of the engine's.
+// the rules differ from 3.1c, the mod and where it was published, which
+// standard hacks are on, and whether it can fetch content. The header
+// includes no other header of the engine's.
 //
 // Limitations: an override Developer Mode holds still counts, and still
 // decides whether its hack is on, when the resolver refused it and the
@@ -108,6 +109,12 @@ struct PresenceFacts {
     /// Developer Mode's overrides, each hack's id and whether it is on
     /// (EngineSettings::hack_overrides). None while Developer Mode is off.
     std::vector<PresenceOverride> overrides;
+    /// The machine can fetch content: the content service has a downloads
+    /// folder and at least one registry that is on, not set aside for
+    /// another of its id, allowed by Developer Mode and whose downloads are
+    /// on (its install ID is not off where it needs one). False before the
+    /// content service has started.
+    bool fetches_content{};
 
     /// Compares two readings: every field.
     ///

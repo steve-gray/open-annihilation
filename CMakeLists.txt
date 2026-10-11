@@ -278,10 +278,12 @@ target_include_directories(oa-app-headers INTERFACE src/app/include)
 # OA_SELF_CHECKS is 1 when the game holds its self-checks (app.hpp).
 target_compile_definitions(oa-app-headers INTERFACE "OA_SELF_CHECKS=$<BOOL:${OA_SELF_CHECKS}>")
 # app.hpp and render_policy.hpp include the engine settings' header,
-# runtime.hpp the gamepad controls' model and game_directory.hpp the found
-# installs' header.
+# runtime.hpp the gamepad controls' model, game_directory.hpp the found
+# installs' header, and extension.hpp the UI kit's headers and the
+# registrations of Settings pages, kit screens, notices and prompts.
 target_link_libraries(oa-app-headers INTERFACE oa-base-sha256 oa-data-languages oa-data-limits
-  oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs)
+  oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs
+  oa-ui-kit oa-ui-screen-registry)
 # oa-game's command line, which the option tests parse without a running app.
 add_library(oa-app-game-options src/app/startup.cpp)
 add_library(oa::app::game_options ALIAS oa-app-game-options)
@@ -943,6 +945,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
   src/app/pack_map_source.cpp
+  src/app/runtime_get_map.cpp
   src/app/mod_install_watch.cpp
   src/app/user_folder_open.cpp
   src/app/runtime_mission_orders.cpp src/app/runtime_showcase.cpp src/app/match_clock.cpp
@@ -957,6 +960,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_engine_settings_match.cpp
   src/app/oa_layer.cpp
   src/app/runtime_library.cpp src/app/runtime_library_actions.cpp
+  src/app/runtime_map_browser.cpp
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
@@ -995,6 +999,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
   src/app/runtime_map_packs_check.cpp
+  src/app/runtime_map_browser_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
@@ -1002,7 +1007,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
-  src/app/runtime_registered_kit_check.cpp
+  src/app/runtime_registered_kit_check.cpp src/app/runtime_kit_gallery_check.cpp
   src/app/oa_layer_check.cpp
   src/app/runtime_engine_settings_match_check.cpp src/app/runtime_engine_settings_dialog_check.cpp
   src/app/runtime_renderer_ladder_check.cpp src/app/runtime_visual_rules_check.cpp
@@ -1035,7 +1040,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
-  oa-ui-frontend-multiplayer oa-ui-library)
+  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).
@@ -1486,6 +1491,24 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-registered-kit PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_registered_kit_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The UI kit gallery from Settings › Developer on 640x480, 1280x720 and
+      # 1920x1080 windows: Compact at 1x, Large at 1x and Regular at 2x over
+      # the whole window, its pixels against the gallery drawn offscreen over
+      # the darkened main menu, Tab through every control, and Escape back to
+      # Developer. A previous run's preferences would be read as the game
+      # starts, before the check empties them, so they go first.
+      set(oa_kit_gallery_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/kit-gallery")
+      file(MAKE_DIRECTORY "${oa_kit_gallery_dir}")
+      add_test(NAME kit-gallery-clean COMMAND ${CMAKE_COMMAND} -E rm -f
+        "${oa_kit_gallery_dir}/kit-gallery.conf")
+      set_tests_properties(kit-gallery-clean PROPERTIES FIXTURES_SETUP kit-gallery-clean)
+      add_test(NAME native-kit-gallery COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-kit-gallery
+        --preferences-file "${oa_kit_gallery_dir}/kit-gallery.conf")
+      set_tests_properties(native-kit-gallery PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_kit_gallery_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED kit-gallery-clean)
       # The simulation hash an extension reads: the plain baseline with no
       # mod, a mod profile's when that profile changes the simulation, a
       # different hash after a Developer Mode override of a rule in the same
@@ -1560,6 +1583,28 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-map-packs PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_map_packs_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The map browser over the skirmish map picker: the map pack check's two
+      # packs in a player's folder of its own, every built-in registry off so
+      # that nothing is fetched, and at 640x480, 1280x720, 1920x1080 and
+      # 2560x1440 MORE MAPS…, the browser's size class, columns and window,
+      # its installed maps, its search, the clashing map greyed with its
+      # reason, and Select moving SELMAP's selection. It leaves each size's
+      # frame in its folder for review. Each run starts from a clean folder.
+      set(oa_map_browser_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-browser")
+      file(MAKE_DIRECTORY "${oa_map_browser_dir}")
+      add_test(NAME map-browser-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_map_browser_dir}/Open Annihilation" "${oa_map_browser_dir}/data"
+        "${oa_map_browser_dir}/map-browser.conf")
+      set_tests_properties(map-browser-clean PROPERTIES FIXTURES_SETUP map-browser-clean)
+      add_test(NAME native-map-browser COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-map-browser
+        --preferences-file "${oa_map_browser_dir}/map-browser.conf"
+        --user-folder "${oa_map_browser_dir}/Open Annihilation"
+        --data-dir "${oa_map_browser_dir}/data")
+      set_tests_properties(native-map-browser PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_map_browser_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED map-browser-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three
@@ -2951,6 +2996,8 @@ endif()
 add_subdirectory(src/formats/tad)
 add_subdirectory(src/ui/frontend-multiplayer)
 add_subdirectory(src/ui/map-previews)
+# The map browser: MORE MAPS… over the map lists opens it on the OA layer.
+add_subdirectory(src/ui/map-browser)
 add_subdirectory(src/netgame)
 # Catalogues are fetched with the HTTP client src/netgame adds, so this
 # library follows that directory. oa-game is linked earlier in this file,

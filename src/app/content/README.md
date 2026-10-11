@@ -96,7 +96,9 @@ downloaded files, and keeps the packages' badge pictures the Library shows.
 - `PictureCache` keeps the badge pictures a catalogue names
   (`/v1/i/<sha256>.png`, resolved against the host that served the
   catalogue). `request` asks for one, `take` hands a ready one over decoded
-  (`read_mod_badge`, at most 64 by 64), and `drop_all` forgets what waits;
+  (`read_mod_badge`, at most 64 by 64), `take_bytes` hands its checked
+  file over instead, for the map browser's previews, `refused` tells a
+  picture never to be asked for again, and `drop_all` forgets what waits;
   these are the main thread's and touch no file or network.
   `fetch_waiting` is the worker's: it reads each picture from the folder,
   or fetches it, checks it and writes it there. `picture_digest` reads the
@@ -241,8 +243,10 @@ one, written to the folder; one whose bytes hash to another name, one over
 256 KiB and one the server does not have, each refused, kept nowhere and
 not asked for again; one the folder holds, read with no request; one in the
 folder that does not hash to its name, fetched and written over; none
-requested while a match runs, and fetched once it ends; and no request
-carrying an install ID.
+requested while a match runs, and fetched once it ends; no request
+carrying an install ID; and a good picture's file handed over byte for byte
+by `take_bytes`, and nothing for one whose bytes hash to another name or
+one over 256 KiB.
 
 ## Downloads
 

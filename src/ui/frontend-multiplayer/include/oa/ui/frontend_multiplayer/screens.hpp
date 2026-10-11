@@ -195,6 +195,16 @@ struct LobbyMapSource {
     /// @param[out] out the map; left unchanged when `index` is out of range
     /// @return true when `out` was written
     bool (*base_at)(void* context, int32_t index, LobbyPackMap* out){};
+    /// Writes the map pack of the pack map whose files `prepare` mounted, as
+    /// this machine's presence record names it. Bound for the battle room
+    /// with multiplayer_bind_map_pack, with `context` as its context: on the
+    /// host it is the selected map's pack.
+    ///
+    /// @param context the source's context
+    /// @param[out] out the map pack; left unchanged when there is none
+    /// @return false when no pack map's files are mounted, or its pack was
+    ///     not installed from a registry's catalogue
+    bool (*pack)(void* context, netgame::PresenceMapPack* out){};
 };
 
 /// Binds the pack maps the battle room lists beside the base maps, and the
@@ -477,6 +487,42 @@ void multiplayer_type(app::ScreenContext* ctx, const char* text) noexcept;
 /// @return false when none of these screens shows, or the focused box is
 ///     not the chat line
 bool multiplayer_compose(const char* composition) noexcept;
+
+/// Returns where the host's open map dialog in the battle room lists the
+/// maps (its MAPNAMES list), in the 640x480 frame the battle room is drawn
+/// in, before the menu frame scales it.
+///
+/// @param[out] x the list's left column; not written when false is returned
+/// @param[out] y the list's top row
+/// @param[out] width the list's width, in pixels
+/// @param[out] height the list's height, in pixels
+/// @return false when the battle room's map dialog is not open, or this
+///     machine is not the host
+bool multiplayer_map_list_rect(int32_t* x, int32_t* y, int32_t* width, int32_t* height) noexcept;
+
+/// Shows a map in the host's open map dialog, as a click on its row
+/// highlights it: when the name is not in the screens' map list, which is
+/// built once a visit, the list is built again, so that a pack installed
+/// since is in it; then the dialog's list is filled again from the lobby's
+/// maps, the map's row is selected and the map previewed. Nothing is sent
+/// to the other players: the host chooses the map with the dialog's LOAD.
+///
+/// @param name the map's name, `<stem>@<id>` for a pack map; null shows nothing
+/// @return false when the dialog is not open, this machine is not the
+///     host, or no map has the name
+bool multiplayer_offer_map(const char* name) noexcept;
+
+/// Fills the map dialog's MAPNAMES list again from the lobby's maps, in name
+/// order, selects the row of a map and previews it (mapselect_preview), as a
+/// click on the row highlights it. Nothing is sent. A name the list lacks
+/// leaves the row highlighted before, and previews nothing.
+///
+/// @param[in,out] lobby Lobby state whose map services list and select the maps.
+/// @param[in,out] select Map selection state; its previous map is kept.
+/// @param[in,out] panel The dialog's panel.
+/// @param name the map's name
+/// @return true when the map's row is selected
+bool mapselect_offer(Lobby& lobby, MapSelect& select, Panel& panel, std::string_view name) noexcept;
 
 /// Starts a new frontend session: drops lobby, connection and dialog state and resets the loopback network.
 ///

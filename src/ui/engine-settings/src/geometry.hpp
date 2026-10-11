@@ -260,9 +260,60 @@ inline constexpr int32_t developer_row_padding = row_padding / 2;
 /// its label line and one hint line.
 inline constexpr int32_t developer_row_height = 1 + developer_row_padding + label_line_height +
                                                 hint_gap + hint_line_height + developer_row_padding;
-/// The row of the line over the list, under Developer's rows.
-inline constexpr int32_t developer_list_rule =
-    first_row_top + developer_row_count * developer_row_height;
+/// UI kit gallery's hint, in English, which the dialog shows through the
+/// interface catalogue: one line at Regular and Large, two at Compact.
+inline constexpr std::string_view kit_gallery_hint_text =
+    "Every part of OA's own screens, in each of its states, at this size.";
+/// The most lines UI kit gallery's hint takes.
+inline constexpr std::size_t kit_gallery_hint_most_lines = 2;
+
+/// Counts the lines a text of single-byte characters takes broken between
+/// words into lines of at most a number of characters, as break_lines
+/// breaks such a text: at its last space where a word would pass the line's
+/// end, a word longer than a line cut there.
+///
+/// @param text the text, of single-byte characters and no location mark
+/// @param characters the most characters a line holds, 1 or more
+/// @return the lines; 0 for a text of spaces alone
+[[nodiscard]] constexpr std::size_t
+lines_between_words(std::string_view text, std::size_t characters) noexcept {
+    characters = characters > 0 ? characters : 1;
+    std::size_t lines = 0;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        while (start < text.size() && text[start] == ' ')
+            ++start;
+        if (start >= text.size())
+            break;
+        std::size_t end = start + characters < text.size() ? start + characters : text.size();
+        if (end < text.size() && text[end] != ' ') {
+            const std::size_t space = text.substr(start, end - start).rfind(' ');
+            if (space != std::string_view::npos && space > 0)
+                end = start + space;
+        }
+        ++lines;
+        start = end;
+    }
+    return lines;
+}
+
+/// Returns the row of the line over Developer's list at a size class: under
+/// its rows, each a label line and one hint line, but UI kit gallery's,
+/// whose hint in English takes as many lines as the class's lines hold.
+/// Where the rows end lower still, as in another language or in the modern
+/// fonts, the list starts under them (developer_list_scroll).
+///
+/// @param hint_line_characters the most characters a hint line holds at the class
+/// @return the row
+[[nodiscard]] constexpr int32_t developer_rule_for(std::size_t hint_line_characters) noexcept {
+    std::size_t gallery_lines = lines_between_words(kit_gallery_hint_text, hint_line_characters);
+    gallery_lines = gallery_lines < 1 ? 1 : gallery_lines;
+    gallery_lines =
+        gallery_lines > kit_gallery_hint_most_lines ? kit_gallery_hint_most_lines : gallery_lines;
+    return first_row_top + developer_row_count * developer_row_height +
+           static_cast<int32_t>(gallery_lines - 1) * hint_line_height;
+}
+
 /// The rows between the footer's line, its two rows and the dialog's footer.
 inline constexpr int32_t developer_footer_gap = 4;
 /// Restore profile values' width.
@@ -270,6 +321,11 @@ inline constexpr int32_t restore_profile_width = 142;
 
 /// OPEN MODS FOLDER's width.
 inline constexpr int32_t mods_folder_button_width = 104;
+/// The rows between Mods' line on the check for updates and OPEN MODS
+/// FOLDER under it.
+inline constexpr int32_t mods_check_gap = 4;
+/// The rows between Mods' list and the line on the check for updates under it.
+inline constexpr int32_t mods_list_gap = 2;
 
 /// The parts of the dialog that move with its size class, in points from its
 /// top left corner: its size, its padding and its section list's width
@@ -323,7 +379,9 @@ struct Sizes {
     /// The rows Page Up and Page Down scroll: the view less three hint
     /// lines, so that what showed at one edge still shows at the other.
     int32_t page_step{};
-    ScrollArea section_scroll{};     ///< where a section's rows scroll
+    ScrollArea section_scroll{}; ///< where a section's rows scroll
+    /// The row of the line over Developer's list, under its rows (developer_rule_for).
+    int32_t developer_list_rule{};
     int32_t developer_footer_rule{}; ///< the row of the line over the footer under Developer's list
     SourceRect developer_view{}; ///< the view Developer's list scrolls in, between its two lines
     SourceRect developer_view_clip{};    ///< what Developer's list is drawn clipped to
@@ -334,6 +392,9 @@ struct Sizes {
     SourceRect mods_note_first{};        ///< the first line under Mods' list naming its folders
     SourceRect mods_note_second{};       ///< the second of those lines
     SourceRect mods_folder_button{};     ///< OPEN MODS FOLDER, over those lines
+    /// The line on the check for updates, directly over OPEN MODS FOLDER and
+    /// under the list.
+    SourceRect mods_check_line{};
     /// The two lines over Mods' list that say why the page is locked, the
     /// padlock at the first's left.
     SourceRect mods_lock_line{};
@@ -435,13 +496,14 @@ struct Sizes {
     sized.scroll_hit = {sized.content_right, sized.view.y, sized.padding, sized.view.height};
     sized.page_step = sized.view.height - 3 * hint_line_height;
     sized.section_scroll = {sized.view, sized.scroll_well, sized.scroll_hit, sized.page_step};
+    sized.developer_list_rule = developer_rule_for(sized.hint_line_characters);
     sized.developer_footer_rule = sized.footer_rule_row - 2 - button_height - developer_footer_gap -
                                   label_line_height - developer_footer_gap;
     sized.developer_view = {
         sized.content_left,
-        developer_list_rule + 1,
+        sized.developer_list_rule + 1,
         sized.content_width,
-        sized.developer_footer_rule - developer_list_rule - 1
+        sized.developer_footer_rule - sized.developer_list_rule - 1
     };
     sized.developer_view_clip = {
         sized.developer_view.x - focus_inset,
@@ -496,6 +558,12 @@ struct Sizes {
         sized.mods_note_first.y - 4 - button_height,
         mods_folder_button_width,
         button_height
+    };
+    sized.mods_check_line = {
+        sized.content_left,
+        sized.mods_folder_button.y - mods_check_gap - hint_line_height,
+        sized.content_width,
+        hint_line_height
     };
     sized.mods_lock_line = {
         sized.content_left, first_row_top, sized.content_width, 2 * hint_line_height
@@ -600,6 +668,8 @@ inline constexpr int32_t page_step = compact_sizes.page_step;
 /// Where a section's rows scroll at Compact; Developer's list scrolls in
 /// developer_scroll.
 inline constexpr ScrollArea section_scroll = compact_sizes.section_scroll;
+/// The row of the line over Developer's list, under its rows, at Compact.
+inline constexpr int32_t developer_list_rule = compact_sizes.developer_list_rule;
 /// The row of the line over the footer under Developer's list, at Compact.
 inline constexpr int32_t developer_footer_rule = compact_sizes.developer_footer_rule;
 /// The view Developer's list scrolls in, between the two lines, at Compact.
@@ -616,9 +686,10 @@ inline constexpr SourceRect restore_profile_button = compact_sizes.restore_profi
 inline constexpr ScrollArea developer_scroll = compact_sizes.developer_scroll;
 
 // Mods: the list of the mods, one row each, in a view of its own under the
-// heading, under a lock line while the page is locked; under the list, OPEN
-// MODS FOLDER and two lines naming the folders listed, which stay put. Only
-// the list scrolls.
+// heading, under a lock line while the page is locked; under the list, the
+// line on the check for updates with CHECK NOW, OPEN MODS FOLDER and GET MORE
+// MODS… in one row, and two lines naming the folders listed, which stay put.
+// Only the list scrolls.
 
 /// The lines under the list naming the folders it lists: the first, at Compact.
 inline constexpr SourceRect mods_note_first = compact_sizes.mods_note_first;
@@ -626,6 +697,8 @@ inline constexpr SourceRect mods_note_first = compact_sizes.mods_note_first;
 inline constexpr SourceRect mods_note_second = compact_sizes.mods_note_second;
 /// OPEN MODS FOLDER, over those lines, at Compact.
 inline constexpr SourceRect mods_folder_button = compact_sizes.mods_folder_button;
+/// The line on the check for updates, over OPEN MODS FOLDER, at Compact.
+inline constexpr SourceRect mods_check_line = compact_sizes.mods_check_line;
 /// The two lines over the list that say why the page is locked, the
 /// padlock at the first's left, at Compact.
 inline constexpr SourceRect mods_lock_line = compact_sizes.mods_lock_line;
@@ -658,9 +731,17 @@ inline constexpr int32_t mod_roll_back_height = 12;
 inline constexpr int32_t mod_roll_back_gap = 4;
 /// The Roll Back Mod question's ROLL BACK button's width.
 inline constexpr int32_t question_roll_back_width = 64;
+/// A mod row's UPDATE button's width, at the right of its description line,
+/// left of ROLL BACK by mod_roll_back_gap when both show.
+inline constexpr int32_t mod_update_width = 60;
+/// Its height.
+inline constexpr int32_t mod_update_height = 12;
+/// The columns between OPEN MODS FOLDER and GET MORE MODS… right of it.
+inline constexpr int32_t mods_library_gap = 6;
 
 /// Returns where Mods' list scrolls: under the heading, or under the lock
-/// line while the page is locked, down to OPEN MODS FOLDER.
+/// line while the page is locked, down to the line on the check for updates
+/// over OPEN MODS FOLDER.
 ///
 /// @param locked the page is locked
 /// @param size_class the size class the dialog is laid out at
@@ -672,7 +753,7 @@ inline constexpr int32_t question_roll_back_width = 64;
     const int32_t top =
         locked ? sized.mods_lock_line.y + sized.mods_lock_line.height + 2 : first_row_top;
     const SourceRect list_view{
-        sized.content_left, top, sized.content_width, sized.mods_folder_button.y - 6 - top
+        sized.content_left, top, sized.content_width, sized.mods_check_line.y - mods_list_gap - top
     };
     return {
         list_view,
@@ -912,6 +993,121 @@ struct ScrolledRows {
 /// @return true when it does
 [[nodiscard]] bool offers_roll_back(const Dialog& dialog, const ModRow& row) noexcept;
 
+/// Returns what the host gave of a row of Mods whose registry's list offers
+/// a newer release (ModDetails::update_offered).
+///
+/// @param dialog the dialog
+/// @param row the row
+/// @return its details; null for a row with no update, and for No Mod
+[[nodiscard]] const ModDetails* update_details(const Dialog& dialog, const ModRow& row) noexcept;
+
+/// Tells whether a row of Mods shows UPDATE: its update is offered and the
+/// page is not locked. In a game it is hidden, as the page is locked.
+///
+/// @param dialog the dialog
+/// @param row the row
+/// @return true when the row has its UPDATE button
+[[nodiscard]] bool shows_update(const Dialog& dialog, const ModRow& row) noexcept;
+
+/// Returns the control of a row's UPDATE button: one more than the last
+/// ROLL BACK control could be for each row before it and itself, so that
+/// OPEN MODS FOLDER's and every ROLL BACK's stay as they were.
+///
+/// @param rows Mods' rows
+/// @param index the row's place among them
+/// @return its control
+[[nodiscard]] int32_t update_control(const Rows& rows, std::size_t index) noexcept;
+
+/// Returns the row an UPDATE control belongs to.
+///
+/// @param rows Mods' rows
+/// @param control the control
+/// @return the row's place; -1 when the control is no row's UPDATE
+[[nodiscard]] int32_t update_row(const Rows& rows, int32_t control) noexcept;
+
+/// Returns CHECK NOW's control: the one after the last UPDATE control.
+///
+/// @param rows Mods' rows
+/// @return its control
+[[nodiscard]] int32_t check_now_control(const Rows& rows) noexcept;
+
+/// Returns GET MORE MODS…'s control: the one after CHECK NOW's.
+///
+/// @param rows Mods' rows
+/// @return its control
+[[nodiscard]] int32_t get_more_mods_control(const Rows& rows) noexcept;
+
+/// Returns a mod row's UPDATE button: at the right of its description line,
+/// as ROLL BACK is, and left of ROLL BACK by mod_roll_back_gap when the row
+/// offers both.
+///
+/// @param row the row, placed
+/// @param roll_back the row shows ROLL BACK too
+/// @return the button's rectangle
+[[nodiscard]] SourceRect update_button(const Row& row, bool roll_back) noexcept;
+
+/// Returns the line a row with an update shows in place of its
+/// description: where its update stands while it is queued
+/// (ModDetails::update_progress), why UPDATE is off when it is
+/// (update_blocked), else what the update is (update_text).
+///
+/// @param details the row's details, its update offered
+/// @return the line
+[[nodiscard]] std::string_view mod_update_line(const ModDetails& details) noexcept;
+
+/// Returns the line a row with an update shows in place of its
+/// description, broken between words into the lines it takes whole in the
+/// room left of its UPDATE button, and of ROLL BACK when it shows both. The
+/// lines are counted in characters, a class's hint_line_characters to its
+/// content column, so that a row is as tall whatever the fonts; at most
+/// most_row_lines, the last cut short only past them.
+///
+/// @param dialog the dialog
+/// @param row the row
+/// @return the lines; none for a row with no update
+[[nodiscard]] std::vector<std::string> update_lines(const Dialog& dialog, const ModRow& row);
+
+/// Tells whether CHECK NOW shows after the line on the check for updates:
+/// the host offers it (Dialog::mods_check_offered) and the page is not
+/// locked.
+///
+/// @param dialog the dialog
+/// @return true when it shows
+[[nodiscard]] bool shows_check_now(const Dialog& dialog) noexcept;
+
+/// Tells whether GET MORE MODS… shows right of OPEN MODS FOLDER: the host
+/// offers it (Dialog::mods_library_offered) and the page is not locked.
+///
+/// @param dialog the dialog
+/// @return true when it shows
+[[nodiscard]] bool shows_get_more_mods(const Dialog& dialog) noexcept;
+
+/// Returns the line on the check for updates as it shows: the host's text
+/// (Dialog::mods_check_text), cut short only where CHECK NOW would not fit
+/// after it.
+///
+/// @param dialog the dialog
+/// @return the text's place and its words
+[[nodiscard]] std::pair<SourceRect, std::string> check_line_text(const Dialog& dialog);
+
+/// Returns CHECK NOW's link: after the line's text and " · " at their
+/// estimated widths in the small font (a class's hint_line_characters to its
+/// content column), so that a press lands where it is drawn whatever the
+/// fonts, and never past the line's end.
+///
+/// @param dialog the dialog
+/// @return the link's rectangle
+[[nodiscard]] SourceRect check_now_link(const Dialog& dialog);
+
+/// Returns GET MORE MODS…: right of OPEN MODS FOLDER by mods_library_gap,
+/// as tall, and as wide as its caption at the kit's estimated width
+/// (oa::ui::kit::estimated_width) with the kit's button padding, so that it
+/// is the same whatever the fonts.
+///
+/// @param dialog the dialog
+/// @return the button's rectangle
+[[nodiscard]] SourceRect get_more_mods_button(const Dialog& dialog);
+
 /// Returns the question's answering button: SWITCH, or ROLL BACK, which is
 /// wider.
 ///
@@ -927,7 +1123,9 @@ struct ScrolledRows {
 
 /// Returns Mods' rows placed in its list at a scroll offset: one for each of
 /// mod_rows, whose control_area is the whole row, label its title, value
-/// its version and hints[0] its description.
+/// its version and hints[0] its description. A row with an update has its
+/// update's lines (update_lines) in hints instead, and grows by a line for
+/// each after the first.
 ///
 /// @param dialog the dialog
 /// @param scroll the offset
@@ -1393,6 +1591,18 @@ inline constexpr int32_t first_menu_item_control = question_no_control - 1;
 /// @return the list
 [[nodiscard]] List place_list(const Dialog& dialog, int32_t scroll = 0);
 
+/// Returns where Developer's list scrolls: its size class's
+/// (Sizes::developer_scroll), whose top is the row under the class's
+/// developer_list_rule, moved down to the row under Developer's rows
+/// wherever they end lower, as in a language whose hints take more lines or
+/// while a hint's lines lie further apart in the modern fonts. Its height,
+/// its well and the margin a press holds the bar in shrink by as much, and
+/// its page step.
+///
+/// @param dialog the dialog, on Developer
+/// @return the view, the well, the margin and the page step
+[[nodiscard]] ScrollArea developer_list_scroll(const Dialog& dialog);
+
 /// Moves a placed list up, every part of every row with it.
 ///
 /// @param[in,out] list the list
@@ -1739,6 +1949,14 @@ inline constexpr std::string_view no_profile_description_text = "No oamod.yaml p
 inline constexpr std::string_view playing_text = "PLAYING";
 /// The button under Mods' list.
 inline constexpr std::string_view open_mods_folder_text = "OPEN MODS FOLDER";
+/// The button right of it, which opens the Library on Mods.
+inline constexpr std::string_view get_more_mods_text = "GET MORE MODS…";
+/// The link after the line on the check for updates.
+inline constexpr std::string_view check_now_text = "CHECK NOW";
+/// Between the line on the check for updates and CHECK NOW.
+inline constexpr std::string_view check_now_separator = " · ";
+/// A mod row's UPDATE caption.
+inline constexpr std::string_view mod_update_caption = "UPDATE";
 /// The lines under Mods' list, naming the folders it lists.
 inline constexpr std::array<std::string_view, 2> mods_folders_text{
     "Lists the mods in the game folder's mods folder and",

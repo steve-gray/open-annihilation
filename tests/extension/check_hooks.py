@@ -30,7 +30,9 @@ when it did not, which fails the run. --runs picks the runs:
            through the check host), --check-match-dialogs
            (whose close requests reach close_requested and whose GAME slider
            speed_changed), a --generate-script run whose recording no
-           extension replays (open_recording) and a run the recorder ends through
+           extension replays (open_recording), a run whose recorder registers
+           a Settings page the registry refuses, which stops the start
+           (--record-refused-page), and a run the recorder ends through
            ScreenServices::quit (--record-quit) with status 3, through SDL's
            dummy drivers. When OA_GAME_DIR is unset,
            empty or names no directory it exits with --skip-code
@@ -71,8 +73,8 @@ HOOK_RE = re.compile(r"\(\*(\w+)\)\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\s*
 
 # Every hook of src/app/include/oa/app/extension.hpp, as the recorder names them.
 HOOKS = [
-    "take_option", "check_options", "switch_handler", "text", "startup", "register_screens", "ready",
-    "frontend_entry", "frontend_states", "run_mode", "start_scene", "shutdown", "select_multiplayer",
+    "take_option", "check_options", "switch_handler", "text", "startup", "register_screens",
+    "register_settings_pages", "ready", "frontend_entry", "frontend_states", "run_mode", "start_scene", "shutdown", "select_multiplayer",
     "frontend_game", "keep_stored_password", "check_multiplayer_menu", "state", "frame",
     "simulation_step", "outcome_ready", "match_game", "match_event", "disconnect_text",
     "give_resources", "message_hooks", "player_gone", "console_host", "check_console", "draw_loading",
@@ -88,6 +90,11 @@ FOLLOWER_UNFILLED = {"runtime_member"}
 FOLLOWER_NOTE = "The recorder test extensions record every hook's calls."
 # The environment variable that has the follower fill frontend_game too.
 DOUBLE_FRONTEND_GAME = "OA_RECORDER_FOLLOWER_FRONTEND_GAME"
+# The preferences file each game run starts from. The Kit fixture, the
+# build's third test extension (kit_fixture.cpp), draws over the
+# battlefield's top left while its chip setting is on, where the navigation
+# check reads the message log; these runs keep it off.
+PREFERENCES = 'open-annihilation-preferences 1\n"kit-fixture.show-chip" "0"\n'
 # Hooks no run here reaches, and why.
 UNREACHED = {
     "disconnect_text": "the end-of-game screen asks for it only after a shared match",
@@ -144,7 +151,8 @@ RUNS = {
     "game": [
         Run("headless-skirmish",
             ["--game-dir", "{game}", "--skip-intro", "--mute", "--headless-check", "--match-ticks", "60"],
-            ["startup", "runtime_member", "register_screens", "ready", "frontend_entry", "run_mode start",
+            ["startup", "runtime_member", "register_screens", "register_settings_pages", "ready",
+             "frontend_entry", "run_mode start",
              "run_mode headless_first", "run_mode headless", "match_game", "match_event torn_down",
              "draw_loading", "draw_match_hud", "draw_match_overlay", "state", "load_progress",
              "team_panel_host", "return_label", "keep_stored_password", "release_runtime",
@@ -179,6 +187,13 @@ RUNS = {
             ["--game-dir", "{game}", "--generate-script", "{scratch}/none.rec"],
             ["open_recording", "follower.order open_recording"], game=True, status=1,
             output="no extension of this build replays none.rec", files={"none.rec": "no recording\n"}),
+        # The recorder registers a Settings page under an id the registry
+        # refuses, which stops the start once every extension's
+        # register_settings_pages has run.
+        Run("refused-page",
+            ["--game-dir", "{game}", "--skip-intro", "--mute", "--headless-check", "--record-refused-page"],
+            ["register_settings_pages", "follower.register_settings_pages"], game=True, status=1,
+            output="settings page registration rejected: an id is malformed"),
         # The recorder uses the screen services it keeps on the fifth frame
         # and ends the run through quit on the tenth, long before 60.
         Run("quit", ["--game-dir", "{game}", "--skip-intro", "--mute", "--frames", "60", "--record-quit", "3"],
@@ -221,6 +236,7 @@ def run_game(game, run, scratch, game_dir):
     arguments = [argument.format(game=game_dir, scratch=scratch) for argument in run.arguments]
     command = [*RUNNER, str(game), "--record-hooks", str(record), *arguments]
     if run.game:
+        preferences.write_text(PREFERENCES, encoding="utf-8")
         command += ["--preferences-file", str(preferences)]
     environment = dict(os.environ)
     if run.dummy:
