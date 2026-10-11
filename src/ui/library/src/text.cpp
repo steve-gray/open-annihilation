@@ -5,12 +5,16 @@
 // written from the patterns in text.hpp.
 #include "oa/ui/library/text.hpp"
 
+#include "oa/ui/kit/text.hpp"
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace oa::ui::library {
 
@@ -337,6 +341,8 @@ std::string_view tab_text(Tab tab, bool compact, const TextHooks& text) {
         return shown(text, compact ? words::tab_languages_short : words::tab_languages);
     case Tab::updates:
         return shown(text, compact ? words::tab_updates_short : words::tab_updates);
+    case Tab::registries:
+        return shown(text, compact ? words::tab_registries_short : words::tab_registries);
     }
     return {};
 }
@@ -401,10 +407,156 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::action_settings);
     case Action::close:
         return shown(text, words::action_close);
+    case Action::add_registry:
+        return shown(text, words::registry_add);
+    case Action::add_mirror:
+        return shown(text, words::registry_add_mirror);
+    case Action::remove_registry:
+        return shown(text, words::registry_remove);
+    case Action::set_registry:
+        return shown(text, words::registry_on);
     case Action::uninstall:
         return shown(text, words::action_uninstall);
     }
     return {};
+}
+
+std::string registry_initials(std::string_view name) {
+    std::vector<std::string_view> words_found;
+    std::size_t start = 0;
+    while (start < name.size()) {
+        while (start < name.size() && name[start] == ' ')
+            ++start;
+        std::size_t end = start;
+        while (end < name.size() && name[end] != ' ')
+            ++end;
+        if (end > start)
+            words_found.push_back(name.substr(start, end - start));
+        start = end;
+    }
+    const auto upper = [](std::string_view character) {
+        std::string text(character);
+        if (text.size() == 1 && text[0] >= 'a' && text[0] <= 'z')
+            text[0] = static_cast<char>(text[0] - 'a' + 'A');
+        return text;
+    };
+    const auto first = [](std::string_view word) {
+        return word.substr(0, std::max(oa::ui::kit::character_bytes(word), std::size_t{1}));
+    };
+    std::string letters;
+    if (words_found.size() >= 2) {
+        for (std::size_t index = 0; index < words_found.size() && index < 3; ++index)
+            letters += upper(first(words_found[index]));
+        return letters;
+    }
+    if (words_found.empty())
+        return letters;
+    std::string_view word = words_found.front();
+    for (int32_t taken = 0; taken < 2 && !word.empty(); ++taken) {
+        const std::string_view character = first(word);
+        letters += upper(character);
+        word.remove_prefix(character.size());
+    }
+    return letters;
+}
+
+std::string registry_age_text(int64_t seconds, const TextHooks& text) {
+    constexpr int64_t minute = 60;
+    constexpr int64_t hour = 60 * minute;
+    constexpr int64_t day = 24 * hour;
+    if (seconds < minute)
+        return std::string(shown(text, words::age_just_now));
+    if (seconds < hour)
+        return filled(text, words::age_minutes, {{"count", std::to_string(seconds / minute)}});
+    if (seconds < day)
+        return filled(text, words::age_hours, {{"count", std::to_string(seconds / hour)}});
+    if (seconds < 2 * day)
+        return std::string(shown(text, words::registry_one_day));
+    return filled(text, words::age_days, {{"count", std::to_string(seconds / day)}});
+}
+
+namespace {
+
+/// Returns a count of things with its noun, one or many.
+///
+/// @param count how many
+/// @param one the noun for one, in English
+/// @param many the noun for any other count, in English
+/// @param text how texts are looked up
+/// @return such as "1 package" or "31 packages"
+std::string counted_things(
+    std::size_t count, std::string_view one, std::string_view many, const TextHooks& text
+) {
+    const std::string number = std::to_string(count);
+    return filled(text, count == 1 ? one : many, {{"n", number}});
+}
+
+/// Joins names as a sentence lists them: "A", "A and B", "A, B and C".
+///
+/// @param names the names
+/// @return the list
+std::string listed_names(const std::vector<std::string>& names) {
+    std::string text;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (index > 0)
+            text += index + 1 == names.size() ? " and " : ", ";
+        text += names[index];
+    }
+    return text;
+}
+
+} // namespace
+
+std::string registry_subtitle(const Registry& registry, const TextHooks& text) {
+    const std::string separator = " · ";
+    std::string unreached;
+    if (registry.unreachable) {
+        unreached = std::string(shown(text, words::registry_unreachable));
+        if (registry.checked_ago)
+            unreached += separator + filled(
+                                         text,
+                                         words::header_list_from,
+                                         {{"age", registry_age_text(*registry.checked_ago, text)}}
+                                     );
+    }
+    const std::string packages = counted_things(
+        registry.packages, words::registry_package_one, words::registry_package_many, text
+    );
+    std::string line;
+    if (registry.built_in) {
+        line = packages + separator;
+        if (registry.unreachable)
+            line += unreached;
+        else if (registry.checked_ago)
+            line += filled(
+                text,
+                words::registry_checked,
+                {{"age", registry_age_text(*registry.checked_ago, text)}}
+            );
+        else
+            line += shown(text, words::registry_not_checked);
+    } else {
+        line = registry.address + separator + packages + separator +
+               std::string(shown(text, words::registry_not_reviewed));
+    }
+    if (registry.mirrors > 0)
+        line += separator +
+                counted_things(
+                    registry.mirrors, words::registry_mirror_one, words::registry_mirror_many, text
+                );
+    if (!registry.built_in && registry.unreachable)
+        line += separator + unreached;
+    return line;
+}
+
+std::string registry_note(const std::vector<Registry>& registries, const TextHooks& text) {
+    std::vector<std::string> names;
+    for (const Registry& registry : registries)
+        if (registry.built_in)
+            names.push_back(registry.name);
+    if (names.empty())
+        return std::string(shown(text, words::registry_note_unnamed));
+    return filled(text, words::registry_note, {{"names", listed_names(names)}});
 }
 
 } // namespace oa::ui::library

@@ -502,10 +502,10 @@ void every_part_lies_inside_the_dialog_and_apart() {
                 // the footer.
                 const auto rows = geometry::place_rows(page, locks);
                 // Downloads' rows come from the offer, which this dialog leaves
-                // empty: the check, the downloaded files and the registries,
-                // and no install ID.
+                // empty, and it is not the main menu: the check and the
+                // downloaded files, no install ID and no link to the Library.
                 const std::size_t row_count =
-                    page == Page::downloads ? 3 : settings::page_settings(page).size();
+                    page == Page::downloads ? 2 : settings::page_settings(page).size();
                 CHECK(rows.rows.size() == row_count);
                 const auto open = geometry::open_rows(dialog);
                 CHECK(
@@ -4604,7 +4604,7 @@ void the_kit_gallery_row_moves_only_developers_list() {
         {Page::touch, 0xbb486b06e5b76dbf},
         {Page::controller, 0x4754d43dc9a9fbcb},
         {Page::game_files, 0xdc5976830185b9a4},
-        {Page::downloads, 0xecc6972ccf8db4e4},
+        {Page::downloads, 0x269e51ef899517e7},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -7033,8 +7033,9 @@ void menu_scaling_and_native_density_show_and_change() {
          {"Native pixel density",
           "The display's own pixel density (Retina on a Mac).",
           "Applies from the next start."})
-        CHECK(find_part(settings::dialog_layout(density_page), text, settings::no_control) !=
-              nullptr);
+        CHECK(
+            find_part(settings::dialog_layout(density_page), text, settings::no_control) != nullptr
+        );
 
     // A click on a caption picks it, and the hint follows.
     const auto click_caption = [&](std::string_view caption) {
@@ -7057,8 +7058,9 @@ void menu_scaling_and_native_density_show_and_change() {
     );
     // The switch, by a press and by Space.
     const auto density = geometry::open_rows(density_page).rows.rows[5].control_area;
-    CHECK(click(density_page, {density.x + density.width - 3, density.y + 4}) ==
-          DialogAction::changed);
+    CHECK(
+        click(density_page, {density.x + density.width - 3, density.y + 4}) == DialogAction::changed
+    );
     CHECK(density_page.chosen.native_density);
     density_page.focused = settings::first_row_control + 5;
     CHECK(settings::dialog_key(density_page, DialogKey::space) == DialogAction::changed);
@@ -8394,8 +8396,7 @@ void the_arrows_move_by_geometry() {
         return order;
     };
     CHECK(
-        tab_round(opened(Page::controls)) ==
-        then_rest({row, row + 1, row + 2, row + 3, row + 4})
+        tab_round(opened(Page::controls)) == then_rest({row, row + 1, row + 2, row + 3, row + 4})
     );
     CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1, row + 2}));
     // Language: Text size waits for the modern fonts.
@@ -8405,16 +8406,8 @@ void the_arrows_move_by_geometry() {
     );
     // Graphics: After zoom waits for Dots.
     CHECK(
-        tab_round(opened(Page::graphics)) == then_rest(
-                                                 {row,
-                                                  row + 1,
-                                                  row + 2,
-                                                  row + 3,
-                                                  row + 4,
-                                                  row + 5,
-                                                  row + 6,
-                                                  row + 7}
-                                             )
+        tab_round(opened(Page::graphics)) ==
+        then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5, row + 6, row + 7})
     );
     // User Interface: every row takes a change, Interface size among them.
     CHECK(

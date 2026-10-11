@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Downloads: when Open Annihilation looks for content, each registry's
-// install ID, the downloaded files, and the registries content comes from.
-// The rows are kit rows, built from the host's offer each time the page is
-// laid out or one of them is used. MANAGE… on the Registries row opens the
-// section's Registries part (registries_page.cpp).
+// install ID, and the downloaded files. On the main menu a link opens the
+// Library on its Registries tab, which lists the registries content comes
+// from. The rows are kit rows, built from the host's offer each time the
+// page is laid out or one of them is used.
 
 #include "downloads_page.hpp"
-#include "registries_page.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -34,7 +33,7 @@ static_assert(
         (manage_registries_action < geometry::first_folder_action ||
          manage_registries_action >=
              geometry::first_folder_action + static_cast<int32_t>(folder_button_count)),
-    "MANAGE… on the Registries row asks for an action no other row's button asks for"
+    "REGISTRIES IN THE LIBRARY… asks for an action no other row's button asks for"
 );
 
 namespace {
@@ -76,19 +75,20 @@ struct RowModel {
 
 /// What a row of the page is.
 enum class Role : uint8_t {
-    check,      ///< Check for content updates
-    toggle,     ///< an install ID's switch
-    id_value,   ///< an install ID's value and RESET
-    files,      ///< Downloaded files and EMPTY
-    registries, ///< Registries and MANAGE…
+    check,    ///< Check for content updates
+    toggle,   ///< an install ID's switch
+    id_value, ///< an install ID's value and RESET
+    files,    ///< Downloaded files and EMPTY
+    link,     ///< REGISTRIES IN THE LIBRARY…, on the main menu
 };
 
 /// Returns how many rows the page has.
 ///
 /// @param dialog the dialog
-/// @return the check, two rows per install ID, the files and the registries
+/// @return the check, two rows per install ID, the files, and the Library
+///     link on the main menu
 std::size_t row_count(const Dialog& dialog) noexcept {
-    return 3 + 2 * dialog.downloads.install_ids.size();
+    return 2 + 2 * dialog.downloads.install_ids.size() + (dialog.library_link ? 1 : 0);
 }
 
 /// Returns what the row at a place is.
@@ -99,9 +99,10 @@ std::size_t row_count(const Dialog& dialog) noexcept {
 Role role_of(const Dialog& dialog, std::size_t index) noexcept {
     if (index == 0)
         return Role::check;
-    if (index + 1 >= row_count(dialog))
-        return Role::registries;
-    if (index + 2 >= row_count(dialog))
+    const std::size_t count = row_count(dialog);
+    if (dialog.library_link && index + 1 == count)
+        return Role::link;
+    if (index + 1 + (dialog.library_link ? std::size_t{1} : std::size_t{0}) == count)
         return Role::files;
     return (index % 2) == 1 ? Role::toggle : Role::id_value;
 }
@@ -329,16 +330,6 @@ bool files_enabled(const RowModel& model) {
     return offer.kept_bytes > 0 && !offer.downloads_busy;
 }
 
-/// Returns the Registries row's value: how many registries are on of those
-/// listed, or the one built-in registry's name and "only" when it alone is
-/// on, as the player has the switches now.
-///
-/// @param model the row
-/// @return the value
-std::string registries_value(const RowModel& model) {
-    return registries::summary(*model.dialog);
-}
-
 /// Returns the lock RESET and EMPTY show during a game.
 ///
 /// @param model the row
@@ -433,16 +424,11 @@ kit::RowSpec<RowModel> spec_for(const RowModel& model) {
         spec.hint_is_status = game_running(locks_of(model));
         return spec;
     }
-    if (role == Role::registries) {
-        kit::RowSpec<RowModel> spec = kit::value_and_button(
-            "registries",
-            "Registries",
-            registries_value,
-            geometry::manage_text,
-            "manage",
-            manage_registries_action
+    if (role == Role::link) {
+        kit::RowSpec<RowModel> spec = kit::link<RowModel>(
+            "registries-in-library", "REGISTRIES IN THE LIBRARY…", manage_registries_action
         );
-        spec.control_width = geometry::manage_button_width;
+        spec.hint = {"Registries are in the Library.", {}};
         return spec;
     }
     kit::RowSpec<RowModel> spec = kit::value_and_button(
@@ -483,8 +469,7 @@ RowModel model_of(Dialog& dialog, const geometry::Row& row) {
     return {&dialog, &dialog.locks, index};
 }
 
-/// Notes a RESET's registry when a row asks for one, and opens the
-/// Registries part for MANAGE…, which asks nothing of the host.
+/// Notes a RESET's registry when a row asks for one.
 ///
 /// @param[in,out] dialog the dialog
 /// @param model the row
@@ -493,10 +478,6 @@ RowModel model_of(Dialog& dialog, const geometry::Row& row) {
 kit::RowResult note_reset(Dialog& dialog, const RowModel& model, const kit::RowResult& result) {
     if (result.event == kit::RowEvent::action && result.action == reset_install_id_action)
         note_registry(dialog, model);
-    if (result.event == kit::RowEvent::action && result.action == manage_registries_action) {
-        registries::show(dialog);
-        return {};
-    }
     return result;
 }
 
@@ -509,14 +490,6 @@ geometry::Rows place(
     kit::PlacedRows* placed
 ) {
     static_cast<void>(width);
-    // The Registries part shows in the rows' place: they are not placed.
-    if (registries::shown(dialog)) {
-        geometry::Rows none;
-        none.bottom = geometry::first_row_top;
-        if (placed != nullptr)
-            *placed = {};
-        return none;
-    }
     const std::size_t count = row_count(dialog);
     std::vector<kit::RowView> row_views;
     std::vector<bool> game_locked;

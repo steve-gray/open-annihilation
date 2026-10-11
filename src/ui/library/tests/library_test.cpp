@@ -698,6 +698,8 @@ void test_tabs_filters_tags() {
     OA_CHECK_TEXT(text, "Lang");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::updates, true), "Upd");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::updates, false), "Updates");
+    OA_CHECK_TEXT(lib::tab_text(lib::Tab::registries, true), "Reg");
+    OA_CHECK_TEXT(lib::tab_text(lib::Tab::registries, false), "Registries");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::mods, true), "Mods");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::active, true), "Active");
     OA_CHECK_TEXT(lib::tab_text(lib::Tab::active, false), "Active");
@@ -1758,6 +1760,92 @@ void test_texts() {
     );
 }
 
+/// The Registries tab's initials, ages, subtitles and note, in the words the
+/// Settings part used.
+void test_registry_texts() {
+    OA_CHECK_TEXT(lib::registry_initials("Core Prime"), "CP");
+    OA_CHECK_TEXT(lib::registry_initials("Example Maps"), "EM");
+    OA_CHECK_TEXT(lib::registry_initials("Kirby's laptop"), "KL");
+    OA_CHECK_TEXT(lib::registry_initials("ridge"), "RI");
+    OA_CHECK_TEXT(lib::registry_initials("North archive of maps"), "NAO");
+    OA_CHECK_TEXT(lib::registry_initials("  spaced  out  "), "SO");
+    OA_CHECK_TEXT(lib::registry_initials("简体中文"), "简体");
+    OA_CHECK_TEXT(lib::registry_initials(""), "");
+
+    OA_CHECK_TEXT(lib::registry_age_text(10), "just now");
+    OA_CHECK_TEXT(lib::registry_age_text(4 * 60), "4 min ago");
+    OA_CHECK_TEXT(lib::registry_age_text(3 * 3600 + 5), "3 h ago");
+    OA_CHECK_TEXT(lib::registry_age_text(30 * 3600), "1 day ago");
+    OA_CHECK_TEXT(lib::registry_age_text(5 * 86400), "5 days ago");
+
+    lib::Registry built;
+    built.name = "Core Prime";
+    built.built_in = true;
+    built.packages = 218;
+    built.checked_ago = 4 * 60;
+    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages · checked 4 min ago");
+    built.checked_ago.reset();
+    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages · not checked yet");
+    built.checked_ago = 2 * 86400;
+    built.unreachable = true;
+    OA_CHECK_TEXT(
+        lib::registry_subtitle(built), "218 packages · couldn't reach · list from 2 days ago"
+    );
+
+    lib::Registry added;
+    added.address = "maps.example.org";
+    added.packages = 31;
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "maps.example.org · 31 packages · not reviewed");
+    added.mirrors = 2;
+    OA_CHECK_TEXT(
+        lib::registry_subtitle(added), "maps.example.org · 31 packages · not reviewed · 2 mirrors"
+    );
+    added.mirrors = 1;
+    added.unreachable = true;
+    added.checked_ago = 60;
+    OA_CHECK_TEXT(
+        lib::registry_subtitle(added),
+        "maps.example.org · 31 packages · not reviewed · 1 mirror · couldn't reach · "
+        "list from 1 min ago"
+    );
+    added = {};
+    added.address = "192.168.1.20";
+    added.packages = 1;
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "192.168.1.20 · 1 package · not reviewed");
+
+    lib::Registry core;
+    core.name = "Core Prime";
+    core.built_in = true;
+    lib::Registry north;
+    north.name = "North";
+    north.built_in = true;
+    lib::Registry west;
+    west.name = "West";
+    west.built_in = true;
+    constexpr std::string_view tail =
+        " isn't reviewed by the OA team. OA still checks every package before using it.";
+    OA_CHECK_TEXT(
+        lib::registry_note({core}),
+        std::string("Content from registries other than Core Prime") + std::string(tail)
+    );
+    OA_CHECK_TEXT(
+        lib::registry_note({core, north}),
+        std::string("Content from registries other than Core Prime and North") + std::string(tail)
+    );
+    OA_CHECK_TEXT(
+        lib::registry_note({core, north, west}),
+        std::string("Content from registries other than Core Prime, North and West") +
+            std::string(tail)
+    );
+    lib::Registry only_added;
+    only_added.name = "Example";
+    OA_CHECK_TEXT(
+        lib::registry_note({only_added}),
+        "Content from these registries isn't reviewed by the OA team. OA still checks "
+        "every package before using it."
+    );
+}
+
 /// A made-up language for the lookup: every known pattern turned around.
 ///
 /// @param english the pattern
@@ -1816,6 +1904,7 @@ int main() {
     test_queue_lines();
     test_change_texts();
     test_texts();
+    test_registry_texts();
     test_lookup();
     return oa::test::check_exit_status();
 }

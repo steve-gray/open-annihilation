@@ -6,7 +6,8 @@
 // folder the game can play, and the download queue; the worker itself; the
 // Library as a screen of the layer (named library), its input and the
 // actions it asks for; and its opening, from the main menu's OA button, from
-// Settings › Language and by the runtime.
+// Settings › Language, from Settings › Downloads' registries link and by the
+// runtime.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
@@ -427,6 +428,8 @@ library::Tab library_tab_of(settings::LibraryTab tab) noexcept {
         return library::Tab::languages;
     case settings::LibraryTab::updates:
         return library::Tab::updates;
+    case settings::LibraryTab::registries:
+        return library::Tab::registries;
     }
     return library::Tab::mods;
 }
@@ -705,6 +708,13 @@ library::Inputs Runtime::library_inputs() {
                 descriptor.install_id != data::registry::InstallIdUse::required ||
                 content::read_install_id(preference_values_, descriptor.id).state !=
                     content::InstallIdState::off;
+            registry.on = view.registry.enabled;
+            registry.address = data::registry::address_text(descriptor);
+            registry.packages = view.catalogue ? view.catalogue->packages.size() : 0;
+            if (view.checked)
+                registry.checked_ago = std::max(now - *view.checked, int64_t{0});
+            registry.mirrors = view.registry.player_mirrors.size();
+            registry.unreachable = !view.last_error.empty();
             inputs.registries.push_back(std::move(registry));
             if (!view.registry.enabled)
                 continue;
@@ -1033,6 +1043,7 @@ library::Inputs Runtime::library_inputs() {
             {map.title.empty() ? map.stem : map.title, map.players, map.size}
         );
     }
+    inputs.registries_notice = registry_edit_notice();
     return inputs;
 }
 
@@ -1136,7 +1147,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
     /// @return what the Library did; pass for every other key
     LayerAnswer shortcut(uint32_t sdl_key, uint16_t modifiers) override {
         if (Runtime::engine_settings_shortcut(sdl_key, modifiers))
-            return take({library::Action::settings, {}, true});
+            return take({.action = library::Action::settings, .redraw = true});
         LibraryHost& host = runtime_.library_host();
         std::optional<library::ScreenCommand> command;
         if (sdl_key == SDLK_F && (modifiers & kCommandModifier) != 0)
@@ -1291,7 +1302,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
     LayerAnswer take(const library::ScreenResult& result) {
         bool closes = false;
         if (result.action)
-            closes = act(*result.action, result.entry);
+            closes = act(result);
         if (closes)
             return LayerAnswer::close;
         if (!result.redraw && !result.action)
@@ -1378,10 +1389,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
 
     /// Carries out one of the Library's actions.
     ///
-    /// @param action what was pressed
-    /// @param id the entry an entry's action is for
+    /// @param result what the input asked for
     /// @return true when the Library closes
-    bool act(library::Action action, const library::EntryId& id) {
+    bool act(const library::ScreenResult& result) {
+        const library::Action action = *result.action;
+        const library::EntryId& id = result.entry;
         LibraryHost& host = runtime_.library_host();
         const library::Entry* entry = library::find_entry(host.model, id);
         switch (action) {
@@ -1429,6 +1441,18 @@ struct Runtime::LibraryScreen final : LayerScreen {
             return true;
         case library::Action::details:
         case library::Action::back:
+            return false;
+        case library::Action::add_registry:
+            runtime_.open_add_registry(std::nullopt);
+            return false;
+        case library::Action::add_mirror:
+            runtime_.open_add_mirror(result.registry);
+            return false;
+        case library::Action::remove_registry:
+            runtime_.remove_library_registry(result.registry);
+            return false;
+        case library::Action::set_registry:
+            runtime_.change_library_registry(result.registry, result.registry_on);
             return false;
         case library::Action::uninstall:
             runtime_.library_entry_action(action, id);

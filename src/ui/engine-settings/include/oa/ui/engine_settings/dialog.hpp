@@ -81,10 +81,9 @@ enum class Page : uint8_t {
     /// platform brings game files in and the dialog is the main menu's
     /// (Dialog::game_files)
     game_files,
-    /// Downloads: when catalogues are checked, each registry's install ID,
-    /// the downloaded files, and the registries, whose MANAGE… opens the
-    /// section's Registries part (Dialog::downloads_part). Listed after Game
-    /// files and before Developer.
+    /// Downloads: when catalogues are checked, each registry's install ID
+    /// and the downloaded files. On the main menu a link opens the Library
+    /// on Registries. Listed after Game files and before Developer.
     downloads,
     mod_keys,   ///< the mod's keys
     mod_patrol, ///< what patrolling builders do
@@ -310,41 +309,6 @@ static_assert(
     "every engine section has an entry's number, and every section a scroll"
 );
 
-/// The Registries part's ‹ DOWNLOADS link, at the left of its heading: the
-/// first row's control while that part shows (DownloadsPart::registries).
-inline constexpr int32_t registries_back_control = first_row_control;
-/// The controls each registry of the Registries part keeps a number for: its
-/// switch, then REMOVE or UNDO, then ADD MIRROR…. A built-in registry shows
-/// its switch alone, and its other two numbers stay unused.
-inline constexpr int32_t registry_row_controls = 3;
-/// ADD REGISTRY…, in the footer where Restore defaults stands while the
-/// Registries part shows.
-inline constexpr int32_t add_registry_control = restore_control;
-
-/// Returns the switch of a registry of the Registries part.
-///
-/// @param index the registry's place in the part, from 0
-/// @return its control's number
-[[nodiscard]] constexpr int32_t registry_switch_control(std::size_t index) noexcept {
-    return registries_back_control + 1 + registry_row_controls * static_cast<int32_t>(index);
-}
-
-/// Returns a registry's REMOVE, or its UNDO once it is marked for removal.
-///
-/// @param index the registry's place in the part, from 0
-/// @return its control's number
-[[nodiscard]] constexpr int32_t registry_remove_control(std::size_t index) noexcept {
-    return registry_switch_control(index) + 1;
-}
-
-/// Returns a registry's ADD MIRROR….
-///
-/// @param index the registry's place in the part, from 0
-/// @return its control's number
-[[nodiscard]] constexpr int32_t registry_mirror_control(std::size_t index) noexcept {
-    return registry_switch_control(index) + 2;
-}
-
 /// The first registered page's entry. Each next page's counts down from it,
 /// under an open list's items.
 inline constexpr int32_t first_registered_nav_control = -10000;
@@ -514,13 +478,11 @@ enum class DialogAction : uint8_t {
     /// An available language was chosen: download Dialog::download_request,
     /// keep the dialog open, and apply the language when its pack arrives
     download_language,
-    /// ADD REGISTRY… in the Registries part: the host opens the Add registry
-    /// window over the dialog, which stays open. What that window adds stays
-    /// added whether the dialog ends with OK or Cancel.
+    /// Kept so a host's switch over every action still compiles. The Library's
+    /// Registries tab asks for its own add, not this.
     add_registry,
-    /// ADD MIRROR… on an added registry's row: the host opens the Add
-    /// registry window for a mirror of Dialog::mirror_request, over the
-    /// dialog, which stays open.
+    /// Kept so a host's switch over every action still compiles. The Library's
+    /// Registries tab asks for its own mirror, not this.
     add_mirror,
     /// MORE IN THE LIBRARY… was pressed: the host opens the Library on
     /// Dialog::library_tab over the dialog, which stays open under it
@@ -534,10 +496,11 @@ enum class DialogAction : uint8_t {
 /// (DialogAction::open_library). It mirrors the Library's own tabs, so that
 /// the dialog needs nothing of the Library.
 enum class LibraryTab : uint8_t {
-    mods,      ///< Mods
-    maps,      ///< Maps
-    languages, ///< Languages
-    updates,   ///< Updates
+    mods,       ///< Mods
+    maps,       ///< Maps
+    languages,  ///< Languages
+    updates,    ///< Updates
+    registries, ///< Registries
 };
 
 /// How the OA button looks.
@@ -686,65 +649,6 @@ struct DownloadsOffer {
 struct InstallIdChoice {
     std::string registry_id; ///< the registry's id
     bool on{true};           ///< the switch
-};
-
-/// Which view of the Downloads section shows.
-enum class DownloadsPart : uint8_t {
-    /// the check for content updates, the install IDs, the downloaded files
-    /// and the Registries row
-    main,
-    /// DOWNLOADS · REGISTRIES, which the Registries row's MANAGE… opens:
-    /// every registry with its switch, and REMOVE and ADD MIRROR… for those
-    /// the player added
-    registries,
-};
-
-/// One registry the Registries part lists. The host fills it from the
-/// registries in effect; the part reads no registry itself.
-struct RegistryRow {
-    std::string id;         ///< the registry's id, kebab-case
-    std::string name;       ///< the name its descriptor gives
-    std::string address;    ///< its catalogue's host, and the port when it is not 80
-    bool built_in{};        ///< ships with the game: it can be turned off, not removed
-    bool on{true};          ///< turned on, as the player's registry list stores it
-    std::size_t packages{}; ///< the packages the catalogue kept for it lists
-    /// How long ago a refresh last found a usable catalogue for it, in
-    /// seconds; none when no refresh ever has.
-    std::optional<int64_t> checked_ago{};
-    std::size_t mirrors{}; ///< the mirrors the player added for it
-    bool unreachable{};    ///< the last refresh found nothing usable
-};
-
-/// What the Registries part shows, which the host gives with
-/// set_registries_offer. The switches and removals the player makes live on
-/// the dialog and take effect at OK.
-struct RegistriesOffer {
-    /// The registries, built-in ones first, then the player's, as they are in effect.
-    std::vector<RegistryRow> registries;
-    /// Why the last OK could not change a registry, which the part's note
-    /// shows in amber; empty for none.
-    std::string notice;
-};
-
-/// One registry's switch and removal, as the player has them in the
-/// Registries part.
-struct RegistryChoice {
-    std::string id; ///< the registry's id
-    bool on{true};  ///< the switch
-    bool removed{}; ///< REMOVE was pressed and not undone: the registry goes at OK
-};
-
-/// What OK does to one registry.
-enum class RegistryChangeKind : uint8_t {
-    turn_on,  ///< turn it on
-    turn_off, ///< turn it off
-    remove,   ///< remove it; only a registry the player added is ever removed
-};
-
-/// One change OK makes to a registry.
-struct RegistryChange {
-    std::string id;                                       ///< the registry's id
-    RegistryChangeKind kind{RegistryChangeKind::turn_on}; ///< what OK does to it
 };
 
 /// One registered settings page the engine's dialog lists after its own
@@ -918,20 +822,6 @@ struct Dialog {
     std::vector<InstallIdChoice> install_id_opened{};
     /// The registry the last RESET names.
     std::string install_id_registry{};
-    /// Which view of Downloads shows; showing another section, or opening
-    /// the dialog, goes back to the main one.
-    DownloadsPart downloads_part{DownloadsPart::main};
-    /// What the Registries part shows, which the host sets with
-    /// set_registries_offer after the dialog has opened. open_dialog clears it.
-    RegistriesOffer registries{};
-    /// Each registry's switch and removal as the player has them, in
-    /// registries.registries' order. They take effect at OK
-    /// (registry_changes).
-    std::vector<RegistryChoice> registry_chosen{};
-    /// Those as the registries were given, which Cancel puts back.
-    std::vector<RegistryChoice> registry_opened{};
-    /// The registry the last DialogAction::add_mirror names.
-    std::string mirror_request{};
     /// The size class it is laid out at: its size, padding, section list and
     /// content column are the class's (oa::ui::kit::metrics_of), and a larger
     /// class shows more rows, each at its Compact size. A host sets it from
@@ -1095,26 +985,6 @@ void open_dialog(
 /// @param[in,out] dialog the dialog
 /// @param offer what Downloads shows
 void set_downloads_offer(Dialog& dialog, const DownloadsOffer& offer);
-
-/// Gives the Registries part what it shows. Each registry keeps the switch
-/// and removal the player gave it while the dialog was open, matched by id;
-/// a registry the dialog has not listed before takes its stored switch, both
-/// as chosen and as opened, so that one added while the dialog is open
-/// stays as it was added whether the dialog ends with OK or Cancel. A
-/// registry no longer listed drops out.
-///
-/// @param[in,out] dialog the dialog
-/// @param offer what the Registries part shows
-void set_registries_offer(Dialog& dialog, const RegistriesOffer& offer);
-
-/// Returns the changes OK makes to the registries: each registry marked for
-/// removal is removed, and each other registry whose switch differs from the
-/// one it was given is turned on or off. A built-in registry is never
-/// removed.
-///
-/// @param dialog the dialog
-/// @return the changes, in the Registries part's order
-[[nodiscard]] std::vector<RegistryChange> registry_changes(const Dialog& dialog);
 
 /// Opens the dialog over a mod's options (ui.options-dialog): its sections
 /// list the mod options alone, and only EngineSettings::mod_options change.
@@ -1284,8 +1154,7 @@ set_controller_section(Dialog& dialog, bool controller, bool steam_input) noexce
 
 /// Takes a key.
 ///
-/// Enter is OK and Escape Cancel, whatever has the focus, but Escape in
-/// Downloads' Registries part goes back to Downloads' own rows. Tab and Shift+Tab
+/// Enter is OK and Escape Cancel, whatever has the focus. Tab and Shift+Tab
 /// move the focus to the next and the previous control in the declared
 /// order, round from one end to the other: the open section's rows that
 /// take a change (on Developer, then its list's rows, Show Active Only and,

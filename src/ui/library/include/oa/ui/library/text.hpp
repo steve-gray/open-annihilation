@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace oa::ui::library {
 
@@ -30,6 +31,9 @@ inline constexpr std::string_view tab_languages = "Languages";
 inline constexpr std::string_view tab_languages_short = "Lang";
 inline constexpr std::string_view tab_updates = "Updates";
 inline constexpr std::string_view tab_updates_short = "Upd";
+inline constexpr std::string_view tab_registries = "Registries";
+/// Compact's short name, as Languages and Updates have.
+inline constexpr std::string_view tab_registries_short = "Reg";
 inline constexpr std::string_view filter_all = "All";
 inline constexpr std::string_view filter_new = "New";
 inline constexpr std::string_view filter_installed = "Installed";
@@ -62,6 +66,30 @@ inline constexpr std::string_view action_check_now = "CHECK NOW";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
 inline constexpr std::string_view action_uninstall = "UNINSTALL";
+
+// The Registries tab. The words are the ones Downloads' Registries part used.
+inline constexpr std::string_view registry_built_in = "Built in";
+inline constexpr std::string_view registry_add = "ADD REGISTRY…";
+inline constexpr std::string_view registry_add_mirror = "ADD MIRROR…";
+inline constexpr std::string_view registry_remove = "REMOVE";
+inline constexpr std::string_view registry_game_lock = "Choose from the main menu.";
+inline constexpr std::string_view registry_off = "OFF";
+inline constexpr std::string_view registry_on = "ON";
+inline constexpr std::string_view registry_unreachable = "couldn't reach";
+inline constexpr std::string_view registry_not_reviewed = "not reviewed";
+inline constexpr std::string_view registry_checked = "checked {age}";
+inline constexpr std::string_view registry_not_checked = "not checked yet";
+inline constexpr std::string_view registry_one_day = "1 day ago";
+inline constexpr std::string_view registry_package_one = "{n} package";
+inline constexpr std::string_view registry_package_many = "{n} packages";
+inline constexpr std::string_view registry_mirror_one = "{n} mirror";
+inline constexpr std::string_view registry_mirror_many = "{n} mirrors";
+inline constexpr std::string_view registry_note =
+    "Content from registries other than {names} isn't reviewed by the OA team. OA still checks "
+    "every package before using it.";
+inline constexpr std::string_view registry_note_unnamed =
+    "Content from these registries isn't reviewed by the OA team. OA still checks "
+    "every package before using it.";
 
 // Why GET or UPDATE is off.
 inline constexpr std::string_view blocked_in_match = "Not during a game";
@@ -553,5 +581,42 @@ engine_short_text(const formats::oamod::EngineRange& range, const TextHooks& tex
 /// @param text how texts are looked up
 /// @return the button's words
 [[nodiscard]] std::string_view action_text(Action action, const TextHooks& text = {});
+
+/// Returns a registry's avatar: the first letters of its first three words
+/// when its name has two or more, or the first two letters of its one word,
+/// in upper case.
+///
+/// @param name the registry's name, in UTF-8
+/// @return at most three characters
+[[nodiscard]] std::string registry_initials(std::string_view name);
+
+/// Returns how long ago a registry was checked, as its subtitle says it:
+/// "just now" under a minute, then whole minutes, hours and days, and
+/// "1 day ago" through the second day.
+///
+/// @param seconds how long ago, in seconds
+/// @param text how texts are looked up
+/// @return such as "4 min ago", "2 h ago" or "3 days ago"
+[[nodiscard]] std::string registry_age_text(int64_t seconds, const TextHooks& text = {});
+
+/// Returns a registry's subtitle. A built-in one: "{n} packages · checked
+/// {age}". An added one: "{address} · {n} packages · not reviewed", with
+/// " · {k} mirrors" after it when the player added mirrors. When the last
+/// refresh found nothing usable, "couldn't reach · list from {age}" stands
+/// where a built-in registry's checked age stands, and after an added one's.
+///
+/// @param registry the registry
+/// @param text how texts are looked up
+/// @return the subtitle
+[[nodiscard]] std::string registry_subtitle(const Registry& registry, const TextHooks& text = {});
+
+/// Returns the note under the Registries list: content from registries other
+/// than the built-in ones, named, is not reviewed by the OA team.
+///
+/// @param registries the registries, in the order they are listed
+/// @param text how texts are looked up
+/// @return the note
+[[nodiscard]] std::string
+registry_note(const std::vector<Registry>& registries, const TextHooks& text = {});
 
 } // namespace oa::ui::library

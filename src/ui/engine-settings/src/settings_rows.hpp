@@ -51,7 +51,7 @@ inline constexpr oa::ui::kit::ActionId first_folder_action = 1;
 /// (downloads_page.hpp).
 inline constexpr oa::ui::kit::ActionId open_library_action = 6;
 /// What SHOW, Developer's UI kit gallery's button, asks for: the gallery.
-/// It follows MORE IN THE LIBRARY… and Downloads' MANAGE…
+/// It follows MORE IN THE LIBRARY… and Downloads' REGISTRIES IN THE LIBRARY…
 /// (downloads_page.hpp).
 inline constexpr oa::ui::kit::ActionId show_gallery_action = 8;
 

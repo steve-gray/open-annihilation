@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The registries' host: the Add registry window on the OA layer, the
-// Registries part's offer in Settings › Downloads, and the changes OK makes.
-// The window reads a typed address first and refuses one OA cannot fetch
-// without asking the content service; every other check and every change is
-// the content service's, which applies the registry rules and verifies each
-// catalogue with the keys being trusted. Nothing here fetches, verifies or
-// writes a registry itself.
+// The registries' host: the Add registry window on the OA layer, and the
+// changes the Library's Registries tab makes at once. The window reads a
+// typed address first and refuses one OA cannot fetch without asking the
+// content service; every other check and every change is the content
+// service's, which applies the registry rules and verifies each catalogue
+// with the keys being trusted. Nothing here fetches, verifies or writes a
+// registry itself.
 
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "user_folder_state.hpp"
 
@@ -30,7 +31,6 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -229,16 +229,6 @@ const content::RegistryView* view_of(const content::Snapshot& snapshot, std::str
     return nullptr;
 }
 
-/// Returns now, in seconds since 1970, as the content service's checked times are.
-///
-/// @return the time
-int64_t seconds_now() {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-               std::chrono::system_clock::now().time_since_epoch()
-    )
-        .count();
-}
-
 /// Writes a line to standard error, which the log keeps.
 ///
 /// @param line the line
@@ -247,12 +237,12 @@ void log_line(std::string_view line) {
 }
 
 /// What outlives one window: the window showing, how many checks the
-/// windows asked the content service for, and why the last OK could not
-/// change a registry.
+/// windows asked the content service for, and why the last change of a
+/// registry was refused.
 struct RegistriesHold {
     const LayerScreen* live{}; ///< the window showing; null for none
     uint64_t checks_asked{};   ///< checks asked of the content service
-    std::string notice;        ///< the next Registries part's note
+    std::string notice;        ///< why the last change was refused; empty when it was kept
 };
 
 RegistriesHold hold;
@@ -620,8 +610,9 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
         else
             log_line("added " + model_.shown.name + ": " + model_.shown.address);
         request_ = 0;
-        if (settings::Dialog* dialog = runtime_.engine_settings_dialog())
-            runtime_.give_settings_registries(*dialog, false);
+        // The new registry is listed at once when the Library is open, and
+        // a refusal shown before this add is cleared.
+        runtime_.finish_registry_edit({});
         return LayerAnswer::close;
     }
 
@@ -737,70 +728,52 @@ uint64_t Runtime::registry_checks_asked() const noexcept {
     return hold.checks_asked;
 }
 
-void Runtime::give_settings_registries(settings::Dialog& dialog, bool opening) {
-    settings::RegistriesOffer offer;
-    if (opening) {
-        offer.notice = std::move(hold.notice);
-        hold.notice.clear();
-    } else {
-        offer.notice = dialog.registries.notice;
-    }
-    const std::shared_ptr<const content::Snapshot> snapshot = content_service().snapshot();
-    if (snapshot) {
-        const int64_t now = seconds_now();
-        for (const content::RegistryView& listed : snapshot->registries) {
-            // An added registry whose id a built-in one has taken is never
-            // used; the built-in registry stands for it.
-            if (listed.registry.conflicting)
-                continue;
-            const registry::Descriptor& descriptor = listed.registry.descriptor;
-            settings::RegistryRow row;
-            row.id = descriptor.id;
-            row.name = descriptor.name;
-            row.address = registry::address_text(descriptor);
-            row.built_in = listed.registry.origin == registry::Origin::built_in;
-            row.on = listed.registry.enabled;
-            row.packages = listed.catalogue ? listed.catalogue->packages.size() : 0;
-            if (listed.checked)
-                row.checked_ago = std::max(now - *listed.checked, int64_t{0});
-            row.mirrors = listed.registry.player_mirrors.size();
-            row.unreachable = !listed.last_error.empty();
-            offer.registries.push_back(std::move(row));
-        }
-    }
-    settings::set_registries_offer(dialog, offer);
+namespace {
+
+/// Returns the sentence the Registries tab shows when a change is refused,
+/// and writes the refusal to the log. Empty when the change was kept.
+///
+/// @param id the registry's id
+/// @param refusal what the content service answered
+/// @param why the content service's own words; empty to use the refusal's
+/// @return the sentence; empty when nothing was refused
+std::string refused_notice(std::string_view id, registry::Refusal refusal, const std::string& why) {
+    if (refusal == registry::Refusal::none)
+        return {};
+    const std::string reason = why.empty() ? std::string(registry::refusal_text(refusal)) : why;
+    log_line(
+        std::string(id) + ": not changed: " + std::string(registry::refusal_text(refusal)) +
+        (why.empty() ? std::string() : " (" + why + ")")
+    );
+    std::string notice = "OA could not change the registries: " + reason;
+    while (!notice.empty() && notice.back() == '.')
+        notice.pop_back();
+    notice += '.';
+    return notice;
 }
 
-void Runtime::apply_registry_changes(const std::vector<settings::RegistryChange>& changes) {
-    if (changes.empty())
-        return;
-    content::Service& service = content_service();
-    for (const settings::RegistryChange& change : changes) {
-        std::string why;
-        registry::Refusal refusal = registry::Refusal::none;
-        switch (change.kind) {
-        case settings::RegistryChangeKind::turn_on:
-        case settings::RegistryChangeKind::turn_off:
-            refusal = service.set_registry_enabled(
-                change.id, change.kind == settings::RegistryChangeKind::turn_on, &why
-            );
-            break;
-        case settings::RegistryChangeKind::remove:
-            refusal = service.remove_registry(change.id, &why);
-            break;
-        }
-        if (refusal == registry::Refusal::none)
-            continue;
-        const std::string reason = why.empty() ? std::string(registry::refusal_text(refusal)) : why;
-        log_line(
-            change.id + ": not changed: " + registry::refusal_text(refusal) +
-            (why.empty() ? std::string() : " (" + why + ")")
-        );
-        hold.notice = "OA could not change the registries: " + reason;
-        while (!hold.notice.empty() && hold.notice.back() == '.')
-            hold.notice.pop_back();
-        hold.notice += '.';
-    }
+} // namespace
+
+void Runtime::finish_registry_edit(std::string notice) {
+    hold.notice = std::move(notice);
+    if (library_)
+        library_->rebuild(*this);
+}
+
+std::string Runtime::registry_edit_notice() const {
+    return hold.notice;
+}
+
+void Runtime::change_library_registry(std::string_view id, bool on) {
+    std::string why;
+    const registry::Refusal refusal = content_service().set_registry_enabled(id, on, &why);
+    finish_registry_edit(refused_notice(id, refusal, why));
+}
+
+void Runtime::remove_library_registry(std::string_view id) {
+    std::string why;
+    const registry::Refusal refusal = content_service().remove_registry(id, &why);
+    finish_registry_edit(refused_notice(id, refusal, why));
 }
 
 } // namespace oa::app

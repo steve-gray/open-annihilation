@@ -76,7 +76,11 @@ struct ScreenResult {
     /// browsing, DETAILS and the way back from the details page.
     std::optional<Action> action{};
     EntryId entry{}; ///< the entry an entry's action is for; empty for the others
-    bool redraw{};   ///< what the screen shows changed: lay it out and draw it again
+    /// The registry a Registries-tab action names: ADD MIRROR…, REMOVE or its switch.
+    std::string registry{};
+    /// The switch's new state, for Action::set_registry.
+    bool registry_on{};
+    bool redraw{}; ///< what the screen shows changed: lay it out and draw it again
 };
 
 /// What a pointer did, as the OA layer passes it to a screen.

@@ -41,7 +41,7 @@ inline constexpr kit::ControlId back = 51;
 inline constexpr kit::ControlId settings = 52;
 /// CLOSE.
 inline constexpr kit::ControlId close = 53;
-/// CHECK NOW.
+/// CHECK NOW. 54 is the next footer number after CLOSE.
 inline constexpr kit::ControlId check_now = 54;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
@@ -57,6 +57,13 @@ inline constexpr kit::ControlId rules = 64;
 inline constexpr kit::ControlId active_mod = 65;
 /// The Active tab's line on the language in use.
 inline constexpr kit::ControlId active_language = 66;
+/// ADD REGISTRY… on the Registries tab. 70–72 are free between the Active
+/// lines (66) and the action buttons (100).
+inline constexpr kit::ControlId add_registry = 70;
+/// The Registries tab's amber note, when a change was refused.
+inline constexpr kit::ControlId registries_notice = 71;
+/// The note under the Registries list.
+inline constexpr kit::ControlId registries_note = 72;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.
@@ -73,8 +80,18 @@ inline constexpr std::size_t most_active_maps = 4000;
 /// A row: this and the entry's place in the model's visible entries, below first_row_icon.
 inline constexpr kit::ControlId first_row = 10000;
 /// A row's state icon that is pressed as GET or UPDATE: this and the
-/// entry's place in the model's visible entries.
+/// entry's place in the model's visible entries, below first_registry.
 inline constexpr kit::ControlId first_row_icon = 1000000;
+/// A Registries-tab switch: this and the registry's place in the inputs.
+/// Switches occupy 2000000 until 3000000, REMOVE 3000000 until 4000000 and
+/// ADD MIRROR… 4000000 until 5000000, after the row icons at 1000000.
+inline constexpr kit::ControlId first_registry = 2000000;
+/// A Registries-tab REMOVE: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_remove = 3000000;
+/// A Registries-tab ADD MIRROR…: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_mirror = 4000000;
+/// The first number after the Registries-tab controls.
+inline constexpr kit::ControlId registry_controls_end = 5000000;
 
 /// The list's scroll area, the group of its rows.
 inline constexpr int32_t list_group = 0;
@@ -100,9 +117,45 @@ inline constexpr int32_t details_group = 1;
 /// Tells whether a control is a row's state icon.
 ///
 /// @param id the control
-/// @return true from first_row_icon on
+/// @return true from first_row_icon up to the Registries-tab controls
 [[nodiscard]] constexpr bool row_icon_control(kit::ControlId id) noexcept {
-    return id >= first_row_icon;
+    return id >= first_row_icon && id < first_registry;
+}
+
+/// Tells whether a control is a registry's switch.
+///
+/// @param id the control
+/// @return true for a Registries-tab switch
+[[nodiscard]] constexpr bool registry_switch_control(kit::ControlId id) noexcept {
+    return id >= first_registry && id < first_registry_remove;
+}
+
+/// Tells whether a control is a registry's REMOVE.
+///
+/// @param id the control
+/// @return true for a Registries-tab REMOVE
+[[nodiscard]] constexpr bool registry_remove_control(kit::ControlId id) noexcept {
+    return id >= first_registry_remove && id < first_registry_mirror;
+}
+
+/// Tells whether a control is a registry's ADD MIRROR….
+///
+/// @param id the control
+/// @return true for a Registries-tab ADD MIRROR…
+[[nodiscard]] constexpr bool registry_mirror_control(kit::ControlId id) noexcept {
+    return id >= first_registry_mirror && id < registry_controls_end;
+}
+
+/// Returns the registry a Registries-tab control belongs to.
+///
+/// @param id a switch, REMOVE or ADD MIRROR… of the tab
+/// @return its place in the inputs, from 0
+[[nodiscard]] constexpr std::size_t registry_index(kit::ControlId id) noexcept {
+    if (id >= first_registry_mirror)
+        return static_cast<std::size_t>(id - first_registry_mirror);
+    if (id >= first_registry_remove)
+        return static_cast<std::size_t>(id - first_registry_remove);
+    return static_cast<std::size_t>(id - first_registry);
 }
 
 /// Returns a filter's chip's or nav entry's control.

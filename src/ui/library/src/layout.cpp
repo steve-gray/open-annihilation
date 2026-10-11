@@ -3,9 +3,9 @@
 
 // The Library's layout at Compact, Regular and Large, made of the UI kit's
 // components: the window's face, header and footer, the tabs, the search,
-// the filters with their counts, the list and the details, and the Active
-// tab's setup, every control named for automation. It reads the model and
-// decides none of its rules.
+// the filters with their counts, the list and the details, the Active tab's
+// setup, and the Registries tab's rows, every control named for automation.
+// It reads the model and decides none of its rules.
 #include "oa/ui/library/screen.hpp"
 
 #include "oa/ui/kit/chrome.hpp"
@@ -81,11 +81,11 @@ constexpr std::string_view name_prefix = "library.";
 
 /// The tabs, in the order they are shown.
 constexpr std::array<Tab, tab_total> tab_order{
-    Tab::active, Tab::mods, Tab::maps, Tab::languages, Tab::updates
+    Tab::active, Tab::mods, Tab::maps, Tab::languages, Tab::updates, Tab::registries
 };
 /// The words the tabs are named by, in that order.
 constexpr std::array<std::string_view, tab_total> tab_words{
-    "active", "mods", "maps", "languages", "updates"
+    "active", "mods", "maps", "languages", "updates", "registries"
 };
 /// The filters, in the order they are shown.
 constexpr std::array<Filter, filter_total> filter_order{
@@ -132,6 +132,14 @@ std::string_view action_word(Action action) {
         return "settings";
     case Action::close:
         return "close";
+    case Action::add_registry:
+        return "add-registry";
+    case Action::add_mirror:
+        return "add-mirror";
+    case Action::remove_registry:
+        return "remove";
+    case Action::set_registry:
+        return "registry";
     case Action::uninstall:
         return "uninstall";
     }
@@ -164,6 +172,17 @@ std::string name_word(std::string_view text) {
     }
     if (word.empty())
         word = "x";
+    return word;
+}
+
+/// Returns the word a registry's controls are named by.
+///
+/// @param id the registry's id
+/// @return the word; "registry" when the id keeps none
+std::string registry_word(std::string_view id) {
+    std::string word = name_word(id);
+    if (word == "x")
+        return "registry";
     return word;
 }
 
@@ -786,10 +805,11 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
 /// Returns the search field's words while it is empty, for the open tab.
 ///
 /// @param library the model
-/// @return the words, looked up; none on the Active tab, which has no search
+/// @return the words, looked up; none on Active and Registries, which have no search
 std::string_view placeholder_of(const Library& library) {
     switch (library.tab) {
     case Tab::active:
+    case Tab::registries:
         return {};
     case Tab::mods:
         return shown(library.text, words::search_mods);
@@ -1968,9 +1988,294 @@ void add_active(Building& building, const kit::Rect& area) {
     }
 }
 
+/// Appends a registry's Off/On switch, in the details' scroll.
+///
+/// @param[in,out] building the layout
+/// @param rect the switch
+/// @param on the switch is On
+/// @param id its control's number
+/// @param name its control's name
+/// @param clip the part of it that shows
+void add_registry_switch(
+    Building& building,
+    const kit::Rect& rect,
+    bool on,
+    kit::ControlId id,
+    std::string name,
+    const kit::Rect& clip
+) {
+    const Library& library = *building.library;
+    kit::SwitchLook look;
+    look.on = on;
+    look.hovered = hovered(building, id);
+    look.off_caption = std::string(shown(library.text, words::registry_off));
+    look.on_caption = std::string(shown(library.text, words::registry_on));
+    const std::size_t before = building.list.controls.size();
+    kit::add_switch(building.list, rect, look, id, unique_name(building, std::move(name)));
+    building.list.items.back().clip = clip;
+    move_controls(building.list, before, building.detail);
+    building.detail.back().clip = clip;
+    building.detail.back().group = controls::details_group;
+    tab_stop(building, building.detail.back());
+}
+
+/// Appends the Registries tab's parts, scrolled up by an offset: one row
+/// for each registry (its avatar, name, subtitle and switch; REMOVE and
+/// ADD MIRROR… for one the player added), then the refusal in amber and
+/// the note under the list. Each control is in the details' scroll area.
+///
+/// @param[in,out] building the layout
+/// @param view the area, which clips them
+/// @param width the columns they take from the area's left
+/// @param offset how far they are scrolled up, in points
+/// @return the parts' height, in points
+int32_t
+add_registries_content(Building& building, const kit::Rect& view, int32_t width, int32_t offset) {
+    const Library& library = *building.library;
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t first = view.y - offset;
+    const int32_t left = view.x;
+    const std::size_t first_item = building.list.items.size();
+    int32_t cursor = first;
+    const std::vector<Registry>& registries = library.inputs.registries;
+    for (std::size_t index = 0; index < registries.size(); ++index) {
+        const Registry& registry = registries[index];
+        const std::string word = registry_word(registry.id);
+        const int32_t line = cursor + metrics.row_padding;
+        const int32_t side = metrics.list_row_badge;
+        add_item(building.list, kit::Role::rule, {left, cursor, width, metrics.hairline}, view)
+            .colour = kit::colour::rule;
+
+        const kit::Rect avatar{left, line + 1, side, side};
+        add_item(building.list, kit::Role::fill, avatar, view).colour =
+            registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
+        add_text(
+            building,
+            kit::FontRole::small,
+            cut(building, kit::FontRole::small, registry_initials(registry.name), side),
+            avatar,
+            kit::Align::centre,
+            kit::colour::on_accent,
+            view
+        );
+
+        const int32_t text_left = left + side + metrics.list_row_gap;
+        const kit::Rect toggle{
+            left + width - metrics.switch_width, line, metrics.switch_width, metrics.regular_line
+        };
+        const int32_t title_width = std::max(toggle.x - metrics.label_gap - text_left, int32_t{0});
+        int32_t chip_span = 0;
+        kit::ChipLook chip;
+        if (registry.built_in) {
+            chip.text = std::string(shown(library.text, words::registry_built_in));
+            chip.state = kit::ChipState::installed;
+            chip_span = kit::chip_width(*building.fonts, chip) + metrics.list_row_gap;
+        }
+        const int32_t name_room = std::max(title_width - chip_span, int32_t{0});
+        const std::string name = cut(building, kit::FontRole::regular, registry.name, name_room);
+        const int32_t name_width = width_of(building, kit::FontRole::regular, name);
+        add_text(
+            building,
+            kit::FontRole::regular,
+            name,
+            {text_left, line, std::max(name_width, int32_t{0}), metrics.regular_line},
+            kit::Align::left,
+            kit::colour::text,
+            view
+        );
+        if (registry.built_in && name_width + chip_span <= title_width) {
+            const int32_t chip_width = chip_span - metrics.list_row_gap;
+            const kit::Rect chip_rect{
+                text_left + name_width + metrics.list_row_gap,
+                line + (metrics.regular_line - metrics.chip_height) / 2,
+                chip_width,
+                metrics.chip_height,
+            };
+            kit::add_chip(building.list, chip_rect, chip, kit::no_control, {});
+            building.list.items.back().clip = view;
+        }
+        add_registry_switch(
+            building,
+            toggle,
+            registry.on,
+            controls::first_registry + static_cast<kit::ControlId>(index),
+            named("registry." + word),
+            view
+        );
+
+        const int32_t subtitle_top = line + metrics.regular_line + metrics.hint_gap;
+        const int32_t subtitle_width = std::max(left + width - text_left, int32_t{0});
+        const kit::Rect subtitle_rect{text_left, subtitle_top, subtitle_width, metrics.small_line};
+        add_text(
+            building,
+            kit::FontRole::small,
+            cut(building,
+                kit::FontRole::small,
+                registry_subtitle(registry, library.text),
+                subtitle_width),
+            subtitle_rect,
+            kit::Align::left,
+            kit::colour::hint,
+            view
+        );
+        int32_t bottom = subtitle_top + metrics.small_line;
+        if (!registry.built_in) {
+            const int32_t buttons_top = bottom + metrics.folder_button_gap;
+            const std::string_view remove_caption = shown(library.text, words::registry_remove);
+            const int32_t remove_width = button_width(building, remove_caption);
+            add_button(
+                building,
+                building.detail,
+                {text_left, buttons_top, remove_width, metrics.button_height},
+                remove_caption,
+                false,
+                true,
+                controls::first_registry_remove + static_cast<kit::ControlId>(index),
+                named("registry." + word + ".remove"),
+                view,
+                controls::details_group
+            );
+            const int32_t mirror_left = text_left + remove_width + metrics.button_gap;
+            if (library.inputs.in_match) {
+                const int32_t lock_width = std::max(left + width - mirror_left, int32_t{0});
+                if (lock_width > 0) {
+                    kit::LockLook look;
+                    look.text = std::string(shown(library.text, words::registry_game_lock));
+                    kit::add_lock(
+                        building.list,
+                        {mirror_left, buttons_top, lock_width, metrics.button_height},
+                        look
+                    );
+                    building.list.items.back().clip = view;
+                }
+            } else {
+                const std::string_view mirror_caption =
+                    shown(library.text, words::registry_add_mirror);
+                add_button(
+                    building,
+                    building.detail,
+                    {mirror_left,
+                     buttons_top,
+                     button_width(building, mirror_caption),
+                     metrics.button_height},
+                    mirror_caption,
+                    false,
+                    true,
+                    controls::first_registry_mirror + static_cast<kit::ControlId>(index),
+                    named("registry." + word + ".add-mirror"),
+                    view,
+                    controls::details_group
+                );
+            }
+            bottom = buttons_top + metrics.button_height;
+        }
+        bottom = std::max(bottom, avatar.y + avatar.height);
+        cursor = bottom + metrics.row_padding;
+    }
+
+    cursor += metrics.label_gap;
+    if (!library.inputs.registries_notice.empty()) {
+        const std::vector<std::string> notice_lines =
+            wrapped(building, kit::FontRole::small, library.inputs.registries_notice, width, 0);
+        const int32_t notice_top = cursor;
+        for (const std::string& notice_line : notice_lines) {
+            add_text(
+                building,
+                kit::FontRole::small,
+                notice_line,
+                {left, cursor, width, metrics.small_line},
+                kit::Align::left,
+                kit::colour::lock,
+                view
+            );
+            cursor += metrics.small_line;
+        }
+        add_label(
+            building.detail,
+            controls::registries_notice,
+            {left, notice_top, width, std::max(cursor - notice_top, metrics.small_line)},
+            unique_name(building, named("registries.notice")),
+            joined(notice_lines),
+            view,
+            controls::details_group
+        );
+        cursor += metrics.hint_gap;
+    }
+
+    const std::string note = registry_note(registries, library.text);
+    const std::vector<std::string> note_lines =
+        wrapped(building, kit::FontRole::small, note, width, 0);
+    const int32_t note_top = cursor;
+    for (const std::string& note_line : note_lines) {
+        add_text(
+            building,
+            kit::FontRole::small,
+            note_line,
+            {left, cursor, width, metrics.small_line},
+            kit::Align::left,
+            kit::colour::hint,
+            view
+        );
+        cursor += metrics.small_line;
+    }
+    if (note_lines.empty())
+        cursor += metrics.small_line;
+    add_label(
+        building.detail,
+        controls::registries_note,
+        {left, note_top, width, std::max(cursor - note_top, metrics.small_line)},
+        unique_name(building, named("registries.note")),
+        note,
+        view,
+        controls::details_group
+    );
+
+    const std::optional<controls::Extent> extent =
+        controls::clipped_extent(building.list, view, first_item);
+    return extent ? extent->bottom - first : 0;
+}
+
+/// Appends the Registries tab: its rows in an area that scrolls when they
+/// are taller than it, with a column for the scroll bar at its right.
+///
+/// @param[in,out] building the layout
+/// @param area the area
+void add_registries(Building& building, const kit::Rect& area) {
+    const kit::Metrics& metrics = *building.metrics;
+    Building trial = building;
+    trial.list = {};
+    trial.detail.clear();
+    trial.order.clear();
+    const int32_t whole_height = add_registries_content(trial, area, area.width, 0);
+    const int32_t well_width = metrics.scroll_thumb_width + 2;
+    const bool scrolls = whole_height > area.height;
+    const int32_t width = scrolls ? area.width - well_width - metrics.button_gap : area.width;
+    int32_t height = whole_height;
+    if (scrolls) {
+        trial = building;
+        trial.list = {};
+        trial.detail.clear();
+        trial.order.clear();
+        height = add_registries_content(trial, area, width, 0);
+    }
+    const int32_t limit = kit::ScrollArea::limit_for(height, area.height);
+    const int32_t scroll_offset = std::clamp(building.state->details_scroll, int32_t{0}, limit);
+    add_registries_content(building, area, width, scroll_offset);
+    if (limit > 0) {
+        kit::ScrollArea scroll;
+        scroll.view = area;
+        scroll.well = {area.x + area.width - well_width, area.y, well_width, area.height};
+        scroll.content_height = height;
+        scroll.limit = limit;
+        scroll.offset = scroll_offset;
+        add_item(building.list, kit::Role::scroll_bar, scroll.well, {}).look =
+            kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), false};
+    }
+}
+
 /// Appends the footer's band, the queue's words at its left and its buttons
-/// at its right: CHECK NOW, SETTINGS…, DETAILS at Compact but on the Active
-/// tab, and CLOSE.
+/// at its right: CHECK NOW, ADD REGISTRY… on the Registries tab, SETTINGS…,
+/// DETAILS at Compact but not on the Active or Registries tabs, and CLOSE.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -1994,17 +2299,37 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
 
     std::vector<FooterButton> buttons{
         {Action::check_now, controls::check_now, can_check_now(library)},
-        {Action::settings, controls::settings, true},
     };
-    if (compact && library.tab != Tab::active)
+    int32_t lock_reserve = 0;
+    if (library.tab == Tab::registries) {
+        if (library.inputs.in_match) {
+            lock_reserve =
+                width_of(
+                    building, kit::FontRole::small, shown(library.text, words::registry_game_lock)
+                ) +
+                metrics.padlock_width + metrics.padlock_gap;
+        } else {
+            buttons.push_back({Action::add_registry, controls::add_registry, true});
+        }
+    }
+    buttons.push_back({Action::settings, controls::settings, true});
+    if (compact && library.tab != Tab::active && library.tab != Tab::registries)
         buttons.push_back({Action::details, controls::details, library.selected.has_value()});
     buttons.push_back({Action::close, controls::close, true});
-    int32_t total = 0;
+    int32_t total = lock_reserve == 0 ? 0 : lock_reserve + metrics.button_gap;
     for (const FooterButton& button : buttons)
         total +=
             button_width(building, action_text(button.action, library.text)) + metrics.button_gap;
     total -= metrics.button_gap;
     int32_t left = window.right - total;
+    if (lock_reserve > 0) {
+        kit::LockLook look;
+        look.text = std::string(shown(library.text, words::registry_game_lock));
+        kit::add_lock(
+            building.list, {left, window.button_top, lock_reserve, metrics.button_height}, look
+        );
+        left += lock_reserve + metrics.button_gap;
+    }
     const int32_t queue_right = left - metrics.label_gap;
     for (const FooterButton& button : buttons) {
         const std::string_view caption = action_text(button.action, library.text);
@@ -2418,17 +2743,24 @@ kit::DisplayList library_layout(
     const int32_t content_width = window.right - window.left;
     int32_t top = window.body_top + window.gap;
     const bool active = library.tab == Tab::active;
+    const bool registries = library.tab == Tab::registries;
+    const bool catalogue = !active && !registries;
     // The Updates tab's line, count and UPDATE ALL, takes a row over its list.
     const bool updates_line = library.tab == Tab::updates;
     const int32_t updates_row = metrics.button_height + window.gap;
+    const auto body_of = [&](int32_t body_top) {
+        return kit::Rect{
+            window.left, body_top, content_width, window.footer_rule - window.gap - body_top
+        };
+    };
     if (compact) {
         add_tabs(building, {window.left, top, content_width, metrics.tab_height}, true);
         top += metrics.tab_height + window.gap;
-        if (active) {
-            add_active(
-                building, {window.left, top, content_width, window.footer_rule - window.gap - top}
-            );
-        } else {
+        if (active)
+            add_active(building, body_of(top));
+        else if (registries)
+            add_registries(building, body_of(top));
+        else {
             const int32_t row_height_points = std::max(metrics.field_height, metrics.button_height);
             add_compact_search_row(building, {window.left, top, content_width, row_height_points});
             top += row_height_points + window.gap;
@@ -2453,7 +2785,7 @@ kit::DisplayList library_layout(
              metrics.tab_height},
             false
         );
-        if (!active)
+        if (catalogue)
             add_search(
                 building,
                 {window.right - wide_search_width,
@@ -2462,11 +2794,11 @@ kit::DisplayList library_layout(
                  metrics.field_height}
             );
         top += metrics.tab_height + window.gap;
-        if (active) {
-            add_active(
-                building, {window.left, top, content_width, window.footer_rule - window.gap - top}
-            );
-        } else {
+        if (active)
+            add_active(building, body_of(top));
+        else if (registries)
+            add_registries(building, body_of(top));
+        else {
             if (!large) {
                 add_chip_row(building, {window.left, top, content_width, metrics.button_height});
                 top += metrics.button_height + window.gap;
