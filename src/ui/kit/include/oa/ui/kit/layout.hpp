@@ -220,8 +220,10 @@ struct Frame {
 /// Returns a rectangle of points as canvas pixels.
 ///
 /// Each edge is that edge in points times the percentage, divided by 100 and
-/// rounded down, so two rectangles that share an edge in points share it in
-/// pixels, with no gap and no overlap. A scale of 0 or less counts as 1%.
+/// rounded to the nearest pixel, a half away from zero (lround of the point
+/// times the scale), each edge on its own, so two rectangles that share an
+/// edge in points share it in pixels, with no gap and no overlap, and every
+/// edge falls on a whole pixel. A scale of 0 or less counts as 1%.
 ///
 /// @param points the rectangle, in points
 /// @param scale_percent the scale, as a percentage

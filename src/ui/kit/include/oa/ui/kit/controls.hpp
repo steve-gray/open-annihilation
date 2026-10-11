@@ -4,9 +4,10 @@
 // Provisional: this header changes whenever OA's screens need it to, until the kit is declared stable (src/ui/kit/README.md).
 
 // The kit's list rows, chips, text and search fields, tabs, cards and their
-// grid, hover cards and links, drawn for the crisp backend. Their colours are
-// kit tokens and their sizes compact_metrics. Texts arrive already looked
-// up; a field holds the player's own text. paint draws their items.
+// grid, hover cards and links, drawn through the canvas's primitives in
+// either form (canvas.hpp). Their colours are kit tokens and their sizes
+// compact_metrics. Texts arrive already looked up; a field holds the
+// player's own text. paint draws their items.
 #pragma once
 
 #include "oa/ui/kit/components.hpp"

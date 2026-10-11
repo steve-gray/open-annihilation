@@ -136,4 +136,13 @@ void draw_notice(
     const oa::ui::frontend_renderer::RgbaPicture& icon
 );
 
+/// Draws the notice as draw_notice does on a canvas of either form, its
+/// texts looked up in the language shown and laid out in the canvas's game
+/// fonts.
+///
+/// @param canvas where the notice's top left corner lands, its fonts and
+///     its icon; without game fonts nothing is drawn
+/// @param notice the notice
+void draw_notice(const oa::ui::kit::Canvas& canvas, const Notice& notice);
+
 } // namespace oa::ui::engine_settings

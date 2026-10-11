@@ -252,8 +252,9 @@ void an_interface_size_takes_the_largest_step_that_fits_compact() {
     OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 200);
 }
 
-/// Checks that neighbouring rectangles share an edge at each scale, and that a
-/// whole scale maps a rectangle back onto itself.
+/// Checks that neighbouring rectangles share an edge at each scale, that each
+/// edge is rounded to the nearest pixel on its own, and that a whole scale
+/// maps a rectangle back onto itself.
 void canvas_pixels_tile_and_whole_scales_round_trip() {
     const kit::Rect left{0, 0, 10, 10};
     const kit::Rect right{10, 0, 10, 10};
@@ -271,6 +272,12 @@ void canvas_pixels_tile_and_whole_scales_round_trip() {
     }
     OA_CHECK(rect_is(kit::to_canvas(left, 150), 0, 0, 15, 15));
     OA_CHECK(rect_is(kit::to_canvas(right, 150), 15, 0, 15, 15));
+    // At 1.5x each edge is lround(point * 1.5) on its own: a point is one or
+    // two pixels, halves rounded away from zero.
+    OA_CHECK(rect_is(kit::to_canvas({1, 1, 1, 1}, 150), 2, 2, 1, 1));
+    OA_CHECK(rect_is(kit::to_canvas({2, 3, 1, 1}, 150), 3, 5, 2, 1));
+    OA_CHECK(rect_is(kit::to_canvas({3, 5, 10, 10}, 150), 5, 8, 15, 15));
+    OA_CHECK(rect_is(kit::to_canvas({-1, -3, 2, 2}, 150), -2, -5, 4, 3));
 
     const kit::Rect samples[] = {{0, 0, 1, 1}, {3, 5, 7, 11}, {10, 20, 30, 40}};
     constexpr int32_t whole[] = {100, 200, 300};

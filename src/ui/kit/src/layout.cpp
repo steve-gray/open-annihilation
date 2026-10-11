@@ -29,6 +29,22 @@ floor_mul_div(int32_t value, int32_t numerator, int32_t denominator) noexcept {
     return static_cast<int32_t>(quotient);
 }
 
+/// Returns value * numerator / denominator rounded to the nearest whole
+/// number, a half away from zero. A denominator of 0 or less counts as 1.
+///
+/// @param value the value
+/// @param numerator the multiplier
+/// @param denominator the divisor
+/// @return the rounded product
+[[nodiscard]] int32_t
+nearest_mul_div(int32_t value, int32_t numerator, int32_t denominator) noexcept {
+    const int64_t divisor = denominator > 0 ? denominator : 1;
+    const int64_t product = static_cast<int64_t>(value) * numerator;
+    const int64_t magnitude = (product < 0 ? -product : product) * 2 + divisor;
+    const int64_t rounded = magnitude / (2 * divisor);
+    return static_cast<int32_t>(product < 0 ? -rounded : rounded);
+}
+
 /// Returns the percentage a scale divides by. 0 or less counts as 1.
 ///
 /// @param scale_percent the scale, as a percentage
@@ -150,10 +166,10 @@ Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept
 
 Rect to_canvas(const Rect& points, int32_t scale_percent) noexcept {
     const int32_t percent = percent_of(scale_percent);
-    const int32_t left = floor_mul_div(points.x, percent, 100);
-    const int32_t top = floor_mul_div(points.y, percent, 100);
-    const int32_t right = floor_mul_div(points.x + points.width, percent, 100);
-    const int32_t bottom = floor_mul_div(points.y + points.height, percent, 100);
+    const int32_t left = nearest_mul_div(points.x, percent, 100);
+    const int32_t top = nearest_mul_div(points.y, percent, 100);
+    const int32_t right = nearest_mul_div(points.x + points.width, percent, 100);
+    const int32_t bottom = nearest_mul_div(points.y + points.height, percent, 100);
     return {left, top, right - left, bottom - top};
 }
 
