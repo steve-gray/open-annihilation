@@ -195,6 +195,16 @@ struct LobbyMapSource {
     /// @param[out] out the map; left unchanged when `index` is out of range
     /// @return true when `out` was written
     bool (*base_at)(void* context, int32_t index, LobbyPackMap* out){};
+    /// Writes the map pack of the pack map whose files `prepare` mounted, as
+    /// this machine's presence record names it. Bound for the battle room
+    /// with multiplayer_bind_map_pack, with `context` as its context: on the
+    /// host it is the selected map's pack.
+    ///
+    /// @param context the source's context
+    /// @param[out] out the map pack; left unchanged when there is none
+    /// @return false when no pack map's files are mounted, or its pack was
+    ///     not installed from a registry's catalogue
+    bool (*pack)(void* context, netgame::PresenceMapPack* out){};
 };
 
 /// Binds the pack maps the battle room lists beside the base maps, and the

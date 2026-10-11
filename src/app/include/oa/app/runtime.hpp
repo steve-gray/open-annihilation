@@ -159,6 +159,7 @@ class FontStack;
 namespace oa::ui::frontend_multiplayer {
 struct LobbyMapSource;
 struct LobbyPackMap;
+struct LocalPack;
 } // namespace oa::ui::frontend_multiplayer
 
 namespace oa::app {
@@ -4131,6 +4132,30 @@ class Runtime final : public menu::Host,
     /// Main thread only, never while a match loads or runs.
     void release_pack_map();
 
+    /// Keeps a map pack's maps from being mounted while GET MAP installs it
+    /// (runtime_get_map.cpp): prepare_pack_map refuses them until the
+    /// download's queue item ends, done, failed or cancelled, or another
+    /// hold replaces this one.
+    ///
+    /// @param id the pack's id; empty lets any hold go
+    /// @param item the queue item that downloads and installs it
+    void hold_pack_maps(std::string_view id, uint64_t item);
+
+    /// Tells whether a pack's maps are held from being mounted
+    /// (hold_pack_maps). A hold whose queue item has ended, or is no longer
+    /// in the queue, is let go here.
+    ///
+    /// @param id the pack's id
+    /// @return true while they are held
+    [[nodiscard]] bool pack_maps_held(std::string_view id);
+
+    /// Returns the installed pack map whose files are mounted
+    /// (prepare_pack_map).
+    ///
+    /// @return the map; null while no pack map's files are mounted, or when
+    ///     the installed packs no longer list it
+    [[nodiscard]] const PackMap* mounted_pack_map();
+
     /// Returns why a pack map was last refused.
     ///
     /// @param name the map's name
@@ -4747,6 +4772,36 @@ class Runtime final : public menu::Host,
     /// layer while the multiplayer screens show: pushes it when the layer
     /// has none. OaLayer::tick calls it once a frame.
     void keep_presence_card_screen();
+
+    /// GET MAP over the battle room, as a screen of the OA layer
+    /// (runtime_get_map.cpp).
+    struct GetMapScreen;
+
+    /// Keeps GET MAP's screen (runtime_get_map.cpp) on the OA layer while the
+    /// multiplayer screens show: pushes it when the layer has none.
+    /// OaLayer::tick calls it once a frame.
+    void keep_get_map_screen();
+
+    /// Returns what this machine has of a map pack (runtime_get_map.cpp):
+    /// from the installed packs, whose SHA-256, registry and release come
+    /// from each pack folder's origin record.
+    ///
+    /// @param id the pack's id
+    /// @param sha256 a release's SHA-256, 64 lower-case hex digits: a pack of
+    ///     that id with this SHA-256 is the one answered, else the first of
+    ///     that id
+    /// @return the pack; not installed when no installed pack has that id
+    [[nodiscard]] oa::ui::frontend_multiplayer::LocalPack
+    local_map_pack(std::string_view id, std::string_view sha256) const;
+
+    /// Tells whether this machine may download from a registry
+    /// (runtime_get_map.cpp): it is on, not set aside for a built-in
+    /// registry of its id, allowed by Developer Mode, and its downloads are
+    /// on, that is its install ID is not off where the registry needs one.
+    ///
+    /// @param view the registry
+    /// @return true when a download from it may be queued
+    [[nodiscard]] bool registry_fetches(const content::RegistryView& view) const;
 
     /// Hands the settings screen on the OA layer an action of the dialog, as
     /// its own events do: its sound, the settings, and the layer taking the
