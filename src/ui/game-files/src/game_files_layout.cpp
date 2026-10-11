@@ -2339,18 +2339,4 @@ Control hit_test(const Layout& layout, Point point, float reach_px) noexcept {
     return screen_control(kit::reach(layout.list, point, reach_px).control);
 }
 
-void mark_interaction(Layout& layout, const Interaction& interaction) noexcept {
-    for (kit::Item& part : layout.list.items) {
-        if (part.control == kit::no_control) {
-            part.state.focused = false;
-            part.state.pressed = false;
-            continue;
-        }
-        const Control control = screen_control(part.control);
-        part.state.focused = interaction.focus_shown && control == interaction.focused;
-        part.state.pressed =
-            interaction.pressed.kind != ControlKind::none && control == interaction.pressed;
-    }
-}
-
 } // namespace oa::ui::game_files

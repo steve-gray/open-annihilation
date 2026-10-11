@@ -926,8 +926,8 @@ game_files::Outcome press(Model& model, const Form& form, Control control) {
     static_cast<void>(game_files::press_down(model, interaction, layout, control));
     const Item* item = item_of(layout, control);
     OA_EXPECT(
-        interaction.pressed == control || !has_control(layout, control) ||
-            (item != nullptr && item->state.disabled),
+        game_files::screen_control(interaction.pressed) == control ||
+            !has_control(layout, control) || (item != nullptr && item->state.disabled),
         "the press shows on the control"
     );
     return game_files::press_up(model, interaction, layout, control);
@@ -1019,7 +1019,7 @@ void presses_return_their_commands() {
             game_files::press_up(model, interaction, layout, {ControlKind::choose_installer})
                 .command == Command::redraw
         );
-        OA_CHECK(interaction.pressed.kind == ControlKind::none);
+        OA_CHECK(interaction.pressed == kit::no_control);
     }
     // S2.
     Model looking = base_model();
@@ -1263,15 +1263,17 @@ void keys_move_focus_and_press() {
     OA_CHECK(
         game_files::key(model, interaction, layout, game_files::Key::tab).command == Command::redraw
     );
-    OA_CHECK(interaction.focus_shown && interaction.focused == expected[0]);
+    OA_CHECK(
+        interaction.focus_shown && game_files::screen_control(interaction.focused) == expected[0]
+    );
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::tab));
-    OA_CHECK(interaction.focused == expected[1]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[1]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::back_tab));
-    OA_CHECK(interaction.focused == expected[0]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[0]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::back_tab));
-    OA_CHECK(interaction.focused == expected[3]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[3]);
     static_cast<void>(game_files::key(model, interaction, layout, game_files::Key::tab));
-    OA_CHECK(interaction.focused == expected[0]);
+    OA_CHECK(game_files::screen_control(interaction.focused) == expected[0]);
     OA_CHECK(
         game_files::key(model, interaction, layout, game_files::Key::enter).command ==
         Command::open_language
@@ -1283,7 +1285,7 @@ void keys_move_focus_and_press() {
         Command::check_copied
     );
     // The focus ring is marked for painting.
-    game_files::mark_interaction(layout, interaction);
+    kit::mark_states(layout.list, interaction);
     const Item* focused = item_of(layout, expected[2]);
     OA_CHECK(focused != nullptr && focused->state.focused);
     // Return with no focus shown presses the main button; Space does nothing.
@@ -1354,7 +1356,7 @@ void keys_move_focus_and_press() {
         const Layout current = lay_out(rows, phone);
         static_cast<void>(game_files::key(rows, tabbing, current, game_files::Key::tab));
         const Layout after = lay_out(rows, phone);
-        const Item* item = item_of(after, tabbing.focused);
+        const Item* item = item_of(after, game_files::screen_control(tabbing.focused));
         if (item != nullptr && item->clip.height > 0) {
             OA_CHECK(visible(*item).height == item->rect.height);
             scrolled = scrolled || rows.scroll_points > 0;

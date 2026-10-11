@@ -10,6 +10,7 @@
 #pragma once
 
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -26,6 +27,7 @@ namespace oa::ui::game_files {
 
 using oa::ui::display_layout::Insets;
 using oa::ui::kit::Glyph;
+using oa::ui::kit::Interaction;
 using oa::ui::kit::Point;
 using oa::ui::kit::Rect;
 using oa::ui::kit::TextMeasureHooks;
@@ -410,14 +412,10 @@ lay_out(const Model& model, const Viewport& viewport, const TextMeasureHooks& me
 /// @return the control; ControlKind::none when there is none
 [[nodiscard]] Control hit_test(const Layout& layout, Point point, float reach_px) noexcept;
 
-/// UI state the app keeps beside the model between frames.
-struct Interaction {
-    Control focused{};  ///< keyboard focus; shown once a key moved it
-    bool focus_shown{}; ///< the focus ring is shown
-    Control pressed{};  ///< the control a held press is on
-};
-
-/// A press landed (finger down, mouse down): sets the pressed look.
+/// A press landed (finger down, mouse down): sets the pressed look. The app keeps the
+/// kit's Interaction beside the model between frames: the focused and the held controls,
+/// by their control_id, and whether a key has shown the focus; kit::mark_states shows them
+/// on the parts for painting.
 ///
 /// @param[in,out] model the model
 /// @param[in,out] interaction the UI state
@@ -452,14 +450,6 @@ press_up(Model& model, Interaction& interaction, const Layout& layout, Control c
 /// @param points how far; positive scrolls down
 /// @return what the app must do
 [[nodiscard]] Outcome scroll(Model& model, const Layout& layout, float points);
-
-/// Marks the parts of the focused control (once a key has shown the focus) as focused and
-/// those of the held control as pressed, in their kit states, for painting; lay_out leaves
-/// both clear, since it does not see the Interaction.
-///
-/// @param[in,out] layout the layout about to be painted
-/// @param interaction the UI state
-void mark_interaction(Layout& layout, const Interaction& interaction) noexcept;
 
 /// The glyph of a button with one: a square as wide as the label's pixel size, this share
 /// of the pixel size left of the label, the two centred together in the button.

@@ -6,6 +6,7 @@
 // it asks the app to do.
 #include "game_files_internal.hpp"
 
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 
 #include <algorithm>
@@ -291,17 +292,17 @@ Outcome press_down(Model& model, Interaction& interaction, const Layout& layout,
     static_cast<void>(model);
     const kit::Control* found = find_control(layout, control);
     if (found == nullptr || !found->enabled) {
-        const bool was_pressed = interaction.pressed.kind != ControlKind::none;
-        interaction.pressed = {};
+        const bool was_pressed = interaction.pressed != kit::no_control;
+        interaction.pressed = kit::no_control;
         return was_pressed ? redraw() : Outcome{};
     }
-    interaction.pressed = control;
+    interaction.pressed = control_id(control);
     return redraw();
 }
 
 Outcome press_up(Model& model, Interaction& interaction, const Layout& layout, Control control) {
-    const Control pressed = interaction.pressed;
-    interaction.pressed = {};
+    const Control pressed = screen_control(interaction.pressed);
+    interaction.pressed = kit::no_control;
     const Outcome look = pressed.kind != ControlKind::none ? redraw() : Outcome{};
     if (control.kind == ControlKind::none)
         return look;
@@ -310,7 +311,7 @@ Outcome press_up(Model& model, Interaction& interaction, const Layout& layout, C
     const kit::Control* found = find_control(layout, control);
     if (found == nullptr || !found->enabled)
         return look;
-    interaction.focused = control;
+    interaction.focused = control_id(control);
     const Outcome outcome = act(model, control);
     if (outcome.command == Command::none)
         return look;
@@ -321,34 +322,29 @@ Outcome key(Model& model, Interaction& interaction, const Layout& layout, Key ke
     switch (key) {
     case Key::tab:
     case Key::back_tab: {
-        const std::vector<Control>& order = layout.focus_order;
+        const std::vector<kit::ControlId>& order = layout.list.tab_order;
         if (order.empty())
             return {};
-        const auto found = std::find(order.begin(), order.end(), interaction.focused);
-        std::size_t next = 0;
-        if (found == order.end() || !interaction.focus_shown) {
-            next = key == Key::tab ? 0 : order.size() - 1;
-            if (found != order.end() && !interaction.focus_shown)
-                next = static_cast<std::size_t>(found - order.begin());
-        } else {
-            const auto at = static_cast<std::size_t>(found - order.begin());
-            next =
-                key == Key::tab ? (at + 1) % order.size() : (at + order.size() - 1) % order.size();
-        }
-        interaction.focused = order[next];
+        // A focus that is not shown yet shows where it is; otherwise Tab moves on in the
+        // declared order, from its first or last control when the focus is in none.
+        const bool in_order =
+            std::find(order.begin(), order.end(), interaction.focused) != order.end();
+        if (interaction.focus_shown || !in_order)
+            interaction.focused =
+                kit::next_in_tab_order(layout.list, interaction.focused, key == Key::tab);
         interaction.focus_shown = true;
-        scroll_into_view(model, layout, interaction.focused);
+        scroll_into_view(model, layout, screen_control(interaction.focused));
         return redraw();
     }
     case Key::enter:
     case Key::space: {
         Control target{};
+        const std::vector<kit::ControlId>& order = layout.list.tab_order;
         const bool focus_live =
             interaction.focus_shown &&
-            std::find(layout.focus_order.begin(), layout.focus_order.end(), interaction.focused) !=
-                layout.focus_order.end();
+            std::find(order.begin(), order.end(), interaction.focused) != order.end();
         if (focus_live)
-            target = interaction.focused;
+            target = screen_control(interaction.focused);
         else if (key == Key::enter)
             target = main_control(layout);
         if (target.kind == ControlKind::none)
@@ -356,12 +352,12 @@ Outcome key(Model& model, Interaction& interaction, const Layout& layout, Key ke
         const kit::Control* found = find_control(layout, target);
         if (found == nullptr || !found->enabled)
             return {};
-        interaction.pressed = {};
+        interaction.pressed = kit::no_control;
         const Outcome outcome = act(model, target);
         return outcome.command == Command::none ? Outcome{} : outcome;
     }
     case Key::escape:
-        interaction.pressed = {};
+        interaction.pressed = kit::no_control;
         if (model.sheet != Sheet::none) {
             close_sheet(model);
             return redraw();

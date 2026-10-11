@@ -882,11 +882,11 @@ void GameFilesScreen::State::repaint() {
         return;
     layout = view::lay_out(model, viewport, game_files_measure(fonts));
     // A shown focus that left the layout moves to its first control.
-    if (interaction_.focus_shown && !layout.focus_order.empty() &&
-        std::find(layout.focus_order.begin(), layout.focus_order.end(), interaction_.focused) ==
-            layout.focus_order.end())
-        interaction_.focused = layout.focus_order.front();
-    view::mark_interaction(layout, interaction_);
+    const std::vector<oa::ui::kit::ControlId>& order = layout.list.tab_order;
+    if (interaction_.focus_shown && !order.empty() &&
+        std::find(order.begin(), order.end(), interaction_.focused) == order.end())
+        interaction_.focused = order.front();
+    oa::ui::kit::mark_states(layout.list, interaction_);
     if (canvas.width != viewport.width || canvas.height != viewport.height)
         canvas = paint::make_canvas(viewport.width, viewport.height);
     paint_game_files(canvas, layout, fonts, viewport.px_per_point);
@@ -1627,7 +1627,7 @@ void GameFilesScreen::State::take_stop() {
 void GameFilesScreen::State::set_step(view::Step step) {
     if (model.step != step) {
         model.scroll_points = 0;
-        interaction_.pressed = {};
+        interaction_.pressed = oa::ui::kit::no_control;
     }
     model.step = step;
     model.sheet = view::Sheet::none;
