@@ -11,8 +11,12 @@
 #include "oa/ui/decoded.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace oa::ui::kit {
 
@@ -149,6 +153,53 @@ std::size_t character_count(std::string_view text) noexcept {
 
 int32_t estimated_width(std::string_view text) {
     return static_cast<int32_t>(oa::base::text::text_columns(text)) * estimated_character_width;
+}
+
+std::string fit(std::string_view text, int32_t width, const Measure& measure) {
+    if (measure(text) <= width)
+        return std::string(text);
+    if (measure(ellipsis) > width)
+        return {};
+    std::vector<std::size_t> ends;
+    for (std::size_t at = 0; at < text.size();) {
+        at += std::max<std::size_t>(character_bytes(text.substr(at)), 1);
+        ends.push_back(std::min(at, text.size()));
+    }
+    std::size_t low = 0;
+    std::size_t high = ends.size();
+    std::string best(ellipsis);
+    while (low < high) {
+        const std::size_t middle = (low + high + 1) / 2;
+        std::string candidate(text.substr(0, ends[middle - 1]));
+        while (!candidate.empty() && candidate.back() == ' ')
+            candidate.pop_back();
+        candidate += ellipsis;
+        if (measure(candidate) <= width) {
+            best = std::move(candidate);
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    return best;
+}
+
+int32_t measured_width(
+    const TextMeasureHooks& hooks, std::string_view text, int32_t pixel_size, bool bold
+) {
+    if (text.empty())
+        return 0;
+    if (hooks.width != nullptr)
+        return hooks.width(hooks.context, text, pixel_size, bold);
+    return static_cast<int32_t>(
+        std::ceil(0.55 * pixel_size * static_cast<double>(character_count(text)))
+    );
+}
+
+int32_t measured_line(const TextMeasureHooks& hooks, int32_t pixel_size, bool bold) {
+    if (hooks.line_height != nullptr)
+        return std::max(1, hooks.line_height(hooks.context, pixel_size, bold));
+    return static_cast<int32_t>(std::ceil(1.25 * pixel_size));
 }
 
 std::string with_stand_ins(const Fonts& fonts, FontRole role, std::string_view text) {

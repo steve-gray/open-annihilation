@@ -62,14 +62,19 @@ void every_token_keeps_its_value() {
 
     equals(kit::screen_colour::background, 0x1b, 0x1e, 0x19);
     equals(kit::screen_colour::panel, 0x23, 0x27, 0x21);
-    equals(kit::screen_colour::line, 0x3a, 0x40, 0x37);
-    equals(kit::screen_colour::text, 0xe8, 0xea, 0xe4);
+    equals(kit::screen_colour::line, 0x3a, 0x40, 0x34);
+    equals(kit::screen_colour::text, 0xe7, 0xe8, 0xdf);
     equals(kit::screen_colour::dim, 0x9a, 0xa0, 0x94);
     equals(kit::screen_colour::green, 0x9c, 0xcc, 0x3c);
-    equals(kit::screen_colour::amber, 0xe8, 0xb4, 0x4c);
+    equals(kit::screen_colour::amber, 0xe0, 0xb0, 0x4f);
     equals(kit::screen_colour::red, 0xe0, 0x6c, 0x5c);
     equals(kit::screen_colour::ink, 0x10, 0x12, 0x0d);
     equals(kit::screen_colour::button_text, 0xc9, 0xcd, 0xbf);
+    // The screen's text, outlines and warnings are the dialog's text, control border and
+    // lock, the near-duplicates (e8eae4, 3a4037 and e8b44c) they were before.
+    OA_CHECK(kit::screen_colour::text == kit::colour::text);
+    OA_CHECK(kit::screen_colour::line == kit::colour::control_border);
+    OA_CHECK(kit::screen_colour::amber == kit::colour::lock);
 
     equals(kit::hud_colour::panel, 0x1b, 0x1e, 0x19, 217);
     equals(kit::hud_colour::sheet, 0x14, 0x16, 0x12, 248);
