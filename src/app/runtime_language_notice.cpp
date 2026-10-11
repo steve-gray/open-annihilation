@@ -96,6 +96,14 @@ class LanguageNoticeHost {
     /// @param runtime the runtime
     static void close_for_run(Runtime& runtime) noexcept;
 
+    /// Returns the fonts the notice is drawn in.
+    ///
+    /// @param runtime the runtime
+    /// @return the fonts; null before they load
+    [[nodiscard]] static const oa::ui::engine_settings::DialogFonts* fonts(Runtime& runtime) {
+        return runtime.engine_settings_fonts();
+    }
+
   private:
 
     /// Returns one preference, trimmed. Empty when the key is absent.
@@ -365,7 +373,8 @@ class LanguageNoticeScreen final : public LayerScreen {
             frame.size_class = kit::SizeClass::compact;
             frame.area = {0, 0, 640, 480};
         }
-        list_ = settings::layout_language_notice(model_, frame);
+        list_ =
+            settings::layout_language_notice(model_, frame, LanguageNoticeHost::fonts(runtime_));
         ++revision_;
     }
 

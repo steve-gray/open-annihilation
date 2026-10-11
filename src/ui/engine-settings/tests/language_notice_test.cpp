@@ -5,13 +5,18 @@
 // body wrapped inside the notice, Download greyed until it can be pressed,
 // the focus on that button first and Tab from Use English to it, the reach
 // of both buttons, and the failed state's texts. English is looked up;
-// a line that is not English is not.
+// a line that is not English is not. With --data, the Chinese body is
+// measured in the fonts the notice is drawn in: each of its lines fits the
+// wrap, and at Compact it is one line.
 
 #include "oa/ui/engine_settings/language_notice.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/text_font.hpp"
+#include "oa/present/game_text.hpp"
 #include "oa/test/check.hpp"
+#include "oa/test/game_assets.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/input.hpp"
@@ -19,7 +24,10 @@
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,6 +37,7 @@ namespace {
 namespace settings = oa::ui::engine_settings;
 namespace kit = oa::ui::kit;
 namespace languages = oa::data::languages;
+namespace text_font = oa::platform::text_font;
 
 /// The language the notice is about in these tests.
 constexpr std::string_view kTag = "zh-Hans";
@@ -467,13 +476,134 @@ void english_is_looked_up() {
     OA_CHECK(download != nullptr && download->text.find("SHOULD NOT") == std::string::npos);
 }
 
+/// Draws a line in the modern fonts, as the game does for the characters
+/// its fonts lack. The notice is shown while the game shows English, so an
+/// ideograph keeps the face's own size.
+///
+/// @param context the font stack
+/// @param text the line, in UTF-8
+/// @param face the game font it stands in for
+/// @param scale screen pixels to a game pixel
+/// @param size the text size, in percent
+/// @return the line's mask; null when the fonts cannot draw it
+std::shared_ptr<const oa::present::TextMask> draw_modern_line(
+    void* context, std::string_view text, oa::present::TextFace face, int32_t scale, int32_t size
+) {
+    auto& stack = *static_cast<text_font::FontStack*>(context);
+    if (text.empty() || text.size() > text_font::max_text_bytes)
+        return nullptr;
+    const bool label = face == oa::present::TextFace::label;
+    const int32_t face_pixels =
+        face == oa::present::TextFace::message  ? text_font::message_log_pixel_size
+        : face == oa::present::TextFace::status ? text_font::status_readout_pixel_size
+                                                : text_font::label_pixel_size;
+    text_font::Style style;
+    style.pixel_size = std::clamp(
+        oa::present::face_pixel_size(face_pixels, scale, size),
+        int32_t{1},
+        text_font::max_pixel_size
+    );
+    style.weight = label ? text_font::Weight::regular : text_font::Weight::bold;
+    style.rendering = text_font::Rendering::mono;
+    const auto drawn = stack.draw(text, style);
+    const auto placements = stack.layout(text, style);
+    const auto characters = text_font::decode_utf8(text);
+    if (!drawn || !placements || !characters)
+        return nullptr;
+    auto mask = std::make_shared<oa::present::TextMask>();
+    mask->width = drawn->width;
+    mask->height = drawn->height;
+    mask->baseline = drawn->baseline;
+    mask->origin = drawn->origin;
+    mask->advance = drawn->advance;
+    mask->alpha = drawn->alpha;
+    std::size_t placed = 0;
+    int32_t pen = 0;
+    for (const char32_t character : *characters) {
+        if (!text_font::is_invisible(character) && placed < placements->size()) {
+            const auto& placement = (*placements)[placed++];
+            pen = placement.pen + placement.advance;
+        }
+        mask->character_ends.push_back(pen);
+    }
+    return mask;
+}
+
+/// Puts the modern-font hooks back when the font case leaves.
+struct ModernFontsGuard {
+    /// The hooks are already installed.
+    ModernFontsGuard() = default;
+
+    /// Clears the hooks.
+    ~ModernFontsGuard() { oa::present::set_game_text_hooks({}); }
+
+    ModernFontsGuard(const ModernFontsGuard&) = delete;
+    ModernFontsGuard& operator=(const ModernFontsGuard&) = delete;
+};
+
+/// The Chinese body, measured in the fonts the notice is drawn in.
+///
+/// Each of its wrapped lines fits the wrap. At Compact the body is one line,
+/// and that line is wider than an estimate that never asked the fonts.
+void chinese_body_in_the_fonts() {
+    oa::AssetStore assets = oa::test::require_game_assets("the missing-language notice's fonts");
+    const kit::Fonts fonts = kit::load_game_fonts(assets);
+    const std::unique_ptr<text_font::FontStack> modern =
+        text_font::FontStack::open(text_font::bundled_font_directory());
+    OA_CHECK(modern != nullptr);
+    if (modern == nullptr)
+        return;
+    oa::present::GameTextHooks hooks;
+    hooks.context = modern.get();
+    hooks.draw = draw_modern_line;
+    oa::present::set_game_text_hooks(hooks);
+    const ModernFontsGuard guard;
+
+    const settings::LanguageNotice notice = unavailable_notice();
+    const kit::Frame frames[] = {
+        frame_of(kit::SizeClass::compact, 640, 480),
+        frame_of(kit::SizeClass::regular, 960, 540),
+        frame_of(kit::SizeClass::large, 1280, 720),
+    };
+    for (const kit::Frame& frame : frames) {
+        const kit::DisplayList list = settings::layout_language_notice(notice, frame, &fonts);
+        const int32_t room =
+            kit::metrics_of(frame.size_class).notice_width - 2 * kit::compact_metrics.padding;
+        int own_lines = 0;
+        bool english_quiet = false;
+        for (const kit::Item& item : list.items) {
+            if (item.role != kit::Role::text || item.font != kit::FontRole::small)
+                continue;
+            if (kEnglish.find(item.text) == 0)
+                english_quiet = item.colour == kit::colour::quiet;
+            if (item.text == kUnavailable || notice.own_body.find(item.text) == std::string::npos)
+                continue;
+            ++own_lines;
+            const int32_t measured = kit::text_width(fonts, kit::FontRole::small, item.text);
+            OA_CHECK(measured <= room);
+            if (frame.size_class == kit::SizeClass::compact && item.text == notice.own_body) {
+                OA_CHECK(measured > room / 2);
+                OA_CHECK(item.colour == kit::colour::text);
+                std::cout << "language notice: the Chinese body is " << measured
+                          << " points wide, in " << room << '\n';
+            }
+        }
+        OA_CHECK(english_quiet);
+        OA_CHECK(own_lines >= 1);
+        if (frame.size_class == kit::SizeClass::compact)
+            OA_CHECK(own_lines == 1);
+    }
+}
+
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     parts_at_each_size();
     reach_of_both_buttons();
     failed_state();
     progress_bar();
     english_is_looked_up();
+    if (oa::test::game_data_requested(argc, argv))
+        chinese_body_in_the_fonts();
     return oa::test::check_exit_status();
 }

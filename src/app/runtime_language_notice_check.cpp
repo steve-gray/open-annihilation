@@ -172,6 +172,11 @@ void Runtime::check_language_notice() {
         "the title is not the language's own name"
     );
     require(body->text.find(lines->body) != std::string::npos, "the sizeless body is not shown");
+    int own_lines = 0;
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::text && item.text == lines->body)
+            ++own_lines;
+    require(own_lines == 1, "the Chinese body is not one line");
     require(body->text.find(english_body) != std::string::npos, "the English body is not shown");
     require(
         body->text.find(lines->unavailable) != std::string::npos,

@@ -32,10 +32,15 @@ if(BUILD_TESTING)
   add_test(NAME ui-engine-settings-prompt COMMAND oa-ui-engine-settings-prompt-test)
 
   # The missing-language notice: its parts, wrap, greyed Download, focus and reach.
+  # With --data, the Chinese body is measured in the fonts it is drawn in.
   add_executable(oa-ui-engine-settings-language-notice-test tests/language_notice_test.cpp)
   target_link_libraries(oa-ui-engine-settings-language-notice-test PRIVATE oa-ui-engine-settings
-    oa-test-support oa-options)
+    oa-platform-text-font oa-test-game-data oa-test-support oa-options)
+  oa_copy_text_fonts(oa-ui-engine-settings-language-notice-test
+    "$<TARGET_FILE_DIR:oa-ui-engine-settings-language-notice-test>")
   add_test(NAME ui-engine-settings-language-notice COMMAND oa-ui-engine-settings-language-notice-test)
+  oa_add_game_data_test(ui-engine-settings-language-notice-data
+    oa-ui-engine-settings-language-notice-test --data)
 
   # The download check: its words, buttons, focus, keys and placement.
   add_executable(oa-ui-engine-settings-challenge-test tests/challenge_test.cpp)

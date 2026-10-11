@@ -37,11 +37,17 @@ struct LanguageNotice {
 /// and takes no press.
 ///
 /// English texts are looked up. A text that is not English is drawn as given.
+/// Widths are measured in the fonts the notice is drawn in. Without fonts,
+/// each line's width is estimated.
 ///
 /// @param notice what the notice shows
 /// @param frame the frame it is laid out on; its size class sets the width
+/// @param fonts the fonts it is drawn in; null to estimate widths
 /// @return the display list, in points from the notice's top left corner
-[[nodiscard]] oa::ui::kit::DisplayList
-layout_language_notice(const LanguageNotice& notice, const oa::ui::kit::Frame& frame);
+[[nodiscard]] oa::ui::kit::DisplayList layout_language_notice(
+    const LanguageNotice& notice,
+    const oa::ui::kit::Frame& frame,
+    const oa::ui::kit::Fonts* fonts = nullptr
+);
 
 } // namespace oa::ui::engine_settings

@@ -138,28 +138,42 @@ int32_t wrap_width(kit::SizeClass size_class) noexcept {
     return kit::metrics_of(size_class).notice_width - 2 * kit::compact_metrics.padding;
 }
 
+/// Returns a text's width in a font, or its estimated width without fonts.
+///
+/// @param fonts the fonts; null to estimate
+/// @param role which font
+/// @return the measure
+kit::Measure measure_of(const kit::Fonts* fonts, kit::FontRole role) {
+    if (fonts == nullptr)
+        return [](std::string_view text) { return kit::estimated_width(text); };
+    return [fonts, role](std::string_view text) { return kit::text_width(*fonts, role, text); };
+}
+
 /// Paints the English body dim and a failure in the lock colour.
 ///
 /// The question draws every line in the text colour. The lines are the
-/// paragraphs' wraps, in order.
+/// paragraphs' wraps, in order, measured as the question measured them.
 ///
 /// @param[in,out] list the display list
 /// @param lines the paragraphs
 /// @param failed true when the status is a failure
 /// @param size_class the notice's size class
+/// @param fonts the fonts the question wrapped with; null when it estimated
 void colour_lines(
     kit::DisplayList& list,
     const std::vector<TaggedLine>& lines,
     bool failed,
-    kit::SizeClass size_class
+    kit::SizeClass size_class,
+    const kit::Fonts* fonts
 ) {
     const int32_t width = wrap_width(size_class);
-    const kit::Measure measure = [](std::string_view text) { return kit::estimated_width(text); };
+    const kit::Measure regular = measure_of(fonts, kit::FontRole::regular);
+    const kit::Measure small = measure_of(fonts, kit::FontRole::small);
     std::vector<LineKind> kinds;
     for (const TaggedLine& line : lines) {
         const std::vector<std::string> wrapped = line.path
-                                                     ? kit::wrap_path(line.text, width, measure)
-                                                     : kit::wrap(line.text, width, measure);
+                                                     ? kit::wrap_path(line.text, width, regular)
+                                                     : kit::wrap(line.text, width, small);
         for (std::size_t index = 0; index < wrapped.size(); ++index)
             kinds.push_back(line.kind);
     }
@@ -207,7 +221,9 @@ void grey_download(kit::DisplayList& list, bool enabled) {
 
 } // namespace
 
-kit::DisplayList layout_language_notice(const LanguageNotice& notice, const kit::Frame& frame) {
+kit::DisplayList layout_language_notice(
+    const LanguageNotice& notice, const kit::Frame& frame, const kit::Fonts* fonts
+) {
     const std::vector<TaggedLine> lines = paragraphs_of(notice);
     kit::Question question;
     question.title = shown("Language");
@@ -224,8 +240,8 @@ kit::DisplayList layout_language_notice(const LanguageNotice& notice, const kit:
     question.progress = bar_of(notice.progress);
     question.size_class = frame.size_class;
     question.word = std::string(kWord);
-    kit::DisplayList list = kit::question_list(question, nullptr);
-    colour_lines(list, lines, notice.failed, frame.size_class);
+    kit::DisplayList list = kit::question_list(question, fonts);
+    colour_lines(list, lines, notice.failed, frame.size_class, fonts);
     grey_download(list, notice.download_enabled);
     return list;
 }
