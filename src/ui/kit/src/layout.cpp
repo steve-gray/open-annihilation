@@ -134,6 +134,20 @@ Frame frame_of(const Viewport& viewport) noexcept {
     return frame;
 }
 
+Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept {
+    const int32_t chosen =
+        chosen_percent > 0 ? chosen_percent / 100 : auto_scale(canvas.height, canvas.density);
+    // The largest whole step at which Compact's dialog fits the room.
+    const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
+    const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
+    const int32_t fits = std::min(
+        room_width / compact_metrics.dialog_width, room_height / compact_metrics.dialog_height
+    );
+    Viewport viewport = canvas;
+    viewport.scale_percent = std::max(int32_t{1}, std::min(chosen, fits)) * 100;
+    return viewport;
+}
+
 Rect to_canvas(const Rect& points, int32_t scale_percent) noexcept {
     const int32_t percent = percent_of(scale_percent);
     const int32_t left = floor_mul_div(points.x, percent, 100);

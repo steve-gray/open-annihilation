@@ -616,9 +616,11 @@ void Runtime::check_engine_settings_in_match() {
         tap_key(SDLK_END, SDL_KMOD_NONE);
         {
             const auto* graphics = engine_settings_dialog();
+            // Its end: 513, and the 79 rows of its last row, Interface size.
             require(
                 graphics != nullptr &&
-                    graphics->scroll[static_cast<std::size_t>(settings::Page::graphics)] == 513,
+                    graphics->scroll[static_cast<std::size_t>(settings::Page::graphics)] ==
+                        513 + 79,
                 "End did not scroll Graphics to its end" + on
             );
             const auto parts = settings::dialog_layout(*graphics);

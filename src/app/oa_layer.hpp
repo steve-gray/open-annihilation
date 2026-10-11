@@ -9,9 +9,10 @@
 // that closed a screen, lets the top modal screen take every input, darkens
 // what lies under each opaque modal screen, and draws the screens in the
 // window's own pixels before the software cursor, each opaque or laid over
-// what lies under it by its pixels' opacity. On the front end it draws them at a
-// whole scale (kit::auto_scale) and lays them out at the size class of the
-// points left over. oa_layer.cpp holds it, the settings' screen
+// what lies under it by its pixels' opacity. On the front end it draws them
+// at a whole scale (kit::layer_viewport: the Interface size setting, or the
+// Auto scale) and lays them out at the size class of the points left over.
+// oa_layer.cpp holds it, the settings' screen
 // (Runtime::SettingsScreen) and the screens of a notice (NoticeScreen) and a
 // question (QuestionScreen).
 #pragma once
@@ -61,9 +62,11 @@ struct LayerView {
     /// match: the safe area, Compact at 100%, as the in-match Settings keeps
     /// its own placement.
     oa::ui::kit::Frame frame{};
-    /// The whole number of window pixels a point takes: the Auto scale of the
-    /// window's canvas (kit::auto_scale), no larger than lets Compact's
-    /// settings dialog fit the room, and at least 1. 1 in a match.
+    /// The whole number of window pixels a point takes: the step the
+    /// Interface size setting in effect chooses, or for Auto the window
+    /// canvas's Auto scale (kit::auto_scale), no larger than lets Compact's
+    /// settings dialog fit the room, and at least 1 (kit::layer_viewport).
+    /// 1 in a match.
     int32_t scale{1};
     /// The room in window pixels: the canvas less its safe insets on the
     /// front end, the safe area in a match. A centred screen centres in it.
@@ -430,8 +433,9 @@ class OaLayer {
     /// Returns what the screens are placed on now: the window over the front
     /// end's picture, with the scale and size class of the window's canvas
     /// (its size in pixels, the window points it holds and, while the game
-    /// has touch controls, its safe insets), or the match's canvas. Without a
-    /// renderer the canvas is the picture itself.
+    /// has touch controls, its safe insets) at the Interface size in effect,
+    /// or the match's canvas. Without a renderer the canvas is the picture
+    /// itself.
     ///
     /// @return the view
     [[nodiscard]] LayerView view() const;
