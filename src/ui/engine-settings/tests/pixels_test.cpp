@@ -359,9 +359,10 @@ struct InstalledSimplifiedChinese {
 };
 
 std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
-    [[maybe_unused]] const InstalledSimplifiedChinese installed;
     std::vector<Picture> pictures;
     const renderer::RgbaPicture no_icon{};
+    { // Simplified Chinese is installed for the scenes in this block.
+        [[maybe_unused]] const InstalledSimplifiedChinese installed;
     const auto game = settings::settings_locks(settings::GameState{true, false, false, false});
 
     for (const Page page : settings::dialog_pages(settings::DialogKind::engine, true, true, true)) {
@@ -536,6 +537,35 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
         settings::draw_oa_mark(surface, {0, 0, 1}, side, no_icon);
         add(pictures, "mark/" + std::to_string(side), std::move(surface));
     }
+    }
+    // Available packs, with Simplified Chinese not installed, so it is listed
+    // only under the divider. The closed field then shows a download.
+    const auto offer = [](Dialog& dialog) {
+        settings::AvailableLanguage simplified;
+        simplified.tag = "zh-Hans";
+        simplified.endonym = "\347\256\200\344\275\223\344\270\255\346\226\207";
+        simplified.english_name = "Chinese (Simplified)";
+        simplified.aside = "4.0 MB \u21E9";
+        settings::AvailableLanguage portuguese;
+        portuguese.tag = "pt-BR";
+        portuguese.endonym = "Portugu\u00EAs (Brasil)";
+        portuguese.english_name = "Portuguese (Brazil)";
+        portuguese.aside = "community \u00B7 92% \u00B7 1.1 MB";
+        dialog.available_languages = {std::move(simplified), std::move(portuguese)};
+    };
+    Dialog available = engine_dialog(Page::language);
+    offer(available);
+    press_keys(available, {DialogKey::tab, DialogKey::space});
+    if (available.open_list == settings::no_control)
+        problem("language-available drop-down is not open");
+    add(pictures, "language-available", drawn_dialog(available, fonts, no_icon, 1));
+
+    Dialog downloading = engine_dialog(Page::language);
+    offer(downloading);
+    downloading.chosen.language = "zh-Hans";
+    downloading.available_languages[0].state = settings::AvailableLanguage::State::downloading;
+    downloading.available_languages[0].percent = 40;
+    add(pictures, "language-downloading", drawn_dialog(downloading, fonts, no_icon, 1));
     return pictures;
 }
 
