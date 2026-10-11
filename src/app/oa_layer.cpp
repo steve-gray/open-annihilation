@@ -1291,6 +1291,16 @@ WindowPosition window_position(const LayerView& view, float x, float y) noexcept
     };
 }
 
+bool layer_paste(uint32_t sdl_key, uint16_t modifiers) noexcept {
+    if (sdl_key != SDLK_V)
+        return false;
+#ifdef SDL_PLATFORM_MACOS
+    if ((modifiers & SDL_KMOD_GUI) != 0)
+        return true;
+#endif
+    return (modifiers & SDL_KMOD_CTRL) != 0;
+}
+
 std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers, bool in_match) noexcept {
     switch (sdl_key) {
     case SDLK_RETURN:
@@ -1752,6 +1762,17 @@ OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInpu
             return own;
         if (const auto pressed = layer_key(input.key, input.modifiers, seen.match))
             return screen.key(*pressed, input.key);
+        // The paste shortcut gives a focused field the clipboard's text up to
+        // its first line break, as typed text arrives.
+        if (layer_paste(input.key, input.modifiers) && screen.text_field()) {
+            char* clipboard = SDL_GetClipboardText();
+            std::string pasted = clipboard != nullptr ? clipboard : "";
+            SDL_free(clipboard);
+            pasted = pasted.substr(0, pasted.find_first_of("\r\n"));
+            if (pasted.empty())
+                return LayerAnswer::none;
+            return screen.text(pasted);
+        }
         return LayerAnswer::pass;
     }
     case ScreenInputKind::text:
@@ -2227,6 +2248,13 @@ bool OaLayer::take_match_button(const ScreenInput& input) {
         return true;
     }
     return false;
+}
+
+void OaLayer::restart_text_input() {
+    if (!text_field_)
+        return;
+    runtime_.stop_text_input();
+    runtime_.start_text_input(*text_field_);
 }
 
 void OaLayer::sync_text_input() {

@@ -46,15 +46,15 @@ struct LoggedRequest {
 /// A delay here is a time at which bytes may leave. The server keeps serving
 /// its other connections, and stop, while it waits.
 struct Reply {
-    int status{200};                        ///< the status code
-    std::vector<Header> headers;            ///< headers sent ahead of the generated ones
-    std::vector<uint8_t> body;              ///< the body, before gzip or chunking
-    bool chunked{false};                    ///< send the body as chunked transfer coding
-    std::size_t chunk_bytes{1024};          ///< the bytes of one chunk when chunked is set
-    bool gzip{false};                       ///< compress the body and send Content-Encoding: gzip
-    uint32_t head_delay_ms{0};              ///< milliseconds to wait before the status line
-    std::size_t piece_bytes{0};             ///< body bytes between pauses; 0 sends the body at once
-    uint32_t piece_delay_ms{0};             ///< milliseconds to wait between body pieces
+    int status{200};               ///< the status code
+    std::vector<Header> headers;   ///< headers sent ahead of the generated ones
+    std::vector<uint8_t> body;     ///< the body, before gzip or chunking
+    bool chunked{false};           ///< send the body as chunked transfer coding
+    std::size_t chunk_bytes{1024}; ///< the bytes of one chunk when chunked is set
+    bool gzip{false};              ///< compress the body and send Content-Encoding: gzip
+    uint32_t head_delay_ms{0};     ///< at least this many milliseconds before the status line
+    std::size_t piece_bytes{0};    ///< body bytes between pauses; 0 sends the body at once
+    uint32_t piece_delay_ms{0};    ///< at least this many milliseconds between body pieces
     std::optional<std::size_t> cut_after{}; ///< close after this many body bytes
     bool close{false};                      ///< send Connection: close and close after the response
     bool no_length{false};                  ///< omit Content-Length and close to end the body

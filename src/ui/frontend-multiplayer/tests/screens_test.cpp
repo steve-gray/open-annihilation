@@ -2220,7 +2220,7 @@ void check_player_row_focus(Driver& d) {
 
     std::vector<FocusStop> walked;
     bool back_at_chat = false;
-    for (int guard = 0; guard < 64 && !back_at_chat; ++guard) {
+    for (int press = 0; press < 64 && !back_at_chat; ++press) {
         d.key(kKeyTab);
         FocusStop stop;
         stop.name = focused_name();

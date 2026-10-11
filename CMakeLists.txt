@@ -939,6 +939,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_mod_warning.cpp
   src/app/runtime_presence_card.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_challenge.cpp
+  src/app/runtime_registries.cpp
   src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
   src/app/pack_map_source.cpp
@@ -958,6 +959,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_library.cpp
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
+  src/app/runtime_language_notice.cpp
   src/app/language_packs.cpp
   src/app/runtime_picture_captions.cpp
   src/app/runtime_renderer.cpp
@@ -986,6 +988,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_unit_speech_check.cpp src/app/runtime_build_page_check.cpp
   src/app/runtime_language_check.cpp src/app/runtime_language_switch_check.cpp
   src/app/runtime_language_registry_check.cpp
+  src/app/runtime_language_notice_check.cpp
   src/app/runtime_side_column_check.cpp src/app/runtime_match_bars_check.cpp
   src/app/runtime_unit_pages_check.cpp src/app/runtime_frontend_controls_check.cpp
   src/app/runtime_briefing_narration_check.cpp src/app/runtime_build_site_check.cpp
@@ -994,6 +997,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
+  src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
@@ -1653,6 +1657,21 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-challenge PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_challenge_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Settings › Downloads › Registries over a registry list the check
+      # writes under its player's folder: one added registry switched off and
+      # removed at OK, left alone by Cancel, an https address refused without
+      # a check, and an .oareg file whose catalogue at 127.0.0.1:1 cannot be
+      # reached. The data folder is the check's own.
+      set(oa_registries_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/registries")
+      file(MAKE_DIRECTORY "${oa_registries_dir}")
+      add_test(NAME native-registries COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-registries
+        --preferences-file "${oa_registries_dir}/registries.conf"
+        --user-folder "${oa_registries_dir}/Open Annihilation"
+        --data-dir "${oa_registries_dir}/data")
+      set_tests_properties(native-registries PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_registries_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # Each renderer failure the game handles while it runs, forced on the
       # renderer the walk of SDL's render drivers makes, which on the dummy
       # video driver is SDL's software renderer: the walk itself, a present
@@ -1945,6 +1964,90 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-language-switch PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_language_switch_check_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Each language-notice check rewrites its preferences. The starting
+      # file is copied over the live one before every run, and anything else
+      # the check leaves in its folder, which a later run would read, is removed.
+      file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-notice-reset.cmake" [=[
+if(NOT DEFINED dir OR NOT DEFINED live OR NOT DEFINED start)
+  message(FATAL_ERROR "language-notice reset needs dir, live and start")
+endif()
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E copy "${dir}/${start}" "${dir}/${live}"
+  COMMAND_ERROR_IS_FATAL ANY)
+set(player "${dir}/Open Annihilation")
+if(EXISTS "${player}/Registries.yaml.start")
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E copy
+      "${player}/Registries.yaml.start" "${player}/Registries.yaml"
+    COMMAND_ERROR_IS_FATAL ANY)
+endif()
+file(GLOB entries LIST_DIRECTORIES true "${dir}/*")
+foreach(entry IN LISTS entries)
+  cmake_path(GET entry FILENAME name)
+  if(name STREQUAL live OR name STREQUAL start OR name STREQUAL "Open Annihilation")
+    continue()
+  endif()
+  file(REMOVE_RECURSE "${entry}")
+endforeach()
+file(GLOB player_entries LIST_DIRECTORIES true "${player}/*")
+foreach(entry IN LISTS player_entries)
+  cmake_path(GET entry FILENAME name)
+  if(name STREQUAL "Registries.yaml" OR name STREQUAL "Registries.yaml.start")
+    continue()
+  endif()
+  file(REMOVE_RECURSE "${entry}")
+endforeach()
+]=])
+      # A language the setting names that is only available: the notice over
+      # the main menu names it, says it cannot be downloaded yet, and Use
+      # English stores English. No catalogue is offered, so the built-in
+      # registry's list cannot supply the pack.
+      set(oa_language_notice_check_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-notice")
+      file(MAKE_DIRECTORY "${oa_language_notice_check_dir}/Open Annihilation")
+      file(WRITE "${oa_language_notice_check_dir}/language-notice.start.conf"
+        "open-annihilation-preferences 1\n\"open-annihilation.language\" \"zh-Hans\"\n")
+      file(WRITE "${oa_language_notice_check_dir}/Open Annihilation/Registries.yaml"
+        "registries: []\ndisabled: [coreprime]\n")
+      file(WRITE "${oa_language_notice_check_dir}/Open Annihilation/Registries.yaml.start"
+        "registries: []\ndisabled: [coreprime]\n")
+      add_test(NAME language-notice-clean COMMAND ${CMAKE_COMMAND}
+        -Ddir=${oa_language_notice_check_dir}
+        -Dlive=language-notice.conf
+        -Dstart=language-notice.start.conf
+        -P "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-notice-reset.cmake")
+      set_tests_properties(language-notice-clean PROPERTIES FIXTURES_SETUP language-notice-clean)
+      add_test(NAME native-language-notice COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-language-notice
+        --preferences-file "${oa_language_notice_check_dir}/language-notice.conf")
+      set_tests_properties(native-language-notice PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_language_notice_check_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED language-notice-clean)
+      # System default, with the operating system asking for Simplified
+      # Chinese: the same notice, and Use English remembers that language.
+      set(oa_language_notice_system_check_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-notice-system")
+      file(MAKE_DIRECTORY "${oa_language_notice_system_check_dir}/Open Annihilation")
+      file(WRITE "${oa_language_notice_system_check_dir}/language-notice-system.start.conf"
+        "open-annihilation-preferences 1\n\"open-annihilation.language\" \"system\"\n")
+      file(WRITE "${oa_language_notice_system_check_dir}/Open Annihilation/Registries.yaml"
+        "registries: []\ndisabled: [coreprime]\n")
+      file(WRITE "${oa_language_notice_system_check_dir}/Open Annihilation/Registries.yaml.start"
+        "registries: []\ndisabled: [coreprime]\n")
+      add_test(NAME language-notice-system-clean COMMAND ${CMAKE_COMMAND}
+        -Ddir=${oa_language_notice_system_check_dir}
+        -Dlive=language-notice-system.conf
+        -Dstart=language-notice-system.start.conf
+        -P "${CMAKE_CURRENT_BINARY_DIR}/native-checks/language-notice-reset.cmake")
+      set_tests_properties(language-notice-system-clean PROPERTIES
+        FIXTURES_SETUP language-notice-system-clean)
+      add_test(NAME native-language-notice-system COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-language-notice
+        --preferences-file "${oa_language_notice_system_check_dir}/language-notice-system.conf")
+      set_tests_properties(native-language-notice-system PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_language_notice_system_check_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software;SDL_PREFERRED_LOCALES=zh_CN"
+        FIXTURES_REQUIRED language-notice-system-clean)
       # The language registry with the pseudo pack installed in the player's
       # Languages folder, beside the preferences file: each live language is
       # named, English first and the built-ins in their order, the pack as

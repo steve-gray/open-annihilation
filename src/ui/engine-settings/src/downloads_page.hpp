@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Downloads' rows (downloads_page.cpp): the check for content updates, one
-// install-ID switch and value per registry the host offers, and the
-// downloaded files. The dialog's events (dialog.cpp) call these for that
-// section's rows; the rows are built when the page is laid out.
+// install-ID switch and value per registry the host offers, the downloaded
+// files, and the Registries row whose MANAGE… opens the Registries part
+// (registries_page.hpp). The dialog's events (dialog.cpp) call these for
+// that section's rows; the rows are built when the page is laid out.
 #pragma once
 
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -21,6 +22,10 @@ namespace oa::ui::engine_settings::downloads {
 inline constexpr int32_t reset_install_id_action = 4;
 /// What EMPTY asks the host for.
 inline constexpr int32_t empty_downloads_action = 5;
+/// What the Registries row's MANAGE… asks for: the Registries part, which
+/// the page opens itself and asks nothing of the host. It follows every
+/// other row's button's action, MORE IN THE LIBRARY…'s among them.
+inline constexpr int32_t manage_registries_action = 7;
 
 /// Places Downloads' rows from the dialog's offer.
 ///
@@ -28,7 +33,8 @@ inline constexpr int32_t empty_downloads_action = 5;
 /// @param locks what cannot be changed now; a game locks RESET and EMPTY
 /// @param width how wide a text is; unused, the hints break on characters
 /// @param[out] placed the kit's rows, when not null
-/// @return the rows, one for the check, two for each install ID and one for the files
+/// @return the rows, one for the check, two for each install ID, one for the
+///     files and one for the registries; none while the Registries part shows
 [[nodiscard]] geometry::Rows place(
     const Dialog& dialog,
     const Locks& locks,
@@ -82,7 +88,8 @@ void apply_choice(Dialog& dialog, int32_t index);
 ///
 /// @param[in,out] dialog the dialog
 /// @param row the row
-/// @return what the key asks; a RESET names Dialog::install_id_registry
+/// @return what the key asks; a RESET names Dialog::install_id_registry, and
+///     MANAGE… opens the Registries part and asks nothing more
 [[nodiscard]] oa::ui::kit::RowResult activate(Dialog& dialog, const geometry::Row& row);
 
 /// Takes a released press on a Downloads row.
@@ -91,7 +98,8 @@ void apply_choice(Dialog& dialog, int32_t index);
 /// @param row the row
 /// @param x the pointer's column, in source pixels from the dialog's left edge
 /// @param y the pointer's row
-/// @return what the release asks; a RESET names Dialog::install_id_registry
+/// @return what the release asks; a RESET names Dialog::install_id_registry,
+///     and MANAGE… opens the Registries part and asks nothing more
 [[nodiscard]] oa::ui::kit::RowResult
 release(Dialog& dialog, const geometry::Row& row, int32_t x, int32_t y);
 
