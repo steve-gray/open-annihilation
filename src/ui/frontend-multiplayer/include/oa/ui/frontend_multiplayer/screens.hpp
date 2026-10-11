@@ -389,6 +389,13 @@ struct PresenceBadgeSpot {
     bool rules_differ{}; ///< the badge carries the dot (lobby_rules_differ_from_host)
 };
 
+/// The rules dot's ring, in canvas pixels: a square this many pixels across,
+/// its four corner pixels left out.
+inline constexpr int32_t presence_badge_dot_ring = 6;
+/// How far the rules dot reaches past the badge's right edge and above its
+/// top, in canvas pixels. The dot's face is the square one pixel inside the ring.
+inline constexpr int32_t presence_badge_dot_overhang = 2;
+
 /// Lists the OA badges the battle room draws now, in slot order.
 ///
 /// A row shows the badge when lobby_row_badge says open_annihilation and the
@@ -427,6 +434,20 @@ class PresenceCardTrigger;
 ///
 /// @param trigger the card's trigger, or null
 void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept;
+
+/// Tells the battle room that the OA layer draws each OA badge at the
+/// window's own pixels, so the 640x480 frame leaves its pixel badge out.
+///
+/// `draws` is asked while the frame is drawn and returns true when the
+/// layer will draw the badges this frame. A null binding, the one the
+/// screens start with, keeps the frame's badge: a renderer without the
+/// layer, and the screens' own tests. The binding survives multiplayer_reset.
+/// The layer binds its own when its overlay is registered, and clears it
+/// when that layer goes.
+///
+/// @param context handed to draws; null with a null draws
+/// @param draws returns true when the layer draws the badges; null clears the binding
+void multiplayer_bind_layer_presence_badges(void* context, bool (*draws)(void*)) noexcept;
 
 /// Returns the gadget records of the current base screen as its loader left them.
 [[nodiscard]] const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept;

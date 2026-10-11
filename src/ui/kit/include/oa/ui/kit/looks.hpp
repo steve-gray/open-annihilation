@@ -267,8 +267,10 @@ struct HoverCardRow {
 /// A hover card: a header, label and value rows, a block of lines and an
 /// arrow pointing at what it describes. Every text is already looked up.
 struct HoverCardLook {
-    int32_t width{};                  ///< the card's width, in points; 0 fits its widest line
-    bool mark{};                      ///< the small OA mark starts the header
+    int32_t width{}; ///< the card's width, in points; 0 fits its widest line
+    /// The header starts with the OA mark: the logo when the canvas carries
+    /// the icon, otherwise the small one-bit mark.
+    bool mark{};
     std::string title{};              ///< the header's title
     std::string aside{};              ///< the header's words at the right
     std::vector<HoverCardRow> rows{}; ///< the rows under the header

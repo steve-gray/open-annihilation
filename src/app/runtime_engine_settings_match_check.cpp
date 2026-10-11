@@ -1123,6 +1123,143 @@ void Runtime::check_engine_settings_in_match() {
         SDL_SetWindowSize(sdl_.window, before_width, before_height);
         pump_window_events();
     }
+    // Interface size Auto at the start of a game is the scale a resize to
+    // the same window leaves. A size chosen in the dialog redraws at once,
+    // and Cancel puts back the size the dialog opened with.
+    {
+        const auto pump_resize = [&] {
+            SDL_SyncWindow(sdl_.window);
+            SDL_Event event{};
+            while (SDL_PollEvent(&event))
+                dispatch_event(event, running);
+            require(running, "a window event ended the run");
+        };
+        const auto preference_of = [this] {
+            const auto stored = preference_values_.find(std::string(settings::key::interface_size));
+            return stored == preference_values_.end() ? std::string{} : stored->second;
+        };
+        const auto read_dialog = [this] {
+            return OaLayer::match_dialog(match_layout_, oa_layer().view().interface_percent);
+        };
+        leave_match();
+        load(Screen::main_menu);
+        engine_settings_state().current.hud_scaling = true;
+        engine_settings_state().current.interface_size = settings::InterfaceSize::automatic;
+        constexpr int kWide = 2103;
+        constexpr int kTall = 1181;
+        if (!SDL_SetWindowSize(sdl_.window, kWide, kTall) || !SDL_SyncWindow(sdl_.window))
+            throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+        start_benchmark_skirmish();
+        const auto started = read_dialog();
+        int window_width = 0;
+        int window_height = 0;
+        SDL_GetWindowSize(sdl_.window, &window_width, &window_height);
+        std::cout << "engine settings check: Interface size Auto at the start on a " << window_width
+                  << 'x' << window_height << " window, canvas " << match_layout_.width << 'x'
+                  << match_layout_.height << ", density " << match_layout_.px_per_point << ", "
+                  << size_class_name(started.size_class) << " at " << started.scale_percent
+                  << "%, dialog " << started.shown.width << 'x' << started.shown.height << '\n';
+        require(
+            window_width == kWide && window_height == kTall && match_layout_.width == kWide &&
+                match_layout_.height == kTall && started.size_class == kit::SizeClass::compact &&
+                started.scale_percent == 200 && started.shown.width == 960 &&
+                started.shown.height == 648,
+            "Auto at the start of a 2103x1181 game is not Compact at 200%, dialog 960x648"
+        );
+        // A different size, reported and not yet handled: the scale after
+        // following the window equals the scale once the resize is handled.
+        constexpr int kAwayWidth = 1280;
+        constexpr int kAwayHeight = 720;
+        if (!SDL_SetWindowSize(sdl_.window, kAwayWidth, kAwayHeight))
+            throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+        follow_window_output();
+        const auto followed = read_dialog();
+        pump_resize();
+        const auto pumped = read_dialog();
+        require(
+            followed.size_class == kit::SizeClass::regular && followed.scale_percent == 100 &&
+                followed.size_class == pumped.size_class &&
+                followed.scale_percent == pumped.scale_percent &&
+                followed.shown.width == pumped.shown.width &&
+                followed.shown.height == pumped.shown.height,
+            "Auto after a resize was not the scale the resize leaves once handled"
+        );
+        if (!SDL_SetWindowSize(sdl_.window, kWide, kTall))
+            throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+        follow_window_output();
+        const auto returned = read_dialog();
+        pump_resize();
+        const auto returned_handled = read_dialog();
+        require(
+            returned.size_class == started.size_class &&
+                returned.scale_percent == started.scale_percent &&
+                returned.shown.width == started.shown.width &&
+                returned.shown.height == started.shown.height &&
+                returned_handled.size_class == started.size_class &&
+                returned_handled.scale_percent == started.scale_percent &&
+                returned_handled.shown.width == started.shown.width &&
+                returned_handled.shown.height == started.shown.height,
+            "Auto after a resize back to 2103x1181 is not the scale at the start"
+        );
+        std::cout << "engine settings check: Interface size Auto after a resize back to " << kWide
+                  << 'x' << kTall << " is " << size_class_name(returned.size_class) << " at "
+                  << returned.scale_percent << "%, dialog " << returned.shown.width << 'x'
+                  << returned.shown.height << '\n';
+        // 100%, stepped onto from Auto, redraws the open dialog at once. The
+        // page, the focus and the scroll stay, and the preference is kept
+        // for OK. Escape puts Auto back.
+        const std::string preference_before = preference_of();
+        open_engine_settings_in_match();
+        require(engine_settings_dialog() != nullptr, "the settings did not open in the game");
+        show_page(settings::Page::graphics, " for Interface size");
+        tap_key(SDLK_END, SDL_KMOD_NONE);
+        const int32_t size_row =
+            settings::first_row_control +
+            static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+        for (int press = 0; press < 64 && engine_settings_dialog()->focused != size_row; ++press)
+            tap_key(SDLK_DOWN, SDL_KMOD_NONE);
+        auto* dialog = engine_settings_dialog();
+        require(
+            dialog != nullptr && dialog->focused == size_row,
+            "Interface size's row did not take the focus in a game"
+        );
+        const auto scroll_index = static_cast<std::size_t>(settings::Page::graphics);
+        const int32_t scroll_before = dialog->scroll[scroll_index];
+        tap_key(SDLK_RIGHT, SDL_KMOD_NONE);
+        dialog = engine_settings_dialog();
+        const auto chosen_place = read_dialog();
+        require(dialog != nullptr, "choosing Interface size 100% closed the dialog");
+        const int32_t limit_now = settings::scroll_limit(*dialog);
+        const int32_t shown_scroll =
+            std::clamp(dialog->scroll[scroll_index], int32_t{0}, limit_now);
+        require(
+            dialog->page == settings::Page::graphics && dialog->focused == size_row &&
+                dialog->chosen.interface_size == settings::InterfaceSize::size_100 &&
+                engine_settings().interface_size == settings::InterfaceSize::size_100 &&
+                dialog->size_class == kit::SizeClass::large &&
+                chosen_place.size_class == kit::SizeClass::large &&
+                chosen_place.scale_percent == 100 && chosen_place.shown.width == 960 &&
+                chosen_place.shown.height == 600 &&
+                (dialog->scroll[scroll_index] == scroll_before ||
+                 shown_scroll == std::min(scroll_before, limit_now)) &&
+                preference_of() == preference_before,
+            "Interface size 100% in a game did not take effect at once on its row"
+        );
+        std::cout << "engine settings check: Interface size 100% in a game takes effect at once, "
+                     "dialog "
+                  << chosen_place.shown.width << 'x' << chosen_place.shown.height << '\n';
+        tap_key(SDLK_ESCAPE, SDL_KMOD_NONE);
+        const auto restored = read_dialog();
+        require(
+            engine_settings_dialog() == nullptr &&
+                engine_settings().interface_size == settings::InterfaceSize::automatic &&
+                preference_of() == preference_before && restored.size_class == started.size_class &&
+                restored.scale_percent == started.scale_percent &&
+                restored.shown.width == started.shown.width &&
+                restored.shown.height == started.shown.height,
+            "Escape did not put the game's Interface size back to Auto"
+        );
+    }
     leave_match();
     load(Screen::main_menu);
     // Back on the main menu the Library's PLAY NOW and SWITCH OFF can be
