@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // List rows, chips, text and search fields, tabs, cards and their grid,
-// hover cards and links, drawn for the crisp backend. Every colour is a kit
-// token and every size a member of compact_metrics.
+// hover cards and links, drawn through the canvas's primitives. Every colour
+// is a kit token and every size a member of compact_metrics.
 
 #include "oa/ui/kit/controls.hpp"
 
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/chrome.hpp"
 
 #include "oa/ui/frontend_renderer/artless.hpp"
@@ -37,7 +38,7 @@ constexpr std::string_view kEllipsis = "...";
 /// @param canvas the canvas
 /// @return true when it has one
 bool drawable(const Canvas& canvas) noexcept {
-    return canvas.surface != nullptr;
+    return can_draw(canvas);
 }
 
 /// Returns a text's width on a canvas, 0 when it has no fonts.
@@ -47,9 +48,7 @@ bool drawable(const Canvas& canvas) noexcept {
 /// @param text the text, in UTF-8
 /// @return the width, in points
 int32_t measured(const Canvas& canvas, FontRole role, std::string_view text) {
-    if (canvas.fonts == nullptr)
-        return 0;
-    return text_width(*canvas.fonts, role, text);
+    return measure_text(canvas, role, text);
 }
 
 /// Fills a rectangle with a token.
@@ -58,7 +57,7 @@ int32_t measured(const Canvas& canvas, FontRole role, std::string_view text) {
 /// @param rect the rectangle
 /// @param ink the colour
 void fill(const Canvas& canvas, const Rect& rect, Colour ink) {
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, rect, rgb(ink));
+    fill_rect(canvas, rect, ink);
 }
 
 /// Outlines a rectangle in a token.
@@ -67,7 +66,7 @@ void fill(const Canvas& canvas, const Rect& rect, Colour ink) {
 /// @param rect the rectangle
 /// @param ink the colour
 void outline(const Canvas& canvas, const Rect& rect, Colour ink) {
-    renderer::draw_outline(*canvas.surface, canvas.placement, rect, rgb(ink));
+    outline_rect(canvas, rect, ink);
 }
 
 /// Blends a token over a rectangle.
@@ -77,7 +76,7 @@ void outline(const Canvas& canvas, const Rect& rect, Colour ink) {
 /// @param ink the colour
 /// @param opacity its share of each pixel, in 256ths
 void blend(const Canvas& canvas, const Rect& rect, Colour ink, uint32_t opacity) {
-    renderer::blend_source_rect(*canvas.surface, canvas.placement, rect, rgb(ink), opacity);
+    blend_rect(canvas, rect, ink, opacity);
 }
 
 /// Draws a text in a box, when the canvas has a surface and fonts.
@@ -100,9 +99,7 @@ void line(
 ) {
     if (!drawable(canvas) || canvas.fonts == nullptr || text.empty())
         return;
-    draw_boxed_text(
-        *canvas.surface, canvas.placement, *canvas.fonts, role, text, box, align, rgb(ink), tracking
-    );
+    box_text(canvas, role, text, box, align, ink, tracking);
 }
 
 /// Draws a text cut with "..." to its box's width.
@@ -268,7 +265,7 @@ void draw_row_badge(const Canvas& canvas, const Rect& badge, const ListRowLook& 
     if (badge.width <= 0 || badge.height <= 0)
         return;
     if (renderer::picture_drawable(look.badge)) {
-        renderer::draw_picture(*canvas.surface, canvas.placement, badge, look.badge);
+        draw_picture(canvas, badge, look.badge);
         outline(canvas, badge, colour::control_border);
         return;
     }
@@ -836,7 +833,7 @@ void draw_card(const Canvas& canvas, const Rect& rect, const CardLook& look) {
 
     const Rect preview = card_preview(rect);
     if (renderer::picture_drawable(look.picture)) {
-        renderer::draw_picture(*canvas.surface, canvas.placement, preview, look.picture);
+        draw_picture(canvas, preview, look.picture);
     } else if (preview.width > 0) {
         fill(canvas, preview, colour::well);
         cut_line(

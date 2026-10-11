@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The window's chrome, drawn for the crisp backend. The arithmetic is the
-// settings dialog's, moved here unchanged.
+// The window's chrome, drawn through the canvas's primitives. The arithmetic
+// is the settings dialog's, moved here unchanged.
 
 #include "oa/ui/kit/chrome.hpp"
 
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/text.hpp"
 
@@ -16,8 +17,6 @@
 #include <utility>
 
 namespace oa::ui::kit {
-
-namespace renderer = oa::ui::frontend_renderer;
 
 namespace {
 
@@ -33,7 +32,7 @@ constexpr int32_t kTextOffset = 12;
 constexpr int32_t kTextMargin = 4;
 
 bool drawable(const Canvas& canvas) noexcept {
-    return canvas.surface != nullptr;
+    return can_draw(canvas);
 }
 
 /// The title's right column: the columns kept for it, or, when the modern
@@ -68,9 +67,7 @@ void draw_line(
 ) {
     if (!drawable(canvas) || canvas.fonts == nullptr || text.empty())
         return;
-    draw_boxed_text(
-        *canvas.surface, canvas.placement, *canvas.fonts, role, text, box, align, rgb(ink), tracking
-    );
+    box_text(canvas, role, text, box, align, ink, tracking);
 }
 
 } // namespace
@@ -78,15 +75,13 @@ void draw_line(
 void draw_window_face(const Canvas& canvas, const Rect& whole) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, whole, rgb(colour::panel));
+    fill_rect(canvas, whole, colour::panel);
 }
 
 void draw_window_edge(const Canvas& canvas, const Rect& whole) {
     if (!drawable(canvas))
         return;
-    renderer::draw_bevel(
-        *canvas.surface, canvas.placement, whole, rgb(colour::edge_light), rgb(colour::edge_dark)
-    );
+    bevel_rect(canvas, whole, colour::edge_light, colour::edge_dark);
 }
 
 void draw_header(const Canvas& canvas, const HeaderLook& look) {
@@ -96,18 +91,8 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
     const int32_t header_top = edge;
     const int32_t header_height = compact_metrics.header_height;
     const int32_t inner = look.width - 2 * edge;
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
-        {edge, header_top, inner, header_height},
-        rgb(colour::band)
-    );
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
-        {edge, header_top + header_height, inner, 1},
-        rgb(colour::rule)
-    );
+    fill_rect(canvas, {edge, header_top, inner, header_height}, colour::band);
+    rule_rect(canvas, {edge, header_top + header_height, inner, 1}, colour::rule);
     const Rect mark{
         compact_metrics.padding,
         compact_metrics.mark_top,
@@ -142,7 +127,7 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
     if (look.note.empty() || canvas.fonts == nullptr)
         return;
     const int32_t version_left =
-        version.x + version.width - text_width(*canvas.fonts, FontRole::small, look.version);
+        version.x + version.width - measure_text(canvas, FontRole::small, look.version);
     const int32_t note_left = second.x + second.width + compact_metrics.header_gap;
     const Rect note{
         note_left,
@@ -157,17 +142,11 @@ void draw_footer_band(const Canvas& canvas, int32_t width, int32_t rule_row) {
     if (!drawable(canvas))
         return;
     const int32_t inner = width - 2 * compact_metrics.edge;
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
-        {compact_metrics.edge, rule_row, inner, 1},
-        rgb(colour::rule)
-    );
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
+    rule_rect(canvas, {compact_metrics.edge, rule_row, inner, 1}, colour::rule);
+    fill_rect(
+        canvas,
         {compact_metrics.edge, rule_row + 1, inner, compact_metrics.footer_height},
-        rgb(colour::band)
+        colour::band
     );
 }
 
@@ -175,38 +154,26 @@ void draw_nav(const Canvas& canvas, const NavLook& look) {
     if (!drawable(canvas))
         return;
     if (look.area.width > 0 && look.area.height > 0) {
-        renderer::fill_source_rect(*canvas.surface, canvas.placement, look.area, rgb(colour::list));
-        renderer::fill_source_rect(
-            *canvas.surface,
-            canvas.placement,
-            {look.rule_column, look.area.y, 1, look.area.height},
-            rgb(colour::rule)
-        );
+        fill_rect(canvas, look.area, colour::list);
+        rule_rect(canvas, {look.rule_column, look.area.y, 1, look.area.height}, colour::rule);
     }
     if (look.divider.has_value())
-        renderer::fill_source_rect(
-            *canvas.surface, canvas.placement, *look.divider, rgb(colour::rule)
-        );
+        rule_rect(canvas, *look.divider, colour::rule);
     for (const NavEntry& entry : look.entries) {
         Colour ink = colour::list_text;
         if (entry.selected) {
-            renderer::fill_source_rect(
-                *canvas.surface, canvas.placement, entry.rect, rgb(colour::list_selected)
-            );
-            renderer::fill_source_rect(
-                *canvas.surface,
-                canvas.placement,
+            fill_rect(canvas, entry.rect, colour::list_selected);
+            fill_rect(
+                canvas,
                 {entry.rect.x + kMarkerOffset,
                  entry.rect.y + (entry.rect.height - kMarkerHeight) / 2,
                  kMarkerWidth,
                  kMarkerHeight},
-                rgb(colour::accent)
+                colour::accent
             );
             ink = colour::text;
         } else if (entry.hovered) {
-            renderer::fill_source_rect(
-                *canvas.surface, canvas.placement, entry.rect, rgb(colour::hover)
-            );
+            fill_rect(canvas, entry.rect, colour::hover);
             ink = colour::text;
         }
         const Rect caption{
@@ -273,9 +240,7 @@ void draw_heading(const Canvas& canvas, const Rect& rect, const std::string& tex
 void draw_row_frame(const Canvas& canvas, const RowFrame& row) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(
-        *canvas.surface, canvas.placement, {row.left, row.top, row.width, 1}, rgb(colour::rule)
-    );
+    rule_rect(canvas, {row.left, row.top, row.width, 1}, colour::rule);
     draw_line(canvas, FontRole::regular, row.label_text, row.label, Align::left, colour::text, 0);
     const std::size_t lines = std::min(row.hints.size(), row.hint_texts.size());
     for (std::size_t line = 0; line < lines; ++line) {
@@ -299,17 +264,13 @@ void draw_row_frame(const Canvas& canvas, const RowFrame& row) {
 void draw_locked_fade(const Canvas& canvas, const Rect& rect) {
     if (!drawable(canvas))
         return;
-    renderer::blend_source_rect(
-        *canvas.surface, canvas.placement, rect, rgb(colour::panel), locked_fade
-    );
+    blend_rect(canvas, rect, colour::panel, locked_fade);
 }
 
 void draw_rule(const Canvas& canvas, int32_t left, int32_t row, int32_t width) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(
-        *canvas.surface, canvas.placement, {left, row, width, 1}, rgb(colour::rule)
-    );
+    rule_rect(canvas, {left, row, width, 1}, colour::rule);
 }
 
 } // namespace oa::ui::kit

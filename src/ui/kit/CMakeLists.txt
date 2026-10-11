@@ -4,11 +4,11 @@
 # The OA UI kit: one look, one text measure, one layout and one set of controls
 # for every OA screen (include/oa/ui/kit/theme.hpp, include/oa/ui/kit/text.hpp,
 # include/oa/ui/kit/layout.hpp, include/oa/ui/kit/input.hpp,
-# include/oa/ui/kit/looks.hpp, include/oa/ui/kit/components.hpp,
+# include/oa/ui/kit/looks.hpp, include/oa/ui/kit/canvas.hpp, include/oa/ui/kit/components.hpp,
 # include/oa/ui/kit/chrome.hpp, include/oa/ui/kit/controls.hpp,
 # include/oa/ui/kit/components_more.hpp). Provisional until the kit is declared
 # stable.
-add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/components.cpp
+add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/canvas.cpp src/components.cpp
   src/chrome.cpp src/controls.cpp src/components_more.cpp)
 # Declared rows: a settings page as a table (include/oa/ui/kit/rows.hpp).
 target_sources(oa-ui-kit PRIVATE src/rows.cpp)

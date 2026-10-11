@@ -3,12 +3,12 @@
 
 // Provisional: this header changes whenever OA's screens need it to, until the kit is declared stable (src/ui/kit/README.md).
 
-// The kit's controls, drawn for the crisp backend: whole scales and the
-// game's fonts, with the modern faces for the characters they lack. One
-// button, five looks. Captions come already looked up. paint draws a
+// The kit's controls, drawn through the canvas's primitives (canvas.hpp).
+// One button, five looks. Captions come already looked up. paint draws a
 // display list's items in order.
 #pragma once
 
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/looks.hpp"
 
@@ -17,23 +17,6 @@
 #include <string>
 
 namespace oa::ui::kit {
-
-/// Where a control is drawn, for the crisp backend.
-struct Canvas {
-    oa::ui::frontend_renderer::Surface* surface{};    ///< the picture; null draws nothing
-    oa::ui::frontend_renderer::Placement placement{}; ///< where points land, and its clip
-    const Fonts* fonts{};                             ///< the game's fonts; null draws no text
-    oa::ui::frontend_renderer::RgbaPicture
-        icon{}; ///< the Open Annihilation icon; empty draws the OA mark
-};
-
-/// Returns a canvas that draws only inside a rectangle, and inside the
-/// canvas's own clip when it has one. Where the two do not meet, nothing draws.
-///
-/// @param canvas the canvas
-/// @param rect the rectangle, in points
-/// @return the canvas, clipped
-[[nodiscard]] Canvas clipped(const Canvas& canvas, const Rect& rect);
 
 /// Draws a one-bit mark.
 ///
@@ -269,8 +252,8 @@ void add_lock(DisplayList& list, const Rect& area, const LockLook& look);
 void add_mark(DisplayList& list, Point at, Mark mark, Colour ink);
 
 /// Draws a display list's items in list order. An item with a clip draws
-/// only inside it. A generic role is drawn by the artless painter; a
-/// component by its draw function.
+/// only inside it. A generic role is drawn by the canvas's primitive of its
+/// name; a component by its draw function.
 ///
 /// @param canvas where the list is drawn
 /// @param list the display list

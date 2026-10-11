@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The settings dialog's controls, drawn for the crisp backend. The arithmetic
-// is the dialog's, moved here unchanged. paint draws every role, the
-// controls of controls.hpp among them.
+// The settings dialog's controls, drawn through the canvas's primitives. The
+// arithmetic is the dialog's, moved here unchanged. paint draws every role,
+// the controls of controls.hpp among them.
 
 #include "oa/ui/kit/components.hpp"
 
@@ -136,7 +136,7 @@ const renderer::Mark& bits_of(Mark mark) noexcept {
 }
 
 bool drawable(const Canvas& canvas) noexcept {
-    return canvas.surface != nullptr;
+    return can_draw(canvas);
 }
 
 void paint_text(
@@ -147,11 +147,7 @@ void paint_text(
     Align align,
     Colour ink
 ) {
-    if (!drawable(canvas) || canvas.fonts == nullptr)
-        return;
-    draw_boxed_text(
-        *canvas.surface, canvas.placement, *canvas.fonts, role, text, box, align, rgb(ink)
-    );
+    box_text(canvas, role, text, box, align, ink);
 }
 
 /// A button's face, when it has one, its border and its caption.
@@ -203,30 +199,17 @@ void draw_mark_square(const Canvas& canvas, int32_t side, Colour ink) {
         side * compact_metrics.button_square_numerator / compact_metrics.button_square_denominator;
     const int32_t square_offset = (side - square_side) / 2;
     const Rect square{square_offset, square_offset, square_side, square_side};
-    renderer::draw_outline(*canvas.surface, canvas.placement, square, rgb(ink));
+    outline_rect(canvas, square, ink);
     const renderer::Mark& mark =
         square_side - 2 >= kLargeMark.width + 2 * compact_metrics.large_mark_margin ? kLargeMark
                                                                                     : kSmallMark;
-    renderer::draw_mark(
-        *canvas.surface,
-        canvas.placement,
+    draw_mark(
+        canvas,
         mark,
-        square_offset + (square_side - mark.width) / 2,
-        square_offset + (square_side - mark.height + 1) / 2,
-        rgb(ink)
+        {square_offset + (square_side - mark.width) / 2,
+         square_offset + (square_side - mark.height + 1) / 2},
+        ink
     );
-}
-
-Canvas placed_at(const Canvas& canvas, Point origin) {
-    Canvas shifted = canvas;
-    const int32_t scale = canvas.placement.scale;
-    shifted.placement.x += origin.x * scale;
-    shifted.placement.y += origin.y * scale;
-    if (shifted.placement.clip.width > 0 && shifted.placement.clip.height > 0) {
-        shifted.placement.clip.x -= origin.x;
-        shifted.placement.clip.y -= origin.y;
-    }
-    return shifted;
 }
 
 void add_control(
@@ -258,34 +241,30 @@ void paint_item(const Canvas& canvas, const Item& item) {
         drawn = clipped(canvas, item.clip);
     if (!drawable(drawn))
         return;
-    renderer::Surface& surface = *drawn.surface;
-    const renderer::Placement& placement = drawn.placement;
     switch (item.role) {
     case Role::fill:
-        renderer::fill_source_rect(surface, placement, item.rect, rgb(item.colour));
+        fill_rect(drawn, item.rect, item.colour);
         break;
     case Role::blend:
-        renderer::blend_source_rect(surface, placement, item.rect, rgb(item.colour), item.opacity);
+        blend_rect(drawn, item.rect, item.colour, item.opacity);
         break;
     case Role::outline:
-        renderer::draw_outline(surface, placement, item.rect, rgb(item.colour));
+        outline_rect(drawn, item.rect, item.colour);
         break;
     case Role::bevel:
-        renderer::draw_bevel(
-            surface, placement, item.rect, rgb(item.colour), rgb(colour::edge_dark)
-        );
+        bevel_rect(drawn, item.rect, item.colour, colour::edge_dark);
         break;
     case Role::rule:
-        renderer::fill_source_rect(surface, placement, item.rect, rgb(item.colour));
+        rule_rect(drawn, item.rect, item.colour);
         break;
     case Role::text:
         paint_text(drawn, item.font, item.text, item.rect, item.align, item.colour);
         break;
     case Role::picture:
         if (const auto* look = std::get_if<PictureLook>(&item.look))
-            renderer::draw_picture(surface, placement, item.rect, look->picture);
+            draw_picture(drawn, item.rect, look->picture);
         else
-            renderer::draw_picture(surface, placement, item.rect, drawn.icon);
+            draw_picture(drawn, item.rect, drawn.icon);
         break;
     case Role::mark:
         if (const auto* look = std::get_if<MarkLook>(&item.look))
@@ -394,23 +373,6 @@ void paint_item(const Canvas& canvas, const Item& item) {
 
 } // namespace
 
-Canvas clipped(const Canvas& canvas, const Rect& rect) {
-    Canvas out = canvas;
-    const Rect& outer = canvas.placement.clip;
-    if (outer.width <= 0 || outer.height <= 0) {
-        out.placement.clip = rect;
-        return out;
-    }
-    const int32_t left = std::max(rect.x, outer.x);
-    const int32_t top = std::max(rect.y, outer.y);
-    const int32_t right = std::min(rect.x + rect.width, outer.x + outer.width);
-    const int32_t bottom = std::min(rect.y + rect.height, outer.y + outer.height);
-    out.placement.clip = {left, top, std::max(right - left, 0), std::max(bottom - top, 0)};
-    if (out.placement.clip.width == 0 || out.placement.clip.height == 0)
-        out.placement.scale = 0;
-    return out;
-}
-
 Point mark_size(Mark mark) noexcept {
     const renderer::Mark& bits = bits_of(mark);
     return {bits.width, bits.height};
@@ -419,14 +381,14 @@ Point mark_size(Mark mark) noexcept {
 void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink) {
     if (!drawable(canvas))
         return;
-    renderer::draw_mark(*canvas.surface, canvas.placement, bits_of(mark), at.x, at.y, rgb(ink));
+    draw_mark(canvas, bits_of(mark), at, ink);
 }
 
 void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around) {
     if (!drawable(canvas))
         return;
     const Rect ring = around ? grown(control, compact_metrics.focus_inset) : control;
-    renderer::draw_outline(*canvas.surface, canvas.placement, ring, rgb(colour::accent));
+    outline_rect(canvas, ring, colour::accent);
 }
 
 void draw_button(const Canvas& canvas, const Rect& area, const ButtonLook& look) {
@@ -434,35 +396,23 @@ void draw_button(const Canvas& canvas, const Rect& area, const ButtonLook& look)
         return;
     const ButtonColours colours = button_colours(look);
     if (colours.face)
-        renderer::fill_source_rect(*canvas.surface, canvas.placement, area, rgb(*colours.face));
-    renderer::draw_outline(*canvas.surface, canvas.placement, area, rgb(colours.border));
+        fill_rect(canvas, area, *colours.face);
+    outline_rect(canvas, area, colours.border);
     paint_text(canvas, FontRole::small, look.caption, area, Align::centre, colours.caption);
 }
 
 void draw_switch(const Canvas& canvas, const Rect& area, const SwitchLook& look) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, area, rgb(colour::well));
-    renderer::draw_outline(
-        *canvas.surface,
-        canvas.placement,
-        area,
-        rgb(look.hovered ? colour::control_hover : colour::control_border)
-    );
+    fill_rect(canvas, area, colour::well);
+    outline_rect(canvas, area, look.hovered ? colour::control_hover : colour::control_border);
     const int32_t half = (area.width - 2) / 2;
     const Rect off{area.x + 1, area.y + 1, half, area.height - 2};
     const Rect on_half{area.x + 1 + half, area.y + 1, half, area.height - 2};
     if (look.on)
-        renderer::fill_source_rect(
-            *canvas.surface,
-            canvas.placement,
-            on_half,
-            rgb(look.locked ? colour::control_hover : colour::accent)
-        );
+        fill_rect(canvas, on_half, look.locked ? colour::control_hover : colour::accent);
     else
-        renderer::fill_source_rect(
-            *canvas.surface, canvas.placement, off, rgb(colour::off_selected)
-        );
+        fill_rect(canvas, off, colour::off_selected);
     paint_text(
         canvas,
         FontRole::small,
@@ -484,13 +434,8 @@ void draw_switch(const Canvas& canvas, const Rect& area, const SwitchLook& look)
 void draw_levels(const Canvas& canvas, const Rect& area, const LevelsLook& look) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, area, rgb(colour::well));
-    renderer::draw_outline(
-        *canvas.surface,
-        canvas.placement,
-        area,
-        rgb(look.hovered ? colour::control_hover : colour::control_border)
-    );
+    fill_rect(canvas, area, colour::well);
+    outline_rect(canvas, area, look.hovered ? colour::control_hover : colour::control_border);
     for (std::size_t index = 0; index < look.captions.size(); ++index) {
         const Rect segment{
             area.x + 1 + static_cast<int32_t>(index) * look.level_width,
@@ -500,12 +445,7 @@ void draw_levels(const Canvas& canvas, const Rect& area, const LevelsLook& look)
         };
         const bool selected = index == look.chosen;
         if (selected)
-            renderer::fill_source_rect(
-                *canvas.surface,
-                canvas.placement,
-                segment,
-                rgb(look.locked ? colour::control_hover : colour::accent)
-            );
+            fill_rect(canvas, segment, look.locked ? colour::control_hover : colour::accent);
         paint_text(
             canvas,
             FontRole::small,
@@ -515,9 +455,7 @@ void draw_levels(const Canvas& canvas, const Rect& area, const LevelsLook& look)
             selected ? colour::on_accent : colour::button_text
         );
         if (index >= look.offered)
-            renderer::blend_source_rect(
-                *canvas.surface, canvas.placement, segment, rgb(colour::panel), locked_fade
-            );
+            blend_rect(canvas, segment, colour::panel, locked_fade);
     }
 }
 
@@ -535,26 +473,24 @@ void draw_slider(const Canvas& canvas, const Rect& area, const SliderLook& look)
     const Rect track{
         area.x, area.y + compact_metrics.track_offset, area.width, compact_metrics.track_height
     };
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, track, rgb(colour::well));
-    renderer::draw_outline(*canvas.surface, canvas.placement, track, rgb(colour::control_border));
+    fill_rect(canvas, track, colour::well);
+    outline_rect(canvas, track, colour::control_border);
     const int32_t knob = knob_column(area, look.stop, look.stops);
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
+    fill_rect(
+        canvas,
         {track.x + 1, track.y + 1, knob - track.x - 1, track.height - 2},
-        rgb(look.locked ? colour::control_border : colour::accent)
+        look.locked ? colour::control_border : colour::accent
     );
     const int32_t travel = area.width - compact_metrics.knob_width;
     if (look.stops > 1 && travel / (look.stops - 1) >= compact_metrics.least_stop_spacing) {
         for (int32_t index = 0; index < look.stops; ++index) {
-            renderer::fill_source_rect(
-                *canvas.surface,
-                canvas.placement,
+            fill_rect(
+                canvas,
                 {knob_column(area, index, look.stops),
                  area.y + compact_metrics.stop_offset,
                  1,
                  compact_metrics.stop_height},
-                rgb(colour::control_border)
+                colour::control_border
             );
         }
     }
@@ -569,8 +505,8 @@ void draw_slider(const Canvas& canvas, const Rect& area, const SliderLook& look)
         face = colour::control_hover;
     else if (look.hovered)
         face = colour::accent_light;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, knob_rect, rgb(face));
-    renderer::draw_outline(*canvas.surface, canvas.placement, knob_rect, rgb(colour::on_accent));
+    fill_rect(canvas, knob_rect, face);
+    outline_rect(canvas, knob_rect, colour::on_accent);
 }
 
 int32_t knob_column(const Rect& track, int32_t stop, int32_t stops) noexcept {
@@ -594,13 +530,13 @@ int32_t stop_at(const Rect& track, int32_t column, int32_t stops) noexcept {
 void draw_choice(const Canvas& canvas, const Rect& area, const ChoiceLook& look) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, area, rgb(colour::well));
+    fill_rect(canvas, area, colour::well);
     Colour border = colour::control_border;
     if (look.open)
         border = colour::accent;
     else if (look.hovered)
         border = colour::control_hover;
-    renderer::draw_outline(*canvas.surface, canvas.placement, area, rgb(border));
+    outline_rect(canvas, area, border);
     const Rect text_box{
         area.x + compact_metrics.choice_text_inset,
         area.y,
@@ -610,22 +546,21 @@ void draw_choice(const Canvas& canvas, const Rect& area, const ChoiceLook& look)
     paint_text(
         clipped(canvas, text_box), FontRole::regular, look.text, text_box, Align::left, colour::text
     );
-    renderer::draw_mark(
-        *canvas.surface,
-        canvas.placement,
+    draw_mark(
+        canvas,
         kChoiceArrow,
-        area.x + area.width - compact_metrics.choice_arrow_room +
-            (compact_metrics.choice_arrow_room - compact_metrics.choice_arrow_width) / 2,
-        area.y + (area.height - compact_metrics.choice_arrow_height) / 2,
-        rgb(look.open ? colour::accent : colour::button_text)
+        {area.x + area.width - compact_metrics.choice_arrow_room +
+             (compact_metrics.choice_arrow_room - compact_metrics.choice_arrow_width) / 2,
+         area.y + (area.height - compact_metrics.choice_arrow_height) / 2},
+        look.open ? colour::accent : colour::button_text
     );
 }
 
 void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLook& look) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, menu, rgb(colour::list));
-    renderer::draw_outline(*canvas.surface, canvas.placement, menu, rgb(colour::control_hover));
+    fill_rect(canvas, menu, colour::list);
+    outline_rect(canvas, menu, colour::control_hover);
     const int32_t count = static_cast<int32_t>(look.shown.size());
     for (int32_t place = 0; place < count; ++place) {
         const int32_t item = look.first + place;
@@ -634,28 +569,23 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
         const Rect box = choice_item(menu, place);
         Colour text = colour::list_text;
         if (item == look.chosen) {
-            renderer::fill_source_rect(
-                *canvas.surface, canvas.placement, box, rgb(colour::list_selected)
-            );
-            renderer::fill_source_rect(
-                *canvas.surface,
-                canvas.placement,
+            fill_rect(canvas, box, colour::list_selected);
+            fill_rect(
+                canvas,
                 {box.x + kChosenMarkerOffset,
                  box.y + (box.height - kChosenMarkerHeight) / 2,
                  kChosenMarkerWidth,
                  kChosenMarkerHeight},
-                rgb(colour::accent)
+                colour::accent
             );
             text = colour::text;
         }
         if (item == look.marked) {
             if (item != look.chosen)
-                renderer::fill_source_rect(
-                    *canvas.surface, canvas.placement, box, rgb(colour::hover)
-                );
+                fill_rect(canvas, box, colour::hover);
             text = colour::text;
             if (look.focus_shown)
-                renderer::draw_outline(*canvas.surface, canvas.placement, box, rgb(colour::accent));
+                outline_rect(canvas, box, colour::accent);
         }
         const Rect caption{
             box.x + compact_metrics.choice_item_text_inset,
@@ -679,12 +609,7 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
         const int32_t height = std::max(travel * window / look.total, 4);
         const int32_t top =
             menu.y + 1 + (travel - height) * look.first / std::max(look.total - window, 1);
-        renderer::fill_source_rect(
-            *canvas.surface,
-            canvas.placement,
-            {menu.x + menu.width - 3, top, 2, height},
-            rgb(colour::control_hover)
-        );
+        fill_rect(canvas, {menu.x + menu.width - 3, top, 2, height}, colour::control_hover);
     }
 }
 
@@ -714,18 +639,14 @@ Rect choice_item(const Rect& menu, int32_t place) noexcept {
 void draw_lock(const Canvas& canvas, const Rect& area, const LockLook& look) {
     if (!drawable(canvas))
         return;
-    int32_t width = 0;
-    if (canvas.fonts != nullptr)
-        width = text_width(*canvas.fonts, FontRole::small, look.text);
+    const int32_t width = measure_text(canvas, FontRole::small, look.text);
     const int32_t left =
         area.x + area.width - width - compact_metrics.padlock_gap - compact_metrics.padlock_width;
-    renderer::draw_mark(
-        *canvas.surface,
-        canvas.placement,
+    draw_mark(
+        canvas,
         kPadlock,
-        left,
-        area.y + (area.height - compact_metrics.padlock_height) / 2,
-        rgb(colour::lock)
+        {left, area.y + (area.height - compact_metrics.padlock_height) / 2},
+        colour::lock
     );
     const Rect text_area{
         left + compact_metrics.padlock_width + compact_metrics.padlock_gap,
@@ -739,19 +660,9 @@ void draw_lock(const Canvas& canvas, const Rect& area, const LockLook& look) {
 void draw_scroll_bar(const Canvas& canvas, const Rect& well, const Rect& thumb, bool hot) {
     if (!drawable(canvas))
         return;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, well, rgb(colour::well));
-    renderer::draw_outline(
-        *canvas.surface,
-        canvas.placement,
-        well,
-        rgb(hot ? colour::control_hover : colour::control_border)
-    );
-    renderer::fill_source_rect(
-        *canvas.surface,
-        canvas.placement,
-        thumb,
-        rgb(hot ? colour::switch_idle : colour::control_hover)
-    );
+    fill_rect(canvas, well, colour::well);
+    outline_rect(canvas, well, hot ? colour::control_hover : colour::control_border);
+    fill_rect(canvas, thumb, hot ? colour::switch_idle : colour::control_hover);
 }
 
 void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state) {
@@ -763,34 +674,19 @@ void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state) {
         face = colour::hover;
     else if (state == OaButtonState::pressed)
         face = colour::band;
-    renderer::fill_source_rect(*canvas.surface, canvas.placement, whole, rgb(face));
+    fill_rect(canvas, whole, face);
     if (state == OaButtonState::pressed)
-        renderer::draw_bevel(
-            *canvas.surface,
-            canvas.placement,
-            whole,
-            rgb(colour::edge_dark),
-            rgb(colour::edge_light)
-        );
+        bevel_rect(canvas, whole, colour::edge_dark, colour::edge_light);
     else
-        renderer::draw_bevel(
-            *canvas.surface,
-            canvas.placement,
-            whole,
-            rgb(colour::edge_light),
-            rgb(colour::edge_dark)
-        );
+        bevel_rect(canvas, whole, colour::edge_light, colour::edge_dark);
     if (renderer::picture_drawable(canvas.icon)) {
         if (state == OaButtonState::hovered)
-            renderer::draw_outline(
-                *canvas.surface, canvas.placement, grown(whole, -1), rgb(colour::accent)
-            );
+            outline_rect(canvas, grown(whole, -1), colour::accent);
         const int32_t pressed_in =
             state == OaButtonState::pressed ? compact_metrics.button_icon_press : 0;
         const int32_t icon_side = side - 2 * compact_metrics.button_icon_inset;
-        renderer::draw_picture(
-            *canvas.surface,
-            canvas.placement,
+        draw_picture(
+            canvas,
             {compact_metrics.button_icon_inset + pressed_in,
              compact_metrics.button_icon_inset + pressed_in,
              icon_side,
@@ -808,7 +704,7 @@ void draw_oa_mark(const Canvas& canvas, int32_t side) {
     if (!drawable(canvas) || side <= 0)
         return;
     if (renderer::picture_drawable(canvas.icon)) {
-        renderer::draw_picture(*canvas.surface, canvas.placement, {0, 0, side, side}, canvas.icon);
+        draw_picture(canvas, {0, 0, side, side}, canvas.icon);
         return;
     }
     draw_mark_square(canvas, side, colour::accent);
@@ -818,7 +714,7 @@ void draw_header_mark(const Canvas& canvas, const Rect& place) {
     if (!drawable(canvas))
         return;
     if (renderer::picture_drawable(canvas.icon)) {
-        renderer::draw_picture(*canvas.surface, canvas.placement, place, canvas.icon);
+        draw_picture(canvas, place, canvas.icon);
         return;
     }
     const int32_t side = compact_metrics.mark_square;
@@ -828,14 +724,13 @@ void draw_header_mark(const Canvas& canvas, const Rect& place) {
         side,
         side,
     };
-    renderer::draw_outline(*canvas.surface, canvas.placement, square, rgb(colour::accent));
-    renderer::draw_mark(
-        *canvas.surface,
-        canvas.placement,
+    outline_rect(canvas, square, colour::accent);
+    draw_mark(
+        canvas,
         kSmallMark,
-        square.x + (square.width - kSmallMark.width) / 2,
-        square.y + (square.height - kSmallMark.height + 1) / 2,
-        rgb(colour::accent)
+        {square.x + (square.width - kSmallMark.width) / 2,
+         square.y + (square.height - kSmallMark.height + 1) / 2},
+        colour::accent
     );
 }
 
