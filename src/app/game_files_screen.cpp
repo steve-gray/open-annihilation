@@ -2108,20 +2108,20 @@ void GameFilesScreen::State::open_language() {
 }
 
 bool GameFilesScreen::State::tap(view::Control control) {
-    // The topmost item of the control: a sheet's lies above what it covers.
-    const view::Item* found = nullptr;
-    for (auto item = layout.items.rbegin(); item != layout.items.rend(); ++item)
-        if (item->control == control) {
-            found = &*item;
+    // The topmost part of the control: a sheet's lies above what it covers.
+    const oa::ui::kit::Item* found = nullptr;
+    for (auto part = layout.list.items.rbegin(); part != layout.list.items.rend(); ++part)
+        if (view::screen_control(part->control) == control) {
+            found = &*part;
             break;
         }
     if (found == nullptr || viewport.width <= 0 || viewport.height <= 0)
         return false;
     const float x =
-        (static_cast<float>(found->box.x) + static_cast<float>(found->box.width) * 0.5F) /
+        (static_cast<float>(found->rect.x) + static_cast<float>(found->rect.width) * 0.5F) /
         static_cast<float>(viewport.width);
     const float y =
-        (static_cast<float>(found->box.y) + static_cast<float>(found->box.height) * 0.5F) /
+        (static_cast<float>(found->rect.y) + static_cast<float>(found->rect.height) * 0.5F) /
         static_cast<float>(viewport.height);
     for (const SDL_EventType type : {SDL_EVENT_FINGER_DOWN, SDL_EVENT_FINGER_UP}) {
         SDL_Event event{};

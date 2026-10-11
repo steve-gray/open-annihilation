@@ -26,9 +26,9 @@ namespace {
 namespace gf = oa::ui::game_files;
 using gf::Colour;
 using gf::Glyph;
-using gf::Item;
-using gf::ItemRole;
-using gf::TextRole;
+using Item = oa::ui::kit::Item;
+using ItemRole = oa::ui::kit::Role;
+using TextRole = oa::ui::kit::TextStyle;
 
 /// The sizes of one form, in points.
 struct Metrics {
@@ -371,14 +371,14 @@ int add_text(
         return 0;
     Item item{};
     item.role = role;
-    item.text = style.role;
+    item.style = style.role;
     item.pixel_size = size;
     item.bold = style.bold;
     item.colour = style.colour;
-    item.box = {x, y, room, context.line(size, style.bold) * static_cast<int>(lines.size())};
+    item.rect = {x, y, room, context.line(size, style.bold) * static_cast<int>(lines.size())};
     item.lines = std::move(lines);
     block.items.push_back(std::move(item));
-    return block.items.back().box.height;
+    return block.items.back().rect.height;
 }
 
 /// Adds one line of text, shortened to fit, centred on a middle line.
@@ -414,11 +414,13 @@ int add_line(
     const int line_width = std::min(room, context.width(line, size, style.bold));
     Item item{};
     item.role = role;
-    item.text = style.role;
+    item.style = style.role;
     item.pixel_size = size;
     item.bold = style.bold;
     item.colour = style.colour;
-    item.box = {from_right ? x - line_width : x, middle - line_height / 2, line_width, line_height};
+    item.rect = {
+        from_right ? x - line_width : x, middle - line_height / 2, line_width, line_height
+    };
     item.lines = {std::move(line)};
     block.items.push_back(std::move(item));
     return line_width;
@@ -435,7 +437,7 @@ void add_icon(Block& block, Rect box, Glyph glyph, Colour colour) {
         return;
     Item item{};
     item.role = ItemRole::icon;
-    item.box = box;
+    item.rect = box;
     item.glyph = glyph;
     item.colour = colour;
     block.items.push_back(std::move(item));
@@ -450,7 +452,7 @@ void add_icon(Block& block, Rect box, Glyph glyph, Colour colour) {
 void add_box(Block& block, ItemRole role, Rect box, Colour colour = gf::line_colour) {
     Item item{};
     item.role = role;
-    item.box = box;
+    item.rect = box;
     item.colour = colour;
     block.items.push_back(std::move(item));
 }
@@ -468,14 +470,14 @@ void add_control(
     const Context& context, Tally& tally, Block& block, Item item, Target target, bool enabled
 ) {
     const int32_t target_index = tally.targets++;
-    item.enabled = enabled;
-    item.pressed = enabled && context.state.pressed == target_index;
+    item.state.disabled = !enabled;
+    item.state.pressed = enabled && context.state.pressed == target_index;
     if (enabled) {
-        item.focused = context.state.focus_shown &&
-                       context.state.focus == static_cast<int32_t>(tally.focus_order.size());
+        item.state.focused = context.state.focus_shown &&
+                             context.state.focus == static_cast<int32_t>(tally.focus_order.size());
         tally.focus_order.push_back(target);
     }
-    block.hits.push_back(HitBox{item.box, target, enabled, {}});
+    block.hits.push_back(HitBox{item.rect, target, enabled, {}});
     block.items.push_back(std::move(item));
 }
 
@@ -519,14 +521,14 @@ void add_button(
 ) {
     Item item{};
     item.role = button.role;
-    item.box = box;
-    item.text = TextRole::button;
+    item.rect = box;
+    item.style = TextRole::button;
     item.pixel_size = context.font(context.metrics.button_text);
     item.bold = true;
     item.colour = button.role == ItemRole::button_main ? oa::ui::kit::screen_colour::ink
                                                        : oa::ui::kit::screen_colour::button_text;
     item.glyph = button.glyph;
-    item.on = button.role == ItemRole::button_main;
+    item.state.on = button.role == ItemRole::button_main;
     const int glyph =
         button.glyph == Glyph::none
             ? 0
@@ -650,7 +652,7 @@ int add_banner(
     add_box(block, ItemRole::banner, {x, y, room, height}, colour);
     add_icon(block, {x + pad_x, y + (height - icon) / 2, icon, icon}, glyph, colour);
     for (Item& item : inner.items) {
-        item.box.y += y + (height - text_height) / 2;
+        item.rect.y += y + (height - text_height) / 2;
         block.items.push_back(std::move(item));
     }
     return height;
@@ -707,7 +709,7 @@ int add_rows(
     const int gap = context.px(metrics.row_gap);
     const int least = context.px(gf::min_button_points);
     const int panel_index = static_cast<int>(block.items.size());
-    add_box(block, ItemRole::card, {x, y, room, 0});
+    add_box(block, ItemRole::panel, {x, y, room, 0});
     int at = y + border;
     const int inner_x = x + border;
     const int inner_room = room - 2 * border;
@@ -753,7 +755,7 @@ int add_rows(
         const int height = std::max(least, text_height + 2 * pad_y);
         Item item{};
         item.role = ItemRole::row;
-        item.box = {inner_x, at, inner_room, height};
+        item.rect = {inner_x, at, inner_room, height};
         item.colour = gf::panel_colour;
         add_control(context, tally, block, std::move(item), row.target, row.enabled);
         const int middle = at + height / 2;
@@ -762,7 +764,7 @@ int add_rows(
         );
         const int text_top = at + (height - text_height) / 2;
         for (Item& text : texts.items) {
-            text.box.y += text_top;
+            text.rect.y += text_top;
             block.items.push_back(std::move(text));
         }
         if (!row.right.empty())
@@ -779,7 +781,7 @@ int add_rows(
         at += height;
     }
     at += border;
-    block.items[static_cast<std::size_t>(panel_index)].box.height = at - y;
+    block.items[static_cast<std::size_t>(panel_index)].rect.height = at - y;
     return at - y;
 }
 
@@ -799,7 +801,7 @@ int add_header(const Context& context, Block& block, Rect safe) {
     const int badge = context.px(metrics.badge);
     Item badge_item{};
     badge_item.role = ItemRole::badge;
-    badge_item.box = {bar.x + pad, middle - badge / 2, badge, badge};
+    badge_item.rect = {bar.x + pad, middle - badge / 2, badge, badge};
     badge_item.colour = gf::green_colour;
     badge_item.glyph = Glyph::oa;
     block.items.push_back(badge_item);
@@ -1145,9 +1147,9 @@ Column browse_column(const Context& context, Tally& tally, int x, int room) {
 /// @param clip the scrolling region they lie in; empty for none
 void put(Layout& layout, Block& block, int dy, Rect clip) {
     for (Item& item : block.items) {
-        item.box.y += dy;
+        item.rect.y += dy;
         item.clip = clip;
-        layout.paint.items.push_back(std::move(item));
+        layout.paint.list.items.push_back(std::move(item));
     }
     for (HitBox& hit : block.hits) {
         hit.box.y += dy;

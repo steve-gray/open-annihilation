@@ -3,12 +3,15 @@
 
 // The Game files screen's model, with no SDL: what the app tells the screen
 // (its step, sheet, banner, problem and rows), its texts through the
-// interface catalogue, its layout in points for the tablet and phone forms,
-// the hit test, the focus order, and what a press or a key asks the app to
-// do. The app maps the import's state onto the model and paints the layout.
+// interface catalogue, its layout in points for the tablet and phone forms
+// as the kit's parts, the hit test, the focus order, and what a press or a
+// key asks the app to do. The app maps the import's state onto the model and
+// paints the parts.
 #pragma once
 
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/touch_hud.hpp"
 #include <array>
@@ -22,8 +25,10 @@
 namespace oa::ui::game_files {
 
 using oa::ui::display_layout::Insets;
-using oa::ui::display_layout::Point;
-using oa::ui::display_layout::Rect;
+using oa::ui::kit::Glyph;
+using oa::ui::kit::Point;
+using oa::ui::kit::Rect;
+using oa::ui::kit::TextMeasureHooks;
 using oa::ui::touch_hud::DeviceClass;
 
 /// A colour, 0 to 255 a channel.
@@ -265,13 +270,27 @@ enum class ControlKind : uint8_t {
     manage_done,           ///< S8 DONE
 };
 
-/// A control: its kind and, for repeated ones, its index.
+/// A control: its kind and, for repeated ones, its index. Each part that draws a control
+/// carries it as its kit control number (control_id).
 struct Control {
     ControlKind kind{ControlKind::none}; ///< what it is
     uint16_t index{};                    ///< which of a repeated kind
     /// Tells whether two controls are the same.
     friend bool operator==(const Control&, const Control&) = default;
 };
+
+/// Returns a control's number in the kit's display list: its kind in the bits above the
+/// low 16 and its index in them; kit::no_control for ControlKind::none.
+///
+/// @param control the control
+/// @return its number
+[[nodiscard]] oa::ui::kit::ControlId control_id(Control control) noexcept;
+
+/// Returns the control a kit control number stands for (control_id's inverse).
+///
+/// @param id the number
+/// @return the control; ControlKind::none for kit::no_control or a number no control has
+[[nodiscard]] Control screen_control(oa::ui::kit::ControlId id) noexcept;
 
 /// What the app must do after a press or a key.
 enum class Command : uint8_t {
@@ -327,100 +346,17 @@ enum class Key : uint8_t {
     space,     ///< press the focused control
 };
 
-/// A text's look.
-enum class TextRole : uint8_t {
-    header,     ///< the header bar
-    title,      ///< a step's title
-    subtitle,   ///< under the title
-    lead,       ///< a card's or banner's lead line
-    body,       ///< ordinary text
-    small,      ///< footers and hints
-    row_title,  ///< a row's name
-    row_detail, ///< a row's detail
-    button,     ///< a button's label
-    mark_text,  ///< text beside a mark
-};
-/// What an item draws.
-enum class ItemRole : uint8_t {
-    header_bar,     ///< the header's bar
-    badge,          ///< the OA badge: the Open Annihilation icon filling its box, no text
-    header_text,    ///< the header's title
-    version,        ///< the version text
-    title,          ///< a title
-    text,           ///< a text block
-    card,           ///< a card
-    icon,           ///< a mark
-    banner,         ///< a banner
-    row,            ///< a part's row
-    divider,        ///< a line between rows
-    switch_off_on,  ///< a switch
-    button_main,    ///< the main button
-    button,         ///< a button
-    button_danger,  ///< a button that removes
-    progress_track, ///< the progress bar's track
-    progress_fill,  ///< the progress bar's fill
-    progress_busy,  ///< a busy bar without a fraction
-    backdrop,       ///< the dimming behind a sheet
-    sheet,          ///< a sheet
-};
-/// A mark the paint draws in an item.
-enum class Glyph : uint8_t {
-    none,    ///< no mark
-    folder,  ///< a folder
-    device,  ///< the device
-    disk,    ///< a disk
-    clock,   ///< a clock
-    warning, ///< a warning triangle
-    check,   ///< a check mark
-    cross,   ///< a cross
-    dash,    ///< a dash
-    info,    ///< an information mark
-    stop,    ///< a stop square
-    play,    ///< a play triangle
-    trash,   ///< a bin
-    refresh, ///< a circular arrow
-    plus,    ///< a plus
-    file,    ///< a file
-    oa,      ///< the Open Annihilation icon, or the OA mark without it (the badge, OA · Aa)
-};
-
-/// One thing to draw, and what pressing it does.
-struct Item {
-    ItemRole role{};                  ///< what it draws
-    Rect box{};                       ///< canvas pixels
-    std::vector<std::string> lines{}; ///< wrapped text, top to bottom; empty for none
-    TextRole text{TextRole::body};    ///< the text's look
-    int pixel_size{};                 ///< text size in canvas pixels
-    bool bold{};                      ///< bold text
-    Colour colour{text_colour};       ///< text (or fill for marks)
-    Glyph glyph{Glyph::none};         ///< the mark
-    int glyph_size{};                 ///< a button's mark's side in canvas pixels; 0: pixel_size
-    Control control{};                ///< none for display only
-    bool enabled = true;              ///< can be pressed
-    bool on{};                        ///< a switch's state; a button's "main"
-    bool focused{};                   ///< has the keyboard focus
-    bool pressed{};                   ///< is held
-    float fraction{};                 ///< progress_fill: 0 to 1
-    Rect clip{};                      ///< non-empty: clip drawing (the scrolled rows)
-};
-
-/// A laid-out step.
+/// A laid-out step: the kit's display list of its parts in painting order, with the
+/// screen's own fields around it. Each part is laid out in canvas pixels; a part that draws
+/// a control carries its control_id. The list's controls are the parts a press can reach,
+/// those after a sheet's backdrop, the top one first, and its Tab order is focus_order's.
 struct Layout {
     DeviceClass device{DeviceClass::tablet}; ///< the form laid out
-    std::vector<Item> items{};               ///< in painting order
+    oa::ui::kit::DisplayList list{};         ///< the parts, their controls and the Tab order
     std::vector<Control> focus_order{};      ///< Tab order, top to bottom, left to right
     Rect rows{};                             ///< the scrolling region, empty when none
     int32_t scroll_max_points{};             ///< how far it scrolls
     float px_per_point{1.0f};                ///< the viewport's canvas pixels per point
-};
-
-/// Text measuring, which the app fills from the bundled fonts.
-struct TextMeasureHooks {
-    void* context{}; ///< passed back to every hook
-    /// Width in pixels of a line at a pixel size; null: 0.55 em a character.
-    int (*width)(void* context, std::string_view text, int pixel_size, bool bold){};
-    /// Height of a line in pixels; null: 1.25 em.
-    int (*line_height)(void* context, int pixel_size, bool bold){};
 };
 
 /// Returns a platform word, or the engine's neutral word when the platform gives none.
@@ -460,15 +396,17 @@ struct TextMeasureHooks {
 /// @param model what to show
 /// @param viewport the canvas
 /// @param measure the text measure
-/// @return the items to draw, in order, with their controls
+/// @return the parts to draw, in order, with their controls
 [[nodiscard]] Layout
 lay_out(const Model& model, const Viewport& viewport, const TextMeasureHooks& measure);
-/// The control at a point: the nearest enabled control whose box is within `reach_px`
-/// (pick_reach_points × px_per_point), the containing one first; none when there is none.
+/// The control at a point, by the kit's reach over the layout's controls: the enabled control
+/// whose part, cut by its clip, holds the point, the top one first; else the nearest within
+/// `reach_px` (pick_reach_points × px_per_point); none when there is none. A part under a
+/// sheet's backdrop is never reached.
 ///
 /// @param layout the layout last drawn
 /// @param point the point, canvas pixels
-/// @param reach_px how far from a box a press still reaches it
+/// @param reach_px how far from a part a press still reaches it, canvas pixels
 /// @return the control; ControlKind::none when there is none
 [[nodiscard]] Control hit_test(const Layout& layout, Point point, float reach_px) noexcept;
 
@@ -515,9 +453,9 @@ press_up(Model& model, Interaction& interaction, const Layout& layout, Control c
 /// @return what the app must do
 [[nodiscard]] Outcome scroll(Model& model, const Layout& layout, float points);
 
-/// Marks the items of the focused control (once a key has shown the focus) as focused and
-/// those of the held control as pressed, for painting; lay_out leaves both clear, since it
-/// does not see the Interaction.
+/// Marks the parts of the focused control (once a key has shown the focus) as focused and
+/// those of the held control as pressed, in their kit states, for painting; lay_out leaves
+/// both clear, since it does not see the Interaction.
 ///
 /// @param[in,out] layout the layout about to be painted
 /// @param interaction the UI state
@@ -525,6 +463,6 @@ void mark_interaction(Layout& layout, const Interaction& interaction) noexcept;
 
 /// The glyph of a button with one: a square as wide as the label's pixel size, this share
 /// of the pixel size left of the label, the two centred together in the button.
-inline constexpr float button_glyph_gap_em = 0.5f;
+inline constexpr float button_glyph_gap_em = oa::ui::kit::button_mark_gap_em;
 
 } // namespace oa::ui::game_files

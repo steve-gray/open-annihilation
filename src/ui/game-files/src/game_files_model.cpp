@@ -6,6 +6,8 @@
 // it asks the app to do.
 #include "game_files_internal.hpp"
 
+#include "oa/ui/kit/layout.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -13,27 +15,26 @@ namespace oa::ui::game_files {
 
 namespace {
 
+namespace kit = oa::ui::kit;
+
 /// How far an arrow key scrolls, in points.
 constexpr float arrow_scroll_points = 40.0f;
 /// The share of the rows' height a page key scrolls.
 constexpr float page_scroll_share = 0.9f;
+/// The bits of a kit control number below a control's kind, which hold its index.
+constexpr int control_index_bits = 16;
+/// The index's bits of a kit control number.
+constexpr uint32_t control_index_mask = (uint32_t{1} << control_index_bits) - 1U;
 
-/// Returns the item of a control that a press can reach (after the last backdrop).
+/// Returns the control a press can reach (on a part after the last backdrop).
 ///
 /// @param layout the layout last drawn
 /// @param control the control
-/// @return the item; null when the layout has no such control
-const Item* find_item(const Layout& layout, Control control) noexcept {
+/// @return the kit's control; null when the layout has no such control
+const kit::Control* find_control(const Layout& layout, Control control) noexcept {
     if (control.kind == ControlKind::none)
         return nullptr;
-    std::size_t first = 0;
-    for (std::size_t index = 0; index < layout.items.size(); ++index)
-        if (layout.items[index].role == ItemRole::backdrop)
-            first = index + 1;
-    for (std::size_t index = first; index < layout.items.size(); ++index)
-        if (layout.items[index].control == control)
-            return &layout.items[index];
-    return nullptr;
+    return kit::control_of(layout.list, control_id(control));
 }
 
 /// Returns the look-only outcome.
@@ -201,15 +202,16 @@ Outcome act(Model& model, Control control) {
 /// @param layout the layout last drawn
 /// @param control the control
 void scroll_into_view(Model& model, const Layout& layout, Control control) {
-    const Item* item = find_item(layout, control);
-    if (item == nullptr || layout.rows.height <= 0 || item->clip.height <= 0)
+    const kit::Control* found = find_control(layout, control);
+    if (found == nullptr || layout.rows.height <= 0 || found->clip.height <= 0)
         return;
     const Rect rows = layout.rows;
+    const Rect box = found->rect;
     int delta = 0;
-    if (item->box.y < rows.y || item->box.height > rows.height)
-        delta = item->box.y - rows.y;
-    else if (item->box.y + item->box.height > rows.y + rows.height)
-        delta = item->box.y + item->box.height - (rows.y + rows.height);
+    if (box.y < rows.y || box.height > rows.height)
+        delta = box.y - rows.y;
+    else if (box.y + box.height > rows.y + rows.height)
+        delta = box.y + box.height - (rows.y + rows.height);
     if (delta == 0)
         return;
     const float scale = layout.px_per_point > 0.0f ? layout.px_per_point : 1.0f;
@@ -225,15 +227,12 @@ void scroll_into_view(Model& model, const Layout& layout, Control control) {
 /// @param layout the layout last drawn
 /// @return its control; none when there is none
 Control main_control(const Layout& layout) noexcept {
-    std::size_t first = 0;
-    for (std::size_t index = 0; index < layout.items.size(); ++index)
-        if (layout.items[index].role == ItemRole::backdrop)
-            first = index + 1;
-    for (std::size_t index = first; index < layout.items.size(); ++index) {
-        const Item& item = layout.items[index];
-        if (item.role == ItemRole::button_main && item.enabled &&
-            item.control.kind != ControlKind::none)
-            return item.control;
+    const std::vector<kit::Item>& parts = layout.list.items;
+    for (std::size_t index = kit::first_live_part(layout.list); index < parts.size(); ++index) {
+        const kit::Item& part = parts[index];
+        if (part.role == kit::Role::button_main && !part.state.disabled &&
+            part.control != kit::no_control)
+            return screen_control(part.control);
     }
     return {};
 }
@@ -268,10 +267,30 @@ Outcome escape_step(Model& model) {
 
 } // namespace
 
+kit::ControlId control_id(Control control) noexcept {
+    if (control.kind == ControlKind::none)
+        return kit::no_control;
+    return static_cast<kit::ControlId>(
+        (static_cast<uint32_t>(control.kind) << control_index_bits) | control.index
+    );
+}
+
+Control screen_control(kit::ControlId id) noexcept {
+    if (id < 0)
+        return {};
+    const uint32_t kind = static_cast<uint32_t>(id) >> control_index_bits;
+    if (kind == 0 || kind > static_cast<uint32_t>(ControlKind::manage_done))
+        return {};
+    return {
+        static_cast<ControlKind>(kind),
+        static_cast<uint16_t>(static_cast<uint32_t>(id) & control_index_mask)
+    };
+}
+
 Outcome press_down(Model& model, Interaction& interaction, const Layout& layout, Control control) {
     static_cast<void>(model);
-    const Item* item = find_item(layout, control);
-    if (item == nullptr || !item->enabled) {
+    const kit::Control* found = find_control(layout, control);
+    if (found == nullptr || !found->enabled) {
         const bool was_pressed = interaction.pressed.kind != ControlKind::none;
         interaction.pressed = {};
         return was_pressed ? redraw() : Outcome{};
@@ -288,8 +307,8 @@ Outcome press_up(Model& model, Interaction& interaction, const Layout& layout, C
         return look;
     if (pressed.kind != ControlKind::none && !(pressed == control))
         return look;
-    const Item* item = find_item(layout, control);
-    if (item == nullptr || !item->enabled)
+    const kit::Control* found = find_control(layout, control);
+    if (found == nullptr || !found->enabled)
         return look;
     interaction.focused = control;
     const Outcome outcome = act(model, control);
@@ -334,8 +353,8 @@ Outcome key(Model& model, Interaction& interaction, const Layout& layout, Key ke
             target = main_control(layout);
         if (target.kind == ControlKind::none)
             return {};
-        const Item* item = find_item(layout, target);
-        if (item == nullptr || !item->enabled)
+        const kit::Control* found = find_control(layout, target);
+        if (found == nullptr || !found->enabled)
             return {};
         interaction.pressed = {};
         const Outcome outcome = act(model, target);

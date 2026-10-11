@@ -18,7 +18,7 @@
 namespace oa::ui::folder_chooser {
 
 using oa::ui::display_layout::Point;
-using oa::ui::display_layout::Rect;
+using oa::ui::kit::Rect;
 using oa::ui::game_files::TextMeasureHooks;
 using oa::ui::game_files::Viewport;
 

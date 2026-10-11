@@ -3,30 +3,45 @@
 
 // The Game files screen's layouts (game_files.hpp): each step in points for
 // the tablet and phone forms inside the safe area, its banner and sheet, the
-// scrolling rows, and the hit test.
+// scrolling rows, and the hit test, built from the kit's parts.
 //
 // A step is laid out as the header bar, then a column of three blocks (a
 // fixed top, a body that scrolls when the column does not fit, and a fixed
 // bottom), then on the first run a footer held at the foot of the safe area.
 // When even the fixed blocks leave too little room for the body, the whole
-// column scrolls. A sheet is laid out the same way inside its panel, over a
-// backdrop that makes everything under it inert.
+// column scrolls (the kit's scroll_column). A sheet is laid out the same way
+// inside its panel, over a backdrop that makes everything under it inert. The
+// kit measures, fits and wraps the texts, and lays out the text parts, the
+// buttons and their rows, the icons and the plain parts; the screen's own
+// compositions (its header, banners, cards, option rows, part rows, panels
+// and sheets) place them.
 #include "game_files_internal.hpp"
 
+#include "oa/ui/kit/input.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace oa::ui::game_files {
 
 namespace {
 
+namespace kit = oa::ui::kit;
 using detail::Action;
 using detail::BannerContent;
 using detail::fill;
 using detail::tr;
+using kit::Lettering;
+using kit::Role;
+using kit::TextFit;
+using kit::TextStyle;
 
 /// The sizes of one form, in points.
 struct Metrics {
@@ -241,405 +256,50 @@ constexpr float compact_short_side_points = 600.0f;
 constexpr float least_body_points = 96.0f;
 /// The margin, in points, a sheet keeps from the safe area's edges.
 constexpr float sheet_margin_points = 12.0f;
-/// The ellipsis that ends a shortened line.
-constexpr std::string_view ellipsis = "\xE2\x80\xA6";
 
-/// A text's look.
-struct Style {
-    float points{};                ///< size in points
-    bool bold{};                   ///< bold
-    Colour colour{text_colour};    ///< colour
-    TextRole role{TextRole::body}; ///< its role
+/// The form being laid out: the model, the form's sizes and the kit's typesetter.
+struct Form {
+    const Model& model;     ///< what to show
+    const Metrics& metrics; ///< the form's sizes
+    kit::Typesetter type{}; ///< the scale and the text measure
+    bool compact{};         ///< the compact sizes: the phone form, or a small window
 };
 
-/// How a text's box sits.
-enum class Fit : uint8_t {
-    column,      ///< as wide as the column it is given, left-aligned
-    tight_left,  ///< as wide as its widest line, at the left of the column
-    tight_right, ///< as wide as its widest line, at the right of the column
-};
-
-/// Returns the byte length of the UTF-8 character that starts at a place.
-///
-/// @param text the text
-/// @param at the character's first byte
-/// @return the place after the character
-std::size_t next_character(std::string_view text, std::size_t at) noexcept {
-    if (at >= text.size())
-        return text.size();
-    const auto lead = static_cast<unsigned char>(text[at]);
-    std::size_t length = 1;
-    if ((lead & 0xe0u) == 0xc0u)
-        length = 2;
-    else if ((lead & 0xf0u) == 0xe0u)
-        length = 3;
-    else if ((lead & 0xf8u) == 0xf0u)
-        length = 4;
-    return std::min(text.size(), at + length);
-}
-
-/// What every part of the layout reads: the model, the measure and the form.
-struct Context {
-    const Model& model;              ///< what to show
-    const TextMeasureHooks& measure; ///< the text measure
-    const Metrics& metrics;          ///< the form's sizes
-    float scale{1.0f};               ///< canvas pixels per point
-    bool phone{};                    ///< the compact sizes: the phone form, or a small window
-
-    /// Converts points to whole canvas pixels.
-    ///
-    /// @param points the length
-    /// @return pixels, rounded
-    [[nodiscard]] int px(float points) const noexcept {
-        return static_cast<int>(std::lround(points * scale));
-    }
-
-    /// Converts a text size in points to a pixel size.
-    ///
-    /// @param points the size
-    /// @return pixels, at least 1
-    [[nodiscard]] int font(float points) const noexcept { return std::max(1, px(points)); }
-
-    /// Measures a line.
-    ///
-    /// @param text UTF-8 text
-    /// @param size pixel size
-    /// @param bold bold
-    /// @return its width in pixels
-    [[nodiscard]] int width(std::string_view text, int size, bool bold) const {
-        if (text.empty())
-            return 0;
-        if (measure.width != nullptr)
-            return measure.width(measure.context, text, size, bold);
-        std::size_t characters = 0;
-        for (std::size_t at = 0; at < text.size(); at = next_character(text, at))
-            ++characters;
-        return static_cast<int>(std::ceil(0.55 * size * static_cast<double>(characters)));
-    }
-
-    /// Gives a line's height.
-    ///
-    /// @param size pixel size
-    /// @param bold bold
-    /// @return pixels
-    [[nodiscard]] int line(int size, bool bold) const {
-        if (measure.line_height != nullptr)
-            return std::max(1, measure.line_height(measure.context, size, bold));
-        return static_cast<int>(std::ceil(1.25 * size));
-    }
-
-    /// Shortens a line to a width, ending it with an ellipsis.
-    ///
-    /// @param text the line
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @return the line itself when it fits, else its longest start that fits with the
-    ///     ellipsis; empty when not even the ellipsis fits
-    [[nodiscard]] std::string fit(std::string_view text, int size, bool bold, int room) const {
-        if (width(text, size, bold) <= room)
-            return std::string(text);
-        if (width(ellipsis, size, bold) > room)
-            return {};
-        std::vector<std::size_t> ends;
-        for (std::size_t at = 0; at < text.size();) {
-            at = next_character(text, at);
-            ends.push_back(at);
-        }
-        std::size_t low = 0;
-        std::size_t high = ends.size();
-        std::string best(ellipsis);
-        while (low < high) {
-            const std::size_t middle = (low + high + 1) / 2;
-            std::string candidate(text.substr(0, ends[middle - 1]));
-            while (!candidate.empty() && candidate.back() == ' ')
-                candidate.pop_back();
-            candidate += ellipsis;
-            if (width(candidate, size, bold) <= room) {
-                best = std::move(candidate);
-                low = middle;
-            } else {
-                high = middle - 1;
-            }
-        }
-        return best;
-    }
-
-    /// Takes the longest start of a word that fits a width, at least one character.
-    ///
-    /// @param word the word
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @return the bytes of the start
-    [[nodiscard]] std::size_t
-    fitting_start(std::string_view word, int size, bool bold, int room) const {
-        std::size_t fits = next_character(word, 0);
-        for (std::size_t at = fits; at < word.size();) {
-            const std::size_t next = next_character(word, at);
-            if (width(word.substr(0, next), size, bold) > room)
-                break;
-            fits = next;
-            at = next;
-        }
-        return fits;
-    }
-};
-
-/// Items laid out in a column, with boxes relative to the block's top.
+/// Parts laid out in a column, their rectangles relative to the block's top.
 struct Block {
-    std::vector<Item> items{}; ///< in painting order
-    int height{};              ///< pixels
+    std::vector<kit::Item> items{}; ///< in painting order
+    int height{};                   ///< pixels
 };
 
-/// Adds a text item, wrapped to a column.
+/// Returns one of the screen's buttons as the kit lays a button out.
 ///
-/// @param context the layout's context
-/// @param[in,out] block the block
-/// @param role the item's role
-/// @param x the column's left, pixels
-/// @param y the text's top, pixels
-/// @param room the column's width, pixels
-/// @param text the text
-/// @param style its look
-/// @param fit how its box sits in the column
-/// @param most_lines the most lines (0: no limit)
-/// @return the text's height, pixels; 0 for no text
-int add_text(
-    const Context& context,
-    Block& block,
-    ItemRole role,
-    int x,
-    int y,
-    int room,
-    std::string_view text,
-    const Style& style,
-    Fit fit = Fit::column,
-    int most_lines = 0
-) {
-    if (text.empty() || room <= 0)
-        return 0;
-    const int size = context.font(style.points);
-    const auto measure = [&](std::string_view shown) {
-        return context.width(shown, size, style.bold);
-    };
-    oa::ui::kit::WrapRules rules;
-    rules.newlines = true;
-    rules.wide_scripts = false;
-    rules.most_lines = most_lines > 0 ? static_cast<std::size_t>(most_lines) : 0;
-    rules.shorten_last = [&](std::string_view joined) {
-        return context.fit(std::string(joined) + std::string(ellipsis), size, style.bold, room);
-    };
-    std::vector<std::string> lines = oa::ui::kit::wrap(text, room, measure, rules);
-    lines.erase(
-        std::remove_if(
-            lines.begin(), lines.end(), [](const std::string& line) { return line.empty(); }
-        ),
-        lines.end()
-    );
-    if (lines.empty())
-        return 0;
-    const int line_height = context.line(size, style.bold);
-    Item item{};
-    item.role = role;
-    item.text = style.role;
-    item.pixel_size = size;
-    item.bold = style.bold;
-    item.colour = style.colour;
-    int widest = 0;
-    for (const std::string& line : lines)
-        widest = std::max(widest, context.width(line, size, style.bold));
-    const int box_width = fit == Fit::column ? room : std::min(room, widest);
-    const int box_x = fit == Fit::tight_right ? x + room - box_width : x;
-    item.box = {box_x, y, box_width, line_height * static_cast<int>(lines.size())};
-    item.lines = std::move(lines);
-    block.items.push_back(std::move(item));
-    return block.items.back().box.height;
-}
-
-/// Adds one line of text, shortened to fit, centred on a row's middle.
-///
-/// @param context the layout's context
-/// @param[in,out] block the block
-/// @param x its left, pixels (its right with tight_right)
-/// @param middle the row's middle, pixels
-/// @param room the most width, pixels
-/// @param text the text
-/// @param style its look
-/// @param fit tight_left or tight_right
-/// @param role the item's role
-/// @return the width taken, pixels; 0 for none
-int add_line(
-    const Context& context,
-    Block& block,
-    int x,
-    int middle,
-    int room,
-    std::string_view text,
-    const Style& style,
-    Fit fit = Fit::tight_left,
-    ItemRole role = ItemRole::text
-) {
-    if (text.empty() || room <= 0)
-        return 0;
-    const int size = context.font(style.points);
-    const std::string line = context.fit(text, size, style.bold, room);
-    if (line.empty())
-        return 0;
-    const int line_height = context.line(size, style.bold);
-    const int line_width = std::min(room, context.width(line, size, style.bold));
-    Item item{};
-    item.role = role;
-    item.text = style.role;
-    item.pixel_size = size;
-    item.bold = style.bold;
-    item.colour = style.colour;
-    item.box = {
-        fit == Fit::tight_right ? x - line_width : x,
-        middle - line_height / 2,
-        line_width,
-        line_height
-    };
-    item.lines = {line};
-    block.items.push_back(std::move(item));
-    return line_width;
-}
-
-/// Returns the side of a button's mark: its own size when it has one, else the label's.
-///
-/// @param context the layout's context
 /// @param action the button
-/// @param label_size the label's pixel size
-/// @return the side, pixels
-int glyph_side(const Context& context, const Action& action, int label_size) {
-    return action.glyph_points > 0.0f ? context.px(action.glyph_points) : label_size;
+/// @return its label, look, mark and control
+kit::ButtonSpec spec_of(const Action& action) {
+    kit::ButtonSpec button{};
+    button.label = action.label;
+    button.role = action.role;
+    button.glyph = action.glyph;
+    button.glyph_points = action.glyph_points;
+    button.control = control_id(action.control);
+    button.enabled = action.enabled;
+    return button;
 }
 
-/// Gives the width a button takes: its label, its glyph and its padding.
+/// Adds a row of the screen's buttons with the kit's button row at the form's sizes: a
+/// button's label and padding, the main button's least width, the gap, and the least
+/// height a control keeps.
 ///
-/// @param context the layout's context
-/// @param action the button
-/// @param text_points the label's size
-/// @param pad_points the side padding
-/// @param least_points the least width
-/// @return pixels
-int button_width(
-    const Context& context,
-    const Action& action,
-    float text_points,
-    float pad_points,
-    float least_points
-) {
-    const int size = context.font(text_points);
-    const int glyph =
-        action.glyph == Glyph::none
-            ? 0
-            : glyph_side(context, action, size) +
-                  static_cast<int>(std::lround(static_cast<float>(size) * button_glyph_gap_em));
-    const int natural =
-        context.width(action.label, size, true) + glyph + 2 * context.px(pad_points);
-    return std::max(natural, context.px(least_points));
-}
-
-/// Adds a button.
-///
-/// @param context the layout's context
+/// @param form the form
 /// @param[in,out] block the block
-/// @param box its box, pixels
-/// @param action the button
-/// @param text_points the label's size
-void add_button(
-    const Context& context, Block& block, Rect box, const Action& action, float text_points
-) {
-    Item item{};
-    item.role = action.role;
-    item.box = box;
-    item.text = TextRole::button;
-    item.pixel_size = context.font(text_points);
-    item.bold = true;
-    item.colour = action.role == ItemRole::button_main ? oa::ui::kit::screen_colour::ink
-                  : action.role == ItemRole::button_danger
-                      ? red_colour
-                      : oa::ui::kit::screen_colour::button_text;
-    item.glyph = action.glyph;
-    if (action.glyph != Glyph::none && action.glyph_points > 0.0f)
-        item.glyph_size = glyph_side(context, action, item.pixel_size);
-    item.control = action.control;
-    item.enabled = action.enabled;
-    item.on = action.role == ItemRole::button_main;
-    const int glyph =
-        action.glyph == Glyph::none
-            ? 0
-            : glyph_side(context, action, item.pixel_size) +
-                  static_cast<int>(
-                      std::lround(static_cast<float>(item.pixel_size) * button_glyph_gap_em)
-                  );
-    const int room = box.width - glyph - 2 * context.px(4.0f);
-    std::string label = context.fit(action.label, item.pixel_size, true, room);
-    if (!label.empty())
-        item.lines = {std::move(label)};
-    block.items.push_back(std::move(item));
-}
-
-/// Adds a mark: a glyph in a box, framed or not.
-///
-/// @param[in,out] block the block
-/// @param box its box, pixels
-/// @param glyph the mark
-/// @param colour its colour
-/// @param framed outline the box too
-void add_icon(Block& block, Rect box, Glyph glyph, Colour colour, bool framed) {
-    if (glyph == Glyph::none && !framed)
-        return;
-    Item item{};
-    item.role = ItemRole::icon;
-    item.box = box;
-    item.glyph = glyph;
-    item.colour = colour;
-    item.on = framed;
-    block.items.push_back(std::move(item));
-}
-
-/// Adds a container (card, row, banner, sheet) with no text.
-///
-/// @param[in,out] block the block
-/// @param role its role
-/// @param box its box, pixels
-/// @param colour its colour (a banner's rule)
-void add_box(Block& block, ItemRole role, Rect box, Colour colour = line_colour) {
-    Item item{};
-    item.role = role;
-    item.box = box;
-    item.colour = colour;
-    block.items.push_back(std::move(item));
-}
-
-/// Moves a block's items down by a distance and appends them to another block.
-///
-/// @param[in,out] to the block that receives them
-/// @param[in,out] from the block whose items move
-/// @param dy pixels to move them down
-void append_items(Block& to, Block& from, int dy) {
-    for (Item& item : from.items) {
-        item.box.y += dy;
-        to.items.push_back(std::move(item));
-    }
-    from.items.clear();
-}
-
-/// Adds a row of buttons: the left ones from the left, the right ones from the right, or,
-/// when they do not fit on one line, every button from the left, wrapping.
-///
-/// @param context the layout's context
-/// @param[in,out] block the block
-/// @param x the column's left, pixels
+/// @param x the row's left, pixels
 /// @param y the row's top, pixels
-/// @param room the column's width, pixels
+/// @param room the row's width, pixels
 /// @param left the buttons at the left, left to right
 /// @param right the buttons at the right, left to right
 /// @return the height taken, pixels
-int add_button_row(
-    const Context& context,
+int button_row_of(
+    const Form& form,
     Block& block,
     int x,
     int y,
@@ -647,69 +307,27 @@ int add_button_row(
     const std::vector<Action>& left,
     const std::vector<Action>& right
 ) {
-    const Metrics& metrics = context.metrics;
-    const int height = context.px(min_button_points);
-    const int gap = context.px(metrics.button_gap);
-    std::vector<int> widths;
-    int total = 0;
-    const auto measure = [&](const Action& action) {
-        const float least = action.role == ItemRole::button_main ? metrics.button_min_width : 0.0f;
-        const int width = std::min(
-            room, button_width(context, action, metrics.button_text, metrics.button_pad, least)
-        );
-        widths.push_back(width);
-        total += width + (widths.size() > 1 ? gap : 0);
-    };
+    std::vector<kit::ButtonSpec> lefts;
     for (const Action& action : left)
-        measure(action);
+        lefts.push_back(spec_of(action));
+    std::vector<kit::ButtonSpec> rights;
     for (const Action& action : right)
-        measure(action);
-    if (widths.empty())
-        return 0;
-    if (!left.empty() && !right.empty())
-        total += gap * 2; // the space between the two groups
-    if (total <= room) {
-        int at = x;
-        for (std::size_t index = 0; index < left.size(); ++index) {
-            add_button(
-                context, block, {at, y, widths[index], height}, left[index], metrics.button_text
-            );
-            at += widths[index] + gap;
-        }
-        int right_width = 0;
-        for (std::size_t index = 0; index < right.size(); ++index)
-            right_width += widths[left.size() + index] + (index > 0 ? gap : 0);
-        at = x + room - right_width;
-        for (std::size_t index = 0; index < right.size(); ++index) {
-            const int width = widths[left.size() + index];
-            add_button(context, block, {at, y, width, height}, right[index], metrics.button_text);
-            at += width + gap;
-        }
-        return height;
-    }
-    int at = x;
-    int top = y;
-    std::size_t index = 0;
-    const auto place = [&](const Action& action) {
-        const int width = widths[index++];
-        if (at > x && at + width > x + room) {
-            at = x;
-            top += height + gap;
-        }
-        add_button(context, block, {at, top, width, height}, action, metrics.button_text);
-        at += width + gap;
+        rights.push_back(spec_of(action));
+    const Metrics& metrics = form.metrics;
+    const kit::ButtonRowSizes sizes{
+        metrics.button_text,
+        metrics.button_pad,
+        metrics.button_min_width,
+        metrics.button_gap,
+        min_button_points,
     };
-    for (const Action& action : left)
-        place(action);
-    for (const Action& action : right)
-        place(action);
-    return top + height - y;
+    return kit::button_row(block.items, form.type, {x, y}, room, lefts, rights, sizes);
 }
 
 /// Adds a banner: its mark, its text and its buttons at the right (below the text when the
 /// banner is narrow).
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the banner's top, pixels
@@ -717,21 +335,23 @@ int add_button_row(
 /// @param banner what it shows
 /// @return the height taken, pixels
 int add_banner(
-    const Context& context, Block& block, int x, int y, int room, const BannerContent& banner
+    const Form& form, Block& block, int x, int y, int room, const BannerContent& banner
 ) {
-    const Metrics& metrics = context.metrics;
-    const int pad_x = context.px(metrics.banner_pad_x);
-    const int pad_y = context.px(metrics.banner_pad_y);
-    const int icon = context.px(metrics.banner_icon);
-    const int gap = context.px(metrics.button_gap);
-    const int button_height = context.px(min_button_points);
-    const Style style{metrics.banner_text, false, text_colour, TextRole::lead};
+    const Metrics& metrics = form.metrics;
+    const int pad_x = kit::canvas_pixels(form.type, metrics.banner_pad_x);
+    const int pad_y = kit::canvas_pixels(form.type, metrics.banner_pad_y);
+    const int icon = kit::canvas_pixels(form.type, metrics.banner_icon);
+    const int gap = kit::canvas_pixels(form.type, metrics.button_gap);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
+    const Lettering style{metrics.banner_text, false, text_colour, TextStyle::lead};
     std::vector<int> widths;
     int buttons = 0;
     for (const Action& action : banner.actions) {
-        const float least = action.role == ItemRole::button_main ? metrics.button_min_width : 0.0f;
+        const float least = action.role == Role::button_main ? metrics.button_min_width : 0.0f;
         widths.push_back(
-            button_width(context, action, metrics.button_text, metrics.button_pad, least)
+            kit::button_span(
+                form.type, spec_of(action), metrics.button_text, metrics.button_pad, least
+            )
         );
         buttons += widths.back() + (widths.size() > 1 ? gap : 0);
     }
@@ -742,36 +362,43 @@ int add_banner(
     if (below)
         text_room = inner_right - text_x;
     Block inner;
-    const int text_height =
-        add_text(context, inner, ItemRole::text, text_x, 0, text_room, banner.text, style);
+    const int text_height = kit::text_part(
+        inner.items, form.type, Role::text, {text_x, 0}, text_room, banner.text, style
+    );
     int height = 0;
     if (below) {
         // A narrow banner puts its buttons under the text, wrapping them as a button row does.
         Block row;
         const int row_top = pad_y + std::max(text_height, icon) + gap;
         const int row_height =
-            add_button_row(context, row, x + pad_x, row_top, room - 2 * pad_x, {}, banner.actions);
+            button_row_of(form, row, x + pad_x, row_top, room - 2 * pad_x, {}, banner.actions);
         height = row_top + row_height + pad_y;
-        add_box(block, ItemRole::banner, {x, y, room, height}, banner.colour);
-        add_icon(block, {x + pad_x, y + pad_y, icon, icon}, banner.glyph, banner.colour, false);
-        append_items(block, inner, y + pad_y);
-        append_items(block, row, y);
+        kit::plain_part(block.items, Role::banner, {x, y, room, height}, banner.colour);
+        kit::icon_part(
+            block.items, {x + pad_x, y + pad_y, icon, icon}, banner.glyph, banner.colour, false
+        );
+        kit::move_parts(block.items, inner.items, y + pad_y);
+        kit::move_parts(block.items, row.items, y);
         return height;
     }
     height = pad_y + std::max({text_height, icon, buttons > 0 ? button_height : 0}) + pad_y;
-    add_box(block, ItemRole::banner, {x, y, room, height}, banner.colour);
-    add_icon(
-        block, {x + pad_x, y + (height - icon) / 2, icon, icon}, banner.glyph, banner.colour, false
+    kit::plain_part(block.items, Role::banner, {x, y, room, height}, banner.colour);
+    kit::icon_part(
+        block.items,
+        {x + pad_x, y + (height - icon) / 2, icon, icon},
+        banner.glyph,
+        banner.colour,
+        false
     );
-    append_items(block, inner, y + (height - text_height) / 2);
+    kit::move_parts(block.items, inner.items, y + (height - text_height) / 2);
     int at = inner_right - buttons;
     const int button_top = y + (height - button_height) / 2;
     for (std::size_t index = 0; index < banner.actions.size(); ++index) {
-        add_button(
-            context,
-            block,
+        kit::button_part(
+            block.items,
+            form.type,
             {at, button_top, widths[index], button_height},
-            banner.actions[index],
+            spec_of(banner.actions[index]),
             metrics.button_text
         );
         at += widths[index] + gap;
@@ -809,21 +436,21 @@ bool banner_on_step(Step step, Banner banner, bool pending) noexcept {
 
 /// Adds the step's banner, when it has one, and the gap after it.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y where it goes, pixels
 /// @param room the column's width, pixels
 /// @return the height taken with the gap, pixels
-int add_step_banner(const Context& context, Block& block, int x, int y, int room) {
-    const Model& model = context.model;
+int add_step_banner(const Form& form, Block& block, int x, int y, int room) {
+    const Model& model = form.model;
     if (!banner_on_step(model.step, model.banner, model.pending_replacement))
         return 0;
     BannerContent banner = detail::banner_content(model);
     if (!banner.shown)
         return 0;
     // In the compact form the continue banner leaves CHOOSE FOLDER to the row just below it.
-    if (context.phone && model.step == Step::first_run && model.offers_pick_folder)
+    if (form.compact && model.step == Step::first_run && model.offers_pick_folder)
         banner.actions.erase(
             std::remove_if(
                 banner.actions.begin(),
@@ -834,12 +461,13 @@ int add_step_banner(const Context& context, Block& block, int x, int y, int room
             ),
             banner.actions.end()
         );
-    return add_banner(context, block, x, y, room, banner) + context.px(context.metrics.block_gap);
+    return add_banner(form, block, x, y, room, banner) +
+           kit::canvas_pixels(form.type, form.metrics.block_gap);
 }
 
 /// Adds a step's title and the line under it.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
@@ -847,43 +475,41 @@ int add_step_banner(const Context& context, Block& block, int x, int y, int room
 /// @param subtitle the line under it; empty for none
 /// @return the height taken, pixels, with the gap after
 int add_title(
-    const Context& context,
+    const Form& form,
     Block& block,
     int x,
     int room,
     std::string_view title,
     std::string_view subtitle
 ) {
-    const Metrics& metrics = context.metrics;
+    const Metrics& metrics = form.metrics;
     int y = block.height;
-    y += add_text(
-        context,
-        block,
-        ItemRole::title,
-        x,
-        y,
+    y += kit::text_part(
+        block.items,
+        form.type,
+        Role::title,
+        {x, y},
         room,
         title,
-        {metrics.title, true, text_colour, TextRole::title},
-        Fit::column,
+        {metrics.title, true, text_colour, TextStyle::title},
+        TextFit::column,
         2
     );
     if (!subtitle.empty()) {
-        y += context.px(metrics.title_gap / 2.0f);
-        y += add_text(
-            context,
-            block,
-            ItemRole::text,
-            x,
-            y,
+        y += kit::canvas_pixels(form.type, metrics.title_gap / 2.0f);
+        y += kit::text_part(
+            block.items,
+            form.type,
+            Role::text,
+            {x, y},
             room,
             subtitle,
-            {metrics.subtitle, false, dim_colour, TextRole::subtitle},
-            Fit::column,
+            {metrics.subtitle, false, dim_colour, TextStyle::subtitle},
+            TextFit::column,
             2
         );
     }
-    y += context.px(metrics.block_gap);
+    y += kit::canvas_pixels(form.type, metrics.block_gap);
     return y - block.height;
 }
 
@@ -917,7 +543,7 @@ std::vector<Option> first_run_options(const Model& model) {
         option.action.label = tr("CHOOSE FOLDER");
         option.action.control = {ControlKind::choose_folder};
         option.action.command = Command::pick_game_folder;
-        option.action.role = ItemRole::button_main;
+        option.action.role = Role::button_main;
         options.push_back(std::move(option));
     }
     if (model.offers_copy_yourself) {
@@ -935,7 +561,7 @@ std::vector<Option> first_run_options(const Model& model) {
         option.action.label = tr("I HAVE COPIED IT");
         option.action.control = {ControlKind::i_have_copied};
         option.action.command = Command::check_copied;
-        option.action.role = options.empty() ? ItemRole::button_main : ItemRole::button;
+        option.action.role = options.empty() ? Role::button_main : Role::button;
         options.push_back(std::move(option));
     }
     if (model.offers_pick_folder) {
@@ -961,7 +587,7 @@ std::vector<Option> first_run_options(const Model& model) {
 
 /// Adds S1's ways in as cards in a row.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the cards' top, pixels
@@ -969,63 +595,62 @@ std::vector<Option> first_run_options(const Model& model) {
 /// @param options the ways in
 /// @return the height taken, pixels
 int add_cards(
-    const Context& context, Block& block, int x, int y, int room, const std::vector<Option>& options
+    const Form& form, Block& block, int x, int y, int room, const std::vector<Option>& options
 ) {
-    const Metrics& metrics = context.metrics;
+    const Metrics& metrics = form.metrics;
     const int count = static_cast<int>(options.size());
-    const int gap = context.px(metrics.card_gap);
+    const int gap = kit::canvas_pixels(form.type, metrics.card_gap);
     const int card_width = (room - gap * (count - 1)) / count;
-    const int pad = context.px(metrics.card_pad);
-    const int icon = context.px(metrics.card_icon);
+    const int pad = kit::canvas_pixels(form.type, metrics.card_pad);
+    const int icon = kit::canvas_pixels(form.type, metrics.card_icon);
     const int inner = card_width - 2 * pad;
-    const int button_height = context.px(min_button_points);
-    const int inner_gap = context.px(10.0f);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
+    const int inner_gap = kit::canvas_pixels(form.type, 10.0f);
     std::vector<Block> texts(options.size());
-    int height = context.px(metrics.card_min_height);
+    int height = kit::canvas_pixels(form.type, metrics.card_min_height);
     for (std::size_t index = 0; index < options.size(); ++index) {
         Block& text = texts[index];
         const int card_x = x + static_cast<int>(index) * (card_width + gap);
         int at = pad + icon + inner_gap;
-        at += add_text(
-            context,
-            text,
-            ItemRole::title,
-            card_x + pad,
-            at,
+        at += kit::text_part(
+            text.items,
+            form.type,
+            Role::title,
+            {card_x + pad, at},
             inner,
             options[index].title,
-            {metrics.card_title, true, text_colour, TextRole::row_title},
-            Fit::column,
+            {metrics.card_title, true, text_colour, TextStyle::row_title},
+            TextFit::column,
             2
         );
         at += inner_gap;
-        at += add_text(
-            context,
-            text,
-            ItemRole::text,
-            card_x + pad,
-            at,
+        at += kit::text_part(
+            text.items,
+            form.type,
+            Role::text,
+            {card_x + pad, at},
             inner,
             options[index].text,
-            {metrics.card_text, false, dim_colour, TextRole::body}
+            {metrics.card_text, false, dim_colour, TextStyle::body}
         );
         height = std::max(height, at + inner_gap + button_height + pad);
     }
     for (std::size_t index = 0; index < options.size(); ++index) {
         const int card_x = x + static_cast<int>(index) * (card_width + gap);
-        add_box(block, ItemRole::card, {card_x, y, card_width, height});
-        add_icon(
-            block, {card_x + pad, y + pad, icon, icon}, options[index].glyph, green_colour, true
+        kit::plain_part(block.items, Role::panel, {card_x, y, card_width, height}, line_colour);
+        kit::icon_part(
+            block.items,
+            {card_x + pad, y + pad, icon, icon},
+            options[index].glyph,
+            green_colour,
+            true
         );
-        for (Item& item : texts[index].items) {
-            item.box.y += y;
-            block.items.push_back(std::move(item));
-        }
-        add_button(
-            context,
-            block,
+        kit::move_parts(block.items, texts[index].items, y);
+        kit::button_part(
+            block.items,
+            form.type,
             {card_x + pad, y + height - pad - button_height, inner, button_height},
-            options[index].action,
+            spec_of(options[index].action),
             metrics.button_text
         );
     }
@@ -1034,7 +659,7 @@ int add_cards(
 
 /// Adds S1's ways in as rows: icon, title, one line and the button at the right.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the first row's top, pixels
@@ -1042,22 +667,24 @@ int add_cards(
 /// @param options the ways in
 /// @return the height taken, pixels
 int add_option_rows(
-    const Context& context, Block& block, int x, int y, int room, const std::vector<Option>& options
+    const Form& form, Block& block, int x, int y, int room, const std::vector<Option>& options
 ) {
-    const Metrics& metrics = context.metrics;
-    const int row_height =
-        std::max(context.px(metrics.option_row_height), context.px(min_button_points + 8.0f));
-    const int pad = context.px(10.0f);
-    const int icon = context.px(metrics.option_icon);
-    const int gap = context.px(12.0f);
-    const int button_height = context.px(min_button_points);
+    const Metrics& metrics = form.metrics;
+    const int row_height = std::max(
+        kit::canvas_pixels(form.type, metrics.option_row_height),
+        kit::canvas_pixels(form.type, min_button_points + 8.0f)
+    );
+    const int pad = kit::canvas_pixels(form.type, 10.0f);
+    const int icon = kit::canvas_pixels(form.type, metrics.option_icon);
+    const int gap = kit::canvas_pixels(form.type, 12.0f);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
     int widest = 0;
     for (const Option& option : options)
         widest = std::max(
             widest,
-            button_width(
-                context,
-                option.action,
+            kit::button_span(
+                form.type,
+                spec_of(option.action),
                 metrics.button_text,
                 metrics.button_pad,
                 metrics.button_min_width
@@ -1066,9 +693,9 @@ int add_option_rows(
     widest = std::min(widest, room / 2);
     int at = y;
     for (const Option& option : options) {
-        add_box(block, ItemRole::card, {x, at, room, row_height});
-        add_icon(
-            block,
+        kit::plain_part(block.items, Role::panel, {x, at, room, row_height}, line_colour);
+        kit::icon_part(
+            block.items,
             {x + pad, at + (row_height - icon) / 2, icon, icon},
             option.glyph,
             green_colour,
@@ -1076,34 +703,42 @@ int add_option_rows(
         );
         const int text_x = x + pad + icon + gap;
         const int text_room = x + room - pad - widest - gap - text_x;
-        const Style title{metrics.option_title, true, text_colour, TextRole::row_title};
-        const Style line{metrics.option_text, false, dim_colour, TextRole::row_detail};
-        const int title_height = context.line(context.font(title.points), true);
-        const int line_height = context.line(context.font(line.points), false);
-        const int spacing = context.px(2.0f);
+        const Lettering title{metrics.option_title, true, text_colour, TextStyle::row_title};
+        const Lettering line{metrics.option_text, false, dim_colour, TextStyle::row_detail};
+        const int title_height =
+            kit::measured_line(form.type.measure, kit::canvas_font(form.type, title.points), true);
+        const int line_height =
+            kit::measured_line(form.type.measure, kit::canvas_font(form.type, line.points), false);
+        const int spacing = kit::canvas_pixels(form.type, 2.0f);
         const int text_top = at + (row_height - title_height - spacing - line_height) / 2;
-        add_line(
-            context, block, text_x, text_top + title_height / 2, text_room, option.title, title
+        kit::line_part(
+            block.items,
+            form.type,
+            text_x,
+            text_top + title_height / 2,
+            text_room,
+            option.title,
+            title
         );
-        add_line(
-            context,
-            block,
+        kit::line_part(
+            block.items,
+            form.type,
             text_x,
             text_top + title_height + spacing + line_height / 2,
             text_room,
             option.short_text,
             line
         );
-        add_button(
-            context,
-            block,
+        kit::button_part(
+            block.items,
+            form.type,
             {x + room - pad - widest, at + (row_height - button_height) / 2, widest, button_height},
-            option.action,
+            spec_of(option.action),
             metrics.button_text
         );
-        at += row_height + context.px(metrics.option_gap);
+        at += row_height + kit::canvas_pixels(form.type, metrics.option_gap);
     }
-    return at - y - context.px(metrics.option_gap);
+    return at - y - kit::canvas_pixels(form.type, metrics.option_gap);
 }
 
 /// The blocks of one step's column.
@@ -1148,13 +783,13 @@ std::pair<Glyph, Colour> row_mark(const PartRow& row) {
 /// @param box the panel's box, pixels
 /// @param[in,out] inner the content, already placed in the block's coordinates
 void add_panel(Block& block, Rect box, Block& inner) {
-    add_box(block, ItemRole::card, box);
-    append_items(block, inner, 0);
+    kit::plain_part(block.items, Role::panel, box, line_colour);
+    kit::move_parts(block.items, inner.items, 0);
 }
 
 /// Adds one part's row.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the row's left, pixels
 /// @param y its top, pixels
@@ -1164,7 +799,7 @@ void add_panel(Block& block, Rect box, Block& inner) {
 /// @param switch_column the rows keep a column for switches
 /// @return the row's height, pixels
 int add_part_row(
-    const Context& context,
+    const Form& form,
     Block& block,
     int x,
     int y,
@@ -1173,8 +808,8 @@ int add_part_row(
     int index,
     bool switch_column
 ) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     const bool choosing = model.step == Step::ready_to_copy;
     const bool managing = model.step == Step::manage;
     const bool missing = detail::part_missing(row);
@@ -1195,64 +830,77 @@ int add_part_row(
         button = Action{};
         button->label = tr("REMOVE");
         button->control = {ControlKind::manage_remove, static_cast<uint16_t>(index)};
-        button->role = ItemRole::button_danger;
+        button->role = Role::button_danger;
         button->enabled = !model.pending_replacement;
     }
-    const int control_height = context.px(min_button_points);
-    const int height =
-        has_switch || button
-            ? std::max(context.px(metrics.row_height), context.px(min_button_points + 4.0f))
-            : context.px(metrics.row_height);
-    add_box(block, ItemRole::row, {x, y, room, height}, panel_colour);
+    const int control_height = kit::canvas_pixels(form.type, min_button_points);
+    const int height = has_switch || button
+                           ? std::max(
+                                 kit::canvas_pixels(form.type, metrics.row_height),
+                                 kit::canvas_pixels(form.type, min_button_points + 4.0f)
+                             )
+                           : kit::canvas_pixels(form.type, metrics.row_height);
+    kit::plain_part(block.items, Role::row, {x, y, room, height}, panel_colour);
     const int middle = y + height / 2;
-    const int pad = context.px(metrics.row_pad);
-    const int gap = context.px(metrics.row_gap);
+    const int pad = kit::canvas_pixels(form.type, metrics.row_pad);
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
     int right = x + room - pad;
     if (switch_column) {
-        const int width = context.px(metrics.switch_width);
+        const int width = kit::canvas_pixels(form.type, metrics.switch_width);
         if (has_switch) {
-            Item item{};
-            item.role = ItemRole::switch_off_on;
-            item.box = {right - width, middle - control_height / 2, width, control_height};
-            item.lines = {tr("OFF"), tr("ON")};
-            item.text = TextRole::button;
-            item.pixel_size = context.font(metrics.switch_text);
-            item.bold = true;
-            item.colour = text_colour;
-            item.control = {ControlKind::part_switch, static_cast<uint16_t>(index)};
-            item.on = row.on;
-            block.items.push_back(std::move(item));
+            kit::Item part{};
+            part.role = Role::toggle;
+            part.rect = {right - width, middle - control_height / 2, width, control_height};
+            part.lines = {tr("OFF"), tr("ON")};
+            part.style = TextStyle::button;
+            part.pixel_size = kit::canvas_font(form.type, metrics.switch_text);
+            part.bold = true;
+            part.colour = text_colour;
+            part.control = control_id({ControlKind::part_switch, static_cast<uint16_t>(index)});
+            part.state.on = row.on;
+            block.items.push_back(std::move(part));
         }
         right -= width + gap;
     }
     const std::string size = detail::part_size(row);
-    const Style size_style{
-        metrics.row_size, false, oa::ui::kit::screen_colour::button_text, TextRole::row_detail
+    const Lettering size_style{
+        metrics.row_size, false, oa::ui::kit::screen_colour::button_text, TextStyle::row_detail
     };
     const int size_room = std::max(
-        context.px(metrics.row_size_min), context.width(size, context.font(metrics.row_size), false)
+        kit::canvas_pixels(form.type, metrics.row_size_min),
+        kit::measured_width(
+            form.type.measure, size, kit::canvas_font(form.type, metrics.row_size), false
+        )
     );
-    add_line(context, block, right, middle, size_room, size, size_style, Fit::tight_right);
+    kit::line_part(
+        block.items, form.type, right, middle, size_room, size, size_style, TextFit::tight_right
+    );
     right -= size_room + gap;
     if (button) {
         const int width = std::min(
-            button_width(
-                context, *button, metrics.small_button_text, metrics.small_button_pad, 0.0f
+            kit::button_span(
+                form.type,
+                spec_of(*button),
+                metrics.small_button_text,
+                metrics.small_button_pad,
+                0.0f
             ),
             room / 3
         );
-        add_button(
-            context,
-            block,
+        kit::button_part(
+            block.items,
+            form.type,
             {right - width, middle - control_height / 2, width, control_height},
-            *button,
+            spec_of(*button),
             metrics.small_button_text
         );
         right -= width + gap;
     }
     const auto [glyph, glyph_colour] = row_mark(row);
-    const int mark = context.px(metrics.row_mark);
-    add_icon(block, {x + pad, middle - mark / 2, mark, mark}, glyph, glyph_colour, false);
+    const int mark = kit::canvas_pixels(form.type, metrics.row_mark);
+    kit::icon_part(
+        block.items, {x + pad, middle - mark / 2, mark, mark}, glyph, glyph_colour, false
+    );
     const int text_x = x + pad + mark + gap;
     Colour title_colour = text_colour;
     if (row.mark == Mark::done)
@@ -1264,31 +912,34 @@ int add_part_row(
         (missing && row.kind != PartKind::update_31c)
     )
         title_colour = dim_colour;
-    const int taken = add_line(
-        context,
-        block,
+    const int taken = kit::line_part(
+        block.items,
+        form.type,
         text_x,
         middle,
         right - text_x,
         detail::part_name(row, managing),
-        {metrics.row_title, true, title_colour, TextRole::row_title}
+        {metrics.row_title, true, title_colour, TextStyle::row_title}
     );
     int at = text_x + taken + gap;
     const std::string note = detail::part_detail(model, row);
     const Colour note_colour =
         row.kind == PartKind::update_31c && missing ? amber_colour : dim_colour;
-    const Style note_style{metrics.row_detail, false, note_colour, TextRole::row_detail};
-    const Style hint_style{metrics.row_hint, false, amber_colour, TextRole::mark_text};
-    const int least = context.px(24.0f);
+    const Lettering note_style{metrics.row_detail, false, note_colour, TextStyle::row_detail};
+    const Lettering hint_style{metrics.row_hint, false, amber_colour, TextStyle::mark_text};
+    const int least = kit::canvas_pixels(form.type, 24.0f);
     if (taken > 0 && !note.empty() && right - at >= least)
-        at += add_line(context, block, at, middle, right - at, note, note_style) + gap;
+        at +=
+            kit::line_part(block.items, form.type, at, middle, right - at, note, note_style) + gap;
     if (taken > 0 && right - at >= least) {
-        const int hint_size = context.font(hint_style.points);
+        const int hint_size = kit::canvas_font(form.type, hint_style.points);
         std::string hint = detail::part_hint(model, row, false);
-        if (!hint.empty() && context.width(hint, hint_size, false) > right - at)
+        if (!hint.empty() &&
+            kit::measured_width(form.type.measure, hint, hint_size, false) > right - at)
             hint = detail::part_hint(model, row, true);
-        if (!hint.empty() && context.width(hint, hint_size, false) <= right - at)
-            add_line(context, block, at, middle, right - at, hint, hint_style);
+        if (!hint.empty() &&
+            kit::measured_width(form.type.measure, hint, hint_size, false) <= right - at)
+            kit::line_part(block.items, form.type, at, middle, right - at, hint, hint_style);
     }
     return height;
 }
@@ -1333,31 +984,33 @@ std::vector<ShownRow> shown_rows(const Model& model) {
 
 /// Adds the parts' rows in a panel, with dividers between them.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block
 /// @param x the panel's left, pixels
 /// @param y its top, pixels
 /// @param room its width, pixels
 /// @return the height taken, pixels
-int add_rows_panel(const Context& context, Block& block, int x, int y, int room) {
-    const std::vector<ShownRow> rows = shown_rows(context.model);
+int add_rows_panel(const Form& form, Block& block, int x, int y, int room) {
+    const std::vector<ShownRow> rows = shown_rows(form.model);
     if (rows.empty())
         return 0;
     bool switch_column = false;
     for (const auto& [row, index] : rows)
         switch_column =
-            switch_column || (context.model.step == Step::ready_to_copy && row.has_switch &&
+            switch_column || (form.model.step == Step::ready_to_copy && row.has_switch &&
                               !detail::part_missing(row) && index >= 0);
-    const int border = std::max(1, context.px(1.0f));
+    const int border = std::max(1, kit::canvas_pixels(form.type, 1.0f));
     Block inner;
     int at = y + border;
     for (std::size_t index = 0; index < rows.size(); ++index) {
         if (index > 0) {
-            add_box(inner, ItemRole::divider, {x + border, at, room - 2 * border, border});
+            kit::plain_part(
+                inner.items, Role::divider, {x + border, at, room - 2 * border, border}, line_colour
+            );
             at += border;
         }
         at += add_part_row(
-            context,
+            form,
             inner,
             x + border,
             at,
@@ -1376,138 +1029,137 @@ int add_rows_panel(const Context& context, Block& block, int x, int y, int room)
 /// FILES", the version and, except in the management state, the OA · Aa button (the icon and
 /// "Aa").
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] block the block (canvas coordinates)
 /// @param safe the safe area, pixels
 /// @return the header's bottom, pixels
-int add_header(const Context& context, Block& block, Rect safe) {
-    const Metrics& metrics = context.metrics;
-    const Rect bar{safe.x, safe.y, safe.width, context.px(metrics.header_height)};
-    add_box(block, ItemRole::header_bar, bar);
-    const int pad = context.px(metrics.header_pad);
-    const int gap = context.px(metrics.header_gap);
+int add_header(const Form& form, Block& block, Rect safe) {
+    const Metrics& metrics = form.metrics;
+    const Rect bar{
+        safe.x, safe.y, safe.width, kit::canvas_pixels(form.type, metrics.header_height)
+    };
+    kit::plain_part(block.items, Role::header_bar, bar, line_colour);
+    const int pad = kit::canvas_pixels(form.type, metrics.header_pad);
+    const int gap = kit::canvas_pixels(form.type, metrics.header_gap);
     const int middle = bar.y + bar.height / 2;
-    const int badge = context.px(metrics.badge);
-    Item badge_item{};
-    badge_item.role = ItemRole::badge;
-    badge_item.box = {bar.x + pad, middle - badge / 2, badge, badge};
-    badge_item.colour = green_colour;
-    badge_item.glyph = Glyph::oa;
-    block.items.push_back(badge_item);
+    const int badge = kit::canvas_pixels(form.type, metrics.badge);
+    kit::Item badge_part{};
+    badge_part.role = Role::badge;
+    badge_part.rect = {bar.x + pad, middle - badge / 2, badge, badge};
+    badge_part.colour = green_colour;
+    badge_part.glyph = Glyph::oa;
+    block.items.push_back(badge_part);
     int right = bar.x + bar.width - pad;
     const int text_x = bar.x + pad + badge + gap;
-    if (!context.model.management) {
+    if (!form.model.management) {
         Action language{};
         language.label = tr("Aa");
         language.glyph = Glyph::oa;
         language.glyph_points = metrics.header_button_mark;
         language.control = {ControlKind::language};
         language.command = Command::open_language;
-        const int height = context.px(min_button_points);
+        const int height = kit::canvas_pixels(form.type, min_button_points);
         const int width = std::min(
-            button_width(context, language, metrics.header_button_text, 12.0f, 0.0f),
+            kit::button_span(form.type, spec_of(language), metrics.header_button_text, 12.0f, 0.0f),
             std::max(0, right - text_x)
         );
-        add_button(
-            context,
-            block,
+        kit::button_part(
+            block.items,
+            form.type,
             {right - width, middle - height / 2, width, height},
-            language,
+            spec_of(language),
             metrics.header_button_text
         );
         right -= width + gap;
     }
-    const int version = add_line(
-        context,
-        block,
+    const int version = kit::line_part(
+        block.items,
+        form.type,
         right,
         middle,
         std::max(0, right - text_x),
-        context.model.version,
-        {metrics.version_text, false, dim_colour, TextRole::small},
-        Fit::tight_right,
-        ItemRole::version
+        form.model.version,
+        {metrics.version_text, false, dim_colour, TextStyle::small},
+        TextFit::tight_right,
+        Role::version
     );
     if (version > 0)
         right -= version + gap;
-    const Style header{metrics.header_text, true, text_colour, TextRole::header};
-    const int title = add_line(
-        context,
-        block,
+    const Lettering header{metrics.header_text, true, text_colour, TextStyle::header};
+    const int title = kit::line_part(
+        block.items,
+        form.type,
         text_x,
         middle,
         right - text_x,
         "OPEN ANNIHILATION",
         header,
-        Fit::tight_left,
-        ItemRole::header_text
+        TextFit::tight_left,
+        Role::header_text
     );
     const int after = text_x + title + gap;
-    if (title > 0 && right - after > context.px(40.0f))
-        add_line(
-            context,
-            block,
+    if (title > 0 && right - after > kit::canvas_pixels(form.type, 40.0f))
+        kit::line_part(
+            block.items,
+            form.type,
             after,
             middle,
             right - after,
             tr("GAME FILES"),
-            {metrics.header_text, false, dim_colour, TextRole::header},
-            Fit::tight_left,
-            ItemRole::header_text
+            {metrics.header_text, false, dim_colour, TextStyle::header},
+            TextFit::tight_left,
+            Role::header_text
         );
     return bar.y + bar.height;
 }
 
 /// Lays out S1: the title, the lead, the banner, the ways in and the footer.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column first_run_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column first_run_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     const std::string device = platform_word(model, detail::word_device);
     Column column;
     Block& top = column.top;
-    int y = add_text(
-        context,
-        top,
-        ItemRole::title,
-        x,
-        0,
+    int y = kit::text_part(
+        top.items,
+        form.type,
+        Role::title,
+        {x, 0},
         room,
         tr("Add your Total Annihilation files"),
-        {metrics.title, true, text_colour, TextRole::title},
-        Fit::column,
+        {metrics.title, true, text_colour, TextStyle::title},
+        TextFit::column,
         2
     );
-    y += context.px(metrics.title_gap);
-    const Style lead{metrics.lead, false, dim_colour, TextRole::lead};
-    if (context.phone)
-        y += add_text(
-            context,
-            top,
-            ItemRole::text,
-            x,
-            y,
+    y += kit::canvas_pixels(form.type, metrics.title_gap);
+    const Lettering lead{metrics.lead, false, dim_colour, TextStyle::lead};
+    if (form.compact)
+        y += kit::text_part(
+            top.items,
+            form.type,
+            Role::text,
+            {x, y},
             room,
             fill(
                 "Copied onto this {device} once from your own copy. Nothing is downloaded.",
                 {{"device", device}}
             ),
             lead,
-            Fit::column,
+            TextFit::column,
             1
         );
     else
-        y += add_text(
-            context,
-            top,
-            ItemRole::text,
-            x,
-            y,
-            std::min(room, context.px(900.0f)),
+        y += kit::text_part(
+            top.items,
+            form.type,
+            Role::text,
+            {x, y},
+            std::min(room, kit::canvas_pixels(form.type, 900.0f)),
             fill(
                 "Open Annihilation plays the game from your own copy, as it does on a computer. It "
                 "comes with no game data and downloads nothing: the files are copied onto this "
@@ -1516,48 +1168,50 @@ Column first_run_column(const Context& context, int x, int room) {
             ),
             lead
         );
-    y += context.px(metrics.block_gap);
-    y += add_step_banner(context, top, x, y, room);
+    y += kit::canvas_pixels(form.type, metrics.block_gap);
+    y += add_step_banner(form, top, x, y, room);
     top.height = y;
 
     const std::vector<Option> options = first_run_options(model);
     Block& body = column.body;
     if (!options.empty()) {
         const int count = static_cast<int>(options.size());
-        const int card_width = (room - context.px(metrics.card_gap) * (count - 1)) / count;
-        const bool cards = !context.phone && card_width >= context.px(metrics.card_min_width);
-        body.height = cards ? add_cards(context, body, x, 0, room, options)
-                            : add_option_rows(context, body, x, 0, room, options);
+        const int card_width =
+            (room - kit::canvas_pixels(form.type, metrics.card_gap) * (count - 1)) / count;
+        const bool cards =
+            !form.compact && card_width >= kit::canvas_pixels(form.type, metrics.card_min_width);
+        body.height = cards ? add_cards(form, body, x, 0, room, options)
+                            : add_option_rows(form, body, x, 0, room, options);
     }
-    if (!context.phone && model.offers_pick_folder) {
-        const int at = body.height + context.px(metrics.block_gap);
-        const int height = add_text(
-            context,
-            body,
-            ItemRole::text,
-            x,
-            at,
-            std::min(room, context.px(900.0f)),
+    if (!form.compact && model.offers_pick_folder) {
+        const int at = body.height + kit::canvas_pixels(form.type, metrics.block_gap);
+        const int height = kit::text_part(
+            body.items,
+            form.type,
+            Role::text,
+            {x, at},
+            std::min(room, kit::canvas_pixels(form.type, 900.0f)),
             tr("You need the folder of an installed copy of Total Annihilation, the one that holds "
                "totala1.hpi: about 1.1 GB with both expansions and the music. Installers of the "
                "full game are Windows programs and cannot be used here; install the game on a "
                "computer and bring its folder."),
-            {metrics.note_text, false, dim_colour, TextRole::small}
+            {metrics.note_text, false, dim_colour, TextStyle::small}
         );
         if (height > 0)
             body.height = at + height;
     }
 
     Block& footer = column.footer;
-    const Style small{metrics.footer_text, false, dim_colour, TextRole::small};
-    const int pad = context.px(metrics.footer_pad);
-    const int line_height = context.line(context.font(small.points), false);
+    const Lettering small{metrics.footer_text, false, dim_colour, TextStyle::small};
+    const int pad = kit::canvas_pixels(form.type, metrics.footer_pad);
+    const int line_height =
+        kit::measured_line(form.type.measure, kit::canvas_font(form.type, small.points), false);
     const int middle = pad + line_height / 2;
     int at = x;
     if (model.free_known)
-        at += add_line(
-                  context,
-                  footer,
+        at += kit::line_part(
+                  footer.items,
+                  form.type,
                   at,
                   middle,
                   room,
@@ -1567,29 +1221,28 @@ Column first_run_column(const Context& context, int x, int room) {
                   ),
                   small
               ) +
-              context.px(20.0f);
+              kit::canvas_pixels(form.type, 20.0f);
     const std::string hint =
-        context.phone
-            ? tr("OA settings › Game files manages them later.")
-            : tr("OA settings › Game files adds an expansion or removes the files later.");
-    if (x + room - at > context.px(60.0f))
-        add_line(context, footer, at, middle, x + room - at, hint, small);
+        form.compact ? tr("OA settings › Game files manages them later.")
+                     : tr("OA settings › Game files adds an expansion or removes the files later.");
+    if (x + room - at > kit::canvas_pixels(form.type, 60.0f))
+        kit::line_part(footer.items, form.type, at, middle, x + room - at, hint, small);
     footer.height = pad * 2 + line_height;
     return column;
 }
 
 /// Lays out S2 while the source is listed: the count growing, CANCEL and a busy bar.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column looking_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column looking_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     Column column;
     column.top.height = add_title(
-        context,
+        form,
         column.top,
         x,
         room,
@@ -1597,7 +1250,7 @@ Column looking_column(const Context& context, int x, int room) {
         model.location
     );
     Block inner;
-    const int pad = context.px(metrics.panel_pad);
+    const int pad = kit::canvas_pixels(form.type, metrics.panel_pad);
     const int inner_x = x + pad;
     const int inner_room = room - 2 * pad;
     Action cancel{};
@@ -1605,14 +1258,15 @@ Column looking_column(const Context& context, int x, int room) {
     cancel.control = {ControlKind::cancel};
     cancel.command = Command::cancel_scan;
     const int cancel_width = std::min(
-        button_width(context, cancel, metrics.button_text, metrics.button_pad, 0.0f), inner_room / 2
+        kit::button_span(form.type, spec_of(cancel), metrics.button_text, metrics.button_pad, 0.0f),
+        inner_room / 2
     );
-    const int button_height = context.px(min_button_points);
-    add_button(
-        context,
-        inner,
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
+    kit::button_part(
+        inner.items,
+        form.type,
         {inner_x + inner_room - cancel_width, pad, cancel_width, button_height},
-        cancel,
+        spec_of(cancel),
         metrics.button_text
     );
     std::string count;
@@ -1626,30 +1280,27 @@ Column looking_column(const Context& context, int x, int room) {
             model.listed_files == 1 ? "1 file, {size} so far" : "{n} files, {size} so far",
             {{"n", std::to_string(model.listed_files)}, {"size", size_text(model.listed_bytes)}}
         );
-    add_line(
-        context,
-        inner,
+    kit::line_part(
+        inner.items,
+        form.type,
         inner_x,
         pad + button_height / 2,
-        inner_room - cancel_width - context.px(metrics.button_gap),
+        inner_room - cancel_width - kit::canvas_pixels(form.type, metrics.button_gap),
         count,
-        {metrics.panel_text, true, text_colour, TextRole::body}
+        {metrics.panel_text, true, text_colour, TextStyle::body}
     );
-    int y = pad + button_height + context.px(12.0f);
-    Item busy{};
-    busy.role = ItemRole::progress_busy;
-    busy.box = {inner_x, y, inner_room, std::max(2, context.px(metrics.bar_height))};
-    inner.items.push_back(busy);
-    y += busy.box.height + context.px(10.0f);
-    y += add_text(
-        context,
-        inner,
-        ItemRole::text,
-        inner_x,
-        y,
+    int y = pad + button_height + kit::canvas_pixels(form.type, 12.0f);
+    const int bar = std::max(2, kit::canvas_pixels(form.type, metrics.bar_height));
+    kit::plain_part(inner.items, Role::progress_busy, {inner_x, y, inner_room, bar}, text_colour);
+    y += bar + kit::canvas_pixels(form.type, 10.0f);
+    y += kit::text_part(
+        inner.items,
+        form.type,
+        Role::text,
+        {inner_x, y},
         inner_room,
         tr("Reading names and sizes only: nothing is copied or downloaded yet."),
-        {metrics.note_text, false, dim_colour, TextRole::small}
+        {metrics.note_text, false, dim_colour, TextStyle::small}
     );
     y += pad;
     add_panel(column.body, {x, 0, room, y}, inner);
@@ -1680,17 +1331,17 @@ std::string nested_name(std::string_view relative) {
 
 /// Lays out S2's offer of a game folder found inside the chosen one.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column nested_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column nested_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     Column column;
     Block& top = column.top;
     int y = add_title(
-        context,
+        form,
         top,
         x,
         room,
@@ -1700,7 +1351,7 @@ Column nested_column(const Context& context, int x, int room) {
             {{"location", model.location.empty() ? tr("a folder") : model.location}}
         )
     );
-    y -= context.px(metrics.block_gap / 2.0f);
+    y -= kit::canvas_pixels(form.type, metrics.block_gap / 2.0f);
     const std::string offer =
         model.nested.size() == 1
             ? fill(
@@ -1708,91 +1359,96 @@ Column nested_column(const Context& context, int x, int room) {
                   {{"folder", nested_name(model.nested.front())}}
               )
             : tr("This folder holds no game archives, but folders inside it do. Choose one.");
-    y += add_text(
-        context,
-        top,
-        ItemRole::text,
-        x,
-        y,
+    y += kit::text_part(
+        top.items,
+        form.type,
+        Role::text,
+        {x, y},
         room,
         offer,
-        {metrics.panel_text, false, text_colour, TextRole::body}
+        {metrics.panel_text, false, text_colour, TextStyle::body}
     );
-    y += context.px(metrics.block_gap);
+    y += kit::canvas_pixels(form.type, metrics.block_gap);
     top.height = y;
 
     Block& body = column.body;
-    const int row_height = context.px(min_button_points + 8.0f);
-    const int pad = context.px(10.0f);
-    const int icon = context.px(metrics.row_mark);
-    const int gap = context.px(metrics.row_gap);
-    const int button_height = context.px(min_button_points);
+    const int row_height = kit::canvas_pixels(form.type, min_button_points + 8.0f);
+    const int pad = kit::canvas_pixels(form.type, 10.0f);
+    const int icon = kit::canvas_pixels(form.type, metrics.row_mark);
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
     int at = 0;
     for (std::size_t index = 0; index < model.nested.size(); ++index) {
         Action use{};
         use.label = tr("USE THAT FOLDER");
         use.control = {ControlKind::nested_choice, static_cast<uint16_t>(index)};
         use.command = Command::use_nested;
-        use.role = index == 0 ? ItemRole::button_main : ItemRole::button;
+        use.role = index == 0 ? Role::button_main : Role::button;
         const int width = std::min(
-            button_width(
-                context, use, metrics.button_text, metrics.button_pad, metrics.button_min_width
+            kit::button_span(
+                form.type,
+                spec_of(use),
+                metrics.button_text,
+                metrics.button_pad,
+                metrics.button_min_width
             ),
             room / 2
         );
-        add_box(body, ItemRole::card, {x, at, room, row_height});
+        kit::plain_part(body.items, Role::panel, {x, at, room, row_height}, line_colour);
         const int middle = at + row_height / 2;
-        add_icon(body, {x + pad, middle - icon / 2, icon, icon}, Glyph::folder, dim_colour, false);
+        kit::icon_part(
+            body.items, {x + pad, middle - icon / 2, icon, icon}, Glyph::folder, dim_colour, false
+        );
         const int text_x = x + pad + icon + gap;
-        add_line(
-            context,
-            body,
+        kit::line_part(
+            body.items,
+            form.type,
             text_x,
             middle,
             x + room - pad - width - gap - text_x,
             nested_name(model.nested[index]),
-            {metrics.row_title, true, text_colour, TextRole::row_title}
+            {metrics.row_title, true, text_colour, TextStyle::row_title}
         );
-        add_button(
-            context,
-            body,
+        kit::button_part(
+            body.items,
+            form.type,
             {x + room - pad - width, middle - button_height / 2, width, button_height},
-            use,
+            spec_of(use),
             metrics.button_text
         );
-        at += row_height + context.px(6.0f);
+        at += row_height + kit::canvas_pixels(form.type, 6.0f);
     }
-    body.height = at > 0 ? at - context.px(6.0f) : 0;
+    body.height = at > 0 ? at - kit::canvas_pixels(form.type, 6.0f) : 0;
 
     Action other{};
     other.label = tr("CHOOSE ANOTHER FOLDER");
     other.control = {ControlKind::choose_folder};
     other.command = Command::pick_game_folder;
-    column.bottom.height = add_button_row(context, column.bottom, x, 0, room, {other}, {});
+    column.bottom.height = button_row_of(form, column.bottom, x, 0, room, {other}, {});
     return column;
 }
 
 /// Lays out S2's answer when the chosen folder is the game folder itself.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column already_there_column(const Context& context, int x, int room) {
+Column already_there_column(const Form& form, int x, int room) {
     Column column;
     column.top.height = add_title(
-        context, column.top, x, room, tr("This is already the game folder."), context.model.location
+        form, column.top, x, room, tr("This is already the game folder."), form.model.location
     );
     Action check{};
     check.label = tr("CHECK IT");
     check.control = {ControlKind::check_it};
     check.command = Command::check_in_place;
-    check.role = ItemRole::button_main;
+    check.role = Role::button_main;
     Action other{};
     other.label = tr("CHOOSE ANOTHER FOLDER");
     other.control = {ControlKind::choose_folder};
     other.command = Command::pick_game_folder;
-    column.body.height = add_button_row(context, column.body, x, 0, room, {check, other}, {});
+    column.body.height = button_row_of(form, column.body, x, 0, room, {check, other}, {});
     return column;
 }
 
@@ -1823,13 +1479,13 @@ std::string short_space_text(const Model& model) {
 
 /// Lays out S3: the parts, what is left out, the space and the check, and COPY.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column ready_to_copy_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column ready_to_copy_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     const std::string device = platform_word(model, detail::word_device);
     Column column;
     std::string source = fill(
@@ -1844,17 +1500,17 @@ Column ready_to_copy_column(const Context& context, int x, int room) {
                                  )
                                : std::string{};
     // The compact form keeps the rows' room: the cloud line joins the source's.
-    if (context.phone && !cloud.empty())
+    if (form.compact && !cloud.empty())
         source = fill("{source} · {cloud}", {{"source", source}, {"cloud", cloud}});
-    column.top.height = add_title(context, column.top, x, room, tr("Ready to copy"), source);
-    column.body.height = add_rows_panel(context, column.body, x, 0, room);
+    column.top.height = add_title(form, column.top, x, room, tr("Ready to copy"), source);
+    column.body.height = add_rows_panel(form, column.body, x, 0, room);
 
     Block& bottom = column.bottom;
-    const Style totals{metrics.totals_text, false, dim_colour, TextRole::body};
-    const Style copies{metrics.totals_text, true, text_colour, TextRole::body};
-    const int size = context.font(metrics.totals_text);
-    const int line_height = context.line(size, true);
-    const int gap = context.px(metrics.row_gap);
+    const Lettering totals{metrics.totals_text, false, dim_colour, TextStyle::body};
+    const Lettering copies{metrics.totals_text, true, text_colour, TextStyle::body};
+    const int size = kit::canvas_font(form.type, metrics.totals_text);
+    const int line_height = kit::measured_line(form.type.measure, size, true);
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
     std::string check;
     Colour check_colour = dim_colour;
     if (model.source_checked) {
@@ -1876,39 +1532,42 @@ Column ready_to_copy_column(const Context& context, int x, int room) {
                            )
                          : std::string{};
     const int icon = check.empty() || !model.source_checked ? 0 : size;
-    const int check_width =
-        check.empty() ? 0 : icon + (icon > 0 ? gap : 0) + context.width(check, size, false);
-    const int totals_width = context.width(copies_text, size, true) +
+    const int check_width = check.empty()
+                                ? 0
+                                : icon + (icon > 0 ? gap : 0) +
+                                      kit::measured_width(form.type.measure, check, size, false);
+    const int totals_width = kit::measured_width(form.type.measure, copies_text, size, true) +
                              (free_text.empty() || copies_text.empty() ? 0 : gap) +
-                             context.width(free_text, size, false);
+                             kit::measured_width(form.type.measure, free_text, size, false);
     int y = 0;
     const auto add_check = [&](int middle) {
         if (check.empty())
             return;
         int at = x;
         if (icon > 0) {
-            add_icon(
-                bottom, {at, middle - icon / 2, icon, icon}, Glyph::check, green_colour, false
+            kit::icon_part(
+                bottom.items, {at, middle - icon / 2, icon, icon}, Glyph::check, green_colour, false
             );
             at += icon + gap;
         }
-        add_line(
-            context,
-            bottom,
+        kit::line_part(
+            bottom.items,
+            form.type,
             at,
             middle,
             x + room - at,
             check,
-            {metrics.totals_text, false, check_colour, TextRole::body}
+            {metrics.totals_text, false, check_colour, TextStyle::body}
         );
     };
     const auto add_totals = [&](int middle, bool right) {
         int at = right ? x + room - std::min(room, totals_width) : x;
-        const int taken = add_line(context, bottom, at, middle, x + room - at, copies_text, copies);
+        const int taken =
+            kit::line_part(bottom.items, form.type, at, middle, x + room - at, copies_text, copies);
         if (taken > 0)
             at += taken + gap;
-        if (!free_text.empty() && x + room - at > context.px(24.0f))
-            add_line(context, bottom, at, middle, x + room - at, free_text, totals);
+        if (!free_text.empty() && x + room - at > kit::canvas_pixels(form.type, 24.0f))
+            kit::line_part(bottom.items, form.type, at, middle, x + room - at, free_text, totals);
     };
     if (check_width + 2 * gap + totals_width <= room) {
         add_check(line_height / 2);
@@ -1917,25 +1576,25 @@ Column ready_to_copy_column(const Context& context, int x, int room) {
     } else {
         if (!check.empty()) {
             add_check(line_height / 2);
-            y += line_height + context.px(4.0f);
+            y += line_height + kit::canvas_pixels(form.type, 4.0f);
         }
         add_totals(y + line_height / 2, false);
         y += line_height;
     }
-    if (!context.phone && !cloud.empty()) {
-        y += context.px(4.0f);
-        y += add_text(context, bottom, ItemRole::text, x, y, room, cloud, totals);
+    if (!form.compact && !cloud.empty()) {
+        y += kit::canvas_pixels(form.type, 4.0f);
+        y += kit::text_part(bottom.items, form.type, Role::text, {x, y}, room, cloud, totals);
     }
     if (model.space_short) {
-        y += context.px(metrics.block_gap / 2.0f);
+        y += kit::canvas_pixels(form.type, metrics.block_gap / 2.0f);
         BannerContent warning{};
         warning.shown = true;
         warning.glyph = Glyph::warning;
         warning.colour = amber_colour;
         warning.text = short_space_text(model);
-        y += add_banner(context, bottom, x, y, room, warning);
+        y += add_banner(form, bottom, x, y, room, warning);
     }
-    y += context.px(metrics.block_gap / 2.0f);
+    y += kit::canvas_pixels(form.type, metrics.block_gap / 2.0f);
     Action other{};
     if (model.demo) {
         other.label = tr("CHOOSE ANOTHER FILE");
@@ -1958,27 +1617,27 @@ Column ready_to_copy_column(const Context& context, int x, int room) {
     copy.label = model.replace ? tr("REPLACE GAME FILES") : tr("COPY");
     copy.control = {ControlKind::copy};
     copy.command = Command::start_copy;
-    copy.role = ItemRole::button_main;
+    copy.role = Role::button_main;
     copy.enabled = !model.space_short;
     right.push_back(copy);
-    y += add_button_row(context, bottom, x, y, room, {other}, right);
+    y += button_row_of(form, bottom, x, y, room, {other}, right);
     bottom.height = y;
     return column;
 }
 
 /// Lays out S4: the progress, STOP, the parts ticking and the hint.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column copying_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column copying_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     Column column;
     Block& top = column.top;
     int y = add_title(
-        context,
+        form,
         top,
         x,
         room,
@@ -1988,32 +1647,34 @@ Column copying_column(const Context& context, int x, int room) {
             {{"location", model.location.empty() ? tr("the folder you chose") : model.location}}
         )
     );
-    y += add_step_banner(context, top, x, y, room);
+    y += add_step_banner(form, top, x, y, room);
     Block inner;
-    const int pad = context.px(metrics.panel_pad);
+    const int pad = kit::canvas_pixels(form.type, metrics.panel_pad);
     const int inner_x = x + pad;
     const int inner_room = room - 2 * pad;
-    const int button_height = context.px(min_button_points);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
     Action stop{};
     stop.label = tr("STOP");
     stop.control = {ControlKind::stop};
-    stop.role = ItemRole::button_danger;
+    stop.role = Role::button_danger;
     stop.glyph = Glyph::stop;
     const int stop_width = std::min(
-        button_width(context, stop, metrics.button_text, metrics.button_pad, 0.0f), inner_room / 2
+        kit::button_span(form.type, spec_of(stop), metrics.button_text, metrics.button_pad, 0.0f),
+        inner_room / 2
     );
     const int middle = y + pad + button_height / 2;
-    add_button(
-        context,
-        inner,
+    kit::button_part(
+        inner.items,
+        form.type,
         {inner_x + inner_room - stop_width, y + pad, stop_width, button_height},
-        stop,
+        spec_of(stop),
         metrics.button_text
     );
-    const int text_room = inner_room - stop_width - context.px(metrics.button_gap);
-    const int taken = add_line(
-        context,
-        inner,
+    const int text_room =
+        inner_room - stop_width - kit::canvas_pixels(form.type, metrics.button_gap);
+    const int taken = kit::line_part(
+        inner.items,
+        form.type,
         inner_x,
         middle,
         text_room,
@@ -2022,24 +1683,24 @@ Column copying_column(const Context& context, int x, int room) {
             {{"done", size_text(model.progress.done_bytes, true)},
              {"total", size_text(model.progress.total_bytes, true)}}
         ),
-        {metrics.panel_text, true, text_colour, TextRole::body}
+        {metrics.panel_text, true, text_colour, TextStyle::body}
     );
-    const int gap = context.px(metrics.row_gap);
-    if (taken > 0 && text_room - taken - gap > context.px(24.0f))
-        add_line(
-            context,
-            inner,
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
+    if (taken > 0 && text_room - taken - gap > kit::canvas_pixels(form.type, 24.0f))
+        kit::line_part(
+            inner.items,
+            form.type,
             inner_x + taken + gap,
             middle,
             text_room - taken - gap,
             time_left_text(model.progress.seconds_left),
-            {metrics.note_text, false, dim_colour, TextRole::small}
+            {metrics.note_text, false, dim_colour, TextStyle::small}
         );
-    int at = y + pad + button_height + context.px(10.0f);
-    Item track{};
-    track.role = ItemRole::progress_track;
-    track.box = {inner_x, at, inner_room, std::max(2, context.px(metrics.bar_height))};
-    inner.items.push_back(track);
+    int at = y + pad + button_height + kit::canvas_pixels(form.type, 10.0f);
+    const Rect track{
+        inner_x, at, inner_room, std::max(2, kit::canvas_pixels(form.type, metrics.bar_height))
+    };
+    kit::plain_part(inner.items, Role::progress_track, track, text_colour);
     float fraction = 0.0f;
     if (model.progress.total_bytes > 0)
         fraction = static_cast<float>(std::min(
@@ -2047,15 +1708,14 @@ Column copying_column(const Context& context, int x, int room) {
             static_cast<double>(model.progress.done_bytes) /
                 static_cast<double>(model.progress.total_bytes)
         ));
-    Item filled{};
-    filled.role = ItemRole::progress_fill;
-    filled.box = track.box;
-    filled.box.width =
-        static_cast<int>(std::lround(static_cast<float>(track.box.width) * fraction));
+    kit::Item filled{};
+    filled.role = Role::progress_fill;
+    filled.rect = track;
+    filled.rect.width = static_cast<int>(std::lround(static_cast<float>(track.width) * fraction));
     filled.fraction = fraction;
     filled.colour = green_colour;
     inner.items.push_back(filled);
-    at += track.box.height + context.px(10.0f);
+    at += track.height + kit::canvas_pixels(form.type, 10.0f);
     std::string current = model.progress.current;
     if (model.progress.downloading && !current.empty())
         current = fill(
@@ -2063,66 +1723,67 @@ Column copying_column(const Context& context, int x, int room) {
             {{"file", current}, {"cloud", platform_word(model, detail::word_cloud_name)}}
         );
     if (!current.empty()) {
-        const Style style{metrics.note_text, false, dim_colour, TextRole::small};
-        const int line_height = context.line(context.font(style.points), false);
-        add_line(context, inner, inner_x, at + line_height / 2, inner_room, current, style);
+        const Lettering style{metrics.note_text, false, dim_colour, TextStyle::small};
+        const int line_height =
+            kit::measured_line(form.type.measure, kit::canvas_font(form.type, style.points), false);
+        kit::line_part(
+            inner.items, form.type, inner_x, at + line_height / 2, inner_room, current, style
+        );
         at += line_height;
     }
     at += pad;
     add_panel(top, {x, y, room, at - y}, inner);
-    top.height = at + context.px(metrics.block_gap);
+    top.height = at + kit::canvas_pixels(form.type, metrics.block_gap);
 
-    column.body.height = add_rows_panel(context, column.body, x, 0, room);
-    column.bottom.height = add_text(
-        context,
-        column.bottom,
-        ItemRole::text,
-        x,
-        0,
+    column.body.height = add_rows_panel(form, column.body, x, 0, room);
+    column.bottom.height = kit::text_part(
+        column.bottom.items,
+        form.type,
+        Role::text,
+        {x, 0},
         room,
         tr("Keep Open Annihilation open until the copy ends. If you leave it, the copy goes on for "
            "a short while, then pauses and continues when you come back."),
-        {metrics.note_text, false, dim_colour, TextRole::small}
+        {metrics.note_text, false, dim_colour, TextStyle::small}
     );
     return column;
 }
 
 /// Lays out S5 while the engine checks the copy (or unpacks the demo).
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column checking_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column checking_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     Column column;
-    int y = add_title(context, column.top, x, room, tr("Checking"), {});
-    y += add_step_banner(context, column.top, x, y, room);
+    int y = add_title(form, column.top, x, room, tr("Checking"), {});
+    y += add_step_banner(form, column.top, x, y, room);
     column.top.height = y;
     Block inner;
-    const int pad = context.px(metrics.panel_pad);
+    const int pad = kit::canvas_pixels(form.type, metrics.panel_pad);
     int at = pad;
-    at += add_text(
-        context,
-        inner,
-        ItemRole::text,
-        x + pad,
-        at,
+    at += kit::text_part(
+        inner.items,
+        form.type,
+        Role::text,
+        {x + pad, at},
         room - 2 * pad,
         model.demo ? fill(
                          "Unpacking the demo's game data ({size})…",
                          {{"size", std::string(detail::demo_data_size_text)}}
                      )
                    : tr("Checking the copied files with the game's own check…"),
-        {metrics.panel_text, false, text_colour, TextRole::body}
+        {metrics.panel_text, false, text_colour, TextStyle::body}
     );
-    at += context.px(12.0f);
-    Item busy{};
-    busy.role = ItemRole::progress_busy;
-    busy.box = {x + pad, at, room - 2 * pad, std::max(2, context.px(metrics.bar_height))};
-    inner.items.push_back(busy);
-    at += busy.box.height + pad;
+    at += kit::canvas_pixels(form.type, 12.0f);
+    const int bar = std::max(2, kit::canvas_pixels(form.type, metrics.bar_height));
+    kit::plain_part(
+        inner.items, Role::progress_busy, {x + pad, at, room - 2 * pad, bar}, text_colour
+    );
+    at += bar + pad;
     add_panel(column.body, {x, 0, room, at}, inner);
     column.body.height = at;
     return column;
@@ -2131,61 +1792,58 @@ Column checking_column(const Context& context, int x, int room) {
 /// Lays out S5's Ready to play: what the game will play, the space, the warnings, the backups
 /// line, the folder set aside, and PLAY.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column ready_to_play_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column ready_to_play_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     const std::string device = platform_word(model, detail::word_device);
     Column column;
     Block& top = column.top;
-    const int icon = context.px(metrics.problem_icon);
-    const int gap = context.px(16.0f);
+    const int icon = kit::canvas_pixels(form.type, metrics.problem_icon);
+    const int gap = kit::canvas_pixels(form.type, 16.0f);
     const int text_x = x + icon + gap;
     const int text_room = room - icon - gap;
-    int text_height = add_text(
-        context,
-        top,
-        ItemRole::title,
-        text_x,
-        0,
+    int text_height = kit::text_part(
+        top.items,
+        form.type,
+        Role::title,
+        {text_x, 0},
         text_room,
         tr("Ready to play"),
-        {metrics.title, true, text_colour, TextRole::title},
-        Fit::column,
+        {metrics.title, true, text_colour, TextStyle::title},
+        TextFit::column,
         2
     );
-    text_height += context.px(metrics.title_gap / 2.0f);
-    text_height += add_text(
-        context,
-        top,
-        ItemRole::text,
-        text_x,
-        text_height,
+    text_height += kit::canvas_pixels(form.type, metrics.title_gap / 2.0f);
+    text_height += kit::text_part(
+        top.items,
+        form.type,
+        Role::text,
+        {text_x, text_height},
         text_room,
         model.ready_summary.empty() ? ready_text(model.ready_parts, model.demo)
                                     : model.ready_summary,
-        {metrics.subtitle, false, text_colour, TextRole::subtitle}
+        {metrics.subtitle, false, text_colour, TextStyle::subtitle}
     );
-    add_icon(top, {x, 0, icon, icon}, Glyph::check, green_colour, true);
-    int y = std::max(icon, text_height) + context.px(metrics.block_gap);
-    y += add_step_banner(context, top, x, y, room);
+    kit::icon_part(top.items, {x, 0, icon, icon}, Glyph::check, green_colour, true);
+    int y = std::max(icon, text_height) + kit::canvas_pixels(form.type, metrics.block_gap);
+    y += add_step_banner(form, top, x, y, room);
     top.height = y;
 
     Block& body = column.body;
     Block inner;
-    const int pad = context.px(metrics.panel_pad);
-    const Style uses{metrics.note_text + 1.0f, false, text_colour, TextRole::body};
-    const Style dim{metrics.note_text, false, dim_colour, TextRole::small};
+    const int pad = kit::canvas_pixels(form.type, metrics.panel_pad);
+    const Lettering uses{metrics.note_text + 1.0f, false, text_colour, TextStyle::body};
+    const Lettering dim{metrics.note_text, false, dim_colour, TextStyle::small};
     int at = pad;
-    at += add_text(
-        context,
-        inner,
-        ItemRole::text,
-        x + pad,
-        at,
+    at += kit::text_part(
+        inner.items,
+        form.type,
+        Role::text,
+        {x + pad, at},
         room - 2 * pad,
         model.free_known ? fill(
                                "Uses {size} on this {device} · {free} free.",
@@ -2200,25 +1858,25 @@ Column ready_to_play_column(const Context& context, int x, int room) {
         uses
     );
     if (!model.backed_up)
-        at += context.px(2.0f) + add_text(
-                                     context,
-                                     inner,
-                                     ItemRole::text,
-                                     x + pad,
-                                     at + context.px(2.0f),
-                                     room - 2 * pad,
-                                     fill(
-                                         "These files are not in this {device}'s backups. Keep "
-                                         "your original copy.",
-                                         {{"device", device}}
-                                     ),
-                                     dim
-                                 );
+        at += kit::canvas_pixels(form.type, 2.0f) +
+              kit::text_part(
+                  inner.items,
+                  form.type,
+                  Role::text,
+                  {x + pad, at + kit::canvas_pixels(form.type, 2.0f)},
+                  room - 2 * pad,
+                  fill(
+                      "These files are not in this {device}'s backups. Keep "
+                      "your original copy.",
+                      {{"device", device}}
+                  ),
+                  dim
+              );
     at += pad;
     add_panel(body, {x, 0, room, at}, inner);
     int y_body = at;
     for (const std::string& archive : model.skipped_archives) {
-        y_body += context.px(metrics.block_gap / 2.0f);
+        y_body += kit::canvas_pixels(form.type, metrics.block_gap / 2.0f);
         BannerContent warning{};
         warning.shown = true;
         warning.glyph = Glyph::warning;
@@ -2228,10 +1886,10 @@ Column ready_to_play_column(const Context& context, int x, int room) {
             "again from the original.",
             {{"file", archive}}
         );
-        y_body += add_banner(context, body, x, y_body, room, warning);
+        y_body += add_banner(form, body, x, y_body, room, warning);
     }
     if (model.old_folder_bytes > 0) {
-        y_body += context.px(metrics.block_gap / 2.0f);
+        y_body += kit::canvas_pixels(form.type, metrics.block_gap / 2.0f);
         BannerContent old{};
         old.shown = true;
         old.glyph = Glyph::folder;
@@ -2245,12 +1903,12 @@ Column ready_to_play_column(const Context& context, int x, int room) {
         remove.control = {ControlKind::remove_old};
         remove.glyph = Glyph::trash;
         old.actions.push_back(remove);
-        y_body += add_banner(context, body, x, y_body, room, old);
+        y_body += add_banner(form, body, x, y_body, room, old);
     }
     body.height = y_body;
 
     Action play{};
-    play.role = ItemRole::button_main;
+    play.role = Role::button_main;
     if (model.management) {
         // CHECK AGAIN in the management state reports here; DONE goes back to the list.
         play.label = tr("DONE");
@@ -2262,56 +1920,54 @@ Column ready_to_play_column(const Context& context, int x, int room) {
         play.command = Command::play;
         play.glyph = Glyph::play;
     }
-    column.bottom.height = add_button_row(context, column.bottom, x, 0, room, {}, {play});
+    column.bottom.height = button_row_of(form, column.bottom, x, 0, room, {}, {play});
     return column;
 }
 
 /// Lays out S6: the problem's mark, title, texts and buttons.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column problem_column(const Context& context, int x, int room) {
-    const Metrics& metrics = context.metrics;
-    const detail::ProblemContent problem = detail::problem_content(context.model);
+Column problem_column(const Form& form, int x, int room) {
+    const Metrics& metrics = form.metrics;
+    const detail::ProblemContent problem = detail::problem_content(form.model);
     Column column;
     Block& body = column.body;
-    const int icon = context.px(metrics.problem_icon);
-    const int gap = context.px(16.0f);
+    const int icon = kit::canvas_pixels(form.type, metrics.problem_icon);
+    const int gap = kit::canvas_pixels(form.type, 16.0f);
     const int text_x = x + icon + gap;
     const int text_room = room - icon - gap;
-    add_icon(body, {x, 0, icon, icon}, problem.glyph, problem.colour, true);
-    int y = add_text(
-        context,
-        body,
-        ItemRole::title,
-        text_x,
-        0,
+    kit::icon_part(body.items, {x, 0, icon, icon}, problem.glyph, problem.colour, true);
+    int y = kit::text_part(
+        body.items,
+        form.type,
+        Role::title,
+        {text_x, 0},
         text_room,
         problem.title,
-        {metrics.problem_title, true, text_colour, TextRole::title},
-        Fit::column,
+        {metrics.problem_title, true, text_colour, TextStyle::title},
+        TextFit::column,
         3
     );
     for (std::size_t index = 0; index < problem.paragraphs.size(); ++index) {
-        y += context.px(6.0f);
-        y += add_text(
-            context,
-            body,
-            ItemRole::text,
-            text_x,
-            y,
+        y += kit::canvas_pixels(form.type, 6.0f);
+        y += kit::text_part(
+            body.items,
+            form.type,
+            Role::text,
+            {text_x, y},
             text_room,
             problem.paragraphs[index],
             {metrics.problem_text,
              false,
              index == 0 ? text_colour : dim_colour,
-             index == 0 ? TextRole::body : TextRole::small}
+             index == 0 ? TextStyle::body : TextStyle::small}
         );
     }
-    y += context.px(metrics.block_gap);
-    y += add_button_row(context, body, text_x, y, text_room, problem.actions, {});
+    y += kit::canvas_pixels(form.type, metrics.block_gap);
+    y += button_row_of(form, body, text_x, y, text_room, problem.actions, {});
     body.height = std::max(icon, y);
     return column;
 }
@@ -2319,13 +1975,13 @@ Column problem_column(const Context& context, int x, int room) {
 /// Lays out S8: the summary, CHECK AGAIN and ADD FILES…, the banner, the parts with REMOVE,
 /// and the foot's REPLACE, REMOVE ALL and DONE.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column manage_column(const Context& context, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column manage_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
     const std::string device = platform_word(model, detail::word_device);
     Column column;
     Block& top = column.top;
@@ -2337,13 +1993,14 @@ Column manage_column(const Context& context, int x, int room) {
     Action add{};
     add.label = tr("ADD FILES…");
     add.control = {ControlKind::manage_add};
-    add.role = ItemRole::button_main;
+    add.role = Role::button_main;
     add.glyph = Glyph::plus;
     add.enabled = !model.pending_replacement;
-    const int gap = context.px(metrics.button_gap);
+    const int gap = kit::canvas_pixels(form.type, metrics.button_gap);
     const int check_width =
-        button_width(context, check, metrics.button_text, metrics.button_pad, 0.0f);
-    const int add_width = button_width(context, add, metrics.button_text, metrics.button_pad, 0.0f);
+        kit::button_span(form.type, spec_of(check), metrics.button_text, metrics.button_pad, 0.0f);
+    const int add_width =
+        kit::button_span(form.type, spec_of(add), metrics.button_text, metrics.button_pad, 0.0f);
     const int buttons = check_width + gap + add_width;
     const std::string title = tr("Game files");
     const std::string subtitle =
@@ -2358,29 +2015,41 @@ Column manage_column(const Context& context, int x, int room) {
                                {{"size", size_text(model.installed_bytes)}, {"device", device}}
                            );
     const int title_width = std::max(
-        context.width(title, context.font(metrics.title), true),
-        context.width(subtitle, context.font(metrics.subtitle), false)
+        kit::measured_width(
+            form.type.measure, title, kit::canvas_font(form.type, metrics.title), true
+        ),
+        kit::measured_width(
+            form.type.measure, subtitle, kit::canvas_font(form.type, metrics.subtitle), false
+        )
     );
     const bool beside = title_width + 2 * gap + buttons <= room;
     const int text_room = beside ? room - buttons - 2 * gap : room;
-    int y = add_title(context, top, x, text_room, title, subtitle);
-    const int height = context.px(min_button_points);
+    int y = add_title(form, top, x, text_room, title, subtitle);
+    const int height = kit::canvas_pixels(form.type, min_button_points);
     if (beside) {
-        add_button(
-            context, top, {x + room - buttons, 0, check_width, height}, check, metrics.button_text
+        kit::button_part(
+            top.items,
+            form.type,
+            {x + room - buttons, 0, check_width, height},
+            spec_of(check),
+            metrics.button_text
         );
-        add_button(
-            context, top, {x + room - add_width, 0, add_width, height}, add, metrics.button_text
+        kit::button_part(
+            top.items,
+            form.type,
+            {x + room - add_width, 0, add_width, height},
+            spec_of(add),
+            metrics.button_text
         );
-        y = std::max(y, height + context.px(metrics.block_gap));
+        y = std::max(y, height + kit::canvas_pixels(form.type, metrics.block_gap));
     } else {
-        y += add_button_row(context, top, x, y, room, {check, add}, {});
-        y += context.px(metrics.block_gap);
+        y += button_row_of(form, top, x, y, room, {check, add}, {});
+        y += kit::canvas_pixels(form.type, metrics.block_gap);
     }
-    y += add_step_banner(context, top, x, y, room);
+    y += add_step_banner(form, top, x, y, room);
     top.height = y;
 
-    column.body.height = add_rows_panel(context, column.body, x, 0, room);
+    column.body.height = add_rows_panel(form, column.body, x, 0, room);
 
     Action replace{};
     replace.label = tr("REPLACE THE GAME FILES…");
@@ -2390,177 +2059,159 @@ Column manage_column(const Context& context, int x, int room) {
     Action remove_all{};
     remove_all.label = tr("REMOVE ALL GAME FILES…");
     remove_all.control = {ControlKind::manage_remove_all};
-    remove_all.role = ItemRole::button_danger;
+    remove_all.role = Role::button_danger;
     remove_all.enabled = !model.pending_replacement;
     Action done{};
     done.label = tr("DONE");
     done.control = {ControlKind::manage_done};
     done.command = Command::done;
-    done.role = ItemRole::button_main;
+    done.role = Role::button_main;
     column.bottom.height =
-        add_button_row(context, column.bottom, x, 0, room, {replace, remove_all}, {done});
+        button_row_of(form, column.bottom, x, 0, room, {replace, remove_all}, {done});
     return column;
 }
 
 /// Lays out the model's step.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column step_column(const Context& context, int x, int room) {
-    switch (context.model.step) {
+Column step_column(const Form& form, int x, int room) {
+    switch (form.model.step) {
     case Step::first_run:
-        return first_run_column(context, x, room);
+        return first_run_column(form, x, room);
     case Step::looking:
-        return looking_column(context, x, room);
+        return looking_column(form, x, room);
     case Step::nested_offer:
-        return nested_column(context, x, room);
+        return nested_column(form, x, room);
     case Step::already_there:
-        return already_there_column(context, x, room);
+        return already_there_column(form, x, room);
     case Step::ready_to_copy:
-        return ready_to_copy_column(context, x, room);
+        return ready_to_copy_column(form, x, room);
     case Step::copying:
-        return copying_column(context, x, room);
+        return copying_column(form, x, room);
     case Step::checking:
-        return checking_column(context, x, room);
+        return checking_column(form, x, room);
     case Step::ready_to_play:
-        return ready_to_play_column(context, x, room);
+        return ready_to_play_column(form, x, room);
     case Step::problem:
-        return problem_column(context, x, room);
+        return problem_column(form, x, room);
     case Step::manage:
-        return manage_column(context, x, room);
+        return manage_column(form, x, room);
     }
     return {};
 }
 
-/// Where a column's scrolling part ended up.
-struct Region {
-    Rect rows{};      ///< the scrolling region; empty when nothing scrolls
-    int scroll_max{}; ///< how far it scrolls, pixels
-};
-
-/// Places a column's blocks in an area: one after another when they fit; else the body
-/// scrolls between the fixed top and bottom; else, when that leaves the body too little
-/// room, the whole column scrolls.
+/// Places a column's blocks in an area as the kit's scroll column: one after another when
+/// they fit; else the body scrolls between the fixed top and bottom; else, when that leaves
+/// the body less than least_body_points, the whole column scrolls.
 ///
-/// @param context the layout's context
-/// @param[out] items where the placed items go
+/// @param form the form
+/// @param[out] items where the placed parts go
 /// @param area the area, pixels
-/// @param[in,out] column the blocks; their items are moved out
+/// @param[in,out] column the blocks; their parts are moved out
 /// @param scroll_points how far the scrolling part is scrolled, points
-/// @return the scrolling region
-Region place_column(
-    const Context& context,
-    std::vector<Item>& items,
+/// @return what scrolls: its view, empty when nothing does, and its limit, pixels
+kit::ScrollArea place_blocks(
+    const Form& form,
+    std::vector<kit::Item>& items,
     Rect area,
     Column& column,
     int32_t scroll_points
 ) {
-    const int between = column.body.height > 0 && column.bottom.height > 0
-                            ? context.px(context.metrics.block_gap)
-                            : 0;
-    const int natural = column.top.height + column.body.height + between + column.bottom.height;
-    const auto put = [&items](Block& block, int dy, Rect clip) {
-        for (Item& item : block.items) {
-            item.box.y += dy;
-            item.clip = clip;
-            items.push_back(std::move(item));
-        }
-        block.items.clear();
-    };
-    Region region{};
-    const int wanted = std::max(0, context.px(static_cast<float>(scroll_points)));
-    if (natural <= area.height) {
-        put(column.top, area.y, {});
-        put(column.body, area.y + column.top.height, {});
-        put(column.bottom, area.y + column.top.height + column.body.height + between, {});
-        return region;
-    }
-    const int body_room = area.height - column.top.height - column.bottom.height - between;
-    if (column.body.height > 0 && body_room >= context.px(least_body_points)) {
-        region.rows = {area.x, area.y + column.top.height, area.width, body_room};
-        region.scroll_max = column.body.height - body_room;
-        const int scroll = std::min(wanted, region.scroll_max);
-        put(column.top, area.y, {});
-        put(column.body, region.rows.y - scroll, region.rows);
-        put(column.bottom, region.rows.y + body_room + between, {});
-        return region;
-    }
-    region.rows = area;
-    region.scroll_max = natural - area.height;
-    const int scroll = std::min(wanted, region.scroll_max);
-    put(column.top, area.y - scroll, area);
-    put(column.body, area.y + column.top.height - scroll, area);
-    put(column.bottom, area.y + column.top.height + column.body.height + between - scroll, area);
-    return region;
+    const kit::ScrollColumn placed = kit::scroll_column(
+        area,
+        column.top.height,
+        column.body.height,
+        column.bottom.height,
+        kit::canvas_pixels(form.type, form.metrics.block_gap),
+        kit::canvas_pixels(form.type, least_body_points),
+        kit::canvas_pixels(form.type, static_cast<float>(scroll_points))
+    );
+    kit::move_parts(items, column.top.items, placed.top, placed.top_clip);
+    kit::move_parts(items, column.body.items, placed.body, placed.body_clip);
+    kit::move_parts(items, column.bottom.items, placed.bottom, placed.bottom_clip);
+    return placed.scroll;
+}
+
+/// Returns how far a scroll area scrolls, in points: its limit in pixels over the scale,
+/// rounded up.
+///
+/// @param scroll the scroll area
+/// @param scale canvas pixels per point
+/// @return points; 0 when it does not scroll
+int32_t scroll_limit_points(const kit::ScrollArea& scroll, float scale) noexcept {
+    return scroll.limit > 0
+               ? static_cast<int32_t>(std::ceil(static_cast<float>(scroll.limit) / scale))
+               : 0;
 }
 
 /// Lays out the model's sheet over a backdrop: its title, text, list and buttons, the list
 /// scrolling when the sheet does not fit.
 ///
-/// @param context the layout's context
+/// @param form the layout's form
 /// @param[in,out] layout the layout
 /// @param viewport the canvas
 /// @param safe the safe area, pixels
-void add_sheet(const Context& context, Layout& layout, const Viewport& viewport, Rect safe) {
-    const Metrics& metrics = context.metrics;
-    const detail::SheetContent sheet = detail::sheet_content(context.model);
-    Item backdrop{};
-    backdrop.role = ItemRole::backdrop;
-    backdrop.box = {0, 0, viewport.width, viewport.height};
-    layout.items.push_back(backdrop);
-    const int margin = context.px(sheet_margin_points);
-    const int width =
-        std::max(0, std::min(context.px(metrics.sheet_width), safe.width - 2 * margin));
-    const int pad = context.px(metrics.sheet_pad);
+void add_sheet(const Form& form, Layout& layout, const Viewport& viewport, Rect safe) {
+    const Metrics& metrics = form.metrics;
+    const detail::SheetContent sheet = detail::sheet_content(form.model);
+    kit::plain_part(
+        layout.list.items, Role::backdrop, {0, 0, viewport.width, viewport.height}, text_colour
+    );
+    const int margin = kit::canvas_pixels(form.type, sheet_margin_points);
+    const int width = std::max(
+        0, std::min(kit::canvas_pixels(form.type, metrics.sheet_width), safe.width - 2 * margin)
+    );
+    const int pad = kit::canvas_pixels(form.type, metrics.sheet_pad);
     const int inner = width - 2 * pad;
     const int x = safe.x + (safe.width - width) / 2;
     const int inner_x = x + pad;
-    const int gap = context.px(metrics.sheet_gap);
+    const int gap = kit::canvas_pixels(form.type, metrics.sheet_gap);
     Column column;
-    column.top.height = add_text(
-                            context,
-                            column.top,
-                            ItemRole::title,
-                            inner_x,
-                            0,
+    column.top.height = kit::text_part(
+                            column.top.items,
+                            form.type,
+                            Role::title,
+                            {inner_x, 0},
                             inner,
                             sheet.title,
-                            {metrics.sheet_title, true, text_colour, TextRole::title},
-                            Fit::column,
+                            {metrics.sheet_title, true, text_colour, TextStyle::title},
+                            TextFit::column,
                             3
                         ) +
                         gap;
     Block& body = column.body;
-    const Style text{metrics.sheet_text, false, dim_colour, TextRole::body};
-    const Style strong{metrics.sheet_text, false, text_colour, TextRole::body};
-    const Style warning{metrics.sheet_text, false, amber_colour, TextRole::body};
-    const Style small{metrics.sheet_text - 1.0f, false, dim_colour, TextRole::row_detail};
+    const Lettering text{metrics.sheet_text, false, dim_colour, TextStyle::body};
+    const Lettering strong{metrics.sheet_text, false, text_colour, TextStyle::body};
+    const Lettering warning{metrics.sheet_text, false, amber_colour, TextStyle::body};
+    const Lettering small{metrics.sheet_text - 1.0f, false, dim_colour, TextStyle::row_detail};
     int y = 0;
-    const auto paragraph = [&](std::string_view words, const Style& style) {
-        const int height = add_text(context, body, ItemRole::text, inner_x, y, inner, words, style);
+    const auto paragraph = [&](std::string_view words, const Lettering& style) {
+        const int height =
+            kit::text_part(body.items, form.type, Role::text, {inner_x, y}, inner, words, style);
         if (height > 0)
             y += height + gap;
     };
     for (const std::string& words : sheet.paragraphs)
         paragraph(words, text);
     for (const detail::SheetRow& row : sheet.rows) {
-        const int size = context.font(strong.points);
-        const int line_height = context.line(size, false);
-        const int size_width = add_line(
-            context,
-            body,
+        const int size = kit::canvas_font(form.type, strong.points);
+        const int line_height = kit::measured_line(form.type.measure, size, false);
+        const int size_width = kit::line_part(
+            body.items,
+            form.type,
             inner_x + inner,
             y + line_height / 2,
             inner / 3,
             row.right,
             text,
-            Fit::tight_right
+            TextFit::tight_right
         );
-        add_line(
-            context,
-            body,
+        kit::line_part(
+            body.items,
+            form.type,
             inner_x,
             y + line_height / 2,
             inner - size_width - (size_width > 0 ? gap : 0),
@@ -2568,12 +2219,15 @@ void add_sheet(const Context& context, Layout& layout, const Viewport& viewport,
             strong
         );
         y += line_height;
-        const int small_height = context.line(context.font(small.points), false);
-        add_line(context, body, inner_x, y + small_height / 2, inner, row.detail, small);
-        y += small_height + context.px(6.0f);
+        const int small_height =
+            kit::measured_line(form.type.measure, kit::canvas_font(form.type, small.points), false);
+        kit::line_part(
+            body.items, form.type, inner_x, y + small_height / 2, inner, row.detail, small
+        );
+        y += small_height + kit::canvas_pixels(form.type, 6.0f);
     }
     if (!sheet.rows.empty())
-        y += gap - context.px(6.0f);
+        y += gap - kit::canvas_pixels(form.type, 6.0f);
     for (const std::string& line : sheet.lines)
         paragraph(line, strong);
     for (const std::string& note : sheet.notes)
@@ -2582,66 +2236,36 @@ void add_sheet(const Context& context, Layout& layout, const Viewport& viewport,
         paragraph(words, text);
     body.height = y > 0 ? y - gap : 0;
     Block& bottom = column.bottom;
-    const int button_height = context.px(min_button_points);
+    const int button_height = kit::canvas_pixels(form.type, min_button_points);
     int at = 0;
     for (const Action& action : sheet.actions) {
-        add_button(
-            context, bottom, {inner_x, at, inner, button_height}, action, metrics.button_text
+        kit::button_part(
+            bottom.items,
+            form.type,
+            {inner_x, at, inner, button_height},
+            spec_of(action),
+            metrics.button_text
         );
         at += button_height + gap;
     }
     bottom.height = at > 0 ? at - gap : 0;
 
-    const int between = body.height > 0 && bottom.height > 0 ? context.px(metrics.block_gap) : 0;
+    const int between =
+        body.height > 0 && bottom.height > 0 ? kit::canvas_pixels(form.type, metrics.block_gap) : 0;
     const int natural = column.top.height + body.height + between + bottom.height;
     const int room = std::max(1, safe.height - 2 * margin - 2 * pad);
     const int height = std::min(natural, room) + 2 * pad;
     const int y_sheet = safe.y + (safe.height - height) / 2;
-    Item panel{};
-    panel.role = ItemRole::sheet;
-    panel.box = {x, y_sheet, width, height};
-    panel.colour = line_colour;
-    layout.items.push_back(panel);
-    const Region region = place_column(
-        context,
-        layout.items,
+    kit::plain_part(layout.list.items, Role::sheet, {x, y_sheet, width, height}, line_colour);
+    const kit::ScrollArea scroll = place_blocks(
+        form,
+        layout.list.items,
         {x, y_sheet + pad, width, height - 2 * pad},
         column,
-        context.model.scroll_points
+        form.model.scroll_points
     );
-    layout.rows = region.rows;
-    layout.scroll_max_points =
-        region.scroll_max > 0
-            ? static_cast<int32_t>(std::ceil(static_cast<float>(region.scroll_max) / context.scale))
-            : 0;
-}
-
-/// Returns the part of an item's box that can be seen and pressed: the box, cut by its clip.
-///
-/// @param item the item
-/// @return the visible box; empty when none of it shows
-Rect visible_box(const Item& item) noexcept {
-    if (item.clip.width <= 0 || item.clip.height <= 0)
-        return item.box;
-    const int left = std::max(item.box.x, item.clip.x);
-    const int top = std::max(item.box.y, item.clip.y);
-    const int right = std::min(item.box.x + item.box.width, item.clip.x + item.clip.width);
-    const int bottom = std::min(item.box.y + item.box.height, item.clip.y + item.clip.height);
-    if (right <= left || bottom <= top)
-        return {};
-    return {left, top, right - left, bottom - top};
-}
-
-/// Returns the first item a press can reach: the one after the last backdrop.
-///
-/// @param layout the layout
-/// @return its index
-std::size_t first_live_item(const Layout& layout) noexcept {
-    std::size_t first = 0;
-    for (std::size_t index = 0; index < layout.items.size(); ++index)
-        if (layout.items[index].role == ItemRole::backdrop)
-            first = index + 1;
-    return first;
+    layout.rows = scroll.view;
+    layout.scroll_max_points = scroll_limit_points(scroll, form.type.px_per_point);
 }
 
 } // namespace
@@ -2672,95 +2296,60 @@ Layout lay_out(const Model& model, const Viewport& viewport, const TextMeasureHo
     const bool compact = layout.device == DeviceClass::phone ||
                          static_cast<float>(std::min(viewport.width, viewport.height)) / scale <
                              compact_short_side_points;
-    const Context context{model, measure, compact ? phone_metrics : tablet_metrics, scale, compact};
-    const Metrics& metrics = context.metrics;
+    const Form form{
+        model, compact ? phone_metrics : tablet_metrics, kit::Typesetter{measure, scale}, compact
+    };
+    const Metrics& metrics = form.metrics;
 
     Block header;
-    const int header_bottom = add_header(context, header, safe);
-    for (Item& item : header.items)
-        layout.items.push_back(std::move(item));
+    const int header_bottom = add_header(form, header, safe);
+    kit::move_parts(layout.list.items, header.items, 0);
 
-    int side = context.px(metrics.side_pad);
+    int side = kit::canvas_pixels(form.type, metrics.side_pad);
     if (metrics.max_content_width > 0.0f)
-        side = std::max(side, (safe.width - context.px(metrics.max_content_width)) / 2);
+        side = std::max(
+            side, (safe.width - kit::canvas_pixels(form.type, metrics.max_content_width)) / 2
+        );
     side = std::min(side, safe.width / 4);
     const int x = safe.x + side;
     const int room = safe.width - 2 * side;
-    Column column = step_column(context, x, room);
+    Column column = step_column(form, x, room);
     const int safe_bottom = safe.y + safe.height;
     const int footer_top = safe_bottom - column.footer.height;
-    const int area_top = header_bottom + context.px(metrics.content_top);
-    const int area_bottom = footer_top - context.px(metrics.content_bottom);
+    const int area_top = header_bottom + kit::canvas_pixels(form.type, metrics.content_top);
+    const int area_bottom = footer_top - kit::canvas_pixels(form.type, metrics.content_bottom);
     const Rect area{safe.x, area_top, safe.width, std::max(1, area_bottom - area_top)};
     const bool sheet = model.sheet != Sheet::none;
-    const Region region =
-        place_column(context, layout.items, area, column, sheet ? 0 : model.scroll_points);
-    for (Item& item : column.footer.items) {
-        item.box.y += footer_top;
-        layout.items.push_back(std::move(item));
-    }
+    const kit::ScrollArea scroll =
+        place_blocks(form, layout.list.items, area, column, sheet ? 0 : model.scroll_points);
+    kit::move_parts(layout.list.items, column.footer.items, footer_top);
     if (sheet) {
-        add_sheet(context, layout, viewport, safe);
+        add_sheet(form, layout, viewport, safe);
     } else {
-        layout.rows = region.rows;
-        layout.scroll_max_points =
-            region.scroll_max > 0
-                ? static_cast<int32_t>(std::ceil(static_cast<float>(region.scroll_max) / scale))
-                : 0;
+        layout.rows = scroll.view;
+        layout.scroll_max_points = scroll_limit_points(scroll, scale);
     }
-    for (std::size_t index = first_live_item(layout); index < layout.items.size(); ++index) {
-        const Item& item = layout.items[index];
-        if (item.control.kind == ControlKind::none || !item.enabled)
-            continue;
-        if (std::find(layout.focus_order.begin(), layout.focus_order.end(), item.control) ==
-            layout.focus_order.end())
-            layout.focus_order.push_back(item.control);
-    }
+    kit::list_part_controls(layout.list);
+    for (const kit::ControlId id : layout.list.tab_order)
+        layout.focus_order.push_back(screen_control(id));
     return layout;
 }
 
 Control hit_test(const Layout& layout, Point point, float reach_px) noexcept {
-    const std::size_t first = first_live_item(layout);
-    Control nearest{};
-    double nearest_distance = static_cast<double>(std::max(0.0f, reach_px));
-    bool found = false;
-    for (std::size_t index = layout.items.size(); index-- > first;) {
-        const Item& item = layout.items[index];
-        if (item.control.kind == ControlKind::none || !item.enabled)
-            continue;
-        const Rect box = visible_box(item);
-        if (box.width <= 0 || box.height <= 0)
-            continue;
-        if (point.x >= box.x && point.x < box.x + box.width && point.y >= box.y &&
-            point.y < box.y + box.height)
-            return item.control;
-        const int dx = point.x < box.x                ? box.x - point.x
-                       : point.x >= box.x + box.width ? point.x - (box.x + box.width - 1)
-                                                      : 0;
-        const int dy = point.y < box.y                 ? box.y - point.y
-                       : point.y >= box.y + box.height ? point.y - (box.y + box.height - 1)
-                                                       : 0;
-        const double distance =
-            std::sqrt(static_cast<double>(dx) * dx + static_cast<double>(dy) * dy);
-        if (distance <= nearest_distance && (!found || distance < nearest_distance)) {
-            nearest = item.control;
-            nearest_distance = distance;
-            found = true;
-        }
-    }
-    return found ? nearest : Control{};
+    return screen_control(kit::reach(layout.list, point, reach_px).control);
 }
 
 void mark_interaction(Layout& layout, const Interaction& interaction) noexcept {
-    for (Item& item : layout.items) {
-        if (item.control.kind == ControlKind::none) {
-            item.focused = false;
-            item.pressed = false;
+    for (kit::Item& part : layout.list.items) {
+        if (part.control == kit::no_control) {
+            part.state.focused = false;
+            part.state.pressed = false;
             continue;
         }
-        item.focused = interaction.focus_shown && item.control == interaction.focused;
-        item.pressed =
-            interaction.pressed.kind != ControlKind::none && item.control == interaction.pressed;
+        const Control control = screen_control(part.control);
+        part.state.focused = interaction.focus_shown && control == interaction.focused;
+        part.state.pressed =
+            interaction.pressed.kind != ControlKind::none && control == interaction.pressed;
     }
 }
 
