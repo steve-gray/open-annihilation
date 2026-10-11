@@ -616,7 +616,11 @@ runtime goes).
   `finish_pending_change` after every run, on the way out as after a soft
   restart, with the runtime and its archives gone. After a crash the next
   start's `recover_package_installs` settles the staged files away, the
-  folder whole.
+  folder whole. CANCEL on that queue line drops the held update
+  (`discard_pending_change`): the staged files are settled away the same
+  way, the mod being played stays as it is, the line goes and the Library
+  offers the update again. It waits for UPDATE or UPDATE ALL; nothing
+  fetches it on its own. A roll back waiting in its place is left.
 - **The install check.** `native-library-install`
   (`--check-library-install`, `runtime_library_actions_check.cpp`) posts
   made-up mod packages with catalogue origins as the hand-off does, the
@@ -626,14 +630,14 @@ runtime goes).
   `.backup` and origin records after each, the refusals in the queue and
   told with the Library closed, a file still asking UPDATE MOD, ROLL BACK
   and PLAY NOW from the Library, and an update to the mod played held,
-  named by `pending_change_target`, and made as the mod is switched. A
+  named by `pending_change_target`. CANCEL on that line drops it, the
+  update is taken again and held, and it is made as the mod is switched. A
   FIXTURES_SETUP test (`library-install-clean`) clears its folders before
   each run.
-- **Limitations.** The controller's Y, X, LB, RB and right stick do not
-  reach the Library's own commands yet: the D-pad, A, B and the shoulder
-  buttons' Tab drive it as the kit's keys. A held update is replaced by a
-  ROLL BACK of the mod being played, which waits for the run to end in its
-  place; the download queue has counted the update installed by then.
+- **Limitations.** A held update is replaced by a ROLL BACK of the mod
+  being played, which waits for the run to end in its place; the download
+  queue has counted the update installed by then. CANCEL on the held line
+  does not drop that roll back.
 
 ## The map browser
 

@@ -465,27 +465,41 @@ void Runtime::LibraryHost::rebuild(Runtime& runtime) {
     if (runtime.mod_install_state_) {
         using Phase = library::QueueItem::Phase;
         const std::optional<std::string> waiting = package_install::pending_change_target();
+        std::vector<library::QueueItem> staying;
+        staying.reserve(inputs.queue.size());
         for (library::QueueItem& item : inputs.queue) {
-            if (item.kind != library::Kind::mod)
-                continue;
-            for (const ModInstallState::LibraryNote& note :
-                 runtime.mod_install_state_->library_notes) {
-                if (note.registry != item.registry || note.key != item.key)
-                    continue;
-                const bool installing =
-                    item.phase == Phase::checking || item.phase == Phase::installing;
-                if (!note.problem.empty() && (installing || item.phase == Phase::failed)) {
-                    item.phase = Phase::failed;
-                    item.problem = note.problem;
-                    item.retryable = true;
-                } else if (
-                    !note.held_target.empty() && waiting && *waiting == note.held_target &&
-                    (installing || item.phase == Phase::installed)
-                ) {
-                    item.phase = Phase::held;
+            bool leave_out = false;
+            if (item.kind == library::Kind::mod) {
+                for (const ModInstallState::LibraryNote& note :
+                     runtime.mod_install_state_->library_notes) {
+                    if (note.registry != item.registry || note.key != item.key)
+                        continue;
+                    // A cancelled held update has already ended in the download
+                    // queue. Leaving that line out is what makes it go; a
+                    // download still running is the player's new ask.
+                    const bool ended = item.phase == Phase::installed || item.phase == Phase::held;
+                    if (note.cancelled && ended) {
+                        leave_out = true;
+                        break;
+                    }
+                    const bool installing =
+                        item.phase == Phase::checking || item.phase == Phase::installing;
+                    if (!note.problem.empty() && (installing || item.phase == Phase::failed)) {
+                        item.phase = Phase::failed;
+                        item.problem = note.problem;
+                        item.retryable = true;
+                    } else if (
+                        !note.held_target.empty() && waiting && *waiting == note.held_target &&
+                        (installing || item.phase == Phase::installed)
+                    ) {
+                        item.phase = Phase::held;
+                    }
                 }
             }
+            if (!leave_out)
+                staying.push_back(std::move(item));
         }
+        inputs.queue = std::move(staying);
     }
     // An update queued from the Library keeps saying what it changes while
     // the queue lists it.
@@ -1128,6 +1142,39 @@ struct Runtime::LibraryScreen final : LayerScreen {
             runtime_.mod_install_state_->note_for_library(runtime_, {id.registry, id.key, {}, {}});
     }
 
+    /// Drops the held update CANCEL was pressed for.
+    ///
+    /// The staged files are settled away, the mod being played stays as it
+    /// is, and the queue leaves the line out so the catalogue's update shows
+    /// again. A roll back waiting in that update's place is left waiting, and
+    /// a download that has not ended is left for the feed to cancel.
+    ///
+    /// @param entry the entry whose queue line was cancelled
+    void drop_held_update(const library::Entry& entry) {
+        if (entry.queued == nullptr || entry.queued->phase != library::QueueItem::Phase::held)
+            return;
+        if (runtime_.mod_install_state_ == nullptr)
+            return;
+        const std::string* held_folder = nullptr;
+        for (const ModInstallState::LibraryNote& note :
+             runtime_.mod_install_state_->library_notes) {
+            if (note.registry == entry.id.registry && note.key == entry.id.key &&
+                !note.held_target.empty())
+                held_folder = &note.held_target;
+        }
+        if (held_folder == nullptr)
+            return;
+        const std::optional<std::string> waiting = package_install::pending_change_target();
+        if (!waiting || *waiting != *held_folder)
+            return;
+        if (!package_install::discard_pending_change())
+            return;
+        runtime_.mod_install_state_->discarder.add(package_install::take_discards());
+        ModInstallState::LibraryNote dropped{entry.id.registry, entry.id.key, {}, {}};
+        dropped.cancelled = true;
+        runtime_.mod_install_state_->note_for_library(runtime_, std::move(dropped));
+    }
+
     /// Queues one entry's GET through the feed; what the installer noted of
     /// an earlier try is forgotten.
     ///
@@ -1176,8 +1223,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
                 get(host, *entry);
             return false;
         case library::Action::cancel:
-            if (entry != nullptr && host.feed.cancel != nullptr)
-                host.feed.cancel(host.feed.context, id.registry, id.key);
+            if (entry != nullptr) {
+                drop_held_update(*entry);
+                if (host.feed.cancel != nullptr)
+                    host.feed.cancel(host.feed.context, id.registry, id.key);
+            }
             return false;
         case library::Action::retry:
             if (entry != nullptr && host.feed.retry != nullptr) {
