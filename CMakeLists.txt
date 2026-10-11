@@ -996,6 +996,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
   src/app/runtime_map_packs_check.cpp
+  src/app/runtime_map_browser_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
@@ -1561,6 +1562,28 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-map-packs PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_map_packs_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The map browser over the skirmish map picker: the map pack check's two
+      # packs in a player's folder of its own, every built-in registry off so
+      # that nothing is fetched, and at 640x480, 1280x720, 1920x1080 and
+      # 2560x1440 MORE MAPS…, the browser's size class, columns and window,
+      # its installed maps, its search, the clashing map greyed with its
+      # reason, and Select moving SELMAP's selection. It leaves each size's
+      # frame in its folder for review. Each run starts from a clean folder.
+      set(oa_map_browser_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-browser")
+      file(MAKE_DIRECTORY "${oa_map_browser_dir}")
+      add_test(NAME map-browser-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_map_browser_dir}/Open Annihilation" "${oa_map_browser_dir}/data"
+        "${oa_map_browser_dir}/map-browser.conf")
+      set_tests_properties(map-browser-clean PROPERTIES FIXTURES_SETUP map-browser-clean)
+      add_test(NAME native-map-browser COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-map-browser
+        --preferences-file "${oa_map_browser_dir}/map-browser.conf"
+        --user-folder "${oa_map_browser_dir}/Open Annihilation"
+        --data-dir "${oa_map_browser_dir}/data")
+      set_tests_properties(native-map-browser PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_map_browser_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED map-browser-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three

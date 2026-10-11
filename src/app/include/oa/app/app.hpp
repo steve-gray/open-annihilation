@@ -570,6 +570,12 @@ struct Options {
     // fits mounted alone while chosen and for its match and unmounted after,
     // and the one that clashes with the game refused with its reason.
     bool check_map_packs = false;
+    // Writes the map pack check's two packs into the player's own folder,
+    // with every built-in registry off, and at four window sizes opens
+    // SELMAP's MORE MAPS… and requires the map browser's size class,
+    // columns and window, its installed maps, its search, the clashing map
+    // greyed with its reason, and Select moving SELMAP's selection.
+    bool check_map_browser = false;
     // Switches to a made-up mod whose unit files are missing and to one
     // that plays whole, each a soft restart, and requires the first's
     // warning once over the main menu and over a refused Skirmish start,
