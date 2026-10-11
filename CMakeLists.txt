@@ -3098,7 +3098,11 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_hook_calls.py --self-test)
     add_test(NAME hook-calls COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_hook_calls.py)
-    set_tests_properties(hook-calls-selftest hook-calls PROPERTIES TIMEOUT 60)
+    set_tests_properties(hook-calls-selftest PROPERTIES TIMEOUT 60)
+    # The scan reads every source once, about 20 s of one core on a laptop;
+    # beside a parallel ctest of the whole build it overran 60 s on every
+    # attempt once 0.8 had grown the sources.
+    set_tests_properties(hook-calls PROPERTIES TIMEOUT 240)
     # Every test of this build is named as the naming rule says
     # (docs/development/conventions.md); the check asks ctest for the
     # tests, so it sees every directory's.
