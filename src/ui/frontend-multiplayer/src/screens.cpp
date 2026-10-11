@@ -112,6 +112,9 @@ struct Resources {
     oa::ui::gui_input::ScrollHold hold;
     /// The game palette's gray table, built the first time a grayed control is drawn.
     std::vector<uint8_t> gray_table;
+    /// The dialog names no picture, so its face is the common panel tiles and
+    /// its text fields and lists take the common list-box frame.
+    bool plain_panel = false;
 };
 
 struct MapInfo {
@@ -1027,14 +1030,16 @@ bool load(
     return true;
 }
 
-// The address question names no picture. paint_address_panel lays the common
-// panel tiles in its rectangle; every other dialog without a picture darkens.
-bool paint_address_panel(const Resources& modal, Image& image);
+// A dialog that names no picture. paint_plain_panel lays the common panel
+// tiles in its rectangle. paint_plain_list_frames lays the common list-box
+// tiles around each list, under the rows the screen draws later.
+bool paint_plain_panel(const Resources& modal, Image& image);
+void paint_plain_list_frames(const Resources& modal, Image& image);
 
 // Places a stacked panel. One with its own picture is centred over the screen
-// below. The address question has none: the common panel tiles are laid in
-// its rectangle over that screen. Any other panel without a picture darkens
-// the rectangle it covers.
+// below. One that names no picture lays the common panel tiles in its
+// rectangle over that screen, and darkens the rectangle when those tiles
+// cannot be drawn.
 bool load_modal(
     ScreenContext* ctx,
     ModalKind kind,
@@ -1058,24 +1063,26 @@ bool load_modal(
     if (full_screen || !state.base.loaded)
         return true;
     if (background == nullptr) {
-        // No picture of its own. The address question takes the common panel
-        // tiles; every other such dialog darkens the rectangle it covers.
+        // No picture of its own. The face is the common panel tiles. The
+        // rectangle is darkened only when those tiles cannot be drawn.
         image = state.base.screen.background;
-        if (paint_address_panel(state.modal, image))
-            return true;
-        for (int32_t y = std::max(0, static_cast<int32_t>(root.y));
-             y < root.y + height && y < static_cast<int32_t>(image.height);
-             ++y)
-            for (int32_t x = std::max(0, static_cast<int32_t>(root.x));
-                 x < root.x + width && x < static_cast<int32_t>(image.width);
-                 ++x) {
-                auto* pixel = &image.rgb
-                                   [(static_cast<std::size_t>(y) * image.width +
-                                     static_cast<std::size_t>(x)) *
-                                    3U];
-                for (int channel = 0; channel < 3; ++channel)
-                    pixel[channel] = static_cast<uint8_t>(pixel[channel] / 4);
-            }
+        state.modal.plain_panel = true;
+        if (!paint_plain_panel(state.modal, image)) {
+            for (int32_t y = std::max(0, static_cast<int32_t>(root.y));
+                 y < root.y + height && y < static_cast<int32_t>(image.height);
+                 ++y)
+                for (int32_t x = std::max(0, static_cast<int32_t>(root.x));
+                     x < root.x + width && x < static_cast<int32_t>(image.width);
+                     ++x) {
+                    auto* pixel = &image.rgb
+                                       [(static_cast<std::size_t>(y) * image.width +
+                                         static_cast<std::size_t>(x)) *
+                                        3U];
+                    for (int channel = 0; channel < 3; ++channel)
+                        pixel[channel] = static_cast<uint8_t>(pixel[channel] / 4);
+                }
+        }
+        paint_plain_list_frames(state.modal, image);
         return true;
     }
     // Own art: the panel occupies the top-left root-sized corner of the
@@ -1193,17 +1200,9 @@ std::string_view template_name(const Resources& res, const Control& control) {
     return res.source.gadgets[static_cast<std::size_t>(control.source)].common.name;
 }
 
-/// Tells whether a panel is the address question.
-///
-/// @param panel the panel
-/// @return true when it was loaded from the address question's layout
-bool address_question(const Panel& panel) {
-    return std::string_view(panel.name.data()) == oa::data::defs::gui_path("tcp.gui");
-}
-
-// The common panel tiles, used when a question names no picture and no panel
-// sequence of its own. The common list-box tiles frame a text box that is
-// not drawn as a solid field, grown this far past each edge.
+// The common panel tiles, used when a dialog names no picture and no panel
+// sequence of its own. The common list-box tiles frame a text field that is
+// not drawn as a solid field, and a list, grown this far past each edge.
 constexpr const char* kPanelTiles = "BackTile";
 constexpr const char* kTextBoxTiles = "Listbox";
 constexpr int32_t kTextBoxFrameMargin = 3;
@@ -1341,14 +1340,14 @@ bool paint_skin(
     return true;
 }
 
-/// The sequence the address question's panel is drawn with.
+/// The sequence a dialog that names no picture is drawn with.
 ///
 /// A sequence the layout names is taken from the shared GUI art. With none
 /// named, or none there, the common panel tiles are used.
 ///
-/// @param modal the question's resources
+/// @param modal the dialog's resources
 /// @return the sequence, or null when the shared art has neither
-const formats::gaf::Sequence* address_panel_skin(const Resources& modal) {
+const formats::gaf::Sequence* plain_panel_skin(const Resources& modal) {
     const auto& shared = modal.screen.shared_sprites;
     if (!modal.source.gadgets.empty()) {
         const auto* fields =
@@ -1361,10 +1360,10 @@ const formats::gaf::Sequence* address_panel_skin(const Resources& modal) {
     return find_sequence(shared, kPanelTiles);
 }
 
-bool paint_address_panel(const Resources& modal, Image& image) {
-    if (!address_question(modal.panel) || modal.panel.count < 1)
+bool paint_plain_panel(const Resources& modal, Image& image) {
+    if (modal.panel.count < 1)
         return false;
-    const auto* skin = address_panel_skin(modal);
+    const auto* skin = plain_panel_skin(modal);
     if (skin == nullptr)
         return false;
     const auto& root = modal.panel.controls[0];
@@ -1381,32 +1380,80 @@ bool paint_address_panel(const Resources& modal, Image& image) {
     );
 }
 
-/// Draws the list-box frame around an address question's text box.
+/// Draws the list-box frame around one control.
 ///
-/// The frame is the common list-box tiles, grown past the box on every side,
-/// under the letters and the cursor.
+/// The frame is the common list-box tiles, grown past the control on every
+/// side. A text field marked as a solid field is not framed.
 ///
-/// @param[in,out] surface the drawn screen
-/// @param res the question's resources
-/// @param control the text box
-void paint_address_text_box(
-    renderer::Surface& surface, const Resources& res, const Control& control
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param res the dialog's resources
+/// @param control the text field or list
+/// @param palette the palette the tiles' indices select from
+/// @param solid_field_unframed true to skip a text field marked as a solid field
+void paint_list_box_frame(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const Resources& res,
+    const Control& control,
+    const PaletteBytes& palette,
+    bool solid_field_unframed
 ) {
-    if ((control.attributes & ui::gui_layout::attribute::horizontal) != 0)
+    if (solid_field_unframed && (control.attributes & ui::gui_layout::attribute::horizontal) != 0)
         return;
     const auto* skin = find_sequence(res.screen.shared_sprites, kTextBoxTiles);
     if (skin == nullptr)
         return;
     (void)paint_skin(
-        surface.rgb,
-        surface.width,
-        surface.height,
+        rgb,
+        image_width,
+        image_height,
         *skin,
         control.x + res.offset_x - kTextBoxFrameMargin,
         control.y + res.offset_y - kTextBoxFrameMargin,
         control.width + kTextBoxFrameMargin * 2,
         control.height + kTextBoxFrameMargin * 2,
-        screen_palette(res.screen)
+        palette
+    );
+}
+
+void paint_plain_list_frames(const Resources& modal, Image& image) {
+    if (!modal.plain_panel)
+        return;
+    const auto& palette = image.palette.has_value() ? *image.palette : modal.screen.gui_palette;
+    for (int32_t index = 1; index < modal.panel.count; ++index) {
+        const auto& control = modal.panel.controls[static_cast<std::size_t>(index)];
+        if (control.type != ControlType::list_box || control.active == 0)
+            continue;
+        paint_list_box_frame(
+            image.rgb, image.width, image.height, modal, control, palette, false
+        );
+    }
+}
+
+/// Draws the list-box frame around a plain dialog's text field.
+///
+/// The frame sits under the letters and the cursor. A field marked as a
+/// solid field is left unframed.
+///
+/// @param[in,out] surface the drawn screen
+/// @param res the dialog's resources
+/// @param control the text field
+void paint_plain_text_box(
+    renderer::Surface& surface, const Resources& res, const Control& control
+) {
+    if (!res.plain_panel)
+        return;
+    paint_list_box_frame(
+        surface.rgb,
+        surface.width,
+        surface.height,
+        res,
+        control,
+        screen_palette(res.screen),
+        true
     );
 }
 
@@ -2576,8 +2623,7 @@ void draw_text_boxes(renderer::Surface& surface, Resources& res) {
         const auto& control = panel.controls[static_cast<std::size_t>(index)];
         if (control.type != ControlType::text_box || control.active == 0)
             continue;
-        if (address_question(panel))
-            paint_address_text_box(surface, res, control);
+        paint_plain_text_box(surface, res, control);
         std::string text(control_text(control));
         const bool focused = index == panel.focus;
         const bool cursor = focused && ((elapsed_ms() / 500U) & 1U) == 0;
