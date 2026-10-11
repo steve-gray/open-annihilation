@@ -523,6 +523,83 @@ void only_oa_blocks_are_peers() {
     CHECK(presence_peer(block));
 }
 
+// An engine field of 0.8.0 / Windows / x64, then a content field saying the
+// machine can fetch content: header 4 + engine field 21 + content field 4 =
+// 29. The bytes are counted from the layout.
+constexpr uint8_t kContentRecord[] = {
+    0xf0, 0x1d, 0x00, 0x01, 0x01, 0x12, 0x00, 0x05, '0', '.', '8',  '.',  '0',  0x07, 'W',
+    'i',  'n',  'd',  'o',  'w',  's',  0x03, 'x',  '6', '4', 0x30, 0x01, 0x00, 0x01,
+};
+static_assert(sizeof kContentRecord == 29);
+
+// The content field, tag 0x30: written right after the engine field as one
+// byte of flags, read back, bits 1 to 7 ignored, and left out when its value
+// is not one byte.
+void the_content_field() {
+    start_case("the_content_field");
+    PresenceRecord record;
+    record.engine = PresenceEngine{"0.8.0", "Windows", "x64"};
+    record.content = PresenceContent{true};
+    uint8_t out[presence_record_max_bytes];
+    std::size_t written = 0;
+    CHECK(encode_presence(record, out, sizeof out, &written) == WireError::ok);
+    CHECK(written == sizeof kContentRecord);
+    CHECK(std::memcmp(out, kContentRecord, sizeof kContentRecord) == 0);
+    PresenceRecord decoded;
+    CHECK(decode_presence(out, written, &decoded) == WireError::ok);
+    CHECK(decoded == record);
+    CHECK(decoded.content && decoded.content->fetches);
+
+    record.content = PresenceContent{false};
+    CHECK(encode_presence(record, out, sizeof out, &written) == WireError::ok);
+    uint8_t without[sizeof kContentRecord];
+    std::memcpy(without, kContentRecord, sizeof without);
+    without[sizeof without - 1] = 0x00;
+    CHECK(written == sizeof without && std::memcmp(out, without, sizeof without) == 0);
+    CHECK(decode_presence(out, written, &decoded) == WireError::ok);
+    CHECK(decoded == record);
+    CHECK(decoded.content && !decoded.content->fetches);
+
+    // Bits 1 to 7 are ignored when read.
+    Value engine;
+    engine.str("0.8.0");
+    engine.str("Windows");
+    engine.str("x64");
+    Value sim;
+    sim.raw(filled(0xab).data(), 32);
+    Raw high_bits;
+    high_bits.field(0x01, engine.bytes);
+    high_bits.field(0x30, {0x03});
+    high_bits.finish();
+    CHECK(
+        decode_presence(high_bits.bytes.data(), high_bits.bytes.size(), &decoded) == WireError::ok
+    );
+    CHECK(decoded.content == PresenceContent{true});
+
+    // A value of 0 or 2 bytes breaks the field's rule: it is left out and the
+    // rest is kept.
+    for (const auto& value : {std::vector<uint8_t>{}, std::vector<uint8_t>{0x01, 0x00}}) {
+        Raw bad;
+        bad.field(0x01, engine.bytes);
+        bad.field(0x30, value);
+        bad.field(0x20, sim.bytes);
+        bad.finish();
+        PresenceRecord kept;
+        CHECK(decode_presence(bad.bytes.data(), bad.bytes.size(), &kept) == WireError::ok);
+        CHECK(!kept.content);
+        CHECK(kept.engine == PresenceEngine("0.8.0", "Windows", "x64"));
+        CHECK(kept.sim_hash == filled(0xab));
+    }
+
+    // A record without the field says nothing of it.
+    Raw silent;
+    silent.field(0x01, engine.bytes);
+    silent.finish();
+    CHECK(decode_presence(silent.bytes.data(), silent.bytes.size(), &decoded) == WireError::ok);
+    CHECK(!decoded.content);
+    CHECK(decoded.engine == PresenceEngine("0.8.0", "Windows", "x64"));
+}
+
 } // namespace
 
 int main() {
@@ -535,6 +612,7 @@ int main() {
     append_and_find();
     frames_split_a_lone_presence_record();
     only_oa_blocks_are_peers();
+    the_content_field();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;
