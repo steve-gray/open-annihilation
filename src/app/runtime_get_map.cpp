@@ -81,8 +81,8 @@ constexpr int32_t button_gap_rows = 8;
 /// the line stands under the name's box.
 constexpr int32_t line_gap_rows = 6;
 /// The columns of the picture, from the map name's left edge, the line may
-/// take: as far as the chat's box below it reaches.
-constexpr int32_t line_room_columns = 330;
+/// take: past the chat's box below it, up to the options' column on the right.
+constexpr int32_t line_room_columns = 388;
 /// A whole bar, in thousandths.
 constexpr int32_t bar_whole = 1000;
 /// The thousandths of a bar a percent takes.
