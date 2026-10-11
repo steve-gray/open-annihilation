@@ -8,7 +8,8 @@ The game runs on the dummy drivers with --fark, once in a 640x480 window
 and once in a 1920x1080 one, where the menus are drawn larger. In each:
 
 - controls lists the OA button as oa.button, with no dialog and enabled, and
-  a click at its rectangle's centre opens Settings;
+  a click at its rectangle's centre opens the Library, whose
+  oa.library.settings opens Settings over it;
 - while Settings shows, screen's dialogs holds oa.settings, the main menu's
   SINGLE is listed disabled and after every oa. control, and no two names
   are the same ignoring case;
@@ -20,6 +21,7 @@ and once in a 1920x1080 one, where the menus are drawn larger. In each:
   maximum zoom out whole-map;
 - opened again, Settings shows wheel zoom off; a click on its On half and
   then oa.settings.cancel keeps the value stored;
+- once Settings closes, oa.library.close closes the Library under it;
 - every oa. control's window rectangle lies in the window hello reports.
 """
 import argparse
@@ -110,12 +112,20 @@ def check_listing(controls, window):
 
 
 def open_settings(client):
-    """Clicks the OA button and waits for Settings' OK."""
+    """Clicks the OA button, then the Library's SETTINGS…, and waits for Settings' OK."""
     button = wait_control(client, "oa.button", lambda control: control.get("enabled"))
     if button.get("dialog") is not None or button.get("kind") != "button":
         raise automation.AutomationFailure(f"the OA button is listed as {button}")
     click(client, "oa.button")
+    wait_control(client, "oa.library.settings")
+    click(client, "oa.library.settings")
     wait_control(client, "oa.settings.ok")
+
+
+def close_library(client):
+    """Closes the Library Settings was opened over, back to the main menu."""
+    click(client, "oa.library.close")
+    wait_gone(client, "oa.library.close")
 
 
 def show_controls(client):
@@ -158,6 +168,7 @@ def check_at(native, game_dir, workdir, resolution):
         wait_gone(client, "oa.settings.ok")
         wait_preference(client, WHEEL_ZOOM, "0")
         wait_preference(client, MAX_ZOOM_OUT, "whole-map")
+        close_library(client)
 
         open_settings(client)
         if not any(control.get("name") == "oa.settings.wheel-zoom.off" for control in listed(client)):
@@ -169,6 +180,7 @@ def check_at(native, game_dir, workdir, resolution):
         click(client, "oa.settings.cancel")
         wait_gone(client, "oa.settings.ok")
         wait_preference(client, WHEEL_ZOOM, "0")
+        close_library(client)
 
         client.request("quit")
         game.wait_end()

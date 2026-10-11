@@ -6,6 +6,7 @@
 // main menu and in a match.
 
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
@@ -1105,6 +1106,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     // Languages a catalogue offers that are not installed, and where a
     // download of one of them stands.
     std::ignore = refresh_settings_languages(dialog);
+    // On the main menu Language links to the Library, which opens over the
+    // dialog; never in a match.
+    dialog.library_link = screen_ == Screen::main_menu;
     // Developer Mode opens as it was left: its open areas and hacks and its filter.
     if (state.last_developer_list) {
         dialog.developer.areas_open = state.last_developer_list->areas_open;
@@ -1305,12 +1309,20 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open under the Game files screen.
         open_game_files_manage();
         return false;
-    case settings::DialogAction::roll_back_mod:
+    case settings::DialogAction::roll_back_mod: {
         // The dialog stays open, unless the mod played rolls back as the
-        // run ends.
-        return roll_back_mod_folder(*dialog);
+        // run ends. The Library looks for updates again, since the version
+        // put back may have one.
+        const bool closed = roll_back_mod_folder(*dialog);
+        if (library_)
+            library_->look_again(*this);
+        return closed;
+    }
     case settings::DialogAction::open_library:
-        // MORE IN THE LIBRARY…: the dialog stays open.
+        // MORE IN THE LIBRARY…: the Library opens over the dialog, which
+        // stays open under it; where the Library is under the dialog
+        // already, the dialog closes back to it.
+        open_library(library_tab_of(dialog->library_tab));
         return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.

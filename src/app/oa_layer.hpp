@@ -205,6 +205,15 @@ class LayerScreen {
     /// @return what the screen did
     virtual LayerAnswer key(oa::ui::kit::Key pressed, uint32_t sdl_key) = 0;
 
+    /// Takes a key's press before the layer maps it to the kit's keys: a
+    /// screen's own shortcuts, such as the Library's Ctrl+F. The layer hands
+    /// the press to key only when this answers pass.
+    ///
+    /// @return what the screen did; pass, as every screen without shortcuts answers
+    virtual LayerAnswer shortcut(uint32_t /*sdl_key*/, uint16_t /*modifiers*/) {
+        return LayerAnswer::pass;
+    }
+
     /// Takes a turn of the wheel.
     ///
     /// @param at the pointer, in the screen's points
@@ -407,6 +416,13 @@ class OaLayer {
     ///
     /// @param name the screen's name
     void close_above(std::string_view name);
+
+    /// Brings the topmost screen of a name back to the top: every screen above
+    /// it is closed (close), a screen that is taking an input or its tick once
+    /// that is done. With no such screen, nothing.
+    ///
+    /// @param name the screen's name
+    void return_to(std::string_view name);
 
     /// Returns the top screen.
     ///

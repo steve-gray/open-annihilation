@@ -1,0 +1,795 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// --check-library: the Library over a feed of made-up packages, with no
+// network. With no update waiting the main menu's OA button draws as it
+// always has and opens the Library on Mods, whose CLOSE goes back; with two
+// it wears its dot, says so to automation and opens the Library on Updates.
+// GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
+// openers, ROLL BACK asks its question in Settings and PLAY NOW asks for a
+// soft restart. SETTINGS… opens Settings over the Library, Settings ›
+// Language's MORE IN THE LIBRARY… the Library over Settings, and never two
+// of either; the shortcut and the in-match OA button open Settings. At
+// 640x480 and 1920x1080.
+
+#include "engine_settings_menu_host.hpp"
+#include "engine_settings_state.hpp"
+#include "library_host.hpp"
+#include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
+#include "user_folder_state.hpp"
+#include "web_link_state.hpp"
+
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/updates.hpp"
+#include "oa/app/game_directory.hpp"
+#include "oa/app/runtime.hpp"
+#include "oa/app/user_folder.hpp"
+#include "oa/ui/display_layout.hpp"
+#include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/looks.hpp"
+#include "oa/ui/library/library.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <tuple>
+#include <vector>
+
+namespace oa::app {
+
+namespace {
+
+namespace settings = oa::ui::engine_settings;
+namespace kit = oa::ui::kit;
+namespace layout = oa::ui::display_layout;
+namespace library = oa::ui::library;
+
+/// The modifier the settings' shortcut takes on this platform.
+#ifdef SDL_PLATFORM_MACOS
+constexpr SDL_Keymod kShortcutModifier = SDL_KMOD_GUI;
+#else
+constexpr SDL_Keymod kShortcutModifier = SDL_KMOD_CTRL;
+#endif
+
+/// The made-up built-in registry.
+constexpr std::string_view kBuiltIn = "fixture-core";
+/// The made-up registry the player added.
+constexpr std::string_view kAdded = "fixture-extra";
+/// Ridge's homepage, which HOMEPAGE records.
+constexpr std::string_view kRidgeHomepage = "http://ridge.example.net/";
+/// Where the pointer rests: over no control of the main menu or the button.
+constexpr layout::Point kRestingPointer{8, 8};
+
+/// One made-up mod the check writes into the player's Mods folder: Ridge,
+/// installed at revision 3 and keeping revision 2 to roll back to, and
+/// Lattice. Neither changes the game's rules.
+struct FixtureMod {
+    std::string_view folder;  ///< the folder's name
+    std::string_view profile; ///< its oamod.yaml
+    std::string_view backup;  ///< its .backup's oamod.yaml; empty for none
+};
+
+/// The made-up mods.
+constexpr std::array<FixtureMod, 2> kFixtureMods{{
+    {"library-check-ridge",
+     "oamod: 1\n"
+     "id: ridge\n"
+     "name: Ridge\n"
+     "version: \"4.8\"\n"
+     "description: A made-up mod the Library check plays.\n"
+     "requires: {base: ta-3.1c, catalogue: 1}\n"
+     "author: {name: unknown}\n"
+     "packaging: {revision: 3, date: 2026-10-11, packager: Open Annihilation}\n",
+     "oamod: 1\n"
+     "id: ridge\n"
+     "name: Ridge\n"
+     "version: \"4.8\"\n"
+     "description: A made-up mod the Library check plays.\n"
+     "requires: {base: ta-3.1c, catalogue: 1}\n"
+     "author: {name: unknown}\n"
+     "packaging: {revision: 2, date: 2026-10-10, packager: Open Annihilation}\n"},
+    {"library-check-lattice",
+     "oamod: 1\n"
+     "id: lattice\n"
+     "name: Lattice\n"
+     "version: \"3.0\"\n"
+     "description: A second made-up mod of the Library check.\n"
+     "requires: {base: ta-3.1c, catalogue: 1}\n"
+     "author: {name: unknown}\n"
+     "packaging: {revision: 3, date: 2026-10-11, packager: Open Annihilation}\n",
+     {}},
+}};
+
+/// One call the Library made of the fixture feed.
+struct FeedCall {
+    std::string registry{};                                           ///< the registry's id
+    std::string key{};                                                ///< the package's key
+    content::DownloadReason reason{content::DownloadReason::install}; ///< enqueue's reason
+};
+
+/// The fixture feed the check gives the Library: its inputs, which the check
+/// changes, and what the Library asked of it.
+struct FixtureFeed {
+    library::Inputs inputs{};          ///< what the Library is built from
+    uint64_t generation{1};            ///< moves whenever the check changes inputs
+    std::vector<FeedCall> enqueued{};  ///< GET's and UPDATE's, in order
+    std::vector<FeedCall> cancelled{}; ///< CANCEL's, in order
+    std::vector<FeedCall> retried{};   ///< RETRY's, in order
+    uint64_t next_item{1};             ///< the next queue item enqueue gives
+};
+
+/// Stops the check.
+///
+/// @param ok the step held
+/// @param what what failed
+void require(bool ok, std::string_view what) {
+    if (!ok)
+        throw std::runtime_error("library check: " + std::string(what));
+}
+
+/// The fixture's inputs.
+///
+/// @param context the fixture
+/// @return its inputs
+library::Inputs fixture_inputs(void* context) {
+    return static_cast<FixtureFeed*>(context)->inputs;
+}
+
+/// The fixture's generation.
+///
+/// @param context the fixture
+/// @return the generation
+uint64_t fixture_generation(void* context) {
+    return static_cast<FixtureFeed*>(context)->generation;
+}
+
+/// Records a download asked for, and gives it a queue item.
+///
+/// @param context the fixture
+/// @param registry the registry's id
+/// @param key the package's key
+/// @param reason why
+/// @return the item
+std::optional<uint64_t> fixture_enqueue(
+    void* context,
+    std::string_view registry,
+    std::string_view key,
+    content::DownloadReason reason,
+    std::string* /*why*/
+) {
+    auto& fixture = *static_cast<FixtureFeed*>(context);
+    fixture.enqueued.push_back({std::string(registry), std::string(key), reason});
+    return fixture.next_item++;
+}
+
+/// Records a cancel.
+///
+/// @param context the fixture
+/// @param registry the registry's id
+/// @param key the package's key
+void fixture_cancel(void* context, std::string_view registry, std::string_view key) {
+    static_cast<FixtureFeed*>(context)->cancelled.push_back(
+        {std::string(registry), std::string(key), content::DownloadReason::install}
+    );
+}
+
+/// Records a retry.
+///
+/// @param context the fixture
+/// @param registry the registry's id
+/// @param key the package's key
+void fixture_retry(void* context, std::string_view registry, std::string_view key) {
+    static_cast<FixtureFeed*>(context)->retried.push_back(
+        {std::string(registry), std::string(key), content::DownloadReason::install}
+    );
+}
+
+/// Tells whether a registry of the fixture's inputs is built in: the
+/// Registry::built_in its inputs give.
+///
+/// @param context the fixture
+/// @param registry the registry's id
+/// @return true for the built-in one
+bool fixture_built_in(void* context, std::string_view registry) {
+    for (const library::Registry& listed : static_cast<FixtureFeed*>(context)->inputs.registries)
+        if (listed.id == registry)
+            return listed.built_in;
+    return false;
+}
+
+/// Returns a made-up mod's listing.
+///
+/// @param registry the registry's id
+/// @param key its key
+/// @param name its name
+/// @param version its version
+/// @param revision its revision
+/// @param release its release
+/// @return the listing
+library::Listing mod_listing(
+    std::string_view registry,
+    std::string_view key,
+    std::string_view name,
+    std::string_view version,
+    int64_t revision,
+    int64_t release
+) {
+    library::Listing listing;
+    listing.registry = std::string(registry);
+    listing.kind = library::Kind::mod;
+    listing.key = std::string(key);
+    listing.name = std::string(name);
+    listing.version = std::string(version);
+    listing.revision = revision;
+    listing.release = release;
+    listing.author = "the " + std::string(name) + " team";
+    listing.summary = "A made-up mod of the Library check.";
+    listing.base = std::string(library::supported_base);
+    listing.size = 3U * 1024U * 1024U;
+    return listing;
+}
+
+/// Returns the fixture's inputs: two registries, Ridge and Lattice installed
+/// from the built-in one, Cinder to get from it and Dunes from the added one,
+/// queued; with or without an update of each installed mod.
+///
+/// @param mods the player's Mods folder
+/// @param updates the two updates wait
+/// @return the inputs
+library::Inputs fixture_inputs_of(const fs::path& mods, bool updates) {
+    library::Inputs inputs;
+    inputs.registries.push_back({std::string(kBuiltIn), "Fixture Core", true, true, {}});
+    inputs.registries.push_back({std::string(kAdded), "Fixture Extra", false, true, {}});
+    library::Listing ridge = mod_listing(kBuiltIn, "ridge", "Ridge", "4.8", 4, 4);
+    ridge.homepage = std::string(kRidgeHomepage);
+    inputs.listings.push_back(std::move(ridge));
+    inputs.listings.push_back(mod_listing(kBuiltIn, "lattice", "Lattice", "3.0", 4, 4));
+    inputs.listings.push_back(mod_listing(kBuiltIn, "cinder", "Cinder", "1.2", 1, 1));
+    inputs.listings.push_back(mod_listing(kAdded, "dunes", "Dunes", "0.9", 1, 1));
+
+    library::Installed ridge_installed;
+    ridge_installed.kind = library::Kind::mod;
+    ridge_installed.key = "ridge";
+    ridge_installed.folder = mods / std::string(kFixtureMods[0].folder);
+    ridge_installed.name = "Ridge";
+    ridge_installed.version = "4.8";
+    ridge_installed.revision = 3;
+    ridge_installed.registry = std::string(kBuiltIn);
+    ridge_installed.release = 3;
+    ridge_installed.kept = library::Kept{"4.8", 2};
+    inputs.installed.push_back(std::move(ridge_installed));
+    library::Installed lattice_installed;
+    lattice_installed.kind = library::Kind::mod;
+    lattice_installed.key = "lattice";
+    lattice_installed.folder = mods / std::string(kFixtureMods[1].folder);
+    lattice_installed.name = "Lattice";
+    lattice_installed.version = "3.0";
+    lattice_installed.revision = 3;
+    lattice_installed.registry = std::string(kBuiltIn);
+    lattice_installed.release = 3;
+    inputs.installed.push_back(std::move(lattice_installed));
+
+    if (updates) {
+        for (const std::string_view key :
+             {std::string_view("ridge"), std::string_view("lattice")}) {
+            library::UpdateNote note;
+            note.registry = std::string(kBuiltIn);
+            note.kind = library::Kind::mod;
+            note.key = std::string(key);
+            note.to_release = 4;
+            note.to_version = key == "ridge" ? "4.8" : "3.0";
+            note.to_revision = 4;
+            note.size = 1024U * 1024U;
+            inputs.updates.push_back(std::move(note));
+        }
+    }
+
+    library::QueueItem dunes;
+    dunes.registry = std::string(kAdded);
+    dunes.kind = library::Kind::mod;
+    dunes.key = "dunes";
+    dunes.name = "Dunes";
+    dunes.version = "0.9";
+    dunes.phase = library::QueueItem::Phase::waiting;
+    dunes.total_bytes = 3U * 1024U * 1024U;
+    inputs.queue.push_back(std::move(dunes));
+
+    inputs.engine = content::this_engine_rules().engine;
+    inputs.version_text = "v0.8.0";
+    inputs.list_age_seconds = 4 * 60;
+    return inputs;
+}
+
+/// Returns a folder as the settings keep it: absolute, normal, in UTF-8.
+///
+/// @param folder the folder
+/// @return its path
+std::string kept_path(const fs::path& folder) {
+    std::error_code error;
+    const fs::path absolute = fs::absolute(folder, error);
+    return path_to_utf8((error ? folder : absolute).lexically_normal());
+}
+
+/// Writes a text file, making its folder.
+///
+/// @param file the file
+/// @param text its text
+void write_text(const fs::path& file, std::string_view text) {
+    std::error_code error;
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    require(static_cast<bool>(out), "a made-up mod could not be written");
+}
+
+/// Counts the pixels of a rectangle in which two pictures of one size differ.
+///
+/// @param left one picture
+/// @param right the other
+/// @param area the rectangle, in their pixels
+/// @param[out] outside how many of those lie outside `inside`
+/// @param inside a rectangle within the area
+/// @return the pixels that differ in the area
+std::size_t differing_in(
+    const renderer::Surface& left,
+    const renderer::Surface& right,
+    const kit::Rect& area,
+    std::size_t& outside,
+    const kit::Rect& inside
+) {
+    outside = 0;
+    if (left.width != right.width || left.height != right.height)
+        return static_cast<std::size_t>(area.width) * static_cast<std::size_t>(area.height);
+    std::size_t differing = 0;
+    for (int32_t y = area.y; y < area.y + area.height; ++y)
+        for (int32_t x = area.x; x < area.x + area.width; ++x) {
+            if (x < 0 || y < 0 || static_cast<uint32_t>(x) >= left.width ||
+                static_cast<uint32_t>(y) >= left.height)
+                continue;
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * left.width + static_cast<std::size_t>(x)) * 3;
+            if (left.rgb[at] == right.rgb[at] && left.rgb[at + 1] == right.rgb[at + 1] &&
+                left.rgb[at + 2] == right.rgb[at + 2])
+                continue;
+            ++differing;
+            if (x < inside.x || y < inside.y || x >= inside.x + inside.width ||
+                y >= inside.y + inside.height)
+                ++outside;
+        }
+    return differing;
+}
+
+} // namespace
+
+void Runtime::check_library() {
+    require(sdl_.window != nullptr, "the check needs the SDL presenter");
+    require(!user_folder_.empty(), "the run has no folder of the player's own");
+    const fs::path mods = user_folder_ / std::string(user_mods_folder_name);
+    for (const FixtureMod& mod : kFixtureMods) {
+        write_text(mods / std::string(mod.folder) / "oamod.yaml", mod.profile);
+        if (!mod.backup.empty())
+            write_text(
+                mods / std::string(mod.folder) / std::string(package_install::backup_folder_name) /
+                    "oamod.yaml",
+                mod.backup
+            );
+    }
+    list_offered_mods();
+
+    // The Library takes the fixture's feed from the first frame on, and the
+    // runtime's own back as the check ends.
+    FixtureFeed fixture;
+    fixture.inputs = fixture_inputs_of(mods, false);
+    LibraryHost& host = library_host();
+    const LibraryFeed own = host.feed;
+
+    struct OwnFeedBack {
+        LibraryHost& host;
+        LibraryFeed feed;
+
+        ~OwnFeedBack() {
+            host.feed = feed;
+            host.own_feed = true;
+            host.refreshed = false;
+        }
+    } own_back{host, own};
+
+    host.feed = LibraryFeed{
+        &fixture,
+        fixture_inputs,
+        fixture_generation,
+        fixture_enqueue,
+        fixture_cancel,
+        fixture_retry,
+        fixture_built_in
+    };
+    host.own_feed = false;
+    host.refreshed = false;
+
+    const auto* fonts = engine_settings_fonts();
+    require(fonts != nullptr, "the dialog's fonts did not load");
+    const auto icon = engine_settings_icon();
+    bool running = true;
+    const auto window_of = [this](int width, int height) {
+        require(
+            SDL_SetWindowSize(sdl_.window, width, height) && SDL_SyncWindow(sdl_.window),
+            "the window did not take " + std::to_string(width) + 'x' + std::to_string(height)
+        );
+        apply_output_mode();
+    };
+    const auto tap = [this](SDL_Keycode code, SDL_Keymod modifiers = SDL_KMOD_NONE) {
+        bool going = true;
+        for (const bool down : {true, false}) {
+            SDL_Event event{};
+            event.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+            event.key.windowID = SDL_GetWindowID(sdl_.window);
+            event.key.key = code;
+            event.key.scancode = SDL_GetScancodeFromKey(code, nullptr);
+            event.key.mod = modifiers;
+            event.key.down = down;
+            dispatch_event(event, going);
+        }
+        require(going, "a key ended the run");
+    };
+    const auto named = [this](std::string_view name) -> std::optional<AutomationControl> {
+        std::vector<AutomationControl> controls;
+        oa_layer().automation_controls(controls);
+        for (const AutomationControl& control : controls)
+            if (control.name == name && control.visible && control.window_width > 0 &&
+                control.window_height > 0)
+                return control;
+        return std::nullopt;
+    };
+    const auto click_named = [&](std::string_view name) {
+        const std::optional<AutomationControl> control = named(name);
+        require(control.has_value(), std::string(name) + " is not shown");
+        const layout::Point pixel{
+            control->window_x + control->window_width / 2,
+            control->window_y + control->window_height / 2
+        };
+        for (const SDL_EventType type :
+             {SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
+            SDL_Event event = window_pointer_event(
+                sdl_.window,
+                sdl_.renderer,
+                type,
+                pixel,
+                type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+            );
+            bool going = true;
+            dispatch_event(event, going);
+            require(going, "a click ended the run");
+        }
+    };
+    const auto top_is = [this](std::string_view name) {
+        const LayerScreen* top = oa_layer().top();
+        return top != nullptr && top->name() == name;
+    };
+    // A few frames on the main menu; a notice nobody asked for is closed.
+    const auto settle = [&] {
+        for (int frame = 0; frame < 12; ++frame) {
+            run_frame(running);
+            require(running, "a frame ended the run");
+            const LayerScreen* top = oa_layer().top();
+            if (top != nullptr && (dynamic_cast<const NoticeScreen*>(top) != nullptr ||
+                                   dynamic_cast<const QuestionScreen*>(top) != nullptr))
+                tap(SDLK_RETURN);
+            else if (top == nullptr && frame >= 2)
+                return;
+        }
+        require(oa_layer().top() == nullptr, "a screen stayed over the main menu");
+    };
+    // The button's square, and that square of the main menu's frame with the
+    // button drawn over it without the dot.
+    const auto button_frames = [&] {
+        send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
+        run_frame(running);
+        const renderer::Surface shown = frame_without_cursor();
+        renderer::Surface plain = shown;
+        const auto square = EngineSettingsMenuHost::button_rect(*this);
+        kit::draw_oa_button(
+            {&plain, {square.x, square.y, 1}, fonts, icon},
+            square.width,
+            kit::OaButtonState::idle,
+            false
+        );
+        return std::array<renderer::Surface, 2>{shown, plain};
+    };
+    const auto press_button = [&] {
+        const auto square = EngineSettingsMenuHost::button_rect(*this);
+        const layout::Point centre{square.x + square.width / 2, square.y + square.height / 2};
+        send_check_pointer(SDL_EVENT_MOUSE_MOTION, centre, 0);
+        send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, centre, SDL_BUTTON_LEFT);
+        require(oa_layer().find(library_screen_name) == nullptr, "a press opened the Library");
+        send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre, SDL_BUTTON_LEFT);
+        send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
+    };
+    const auto feed_changes = [&](bool updates) {
+        fixture.inputs = fixture_inputs_of(mods, updates);
+        ++fixture.generation;
+        run_frame(running);
+        require(running, "a frame ended the run");
+    };
+    // Shows an entry's details: its row selected, and at Compact its page.
+    const auto show_entry = [&](std::string_view row) {
+        if (named("oa.library.back"))
+            click_named("oa.library.back");
+        click_named(row);
+    };
+    // Presses one of the shown entry's actions: a button, or an item of
+    // MORE ▾ at Compact.
+    const auto press_action = [&](std::string_view word) {
+        const std::string action = "oa.library.action." + std::string(word);
+        if (!named(action))
+            click_named("oa.library.action");
+        click_named(action);
+    };
+
+    load(Screen::main_menu);
+    require(screen_ == Screen::main_menu, "the main menu did not open");
+    const std::array<std::array<int, 2>, 2> windows{{{kCanvasWidth, kCanvasHeight}, {1920, 1080}}};
+    for (const auto& [width, height] : windows) {
+        const std::string on =
+            " on the " + std::to_string(width) + 'x' + std::to_string(height) + " window";
+        window_of(width, height);
+        settle();
+        feed_changes(false);
+        require(
+            library_registry_built_in(kBuiltIn) && !library_registry_built_in(kAdded),
+            "library_registry_built_in does not answer as the feed's registries say" + on
+        );
+
+        // 1. With no update waiting, the button is drawn as it always was.
+        require(library_update_count() == 0, "an update waits in the fixture without one" + on);
+        {
+            const auto [shown, plain] = button_frames();
+            const auto square = EngineSettingsMenuHost::button_rect(*this);
+            std::size_t outside = 0;
+            require(
+                differing_in(
+                    shown, plain, {square.x, square.y, square.width, square.height}, outside, {}
+                ) == 0,
+                "with no update the OA button is not the button drawn without a dot" + on
+            );
+        }
+
+        // 2. Releasing the press opens the Library on Mods.
+        press_button();
+        require(
+            top_is(library_screen_name) && host.model.tab == library::Tab::mods &&
+                engine_settings_dialog() == nullptr,
+            "the OA button did not open the Library on Mods" + on
+        );
+
+        // 3. CLOSE goes back to the main menu.
+        click_named("oa.library.close");
+        require(
+            oa_layer().top() == nullptr && screen_ == Screen::main_menu,
+            "CLOSE did not go back to the main menu" + on
+        );
+
+        // 4. With two updates the button wears its dot, says so, and opens
+        // the Library on Updates.
+        feed_changes(true);
+        require(library_update_count() == 2, "the two updates are not counted" + on);
+        {
+            const auto [shown, plain] = button_frames();
+            const auto square = EngineSettingsMenuHost::button_rect(*this);
+            const kit::Rect dot = kit::oa_button_dot(square.width);
+            std::size_t outside = 0;
+            const std::size_t differing = differing_in(
+                shown,
+                plain,
+                {square.x, square.y, square.width, square.height},
+                outside,
+                {square.x + dot.x, square.y + dot.y, dot.width, dot.height}
+            );
+            require(
+                differing > 0 && outside == 0,
+                "with two updates the OA button does not differ only in its dot" + on
+            );
+        }
+        const std::optional<AutomationControl> button = named("oa.button");
+        require(
+            button.has_value() && button->text == "Library · 2 updates",
+            "automation does not list oa.button as \"Library · 2 updates\"" + on
+        );
+        press_button();
+        require(
+            top_is(library_screen_name) && host.model.tab == library::Tab::updates,
+            "the OA button did not open the Library on Updates" + on
+        );
+        require(
+            named("oa.library.tab.updates").has_value(),
+            "automation does not list oa.library.tab.updates" + on
+        );
+
+        // 5. GET and CANCEL reach the feed.
+        click_named("oa.library.tab.mods");
+        show_entry("oa.library.row.fixture-core.cinder");
+        const std::size_t enqueued = fixture.enqueued.size();
+        press_action("get");
+        require(
+            fixture.enqueued.size() == enqueued + 1 &&
+                fixture.enqueued.back().registry == kBuiltIn &&
+                fixture.enqueued.back().key == "cinder" &&
+                fixture.enqueued.back().reason == content::DownloadReason::install,
+            "GET did not reach the feed for fixture-core's cinder" + on
+        );
+        show_entry("oa.library.row.fixture-extra.dunes");
+        const std::size_t cancelled = fixture.cancelled.size();
+        press_action("cancel");
+        require(
+            fixture.cancelled.size() == cancelled + 1 &&
+                fixture.cancelled.back().registry == kAdded &&
+                fixture.cancelled.back().key == "dunes",
+            "CANCEL did not reach the feed for fixture-extra's dunes" + on
+        );
+
+        // 6. OPEN FOLDER and HOMEPAGE through the recorded openers, ROLL BACK's
+        // question in Settings, and PLAY NOW's soft restart.
+        const fs::path ridge = mods / std::string(kFixtureMods[0].folder);
+        show_entry("oa.library.row.fixture-core.ridge");
+        const std::size_t opened = user_folder_state().opened.size();
+        press_action("open-folder");
+        require(
+            user_folder_state().opened.size() == opened + 1 &&
+                kept_path(user_folder_state().opened.back()) == kept_path(ridge),
+            "OPEN FOLDER did not show Ridge's folder through the recorded opener" + on
+        );
+        require(web_links_ != nullptr, "the run keeps no record of web links");
+        const std::size_t links = web_links_->requests.size();
+        press_action("homepage");
+        require(
+            web_links_->requests.size() == links + 1 &&
+                web_links_->requests.back() == kRidgeHomepage,
+            "HOMEPAGE did not record Ridge's homepage" + on
+        );
+        press_action("roll-back");
+        {
+            const settings::Dialog* dialog = engine_settings_dialog();
+            require(
+                dialog != nullptr && top_is("settings") &&
+                    oa_layer().find(library_screen_name) != nullptr,
+                "ROLL BACK did not open Settings over the Library" + on
+            );
+            const std::string folder = kept_path(ridge);
+            const auto row =
+                std::find(dialog->mod_folders.begin(), dialog->mod_folders.end(), folder);
+            require(
+                dialog->page == settings::Page::mods && row != dialog->mod_folders.end() &&
+                    dialog->switch_question ==
+                        static_cast<int32_t>(row - dialog->mod_folders.begin()) &&
+                    dialog->mod_question == settings::ModQuestion::roll_back,
+                "Settings does not ask Mods' Roll Back Mod question for Ridge's folder" + on
+            );
+        }
+        tap(SDLK_ESCAPE);
+        require(
+            engine_settings_dialog() != nullptr &&
+                engine_settings_dialog()->switch_question == settings::no_question,
+            "Escape did not answer the Roll Back Mod question" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(
+            engine_settings_dialog() == nullptr && top_is(library_screen_name),
+            "closing Settings did not go back to the Library" + on
+        );
+        const settings::EngineSettings before = engine_settings_state().current;
+        press_action("play-now");
+        require(soft_restart_requested(), "PLAY NOW on Ridge did not ask for a soft restart" + on);
+        {
+            // The check goes on: the run is not ended, and the Mod setting
+            // goes back.
+            soft_restart_requested_ = false;
+            exit_requested_ = false;
+            const settings::EngineSettings played = engine_settings_state().current;
+            require(
+                played.mod_folder == kept_path(ridge), "PLAY NOW did not choose Ridge's folder" + on
+            );
+            apply_engine_settings(before);
+            require(
+                !save_engine_settings(played, before, false).has_value(),
+                "the Mod setting could not be put back" + on
+            );
+        }
+
+        // 7. SETTINGS… opens Settings over the Library; the shortcut on the
+        // main menu opens Settings, not the Library. Compact's details page
+        // goes back to the list first, whose footer holds SETTINGS….
+        if (named("oa.library.back"))
+            click_named("oa.library.back");
+        click_named("oa.library.settings");
+        require(
+            engine_settings_dialog() != nullptr && top_is("settings") &&
+                oa_layer().find(library_screen_name) != nullptr,
+            "SETTINGS… did not open Settings over the Library" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(top_is(library_screen_name), "Settings did not close back to the Library" + on);
+        click_named("oa.library.close");
+        require(oa_layer().top() == nullptr, "CLOSE did not go back to the main menu" + on);
+        tap(SDLK_COMMA, kShortcutModifier);
+        require(
+            engine_settings_dialog() != nullptr && top_is("settings") &&
+                oa_layer().find(library_screen_name) == nullptr,
+            "the shortcut did not open Settings alone" + on
+        );
+
+        // 8. Settings › Language's MORE IN THE LIBRARY… opens the Library on
+        // Languages over Settings, and closing it goes back to Settings.
+        click_named("oa.settings.nav.language");
+        click_named("oa.settings.more-in-library");
+        require(
+            top_is(library_screen_name) && oa_layer().find("settings") != nullptr &&
+                engine_settings_dialog() != nullptr && host.model.tab == library::Tab::languages,
+            "MORE IN THE LIBRARY… did not open the Library on Languages over Settings" + on
+        );
+        click_named("oa.library.close");
+        require(
+            top_is("settings") && engine_settings_dialog() != nullptr,
+            "closing the Library did not go back to Settings" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(oa_layer().top() == nullptr, "Escape did not close Settings" + on);
+        // From the Library, Settings, then MORE IN THE LIBRARY… goes back to
+        // the Library: never two of either.
+        press_button();
+        click_named("oa.library.settings");
+        click_named("oa.settings.nav.language");
+        click_named("oa.settings.more-in-library");
+        require(
+            top_is(library_screen_name) && oa_layer().find("settings") == nullptr &&
+                engine_settings_dialog() == nullptr && host.model.tab == library::Tab::languages,
+            "MORE IN THE LIBRARY… over the Library stacked a second Library" + on
+        );
+        click_named("oa.library.close");
+        require(
+            oa_layer().find(library_screen_name) == nullptr && oa_layer().top() == nullptr,
+            "a second Library was left on the layer" + on
+        );
+        std::cout << "library check: the OA button, its dot, the Library's actions and Settings"
+                  << on << '\n';
+    }
+
+    // 9. In a skirmish the in-match OA button opens Settings, the Library
+    // opens nowhere, and Language does not link to it.
+    start_benchmark_skirmish();
+    require(screen_ == Screen::match && match_ != nullptr, "the skirmish did not start");
+    open_library(std::nullopt);
+    require(oa_layer().find(library_screen_name) == nullptr, "the Library opened in a match");
+    show_match_pause_menu();
+    require(ingame_menu_column_shown(), "the in-game menu's column does not show");
+    render();
+    const layout::Rect in_match = OaLayer::match_button_rect(match_layout_);
+    const layout::Point centre{in_match.x + in_match.width / 2, in_match.y + in_match.height / 2};
+    send_check_pointer(SDL_EVENT_MOUSE_MOTION, centre, 0);
+    send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, centre, SDL_BUTTON_LEFT);
+    send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre, SDL_BUTTON_LEFT);
+    require(
+        engine_settings_dialog() != nullptr && oa_layer().find("settings") != nullptr &&
+            oa_layer().find(library_screen_name) == nullptr,
+        "the in-match OA button did not open Settings"
+    );
+    require(!engine_settings_dialog()->library_link, "Language links to the Library in a match");
+    std::ignore = take_engine_settings_action(settings::DialogAction::cancelled);
+    leave_match();
+    load(Screen::main_menu);
+    std::cout << "library check: the in-match OA button opens Settings\n";
+}
+
+} // namespace oa::app

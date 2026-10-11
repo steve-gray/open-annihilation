@@ -1026,14 +1026,19 @@ void Runtime::check_engine_settings_dialog() {
     chosen.language = "en";
     expect("Language English");
     require(shown_language().tag == "en", "Language English did not put English back");
-    click(settings::first_row_control + 1, "ON", "Use modern fonts for game text's On");
+    // On the main menu MORE IN THE LIBRARY… stands right under Language's
+    // row, and the rows under it come one control later.
+    const int32_t library_link = engine_settings_dialog()->library_link ? 1 : 0;
+    click(
+        settings::first_row_control + 1 + library_link, "ON", "Use modern fonts for game text's On"
+    );
     chosen.modern_fonts = true;
     expect("Use modern fonts for game text On");
     require(
         !shows_text(settings::dialog_layout(*engine_settings_dialog()), "Needs modern fonts"),
         "Text size stayed locked with the modern fonts On"
     );
-    focus(settings::first_row_control + 2, "Text size");
+    focus(settings::first_row_control + 2 + library_link, "Text size");
     tap(SDLK_RIGHT);
     chosen.text_size = settings::default_text_size + settings::text_size_step;
     expect("Text size a stop up");
@@ -1043,7 +1048,7 @@ void Runtime::check_engine_settings_dialog() {
         "Text size a stop up did not reach the text style"
     );
     // Font shadow lies under the view's edge: the focus brings it in.
-    focus(settings::first_row_control + 4, "Font shadow");
+    focus(settings::first_row_control + 4 + library_link, "Font shadow");
     tap(SDLK_LEFT);
     chosen.text_shadow = false;
     expect("Font shadow Off");
@@ -1901,13 +1906,21 @@ void Runtime::check_engine_settings_window_sizes() {
         // backdrop darkens.
         const renderer::Surface closed = presented;
 
-        // A click on the button where the window shows it opens the dialog,
-        // laid out at the class and drawn at the scale this window gives.
+        // A click on the button where the window shows it opens the Library,
+        // which Escape closes; the shortcut opens the dialog, laid out at the
+        // class and drawn at the scale this window gives.
         click({button.x + button.width / 2, button.y + button.height / 2});
+        require(
+            oa_layer().find("library") != nullptr && engine_settings_dialog() == nullptr,
+            "a click on the OA button did not open the Library" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(oa_layer().find("library") == nullptr, "Escape did not close the Library" + on);
+        tap(SDLK_COMMA, kShortcutModifier);
         auto* dialog = engine_settings_dialog();
         require(
             dialog != nullptr && oa_layer().find("settings") != nullptr,
-            "a click on the OA button did not open the dialog" + on
+            "the shortcut did not open the dialog" + on
         );
         point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
         const LayerView seen = oa_layer().view();
@@ -2051,9 +2064,10 @@ void Runtime::check_engine_settings_window_sizes() {
             const std::string chosen_size = "Interface size " + std::string(size_step.caption) + on;
             const auto opened_class = oa_layer().screen_class();
             const int32_t opened_scale = oa_layer().screen_scale();
-            click({button.x + button.width / 2, button.y + button.height / 2});
+            // The shortcut opens the dialog; the OA button opens the Library.
+            tap(SDLK_COMMA, kShortcutModifier);
             auto* sized = engine_settings_dialog();
-            require(sized != nullptr, "a click on the OA button did not open the dialog" + on);
+            require(sized != nullptr, "the shortcut did not open the dialog" + on);
             click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
             require(
                 sized->page == settings::Page::graphics,
@@ -2101,7 +2115,7 @@ void Runtime::check_engine_settings_window_sizes() {
             }
             // At once after OK: the dialog opens again at the size's class
             // and scale, centred, and the window shows it so.
-            click({button.x + button.width / 2, button.y + button.height / 2});
+            tap(SDLK_COMMA, kShortcutModifier);
             const auto* reopened = engine_settings_dialog();
             require(reopened != nullptr, "the dialog did not open again" + on);
             point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
