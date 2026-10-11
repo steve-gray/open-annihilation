@@ -4626,8 +4626,9 @@ class Runtime final : public menu::Host,
     /// SELMAP's MORE MAPS… and the map browser: its size class, scale and
     /// columns, everything inside its window, the installed packs' two maps,
     /// the search, the clashing map greyed with its reason, and Select moving
-    /// SELMAP's selection. Writes each size's frame as map-browser-<w>x<h>.png
-    /// in the working folder.
+    /// SELMAP's selection; then, nobody watching, a catalogue map pack waiting
+    /// with the browser closed and installing with no prompt while it shows.
+    /// Writes each size's frame as map-browser-<w>x<h>.png in the working folder.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_map_browser();
