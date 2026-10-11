@@ -917,9 +917,10 @@ struct Runtime::SettingsScreen final : LayerScreen {
     /// and Controller once a gamepad sends input, with its Steam Input
     /// notice while that applies. Language's rows follow the catalogues and
     /// the download queue, so a match draws the field again as a pack
-    /// arrives. Off the main menu the main menu's dialog
-    /// closes as Cancel; once the in-game menu's column no longer shows under
-    /// it, the match's closes as OK.
+    /// arrives, and Mods' updates and its line on the check for updates
+    /// follow the Library's model and the registries. Off the main menu the
+    /// main menu's dialog closes as Cancel; once the in-game menu's column no
+    /// longer shows under it, the match's closes as OK.
     ///
     /// @return close when the dialog closed
     LayerAnswer tick() override {
@@ -953,6 +954,9 @@ struct Runtime::SettingsScreen final : LayerScreen {
         // The front end draws every frame. A match draws this dialog again
         // only when the revision moves, so a download's progress has to.
         changed = runtime_.refresh_settings_languages(*dialog) || changed;
+        // Mods' updates and its line on the check for updates follow the
+        // Library's model and the registries.
+        changed = runtime_.refresh_settings_mods(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;

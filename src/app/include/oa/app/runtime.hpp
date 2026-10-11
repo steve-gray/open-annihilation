@@ -144,6 +144,10 @@ struct EntryId;
 struct Inputs;
 } // namespace oa::ui::library
 
+namespace oa::ui::kit {
+struct Question;
+} // namespace oa::ui::kit
+
 namespace oa::data::map_fit {
 struct Fit;
 } // namespace oa::data::map_fit
@@ -3745,8 +3749,34 @@ class Runtime final : public menu::Host,
     /// its oamod.yaml and oamod.png give (read_mod_summary): the game
     /// folder's mods folder's, the player's own Mods folder's, the folder an
     /// earlier version's Pick Folder... stored while it is the mod stored and
-    /// still a folder, and the one played, each once.
+    /// still a folder, and the one played, each once. Each folder the
+    /// Library's model lists with an update has its update's fields too
+    /// (give_mod_updates).
     void list_offered_mods();
+
+    /// Gives each offered mod folder what Mods shows of its update, from the
+    /// Library's model as its worker last found the updates and the download
+    /// queue last stood (ModDetails::update_offered and the fields after
+    /// it): the folder matched by its path to an installed package, and that
+    /// package's update. Nothing is read from a file or the network; with no
+    /// Library host yet every folder shows no update.
+    ///
+    /// @param folders the offered folders, as Dialog::mod_folders holds them
+    /// @param[in,out] details what Mods shows of each, in the same order
+    void give_mod_updates(
+        const std::vector<std::string>& folders,
+        std::vector<oa::ui::engine_settings::ModDetails>& details
+    );
+
+    /// Brings an open engine dialog's Mods page up to date with the Library's
+    /// model and the content service: each row's update (give_mod_updates),
+    /// the line on the check for updates with whether CHECK NOW follows it,
+    /// and whether GET MORE MODS… shows (on the main menu). The settings
+    /// screen calls it every frame; it reads only what is in memory.
+    ///
+    /// @param dialog the open dialog
+    /// @return true when what Mods shows changed
+    bool refresh_settings_mods(oa::ui::engine_settings::Dialog& dialog);
 
     /// Ends the run after this frame for main() to start the game afresh
     /// with the mod the settings stored (soft_restart_requested).
@@ -4505,8 +4535,12 @@ class Runtime final : public menu::Host,
     /// Library, and ROLL BACK on it rolls the folder back
     /// (roll_back_mod_folder); PLAY NOW switches the game to the installed
     /// mod's folder (switch_to_mod_folder); a refusal of either shows in the
-    /// status line. UPDATE asks request_update, and UPDATE ALL asks it for
-    /// each update that can be installed, in the order the list shows them.
+    /// status line. UPDATE asks request_update. UPDATE ALL asks it at once for
+    /// each update that can be installed and asks nothing first
+    /// (oa::ui::library::asks_before_update), in the order the list shows
+    /// them, and asks the update question once about the others
+    /// (update_all_question), whose UPDATE asks request_update for each of
+    /// them in that order and whose NOT NOW leaves them.
     ///
     /// @param action Action::roll_back, play_now, update or update_all; any
     ///     other does nothing
@@ -4514,12 +4548,32 @@ class Runtime final : public menu::Host,
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
 
-    /// Queues an entry's update with the download queue: the one place an
-    /// update reaches it. A refusal shows in the status line.
+    /// Starts an entry's update: the one place an update reaches the download
+    /// queue, from the Library's UPDATE and UPDATE ALL and Settings › Mods'
+    /// UPDATE. An update that asks first (oa::ui::library::update_question:
+    /// an added registry's mod whose rules hash changes or cannot be known)
+    /// pushes the update question at once over the screen that asked, NOT NOW
+    /// marked; its UPDATE queues the update, and NOT NOW, Escape or B leaves
+    /// it. Any other update, every built-in registry's among them, is queued
+    /// at once. A refusal shows in the status line.
     ///
     /// @param entry the entry
-    /// @return true when the update was queued
-    bool request_update(const oa::ui::library::EntryId& entry);
+    /// @param answered the player answered UPDATE on the update question for
+    ///     it already (ask_before_updates): it is queued with no question.
+    ///     Only that question's own UPDATE passes true.
+    /// @return true when the update was queued or its question asked
+    bool request_update(const oa::ui::library::EntryId& entry, bool answered = false);
+
+    /// Pushes the update question at once over the screen that asked, the
+    /// Library or Settings, never queued behind it: on the main menu, NOT
+    /// NOW marked. Its UPDATE asks request_update for each entry, in order,
+    /// as answered; NOT NOW, Escape or B leaves them all.
+    ///
+    /// @param question the kit question (oa::ui::library::update_prompt)
+    /// @param entries the entries its UPDATE starts, in list order
+    void ask_before_updates(
+        const oa::ui::kit::Question& question, const std::vector<oa::ui::library::EntryId>& entries
+    );
 
     /// Brings the Library up to date once a frame: on the main menu its
     /// worker finds the updates again after a catalogue refresh or an

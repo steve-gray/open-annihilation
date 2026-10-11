@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Mods: the list of the mods the game can play, in the order it shows them,
-// each row's texts and place, the Switch Mod question's text, and the Roll
-// Back Mod question as a prompt of its own.
+// each row's texts and place, a row's update and its UPDATE button, the line
+// on the check for updates with CHECK NOW and GET MORE MODS… under the list,
+// the Switch Mod question's text, and the Roll Back Mod question as a prompt
+// of its own.
 
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
@@ -11,6 +13,7 @@
 #include "geometry.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/kit/text.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -35,6 +38,54 @@ std::string folded(std::string_view text) {
         if (character >= 'A' && character <= 'Z')
             character = static_cast<char>(character - 'A' + 'a');
     return lowered;
+}
+
+/// Returns the columns left of a mod row's buttons that its update's line
+/// takes: the text's width, less UPDATE's and, when it shows, ROLL BACK's.
+///
+/// @param dialog the dialog
+/// @param row the row
+/// @return the columns, in source pixels
+int32_t update_room(const Dialog& dialog, const ModRow& row) noexcept {
+    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    const int32_t text_left = sized.content_left + geometry::mod_row_inset +
+                              geometry::mod_badge_side + geometry::mod_row_inset;
+    int32_t room = sized.content_right - geometry::mod_row_inset - text_left;
+    if (geometry::shows_update(dialog, row))
+        room -= geometry::mod_update_width + geometry::mod_roll_back_gap;
+    if (geometry::offers_roll_back(dialog, row))
+        room -= geometry::mod_roll_back_width + geometry::mod_roll_back_gap;
+    return room;
+}
+
+/// Returns how many characters of the small font a width holds, as the
+/// dialog counts them for a host's text: the class's hint_line_characters
+/// to its content column.
+///
+/// @param sized the dialog's sizes
+/// @param width the width, in source pixels
+/// @return the characters, at least 1
+std::size_t characters_in(const geometry::Sizes& sized, int32_t width) noexcept {
+    if (width <= 0 || sized.content_width <= 0)
+        return 1;
+    const auto held = static_cast<std::size_t>(width) * sized.hint_line_characters /
+                      static_cast<std::size_t>(sized.content_width);
+    return std::max(held, std::size_t{1});
+}
+
+/// Returns a text's width in the small font as the dialog estimates it
+/// without a font: the class's content column for hint_line_characters, a
+/// character (a wide one counts twice, as kit::estimated_width counts it).
+///
+/// @param sized the dialog's sizes
+/// @param text the text
+/// @return the width, in source pixels, rounded up
+int32_t small_width_estimate(const geometry::Sizes& sized, std::string_view text) {
+    const int64_t columns =
+        oa::ui::kit::estimated_width(text) / oa::ui::kit::estimated_character_width;
+    const auto characters =
+        static_cast<int64_t>(std::max(sized.hint_line_characters, std::size_t{1}));
+    return static_cast<int32_t>((columns * sized.content_width + characters - 1) / characters);
 }
 
 /// Returns the details of the row the question asks about.
@@ -144,6 +195,104 @@ bool offers_roll_back(const Dialog& dialog, const ModRow& row) noexcept {
            !dialog.mod_details[static_cast<std::size_t>(row.offered)].roll_back_from.empty();
 }
 
+const ModDetails* update_details(const Dialog& dialog, const ModRow& row) noexcept {
+    if (row.offered < 0 || static_cast<std::size_t>(row.offered) >= dialog.mod_details.size() ||
+        static_cast<std::size_t>(row.offered) >= dialog.mod_folders.size())
+        return nullptr;
+    const ModDetails& details = dialog.mod_details[static_cast<std::size_t>(row.offered)];
+    return details.update_offered ? &details : nullptr;
+}
+
+bool shows_update(const Dialog& dialog, const ModRow& row) noexcept {
+    return dialog.locks.mod == Lock::none && update_details(dialog, row) != nullptr;
+}
+
+int32_t update_control(const Rows& rows, std::size_t index) noexcept {
+    return roll_back_control(rows, rows.rows.size()) + static_cast<int32_t>(index);
+}
+
+int32_t update_row(const Rows& rows, int32_t control) noexcept {
+    const int32_t first = update_control(rows, 0);
+    if (control < first || control - first >= static_cast<int32_t>(rows.rows.size()))
+        return -1;
+    return control - first;
+}
+
+int32_t check_now_control(const Rows& rows) noexcept {
+    return update_control(rows, rows.rows.size());
+}
+
+int32_t get_more_mods_control(const Rows& rows) noexcept {
+    return check_now_control(rows) + 1;
+}
+
+SourceRect update_button(const Row& row, bool roll_back) noexcept {
+    const SourceRect beside = roll_back_button(row);
+    const int32_t right = roll_back ? beside.x - mod_roll_back_gap : beside.x + beside.width;
+    return {right - mod_update_width, beside.y, mod_update_width, mod_update_height};
+}
+
+std::string_view mod_update_line(const ModDetails& details) noexcept {
+    if (!details.update_progress.empty())
+        return details.update_progress;
+    if (!details.update_enabled && !details.update_blocked.empty())
+        return details.update_blocked;
+    return details.update_text;
+}
+
+std::vector<std::string> update_lines(const Dialog& dialog, const ModRow& row) {
+    const ModDetails* details = update_details(dialog, row);
+    if (details == nullptr)
+        return {};
+    return break_lines(
+        mod_update_line(*details),
+        characters_in(sizes_of(dialog), update_room(dialog, row)),
+        most_row_lines
+    );
+}
+
+bool shows_check_now(const Dialog& dialog) noexcept {
+    return dialog.mods_check_offered && dialog.locks.mod == Lock::none;
+}
+
+bool shows_get_more_mods(const Dialog& dialog) noexcept {
+    return dialog.mods_library_offered && dialog.locks.mod == Lock::none;
+}
+
+SourceRect check_now_link(const Dialog& dialog) {
+    const Sizes& sized = sizes_of(dialog);
+    const SourceRect& line = sized.mods_check_line;
+    const int32_t width = small_width_estimate(sized, shown_text(check_now_text));
+    const int32_t after = small_width_estimate(sized, dialog.mods_check_text) +
+                          small_width_estimate(sized, check_now_separator);
+    const int32_t left = std::min(line.x + after, line.x + line.width - width);
+    return {std::max(left, line.x), line.y, width, line.height};
+}
+
+std::pair<SourceRect, std::string> check_line_text(const Dialog& dialog) {
+    const Sizes& sized = sizes_of(dialog);
+    SourceRect place = sized.mods_check_line;
+    if (!shows_check_now(dialog))
+        return {place, dialog.mods_check_text};
+    // The text keeps clear of " · " and CHECK NOW after it, cut short only
+    // where they would not fit.
+    const SourceRect link = check_now_link(dialog);
+    place.width =
+        std::max(link.x - small_width_estimate(sized, check_now_separator) - place.x, int32_t{0});
+    const std::size_t room = characters_in(sized, place.width);
+    if (oa::ui::kit::character_count(dialog.mods_check_text) <= room)
+        return {place, dialog.mods_check_text};
+    const std::vector<std::string> first = break_lines(dialog.mods_check_text, room, 1);
+    return {place, first.empty() ? std::string() : first.front() + std::string(path_ellipsis)};
+}
+
+SourceRect get_more_mods_button(const Dialog& dialog) {
+    const SourceRect& folder = sizes_of(dialog).mods_folder_button;
+    const int32_t width = oa::ui::kit::estimated_width(shown_text(get_more_mods_text)) +
+                          oa::ui::kit::compact_metrics.prompt_button_padding;
+    return {folder.x + folder.width + mods_library_gap, folder.y, width, folder.height};
+}
+
 SourceRect question_yes_rect(const Dialog& dialog) noexcept {
     const Sizes& sized = sizes_of(dialog);
     if (dialog.mod_question != ModQuestion::roll_back)
@@ -191,6 +340,9 @@ Rows place_mod_rows(const Dialog& dialog, int32_t scroll) {
                       oa::data::languages::TextNeeds::game_fonts;
     const int32_t height = mod_row_height + (tall ? tall_mod_row_growth : 0);
     const int32_t description_top = mod_description_top + (tall ? tall_mod_description_drop : 0);
+    // A row with an update grows by a line for each of its update's lines
+    // after the first; every other row is as it was.
+    const int32_t line_step = hint_line_height + (tall ? tall_hint_line_gap : 0);
     placed.rows.reserve(rows.size());
     for (std::size_t index = 0; index < rows.size(); ++index) {
         Row& row = placed.rows.emplace_back();
@@ -199,15 +351,24 @@ Rows place_mod_rows(const Dialog& dialog, int32_t scroll) {
         // A locked page keeps the mod played: every row is inert.
         row.lock = lock;
         row.top = top;
-        row.height = height + mod_row_gap;
-        row.control_area = {sized.content_left, top, sized.content_width, height};
+        const std::size_t lines =
+            std::max(update_lines(dialog, rows[index]).size(), std::size_t{1});
+        const int32_t grown = height + static_cast<int32_t>(lines - 1) * line_step;
+        row.height = grown + mod_row_gap;
+        row.control_area = {sized.content_left, top, sized.content_width, grown};
         const int32_t text_left =
             sized.content_left + mod_row_inset + mod_badge_side + mod_row_inset;
         const int32_t text_width = sized.content_right - mod_row_inset - text_left;
         row.label = {text_left, top + 1, text_width, label_line_height};
         row.value = {text_left, top + 3, text_width, hint_line_height};
-        row.hints[0] = {text_left, top + description_top, text_width, hint_line_height};
-        row.hint_lines = 1;
+        for (std::size_t line = 0; line < lines && line < row.hints.size(); ++line)
+            row.hints[line] = {
+                text_left,
+                top + description_top + static_cast<int32_t>(line) * line_step,
+                text_width,
+                hint_line_height
+            };
+        row.hint_lines = lines;
         top += row.height;
     }
     placed.bottom = top - mod_row_gap;

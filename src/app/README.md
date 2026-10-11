@@ -552,8 +552,15 @@ runtime goes).
   Library and CLOSE closes it. UPDATE, UPDATE ALL, PLAY NOW and ROLL BACK
   go through `library_entry_action` (`runtime_library_actions.cpp`):
   UPDATE calls `Runtime::request_update`, the one place an update reaches
-  the download queue (`DownloadReason::update`), and UPDATE ALL calls it
-  for every update that can act and is not queued, in list order; PLAY NOW
+  the download queue (`DownloadReason::update`), as Settings › Mods' UPDATE
+  does. An added registry's mod whose rules hash changes or cannot be known
+  (`library::asks_before_update`) asks the update question first
+  (`update_question`), pushed at once over the screen that asked, NOT NOW
+  marked; its UPDATE queues the update and NOT NOW leaves it. Every other
+  update, every built-in registry's among them, is queued at once. UPDATE
+  ALL calls it at once for every update that can act, is not queued and
+  asks nothing, in list order, and asks one question about the others
+  (`update_all_question`), whose UPDATE queues them in list order; PLAY NOW
   switches the game to the installed mod's folder (`switch_to_mod_folder`,
   the soft restart); ROLL BACK asks the Mods page's Roll Back Mod question
   in its own words (`settings::roll_back_prompt`, with the reload line for
