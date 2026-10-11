@@ -31,4 +31,25 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-library-search-test PRIVATE oa-ui-library oa-test-support oa-options)
   add_test(NAME ui-library-search COMMAND oa-ui-library-search-test)
   set_tests_properties(ui-library-search PROPERTIES TIMEOUT 30)
+
+  # The screens' layout at Compact, Regular and Large and at three windows:
+  # parts inside the frame, no two controls meeting, every action a control,
+  # Tab's order and the arrows, the names, the texts fitting and the Rules
+  # fact whole, and what the keys, the controller and the pointer change.
+  add_executable(oa-ui-library-layout-test tests/layout_test.cpp)
+  target_link_libraries(oa-ui-library-layout-test PRIVATE oa-ui-library oa-ui-kit oa-test-support
+    oa-options)
+  add_test(NAME ui-library-layout COMMAND oa-ui-library-layout-test)
+  set_tests_properties(ui-library-layout PROPERTIES TIMEOUT 60)
+
+  # Each class drawn twice in the installed game's fonts, byte for byte the
+  # same and nothing outside the window; with --frames DIR it writes the
+  # pictures for review.
+  add_executable(oa-ui-library-draw-test tests/draw_test.cpp)
+  target_link_libraries(oa-ui-library-draw-test PRIVATE oa-ui-library oa-ui-kit oa-formats-png
+    oa-formats-hpi oa-platform-text-font oa-present oa-test-game-data oa-test-support oa-options)
+  # The modern fonts draw the characters the game's fonts lack, as beside the game.
+  oa_copy_text_fonts(oa-ui-library-draw-test "$<TARGET_FILE_DIR:oa-ui-library-draw-test>")
+  oa_add_game_data_test(ui-library-draw-data oa-ui-library-draw-test --data)
+  set_tests_properties(ui-library-draw-data PROPERTIES TIMEOUT 60)
 endif()
