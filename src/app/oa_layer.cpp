@@ -5,8 +5,9 @@
 // waiting for it, their input and ticks, its drawing over the front end's
 // picture and over a match, the overlay that hands it the game's input and
 // frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
-// on the main menu and in a match, and the screens of a notice and a
-// question (NoticeScreen, QuestionScreen). On the front end the screens are
+// on the main menu and in a match, the screens of a notice and a question
+// (NoticeScreen, QuestionScreen), and the UI kit gallery over the whole
+// window (GalleryScreen). On the front end the screens are
 // laid out at the size class of the window's canvas and drawn at its scale
 // in the window's own pixels: crisp at a whole scale, smooth at 150%.
 
@@ -30,6 +31,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/gallery.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
@@ -663,6 +665,38 @@ LayerPlacement centred_box(const LayerView& view, int32_t box_height) noexcept {
     return centred_placement(view, kit::metrics_of(front_class(view)).notice_width, box_height);
 }
 
+/// Returns the match's canvas at the layer's scale on it, as the in-match
+/// Settings and the gallery start from: the Interface size's step, 150%, or
+/// for Auto the Auto scale of its height (kit::layer_viewport), never above
+/// the side column's scale, which HUD scaling caps: the largest whole step
+/// at or below it instead, and at least 1.
+///
+/// @param match_layout the match's layout
+/// @param interface_percent the Interface size in effect, in percent; 0 for Auto
+/// @return the canvas, its pixels, density and safe insets, at that scale
+kit::Viewport
+match_layer_viewport(const layout::MatchLayout& match_layout, int32_t interface_percent) noexcept {
+    kit::Viewport canvas;
+    canvas.width = match_layout.width;
+    canvas.height = match_layout.height;
+    canvas.density = static_cast<float>(match_layout.px_per_point);
+    canvas.safe = {
+        match_layout.safe.left,
+        match_layout.safe.top,
+        match_layout.safe.right,
+        match_layout.safe.bottom
+    };
+    int32_t percent = kit::layer_viewport(canvas, interface_percent).scale_percent;
+    // A hair under a whole step counts as that step.
+    constexpr double kWhole = 1e-9;
+    if (static_cast<double>(percent) > match_layout.scale * 100.0 + kWhole)
+        percent =
+            std::max(int32_t{1}, static_cast<int32_t>(std::floor(match_layout.scale + kWhole))) *
+            100;
+    canvas.scale_percent = percent;
+    return canvas;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -1143,6 +1177,145 @@ LayerAnswer QuestionScreen::take(kit::QuestionAnswer outcome, uint32_t sdl_key) 
         ++revision_;
         return LayerAnswer::redraw;
     case kit::QuestionAction::none:
+        break;
+    }
+    return LayerAnswer::none;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The UI kit gallery as a screen of the layer
+
+GalleryScreen::GalleryScreen(OaLayer& layer, bool in_match) noexcept
+    : layer_(layer), in_match_(in_match) {
+}
+
+kit::Frame GalleryScreen::frame_for(const LayerView& view) const {
+    kit::Frame frame{};
+    if (view.match != in_match_ || layer_.screen_fonts() == nullptr)
+        return frame;
+    if (view.match) {
+        if (view.match_layout == nullptr)
+            return frame;
+        frame = OaLayer::match_gallery(*view.match_layout, view.interface_percent);
+    } else {
+        // The view's room at its scale, and the class of its points.
+        frame = view.frame;
+        frame.scale_percent = view.scale_percent;
+    }
+    frame.area.x = 0;
+    frame.area.y = 0;
+    return frame;
+}
+
+LayerPlacement GalleryScreen::placement(const LayerView& view) const {
+    const kit::Frame frame = frame_for(view);
+    if (frame.area.width <= 0 || frame.area.height <= 0)
+        return {};
+    if (!view.match)
+        return centred_placement(view, frame.area.width, frame.area.height);
+    // The match's canvas at the gallery's own scale, centred in its safe area.
+    const auto safe = OaLayer::match_safe_area(*view.match_layout);
+    const kit::Rect drawn = kit::to_canvas(frame.area, frame.scale_percent);
+    return {
+        {safe.x + (safe.width - drawn.width) / 2,
+         safe.y + (safe.height - drawn.height) / 2,
+         drawn.width,
+         drawn.height},
+        frame.area.width,
+        frame.area.height,
+        frame.scale_percent
+    };
+}
+
+void GalleryScreen::lay_out(const LayerView& view) {
+    const kit::Frame frame = frame_for(view);
+    const kit::Fonts* fonts = layer_.screen_fonts();
+    if (fonts == nullptr || frame.area.width <= 0 || frame.area.height <= 0)
+        return;
+    if (frame.area.width == frame_.area.width && frame.area.height == frame_.area.height &&
+        frame.size_class == frame_.size_class && frame.scale_percent == frame_.scale_percent)
+        return;
+    frame_ = frame;
+    layout_ = kit::gallery_layout(model_, frame_, *fonts);
+    ++revision_;
+}
+
+void GalleryScreen::draw(const kit::Canvas& canvas) const {
+    if (!kit::can_draw(canvas) || canvas.fonts == nullptr)
+        return;
+    kit::draw_gallery(canvas, layout_);
+}
+
+LayerAnswer
+GalleryScreen::pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) {
+    kit::GalleryEvent event;
+    event.at = at;
+    event.reach = finger_reach;
+    switch (kind) {
+    case ScreenInputKind::pointer_move:
+        event.kind = kit::GalleryEventKind::pointer_move;
+        break;
+    case ScreenInputKind::pointer_down:
+        if (button != SDL_BUTTON_LEFT)
+            return LayerAnswer::none;
+        event.kind = kit::GalleryEventKind::pointer_down;
+        break;
+    case ScreenInputKind::pointer_up:
+        if (button != SDL_BUTTON_LEFT)
+            return LayerAnswer::none;
+        event.kind = kit::GalleryEventKind::pointer_up;
+        break;
+    default:
+        return LayerAnswer::none;
+    }
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::key(kit::Key pressed, uint32_t /*sdl_key*/) {
+    if (pressed == kit::Key::info)
+        return LayerAnswer::none;
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::key;
+    event.key = pressed;
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::wheel(kit::Point at, float notches) {
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::wheel;
+    event.at = at;
+    event.notches = notches;
+    return take(event);
+}
+
+LayerAnswer GalleryScreen::text(std::string_view utf8) {
+    kit::GalleryEvent event;
+    event.kind = kit::GalleryEventKind::text;
+    event.text = utf8;
+    return take(event);
+}
+
+std::optional<kit::Rect> GalleryScreen::text_field() const {
+    return kit::gallery_text_field(model_, layout_);
+}
+
+LayerAnswer GalleryScreen::tick() {
+    // The gallery shows over the settings dialog, and leaves with it.
+    return layer_.find("settings") == nullptr ? LayerAnswer::close : LayerAnswer::none;
+}
+
+LayerAnswer GalleryScreen::take(const kit::GalleryEvent& event) {
+    const kit::Fonts* fonts = layer_.screen_fonts();
+    if (fonts == nullptr || frame_.area.width <= 0 || frame_.area.height <= 0)
+        return LayerAnswer::none;
+    switch (kit::gallery_act(model_, frame_, *fonts, event)) {
+    case kit::GalleryResult::close:
+        return LayerAnswer::close;
+    case kit::GalleryResult::redraw:
+        layout_ = kit::gallery_layout(model_, frame_, *fonts);
+        ++revision_;
+        return LayerAnswer::redraw;
+    case kit::GalleryResult::none:
         break;
     }
     return LayerAnswer::none;
@@ -1975,6 +2148,13 @@ uint32_t OaLayer::take_request_id() noexcept {
     return id;
 }
 
+GalleryScreen& OaLayer::open_gallery() {
+    auto screen = std::make_unique<GalleryScreen>(*this, view().match);
+    GalleryScreen& opened = *screen;
+    push(std::move(screen));
+    return opened;
+}
+
 bool OaLayer::open_registered_screen(std::string_view name) {
     const KitScreenDesc* found = nullptr;
     for (uint32_t index = 0; index < kit_screens_.screen_count; ++index) {
@@ -2615,6 +2795,12 @@ renderer::Surface OaLayer::match_button_face(
     return face;
 }
 
+kit::Frame OaLayer::match_gallery(
+    const layout::MatchLayout& match_layout, int32_t interface_percent
+) noexcept {
+    return kit::frame_of(match_layer_viewport(match_layout, interface_percent));
+}
+
 MatchDialogPlace OaLayer::match_dialog(
     const layout::MatchLayout& match_layout, int32_t interface_percent, bool fit
 ) noexcept {
@@ -2635,27 +2821,7 @@ MatchDialogPlace OaLayer::match_dialog(
         place.scale_percent = 0;
         return place;
     }
-    // The layer's scale on the match's canvas: the Interface size's, or the
-    // Auto scale of its height.
-    kit::Viewport canvas;
-    canvas.width = match_layout.width;
-    canvas.height = match_layout.height;
-    canvas.density = static_cast<float>(match_layout.px_per_point);
-    canvas.safe = {
-        match_layout.safe.left,
-        match_layout.safe.top,
-        match_layout.safe.right,
-        match_layout.safe.bottom
-    };
-    int32_t percent = kit::layer_viewport(canvas, interface_percent).scale_percent;
-    // Never above the side column's scale, which HUD scaling caps: the
-    // largest whole step at or below it instead, and at least 1. A hair
-    // under a whole step counts as that step.
-    constexpr double kWhole = 1e-9;
-    if (static_cast<double>(percent) > match_layout.scale * 100.0 + kWhole)
-        percent =
-            std::max(int32_t{1}, static_cast<int32_t>(std::floor(match_layout.scale + kWhole))) *
-            100;
+    int32_t percent = match_layer_viewport(match_layout, interface_percent).scale_percent;
     // Compact's dialog fits the area right of the column at the scale, or
     // the scale is the largest whole step at which it does, and at least 1.
     const int32_t area_width = std::max(match_layout.width - match_layout.left, 0);

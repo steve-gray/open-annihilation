@@ -16,8 +16,9 @@
 // form in the modern fonts. In a match the settings dialog takes a scale and
 // size class of its own, capped by the side column's scale, and is drawn at
 // them beside the column (OaLayer::match_dialog). oa_layer.cpp holds it, the
-// settings' screen (Runtime::SettingsScreen) and the screens of a notice
-// (NoticeScreen) and a question (QuestionScreen).
+// settings' screen (Runtime::SettingsScreen), the screens of a notice
+// (NoticeScreen) and a question (QuestionScreen), and the UI kit gallery
+// (GalleryScreen), which covers the whole window over the settings.
 #pragma once
 
 #include "oa/app/automation_host.hpp"
@@ -27,6 +28,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/gallery.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/screen_registry.hpp"
@@ -47,6 +49,7 @@
 namespace oa::app {
 
 class OaLayer;
+class GalleryScreen;
 
 /// What a screen of the OA layer needs to place itself.
 struct LayerView {
@@ -805,6 +808,34 @@ class OaLayer {
         bool fit = false
     ) noexcept;
 
+    /// Returns the frame the UI kit gallery takes in a match: the match's
+    /// canvas less its safe insets, at the layer's scale on it
+    /// (kit::layer_viewport of its pixels, density and safe insets at the
+    /// Interface size: its step, 150%, or for Auto the canvas height's), no
+    /// larger than the side column's scale (MatchLayout::scale, which HUD
+    /// scaling caps: the largest whole step at or below it instead, and at
+    /// least 1), and the size class of the canvas's points at that scale
+    /// (kit::frame_of). Unlike the settings dialog the gallery covers the
+    /// whole canvas, so the room right of the column plays no part: a 640
+    /// by 480 window is Compact at 1×, 1280 by 720 Large at 1× and 1920 by
+    /// 1080 Regular at 2× with HUD scaling On.
+    ///
+    /// @param match_layout the match's layout
+    /// @param interface_percent the Interface size in effect, in percent
+    ///     (LayerView::interface_percent): 0 for Auto
+    /// @return the frame, its area in points from the canvas's safe insets
+    [[nodiscard]] static oa::ui::kit::Frame match_gallery(
+        const oa::ui::display_layout::MatchLayout& match_layout, int32_t interface_percent
+    ) noexcept;
+
+    /// Opens the UI kit gallery on top of the stack, over the settings
+    /// dialog that asked for it: modal, covering the whole window on the
+    /// front end or in a match, whichever the layer shows over now
+    /// (GalleryScreen).
+    ///
+    /// @return the gallery's screen, which the layer holds
+    GalleryScreen& open_gallery();
+
     /// Returns the settings pages registered for this runtime.
     ///
     /// @return the registry; the caller keeps each page's rows alive
@@ -1418,6 +1449,162 @@ class QuestionScreen final : public LayerScreen {
     /// The size class the layer lays the question out at (lay_out).
     oa::ui::kit::SizeClass size_class_{oa::ui::kit::SizeClass::compact};
     bool any_menu_{}; ///< shows on any menu, never in a match
+};
+
+/// The UI kit gallery (kit::gallery_layout) as a screen of the OA layer:
+/// modal over a backdrop, covering the whole window. On the front end it
+/// takes the view's scale and size class (the Interface size, or the Auto
+/// scale); in a match the scale and class OaLayer::match_gallery gives.
+/// Its model is its own: nothing it does reads or changes a setting.
+/// Escape and its CLOSE take it off, back to the settings dialog under it,
+/// and it leaves with that dialog.
+class GalleryScreen final : public LayerScreen {
+  public:
+
+    /// The gallery's name on the layer; automation names its dialog
+    /// oa.gallery.
+    static constexpr std::string_view screen_name = "gallery";
+
+    /// Makes the gallery's screen.
+    ///
+    /// @param layer the layer it shows on, whose fonts it is laid out and
+    ///     drawn in
+    /// @param in_match it was opened in a match; otherwise on the front end
+    GalleryScreen(OaLayer& layer, bool in_match) noexcept;
+
+    /// Returns "gallery".
+    ///
+    /// @return the name
+    [[nodiscard]] std::string_view name() const override { return screen_name; }
+
+    /// Returns where the gallery shows: on the front end the view's room at
+    /// its scale, the frame's area wide and tall in points, centred; in a
+    /// match match_gallery's frame at its scale, centred in the canvas's
+    /// safe area.
+    ///
+    /// @param view what the screen is placed on
+    /// @return its place; empty where it was not opened, or without fonts
+    [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Tells that the gallery takes every input.
+    ///
+    /// @return true
+    [[nodiscard]] bool modal() const override { return true; }
+
+    /// Tells that what lies under the gallery darkens.
+    ///
+    /// @return true
+    [[nodiscard]] bool backdrop() const override { return true; }
+
+    /// Lays the gallery out for the frame the view gives it, when that
+    /// changes.
+    ///
+    /// @param view what the screen is placed on
+    void lay_out(const LayerView& view) override;
+
+    /// Draws the gallery with the kit (kit::draw_gallery).
+    ///
+    /// @param canvas where it draws
+    void draw(const oa::ui::kit::Canvas& canvas) const override;
+
+    /// Takes a pointer's move, press or release (kit::gallery_act).
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button; only the left presses
+    /// @param at the pointer, in the gallery's points
+    /// @param finger_reach a finger's reach in the gallery's points; 0 for a mouse
+    /// @return close when CLOSE closed it; otherwise none or redraw
+    LayerAnswer pointer(
+        ScreenInputKind kind, uint8_t button, oa::ui::kit::Point at, int32_t finger_reach
+    ) override;
+
+    /// Takes a key's press (kit::gallery_act); the information key does
+    /// nothing here.
+    ///
+    /// @param pressed the key
+    /// @return close when Escape closed it; otherwise none or redraw
+    LayerAnswer key(oa::ui::kit::Key pressed, uint32_t /*sdl_key*/) override;
+
+    /// Takes a turn of the wheel, which scrolls the sections or the scroll list.
+    ///
+    /// @param at the pointer, in the gallery's points
+    /// @param notches how far the wheel turned
+    /// @return redraw when it scrolled; otherwise none
+    LayerAnswer wheel(oa::ui::kit::Point at, float notches) override;
+
+    /// Takes text typed into the gallery's search field.
+    ///
+    /// @param utf8 the text
+    /// @return redraw when the field took it; otherwise none
+    LayerAnswer text(std::string_view utf8) override;
+
+    /// Returns the search field while it has the focus.
+    ///
+    /// @return its rectangle, in the gallery's points; none otherwise
+    [[nodiscard]] std::optional<oa::ui::kit::Rect> text_field() const override;
+
+    /// Returns the gallery's display list, as automation lists it.
+    ///
+    /// @return the list
+    [[nodiscard]] oa::ui::kit::DisplayList display_list() const override { return layout_.list; }
+
+    /// Returns the gallery's hover, press and focus.
+    ///
+    /// @return the interaction
+    [[nodiscard]] oa::ui::kit::Interaction interaction() const override {
+        return model_.interaction;
+    }
+
+    /// Closes the gallery once the settings dialog under it has gone.
+    ///
+    /// @return close then; otherwise none
+    LayerAnswer tick() override;
+
+    /// Returns the gallery's revision, which counts the changes to its look.
+    ///
+    /// @return the revision
+    [[nodiscard]] uint64_t revision() const override { return revision_; }
+
+    /// Has nothing of its own to close.
+    void close(bool /*by_key*/) override {}
+
+    /// Returns the frame the gallery is laid out for: its size in points,
+    /// its size class and its scale.
+    ///
+    /// @return the frame; an empty area before it is first laid out
+    [[nodiscard]] const oa::ui::kit::Frame& frame() const noexcept { return frame_; }
+
+    /// Returns the gallery as laid out now.
+    ///
+    /// @return the layout
+    [[nodiscard]] const oa::ui::kit::GalleryLayout& layout() const noexcept { return layout_; }
+
+    /// Returns the gallery's model.
+    ///
+    /// @return the model
+    [[nodiscard]] const oa::ui::kit::GalleryModel& model() const noexcept { return model_; }
+
+  private:
+
+    /// Returns the frame a view gives the gallery.
+    ///
+    /// @param view what the screen is placed on
+    /// @return the frame, its area from the gallery's own origin; an empty
+    ///     area where the gallery does not show
+    [[nodiscard]] oa::ui::kit::Frame frame_for(const LayerView& view) const;
+
+    /// Hands one event to the gallery and lays it out again when it changed.
+    ///
+    /// @param event the event
+    /// @return what the screen answers
+    LayerAnswer take(const oa::ui::kit::GalleryEvent& event);
+
+    OaLayer& layer_;                      ///< the layer it shows on
+    bool in_match_{};                     ///< opened in a match; otherwise on the front end
+    oa::ui::kit::GalleryModel model_{};   ///< its own model
+    oa::ui::kit::Frame frame_{};          ///< the frame it is laid out for
+    oa::ui::kit::GalleryLayout layout_{}; ///< the layout of model_ for frame_
+    uint64_t revision_{};                 ///< counts the changes to its look
 };
 
 } // namespace oa::app
