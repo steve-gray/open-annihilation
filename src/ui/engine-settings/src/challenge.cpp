@@ -8,6 +8,7 @@
 
 #include "oa/ui/engine_settings/challenge.hpp"
 
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
@@ -543,17 +544,16 @@ void draw_challenge(const kit::Canvas& canvas, const ChallengeModel& model) {
         }
     }
     kit::paint(canvas, list);
-    if (code.empty() || canvas.surface == nullptr || canvas.fonts == nullptr)
+    if (code.empty() || canvas.fonts == nullptr)
         return;
-    kit::draw_boxed_text(
-        *canvas.surface,
-        canvas.placement,
-        *canvas.fonts,
+    // Through the canvas's text, so that it draws on either form.
+    kit::box_text(
+        canvas,
         kit::FontRole::regular,
         code,
         code_box,
         kit::Align::centre,
-        kit::rgb(kit::colour::accent),
+        kit::colour::accent,
         challenge_code_tracking
     );
 }

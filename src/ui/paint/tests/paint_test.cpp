@@ -5,7 +5,8 @@
 // rectangles clipped to the canvas and the clip, rounded corners left clear,
 // discs, the radial menu's wedges, every icon inside its box, coverage maps
 // in their colour, lines of text from the bundled fonts when they lie
-// beside the test, and a gamepad glyph of every shape inside its box.
+// beside the test, RGBA pictures scaled and filtered, and a gamepad glyph of
+// every shape inside its box.
 #include "oa/ui/paint/painter.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/paint/pad_glyphs.hpp"
@@ -370,6 +371,82 @@ void pictures_scale_into_their_area() {
     OA_CHECK(faint_painter.painted().empty());
 }
 
+/// Checks an RGBA picture scaled and filtered into a box: at its own size it
+/// is copied, grown it shades smoothly from one pixel to the next rather than
+/// in blocks, shrunk each pixel is the mean of what it covers, its colours
+/// count by their alpha, and the clip holds.
+void rgba_pictures_scale_filtered() {
+    // At the picture's own size each pixel is the picture's.
+    const std::array<uint8_t, 8> pair{200, 10, 20, 255, 30, 40, 250, 255};
+    auto same = paint::make_canvas(4, 2);
+    paint::Painter same_painter(same);
+    same_painter.draw_rgba(pair, 2, 1, {1, 1, 2, 1});
+    OA_CHECK(paint::pixel_at(same, 1, 1) == (paint::Rgba{200, 10, 20, 255}));
+    OA_CHECK(paint::pixel_at(same, 2, 1) == (paint::Rgba{30, 40, 250, 255}));
+    OA_CHECK(paint::pixel_at(same, 0, 1).a == 0 && paint::pixel_at(same, 3, 1).a == 0);
+    OA_CHECK(same_painter.painted() == (paint::Box{1, 1, 2, 1}));
+
+    // Black then white, grown to eight pixels across: black at the left end,
+    // white at the right, and between them shades that rise pixel by pixel.
+    const std::array<uint8_t, 8> black_white{0, 0, 0, 255, 255, 255, 255, 255};
+    auto grown = paint::make_canvas(8, 1);
+    paint::Painter grown_painter(grown);
+    grown_painter.draw_rgba(black_white, 2, 1, {0, 0, 8, 1});
+    OA_CHECK(paint::pixel_at(grown, 0, 0) == (paint::Rgba{0, 0, 0, 255}));
+    OA_CHECK(paint::pixel_at(grown, 7, 0) == (paint::Rgba{255, 255, 255, 255}));
+    int shades = 0;
+    for (int x = 1; x < 8; ++x) {
+        const auto left = paint::pixel_at(grown, x - 1, 0);
+        const auto right = paint::pixel_at(grown, x, 0);
+        OA_CHECK(right.r >= left.r && right.r == right.g && right.g == right.b);
+        shades += right.r > 0 && right.r < 255 ? 1 : 0;
+    }
+    // Nearest would give four black pixels and four white; filtered, the
+    // middle four are greys.
+    OA_CHECK(shades == 4);
+    OA_CHECK(paint::pixel_at(grown, 3, 0).r < 128 && paint::pixel_at(grown, 4, 0).r > 128);
+
+    // A 4x4 checkerboard shrunk to 2x2: each pixel is the mean of the four it covers.
+    std::array<uint8_t, 64> checker{};
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) {
+            const auto at = static_cast<std::size_t>((y * 4 + x) * 4);
+            const uint8_t value = (x + y) % 2 == 0 ? 255 : 0;
+            checker[at] = checker[at + 1] = checker[at + 2] = value;
+            checker[at + 3] = 255;
+        }
+    auto shrunk = paint::make_canvas(2, 2);
+    paint::Painter shrunk_painter(shrunk);
+    shrunk_painter.draw_rgba(checker, 4, 4, {0, 0, 2, 2});
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x) {
+            const auto pixel = paint::pixel_at(shrunk, x, y);
+            OA_CHECK(near(pixel.r, 128) && pixel.a == 255);
+        }
+
+    // A clear pixel beside an opaque red one: the red keeps its colour at
+    // half the opacity, over a blue canvas.
+    const std::array<uint8_t, 8> red_clear{255, 0, 0, 255, 0, 255, 0, 0};
+    auto over = paint::make_canvas(1, 1);
+    paint::Painter over_painter(over);
+    over_painter.fill_rect({0, 0, 1, 1}, blue);
+    over_painter.draw_rgba(red_clear, 2, 1, {0, 0, 1, 1});
+    const auto mixed = paint::pixel_at(over, 0, 0);
+    OA_CHECK(near(mixed.r, 128) && mixed.g == 0 && near(mixed.b, 127) && mixed.a == 255);
+
+    // The clip holds, and a short picture or an empty box draws nothing.
+    auto clipped = paint::make_canvas(8, 1);
+    paint::Painter clipped_painter(clipped);
+    clipped_painter.set_clip({2, 0, 2, 1});
+    clipped_painter.draw_rgba(black_white, 2, 1, {0, 0, 8, 1});
+    OA_CHECK(clipped_painter.painted() == (paint::Box{2, 0, 2, 1}));
+    OA_CHECK(paint::pixel_at(clipped, 1, 0).a == 0 && paint::pixel_at(clipped, 4, 0).a == 0);
+    clipped_painter.forget_painted();
+    clipped_painter.draw_rgba(std::span<const uint8_t>(black_white.data(), 4), 2, 1, {0, 0, 8, 1});
+    clipped_painter.draw_rgba(black_white, 2, 1, {0, 0, 0, 1});
+    OA_CHECK(clipped_painter.painted().empty());
+}
+
 /// Counts a canvas's painted pixels and tells whether any lies outside a box, a pixel of
 /// smoothing beyond its edge allowed.
 ///
@@ -506,6 +583,7 @@ int main() {
     coverage_paints_in_its_colour();
     text_paints_in_its_colour();
     pictures_scale_into_their_area();
+    rgba_pictures_scale_filtered();
     pad_glyphs_paint_inside_their_boxes();
     return oa::test::check_exit_status();
 }

@@ -197,6 +197,10 @@ struct Frame {
 /// @return the frame
 [[nodiscard]] Frame frame_of(const Viewport& viewport) noexcept;
 
+/// The one fractional scale an Interface size offers, in percent: one and a
+/// half, drawn on the canvas's smooth form in the modern fonts.
+inline constexpr int32_t fractional_scale_percent = 150;
+
 /// Returns the viewport OA's own screens are laid out on, at the scale an
 /// Interface size chooses for a canvas.
 ///
@@ -206,22 +210,28 @@ struct Frame {
 /// included, on a touch canvas as on a desktop one. The scale is the
 /// largest whole step, no larger than the chosen one, at which Compact's
 /// dialog (compact_metrics' dialog_width by dialog_height points) fits the
-/// room, the canvas less its safe insets, and at least 1. frame_of of the
-/// result gives the size class of the room's points at that scale.
+/// room, the canvas less its safe insets, and at least 1. 150%
+/// (fractional_scale_percent) is held the same way: it is used where
+/// Compact's dialog fits the room at one and a half, and otherwise 1.
+/// frame_of of the result gives the size class of the room's points at
+/// that scale.
 ///
 /// @param canvas the canvas: its pixels, density and safe insets; its
 ///     scale_percent is not read
 /// @param chosen_percent the Interface size in percent, 100 a step: 100,
-///     200, 300 or 400; 0 for Auto. A percent between two steps takes the
-///     step below it.
-/// @return the canvas with scale_percent set to that scale times 100
+///     150, 200, 300 or 400; 0 for Auto. Any other percent between two
+///     steps takes the step below it.
+/// @return the canvas with scale_percent set to that scale: 150, or a
+///     whole step times 100
 [[nodiscard]] Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept;
 
 /// Returns a rectangle of points as canvas pixels.
 ///
 /// Each edge is that edge in points times the percentage, divided by 100 and
-/// rounded down, so two rectangles that share an edge in points share it in
-/// pixels, with no gap and no overlap. A scale of 0 or less counts as 1%.
+/// rounded to the nearest pixel, a half away from zero (lround of the point
+/// times the scale), each edge on its own, so two rectangles that share an
+/// edge in points share it in pixels, with no gap and no overlap, and every
+/// edge falls on a whole pixel. A scale of 0 or less counts as 1%.
 ///
 /// @param points the rectangle, in points
 /// @param scale_percent the scale, as a percentage

@@ -175,7 +175,7 @@ latched the closing key and drew a backdrop.
 - **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
   and darkens what lies under it, whether it is opaque, a layout at the
   view's size class (`lay_out`), a drawing from its own top left corner at
-  the canvas's whole scale, its answers to the pointer, the keys, the wheel
+  the canvas's scale, its answers to the pointer, the keys, the wheel
   and typed text, a text field, its display list and interaction (what
   automation lists), a tick and a revision. No call of it names an SDL
   type. A screen joins with
@@ -259,8 +259,9 @@ latched the closing key and drew a backdrop.
   menu, and leaving the main menu hides the window without cancelling the
   download. A new code refreshes the same window.
 - **Scale and size class.** On the front end the layer draws its screens at
-  a whole scale and lays them out at the size class of the points left
-  over (`LayerView`, from `view`, worked out afresh whenever the window's
+  a whole scale on the kit canvas's crisp form, or at 150% on its smooth
+  form in the modern fonts (`layer_drawing`), and lays them out at the size
+  class of the points left over (`LayerView`, from `view`, worked out afresh whenever the window's
   size, the touch state or the Interface size in effect may have changed:
   each input, tick and present lays the screens out again,
   `lay_out_screens`). It fills a `kit::Viewport`
@@ -273,22 +274,26 @@ latched the closing key and drew a backdrop.
   over 720, halves rounded up, never below the density, so a point is never
   smaller than a window point; it is then held to the largest scale at
   which Compact's 480 by 324 dialog fits the canvas less its insets, and to
-  at least 1. The class comes from
+  at least 1. 150% is 1.5 where Compact fits at one and a half, else 1, and
+  only while the modern fonts in effect are on and the layer's own stack of
+  them opens (`smooth_fonts`). The class comes from
   `kit::frame_of`: Compact below 960 by 540 points, Regular from 960 by 540,
   Large from 1280 by 720. A 640 by 480 window is Compact at 1×, pixel for
   pixel as 0.7.3; 1024 by 768 is Regular at 1×, 1280 by 720 Large at 1×,
   1920 by 1080 and 2560 by 1080 Regular at 2×, 2560 by 1440 Large at 2× and
   3840 by 2160 Large at 3×; a phone of 852 by 393 points at 3 pixels a
-  point is Compact at 3×. `screen_scale`, `screen_class` and `placement_of(name)`
-  report them, for the checks. Without a renderer the canvas is the picture
+  point is Compact at 3×; 1920 by 1080 at 150% is Large at 1.5×.
+  `screen_scale`, `screen_scale_percent`, `screen_class` and
+  `placement_of(name)` report them, for the checks. Without a renderer the canvas is the picture
   itself, Compact at 1×. In a match the view is Compact at 100%: the
   in-match Settings keeps its own placement and look until U25.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
   window pixels, and how many points it has. Settings, a notice and a
   question centre themselves in the view's room at its scale
-  (`centred_placement`): left = (window width − width × scale) / 2, rounded
-  down, and the same down, in the canvas less its safe insets on a touch
-  canvas. A screen anchored to a part of a 3.1c screen places itself by the
+  (`centred_placement`): left = (window width − width at the scale) / 2,
+  rounded down, and the same down, in the canvas less its safe insets on a
+  touch canvas, the width at 150% each edge rounded to the nearest pixel
+  (`kit::to_canvas`); input maps back by the same scale (`layer_point`). A screen anchored to a part of a 3.1c screen places itself by the
   picture's rectangle (`LayerView::picture`, where the 640 by 480 frame is
   drawn) at the same scale. The main menu's OA button stays in the frame.
   In a match Settings shows where `match_dialog_rect` puts it, Compact and
@@ -345,8 +350,9 @@ latched the closing key and drew a backdrop.
   the backdrop covers the whole window; every screen under it darkens too,
   as its drawing is darkened before it is copied: a question over Settings
   darkens the menu twice and Settings once. The screens are drawn through a
-  `kit::Canvas` at the view's scale onto a picture of their size in points
-  times the scale, never drawn at 1× and enlarged, and copied pixel for
+  `kit::Canvas` at the view's scale, crisp at a whole scale and smooth at
+  150%, onto a picture of their size in points at the scale, never drawn at
+  another scale and enlarged, and copied pixel for
   pixel to their places in the window's own pixels
   (`RenderState::use_window_pixels`); then the software cursor is
   presented above them, and the frame holds no cursor while a screen shows

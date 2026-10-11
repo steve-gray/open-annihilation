@@ -134,4 +134,12 @@ void draw_prompt(
     const oa::ui::frontend_renderer::RgbaPicture& icon
 );
 
+/// Draws a prompt as draw_prompt does on a canvas of either form, laid out
+/// in the canvas's game fonts.
+///
+/// @param canvas where the prompt's top left corner lands, its fonts and
+///     its icon; without game fonts nothing is drawn
+/// @param prompt the prompt
+void draw_prompt(const oa::ui::kit::Canvas& canvas, const Prompt& prompt);
+
 } // namespace oa::ui::engine_settings

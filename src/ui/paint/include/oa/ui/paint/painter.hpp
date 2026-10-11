@@ -326,6 +326,25 @@ class Painter {
         std::span<const uint8_t> rgb, int width, int height, Box source, Area area, float opacity
     ) noexcept;
 
+    /// Blends an RGBA picture, its alpha straight, scaled to fill a box of whole
+    /// pixels and filtered, so that a picture drawn at a size of its own, such as
+    /// the Open Annihilation icon at one and a half times, keeps its curves.
+    ///
+    /// Each axis is filtered on its own. Where the picture shrinks along it, a
+    /// pixel takes the picture's pixels its span covers, each weighted by how
+    /// much of it the span covers; where the picture grows, the two picture
+    /// pixels nearest its centre, weighted by how near each is (bilinear),
+    /// the picture's edge pixels standing in past its edge. The colours are
+    /// mixed weighted by their alpha, the alpha by itself, and the result is
+    /// laid over the canvas by its alpha. At the picture's own size each pixel
+    /// is the picture's.
+    ///
+    /// @param rgba the picture, four bytes a pixel, rows top to bottom
+    /// @param width the picture's width in pixels
+    /// @param height the picture's height in pixels
+    /// @param box where it goes on the canvas, inside the clip
+    void draw_rgba(std::span<const uint8_t> rgba, int width, int height, Box box) noexcept;
+
     /// Blends an icon centred in a box, as large as the box's shorter side allows.
     ///
     /// @param icon the icon; none paints nothing
