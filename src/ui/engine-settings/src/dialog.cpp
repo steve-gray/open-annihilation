@@ -161,7 +161,11 @@ std::string_view shown_text(std::string_view english) {
 }
 
 RowContext row_context(const Dialog& dialog) noexcept {
-    return RowContext{dialog.steam_input, dialog.steam_deck_panel_hz};
+    return RowContext{
+        dialog.steam_input,
+        dialog.steam_deck_panel_hz,
+        dialog.library_link && dialog.kind == DialogKind::engine
+    };
 }
 
 kit::RowView row_view(
@@ -263,6 +267,7 @@ Rows place_rows(
     Dialog shown;
     shown.steam_input = context.steam_input;
     shown.steam_deck_panel_hz = context.steam_deck_panel_hz;
+    shown.library_link = context.library_link;
     Rows placed = place_section(shown, page, locks, section, &estimated_width);
     scroll_rows(placed, scroll);
     return placed;
@@ -1287,15 +1292,20 @@ DialogAction open_folder(Dialog& dialog, FolderButton button) noexcept {
 }
 
 /// Takes what a row's button asks for: MANAGE… the Game files screen, a
-/// button of Your files its folder.
+/// button of Your files its folder, MORE IN THE LIBRARY… the Library's
+/// Languages.
 ///
 /// @param[in,out] dialog the dialog
-/// @param action the button's action (manage_game_files_action, or
-///     first_folder_action and its place)
+/// @param action the button's action (manage_game_files_action,
+///     first_folder_action and its place, or open_library_action)
 /// @return what it asks of the host
 DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
     if (action == layout::manage_game_files_action)
         return DialogAction::manage_game_files;
+    if (action == layout::open_library_action) {
+        dialog.library_tab = LibraryTab::languages;
+        return DialogAction::open_library;
+    }
     const kit::ActionId button = action - layout::first_folder_action;
     if (button < 0 || button >= static_cast<kit::ActionId>(folder_button_count))
         return DialogAction::none;

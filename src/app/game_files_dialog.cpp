@@ -797,6 +797,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             case settings::DialogAction::open_folder:
             case settings::DialogAction::roll_back_mod:
             case settings::DialogAction::download_language:
+            case settings::DialogAction::open_library:
                 // The Language dialog lists none of the controls that ask
                 // for these, and no language that is only available to download.
                 dirty = true;

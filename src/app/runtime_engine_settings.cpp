@@ -1309,6 +1309,9 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open, unless the mod played rolls back as the
         // run ends.
         return roll_back_mod_folder(*dialog);
+    case settings::DialogAction::open_library:
+        // MORE IN THE LIBRARY…: the dialog stays open.
+        return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.
         std::string why;

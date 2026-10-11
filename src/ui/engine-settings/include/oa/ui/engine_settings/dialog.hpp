@@ -232,6 +232,10 @@ enum class Setting : uint8_t {
     /// Interface size: a drop-down of Auto, 100%, 200%, 300% and 400%, the
     /// last of Graphics' rows
     interface_size,
+    /// MORE IN THE LIBRARY…: a link under Language's row that opens the
+    /// Library on Languages, listed only while Dialog::library_link is set;
+    /// it changes no setting
+    more_in_library,
 };
 
 /// Returns the settings a section shows, top to bottom.
@@ -470,6 +474,19 @@ enum class DialogAction : uint8_t {
     /// An available language was chosen: download Dialog::download_request,
     /// keep the dialog open, and apply the language when its pack arrives
     download_language,
+    /// MORE IN THE LIBRARY… was pressed: the host opens the Library on
+    /// Dialog::library_tab over the dialog, which stays open under it
+    open_library,
+};
+
+/// One of the Library's tabs, as the dialog asks the host to open it
+/// (DialogAction::open_library). It mirrors the Library's own tabs, so that
+/// the dialog needs nothing of the Library.
+enum class LibraryTab : uint8_t {
+    mods,      ///< Mods
+    maps,      ///< Maps
+    languages, ///< Languages
+    updates,   ///< Updates
 };
 
 /// How the OA button looks.
@@ -814,6 +831,12 @@ struct Dialog {
     std::vector<AvailableLanguage> available_languages{};
     /// The tag DialogAction::download_language asks the host to download.
     std::string download_request;
+    /// Language lists MORE IN THE LIBRARY… under its row: a host sets it as
+    /// the engine's settings open on the main menu, where the Library can
+    /// open over them; never in a match, and never for Language alone.
+    bool library_link{};
+    /// The tab DialogAction::open_library asks the host to open the Library on.
+    LibraryTab library_tab{LibraryTab::mods};
     /// The row whose drop-down list is open: its control; no_control while
     /// no list is open. An open list takes every pointer event and key.
     int32_t open_list{no_control};
