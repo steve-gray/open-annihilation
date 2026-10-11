@@ -624,6 +624,9 @@ hit(const DisplayList& list, Point point, DisabledControl disabled) noexcept;
 /// @return the control, or null when the list has none of that number; the first when it has several
 [[nodiscard]] const Control* control_of(const DisplayList& list, ControlId id) noexcept;
 
+/// A temporary list would be freed before its control is read: name the list.
+const Control* control_of(DisplayList&& list, ControlId id) = delete;
+
 // Parts of a screen drawn in the modern fonts, laid out in canvas pixels at a
 // scale that may be a fraction of a pixel a point (the Game files screen and
 // the folder chooser).
