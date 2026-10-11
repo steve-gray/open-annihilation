@@ -22,7 +22,10 @@ until then.
   and `red` (e06c5c, the kit's `colour::danger`) are the screens' own.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
   boxed line, and the one wrap; `fitting_start`, where the wrap breaks a word
-  wider than a line; `fit`, a line shortened to a width with the `ellipsis`;
+  wider than a line; `path_break`, a `WordBreak` that breaks a folder's path
+  wider than a line after its last separator that fits (the folder
+  chooser's texts break so); `fit`, a line shortened to a width with the
+  `ellipsis`;
   and, for a screen drawn in the modern fonts, `TextMeasureHooks` (the app
   measures with the bundled fonts) with `measured_width` and
   `measured_line`, which estimate what a null hook leaves out.
@@ -37,7 +40,9 @@ until then.
   be a fraction (`Typesetter`, `canvas_pixels`, `canvas_font`) with:
   - `text_part`, a text wrapped to a room in a `Lettering` (size, weight,
     colour and `TextStyle`), at most so many lines, the last ending with an
-    ellipsis, as wide as the room or its widest line (`TextFit`);
+    ellipsis, as wide as the room or its widest line (`TextFit`), a word
+    wider than the room breaking where a `WordBreak` such as `path_break`
+    says;
   - `line_part`, one line fitted to a room and centred on a row;
   - `button_span` and `button_part`, a button of a `ButtonSpec` (its label,
     look, `Glyph` and control), and `button_row`, its left and right groups
@@ -49,10 +54,18 @@ until then.
     the others, else the whole column scrolling, as a `ScrollArea`;
   - `first_live_part` and `list_part_controls`, the controls of the parts
     above the last backdrop, the top one first, and the Tab order.
+
+  `hit` takes a `DisabledControl` rule for a disabled control a point lies
+  in: it `passes` the point on to the controls under it (the rule without
+  one, the Game files screen's), or `blocks` it, and the point reaches no
+  control (the folder chooser's).
 - `input.hpp`: a pointer and a finger's reach (in whole points, or in a
-  fraction of a point for a screen at a fractional scale), `mark_states`
-  (the focused and held parts of an `Interaction`), the keys, Tab in a
-  declared order, the arrows by where controls sit, the wheel, and a text
+  fraction of a point for a screen at a fractional scale, and by the
+  `DisabledControl` rule, a disabled control the finger is on blocking the
+  press and every search), `mark_states` (the focused and held parts of an
+  `Interaction`), the keys, Tab in a declared order, the arrows by where
+  controls sit (`focus_toward`; given the scroll areas, judged with them
+  laid out whole), the wheel, and a text
   field's editing: `insert_text` for typed text and `edit_text` for Backspace,
   Delete, Left, Right, Home and End. For automation, `automation_entries`
   lists the named controls, and `automation_parts` lists each control
@@ -294,7 +307,12 @@ first, including rows the area does not show. The focus leaves that area only
 when nothing in it lies that way, and a move from outside never lands on a
 row the area hides. A control in no scroll area, such as a footer button or
 an entry of a section list, has no area of its own: every control that shows
-is searched at once. Tab follows the declared order and wraps. Up and Down
+is searched at once. Given the scroll areas (`focus_toward` with `areas`),
+the arrows judge every control where it lies with the areas laid out whole:
+a row moved back by its area's offset, a control under an area's view moved
+down by its limit, every row a candidate whether its area shows it or not,
+so that from a button under a list Up reaches the list's last row, as the
+folder chooser's arrows do. Tab follows the declared order and wraps. Up and Down
 never follow that order. Left and Right go to a focused text field, which
 moves its caret, as do Home, End, Backspace and Delete. Tabs and cards do not
 take Left and Right: the arrows move the focus between them. Enter goes to a
@@ -310,17 +328,19 @@ else, and that each class's dialog and notices fit the least window of their
 class. `ui-kit-text` checks the UTF-8
 helpers, the estimated width, the stand-ins, the wrap against copies of
 the six wraps it replaces, `fit` and `fitting_start` against the Game files
-screen's copies, and the modern fonts' measure through its hooks and
+screen's copies, `path_break` at its separators and against the folder
+chooser's copy, and the modern fonts' measure through its hooks and
 without them. `ui-kit-layout` checks the Auto scale, the design's
 window sizes, the Interface size's examples and Auto at each window, 150%
 where Compact fits at one and a half and 1x where it does not, that
 `metrics_of` gives each class its metrics, `to_canvas`'s rounding at 1.5x,
-arrangements, the scroll arithmetic and hit testing, and each helper of a screen drawn in the modern
-fonts with a made-up measure: points to canvas pixels, a text part's wrap,
-line limit and fit, a line part, a button's span, label and look, a row of
-buttons on one line and wrapped, icons, plain parts and moved parts, the
-three ways a column is placed, and the controls listed from parts under and
-above a backdrop.
+arrangements, the scroll arithmetic and hit testing (a disabled control
+passing a point on or blocking it), and each helper of a screen drawn in the
+modern fonts with a made-up measure: points to canvas pixels, a text part's
+wrap, line limit, fit and path break, a line part, a button's span, label and
+look, a row of buttons on one line and wrapped, icons, plain parts and moved
+parts, the three ways a column is placed, and the controls listed from parts
+under and above a backdrop.
 `ui-kit-smooth` checks the smooth form at 1.5x: a 10 by 10 point fill
 covering exactly 15 by 15 pixels from `lround(x * 1.5)`, at even and odd
 points, fills sharing their edges, outlines, raised edges and rules of whole
@@ -330,8 +350,9 @@ wide for its box drawn smaller inside it, tracking, a clip that keeps what
 lies outside it, a picture drawn filtered, a mark, a moved origin, and a
 button and a display list drawn through the same functions as on the crisp
 form. Its text checks read the bundled fonts beside the test.
-`ui-kit-input` checks reach (with a reach of a fraction of a point too),
-`mark_states`, the pointer, Tab, the arrows, the keys and
+`ui-kit-input` checks reach (with a reach of a fraction of a point too, and
+a disabled control blocking a finger), `mark_states`, the pointer, Tab, the
+arrows (with a scroll area laid out whole too), the keys and
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item

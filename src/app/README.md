@@ -2247,7 +2247,11 @@ in-engine folder chooser picks the folder (`folder_chooser_screen.*`, over
 the model of the module in src/ui/folder-chooser): the folders
 found on this machine, a folder browser driven by touch, a gamepad, the keys
 or the pointer, the 1997 demo's folder and, outside Game Mode, the
-desktop's dialog. `folder_chooser_offered` says whether it may show, and
+desktop's dialog. Like the Game files screen, the chooser is laid out, hit
+tested and focused by the UI kit, so every OA screen is one UI stack, and it
+reads the window, shows its frame and reads the pointer through the same
+window-pixel code (`window_pixels.*`, below); its gamepad handling is its
+own. `folder_chooser_offered` says whether it may show, and
 `run_folder_chooser_until_resolved` runs it from `main.cpp` before the Game
 files screen. Resolution looks for folders where Steam, Heroic and Lutris
 put Total Annihilation (the module in src/platform/game-installs)
@@ -2282,7 +2286,8 @@ the game's window ([docs/game-files.md](../../docs/game-files.md)).
   `game_files_paint.cpp` paints its layout with the touch controls' painter
   and the bundled fonts; `game_files_dialog.cpp` hosts the Language
   settings over it, placed by the OA layer's rule over the screen's
-  viewport: its Auto scale held to what fits Compact's dialog, the size
+  viewport (`kit::layer_viewport`): the scale the Interface size in effect
+  chooses, or the Auto scale, held to what fits Compact's dialog, the size
   class of the points left over, centred.
 - `game_files_check.cpp` is `--check-game-files`: scripted hooks, the route
   driven by taps and keys, pictures of each step and the verdict line.
@@ -2293,6 +2298,15 @@ the game's window ([docs/game-files.md](../../docs/game-files.md)).
   back, and `use_window_pixels` draws in the window's own pixels: the Game
   files screen, the folder chooser and the OA layer each keep one while
   they draw.
+- `window_pixels.hpp` holds the rest of the window-pixel path the Game files
+  screen and the folder chooser share: `read_window_viewport` reads the
+  window's canvas (its pixels, the pixels a window point holds and the safe
+  area), `WindowFrame` shows a painted frame on the window in its own pixels
+  through a texture it keeps, and `read_pointer` reads fingers, the pointer
+  and the wheel as one press in canvas pixels (`WindowPress`), with
+  `touch_screen`, `press_scrolls` (a press over the rows that becomes a
+  scroll), `canvas_point` and the drag and wheel distances. What a press
+  does, and which touch devices a screen takes, stay each screen's.
 
 ## The player's own folder
 

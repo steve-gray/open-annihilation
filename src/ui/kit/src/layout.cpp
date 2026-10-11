@@ -319,13 +319,19 @@ Rect ScrollArea::placed(const Rect& content) const noexcept {
 }
 
 ControlId hit(const DisplayList& list, Point point) noexcept {
+    return hit(list, point, DisabledControl::passes);
+}
+
+ControlId hit(const DisplayList& list, Point point, DisabledControl disabled) noexcept {
     for (const Control& control : list.controls) {
-        if (!control.enabled)
-            continue;
         const bool clipped = control.clip.width > 0 && control.clip.height > 0;
         const Rect reach = clipped ? intersect(control.rect, control.clip) : control.rect;
-        if (contains(reach, point))
+        if (!contains(reach, point))
+            continue;
+        if (control.enabled)
             return control.id;
+        if (disabled == DisabledControl::blocks)
+            return no_control;
     }
     return no_control;
 }
@@ -354,7 +360,8 @@ int32_t text_part(
     std::string_view words,
     const Lettering& look,
     TextFit sits,
-    std::size_t most_lines
+    std::size_t most_lines,
+    WordBreak break_word
 ) {
     if (words.empty() || room <= 0)
         return 0;
@@ -366,6 +373,10 @@ int32_t text_part(
     rules.newlines = true;
     rules.wide_scripts = false;
     rules.most_lines = most_lines;
+    if (break_word != nullptr)
+        rules.break_word = [break_word, room, &measure](std::string_view word) {
+            return break_word(word, room, measure);
+        };
     rules.shorten_last = [&measure, room](std::string_view joined) {
         return fit(std::string(joined) + std::string(ellipsis), room, measure);
     };

@@ -10,6 +10,7 @@
 
 #include "oa/ui/kit/layout.hpp"
 
+#include <span>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -90,6 +91,23 @@ struct Reached {
 /// @param within how far a control may lie from the finger, in points
 /// @return the control and the point the press takes
 [[nodiscard]] Reached reach(const DisplayList& list, Point finger, float within) noexcept;
+
+/// Returns where a finger's press lands, by a rule for disabled controls.
+///
+/// As the reach above, but a disabled control the finger is on does as the
+/// rule says: with DisabledControl::passes it is passed over, as above; with
+/// DisabledControl::blocks the first control whose press area holds the
+/// finger, when it is disabled, takes the press to no control, and nothing
+/// within reach is searched. The search itself passes over disabled controls
+/// either way.
+///
+/// @param list the display list
+/// @param finger the finger, in the same points as the controls
+/// @param reach how far a control may lie from the finger, in points
+/// @param disabled what a disabled control the finger is on does
+/// @return the control and the point the press takes
+[[nodiscard]] Reached
+reach(const DisplayList& list, Point finger, int32_t reach, DisabledControl disabled) noexcept;
 
 /// What a pointer and the keys have done on a screen, between events.
 struct Interaction {
@@ -209,6 +227,27 @@ next_in_tab_order(const DisplayList& list, ControlId from, bool forward) noexcep
 /// @return the control, or no_control when the focus stays
 [[nodiscard]] ControlId
 focus_toward(const DisplayList& list, ControlId from, Direction direction) noexcept;
+
+/// Returns the control the focus moves to in a direction, judging where the
+/// controls lie with their scroll areas laid out whole.
+///
+/// As focus_toward above, with each control first put where it lies with
+/// every scroll area at rest and as tall as its content: a control in an
+/// area, its group an index into `areas`, moves down by that area's offset,
+/// and a control in no area whose top lies at or below an area's view moves
+/// down by that area's limit. A row scrolled out of view then lies between
+/// the fixed controls above and below its area, as it does in the content,
+/// and every control is a candidate, whether its area shows it or not. The
+/// folder chooser's arrows move this way, from its buttons into its rows.
+///
+/// @param list the display list
+/// @param from the control the focus is on
+/// @param direction the way it moves
+/// @param areas the scroll areas, by group; their views, offsets and limits are read
+/// @return the control, or no_control when the focus stays
+[[nodiscard]] ControlId focus_toward(
+    const DisplayList& list, ControlId from, Direction direction, std::span<const ScrollArea> areas
+) noexcept;
 
 /// What a key asks the screen to do.
 enum class /* one key */ KeyResult : uint8_t {
