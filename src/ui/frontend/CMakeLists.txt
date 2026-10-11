@@ -11,6 +11,11 @@ target_link_libraries(oa-ui-frontend PUBLIC oa-ui-frontend-state oa-ui-gui-layou
   oa-present-world-renderer oa-ui-campaign oa-data-campaign oa-data-match-rules PRIVATE oa-data-persist oa-options
   oa-ui-gui-input)
 target_compile_features(oa-ui-frontend PUBLIC cxx_std_20)
+# The main menu's version label names this build. The label is empty for a
+# release and names a development build ("dev").
+target_compile_definitions(oa-ui-frontend PRIVATE
+  "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\""
+  "OA_ENGINE_VERSION_LABEL=\"${OA_VERSION_LABEL}\"")
 
 if(BUILD_TESTING)
   add_executable(oa-ui-frontend-options-test tests/options_test.cpp tests/ingame_menu_test.cpp
