@@ -306,8 +306,11 @@ A screen with no `lay_out` or `act`, a taken or malformed name, or a full
 table (16 screens) is refused, and the start stops.
 
 **The model** is the extension's: whatever its screen shows and changes.
-The kit keeps no state of a screen's own; the engine keeps the pointer's
-hover and press and the focus.
+The kit keeps no state of a screen's own. The engine keeps the pointer's
+hover and press and the focus, and draws them on a copy of the list
+`lay_out` returned: the control under the pointer lights up, a press held
+on it shows the held look, and the focused control wears the focus ring.
+The list the extension returned is left as it was.
 
 **The layout.** `lay_out` returns the screen's display list for a frame:
 `items`, what is drawn, in drawing order; `controls`, what a press can
@@ -687,11 +690,7 @@ beside the path given; each is stored here as a PNG of the same pixels.
 - The kit is provisional ([above](#provisional-until-it-is-stable)).
 - A kit screen opens over the front end only. Opened during a match, it has
   no place there, takes no input and shows once the front end does.
-- The engine draws a kit screen's display list as `lay_out` returned it.
-  The pointer's hover and press and the keyboard focus are kept and move as
-  the input model says, and the automation endpoint reports the focus, but
-  the screen does not yet show them: no hover look and no focus ring is
-  drawn on an extension's kit screen. The wheel does nothing on one.
+- The wheel does nothing on a kit screen.
 - A Settings page takes four kinds of row: switches, drop-downs, sliders
   and text fields, each bound to a key. The registry refuses the other
   kinds of declared row (a level strip, a value with a button, buttons, a

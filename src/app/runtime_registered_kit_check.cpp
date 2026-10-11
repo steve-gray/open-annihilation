@@ -14,6 +14,7 @@
 #include "oa/app/user_folder.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/controls.hpp"
@@ -37,6 +38,7 @@ namespace oa::app {
 namespace settings = oa::ui::engine_settings;
 namespace kit = oa::ui::kit;
 namespace layout = oa::ui::display_layout;
+namespace renderer = oa::ui::frontend_renderer;
 
 namespace {
 
@@ -410,6 +412,62 @@ void Runtime::check_registered_kit() {
             "the screen's dialog is not oa.check.screen"
         );
         require(top->interaction().focused == kit::no_control, "the screen opened with a focus");
+        bool watch_focus = false;
+        int32_t edge_x = 0;
+        int32_t edge_y = 0;
+        std::array<uint8_t, 3> edge_before{};
+        const LayerPlacement placed = top->placement(oa_layer().view());
+        const auto paint = [&]() {
+            renderer::Surface picture;
+            picture.width = static_cast<uint32_t>(placed.points_width);
+            picture.height = static_cast<uint32_t>(placed.points_height);
+            picture.rgb.assign(static_cast<std::size_t>(picture.width) * picture.height * 3U, 0);
+            kit::Canvas canvas;
+            canvas.surface = &picture;
+            canvas.placement = {0, 0, 1, {0, 0, placed.points_width, placed.points_height}};
+            oa_layer().top()->draw(canvas);
+            return picture;
+        };
+        const auto sample = [](const renderer::Surface& picture, int32_t x, int32_t y) {
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * picture.width + static_cast<std::size_t>(x)) * 3U;
+            return std::array<uint8_t, 3>{
+                picture.rgb[at], picture.rgb[at + 1], picture.rgb[at + 2]
+            };
+        };
+        if (window.write) {
+            const kit::DisplayList listed = top->display_list();
+            const kit::Control* close = kit::control_of(listed, 4);
+            require(close != nullptr, "the screen has no CLOSE button");
+            const kit::Rect button = close->rect;
+            require(
+                placed.points_width > button.x + 2 && placed.points_height > button.y + 2 &&
+                    button.x >= kit::compact_metrics.focus_inset,
+                "CLOSE is not where its edge can be read"
+            );
+            const renderer::Surface idle = paint();
+            const std::array<uint8_t, 3> face = sample(idle, button.x + 2, button.y + 2);
+            edge_x = button.x - kit::compact_metrics.focus_inset;
+            edge_y = button.y + button.height / 2;
+            edge_before = sample(idle, edge_x, edge_y);
+            const layout::Point pixel{
+                close_button->window_x + close_button->window_width / 2,
+                close_button->window_y + close_button->window_height / 2
+            };
+            SDL_Event motion =
+                window_pointer_event(sdl_.window, sdl_.renderer, SDL_EVENT_MOUSE_MOTION, pixel, 0);
+            bool running = true;
+            dispatch_event(motion, running);
+            require(running, "a pointer move ended the run");
+            top = oa_layer().top();
+            require(
+                top != nullptr && top->interaction().hovered == 4, "the pointer is not over CLOSE"
+            );
+            const std::array<uint8_t, 3> lit = sample(paint(), button.x + 2, button.y + 2);
+            require(lit != face, "hovering CLOSE did not change its pixels");
+            std::cout << "registered kit check: hovering the button changes its pixels\n";
+            watch_focus = true;
+        }
         const std::array<kit::ControlId, 4> order{1, 2, 3, 4};
         for (const kit::ControlId id : order) {
             tap(SDLK_TAB);
@@ -418,6 +476,13 @@ void Runtime::check_registered_kit() {
                 top != nullptr && top->name() == "check.screen" && top->interaction().focused == id,
                 "Tab did not follow the screen's controls on the " + on + " window"
             );
+            if (watch_focus && id == 4) {
+                require(
+                    sample(paint(), edge_x, edge_y) != edge_before,
+                    "Tab onto CLOSE did not draw the focus ring"
+                );
+                std::cout << "registered kit check: Tab draws the focus ring\n";
+            }
         }
         tap(SDLK_RETURN);
         require(oa_layer().find("check.screen") == nullptr, "CLOSE did not pop the screen");
