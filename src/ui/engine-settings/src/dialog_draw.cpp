@@ -21,6 +21,7 @@
 
 #include "developer.hpp"
 #include "geometry.hpp"
+#include "registered.hpp"
 
 #include <algorithm>
 #include <array>
@@ -284,6 +285,112 @@ void add_nav(Building& building, const Dialog& dialog) {
         nav.entries.push_back(std::move(entry));
     }
     item(building.list, kit::Role::nav, nav.area, {}).look = std::move(nav);
+}
+
+/// Tells whether a rectangle lies wholly inside another.
+///
+/// @param inner the inner rectangle
+/// @param outer the outer rectangle
+/// @return true when inner has room and none of it falls outside outer
+bool inside_rect(const SourceRect& inner, const SourceRect& outer) noexcept {
+    return inner.width > 0 && inner.height > 0 && inner.x >= outer.x && inner.y >= outer.y &&
+           inner.x + inner.width <= outer.x + outer.width &&
+           inner.y + inner.height <= outer.y + outer.height;
+}
+
+/// Adds the section list while registered pages are listed: the engine's
+/// sections, then each owner's name and pages, scrolled as one list.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+void add_registered_nav(Building& building, const Dialog& dialog) {
+    const NavLayout layout = layout_registered_nav(dialog);
+    const int32_t scroll = std::clamp(dialog.nav_scroll, int32_t{0}, layout.limit);
+    kit::NavLook nav;
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    nav.area = layout.area;
+    nav.rule_column = sized.list_rule_column;
+    for (const NavPiece& piece : layout.pieces) {
+        SourceRect drawn = piece.rect;
+        drawn.y -= scroll;
+        if (piece.kind != NavPiece::Kind::entry)
+            continue;
+        const bool selected = piece.registered ? dialog.page == Page::registered &&
+                                                     dialog.registered_page == piece.index
+                                               : dialog.page == piece.page;
+        std::string name = piece.registered
+                               ? named("nav." + dialog.registered_pages[piece.index].id)
+                               : named("nav." + std::string(layout::page_word(piece.page)));
+        kit::Control added =
+            control_of(piece.control, drawn, std::move(name), kit::ControlKind::tab);
+        added.clip = layout.viewport;
+        added.group = registered_nav_group;
+        added.checked = selected;
+        added.text = piece.text;
+        building.nav.push_back(std::move(added));
+        if (!inside_rect(drawn, layout.viewport))
+            continue;
+        kit::NavEntry entry;
+        entry.rect = drawn;
+        entry.caption = piece.text;
+        entry.selected = selected;
+        entry.hovered = dialog.hovered == piece.control || dialog.pressed == piece.control;
+        entry.focused = dialog.focused == piece.control;
+        nav.entries.push_back(std::move(entry));
+    }
+    // The list's face and its entries. Rules and owner names follow, so they
+    // paint over the face and stay clipped to it.
+    item(building.list, kit::Role::nav, nav.area, {}).look = std::move(nav);
+    for (const NavPiece& piece : layout.pieces) {
+        if (piece.kind == NavPiece::Kind::entry)
+            continue;
+        SourceRect drawn = piece.rect;
+        drawn.y -= scroll;
+        if (piece.kind == NavPiece::Kind::rule) {
+            kit::Item& rule = item(building.list, kit::Role::rule, drawn, layout.area);
+            rule.colour = kit::colour::rule;
+            continue;
+        }
+        text(
+            building.list,
+            DialogFont::small,
+            piece.text,
+            drawn,
+            kit::Align::left,
+            kit::colour::hint,
+            layout.area
+        );
+    }
+}
+
+/// Adds the open registered page's rows from their specs.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+void add_registered_rows(Building& building, const Dialog& dialog) {
+    const RegisteredContent content = registered_content(dialog);
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    if (dialog.registered_page >= dialog.registered_pages.size())
+        return;
+    const RegisteredPage& page = dialog.registered_pages[dialog.registered_page];
+    kit::RowsState state;
+    state.name_prefix = std::string(kNamePrefix) + "." + page.id;
+    state.hovered = dialog.hovered;
+    state.pressed = dialog.pressed;
+    state.focused = dialog.focused;
+    state.group = layout::section_group;
+    state.clip = sized.view_clip;
+    kit::DisplayList rows;
+    kit::add_rows(rows, content.placed, state);
+    for (kit::Item& added : rows.items)
+        building.list.items.push_back(std::move(added));
+    building.section_tab = rows.tab_order;
+    for (kit::Control& added : rows.controls) {
+        const SourceRect control = added.rect;
+        added.rect = {sized.content_left, control.y, sized.content_width, control.height};
+        added.clip = {control.x, sized.view.y, control.width, sized.view.height};
+        building.rows.push_back(std::move(added));
+    }
 }
 
 /// Adds a mod's badge: its picture, the OA mark for No Mod, or a blank
@@ -915,8 +1022,15 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
 void add_section(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
     const layout::Sizes& sized = layout::sizes_of(dialog);
-    item(list, kit::Role::heading, sized.heading, {}).look =
-        kit::HeadingLook{std::string(layout::shown_text(layout::page_heading(dialog.page)))};
+    const std::string heading =
+        dialog.page == Page::registered
+            ? registered_heading(dialog)
+            : std::string(layout::shown_text(layout::page_heading(dialog.page)));
+    item(list, kit::Role::heading, sized.heading, {}).look = kit::HeadingLook{heading};
+    if (dialog.page == Page::registered) {
+        add_registered_rows(building, dialog);
+        return;
+    }
     if (layout::mods_page(dialog)) {
         add_mods(building, dialog, open);
         return;
@@ -1211,7 +1325,10 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     fill(building.list, whole, kit::colour::panel, {});
     item(building.list, kit::Role::header, {0, 0, sized.dialog_width, header_rule_row + 1}, {})
         .look = dialog_header(dialog);
-    add_nav(building, dialog);
+    if (registered_nav(dialog))
+        add_registered_nav(building, dialog);
+    else
+        add_nav(building, dialog);
     const ScrolledRows open = open_rows(dialog);
     add_section(building, dialog, open);
     item(

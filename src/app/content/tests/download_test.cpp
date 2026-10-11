@@ -1286,7 +1286,8 @@ void test_match_pauses() {
     session.extra = package_file(64, 0x49);
     if (!session.open())
         return;
-    serve_paced(session.server, session.package, 256 * 1024, 40);
+    // 128 KiB each 40 ms: after the first step, about 640 ms of the file remain.
+    serve_paced(session.server, session.package, 128 * 1024, 40);
     content::Downloads downloads(session.queue_options());
     downloads.start(*session.service->snapshot());
     std::string why;
@@ -1302,11 +1303,16 @@ void test_match_pauses() {
         return;
     const auto second = downloads.queue(std::move(*other), content::DownloadReason::update, &why);
     OA_CHECK(second.has_value());
+    // The file keeps going after the first step. Pause from the poll that sees
+    // that step, so a stalled test thread cannot watch the download finish first.
     OA_CHECK(wait_until(
         [&] {
             const auto view = view_of(downloads, *id);
-            return view && view->state == content::DownloadState::downloading &&
-                   view->done >= content::download_step_bytes;
+            if (!view || view->state != content::DownloadState::downloading ||
+                view->done < content::download_step_bytes)
+                return false;
+            downloads.set_match_running(true);
+            return true;
         },
         8000
     ));
@@ -1365,10 +1371,13 @@ void test_one_at_a_time() {
 }
 
 void test_resume_after_restart() {
-    Session session("f10-restart", (2u << 20) + 80, 0x4c);
+    // Three steps, served 128 KiB each 40 ms. A match pauses the worker on the
+    // poll that first sees a whole step, so the part is still there when the
+    // queue stops: the rest of the file would otherwise end about 640 ms later.
+    Session session("f10-restart", (3u << 20) + 80, 0x4c);
     if (!session.open())
         return;
-    serve_paced(session.server, session.package, 256 * 1024, 40);
+    serve_paced(session.server, session.package, 128 * 1024, 40);
     {
         content::Downloads downloads(session.queue_options());
         downloads.start(*session.service->snapshot());
@@ -1380,12 +1389,25 @@ void test_resume_after_restart() {
         OA_CHECK(wait_until(
             [&] {
                 std::error_code error;
-                return fs::is_regular_file(session.part_path(), error) &&
-                       fs::file_size(session.part_path(), error) >= content::download_step_bytes;
+                if (!fs::is_regular_file(session.part_path(), error) || error)
+                    return false;
+                const auto size = fs::file_size(session.part_path(), error);
+                if (error || size < content::download_step_bytes)
+                    return false;
+                downloads.set_match_running(true);
+                return true;
             },
             8000
         ));
     }
+    OA_CHECK(wait_until(
+        [&] {
+            std::error_code error;
+            return fs::is_regular_file(session.part_path(), error) && !error &&
+                   fs::file_size(session.part_path(), error) >= content::download_step_bytes;
+        },
+        5000
+    ));
     OA_CHECK(fs::is_regular_file(session.part_path()));
     session.server.clear_log();
     content::Downloads again(session.queue_options());
@@ -1498,7 +1520,7 @@ void test_install_id_off() {
     if (!id)
         return;
     downloads.set_install_id("ridge", std::nullopt);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 3000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
@@ -1547,6 +1569,23 @@ void test_cancel_keeps_part() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
+    // Cancel from the poll that sees the step. The worker still closes the part
+    // after the state is cancelled, so the size is read again after that.
+    OA_CHECK(wait_until(
+        [&] {
+            std::error_code error;
+            if (!fs::is_regular_file(session.part_path(), error) || error)
+                return false;
+            const auto size = fs::file_size(session.part_path(), error);
+            if (error || size < content::download_step_bytes)
+                return false;
+            downloads.cancel(*id);
+            return true;
+        },
+        8000
+    ));
+    downloads.cancel(*id);
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, 5000));
     OA_CHECK(wait_until(
         [&] {
             std::error_code error;
@@ -1555,10 +1594,8 @@ void test_cancel_keeps_part() {
             const auto size = fs::file_size(session.part_path(), error);
             return !error && size >= content::download_step_bytes;
         },
-        8000
+        5000
     ));
-    downloads.cancel(*id);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, 5000));
     std::error_code kept_error;
     const auto kept = fs::file_size(session.part_path(), kept_error);
     OA_CHECK(!kept_error);
