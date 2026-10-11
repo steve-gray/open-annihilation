@@ -271,6 +271,7 @@ void check_game_files_options(Options& options) {
         {options.check_mod_install, "--check-mod-install"},
         {options.check_language_install, "--check-language-install"},
         {options.check_challenge, "--check-challenge"},
+        {options.check_registries, "--check-registries"},
         {options.check_library, "--check-library"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
@@ -528,6 +529,7 @@ void check_director_options(Options& options) {
         {options.check_mod_install, "--check-mod-install"},
         {options.check_language_install, "--check-language-install"},
         {options.check_challenge, "--check-challenge"},
+        {options.check_registries, "--check-registries"},
         {options.check_library, "--check-library"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
@@ -597,6 +599,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_mod_install, "--check-mod-install"},
             {options.check_language_install, "--check-language-install"},
             {options.check_challenge, "--check-challenge"},
+            {options.check_registries, "--check-registries"},
             {options.check_library, "--check-library"},
             {options.check_renderer_ladder, "--check-renderer-ladder"},
         };
@@ -738,6 +741,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-mod-install", &Options::check_mod_install},
     {"--check-language-install", &Options::check_language_install},
     {"--check-challenge", &Options::check_challenge},
+    {"--check-registries", &Options::check_registries},
     {"--check-library", &Options::check_library},
     {"--check-renderer-ladder", &Options::check_renderer_ladder},
     {"--check-briefing-narration", &Options::check_briefing_narration},
@@ -1230,6 +1234,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
                    "[--check-mod-warning] "
                    "[--check-mod-install] [--check-language-install] [--check-challenge] "
+                   "[--check-registries] "
                    "[--check-library] "
                    "[--check-renderer-ladder [--render-fault POINT[@FRAME]]] "
                    "[--check-briefing-narration] [--check-director-view] "
@@ -1396,14 +1401,14 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         result.check_scroll_bars || result.check_engine_settings || result.check_registered_kit ||
         result.check_user_folder || result.check_mod_switch || result.check_mod_warning ||
         result.check_mod_install || result.check_language_install || result.check_challenge ||
-        result.check_library || result.check_renderer_ladder || result.check_match_orders ||
-        result.check_factory_orders || result.check_unit_speech || result.check_download_builds ||
-        result.check_stockpile_builds || result.check_unit_page_memory ||
-        result.check_side_column || result.check_match_bars || !result.check_unit_pages.empty() ||
-        result.check_kill_board || !result.check_unit_language.empty() ||
-        result.check_language_switch || result.check_language_registry ||
-        result.check_language_notice || result.check_patrol_reclaim ||
-        result.check_reclaim_cursor || result.check_build_preview ||
+        result.check_registries || result.check_library || result.check_renderer_ladder ||
+        result.check_match_orders || result.check_factory_orders || result.check_unit_speech ||
+        result.check_download_builds || result.check_stockpile_builds ||
+        result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||
+        !result.check_unit_pages.empty() || result.check_kill_board ||
+        !result.check_unit_language.empty() || result.check_language_switch ||
+        result.check_language_registry || result.check_language_notice ||
+        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
         result.check_pointer_interfaces || result.check_megamap_clicks ||
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||

@@ -591,6 +591,11 @@ struct Options {
     // Shows a made-up download check over the main menu, opens its page,
     // retries it and cancels it, and keeps it hidden during a skirmish.
     bool check_challenge = false;
+    // Lists, switches and removes an added registry in Settings › Downloads,
+    // refuses an https address without asking the content service, and opens
+    // an .oareg file the run posts. It writes its own registry list under
+    // --user-folder before the content service starts.
+    bool check_registries = false;
     // Opens the Library from the main menu's OA button over a feed of
     // made-up packages, wears the button's dot while updates wait, carries
     // out the Library's actions, opens Settings over it and it over

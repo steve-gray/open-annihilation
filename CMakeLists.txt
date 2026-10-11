@@ -939,6 +939,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_mod_warning.cpp
   src/app/runtime_presence_card.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_challenge.cpp
+  src/app/runtime_registries.cpp
   src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
   src/app/pack_map_source.cpp
@@ -996,6 +997,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
+  src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
@@ -1654,6 +1656,21 @@ if(OA_BUILD_PLATFORM)
         --user-folder "${oa_challenge_dir}/Open Annihilation")
       set_tests_properties(native-challenge PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_challenge_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # Settings › Downloads › Registries over a registry list the check
+      # writes under its player's folder: one added registry switched off and
+      # removed at OK, left alone by Cancel, an https address refused without
+      # a check, and an .oareg file whose catalogue at 127.0.0.1:1 cannot be
+      # reached. The data folder is the check's own.
+      set(oa_registries_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/registries")
+      file(MAKE_DIRECTORY "${oa_registries_dir}")
+      add_test(NAME native-registries COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-registries
+        --preferences-file "${oa_registries_dir}/registries.conf"
+        --user-folder "${oa_registries_dir}/Open Annihilation"
+        --data-dir "${oa_registries_dir}/data")
+      set_tests_properties(native-registries PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_registries_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # Each renderer failure the game handles while it runs, forced on the
       # renderer the walk of SDL's render drivers makes, which on the dummy

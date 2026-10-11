@@ -4308,6 +4308,66 @@ class Runtime final : public menu::Host,
     /// (--check-challenge).
     void check_challenge();
 
+    /// The Add registry window as a screen of the OA layer
+    /// (runtime_registries.cpp).
+    struct AddRegistryScreen;
+
+    /// Opens the Add registry window over Settings or the main menu, to add a
+    /// registry by its address: ADD REGISTRY… in Settings › Downloads, and a
+    /// caller with an address, whose check starts at once. Nothing opens
+    /// while the window already shows.
+    ///
+    /// @param url the address to check at once; none opens the window empty
+    void open_add_registry(std::optional<std::string> url);
+
+    /// Opens the Add registry window for a mirror of a registry the player
+    /// added (ADD MIRROR…). Nothing opens for a registry that is built in or
+    /// not in effect.
+    ///
+    /// @param registry_id the registry's id
+    void open_add_mirror(std::string_view registry_id);
+
+    /// Takes the next .oareg file the game was opened with and opens the Add
+    /// registry window filled in from it: one at a time, on the settled main
+    /// menu, with no OA screen that takes every input showing and no game
+    /// running. A run nobody watches leaves the files waiting, unless
+    /// --check-registries asks for them. Called once a frame beside
+    /// tell_mod_installs.
+    void take_registry_files();
+
+    /// Gives the settings dialog the Registries part's registries, from the
+    /// registries in effect.
+    ///
+    /// @param[in,out] dialog the dialog
+    /// @param opening the dialog has just opened: the note says why the last
+    ///     OK could not change a registry, once; otherwise the note it shows stays
+    void give_settings_registries(oa::ui::engine_settings::Dialog& dialog, bool opening);
+
+    /// Makes the changes OK asks of the registries through the content
+    /// service. A refused change is logged, and the Registries part's note
+    /// says why the next time it opens.
+    ///
+    /// @param changes the changes (oa::ui::engine_settings::registry_changes)
+    void
+    apply_registry_changes(const std::vector<oa::ui::engine_settings::RegistryChange>& changes);
+
+    /// Counts the checks the Add registry windows have asked the content
+    /// service for in this process, which --check-registries reads.
+    ///
+    /// @return the checks asked
+    [[nodiscard]] uint64_t registry_checks_asked() const noexcept;
+
+    /// Writes the registries check's own registry list and descriptor under
+    /// the player's folder before the content service starts
+    /// (--check-registries).
+    void prepare_registries_check();
+
+    /// Lists, switches and removes an added registry in Settings › Downloads,
+    /// refuses an https address without asking the content service, and opens
+    /// an .oareg file the run posts, which is refused once its catalogue
+    /// cannot be reached (--check-registries).
+    void check_registries();
+
     /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 
