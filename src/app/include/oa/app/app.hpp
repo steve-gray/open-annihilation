@@ -462,6 +462,9 @@ struct Options {
     // checks English comes first, the built-in languages follow in their
     // order, and the pseudo pack is installed and shown.
     bool check_language_registry = false;
+    // Shows the notice for a language that is only available, over the main
+    // menu, and checks Use English records the answer.
+    bool check_language_notice = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;

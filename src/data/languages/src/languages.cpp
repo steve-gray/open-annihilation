@@ -19,6 +19,7 @@ namespace oa::data::languages {
 namespace {
 
 #include "registry.inc"
+#include "pack_notices.inc"
 
 static_assert(!kLanguages.empty() && kLanguages[0].tag == "en", "English comes first");
 
@@ -468,6 +469,13 @@ const Language& chosen_language(std::string_view choice, const Language& system)
     if (const Language* language = find_by_tag(choice); language != nullptr && playable(*language))
         return *language;
     return system;
+}
+
+const PackNotice* pack_notice(std::string_view tag) noexcept {
+    for (const PackNoticeRow& row : kPackNotices)
+        if (same_tag(row.tag, tag))
+            return &row.notice;
+    return nullptr;
 }
 
 } // namespace oa::data::languages
