@@ -198,6 +198,21 @@ PresenceFacts presence_facts(const Runtime& runtime) {
             facts.mod_origin = mod_origin(service, folders.front(), *facts.mod);
     }
 
+    // Whether this machine can fetch content: a downloads folder and a
+    // registry it may download from. Asking for the service starts nothing:
+    // it has started with the runtime when content_ is set.
+    if (runtime.content_ && !runtime.content_downloads_folder().empty()) {
+        const auto snapshot = const_cast<Runtime&>(runtime).content_service().snapshot();
+        facts.fetches_content =
+            snapshot != nullptr && std::any_of(
+                                       snapshot->registries.begin(),
+                                       snapshot->registries.end(),
+                                       [&runtime](const content::RegistryView& view) {
+                                           return runtime.registry_fetches(view);
+                                       }
+                                   );
+    }
+
     const auto* state = runtime.engine_settings_ ? runtime.engine_settings_.get() : nullptr;
     if (state != nullptr) {
         const auto hacks = profiles::standard_hacks();

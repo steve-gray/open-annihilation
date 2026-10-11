@@ -6,13 +6,21 @@
 #include "oa/app/pack_map_source.hpp"
 
 #include "map_packs.hpp"
+#include "oa/app/content/service.hpp"
+#include "oa/app/package_install/origin.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/netgame/presence.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <exception>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace oa::app {
 
@@ -73,6 +81,47 @@ oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime) {
     source.release = [](void* context) { static_cast<Runtime*>(context)->release_pack_map(); };
     source.base_count = &Runtime::bound_base_count;
     source.base_at = &Runtime::bound_base_at;
+    // The pack of the map whose files are mounted: on the host, the selected
+    // map's, which the presence record names. Only a pack installed from a
+    // registry's catalogue is named: its key, the release and SHA-256 its
+    // folder's origin record gives, the registry, the address the registry's
+    // descriptor was read from, and the pack's name and version.
+    source.pack = [](void* context, oa::netgame::PresenceMapPack* out) {
+        auto& runtime = *static_cast<Runtime*>(context);
+        const PackMap* map = runtime.mounted_pack_map();
+        if (out == nullptr || map == nullptr)
+            return false;
+        std::optional<package_install::Origin> origin;
+        try {
+            origin = package_install::read_origin(map->folder);
+        } catch (const std::exception&) {
+            // A record that cannot be read is no record.
+        }
+        if (!origin || origin->kind != package_install::OriginKind::catalogue || !origin->sha256 ||
+            origin->release < 1 || origin->release > std::numeric_limits<uint32_t>::max())
+            return false;
+        oa::netgame::PresenceMapPack pack;
+        pack.key = map->id;
+        pack.release = static_cast<uint32_t>(origin->release);
+        pack.sha256 = *origin->sha256;
+        pack.registry = origin->registry;
+        // Empty for a built-in registry, one added from a file, and one no
+        // longer in effect.
+        if (runtime.content_) {
+            const std::shared_ptr<const content::Snapshot> snapshot =
+                runtime.content_service().snapshot();
+            if (snapshot != nullptr)
+                for (const content::RegistryView& view : snapshot->registries)
+                    if (view.registry.descriptor.id == pack.registry) {
+                        pack.descriptor_url = view.registry.url;
+                        break;
+                    }
+        }
+        pack.name = map->pack_name;
+        pack.version = map->pack_version;
+        *out = std::move(pack);
+        return true;
+    };
     return source;
 }
 
