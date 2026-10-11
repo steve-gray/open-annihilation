@@ -3,7 +3,8 @@
 Open Annihilation adds settings of its own to the game: which mod to play,
 a few controls, the unit limit, the language and fonts of the game's text,
 graphics and the size of Open Annihilation's own screens, touch and gamepad
-controls, downloads and the registries they come from, and Developer Mode.
+controls, downloads, and Developer Mode. The registries packages come
+from are a tab of the Library.
 They live in one dialog, apart from the game's own options, which stay in
 3.1c's Options menu. This page shows each section of the dialog and says
 what every setting does, its default, when it takes effect and when you
@@ -642,12 +643,13 @@ them.
 
 ![The top of the Downloads section: Check for content updates at Automatically, Install ID On with its hint, the ID's row reading "Made at your first download" with a RESET button, and Downloaded files.](images/settings/downloads-1.png)
 
-![The rest of the Downloads section, scrolled to its end: Install ID On, "Made at your first download", Downloaded files reading "Nothing kept" with an EMPTY button, and Registries reading "Core Prime only" with a MANAGE… button.](images/settings/downloads-2.png)
+![The Downloads section: Check for content updates at Automatically, Install ID On, "Made at your first download" with RESET, Downloaded files reading "Nothing kept" with EMPTY, and REGISTRIES IN THE LIBRARY… with the line "Registries are in the Library."](images/settings/downloads-2.png)
 
 Downloads says when Open Annihilation looks for new content, holds the
-install ID a registry asks for, keeps the files downloads leave behind, and
-lists the registries content comes from. [Downloads and privacy](downloads.md)
-explains each of them, and what a download sends and records.
+install ID a registry asks for, and keeps the files downloads leave behind.
+The registries themselves are in the Library.
+[Downloads and privacy](downloads.md) explains each of them, and what a
+download sends and records.
 
 - **Check for content updates**, Automatically, Only when I open the
   Library or Never, Automatically by default: when OA fetches the
@@ -671,24 +673,15 @@ explains each of them, and what a download sends and records.
 - **Downloaded files**: how much the download folder keeps for resuming and
   repairs, or "Nothing kept". **EMPTY** removes those files at once; it is
   greyed while nothing is kept, or while a download is using them.
-- **Registries**: which registries are on, "Core Prime only", "2 on of 3"
-  or "None", and **MANAGE…**, which shows the Registries part:
+- **REGISTRIES IN THE LIBRARY…**, on the main menu only: opens the Library
+  on its Registries tab, where every registry is listed, switched, removed
+  or added. The line under it says "Registries are in the Library." During
+  a game the row is not listed. [The Registries tab](library.md#the-registries-tab)
+  and [Registries](downloads.md#registries) explain adding one, mirrors and
+  what "not reviewed" means.
 
-![The Registries part of the Downloads section: the heading DOWNLOADS · REGISTRIES beside a ‹ DOWNLOADS link, the Core Prime row with its CP mark, a Built in label, "1 package · checked 4 min ago" and its switch On, a note that content from registries other than Core Prime isn't reviewed by the OA team, and ADD REGISTRY… in the footer.](images/settings/downloads-registries.png)
-
-The Registries part lists Core Prime's registry, which is built in and can
-be turned off but not removed, then each registry you added, with its
-address, how many packages it lists and "not reviewed". Each has a switch;
-an added registry also has **REMOVE** ("Removed when you press OK", with
-**UNDO**) and **ADD MIRROR…**. **ADD REGISTRY…** takes Restore defaults'
-place in the footer. The switches and removals take effect at OK, and
-Cancel puts them back; a registry or mirror you add is added at once.
-**‹ DOWNLOADS** goes back. [Registries](downloads.md#registries) explains
-adding one, mirrors and what "not reviewed" means.
-
-During a game RESET and EMPTY are locked ("Locked during a game."), and so
-are ADD REGISTRY… and ADD MIRROR… ("Choose from the main menu."); the rest
-can still change.
+During a game RESET and EMPTY are locked ("Locked during a game."). The
+check and the install-ID switch can still change.
 
 ## Developer
 

@@ -49,18 +49,20 @@ a key at a time: installing the same key from another registry replaces
 the copy you have, and a mod from a registry you added, or any map pack,
 asks first ([which downloads ask first](library.md#which-downloads-ask-first)).
 
-Settings › Downloads lists the registries under **MANAGE…**
-([picture](settings.md#downloads)).
+The Library's **Registries** tab lists them
+([the Registries tab](library.md#the-registries-tab)). Settings ›
+Downloads, on the main menu, has **REGISTRIES IN THE LIBRARY…**, which
+opens the Library on that tab ([picture](settings.md#downloads)).
 
 ### Core Prime's registry
 
 Core Prime's registry is built into Open Annihilation. Its descriptor ships
 in the `registries` folder beside the game, and the key that signs its
 catalogue is compiled into the engine, so no one else can sign a list OA
-takes for Core Prime's. Its row in the Registries part says "Built in", how
-many packages it lists and when its list was last checked ("1 package ·
-checked 4 min ago"). It can be turned off, but not removed, so it is always
-one switch away. Its packages are published by the OA team.
+takes for Core Prime's. Its row on the Library's Registries tab says
+"Built in", how many packages it lists and when its list was last checked
+("1 package · checked 4 min ago"). It can be turned off, but not removed,
+so it is always one switch away. Its packages are published by the OA team.
 
 A download from Core Prime's registry installs when you press its button,
 GET, UPDATE, UPDATE ALL, a language in Settings › Language or the
@@ -73,8 +75,8 @@ Prime ([which downloads ask first](library.md#which-downloads-ask-first)).
 
 OA suggests no registry: you add each one yourself. There are three ways:
 
-- **By its address.** In Settings › Downloads, press **MANAGE…**, then
-  **ADD REGISTRY…** at the foot of the dialog, type the address of the
+- **By its address.** On the Library's Registries tab, press
+  **ADD REGISTRY…** at the left of the footer, type the address of the
   registry's descriptor (`http://…`, for example
   `http://maps.example.org/oa/registry.yaml`) and press **CHECK**. Use the
   `http://` address: an `https://` one is refused ("Use the registry's
@@ -126,7 +128,7 @@ The OA team publishes the packages in Core Prime's registry. Packages from
 a registry you added are marked "Not reviewed by the OA team" in the
 Library's details ("*registry* · Not reviewed by the OA team"), "not
 reviewed" on the registry's row and in Settings › Language, and the
-Registries part says under its list: "Content from registries other than
+Registries tab says under its list: "Content from registries other than
 Core Prime isn't reviewed by the OA team. OA still checks every package
 before using it."
 
@@ -139,14 +141,13 @@ replaces a copy you did not get from that registry
 
 ### Turning a registry off, and removing it
 
-In the Registries part each registry has a switch. Off, its packages leave
-the Library and nothing downloads from it; what you installed from it keeps
-working. A registry you added also has **REMOVE**, which marks it
-("Removed when you press OK", with **UNDO** to take it back): OK forgets
-the registry and the list OA kept of it, and leaves what you installed
-from it in place. The switches and removals take effect when you press OK,
-and Cancel puts them back. Core Prime's registry can be turned off, never
-removed. Turning a registry on fetches its list at once.
+On the Library's Registries tab each registry has a switch. Off, its
+packages leave the Library at once and nothing downloads from it; what you
+installed from it keeps working. A registry you added also has **REMOVE**,
+which forgets the registry and the list OA kept of it at once, and leaves
+what you installed from it in place. **CLOSE** does not put a switch or a
+removal back. Core Prime's registry can be turned off, never removed.
+Turning a registry on fetches its list at once.
 
 ### Mirrors
 
@@ -181,8 +182,9 @@ and serve one, and how to sign its catalogue.
 ## The Downloads settings
 
 Settings › Downloads ([pictures](settings.md#downloads)) holds when OA
-checks for content, the install ID, the files downloads keep, and the
-registries.
+checks for content, the install ID and the files downloads keep. The
+registries are on the Library's Registries tab. On the main menu,
+**REGISTRIES IN THE LIBRARY…** opens it there.
 
 ### When OA checks for content
 

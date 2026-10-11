@@ -23,6 +23,7 @@ settings and exactly what a download sends and records.
 - [Installing](#installing)
 - [The download queue](#the-download-queue)
 - [Updates](#updates)
+- [The Registries tab](#the-registries-tab)
 - [Which downloads ask first](#which-downloads-ask-first)
 - [The update question](#the-update-question)
 - [Rolling back](#rolling-back)
@@ -88,9 +89,11 @@ updated and played.
 
 ## Tabs and states
 
-The tabs are **Active**, **Mods**, **Maps**, **Languages** and
-**Updates** ("Lang" and "Upd" in the Compact layout). Updates carries the
-number of updates you can install now.
+The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
+and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout).
+Updates carries the number of updates you can install now. Registries
+is last, and it is where registries are added, checked and turned off
+([the Registries tab](#the-registries-tab)).
 
 Each row shows the package's badge (its own picture, or up to three
 letters), its name, its version ("4.8 · rev 4" from its second packaging
@@ -322,6 +325,54 @@ An update shows:
 **UPDATE** and **UPDATE ALL** start updates; OA finds updates by itself, but
 never installs one on its own. A mod that changes its rules is your call,
 mid-campaign above all.
+
+## The Registries tab
+
+**Registries** is the last tab. It lists every registry the packages come
+from, with no search and no filters. Turning one off, or removing one,
+changes the other tabs at once: its packages leave the lists as soon as
+the switch or **REMOVE** is pressed.
+
+Each row shows:
+
+- an avatar, the name's initials in a square: the first letters of its
+  first three words, or of a name of one word its first two letters;
+- the name, and a **Built in** chip when the registry ships with the game;
+- a subtitle. A built-in registry's says how many packages it lists and
+  when its list was last checked ("1 package · checked 4 min ago", or
+  "not checked yet" before the first check). One you added says its
+  address, how many packages and "not reviewed"
+  ("maps.example.org · 31 packages · not reviewed"), then how many mirrors
+  you added (" · 2 mirrors"). When the last check found nothing usable it
+  says "couldn't reach", and "list from *age*" when a list was kept;
+- an Off/On switch.
+
+A registry you added also has **REMOVE** and **ADD MIRROR…** under the
+subtitle. **REMOVE** forgets the registry at once and leaves what you
+installed from it in place. Core Prime's registry can be turned off and
+never removed, and it has no **ADD MIRROR…**: its mirrors come only from
+its own catalogue. Turning a registry on fetches its list at once.
+
+Under the list a note says "Content from registries other than Core Prime
+isn't reviewed by the OA team. OA still checks every package before using
+it.", naming every built-in registry ("Core Prime and North", "Core Prime,
+North and West"), or, when none is built in, "Content from these
+registries isn't reviewed by the OA team. …". When a change is refused,
+the reason stands over the note ("OA could not change the registries:
+…").
+
+**ADD REGISTRY…** sits at the left of the footer, beside **SETTINGS…** and
+**CLOSE**. It opens the same Add registry window as opening an `.oareg`
+file: the address or "From *file*", the fingerprints of the keys, and
+"Not reviewed by the OA team"
+([adding a registry](downloads.md#adding-a-registry)). **CLOSE** leaves a
+switch or a removal as it was stored. During a game **ADD REGISTRY…** and
+**ADD MIRROR…** are locked ("Choose from the main menu."); the switches
+and **REMOVE** stay.
+
+The rows and the note scroll together when they are taller than the
+window. Settings › Downloads, on the main menu, has **REGISTRIES IN THE
+LIBRARY…**, which opens the Library on this tab.
 
 ## Which downloads ask first
 
