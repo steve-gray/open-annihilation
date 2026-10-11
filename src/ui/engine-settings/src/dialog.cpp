@@ -11,6 +11,7 @@
 #include "geometry.hpp"
 #include "language_page.hpp"
 #include "registered.hpp"
+#include "settings_rows.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -1407,6 +1408,10 @@ bool press_held(const Dialog& dialog) noexcept {
 }
 
 } // namespace
+
+std::string_view page_word(Page page) noexcept {
+    return geometry::page_word(page);
+}
 
 std::span<const Page>
 dialog_pages(DialogKind kind, bool touch, bool game_files, bool controller) noexcept {

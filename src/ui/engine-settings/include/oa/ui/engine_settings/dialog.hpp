@@ -135,6 +135,14 @@ enum class DialogKind : uint8_t {
     DialogKind kind, bool touch = false, bool game_files = false, bool controller = false
 ) noexcept;
 
+/// Returns a section's word: its name in kebab case, the same in every
+/// language, as automation names its entry (`oa.settings.nav.<word>`) and a
+/// stage file may name the section ("language", "user-interface").
+///
+/// @param page the section
+/// @return the word
+[[nodiscard]] std::string_view page_word(Page page) noexcept;
+
 /// The settings, as the dialog's rows show them.
 enum class Setting : uint8_t {
     path_search, ///< Pathfinding cycles: a slider

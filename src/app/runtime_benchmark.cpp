@@ -467,7 +467,13 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                      settings::dialog_pages(settings::DialogKind::engine, touch))
                     if (part.text == rest && part.control == settings::page_control(listed))
                         page = listed;
-            // Older stage files name Language & Text "Language".
+            // A section's word names it in every language ("language"), and
+            // older stage files name Language & Text "Language".
+            if (!page)
+                for (const auto listed :
+                     settings::dialog_pages(settings::DialogKind::engine, touch))
+                    if (rest == settings::page_word(listed))
+                        page = listed;
             if (!page && rest == "Language")
                 page = settings::Page::language;
             if (!page)
