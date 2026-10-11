@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The presence card (presence_card.hpp): its words from a player's presence
-// record.
+// record, the kit's hover card that shows them, its place by the badge and
+// when it opens.
 
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 
 #include "oa/present/game_text.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -242,6 +244,22 @@ PresenceCardLine labelled(std::string label, PresenceCardLine line) {
     return line;
 }
 
+/// Returns a colour token for a line's colour.
+///
+/// @param tone the line's colour
+/// @return the token
+kit::Colour tone_colour(CardTone tone) noexcept {
+    switch (tone) {
+    case CardTone::amber:
+        return kit::colour::lock;
+    case CardTone::lime:
+        return kit::colour::accent;
+    case CardTone::plain:
+        break;
+    }
+    return kit::colour::text;
+}
+
 } // namespace
 
 std::optional<PresenceCard> presence_card(
@@ -331,6 +349,165 @@ std::optional<PresenceCard> presence_card(
             );
     }
     return card;
+}
+
+kit::HoverCardLook presence_card_look(
+    const PresenceCard& card,
+    kit::SizeClass size_class,
+    int32_t window_points_width,
+    const kit::Fonts& fonts
+) {
+    const kit::Metrics& metrics = kit::metrics_of(size_class);
+    int32_t width = presence_card_compact_width;
+    if (size_class == kit::SizeClass::regular)
+        width = presence_card_regular_width;
+    else if (size_class == kit::SizeClass::large)
+        width = presence_card_large_width;
+    width = std::max(std::min(width, window_points_width - 2 * presence_card_edge_gap), int32_t{1});
+
+    kit::HoverCardLook look;
+    look.width = width;
+    look.mark = true;
+    look.title = card.title;
+    look.aside = card.aside;
+    const int32_t room = std::max(width - 2 * metrics.hover_card_padding, int32_t{0});
+    int32_t widest_label = 0;
+    bool labelled_rows = false;
+    for (const PresenceCardLine& line : card.lines) {
+        if (line.label.empty())
+            continue;
+        labelled_rows = true;
+        widest_label =
+            std::max(widest_label, kit::text_width(fonts, kit::FontRole::small, line.label));
+    }
+    const int32_t label_column = labelled_rows ? widest_label + metrics.hover_card_padding : 0;
+    for (const PresenceCardLine& line : card.lines) {
+        const int32_t value_room =
+            std::max(room - (line.label.empty() ? 0 : label_column), int32_t{0});
+        look.rows.push_back(
+            {line.label,
+             kit::cut_to_width(fonts, kit::FontRole::small, line.value, value_room),
+             tone_colour(line.tone)}
+        );
+    }
+    for (const std::string& hack : card.hacks)
+        look.block.push_back(kit::cut_to_width(fonts, kit::FontRole::small, hack, room));
+    if (!card.hacks_more.empty())
+        look.block.push_back(kit::cut_to_width(fonts, kit::FontRole::small, card.hacks_more, room));
+    return look;
+}
+
+kit::Rect presence_card_place(
+    kit::Rect badge, kit::Point size, kit::Rect safe_area, int32_t /*arrow_depth*/
+) {
+    const kit::Rect frame = kit::grown(safe_area, -presence_card_edge_gap);
+    return kit::hover_card_rect(badge, frame, size);
+}
+
+void presence_card_point(kit::HoverCardLook& look, kit::Rect card, kit::Rect badge) noexcept {
+    const int32_t badge_bottom = badge.y + badge.height;
+    bool below = card.y >= badge_bottom;
+    // A card the window pressed over its badge points from the side nearer it.
+    if (!below && card.y + card.height > badge.y)
+        below = 2 * card.y + card.height > 2 * badge.y + badge.height;
+    look.arrow = below ? kit::Side::top : kit::Side::bottom;
+    look.arrow_at = badge.x + badge.width / 2 - card.x;
+}
+
+bool PresenceCardTrigger::pointer(int32_t slot, uint64_t now_ms) noexcept {
+    const int32_t before = open_;
+    const bool moved = slot != resting_;
+    resting_ = slot;
+    if (held_off_ && slot != held_slot_)
+        held_off_ = false;
+    const kit::ControlId hovered =
+        slot != presence_card_no_slot && !held_off_ ? kit::ControlId{slot} : kit::no_control;
+    const bool due = kit::hover_card_due(timer_, hovered, now_ms);
+    if (open_ != presence_card_no_slot) {
+        if (slot == open_ || (slot == presence_card_no_slot && over_card_))
+            pointer_inside_ = true;
+        else if (slot != presence_card_no_slot ? moved : pointer_inside_)
+            drop();
+    }
+    if (open_ == presence_card_no_slot && due)
+        open(slot, Opener::hover);
+    return open_ != before;
+}
+
+bool PresenceCardTrigger::key_info(int32_t focused_slot) noexcept {
+    if (open_ != presence_card_no_slot) {
+        if (focused_slot != presence_card_no_slot && focused_slot != open_)
+            open(focused_slot, Opener::key);
+        else
+            shut();
+        return true;
+    }
+    if (focused_slot == presence_card_no_slot)
+        return false;
+    open(focused_slot, Opener::key);
+    return true;
+}
+
+bool PresenceCardTrigger::key_close() noexcept {
+    if (open_ == presence_card_no_slot)
+        return false;
+    shut();
+    return true;
+}
+
+bool PresenceCardTrigger::tap(int32_t slot) noexcept {
+    if (slot == presence_card_no_slot) {
+        if (open_ != presence_card_no_slot)
+            shut();
+        return false;
+    }
+    if (open_ == slot)
+        shut();
+    else
+        open(slot, Opener::tap);
+    return true;
+}
+
+void PresenceCardTrigger::over_card(bool over) noexcept {
+    over_card_ = over && open_ != presence_card_no_slot;
+    if (over_card_)
+        pointer_inside_ = true;
+}
+
+bool PresenceCardTrigger::focus(int32_t focused_slot) noexcept {
+    if (open_ == presence_card_no_slot || opened_by_ != Opener::key || focused_slot == open_)
+        return false;
+    if (focused_slot != presence_card_no_slot)
+        open(focused_slot, Opener::key);
+    else
+        shut();
+    return true;
+}
+
+void PresenceCardTrigger::close() noexcept {
+    if (open_ != presence_card_no_slot)
+        shut();
+}
+
+void PresenceCardTrigger::open(int32_t slot, Opener by) noexcept {
+    open_ = slot;
+    opened_by_ = by;
+    over_card_ = false;
+    pointer_inside_ = resting_ == slot;
+    held_off_ = false;
+}
+
+void PresenceCardTrigger::drop() noexcept {
+    open_ = presence_card_no_slot;
+    over_card_ = false;
+    pointer_inside_ = false;
+}
+
+void PresenceCardTrigger::shut() noexcept {
+    drop();
+    timer_ = {};
+    held_off_ = resting_ != presence_card_no_slot;
+    held_slot_ = resting_;
 }
 
 } // namespace oa::ui::frontend_multiplayer

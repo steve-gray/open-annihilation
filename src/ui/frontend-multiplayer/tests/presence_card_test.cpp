@@ -5,14 +5,24 @@
 // sample player (Kirby, on Ridge 4.8 rev 3 under a host on rev 4), for a
 // development build, for an OA player whose record has not come and for the
 // host's own card with a map pack in each state, and no card for a player on
-// 3.1c.
+// 3.1c; the kit's hover card that shows it, in a synthetic font; its place
+// by a badge near each edge of the window at Compact, Regular and Large; and
+// when it opens and closes.
+//
+// The synthetic font's glyph for byte b is 2 + b % 4 columns wide, so the
+// widths the cutting tests read are sums of those columns.
 
+#include "oa/formats/fnt.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/netgame/records.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 #include "oa/ui/frontend_multiplayer/lobby_net.hpp"
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
+#include "oa/ui/frontend_renderer.hpp"
+#include "oa/ui/kit/controls.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -31,6 +41,8 @@ namespace {
 
 namespace mp = oa::ui::frontend_multiplayer;
 namespace ng = oa::netgame;
+namespace kit = oa::ui::kit;
+namespace renderer = oa::ui::frontend_renderer;
 
 constexpr uint32_t kHostId = 0x100;
 constexpr uint32_t kGuestId = 0x200;
@@ -467,6 +479,303 @@ void the_words_go_through_the_translation() {
     OA_CHECK(card && card->hacks_more == "· 5 de plus");
 }
 
+/// The synthetic font, for both roles.
+kit::Fonts block_fonts() {
+    renderer::TextFont font;
+    font.font.nominal_height = 8;
+    constexpr uint8_t ink_index = 1;
+    for (int code = 0; code < 256; ++code) {
+        const auto width = static_cast<uint16_t>(2 + code % 4);
+        constexpr uint16_t height = 8;
+        const auto count = static_cast<std::size_t>(width) * height;
+        std::vector<uint8_t> pixels(count, ink_index);
+        std::vector<uint8_t> coverage(count, 1);
+        font.font.glyphs[static_cast<std::size_t>(code)] =
+            oa::formats::fnt::Glyph{width, height, 0, 0, std::move(pixels), std::move(coverage)};
+    }
+    font.ink[ink_index] = static_cast<uint16_t>(renderer::blend_opaque);
+    return {font, font, {}, {}};
+}
+
+const kit::Fonts& fonts() {
+    static const kit::Fonts loaded = block_fonts();
+    return loaded;
+}
+
+// The kit's hover card for the sample: the mark, the title and aside, one
+// row a line with the Rules value in the lock colour, and the hack ids and
+// "· 5 more" as the block.
+void the_look_shows_the_sample() {
+    SampleRoom sample;
+    const auto card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
+    OA_CHECK(card.has_value());
+    if (!card)
+        return;
+    const kit::HoverCardLook look =
+        mp::presence_card_look(*card, kit::SizeClass::compact, 640, fonts());
+    OA_CHECK(look.mark);
+    OA_CHECK(look.title == "KIRBY" && look.aside == "Windows · x64");
+    OA_CHECK(look.width == mp::presence_card_compact_width);
+    OA_CHECK(look.rows.size() == card->lines.size());
+    for (std::size_t index = 0; index < look.rows.size() && index < card->lines.size(); ++index) {
+        OA_CHECK(look.rows[index].label == card->lines[index].label);
+        OA_CHECK(look.rows[index].value == card->lines[index].value);
+        OA_CHECK(
+            look.rows[index].value_colour == (index == 2 ? kit::colour::lock : kit::colour::text)
+        );
+    }
+    OA_CHECK(
+        look.block ==
+        (std::vector<std::string>{
+            sample_game_hacks[0], sample_game_hacks[1], sample_game_hacks[2], "· 5 more"
+        })
+    );
+    OA_CHECK(look.arrow == kit::Side::none);
+    // The size is the kit's.
+    const kit::Point size = kit::hover_card_size(fonts(), look);
+    OA_CHECK(size.x == look.width);
+    OA_CHECK(
+        size.y == 11 * kit::compact_metrics.small_line + 2 * kit::compact_metrics.hover_card_padding
+    );
+
+    // Lime for an installed pack.
+    mp::PresenceCard lime;
+    lime.lines.push_back({"Map", "Archipelago 1.2 ✓ installed", mp::CardTone::lime});
+    const auto lit = mp::presence_card_look(lime, kit::SizeClass::compact, 640, fonts());
+    OA_CHECK(lit.rows.size() == 1 && lit.rows[0].value_colour == kit::colour::accent);
+}
+
+// The width by class, never wider than the window less 16 points.
+void the_width_follows_the_class() {
+    const mp::PresenceCard card{"KIRBY", "", {{"Engine", "Open Annihilation 0.8.0", {}}}, {}, {}};
+    OA_CHECK(mp::presence_card_look(card, kit::SizeClass::compact, 640, fonts()).width == 240);
+    OA_CHECK(mp::presence_card_look(card, kit::SizeClass::regular, 960, fonts()).width == 280);
+    OA_CHECK(mp::presence_card_look(card, kit::SizeClass::large, 1280, fonts()).width == 320);
+    OA_CHECK(mp::presence_card_look(card, kit::SizeClass::compact, 200, fonts()).width == 184);
+    OA_CHECK(mp::presence_card_look(card, kit::SizeClass::large, 300, fonts()).width == 284);
+}
+
+// A value or a block line wider than its room is cut with "..." at a
+// character, through the kit's measure; one that fits is kept whole.
+void a_long_value_is_cut() {
+    const std::string long_name(200, 'w');
+    mp::PresenceCard card;
+    card.lines.push_back({"Mod", long_name + " · rev 3", {}});
+    card.lines.push_back({"Dev mode", "Off", {}});
+    card.hacks.push_back("economy." + long_name);
+    const auto look = mp::presence_card_look(card, kit::SizeClass::compact, 640, fonts());
+    const int32_t padding = kit::compact_metrics.hover_card_padding;
+    const int32_t label_column =
+        kit::text_width(fonts(), kit::FontRole::small, "Dev mode") + padding;
+    const int32_t value_room = look.width - 2 * padding - label_column;
+    OA_CHECK(look.rows.size() == 2 && look.block.size() == 1);
+    if (look.rows.size() != 2 || look.block.size() != 1)
+        return;
+    const std::string& cut = look.rows[0].value;
+    OA_CHECK(cut.size() > 3 && cut.ends_with("..."));
+    OA_CHECK(long_name.starts_with(cut.substr(0, cut.size() - 3)));
+    OA_CHECK(kit::text_width(fonts(), kit::FontRole::small, cut) <= value_room);
+    OA_CHECK(
+        cut == kit::cut_to_width(fonts(), kit::FontRole::small, long_name + " · rev 3", value_room)
+    );
+    OA_CHECK(look.rows[1].value == "Off");
+    const std::string& block = look.block[0];
+    OA_CHECK(block.ends_with("...") && block.starts_with("economy."));
+    OA_CHECK(kit::text_width(fonts(), kit::FontRole::small, block) <= look.width - 2 * padding);
+}
+
+/// One window the card is placed in.
+struct Window {
+    const char* name{};
+    int32_t points_width{};  ///< its width in points: its pixels over the scale
+    int32_t points_height{}; ///< its height in points
+    kit::SizeClass size_class{};
+};
+
+// The card's place by a badge near each edge of the window at Compact
+// (640x480 at 1x), Regular (1920x1080 at 2x) and Large (2560x1440 at 2x):
+// below the badge, above it near the window's foot, always inside the
+// window less 8 points, its arrow from the badge's side at its centre and
+// reaching the badge.
+void the_card_lies_by_its_badge() {
+    SampleRoom sample;
+    const auto card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
+    OA_CHECK(card.has_value());
+    if (!card)
+        return;
+    const int32_t arrow = kit::compact_metrics.hover_card_arrow;
+    for (const Window& window : {
+             Window{"Compact", 640, 480, kit::SizeClass::compact},
+             Window{"Regular", 960, 540, kit::SizeClass::regular},
+             Window{"Large", 1280, 720, kit::SizeClass::large},
+         }) {
+        const kit::Rect safe{0, 0, window.points_width, window.points_height};
+        const kit::Rect frame = kit::grown(safe, -mp::presence_card_edge_gap);
+        kit::HoverCardLook look =
+            mp::presence_card_look(*card, window.size_class, window.points_width, fonts());
+        const kit::Point size = kit::hover_card_size(fonts(), look);
+        constexpr int32_t side = 18;
+        const int32_t right = window.points_width - side - 2;
+        const int32_t foot = window.points_height - side - 2;
+        const int32_t middle_x = window.points_width / 2;
+        const int32_t middle_y = window.points_height / 3;
+
+        const struct {
+            kit::Rect badge;
+            bool below;
+        } badges[] = {
+            {{2, 2, side, side}, true},
+            {{right, 2, side, side}, true},
+            {{2, foot, side, side}, false},
+            {{right, foot, side, side}, false},
+            {{middle_x, middle_y, side, side}, true},
+            {{middle_x, foot, side, side}, false},
+        };
+
+        for (const auto& placed : badges) {
+            const kit::Rect badge = placed.badge;
+            const kit::Rect rect = mp::presence_card_place(badge, size, safe, arrow);
+            mp::presence_card_point(look, rect, badge);
+            const bool inside = kit::wholly_in(rect, frame);
+            if (!inside)
+                std::fprintf(
+                    stderr,
+                    "  %s: the card at (%d, %d) leaves the window\n",
+                    window.name,
+                    rect.x,
+                    rect.y
+                );
+            OA_CHECK(inside);
+            OA_CHECK(rect.width == size.x && rect.height == size.y);
+            if (placed.below) {
+                OA_CHECK(look.arrow == kit::Side::top);
+                OA_CHECK(rect.y - arrow == badge.y + badge.height);
+            } else {
+                OA_CHECK(look.arrow == kit::Side::bottom);
+                OA_CHECK(rect.y + rect.height + arrow == badge.y);
+            }
+            OA_CHECK(look.arrow_at == badge.x + badge.width / 2 - rect.x);
+            // Its left at the badge's, unless the window's edge moves it in.
+            OA_CHECK(
+                rect.x == std::max(std::min(badge.x, frame.x + frame.width - rect.width), frame.x)
+            );
+        }
+    }
+    // Inside the safe area, wherever it lies.
+    const kit::Rect safe{40, 20, 560, 440};
+    const kit::Rect rect = mp::presence_card_place({44, 24, 18, 18}, {240, 144}, safe, arrow);
+    OA_CHECK(kit::wholly_in(rect, kit::grown(safe, -mp::presence_card_edge_gap)));
+}
+
+// The pointer resting on a badge: closed at 399 ms, open at 400 ms; it stays
+// over the badge and the card and closes once over neither.
+void hover_opens_after_the_kits_delay() {
+    mp::PresenceCardTrigger trigger;
+    OA_CHECK(!trigger.pointer(1, 1000));
+    OA_CHECK(!trigger.pointer(1, 1000 + kit::hover_card_delay_ms - 1));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(trigger.pointer(1, 1000 + kit::hover_card_delay_ms));
+    OA_CHECK(trigger.open_slot() == 1);
+    OA_CHECK(!trigger.pointer(1, 2000));
+    // Onto the card, its arrow first, then off it.
+    trigger.over_card(true);
+    OA_CHECK(!trigger.pointer(mp::presence_card_no_slot, 2100));
+    OA_CHECK(trigger.open_slot() == 1);
+    trigger.over_card(false);
+    OA_CHECK(trigger.pointer(mp::presence_card_no_slot, 2200));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    // Straight off the badge closes it too.
+    OA_CHECK(!trigger.pointer(1, 3000));
+    OA_CHECK(trigger.pointer(1, 3400));
+    trigger.over_card(false);
+    OA_CHECK(trigger.pointer(mp::presence_card_no_slot, 3500));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    // A pass over a badge shorter than the wait opens nothing.
+    OA_CHECK(!trigger.pointer(2, 4000));
+    OA_CHECK(!trigger.pointer(mp::presence_card_no_slot, 4300));
+    OA_CHECK(!trigger.pointer(2, 4500));
+    OA_CHECK(!trigger.pointer(2, 4899));
+    OA_CHECK(trigger.pointer(2, 4900));
+}
+
+// Moving to another badge closes the card and opens the other's after its
+// own wait.
+void moving_between_badges_waits_again() {
+    mp::PresenceCardTrigger trigger;
+    (void)trigger.pointer(1, 0);
+    OA_CHECK(trigger.pointer(1, 400));
+    OA_CHECK(trigger.pointer(3, 450));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(!trigger.pointer(3, 849));
+    OA_CHECK(trigger.pointer(3, 850));
+    OA_CHECK(trigger.open_slot() == 3);
+}
+
+// F1 toggles the focused row's card and follows the focus; Escape closes a
+// card and is taken only while one is open. A card closed by a key stays
+// closed while the pointer rests on its badge.
+void the_keys_open_and_close_the_card() {
+    mp::PresenceCardTrigger trigger;
+    OA_CHECK(!trigger.key_info(mp::presence_card_no_slot));
+    OA_CHECK(!trigger.key_close());
+    OA_CHECK(trigger.key_info(2));
+    OA_CHECK(trigger.open_slot() == 2);
+    // The pointer resting elsewhere leaves a card the key opened.
+    OA_CHECK(!trigger.pointer(mp::presence_card_no_slot, 100));
+    OA_CHECK(!trigger.pointer(mp::presence_card_no_slot, 900));
+    OA_CHECK(trigger.open_slot() == 2);
+    OA_CHECK(trigger.key_info(2));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(trigger.key_info(4));
+    OA_CHECK(trigger.key_info(1));
+    OA_CHECK(trigger.open_slot() == 1);
+    OA_CHECK(trigger.focus(3));
+    OA_CHECK(trigger.open_slot() == 3);
+    OA_CHECK(!trigger.focus(3));
+    OA_CHECK(trigger.focus(mp::presence_card_no_slot));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(trigger.key_info(3));
+    OA_CHECK(trigger.key_info(mp::presence_card_no_slot));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(trigger.key_info(3));
+    OA_CHECK(trigger.key_close());
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(!trigger.key_close());
+
+    // A hovered card closed by Escape, with the pointer still on its badge.
+    (void)trigger.pointer(0, 5000);
+    OA_CHECK(trigger.pointer(0, 5400));
+    OA_CHECK(trigger.key_close());
+    OA_CHECK(!trigger.pointer(0, 6000));
+    OA_CHECK(!trigger.pointer(0, 9000));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(!trigger.pointer(mp::presence_card_no_slot, 9100));
+    OA_CHECK(!trigger.pointer(0, 9200));
+    OA_CHECK(trigger.pointer(0, 9600));
+    // Hover moves only by the pointer: the focus leaves it.
+    OA_CHECK(!trigger.focus(4));
+    OA_CHECK(trigger.open_slot() == 0);
+    // An OA screen over the card closes it.
+    trigger.close();
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+}
+
+// A tap on a badge toggles its card and is taken; a tap elsewhere closes it
+// and goes on.
+void taps_toggle_the_card() {
+    mp::PresenceCardTrigger trigger;
+    OA_CHECK(!trigger.tap(mp::presence_card_no_slot));
+    OA_CHECK(trigger.tap(1));
+    OA_CHECK(trigger.open_slot() == 1);
+    OA_CHECK(trigger.tap(1));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+    OA_CHECK(trigger.tap(2));
+    OA_CHECK(trigger.tap(5));
+    OA_CHECK(trigger.open_slot() == 5);
+    OA_CHECK(!trigger.tap(mp::presence_card_no_slot));
+    OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
+}
+
 } // namespace
 
 int main() {
@@ -477,5 +786,13 @@ int main() {
     the_hosts_card_names_its_map_pack();
     a_31c_player_has_no_card();
     the_words_go_through_the_translation();
+    the_look_shows_the_sample();
+    the_width_follows_the_class();
+    a_long_value_is_cut();
+    the_card_lies_by_its_badge();
+    hover_opens_after_the_kits_delay();
+    moving_between_badges_waits_again();
+    the_keys_open_and_close_the_card();
+    taps_toggle_the_card();
     return oa::test::check_exit_status();
 }
