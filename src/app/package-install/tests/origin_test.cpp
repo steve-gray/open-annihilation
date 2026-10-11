@@ -7,7 +7,9 @@
 // catalogue hash that differs refused; the hash phase held to its budget;
 // write_origin replacing a record and refusing a missing folder, a link and
 // a lock that is held; the folder hooks' records; catalogue outcomes kept,
-// capped and taken once, including one a pending change reports.
+// capped and taken once, including one a pending change reports; and an
+// update held for the mod played, named while it waits and put in place on
+// the way out, or settled away whole by recovery after a stop.
 
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
@@ -898,6 +900,133 @@ void test_outcomes(const Scratch& scratch) {
     drain_inbox();
 }
 
+/// Returns the revision a folder's profile gives; -1 when it holds no mod.
+///
+/// @param folder the folder
+/// @return the revision
+int64_t revision_in(const fs::path& folder) {
+    const install::InstalledPackage held = install::oamod::read_installed_mod(folder);
+    return held.kind == install::FolderKind::package ? held.revision : -1;
+}
+
+/// Tells whether a root holds a folder an install keeps while it works.
+///
+/// @param mods the root
+/// @return true when one is there
+bool reserved_in(const fs::path& mods) {
+    const install::FolderNames names = install::folder_names(install::mod_kind());
+    std::error_code error;
+    for (fs::directory_iterator entry{mods, error}, end; !error && entry != end;
+         entry.increment(error)) {
+        const std::string name = entry->path().filename().string();
+        if (name.starts_with(names.reserved) && name != names.lock)
+            return true;
+    }
+    return false;
+}
+
+/// Unpacks a package over the target as the game does for the mod it plays,
+/// and leaves the change waiting: the staged files and the root's hold go
+/// with the pending change.
+///
+/// @param file the package
+/// @param mods the Mods folder
+/// @param origin where it came from
+/// @return the change, its hold taken; its kind null when the unpacking failed
+install::PendingChange
+staged_change(const fs::path& file, const fs::path& mods, const install::Origin& origin) {
+    install::PendingChange pending{};
+    const auto opened = install::open_package(file);
+    OA_CHECK(opened.package.has_value());
+    if (!opened.package)
+        return pending;
+    const auto incoming = install::oamod::incoming_of(*opened.package->profile);
+    const install::InstallPlan plan =
+        install::oamod::plan_install(incoming, install::folder_hooks(install::mod_kind(), mods));
+    OA_CHECK(plan.kind == install::PlanKind::ask_update);
+    install::Unpacking unpacking;
+    install::Problem problem{};
+    if (!unpacking.start(*opened.package, mods, plan.target, plan.installed, origin, problem)) {
+        discard_all(unpacking.discards());
+        return pending;
+    }
+    auto step = oa::formats::zip::StreamStep::more;
+    while (step == oa::formats::zip::StreamStep::more)
+        step = unpacking.step(uint64_t{1} << 20, problem);
+    OA_CHECK(step == oa::formats::zip::StreamStep::done);
+    pending.kind = &install::mod_kind();
+    pending.root = mods;
+    pending.target = plan.target;
+    pending.change = Change::replace;
+    pending.incoming = incoming;
+    pending.replaced = plan.installed;
+    pending.file_name = file.filename().string();
+    pending.origin = origin;
+    pending.file = file;
+    pending.hold = unpacking.take_hold();
+    return pending;
+}
+
+void test_held_change(const Scratch& scratch) {
+    drain_inbox();
+    const fs::path packages = scratch.path() / "held";
+    const fs::path mods = packages / "Mods";
+    const fs::path folder = mods / std::string(target);
+    fs::create_directories(mods);
+    install::ChangeOptions options{};
+    options.first_retry_ms = 0;
+    const fs::path first = write_package(packages, 1);
+    install::Origin origin = catalogue_origin();
+    origin.sha256 = file_hash(first);
+    auto done = install_package(first, mods, Change::install, origin);
+    OA_CHECK(done.result.changed && revision_in(folder) == 1);
+    OA_CHECK(!install::pending_change_target());
+
+    // The update waits, named by its folder, and the folder is as it was.
+    const fs::path second = write_package(packages, 2);
+    install::Origin second_origin = origin;
+    second_origin.release = 28;
+    second_origin.sha256 = file_hash(second);
+    install::PendingChange pending = staged_change(second, mods, second_origin);
+    OA_CHECK(pending.kind != nullptr && pending.hold != nullptr);
+    install::set_pending_change(std::move(pending));
+    OA_CHECK(install::pending_change_waiting());
+    OA_CHECK(install::pending_change_target() == std::string(target));
+    OA_CHECK(revision_in(folder) == 1 && !fs::exists(folder / ".backup"));
+
+    // The way out puts it in place, as main() does once the run has ended
+    // other than for a soft restart: the new version in the folder, the old
+    // one kept, nothing waiting.
+    install::finish_pending_change(options);
+    OA_CHECK(!install::pending_change_waiting());
+    OA_CHECK(!install::pending_change_target());
+    OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 1);
+    const auto outcome = install::take_change_outcome();
+    OA_CHECK(outcome && outcome->result.changed);
+    const auto held_record = install::read_origin(folder);
+    OA_CHECK(held_record && held_record->release == 28);
+    discard_all(install::take_discards());
+    OA_CHECK(!reserved_in(mods));
+
+    // A stop before the change was made: the next start's recovery settles
+    // the staged files away whole, and the folder keeps what it held.
+    const fs::path third = write_package(packages, 3);
+    install::Origin third_origin = origin;
+    third_origin.release = 29;
+    third_origin.sha256 = file_hash(third);
+    {
+        install::PendingChange stopped = staged_change(third, mods, third_origin);
+        OA_CHECK(stopped.kind != nullptr);
+        OA_CHECK(reserved_in(mods));
+    }
+    const install::Recovery recovery = install::recover_changes(install::mod_kind(), mods, options);
+    OA_CHECK(!recovery.skipped);
+    discard_all(recovery.discards);
+    OA_CHECK(revision_in(folder) == 2 && revision_in(folder / ".backup") == 1);
+    OA_CHECK(!reserved_in(mods));
+    drain_inbox();
+}
+
 } // namespace
 
 int main() {
@@ -911,5 +1040,6 @@ int main() {
     test_write_origin(scratch);
     test_hooks(scratch);
     test_outcomes(scratch);
+    test_held_change(scratch);
     return oa::test::check_exit_status();
 }

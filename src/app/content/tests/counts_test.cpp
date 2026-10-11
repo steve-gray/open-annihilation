@@ -25,7 +25,7 @@
 #include <vector>
 
 #ifndef OA_COUNTS_EXAMPLE
-#error OA_COUNTS_EXAMPLE is the counts example's path
+#error "OA_COUNTS_EXAMPLE names the path of the counts example the test reads"
 #endif
 
 namespace {

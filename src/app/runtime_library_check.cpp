@@ -6,8 +6,8 @@
 // always has and opens the Library on Mods, whose CLOSE goes back; with two
 // it wears its dot, says so to automation and opens the Library on Updates.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
-// openers, ROLL BACK asks its question in Settings and PLAY NOW asks for a
-// soft restart. SETTINGS… opens Settings over the Library, Settings ›
+// openers, ROLL BACK asks the Mods page's question over the Library and PLAY
+// NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
 // Language's MORE IN THE LIBRARY… the Library over Settings, and never two
 // of either; the shortcut and the in-match OA button open Settings. At
 // 640x480 and 1920x1080. Then, at 640x480, a stand-in controller: Y focuses
@@ -28,10 +28,12 @@
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/updates.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/looks.hpp"
@@ -899,7 +901,7 @@ void Runtime::check_library() {
         );
 
         // 6. OPEN FOLDER and HOMEPAGE through the recorded openers, ROLL BACK's
-        // question in Settings, and PLAY NOW's soft restart.
+        // question over the Library, and PLAY NOW's soft restart.
         const fs::path ridge = mods / std::string(kFixtureMods[0].folder);
         show_entry("oa.library.row.fixture-core.ridge");
         const std::size_t opened = user_folder_state().opened.size();
@@ -919,33 +921,26 @@ void Runtime::check_library() {
         );
         press_action("roll-back");
         {
-            const settings::Dialog* dialog = engine_settings_dialog();
+            const auto* asked = dynamic_cast<const QuestionScreen*>(oa_layer().top());
             require(
-                dialog != nullptr && top_is("settings") &&
-                    oa_layer().find(library_screen_name) != nullptr,
-                "ROLL BACK did not open Settings over the Library" + on
+                asked != nullptr && oa_layer().find(library_screen_name) != nullptr &&
+                    engine_settings_dialog() == nullptr,
+                "ROLL BACK did not ask its question over the Library" + on
             );
-            const std::string folder = kept_path(ridge);
-            const auto row =
-                std::find(dialog->mod_folders.begin(), dialog->mod_folders.end(), folder);
+            const settings::Prompt& question = asked->question();
             require(
-                dialog->page == settings::Page::mods && row != dialog->mod_folders.end() &&
-                    dialog->switch_question ==
-                        static_cast<int32_t>(row - dialog->mod_folders.begin()) &&
-                    dialog->mod_question == settings::ModQuestion::roll_back,
-                "Settings does not ask Mods' Roll Back Mod question for Ridge's folder" + on
+                question.title == "ROLL BACK MOD" && question.buttons.size() == 2 &&
+                    question.buttons[0].id == "cancel" && question.buttons[1].id == "roll-back" &&
+                    question.marked == 0 && question.paragraphs.size() == 1 &&
+                    question.paragraphs[0].text.starts_with("Roll back Ridge to 4.8 revision 2?"),
+                "ROLL BACK did not ask the Mods page's Roll Back Mod question for Ridge" + on
             );
         }
         tap(SDLK_ESCAPE);
         require(
-            engine_settings_dialog() != nullptr &&
-                engine_settings_dialog()->switch_question == settings::no_question,
-            "Escape did not answer the Roll Back Mod question" + on
-        );
-        tap(SDLK_ESCAPE);
-        require(
-            engine_settings_dialog() == nullptr && top_is(library_screen_name),
-            "closing Settings did not go back to the Library" + on
+            top_is(library_screen_name) && engine_settings_dialog() == nullptr &&
+                package_install::oamod::read_installed_mod(ridge).revision == 3,
+            "CANCEL on the Roll Back question did not go back to the Library unchanged" + on
         );
         const settings::EngineSettings before = engine_settings_state().current;
         press_action("play-now");

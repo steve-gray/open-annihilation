@@ -57,6 +57,7 @@
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/present/game_text.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/paint/painter.hpp"
@@ -6219,6 +6220,41 @@ void a_kept_version_rolls_back_after_a_question() {
     }
 }
 
+void the_roll_back_question_asks_as_a_prompt_in_the_pages_words() {
+    // What the page's question asks of alpha, as a prompt of its own.
+    const settings::Prompt asked =
+        settings::roll_back_prompt("alpha", "0.9 revision 2", "0.9 revision 1", false);
+    CHECK(asked.title == geometry::roll_back_heading_text);
+    CHECK(asked.paragraphs.size() == 1);
+    CHECK(
+        !asked.paragraphs.empty() &&
+        asked.paragraphs[0].text == "Roll back alpha to 0.9 revision 1? 0.9 revision 2 is kept "
+                                    "in its place, and ROLL BACK again brings it back."
+    );
+    // CANCEL, then ROLL BACK, named to automation; CANCEL marked.
+    CHECK(asked.buttons.size() == 2);
+    if (asked.buttons.size() == 2) {
+        CHECK(asked.buttons[0].caption == geometry::no_text && asked.buttons[0].id == "cancel");
+        CHECK(!asked.buttons[0].accent);
+        CHECK(
+            asked.buttons[1].caption == geometry::roll_back_text &&
+            asked.buttons[1].id == "roll-back"
+        );
+        CHECK(asked.buttons[1].accent);
+    }
+    CHECK(asked.cancel_button == 0 && asked.primary_button == 1 && asked.marked == 0);
+    CHECK(settings::prompt_fits(asked));
+    // For the mod the game plays it says the game reloads.
+    const settings::Prompt played =
+        settings::roll_back_prompt("alpha", "0.9 revision 2", "0.9 revision 1", true);
+    CHECK(
+        !played.paragraphs.empty() &&
+        played.paragraphs[0].text ==
+            asked.paragraphs[0].text + " " + std::string(geometry::roll_back_reload_text)
+    );
+    CHECK(settings::prompt_fits(played));
+}
+
 void mods_locks_during_a_game_and_by_the_command_line() {
     const auto fonts = block_fonts();
     const settings::Dialog unlocked = mods_dialog(kModFolders[0]);
@@ -10021,6 +10057,7 @@ int main(int argc, char** argv) {
         choosing_another_mod_asks_before_switching();
         the_keys_answer_the_switch_mod_question();
         a_kept_version_rolls_back_after_a_question();
+        the_roll_back_question_asks_as_a_prompt_in_the_pages_words();
         mods_locks_during_a_game_and_by_the_command_line();
         open_mods_folder_asks_for_the_mods_folder();
         the_notice_wraps_its_text_and_places_its_buttons();

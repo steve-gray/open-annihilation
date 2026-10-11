@@ -4201,8 +4201,20 @@ class Runtime final : public menu::Host,
     /// change that waited did, takes the packages a second start handed over,
     /// and deletes the folders a change dropped, a step a frame. A run nobody
     /// watches leaves the packages waiting, unless --check-mod-install asks
-    /// for them.
+    /// for them. A mod the player chose in the Library also starts while the
+    /// Library shows (catalogue_mod_may_start), and asks only what its
+    /// registry must; its update to the mod played waits until the player
+    /// leaves the mod, with no soft restart.
     void tell_mod_installs();
+
+    /// Tells whether a mod the player chose in the Library may start
+    /// installing now: on the main menu with nothing of Open Annihilation's
+    /// own over it, or with the Library the top screen; never in a match,
+    /// on a loading screen, over a message box or while Settings, a notice
+    /// or a question is on top.
+    ///
+    /// @return true when it may
+    [[nodiscard]] bool catalogue_mod_may_start();
 
     /// Tells whether a folder is what the game plays now, which a kind
     /// decides: a change to it waits for the run to end. A mod folder is the
@@ -4260,12 +4272,15 @@ class Runtime final : public menu::Host,
 
     /// Rolls a folder of the player's own Mods folder back to the version
     /// its .backup keeps, which must be playable: at once, or, for the mod
-    /// played, as the run ends (the Mods page's ROLL BACK). A failure is
-    /// told on the Mods page.
+    /// played, as the run ends, Settings where it is open keeping its
+    /// choices, saving them and closing as SWITCH does (ROLL BACK on the
+    /// Mods page and in the Library). A refusal changes nothing; its prompt
+    /// is kept for the Mods page (ModInstallState::roll_back_refusal).
     ///
-    /// @param dialog the settings dialog, open on Mods
-    /// @return true when the dialog closed
-    bool roll_back_mod_folder(oa::ui::engine_settings::Dialog& dialog);
+    /// @param folder the mod folder
+    /// @param[out] refusal why it was not rolled back, in the player's words
+    /// @return true when it was rolled back, or will be as the run ends
+    bool roll_back_mod_folder(const fs::path& folder, std::string& refusal);
 
     /// Installs made-up mod packages through each of the main menu's
     /// questions, by a dropped file and from the command line, rolls a mod
@@ -4460,15 +4475,26 @@ class Runtime final : public menu::Host,
     /// @return true for a registry that ships with the game
     [[nodiscard]] bool library_registry_built_in(std::string_view registry);
 
-    /// Carries out an entry's ROLL BACK or PLAY NOW. PLAY NOW switches the
-    /// game to the installed mod's folder (switch_to_mod_folder), a refusal
-    /// shown in the status line; ROLL BACK opens Settings over the Library on
-    /// Mods with the Roll Back Mod question asked for its folder.
+    /// Carries out an entry's ROLL BACK, PLAY NOW or UPDATE, or UPDATE ALL.
+    /// ROLL BACK asks the Mods page's Roll Back Mod question over the
+    /// Library, and ROLL BACK on it rolls the folder back
+    /// (roll_back_mod_folder); PLAY NOW switches the game to the installed
+    /// mod's folder (switch_to_mod_folder); a refusal of either shows in the
+    /// status line. UPDATE asks request_update, and UPDATE ALL asks it for
+    /// each update that can be installed, in the order the list shows them.
     ///
-    /// @param action Action::roll_back or Action::play_now; any other does nothing
-    /// @param entry the entry
+    /// @param action Action::roll_back, play_now, update or update_all; any
+    ///     other does nothing
+    /// @param entry the entry; none for UPDATE ALL
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
+
+    /// Queues an entry's update with the download queue: the one place an
+    /// update reaches it. A refusal shows in the status line.
+    ///
+    /// @param entry the entry
+    /// @return true when the update was queued
+    bool request_update(const oa::ui::library::EntryId& entry);
 
     /// Brings the Library up to date once a frame: on the main menu its
     /// worker finds the updates again after a catalogue refresh or an
@@ -4482,6 +4508,16 @@ class Runtime final : public menu::Host,
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_library();
+
+    /// Runs --check-library-install: made-up mod packages posted as the
+    /// download queue posts them, from a built-in registry and two added
+    /// ones, installed while the Library shows, each asking only what its
+    /// registry must; refusals in the Library's queue; ROLL BACK and PLAY
+    /// NOW from the Library; and an update to the mod played held until the
+    /// mod is switched, across soft restarts. Each run is one turn.
+    ///
+    /// Throws std::runtime_error naming the first step that failed.
+    void check_library_install();
 
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
     /// which does not respond until it is closed, then refreshes the section's rows
