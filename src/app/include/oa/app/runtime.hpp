@@ -4259,7 +4259,8 @@ class Runtime final : public menu::Host,
     /// (catalogue_mod_may_start), asks only what its registry must, and its
     /// update to the mod played waits until the player leaves the mod. A run
     /// nobody watches, unless its check asks, leaves the packages waiting but
-    /// a catalogue language pack, and a chosen mod while the Library is on top.
+    /// a catalogue language pack, a chosen mod while the Library is on top,
+    /// and a catalogue map pack while the map browser is on top or GET MAP shows.
     void tell_mod_installs();
 
     /// Tells whether a mod the player chose in the Library may start
@@ -4625,8 +4626,9 @@ class Runtime final : public menu::Host,
     /// SELMAP's MORE MAPS… and the map browser: its size class, scale and
     /// columns, everything inside its window, the installed packs' two maps,
     /// the search, the clashing map greyed with its reason, and Select moving
-    /// SELMAP's selection. Writes each size's frame as map-browser-<w>x<h>.png
-    /// in the working folder.
+    /// SELMAP's selection; then, nobody watching, a catalogue map pack waiting
+    /// with the browser closed and installing with no prompt while it shows.
+    /// Writes each size's frame as map-browser-<w>x<h>.png in the working folder.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_map_browser();
