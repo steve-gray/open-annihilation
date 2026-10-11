@@ -78,8 +78,7 @@ OA suggests no registry: you add each one yourself. There are three ways:
   registry's descriptor (`http://…`, for example
   `http://maps.example.org/oa/registry.yaml`) and press **CHECK**. Use the
   `http://` address: an `https://` one is refused ("Use the registry's
-  http:// address. OA checks every catalogue's signature itself."), because
-  OA checks the catalogue's signature instead.
+  http:// address. OA checks every catalogue's signature itself.").
 - **By opening an `.oareg` file**, a registry's descriptor as a file a
   registry hands out: double-click it, choose Open With and Open
   Annihilation, drag it onto the game's window, or start the game with its
@@ -158,7 +157,8 @@ trusts the signature and the SHA-256, never the host, so a mirror needs no
 trust of its own.
 
 You can add a mirror to a registry you added: **ADD MIRROR…** on its row
-opens the same window as **Mirror of *name***. Type the mirror's address
+opens the window as **Add mirror**, for "Mirror of *name*". Type the
+mirror's address
 and press **CHECK**: OA fetches its catalogue and checks it with the keys
 you already trust for that registry ("Checked against the keys you trust
 for *name*"), and **ADD MIRROR** adds it. The registry's row then says how

@@ -762,6 +762,9 @@ options. The installation guides say where it is
 [Linux](installation/linux.md#where-it-keeps-its-files)), and
 [user preferences](../src/platform/preferences/README.md) lists every key.
 A setting you have never changed is not written, and follows its default.
+The registries you add, and the built-in ones you turn off, are kept apart,
+in `Registries.yaml` in your own Open Annihilation folder
+([where it is all kept](downloads.md#where-it-is-all-kept)).
 To turn Hardware acceleration off for good without starting the game, for
 a graphics driver that stops it, set
 `open-annihilation.hardware-acceleration` to `off` in that file; `basic`
