@@ -26,12 +26,19 @@
 // queuing it, and one that keeps the rules is queued at once; the built-in
 // registry's whose rules change, or cannot be known, are queued at once from
 // both, their rows and Rules facts saying so before; and UPDATE ALL queues
-// the built-in one at once and asks about the added one only.
+// the built-in one at once and asks about the added one only. The fourth is
+// a run nobody watches, on SDL's dummy video driver without the prompts the
+// other runs show: a built-in registry's update waits in the inbox while the
+// Library is closed, then installs with no prompt once the Library shows,
+// the folder it drops deleted; an added registry's copy asks REPLACE MOD
+// over the Library, which waits for its answer, and REPLACE installs it; and
+// a file opened outside the game stays in the inbox.
 
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
+#include "user_folder_state.hpp"
 
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/updates.hpp"
@@ -98,6 +105,10 @@ constexpr std::string_view kEmber = "ember";
 constexpr std::string_view kFlint = "flint";
 /// The most frames a step of the check runs before it gives up.
 constexpr int kMostFrames = 400;
+/// The frames a step runs to show that something waits: nothing comes of it.
+constexpr int kWaitingFrames = 30;
+/// The run of the check that nobody watches, the last: the fourth.
+constexpr uint32_t kUnwatchedRun = 3;
 /// What the download queue says of a package the installer refused, which
 /// the installer's own reason replaces in the Library.
 constexpr std::string_view kQueueRefused = "The package was refused";
@@ -309,7 +320,9 @@ void Runtime::check_library_install() {
     const fs::path ridge = mods / std::string(kRidge);
     const fs::path kept = ridge / std::string(install::backup_folder_name);
     auto& state = mod_install_state();
-    state.check_shows_prompts = true;
+    // Every run but the last shows the prompts although nobody watches it;
+    // the last shows only what a run nobody watches shows.
+    state.check_shows_prompts = options_.restarts < kUnwatchedRun;
 
     // The Library takes the fixture's feed from the first frame on, and the
     // runtime's own back as the check ends.
@@ -794,10 +807,10 @@ void Runtime::check_library_install() {
         // goes is refused in the Library's queue with no question and no
         // prompt, and left as it is; an added registry's asks FOLDER IN USE;
         // with the Library closed, the refusal is told.
-        const fs::path own = mods / std::string(kCinder);
-        fs::create_directories(own, error);
+        const fs::path players_folder = mods / std::string(kCinder);
+        fs::create_directories(players_folder, error);
         {
-            std::ofstream(own / "notes.txt") << "not a mod";
+            std::ofstream(players_folder / "notes.txt") << "not a mod";
         }
         const fs::path cinder = packages / "cinder.oamod";
         write_package(cinder, profile_text(kCinder, "Cinder", "1.0", 1), 1);
@@ -824,8 +837,8 @@ void Runtime::check_library_install() {
             );
         }
         const auto own_folder_unchanged = [&] {
-            return fs::exists(own / "notes.txt") && !fs::exists(own / "oamod.yaml") &&
-                   !fs::exists(mods / "cinder-1.0");
+            return fs::exists(players_folder / "notes.txt") &&
+                   !fs::exists(players_folder / "oamod.yaml") && !fs::exists(mods / "cinder-1.0");
         };
         require(own_folder_unchanged(), "the folder of the player's own was changed");
         post_catalogue(cinder, kAdded, kCinder, "Cinder", 1);
@@ -1043,7 +1056,7 @@ void Runtime::check_library_install() {
         std::cout << "library install check: run 1 held the update to the mod played\n";
         return;
     }
-    default: {
+    case 2: {
         // The update was put in place as the mod was switched, and is told.
         require(playing(mods / std::string(kLattice)), "the run does not play Lattice");
         require(
@@ -1315,9 +1328,141 @@ void Runtime::check_library_install() {
         ++fixture.generation;
         close_the_library();
 
-        // The next start of the check plays No Mod again.
+        // The last run plays No Mod, as the next start of the check does.
         preference_values_.erase(std::string(settings::key::mod_directory));
         preferences_dirty_ = true;
+        request_soft_restart();
+        std::cout << "library install check: run 2 found the held update made and queued the "
+                     "updates\n";
+        return;
+    }
+    default: {
+        // 13. A run nobody watches: SDL's dummy video driver, and none of
+        // the prompts the other runs show. A built-in registry's update to
+        // Ridge waits in the inbox while the Library is closed, and installs
+        // with no prompt once the Library is the top screen, the folder it
+        // drops deleted as on a menu someone watches.
+        require(
+            UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts,
+            "the last run is watched: run the check on SDL's dummy video driver"
+        );
+        settle();
+        require(options_.game_folders.size() <= 1, "the last run plays a mod");
+        require(
+            revision_in(ridge) == 5 && recorded_from(ridge, kBuiltIn, 2) &&
+                revision_in(kept) == 4 && !install::package_files_waiting(),
+            "the last run does not find Ridge's fifth revision with nothing waiting"
+        );
+        const uint32_t prompts_before = state.prompts_shown;
+        post_ridge(kBuiltIn, "1.0", 6, 3);
+        for (int count = 0; count < kWaitingFrames; ++count) {
+            tell_mod_installs();
+            frame();
+        }
+        {
+            const std::optional<install::OpenedPackage> chosen_waiting =
+                install::next_package_file();
+            require(
+                chosen_waiting && chosen_waiting->origin.kind == install::OriginKind::catalogue &&
+                    chosen_waiting->origin.registry == kBuiltIn && revision_in(ridge) == 5 &&
+                    state.stage == ModInstallState::Stage::idle && state.prompt == nullptr &&
+                    state.prompts_shown == prompts_before,
+                "a chosen mod did not wait in the inbox with the Library closed and nobody "
+                "watching"
+            );
+        }
+        list_installed();
+        open_library(library::Tab::mods);
+        require(top_is(library_screen_name), "the Library did not open over the main menu");
+        installs_quietly("check-builtin's update with nobody watching", kBuiltIn, kRidge);
+        require(
+            revision_in(ridge) == 6 && recorded_from(ridge, kBuiltIn, 3) &&
+                revision_in(kept) == 5 && recorded_from(kept, kBuiltIn, 2) &&
+                state.prompts_shown == prompts_before,
+            "check-builtin's update with nobody watching did not keep the fifth revision"
+        );
+        for (int count = 0; count < kMostFrames && state.discarder.busy(); ++count)
+            tell_mod_installs();
+        require(
+            !state.discarder.busy() && !reserved_left(mods),
+            "the update with nobody watching left a folder of its own in Mods"
+        );
+        std::cout << "library install check: nobody watching, a chosen mod waited for the "
+                     "Library, then installed with no prompt\n";
+
+        // 14. An added registry's copy over the built-in registry's asks
+        // REPLACE MOD over the Library with nobody watching. It waits for its
+        // answer, and REPLACE, pressed where automation lists it, installs.
+        post_ridge(kAdded, "1.0", 7, 3);
+        asks_over_library("check-added's release with nobody watching", "REPLACE MOD");
+        for (int count = 0; count < kWaitingFrames; ++count)
+            frame();
+        require(
+            state.prompt != nullptr && oa_layer().top() == state.prompt && titled("REPLACE MOD") &&
+                state.prompts_shown == prompts_before + 1 && revision_in(ridge) == 6,
+            "REPLACE MOD did not wait for its answer with nobody watching"
+        );
+        click_named("oa.prompt.replace");
+        {
+            const std::optional<install::PackageOutcome> outcome =
+                until_outcome("REPLACE with nobody watching");
+            require(
+                outcome && outcome->result == install::OutcomeResult::installed &&
+                    state.prompt == nullptr,
+                "REPLACE on REPLACE MOD with nobody watching did not install check-added's release"
+            );
+            take_outcome(*outcome, kAdded, kRidge);
+        }
+        require(
+            top_is(library_screen_name) && revision_in(ridge) == 7 &&
+                recorded_from(ridge, kAdded, 3) && revision_in(kept) == 6 &&
+                recorded_from(kept, kBuiltIn, 3),
+            "REPLACE with nobody watching did not keep check-builtin's copy as the .backup"
+        );
+        for (int count = 0; count < kMostFrames && state.discarder.busy(); ++count)
+            tell_mod_installs();
+        require(
+            !state.discarder.busy() && !reserved_left(mods),
+            "REPLACE with nobody watching left a folder of its own in Mods"
+        );
+        std::cout << "library install check: nobody watching, REPLACE MOD waited for its "
+                     "answer, and REPLACE installed\n";
+
+        // 15. A file opened outside the game waits in the inbox for a run
+        // someone watches, with the Library open and closed: nothing is read,
+        // asked or installed.
+        const fs::path opened_update = packages / "ridge-1.0-r8.oamod";
+        write_package(opened_update, profile_text(kRidge, "Ridge", "1.0", 8), 8);
+        install::post_package_file(opened_update);
+        const uint32_t prompts_with_file = state.prompts_shown;
+        const auto file_waits = [&](std::string_view where) {
+            for (int count = 0; count < kWaitingFrames; ++count) {
+                tell_mod_installs();
+                frame();
+            }
+            const std::optional<install::OpenedPackage> file_waiting = install::next_package_file();
+            require(
+                file_waiting && file_waiting->origin.kind == install::OriginKind::file &&
+                    file_waiting->file.filename() == opened_update.filename() &&
+                    state.stage == ModInstallState::Stage::idle && state.prompt == nullptr &&
+                    state.prompts_shown == prompts_with_file && revision_in(ridge) == 7,
+                "a file opened outside the game did not wait in the inbox " + std::string(where)
+            );
+        };
+        file_waits("with the Library open");
+        close_the_library();
+        file_waits("on the main menu");
+        {
+            // Taken back out, so the check leaves nothing waiting.
+            const std::optional<install::OpenedPackage> taken = install::take_package_file();
+            install::finish_package_file();
+            require(
+                taken && !install::package_files_waiting(),
+                "the file opened outside the game was not the only package waiting"
+            );
+        }
+        std::cout << "library install check: nobody watching, a file opened outside the game "
+                     "stayed in the inbox\n";
         std::cout << "library install check: passed\n";
         return;
     }

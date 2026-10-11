@@ -608,6 +608,39 @@ runtime goes).
   in a prompt, the entry then offering PLAY NOW; with the Library closed,
   its questions wait in the OA layer's queue and its prompts show as a
   file's do. Catalogue map packs and language packs keep their own rules.
+
+  In a run nobody watches (`UserFolderState::unwatched`: unattended, on CI,
+  or on a video driver that shows no window, such as SDL's dummy driver),
+  such a mod asks and installs by the same rules, but starts only while the
+  Library is the top screen, where whoever drives the run asked for it: a
+  built-in registry's asks nothing, and an added registry's question is
+  pushed over the Library and waits for its answer, which the automation
+  endpoint can press (`oa.prompt.replace`); the folders its changes drop
+  are deleted a step a frame while the Library stays on top. With the
+  Library closed it waits in the inbox. A file opened outside the game and
+  any other package without a catalogue origin still wait for a run
+  someone watches, a catalogue map pack keeps the rule below, and a
+  catalogue language pack still installs. A run nobody watches and nobody
+  drives never shows the Library, the map browser or GET MAP: a package
+  the download queue left unfinished in an earlier run, which it restores
+  at start while the catalogue still offers that release and hands over
+  again once its file is whole, waits in the inbox, its queue item
+  installing, and stays in the saved queue as the game quits, for the next
+  run someone watches or drives.
+
+  A catalogue map pack installs in a run nobody watches as in one someone
+  watches, with no prompt, but only while the player is getting one: while
+  the map browser (`map-browser`) is the OA layer's top screen, as it stays
+  after Download and select, or while GET MAP shows over the battle room
+  (`ModInstallState::get_map_shows`: the battle room shows with no dialog
+  over it, and GET MAP has its line there). A pack that does not fit TA
+  3.1c is refused as in a watched run, the download queue told so, and a
+  pack whose plan asks waits, as it does off the main menu, for the
+  settled main menu of a run someone watches. Off those screens,
+  on the main menu and over SELMAP with the browser closed among them, it
+  waits in the inbox, so a pack an earlier run's queue hands over never
+  installs into a run nobody drives. The folders an install drops are left
+  for a main menu someone watches, or the Library on top of one.
 - **Held changes and the quit path.** A chosen mod's update to the mod
   being played is unpacked and checked as a file's, then held in
   `set_pending_change` with no soft restart; the download queue is told
@@ -626,18 +659,26 @@ runtime goes).
   made-up mod packages with catalogue origins as the hand-off does, the
   Library showing over a feed of three registries (`check-builtin` built
   in, `check-added` and `check-added-2` added), and checks each rule above
-  over three runs: the questions each registry asks or does not, the
+  over four runs: the questions each registry asks or does not, the
   `.backup` and origin records after each, the refusals in the queue and
   told with the Library closed, a file still asking UPDATE MOD, ROLL BACK
   and PLAY NOW from the Library, and an update to the mod played held,
   named by `pending_change_target`. CANCEL on that line drops it, the
-  update is taken again and held, and it is made as the mod is switched. A
-  FIXTURES_SETUP test (`library-install-clean`) clears its folders before
-  each run.
+  update is taken again and held, and it is made as the mod is switched.
+  The fourth run is one nobody watches, on the dummy video driver without
+  the prompts the other runs show: a built-in registry's update waits in
+  the inbox with the Library closed and installs with no prompt once the
+  Library shows, an added registry's copy asks REPLACE MOD over the
+  Library, which waits for its answer until REPLACE installs it, and a file
+  opened outside the game stays in the inbox. A FIXTURES_SETUP test
+  (`library-install-clean`) clears its folders before each run.
 - **Limitations.** A held update is replaced by a ROLL BACK of the mod
   being played, which waits for the run to end in its place; the download
   queue has counted the update installed by then. CANCEL on the held line
-  does not drop that roll back.
+  does not drop that roll back. In a run nobody watches, a file opened
+  outside the game that waits first in the inbox holds back every package
+  behind it, a mod chosen in the Library among them, until a run someone
+  watches takes it.
 
 ## The map browser
 
@@ -697,7 +738,9 @@ hosts them on the OA layer.
   map, it acts as Select. A failure, the installer's refusal among them,
   shows its reason in the footer, and the button comes back. Cancel closes
   the browser and changes nothing; a download under way goes on in the
-  queue, which the Library shows.
+  queue, which the Library shows. In a run nobody watches the pack
+  installs while the browser stays the top screen, and waits in the inbox
+  once it closes ([The Library](#the-library)).
 - **The check.** `native-map-browser` (`--check-map-browser`,
   `runtime_map_browser_check.cpp`) writes the map pack check's two packs
   (`write_map_pack_check_packs`) into its own `--user-folder`, turns every
@@ -711,8 +754,17 @@ hosts them on the OA layer.
   greyed, "New names" in the footer and Select disabled; the search "isle"
   leaving one map; and Select on `check_isle@oa-check-isles` closing the
   browser with SELMAP's selection on it. It writes each size's frame as
-  `map-browser-<w>x<h>.png` in its folder for review. A FIXTURES_SETUP test
-  (`map-browser-clean`) clears its folders before each run.
+  `map-browser-<w>x<h>.png` in its folder for review. The run is one
+  nobody watches, on the dummy video driver with no check showing the
+  installer's prompts, and last it posts the two packs again under ids of
+  their own, as the download queue hands a catalogue's over: the fitting
+  one waits in the inbox, nothing asked or installed, on the main menu and
+  over SELMAP with the browser closed, then installs with no prompt once
+  MORE MAPS… opens the browser, its folder holding the catalogue's origin
+  record and the installed packs listing its map; the clashing one is
+  refused there for New names, with no prompt. A FIXTURES_SETUP test
+  (`map-browser-clean`) clears its folders before each run, and the check
+  removes the packs an earlier run installed as a catalogue's.
 - **Limitations.** The fit of an installed pack map is checked on the main
   thread as its card comes into view, once per pack. A map pack installed
   while SELMAP is open joins its list as Select or Download and select
@@ -2979,7 +3031,10 @@ in place, and how what a stop leaves is settled). The runtime's part:
   of it is told: MOD INSTALLED, MOD UPDATED or MOD NOT INSTALLED, with OPEN
   FOLDER and, where the Mod setting is the player's to change, PLAY NOW
   (`Runtime::switch_to_mod_folder`, the Mods page's own switch). A run
-  nobody watches leaves packages waiting.
+  nobody watches leaves packages waiting, but for a catalogue language
+  pack, a mod chosen in the Library while the Library is the top screen,
+  and a catalogue map pack while the map browser is the top screen or GET
+  MAP shows over the battle room ([The Library](#the-library)).
 - **The mod played.** A replace or reinstall of the folder the game plays,
   once unpacked and checked as the Mods page checks a folder, waits in
   `set_pending_change`, holding the Mods folder's lock, and the run ends
@@ -3024,9 +3079,12 @@ A map pack is a zip archive whose manifest is `oamap.yaml`. It installs into
 and the questions). A file the player opens is asked on the settled main
 menu. A pack from a catalogue installs on any screen except while a match
 loads or runs, and shows no prompt: a question waits for that menu, and a
-refusal is reported to the screen that asked. A file the player opens, and
-a package of another kind, still wait for the menu. Nothing starts while a
-match loads or runs.
+refusal is reported to the screen that asked. In a run nobody watches it
+installs only while the map browser is the top screen or GET MAP shows
+over the battle room, and waits in the inbox otherwise
+([The Library](#the-library)). A file the player opens, and a package of
+another kind, still wait for the menu. Nothing starts while a match loads
+or runs.
 
 Before the pack is put in place it is checked: the manifest, that the pack
 holds the files it lists and nothing else, that those files sit in the
@@ -3941,15 +3999,16 @@ it requires the catalogue's SHA-256 for the pack to be the record's, queues
 that release (`queue_download`, reason `offered-in-lobby`), and, when the
 mounted pack layer is another release of this pack, unmounts it. The queue
 checks the file against that SHA-256 and the installer puts the pack in
-place, replacing another release (kept as `.backup`). Until the queue item
-ends the pack's maps are held (`hold_pack_maps`): `prepare_pack_map`
-refuses them, so no folder is replaced while its layer is mounted. Once
-the installed packs list the map, the battle room's own selection of the
-host's map finds it (`maps_select` lists a pack map the source has gained
-since the list was read, and a pack map mounted again is read again, its
-hashes among it) and the map name stops flashing. Nothing readies the
-player. A download that fails says why on the line; one cancelled leaves
-GET MAP as it was. The log says what happened:
+place, replacing another release (kept as `.backup`); in a run nobody
+watches it does so while GET MAP shows ([The Library](#the-library)).
+Until the queue item ends the pack's maps are held (`hold_pack_maps`):
+`prepare_pack_map` refuses them, so no folder is replaced while its layer
+is mounted. Once the installed packs list the map, the battle room's own
+selection of the host's map finds it (`maps_select` lists a pack map the
+source has gained since the list was read, and a pack map mounted again is
+read again, its hashes among it) and the map name stops flashing. Nothing
+readies the player. A download that fails says why on the line; one
+cancelled leaves GET MAP as it was. The log says what happened:
 
 ```
 open-annihilation: GET MAP: offering to add the registry <registry> for <pack>

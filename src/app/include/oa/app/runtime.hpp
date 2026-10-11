@@ -4254,12 +4254,13 @@ class Runtime final : public menu::Host,
     /// exception: it installs on any screen but a match, with no prompt, and
     /// a plan that asks waits for the settled main menu. Also tells what a
     /// change that waited did, takes the packages a second start handed over,
-    /// and deletes the folders a change dropped, a step a frame. A run nobody
-    /// watches leaves the packages waiting, unless --check-mod-install asks
-    /// for them. A mod the player chose in the Library also starts while the
-    /// Library shows (catalogue_mod_may_start), and asks only what its
-    /// registry must; its update to the mod played waits until the player
-    /// leaves the mod, with no soft restart.
+    /// and deletes the folders a change dropped, a step a frame. A mod the
+    /// player chose in the Library also starts while the Library shows
+    /// (catalogue_mod_may_start), asks only what its registry must, and its
+    /// update to the mod played waits until the player leaves the mod. A run
+    /// nobody watches, unless its check asks, leaves the packages waiting but
+    /// a catalogue language pack, a chosen mod while the Library is on top,
+    /// and a catalogue map pack while the map browser is on top or GET MAP shows.
     void tell_mod_installs();
 
     /// Tells whether a mod the player chose in the Library may start
@@ -4591,10 +4592,10 @@ class Runtime final : public menu::Host,
     /// Runs --check-library-install: made-up mod packages posted as the
     /// download queue posts them, from a built-in registry and two added
     /// ones, installed while the Library shows, each asking only what its
-    /// registry must; refusals in the Library's queue; ROLL BACK and PLAY
-    /// NOW from the Library; and an update to the mod played held until the
-    /// mod is switched, whose CANCEL drops it before it is held again,
-    /// across soft restarts. Each run is one turn.
+    /// registry must, the last run one nobody watches; refusals in the
+    /// Library's queue; ROLL BACK and PLAY NOW from the Library; and an
+    /// update to the mod played held until the mod is switched, whose CANCEL
+    /// drops it before it is held again. Each run is one turn.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();
@@ -4625,8 +4626,9 @@ class Runtime final : public menu::Host,
     /// SELMAP's MORE MAPS… and the map browser: its size class, scale and
     /// columns, everything inside its window, the installed packs' two maps,
     /// the search, the clashing map greyed with its reason, and Select moving
-    /// SELMAP's selection. Writes each size's frame as map-browser-<w>x<h>.png
-    /// in the working folder.
+    /// SELMAP's selection; then, nobody watching, a catalogue map pack waiting
+    /// with the browser closed and installing with no prompt while it shows.
+    /// Writes each size's frame as map-browser-<w>x<h>.png in the working folder.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_map_browser();

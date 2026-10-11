@@ -869,12 +869,21 @@ void Runtime::check_engine_settings_in_menu() {
     // outside reaches the menu; typed text reaches it; the system's text
     // input is on while it shows, and off once it is closed.
     {
-        const auto& exit_at = exit->common;
+        // Looked up again: the menu's widgets may have been read again since
+        // the dialog's check above, while the Library showed over them.
+        const auto* exit_now = widget(menu::resource_name(menu::Button::exit));
+        require(exit_now != nullptr, "the main menu has no Exit button after the Library");
+        const auto exit_at = exit_now->common;
+        require(exit_at.width > 0 && exit_at.height > 0, "the main menu's Exit button has no size");
         const oa::ui::display_layout::Rect over_exit{
             exit_at.x, exit_at.y, exit_at.width, exit_at.height
         };
         auto taken = std::make_shared<CheckScreenSeen>();
         oa_layer().push(std::make_unique<CheckScreen>("check-field", over_exit, true, taken));
+        // A tick lays the screens out and starts the system's text input
+        // again, as each frame does, should the push have come before the
+        // menu's picture had a size.
+        oa_layer().tick();
         require(SDL_TextInputActive(sdl_.window), "the text field did not start text input");
         click({exit_at.x + exit_at.width / 2, exit_at.y + exit_at.height / 2});
         require(

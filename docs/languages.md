@@ -4,7 +4,9 @@ Open Annihilation shows the game in the language the player chooses,
 through the game's own translations: the ones Total Annihilation 3.1c's
 data holds for German, French, Italian and Spanish, and any a mod's data
 holds. Language packs add to them, entry by entry, and bring Simplified
-Chinese. English is the game data's own language.
+Chinese. English is the game data's own language. Every language beyond
+the five 3.1c's data holds is a pack, which the game downloads from a
+registry when you choose it ([language packs](#language-packs)).
 
 ## How the language is chosen
 
@@ -20,7 +22,10 @@ the setting changes:
    show, named in itself. With no language pack installed those are
    English, Deutsch, Español, Français and Italiano, in that
    order. An installed pack adds its language among them, by its own name.
-   A language that is not installed is not offered. It is kept as
+   Under them, headed AVAILABLE TO DOWNLOAD, the list offers each language
+   a registry offers whose pack is not installed, with the pack's size;
+   choosing one downloads the pack and then switches to it
+   ([Settings](settings.md#language)). It is kept as
    `open-annihilation.language`: `system`, or the language's BCP-47 tag
    (`de`).
 3. **The operating system.** System default takes the first of the user's
@@ -31,9 +36,10 @@ the setting changes:
    German. `zh-Hans`, `zh-CN`, `zh-SG`, `zh-MY` and a bare `zh` are
    Simplified Chinese: once that pack is installed they choose it, and
    before then the game shows English, having recognised the locale as
-   wanting that language. Traditional Chinese (`zh-Hant`, `zh-TW`, `zh-HK`,
-   `zh-MO`) is not offered and chooses none, never Simplified. When
-   none is known, English.
+   wanting that language, and offers the pack at start
+   ([below](#choosing-the-language-at-start)). Traditional Chinese
+   (`zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`) is not offered and chooses none,
+   never Simplified. When none is known, English.
 
 A preferences file named with `--preferences-file` starts in English, the
 game's own default, so that a check plays the same on every machine. 3.1c
@@ -42,20 +48,35 @@ the operating system; the engine differs there on purpose.
 
 ## Choosing the language at start
 
-When the language setting names a language that is not installed and is
-only offered as a download, the game shows a notice over the main menu
-once that menu has settled. The same notice shows when the setting is
-System default and the computer's language is one of those, until the
-player answers Use English for it.
+No player is switched to English without being told. When the language
+setting names a language whose pack is not installed, as for a player of
+0.7 who chose Chinese, the game shows a notice over the main menu once that
+menu has settled. The same notice shows when the setting is System default
+and the computer's language is one of those, until the player answers Use
+English for it. It never shows in a game, nor when 3.1c's command line
+names the language.
 
-The title is the language's own name. The text is in that language, where
-the game has the words, and in English. Download asks for the language
-pack and shows how far the download has come. When the pack is installed
-the notice closes and that language is the one the game shows. Use English
-leaves the game in English. When the setting names the language, Use
-English stores English. When the setting is System default, Use English
-remembers that language so the notice does not return. Escape closes the
-notice until the next start.
+The notice is titled Language, with the language's own name large under
+it, then its text in that language, where the game has the words, and in
+English: for Simplified Chinese, "简体中文现在需要单独下载（3.5 MB）。安装完成前，游戏将显示英文。"
+and "Chinese (Simplified) is now a separate download (3.5 MB). Until it
+is installed, the game shows English." Its buttons are **Use English** and
+**下载 · Download**, which has the focus:
+
+- **Download** downloads the pack from the registry that offers it, with no
+  question, and shows how far it has come ("1.6 MB of 3.5 MB", with a bar).
+  When the pack is installed the notice closes and that language is the
+  one the game shows. A download that fails says "下载失败。" and "The
+  download failed.", and the button becomes **重试 · Try again**. When no
+  registry offers the pack, or downloads from it are off, the notice says
+  "现在无法下载。" and "It cannot be downloaded now.", and Download is
+  greyed.
+- **Use English** leaves the game in English. When the setting names the
+  language, Use English stores English. When the setting is System
+  default, Use English remembers that language so the notice does not
+  return.
+- Escape, or B on a controller, closes the notice until the next start; Y
+  presses Download.
 
 The remembered languages are `open-annihilation.language-notice-dismissed`,
 a comma-separated list of tags.
@@ -173,8 +194,9 @@ packaging: {revision: 1, date: 2026-10-10, packager: Ridge}
 the game does not already show adds that language to Settings › Language,
 named in itself, beside the languages the game ships. A pack for a
 language the game already shows adds its text and leaves that language's
-name, word and drawing needs as they are. A language a pack exists for,
-but which is not installed, is not offered until its pack is installed.
+name, word and drawing needs as they are. A language a registry offers,
+whose pack is not installed, is offered under AVAILABLE TO DOWNLOAD, by
+the name, tag and locales the catalogue gives, until its pack arrives.
 `unicode: true` turns Enable Unicode Multiplayer Chat on while the
 language is shown ([Settings](settings.md#language)). A language whose
 text needs the modern fonts turns it on too, with or without its pack,
@@ -215,10 +237,19 @@ version. Quote a requirement that starts with `>`.
 When the pack is the language chosen, including a choice that read as
 System default until the pack was installed, the running game switches to
 it at once. The registry, the interface catalogue, the pack layers and the
-font faces are read again; the game does not ask for a restart. A pack from
-a catalogue asks nothing and shows nothing. It installs while Settings or a
-notice show, and in a run nobody watches, and it does not install while a
-match loads or runs.
+font faces are read again; the game does not ask for a restart. A pack
+downloaded from a registry, Core Prime's or one you added, asks nothing and
+shows nothing. It installs while Settings or a notice show, and in a run
+nobody watches, and it does not install while a match loads or runs.
+
+Language packs are downloaded from inside the game: from Settings ›
+Language's list, from the notice at start, and from the Library's
+Languages tab, which Settings › Language's **MORE IN THE LIBRARY…** opens
+([the Library](library.md)). Each pack and revision is also a release of
+the open-annihilation/languages repository on GitHub, named by the pack's
+tag and revision (`zh-Hans-r2`), whose `.oalang` file installs as above
+when you open it, with no install ID
+([downloads and privacy](downloads.md#language-packs-without-an-install-id)).
 
 The tables are UTF-8 TDF files, each starting with its licence in `//`
 comments. TDF has no escapes, so a value never holds `;`: write the
@@ -291,10 +322,15 @@ data holds in the language's own folder (`bitmaps-<word>`,
 ## Simplified Chinese
 
 Simplified Chinese (`zh-Hans`, the game data's word `Chinese`) is a
-download, `zh-Hans.oalang`, from Settings or the
-open-annihilation/languages releases. It is not in the game. At the first
-start a notice says the pack is not installed yet. The pack brings its
-own font, and its warm-up text is the pack's `warmup.txt`.
+download, `zh-Hans.oalang`, of about 3.5 MB, from Core Prime's registry or
+the open-annihilation/languages releases (`zh-Hans-r1`, and `zh-Hans-r2`,
+which translates 0.8's new screens). It is not in the game. Settings ›
+Language lists it, as 简体中文, under AVAILABLE TO DOWNLOAD, and choosing it
+downloads it; a player who chose it before 0.8, or whose computer is set to
+Chinese, sees the notice at start that offers it
+([choosing the language at start](#choosing-the-language-at-start)). The
+pack brings its own font, and its warm-up text is the pack's
+`warmup.txt`.
 
 Once the pack is installed, the language is drawn only in the modern
 fonts, so choosing it turns Use modern fonts for game text on and keeps
@@ -457,7 +493,7 @@ game data knows it by, the system locales that choose it, the languages
 it falls back to and what drawing it needs.
 
 A language the engine knows a pack exists for, but which is not installed,
-is not offered until that pack is installed.
+is offered only as a download, while a registry offers its pack.
 
 A language whose letters are all in the game's 8-bit code page
 (Windows-1252), as Portuguese's or Dutch's are, needs nothing more. Others
@@ -472,4 +508,4 @@ need drawing the game has in part or not yet:
   characters side by side.
 
 The registry records these needs (`TextNeeds`), and the setting offers only
-the languages this build draws.
+the installed languages this build draws.

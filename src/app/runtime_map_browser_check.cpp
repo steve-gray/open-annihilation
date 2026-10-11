@@ -12,21 +12,33 @@
 // map's card greyed with "New names" in the footer's reason and the primary
 // button disabled; and Select on the fitting map closing the browser with
 // SELMAP's selection on it. Each size's frame is written as
-// map-browser-<w>x<h>.png in the working folder, for review.
+// map-browser-<w>x<h>.png in the working folder, for review. The run is one
+// nobody watches: last, the two packs are posted again under ids of their
+// own, as the download queue hands a catalogue's over, and the fitting one
+// must wait in the inbox with the browser closed and install with no prompt
+// while it is the top screen, the clashing one be refused there.
 
 #include "map_pack_check_packs.hpp"
 #include "map_packs.hpp"
+#include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
+#include "user_folder_state.hpp"
 
 #include "oa/app/content/service.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/app/package_install/inbox.hpp"
 #include "oa/app/package_install/oamap.hpp"
+#include "oa/app/package_install/origin.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/base/sha256.hpp"
+#include "oa/data/map_pack/manifest.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/player_registries.hpp"
 #include "oa/data/registry/trust.hpp"
 #include "oa/formats/png.hpp"
+#include "oa/formats/zip.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
@@ -43,11 +55,13 @@
 #include <fstream>
 #include <ios>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <variant>
 #include <vector>
 
@@ -59,6 +73,7 @@ namespace kit = oa::ui::kit;
 namespace mb = oa::ui::map_browser;
 namespace layout = oa::ui::display_layout;
 namespace registry = oa::data::registry;
+namespace map_pack = oa::data::map_pack;
 
 /// One window the check opens the browser in, and what the OA layer gives
 /// there: the design's table of windows.
@@ -87,6 +102,22 @@ constexpr std::string_view kNewNames = "New names";
 /// The search the check types.
 constexpr std::string_view kSearch = "isle";
 
+/// Frames a package is given to wait before the check looks at the inbox.
+constexpr int32_t kWaitingFrames = 30;
+
+/// The most frames the check waits for what came of a package.
+constexpr int32_t kMostFrames = 600;
+
+/// The registry the check's packages come from, as the download queue's
+/// hand-off names it. No registry of the run has this id.
+constexpr std::string_view kCheckRegistry = "map-browser-check";
+
+/// The packs the check posts as a catalogue's: the map pack check's two
+/// packs under ids of their own, which no folder of Maps holds until the
+/// check installs them.
+constexpr std::string_view kOnlineIsles = "oa-check-isles-online";
+constexpr std::string_view kOnlineClash = "oa-check-clash-online";
+
 /// Stops the check.
 ///
 /// @param ok the step held
@@ -106,6 +137,61 @@ void write_text(const fs::path& file, std::string_view bytes) {
     std::ofstream out(file, std::ios::binary | std::ios::trunc);
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     require(static_cast<bool>(out), "could not write " + path_to_utf8(file));
+}
+
+/// Reads a file whole.
+///
+/// @param file the file
+/// @return its bytes
+std::vector<uint8_t> read_whole(const fs::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    require(static_cast<bool>(in), "could not read " + path_to_utf8(file));
+    const std::vector<uint8_t> bytes{std::istreambuf_iterator<char>{in}, {}};
+    return bytes;
+}
+
+/// Writes one of the map pack check's packs, as its folder holds it, into a
+/// map pack package of another id: its manifest with that id and its name
+/// marked online, then every file its maps list, stored.
+///
+/// @param folder the pack's folder
+/// @param id the package's pack id
+/// @param file the package
+void write_online_pack(const fs::path& folder, std::string_view id, const fs::path& file) {
+    const std::vector<uint8_t> manifest_read =
+        read_whole(folder / std::string(map_pack::manifest_file));
+    map_pack::Manifest manifest;
+    std::vector<map_pack::Problem> problems;
+    require(
+        map_pack::read_manifest(manifest_read, map_pack::ManifestUse::package, manifest, problems),
+        "the manifest of " + path_to_utf8(folder) + " cannot be read"
+    );
+    manifest.id = std::string(id);
+    manifest.name += " Online";
+    const std::string manifest_text = map_pack::write_manifest(manifest);
+    const std::vector<uint8_t> manifest_written(manifest_text.begin(), manifest_text.end());
+    std::vector<std::string> listed_files;
+    for (const map_pack::MapEntry& map : manifest.maps)
+        for (const std::string& listed : map.files)
+            if (std::find(listed_files.begin(), listed_files.end(), listed) == listed_files.end())
+                listed_files.push_back(listed);
+    std::vector<std::vector<uint8_t>> contents;
+    contents.reserve(listed_files.size());
+    for (const std::string& listed : listed_files)
+        contents.push_back(read_whole(folder / path_from_utf8(listed)));
+    // The entries point into the manifest's bytes and the contents, both named above.
+    std::vector<oa::formats::zip::NewEntry> entries{{map_pack::manifest_file, manifest_written}};
+    for (std::size_t at = 0; at < listed_files.size(); ++at)
+        entries.push_back({listed_files[at], contents[at]});
+    std::vector<uint8_t> archive;
+    oa::formats::zip::ZipError error{};
+    require(
+        oa::formats::zip::write_archive(entries, archive, error),
+        "the package " + path_to_utf8(file) + " could not be made"
+    );
+    write_text(
+        file, std::string_view(reinterpret_cast<const char*>(archive.data()), archive.size())
+    );
 }
 
 /// Writes a frame as a PNG file.
@@ -211,7 +297,14 @@ void Runtime::check_map_browser() {
     const fs::path maps = user_folder_ / std::string(package_install::oamap::maps_folder_name);
     const auto models = assets_.list_effective("objects3d", ".3do", false);
     require(!models.empty(), "the game has no model for the check maps' feature");
-    write_map_pack_check_packs(maps, path_to_utf8(path_from_utf8(models.front()).stem()));
+    const std::string model_stem = path_to_utf8(path_from_utf8(models.front()).stem());
+    // The packs an earlier run installed as a catalogue's leave first.
+    for (const std::string_view online : {kOnlineIsles, kOnlineClash}) {
+        std::error_code removed;
+        fs::remove_all(maps / std::string(online), removed);
+        require(!removed, "could not remove an earlier " + std::string(online));
+    }
+    write_map_pack_check_packs(maps, model_stem);
     map_packs().refresh();
     const std::string isle(map_pack_check_fitting_map);
     const std::string clash(map_pack_check_clashing_map);
@@ -495,7 +588,7 @@ void Runtime::check_map_browser() {
         click_named("oa.maps-players-3");
         click_named("oa.maps-filter-all");
         click_named("oa.maps-search");
-        for (std::size_t left = foursome.size(); left > 0; --left) {
+        for (std::size_t typed = foursome.size(); typed > 0; --typed) {
             const LayerAnswer erased = shown->key(kit::Key::backspace, 0);
             oa_layer().take_answer(*shown, erased, 0);
         }
@@ -533,6 +626,150 @@ void Runtime::check_map_browser() {
             oa_layer().find("more-maps") == nullptr, "MORE MAPS… stayed after SELMAP closed" + on
         );
     }
+
+    // Nobody watches the run: SDL's dummy video driver, and no check that
+    // shows the installer's prompts. A catalogue map pack, posted as the
+    // download queue hands one over, waits in the inbox while the browser is
+    // closed, on the main menu and over SELMAP, and installs with no prompt
+    // while the browser is the top screen, as Download and select's would;
+    // one that does not fit TA 3.1c is refused there with no prompt.
+    auto& state = mod_install_state();
+    require(
+        UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts,
+        "the run is watched: run the check on SDL's dummy video driver"
+    );
+    require(
+        SDL_SetWindowSize(sdl_.window, kWindows.front().width, kWindows.front().height) &&
+            SDL_SyncWindow(sdl_.window),
+        "the window did not take its first size again"
+    );
+    apply_output_mode();
+    load(Screen::main_menu);
+    frames(2);
+    require(
+        !package_install::package_files_waiting() && state.stage == ModInstallState::Stage::idle,
+        "a package waits before the check posts one"
+    );
+    const fs::path files_folder = user_folder_.parent_path() / "files";
+    const fs::path packs_made = files_folder / "packs";
+    write_map_pack_check_packs(packs_made, model_stem);
+    const std::optional<map_pack::PackMapName> fitting_split = map_pack::split_pack_map_name(isle);
+    const std::optional<map_pack::PackMapName> clashing_split =
+        map_pack::split_pack_map_name(clash);
+    require(fitting_split && clashing_split, "the check maps' names do not split");
+    const fs::path online_isle_file = files_folder / (std::string(kOnlineIsles) + ".oamap");
+    const fs::path online_clash_file = files_folder / (std::string(kOnlineClash) + ".oamap");
+    write_online_pack(packs_made / std::string(fitting_split->id), kOnlineIsles, online_isle_file);
+    write_online_pack(
+        packs_made / std::string(clashing_split->id), kOnlineClash, online_clash_file
+    );
+    const std::string online_isle =
+        std::string(fitting_split->stem) + map_pack::map_name_separator + std::string(kOnlineIsles);
+    const auto post_from_catalogue = [](const fs::path& file, std::string_view id) {
+        package_install::Origin from_catalogue{};
+        from_catalogue.kind = package_install::OriginKind::catalogue;
+        from_catalogue.registry = std::string(kCheckRegistry);
+        from_catalogue.catalogue_id = std::string(id);
+        from_catalogue.release = 1;
+        const std::vector<uint8_t> package_bytes = read_whole(file);
+        from_catalogue.sha256 = oa::base::sha256::digest_of(package_bytes);
+        package_install::post_package_file(file, from_catalogue);
+    };
+    const uint32_t prompts_before = state.prompts_shown;
+    // The pack waits first in the inbox: nothing read, asked or installed.
+    const auto waits = [&](std::string_view where) {
+        frames(kWaitingFrames);
+        const std::optional<package_install::OpenedPackage> waiting =
+            package_install::next_package_file();
+        require(
+            waiting && waiting->origin.kind == package_install::OriginKind::catalogue &&
+                waiting->file.filename() == online_isle_file.filename() &&
+                state.stage == ModInstallState::Stage::idle && state.prompt == nullptr &&
+                state.prompts_shown == prompts_before &&
+                !fs::exists(maps / std::string(kOnlineIsles)),
+            "a catalogue map pack did not wait in the inbox " + std::string(where)
+        );
+    };
+    // What came of a package while the browser shows, which shows no prompt.
+    const auto until_outcome = [&](std::string_view what) {
+        for (int32_t frame = 0; frame < kMostFrames; ++frame) {
+            frames(1);
+            require(
+                state.prompt == nullptr && state.prompts_shown == prompts_before,
+                std::string(what) + " showed a prompt"
+            );
+            require(
+                browser() != nullptr,
+                "the map browser closed while " + std::string(what) + " installed"
+            );
+            // Taken before the next frame's content service takes it.
+            const std::vector<package_install::PackageOutcome> outcomes =
+                package_install::take_package_outcomes();
+            if (!outcomes.empty())
+                return outcomes.front();
+        }
+        throw std::runtime_error(
+            "map browser check: nothing came of " + std::string(what) + " while the browser showed"
+        );
+    };
+
+    post_from_catalogue(online_isle_file, kOnlineIsles);
+    waits("on the main menu");
+    exercise_click(menu::resource_name(menu::Button::single_player));
+    exercise_click(entry::resource_name(entry::Button::skirmish));
+    exercise_click(skirmish::resource_name(skirmish::Button::select_map));
+    require(screen_ == Screen::map_selection, "the map picker did not open for the install");
+    waits("over SELMAP with the browser closed");
+    std::cout << "map browser check: nobody watching, a catalogue map pack waited in the inbox "
+                 "with the map browser closed\n";
+
+    click_named("oa.more-maps");
+    require(browser() != nullptr, "MORE MAPS… did not open the map browser for the install");
+    {
+        const package_install::PackageOutcome outcome = until_outcome("the catalogue map pack");
+        require(
+            outcome.result == package_install::OutcomeResult::installed,
+            "the catalogue map pack was not installed while the browser showed: " + outcome.reason
+        );
+        const fs::path installed_folder = maps / std::string(kOnlineIsles);
+        const std::optional<package_install::Origin> record =
+            package_install::read_origin(installed_folder);
+        require(
+            fs::exists(installed_folder / std::string(map_pack::manifest_file)) && record &&
+                record->kind == package_install::OriginKind::catalogue &&
+                record->registry == kCheckRegistry && record->catalogue_id == kOnlineIsles &&
+                record->release == 1,
+            "the catalogue map pack is not in Maps with its catalogue's record"
+        );
+        require(
+            map_packs().find(online_isle) != nullptr && !package_install::package_files_waiting() &&
+                state.stage == ModInstallState::Stage::idle,
+            "the installed packs do not list " + online_isle
+        );
+    }
+    std::cout << "map browser check: nobody watching, a catalogue map pack installed with no "
+                 "prompt while the map browser showed\n";
+
+    post_from_catalogue(online_clash_file, kOnlineClash);
+    {
+        const package_install::PackageOutcome outcome =
+            until_outcome("the catalogue map pack that does not fit");
+        require(
+            outcome.result == package_install::OutcomeResult::refused &&
+                !fs::exists(maps / std::string(kOnlineClash)) &&
+                !package_install::package_files_waiting() &&
+                state.stage == ModInstallState::Stage::idle,
+            "a catalogue map pack that does not fit TA 3.1c was not refused"
+        );
+        std::cout << "map browser check: nobody watching, a catalogue map pack that does not fit "
+                     "was refused with no prompt: "
+                  << outcome.reason << '\n';
+    }
+    click_named("oa.maps-cancel");
+    frames(2);
+    require(browser() == nullptr, "Cancel did not close the map browser");
+    close_map_modal();
+    frames(2);
     load(Screen::main_menu);
     std::cout << "map browser check passed\n";
 }

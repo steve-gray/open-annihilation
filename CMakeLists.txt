@@ -4,9 +4,10 @@
 cmake_minimum_required(VERSION 3.24)
 project(open_annihilation VERSION 0.8.0 LANGUAGES C CXX)
 # The version's label. A build of a tree whose label is not empty is a
-# development build. The label is empty only in a release's version commit;
-# the commit after a release sets it back to "dev" and raises the version.
-set(OA_VERSION_LABEL "dev")
+# development build. The label is empty for a release, and for a build the
+# maintainer reviews as one; the commit after a release sets it back to "dev"
+# and raises the version.
+set(OA_VERSION_LABEL "")
 # A target that links one static library both directly and through
 # another library gets it once on its link line, in dependency order, rather
 # than once for each path that reaches it. The linker then has nothing to
@@ -1588,13 +1589,16 @@ if(OA_BUILD_PLATFORM)
       # that nothing is fetched, and at 640x480, 1280x720, 1920x1080 and
       # 2560x1440 MORE MAPS…, the browser's size class, columns and window,
       # its installed maps, its search, the clashing map greyed with its
-      # reason, and Select moving SELMAP's selection. It leaves each size's
-      # frame in its folder for review. Each run starts from a clean folder.
+      # reason, and Select moving SELMAP's selection. Then, as the run is one
+      # nobody watches, a map pack posted as the download queue hands one
+      # over waits in the inbox while the browser is closed and installs with
+      # no prompt while it shows. It leaves each size's frame in its folder
+      # for review. Each run starts from a clean folder.
       set(oa_map_browser_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-browser")
       file(MAKE_DIRECTORY "${oa_map_browser_dir}")
       add_test(NAME map-browser-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
-        "${oa_map_browser_dir}/Open Annihilation" "${oa_map_browser_dir}/data"
-        "${oa_map_browser_dir}/map-browser.conf")
+        "${oa_map_browser_dir}/Open Annihilation" "${oa_map_browser_dir}/files"
+        "${oa_map_browser_dir}/data" "${oa_map_browser_dir}/map-browser.conf")
       set_tests_properties(map-browser-clean PROPERTIES FIXTURES_SETUP map-browser-clean)
       add_test(NAME native-map-browser COMMAND oa-game --game-dir "${OA_GAME_DIR}"
         --skip-intro --mute --check-map-browser
@@ -1649,9 +1653,12 @@ if(OA_BUILD_PLATFORM)
       # REPLACE MOD and FOLDER IN USE over the Library, refusals in its
       # queue, a file still asking UPDATE MOD, ROLL BACK's question and PLAY
       # NOW from the Library; then, over soft restarts, an update to the mod
-      # played held until the mod is switched. Its data, settings and the
-      # player's folder stay in the build tree, and are cleared before each
-      # run, which is when the settings are read.
+      # played held until the mod is switched; and last a run nobody
+      # watches, the check's prompts off on the dummy video driver, where a
+      # chosen mod installs and asks only while the Library shows and a file
+      # waits. Its data, settings and the player's folder stay in the build
+      # tree, and are cleared before each run, which is when the settings
+      # are read.
       set(oa_library_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-install")
       file(MAKE_DIRECTORY "${oa_library_install_dir}")
       add_test(NAME library-install-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
@@ -3095,7 +3102,11 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_hook_calls.py --self-test)
     add_test(NAME hook-calls COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_hook_calls.py)
-    set_tests_properties(hook-calls-selftest hook-calls PROPERTIES TIMEOUT 60)
+    set_tests_properties(hook-calls-selftest PROPERTIES TIMEOUT 60)
+    # The scan reads every source once, about 20 s of one core on a laptop;
+    # beside a parallel ctest of the whole build it overran 60 s on every
+    # attempt once 0.8 had grown the sources.
+    set_tests_properties(hook-calls PROPERTIES TIMEOUT 240)
     # Every test of this build is named as the naming rule says
     # (docs/development/conventions.md); the check asks ctest for the
     # tests, so it sees every directory's.

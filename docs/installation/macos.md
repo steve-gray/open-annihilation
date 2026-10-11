@@ -69,9 +69,10 @@ To choose a different folder later, start it once from Terminal with
 open -a "Open Annihilation" --args --choose-game-dir
 ```
 
-Open Annihilation's own settings open from the **OA** button at the bottom
-right of the main menu, or with **Cmd+,**. See
-[Settings](../settings.md).
+Open Annihilation's own settings open with **Cmd+,**, or from
+**SETTINGS…** at the foot of the Library, which the **OA** button at the
+bottom right of the main menu opens. See [Settings](../settings.md), and
+[the Library](../library.md) for mods, maps and languages to download.
 
 Double-click a `.oamod` file to install the mod it holds in Open
 Annihilation ([mods](../mods/README.md#installing-a-oamod-file)).
@@ -96,8 +97,8 @@ Annihilation`):
 | `Recordings` | recordings of network games, which `--play-demo` plays back, in a folder for each mod as in `Saves` |
 | `Mods` | mods you add, each in a folder of its own, which the settings' Mods page lists besides the game folder's `mods` folder ([mods](../mods/README.md#installing-a-mod)) |
 
-The game makes each folder the first time it needs it. In the settings (the
-**OA** button on the main menu), **Common Tweaks** shows the folder under
+The game makes each folder the first time it needs it. In the settings
+(**Cmd+,**), **Common Tweaks** shows the folder under
 **Your files**, whose buttons open Saves, Screenshots and Mods in Finder.
 
 **macOS asks first.** On macOS 10.15 and later, the first time the game

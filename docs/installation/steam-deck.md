@@ -260,8 +260,9 @@ On a Steam Deck the game starts with **Maximum frame rate** at the
 screen's rate, 60 frames a second on the LCD model and 90 on the OLED, and
 with **Control size** at **Larger**, so the touch controls are near the
 size they have on an iPad. Both are ordinary settings: change them in
-Open Annihilation's settings (the **OA** button at the bottom right of the
-main menu): Maximum frame rate under **Graphics**, Control size under
+Open Annihilation's settings (**SETTINGS…** at the foot of the Library,
+which the **OA** button at the bottom right of the main menu opens):
+Maximum frame rate under **Graphics**, Control size under
 **Touch** or **Controller**. A value you set is kept, and **Restore
 defaults** brings the Deck's starting values back. Steam's own frame limit
 and power settings in the Quick Access menu (···) stay yours and work as
