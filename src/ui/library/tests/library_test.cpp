@@ -1813,9 +1813,9 @@ void test_registry_texts() {
     added.packages = 1;
     OA_CHECK_TEXT(lib::registry_subtitle(added), "192.168.1.20 · 1 package · not reviewed");
 
-    lib::Registry core;
-    core.name = "Core Prime";
-    core.built_in = true;
+    lib::Registry core_prime;
+    core_prime.name = "Core Prime";
+    core_prime.built_in = true;
     lib::Registry north;
     north.name = "North";
     north.built_in = true;
@@ -1825,15 +1825,15 @@ void test_registry_texts() {
     constexpr std::string_view tail =
         " isn't reviewed by the OA team. OA still checks every package before using it.";
     OA_CHECK_TEXT(
-        lib::registry_note({core}),
+        lib::registry_note({core_prime}),
         std::string("Content from registries other than Core Prime") + std::string(tail)
     );
     OA_CHECK_TEXT(
-        lib::registry_note({core, north}),
+        lib::registry_note({core_prime, north}),
         std::string("Content from registries other than Core Prime and North") + std::string(tail)
     );
     OA_CHECK_TEXT(
-        lib::registry_note({core, north, west}),
+        lib::registry_note({core_prime, north, west}),
         std::string("Content from registries other than Core Prime, North and West") +
             std::string(tail)
     );
