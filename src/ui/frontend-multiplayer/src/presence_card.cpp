@@ -280,9 +280,12 @@ std::optional<PresenceCard> presence_card(
         );
         return card;
     }
-    if (record->engine)
-        card.aside = joined(record->engine->platform, record->engine->architecture);
     card.lines.push_back({word(lobby, "Engine"), engine_value(lobby, *record), CardTone::plain});
+    if (record->engine) {
+        const std::string platform = joined(record->engine->platform, record->engine->architecture);
+        if (!platform.empty())
+            card.lines.push_back({word(lobby, "Platform"), platform, CardTone::plain});
+    }
     if (record->mod) {
         const auto& mod = *record->mod;
         const std::string named = mod.version.empty() ? mod.name : mod.name + " " + mod.version;
@@ -369,7 +372,6 @@ kit::HoverCardLook presence_card_look(
     look.width = width;
     look.mark = true;
     look.title = card.title;
-    look.aside = card.aside;
     const int32_t room = std::max(width - 2 * metrics.hover_card_padding, int32_t{0});
     int32_t widest_label = 0;
     bool labelled_rows = false;

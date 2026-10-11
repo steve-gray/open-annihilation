@@ -267,6 +267,12 @@ DirectGameState g_direct{};
 // does nothing. The binding survives multiplayer_reset.
 LobbyMapSource g_map_source{};
 
+// The OA layer's answer for whether it draws the badges at the window's own
+// pixels this frame. A null answer keeps the frame's pixel badge. The
+// binding survives multiplayer_reset.
+void* g_layer_badge_context = nullptr;
+bool (*g_layer_draws_badges)(void*) = nullptr;
+
 /// Tells whether the bound source lists a map by this exact name.
 ///
 /// @param name the map's name
@@ -2279,11 +2285,9 @@ constexpr ScreenColor kBadgeBottomColor{0x15, 0x19, 0x15};
 constexpr ScreenColor kAmberColor{0xe2, 0xb2, 0x3d};
 /// Background, #0d100e: the ring around the dot.
 constexpr ScreenColor kBackgroundColor{0x0d, 0x10, 0x0e};
-/// The dot's ring is a square this many pixels across, its four corner
-/// pixels left out, reaching kBadgeDotOverhang pixels past the badge's right
-/// edge and above its top; the dot is the square one pixel inside it.
-constexpr int32_t kBadgeDotRingSize = 6;
-constexpr int32_t kBadgeDotOverhang = 2;
+/// The dot's ring is presence_badge_dot_ring pixels across, its four corner
+/// pixels left out, reaching presence_badge_dot_overhang pixels past the
+/// badge's right edge and above its top; the dot is the square one pixel inside it.
 
 /// Fills a square without its four corner pixels, skipping pixels outside the surface.
 ///
@@ -2361,11 +2365,13 @@ void draw_presence_badge(
     );
     if (!spot.rules_differ)
         return;
-    const int32_t ring_left = x + width + kBadgeDotOverhang - kBadgeDotRingSize;
-    const int32_t ring_top = y - kBadgeDotOverhang;
-    fill_square_without_corners(surface, ring_left, ring_top, kBadgeDotRingSize, kBackgroundColor);
+    const int32_t ring_left = x + width + presence_badge_dot_overhang - presence_badge_dot_ring;
+    const int32_t ring_top = y - presence_badge_dot_overhang;
     fill_square_without_corners(
-        surface, ring_left + 1, ring_top + 1, kBadgeDotRingSize - 2, kAmberColor
+        surface, ring_left, ring_top, presence_badge_dot_ring, kBackgroundColor
+    );
+    fill_square_without_corners(
+        surface, ring_left + 1, ring_top + 1, presence_badge_dot_ring - 2, kAmberColor
     );
 }
 
@@ -2405,10 +2411,16 @@ int32_t presence_badge_spots(
 
 /// Draws the OA badge, and its dot, in each OA player's CD<slot> rectangle (draw_presence_badge).
 ///
+/// Left out when the OA layer draws the badges at the window's own pixels
+/// (multiplayer_bind_layer_presence_badges), so the frame's small badge is
+/// not magnified under the sharp one. A renderer without the layer keeps it.
+///
 /// @param[in,out] surface image drawn on
 /// @param res the battle room's resources
 /// @param lobby lobby whose slots are shown
 void draw_presence_badges(renderer::Surface& surface, const Resources& res, Lobby& lobby) {
+    if (g_layer_draws_badges != nullptr && g_layer_draws_badges(g_layer_badge_context))
+        return;
     PresenceBadgeSpot spots[kSlotCount]{};
     const auto count = presence_badge_spots(res, lobby, spots, kSlotCount);
     for (int32_t index = 0; index < count; ++index)
@@ -4145,6 +4157,11 @@ void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
 
 void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept {
     row_key_trigger = trigger;
+}
+
+void multiplayer_bind_layer_presence_badges(void* context, bool (*draws)(void*)) noexcept {
+    g_layer_badge_context = context;
+    g_layer_draws_badges = draws;
 }
 
 void multiplayer_reset() noexcept {
