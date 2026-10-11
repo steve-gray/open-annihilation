@@ -1150,8 +1150,10 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
         return;
     // Settings over the Library on Mods, the Roll Back Mod question asked
     // for the folder; where Settings is under the Library, it comes back.
+    // The Library may be taking the input that asked, so it never closes
+    // anything but through return_to.
     OaLayer& layer = oa_layer();
-    if (layer.find(kSettingsScreen) != nullptr && engine_settings_dialog() != nullptr)
+    if (layer.find(kSettingsScreen) != nullptr)
         layer.return_to(kSettingsScreen);
     else
         open_engine_settings_from_menu();
