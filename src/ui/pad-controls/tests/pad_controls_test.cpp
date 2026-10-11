@@ -1000,6 +1000,7 @@ void layer_tables() {
                         row(PadButton::a, Action::press),
                         row(PadButton::b, Action::back),
                         row(PadButton::menu, Action::default_button),
+                        row(PadButton::view, Action::info),
                         row(PadButton::r2, Action::left_button),
                         row(PadButton::right_pad, Action::left_button),
                         row(PadButton::l2, Action::right_button),
@@ -1408,6 +1409,30 @@ void feels_by_strength() {
     );
 }
 
+/// Checks the View button: in the menus it is the information key, as F1, left-handed too; in
+/// the match a tap of it is still the unit's information.
+void view_is_information_in_the_menus() {
+    for (const bool left_handed : {false, true})
+        for (const bool fallback : {false, true})
+            for (const auto scheme : {pad::Scheme::trackpads, pad::Scheme::sticks})
+                for (const bool trackpads : {false, true}) {
+                    auto ctx = map_of(scheme, fallback, trackpads);
+                    ctx.left_handed = left_handed;
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::menus, PadButton::view).action == Action::info
+                    );
+                    OA_CHECK(
+                        pad::tap_binding_for(ctx, Layer::base, PadButton::view).action ==
+                        Action::unit_info
+                    );
+                    OA_CHECK(
+                        pad::binding_for(ctx, Layer::base, PadButton::view).action != Action::info
+                    );
+                }
+    const auto deck = map_of(pad::Scheme::trackpads, false, true);
+    OA_CHECK(chord_is(pad::chord_for(deck, Action::info), PadButton::none, PadButton::view));
+}
+
 } // namespace
 
 /// Runs the checks.
@@ -1435,6 +1460,7 @@ int main() {
     base_tables();
     layer_tables();
     mirror_swaps_the_sides();
+    view_is_information_in_the_menus();
     layer_follows_what_is_held();
     chords_for_every_badge();
     effective_scheme_needs_a_pointer();

@@ -392,6 +392,15 @@ struct PresenceBadgeSpot {
 ///         or a dialog covers it, or its GUI has no CD<slot> control
 int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) noexcept;
 
+/// Returns the slot of the battle room's row whose name has the keyboard's
+/// focus: the front panel's focused control when it is a remote player's
+/// PLAYER<slot> name (the local player's own row is a label and takes no
+/// focus).
+///
+/// @return the slot, 0..9; -1 while the battle room is not shown, a dialog
+///     covers it, or the focus is on no player's row
+[[nodiscard]] int32_t multiplayer_focused_player_slot() noexcept;
+
 /// Returns the gadget records of the current base screen as its loader left them.
 [[nodiscard]] const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept;
 

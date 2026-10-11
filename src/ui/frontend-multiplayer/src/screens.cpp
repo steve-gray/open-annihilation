@@ -3477,6 +3477,26 @@ int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) no
     return presence_badge_spots(state.base, state.lobby, out, capacity);
 }
 
+int32_t multiplayer_focused_player_slot() noexcept {
+    auto& state = ui();
+    // As the badges: the battle room shows, with no dialog over it.
+    if (!state.showing || state.screen != kScreenBattleroom || !state.base.loaded ||
+        &front() != &state.base)
+        return -1;
+    const auto& panel = state.base.panel;
+    if (panel.focus <= 0 || panel.focus >= panel.count)
+        return -1;
+    const auto& name = panel.controls[static_cast<std::size_t>(panel.focus)].name;
+    constexpr std::string_view row_name = "PLAYER";
+    const std::string_view focused(name.data(), ::strnlen(name.data(), name.size()));
+    if (focused.size() != row_name.size() + 1 || !focused.starts_with(row_name))
+        return -1;
+    const char digit = focused.back();
+    if (digit < '0' || digit > '9' || digit - '0' >= kSlotCount)
+        return -1;
+    return digit - '0';
+}
+
 const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept {
     return ui().base.source;
 }

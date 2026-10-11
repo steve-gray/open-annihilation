@@ -2037,6 +2037,7 @@ void OaLayer::drop_pending_prompts() {
 void OaLayer::tick() {
     // The window's size, and with it the screens' class, may have changed.
     lay_out_screens();
+    runtime_.keep_presence_card_screen();
     // A tick may close a screen, or open another. The screens waiting are
     // ticked too, so that one whose screen of the game goes leaves the queue.
     std::vector<LayerScreen*> ticking;

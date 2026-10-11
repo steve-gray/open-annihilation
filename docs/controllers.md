@@ -330,6 +330,7 @@ settings dialog, the Game files screen and the folder chooser.
 | A | Presses the focused button. With none focused, as when the main menu opens, the 640×480 menus focus their first button and the other screens press their default |
 | B | Back (Escape), as each screen has it |
 | Menu | Enter: the screen's default button; on the 640×480 menus, as A |
+| View | Information about the focused item, as F1: in the battle room, the card of the focused player's OA badge |
 | Right stick ↑ and ↓ | The wheel: steps the map and mission lists |
 | A twice quickly on a list row | Starts the campaign, mission or map, as a double click does |
 
