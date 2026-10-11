@@ -9,7 +9,8 @@
 // one question, naming only the added registries' updates; the kit question
 // with NOT NOW marked and UPDATE primary; the questions about the mod the
 // game plays (SWITCH OFF's, PLAY NOW's refusal and ROLL BACK's), their words
-// and buttons; and a lookup that translates.
+// and buttons; an update that names no revision, which never says "Revision
+// 0"; and a lookup that translates.
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/library/library.hpp"
@@ -425,6 +426,41 @@ void update_all_asks_once_about_the_added_registries_updates() {
         OA_CHECK(two->body.starts_with("2 updates change the game's rules: Alder, Cedar. "));
 }
 
+/// An update that keeps the version and names no revision, as a catalogue
+/// that leaves the revision out gives one, never says "Revision 0": the
+/// status line calls it an update, and its question's heading names the
+/// version alone and its body the new copy.
+void an_update_without_a_revision_never_says_revision_0() {
+    const lib::Library made = library_of({
+        {core, Kind::language, "pt-br", "Portugues", "1.0", "1.0", Rules::same},
+        {core, Kind::mod, "lattice", "Lattice", "3.0", "3.0", Rules::changes},
+        {extra, Kind::mod, "cinder", "Cinder", "1.2", "1.2", Rules::unknown},
+    });
+    lib::Inputs inputs = made.inputs;
+    for (lib::UpdateNote& update : inputs.updates)
+        update.to_revision = 0;
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+
+    if (const lib::Entry* language = at(library, core, Kind::language, "pt-br"))
+        OA_CHECK_TEXT(
+            lib::status_line(library, *language), "Update available · 3.2 MB to download"
+        );
+    if (const lib::Entry* cinder = at(library, extra, Kind::mod, "cinder")) {
+        const auto asked = lib::update_question(*cinder, *cinder->update, false);
+        OA_CHECK(asked.has_value());
+        if (asked) {
+            OA_CHECK_TEXT(asked->heading, "Cinder 1.2");
+            OA_CHECK_TEXT(
+                asked->body,
+                "OA can't tell whether the new copy changes the game's rules. If it does, saved "
+                "games from revision 3 won't load under it. Revision 3 is kept, and ROLL BACK "
+                "brings it back."
+            );
+        }
+    }
+}
+
 void the_questions_about_the_mod_played_keep_the_mods_pages_words() {
     // SWITCH OFF's: the Switch Mod question of No Mod, CANCEL marked.
     const kit::Question off = lib::switch_off_question();
@@ -543,6 +579,7 @@ int main() {
     the_question_reads_as_the_design_shows_it();
     a_new_version_and_an_unknown_rules_hash_say_so();
     update_all_asks_once_about_the_added_registries_updates();
+    an_update_without_a_revision_never_says_revision_0();
     the_questions_about_the_mod_played_keep_the_mods_pages_words();
     every_word_is_looked_up();
     return oa::test::check_exit_status();

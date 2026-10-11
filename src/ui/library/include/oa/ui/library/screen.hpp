@@ -28,7 +28,7 @@ namespace oa::ui::library {
 /// One of the Library's drop-downs, which can be open.
 enum class MenuKind : uint8_t {
     none,   ///< no drop-down is open
-    filter, ///< Compact's filter: All, Installed, Updates, then each tag of the tab (library.filter)
+    filter, ///< Compact's filter: the filters, then each tag of the tab (library.filter)
     tags,   ///< the tags that do not fit as chips or in the filter pane (library.tags)
     more,   ///< the Compact details page's actions after its first three (library.action)
 };

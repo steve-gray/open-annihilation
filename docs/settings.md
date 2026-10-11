@@ -39,9 +39,11 @@ before Downloads joined it.
 
 The settings open from:
 
-- **SETTINGS…** at the foot of the Library, which the **OA** button at the
-  bottom right of the main menu opens ([the Library](library.md));
-- the **OA** button under **Resume** in the in-game menu (F2);
+- the **Settings** button, the gears at the bottom right of the main menu,
+  right of the **OA** button, which opens [the Library](library.md);
+- **SETTINGS…** at the foot of the Library;
+- the button under **Resume** in the in-game menu (F2), which shows the
+  gears too;
 - **Cmd+,** on macOS, or **Settings…** in the application menu;
 - **Ctrl+,** on Windows and Linux.
 

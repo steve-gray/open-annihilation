@@ -25,9 +25,14 @@
 // NOW leaving it and UPDATE queuing it, and one that keeps the rules is
 // queued at once; the built-in registry's whose rules change, or cannot be
 // known, are queued at once, their status lines and Rules facts saying so
-// before, and again each in turn, CHECK NOW offered
-// once a registry can be asked; and UPDATE ALL queues
-// the built-in one at once and asks about the added one only. The fourth is
+// before, and again each in turn, CHECK NOW offered once a registry can be
+// asked; and UPDATE ALL queues the built-in one at once and asks about the
+// added one only; then UNINSTALL: off for a map pack during a game, a notice
+// for the language pack in use and for the mod being played, each keeping
+// its folder, the question for a built-in registry's mod, CANCEL removing
+// nothing and UNINSTALL its folder with the copy ROLL BACK keeps, its row
+// staying not installed, and a mod of the player's own leaving the Library.
+// The fourth is
 // a run nobody watches, on SDL's dummy video driver without the prompts the
 // other runs show: a built-in registry's update waits in the inbox while the
 // Library is closed, then installs with no prompt once the Library shows,
@@ -56,6 +61,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/uninstall.hpp"
 #include "oa/ui/library/update_question.hpp"
 
 #include <SDL3/SDL.h>
@@ -104,6 +110,14 @@ constexpr std::string_view kDunes = "dunes";
 constexpr std::string_view kEmber = "ember";
 /// A made-up mod of an added registry whose update keeps the rules.
 constexpr std::string_view kFlint = "flint";
+/// A made-up mod of the built-in registry the check uninstalls.
+constexpr std::string_view kBasalt = "basalt";
+/// A made-up mod of the player's own, no registry listing it, the check uninstalls.
+constexpr std::string_view kScree = "scree";
+/// A made-up map pack of the built-in registry, installed while a game is played.
+constexpr std::string_view kArchipelago = "archipelago";
+/// A made-up language pack of the built-in registry, the one in use.
+constexpr std::string_view kPseudo = "en-XA";
 /// The most frames a step of the check runs before it gives up.
 constexpr int kMostFrames = 400;
 /// The frames a step runs to show that something waits: nothing comes of it.
@@ -354,9 +368,12 @@ void Runtime::check_library_install() {
     host.refreshed = false;
 
     bool running = true;
+    // Installed packages of the other kinds the fixture lists after the mods.
+    std::vector<library::Installed> beside_mods;
     // The installed mods as the Library's worker would list them: each
     // folder of Mods that holds a mod, its registry and key from its origin
-    // record, the version its .backup keeps and whether the game plays it.
+    // record, the version its .backup keeps and whether the game plays it;
+    // then the packages beside them.
     const auto list_installed = [&] {
         fixture.inputs.installed.clear();
         std::error_code error;
@@ -388,6 +405,9 @@ void Runtime::check_library_install() {
                 shown.kept = library::Kept{backup->version, backup->revision};
             fixture.inputs.installed.push_back(std::move(shown));
         }
+        fixture.inputs.installed.insert(
+            fixture.inputs.installed.end(), beside_mods.begin(), beside_mods.end()
+        );
         ++fixture.generation;
     };
     const auto frame = [&] {
@@ -1343,6 +1363,264 @@ void Runtime::check_library_install() {
         fixture.inputs.updates.clear();
         ++fixture.generation;
         close_the_library();
+
+        // UNINSTALL. A map pack's is off while a game is played, and says
+        // why; the language pack in use and the mod being played, Lattice,
+        // show a notice and keep their folders; a built-in registry's mod
+        // asks first, CANCEL removing nothing and UNINSTALL its folder and
+        // the copy ROLL BACK keeps, and its row stays, not installed; and a
+        // mod of the player's own leaves the Library with its folder.
+        std::error_code uninstall_error;
+        const fs::path maps_folder = user_folder_ / "Maps";
+        const fs::path languages_folder = user_folder_ / "Languages";
+        const fs::path pack_folder = maps_folder / std::string(kArchipelago);
+        const fs::path language_folder = languages_folder / std::string(kPseudo);
+        for (const fs::path& made : {pack_folder, language_folder}) {
+            fs::create_directories(made, uninstall_error);
+            std::ofstream(made / "kept.txt") << "kept";
+        }
+        const auto still_there = [](const fs::path& made) { return fs::exists(made / "kept.txt"); };
+        const auto beside = [&](library::Kind kind,
+                                std::string_view key,
+                                std::string_view name,
+                                const fs::path& folder) {
+            library::Installed shown;
+            shown.kind = kind;
+            shown.key = std::string(key);
+            shown.folder = folder;
+            shown.name = std::string(name);
+            shown.version = "1.0";
+            shown.registry = std::string(kBuiltIn);
+            shown.release = 1;
+            return shown;
+        };
+        beside_mods.push_back(
+            beside(library::Kind::map_pack, kArchipelago, "Archipelago", pack_folder)
+        );
+        beside_mods.push_back(beside(library::Kind::language, kPseudo, "Pseudo", language_folder));
+        beside_mods.back().in_use = true;
+        const auto notice_says = [&](std::string_view title, std::string_view text) {
+            const QuestionScreen* told = asked();
+            return told != nullptr && told->question().title == title &&
+                   told->question().paragraphs.size() == 1 &&
+                   told->question().paragraphs[0].text == text &&
+                   told->question().buttons.size() == 1 &&
+                   told->question().buttons[0].id == library::uninstall_ok_button_id;
+        };
+        open_the_library();
+
+        // A map pack while a game is played: UNINSTALL is off and the note
+        // says why; the runtime, asked directly, does nothing either.
+        fixture.inputs.in_match = true;
+        ++fixture.generation;
+        frames();
+        click_named("oa.library.tab.maps");
+        frames();
+        show_entry("oa.library.row.check-builtin.archipelago");
+        {
+            const std::optional<AutomationControl> button = named("oa.library.action.uninstall");
+            const std::optional<AutomationControl> note = named("oa.library.note");
+            require(
+                button.has_value() && !button->enabled && note.has_value() &&
+                    note->text == "Map packs can't be uninstalled during a game.",
+                "a map pack's UNINSTALL is not off during a game, with its reason"
+            );
+        }
+        library_entry_action(
+            library::Action::uninstall,
+            {std::string(kBuiltIn), library::Kind::map_pack, std::string(kArchipelago)}
+        );
+        frame();
+        require(
+            top_is(library_screen_name) && still_there(pack_folder),
+            "UNINSTALL of a map pack during a game did something"
+        );
+        fixture.inputs.in_match = false;
+        ++fixture.generation;
+        frames();
+
+        // The language pack in use: a notice, and its folder stays.
+        click_named("oa.library.tab.languages");
+        frames();
+        show_entry("oa.library.row.check-builtin.en-xa");
+        press_action("uninstall");
+        require(
+            notice_says(
+                "Uninstall Pseudo",
+                "The game is shown in Pseudo. Choose another language in Settings › Language "
+                "first, then uninstall it."
+            ),
+            "UNINSTALL of the language pack in use did not say to choose another language first"
+        );
+        frame();
+        require(
+            named("oa.prompt.ok").has_value(), "automation does not list the notice's oa.prompt.ok"
+        );
+        tap(SDLK_RETURN);
+        require(
+            top_is(library_screen_name) && still_there(language_folder),
+            "the notice for the language pack in use did not close, or its folder went"
+        );
+        click_named("oa.library.tab.mods");
+        frames();
+
+        // The mod being played: a notice, and its folder stays.
+        show_entry("oa.library.row.check-builtin.lattice");
+        press_action("uninstall");
+        require(
+            notice_says(
+                "Uninstall Lattice",
+                "You are playing Lattice. Switch it off first with SWITCH OFF, then uninstall it."
+            ),
+            "UNINSTALL of the mod being played did not say to switch it off first"
+        );
+        tap(SDLK_RETURN);
+        require(
+            top_is(library_screen_name) && revision_in(mods / std::string(kLattice)) == 1,
+            "the notice for the mod being played did not close, or the mod changed"
+        );
+
+        // A built-in registry's mod with a copy kept: the question, CANCEL
+        // removing nothing, and UNINSTALL removing both.
+        const fs::path basalt = mods / std::string(kBasalt);
+        for (const int release : {1, 2}) {
+            const fs::path file = packages / ("basalt-" + std::to_string(release) + ".oamod");
+            write_package(file, profile_text(kBasalt, "Basalt", "1.0", release), release);
+            post_catalogue(file, kBuiltIn, kBasalt, "Basalt", release);
+            installs_quietly("check-builtin's Basalt", kBuiltIn, kBasalt);
+        }
+        require(
+            revision_in(basalt) == 2 &&
+                revision_in(basalt / std::string(install::backup_folder_name)) == 1,
+            "Basalt's second release did not keep the first"
+        );
+        {
+            library::Listing listed;
+            listed.registry = std::string(kBuiltIn);
+            listed.kind = library::Kind::mod;
+            listed.key = std::string(kBasalt);
+            listed.name = "Basalt";
+            listed.version = "1.0";
+            listed.revision = 2;
+            listed.release = 2;
+            listed.size = 1024;
+            fixture.inputs.listings.push_back(std::move(listed));
+            ++fixture.generation;
+            frames();
+        }
+        const auto asks_uninstall = [&](std::string_view title,
+                                        std::string_view first,
+                                        std::string_view second) {
+            const QuestionScreen* question = asked();
+            require(
+                question != nullptr && question->question().title == title &&
+                    oa_layer().find(library_screen_name) != nullptr,
+                std::string("UNINSTALL did not ask ") + std::string(title) + " over the Library"
+            );
+            const settings::Prompt& shown = question->question();
+            require(
+                shown.paragraphs.size() == 2 && shown.paragraphs[0].text == first &&
+                    shown.paragraphs[1].text == second,
+                std::string(title) + " does not say what it removes"
+            );
+            require(
+                shown.buttons.size() == 2 &&
+                    shown.buttons[0].id == library::uninstall_cancel_button_id &&
+                    shown.buttons[1].id == library::uninstall_button_id &&
+                    shown.buttons[1].accent && shown.marked == 0,
+                std::string(title) + " is not CANCEL, marked, then UNINSTALL, primary"
+            );
+            frame();
+            require(
+                named("oa.prompt.cancel").has_value() && named("oa.prompt.uninstall").has_value() &&
+                    named("oa.prompt.body").has_value(),
+                "automation does not list the question's oa.prompt.cancel, uninstall and body"
+            );
+        };
+        const auto drain = [&] {
+            for (int count = 0; count < kMostFrames && state.discarder.busy(); ++count)
+                frame();
+            require(
+                !state.discarder.busy() && !reserved_left(mods),
+                "an uninstall left a folder of its own in Mods"
+            );
+        };
+        show_entry("oa.library.row.check-builtin.basalt");
+        press_action("uninstall");
+        asks_uninstall(
+            "Uninstall Basalt",
+            "Uninstall Basalt? Its folder, Mods/basalt, is removed, and with it the copy ROLL BACK "
+            "keeps.",
+            "GET installs it again."
+        );
+        tap(SDLK_ESCAPE);
+        require(
+            top_is(library_screen_name) && revision_in(basalt) == 2 &&
+                revision_in(basalt / std::string(install::backup_folder_name)) == 1,
+            "CANCEL on the Uninstall question changed Basalt"
+        );
+        press_action("uninstall");
+        click_named("oa.prompt.uninstall");
+        require(
+            top_is(library_screen_name) && !fs::exists(fs::symlink_status(basalt)),
+            "UNINSTALL did not remove Basalt's folder"
+        );
+        drain();
+        list_installed();
+        frames();
+        {
+            const library::Entry* entry = library::find_entry(
+                host.model, {std::string(kBuiltIn), library::Kind::mod, std::string(kBasalt)}
+            );
+            require(
+                entry != nullptr && entry->installed == nullptr &&
+                    entry->state == library::State::get &&
+                    named("oa.library.row.check-builtin.basalt").has_value(),
+                "the Library does not show Basalt as not installed"
+            );
+        }
+        std::cout << "library install check: UNINSTALL removed a built-in registry's mod\n";
+
+        // A mod of the player's own, which no registry lists, leaves the Library.
+        const fs::path scree = mods / std::string(kScree);
+        fs::create_directories(scree, uninstall_error);
+        std::ofstream(scree / "oamod.yaml") << profile_text(kScree, "Scree", "1.0", 1);
+        list_installed();
+        frames();
+        show_entry("oa.library.row.scree");
+        press_action("uninstall");
+        asks_uninstall(
+            "Uninstall Scree",
+            "Uninstall Scree? Its folder, Mods/scree, is removed.",
+            "No registry lists it, so the Library cannot get it again."
+        );
+        click_named("oa.prompt.uninstall");
+        require(
+            top_is(library_screen_name) && !fs::exists(fs::symlink_status(scree)),
+            "UNINSTALL did not remove the player's own mod"
+        );
+        drain();
+        list_installed();
+        frames();
+        require(
+            library::find_entry(
+                host.model, {std::string(), library::Kind::mod, std::string(kScree)}
+            ) == nullptr &&
+                !named("oa.library.row.scree").has_value(),
+            "the player's own mod is still in the Library"
+        );
+        require(
+            still_there(pack_folder) && still_there(language_folder) &&
+                revision_in(mods / std::string(kLattice)) == 1 && revision_in(ridge) == 5,
+            "an uninstall removed something it was not asked to"
+        );
+        beside_mods.clear();
+        list_installed();
+        close_the_library();
+        fs::remove_all(maps_folder, uninstall_error);
+        fs::remove_all(languages_folder, uninstall_error);
+        std::cout
+            << "library install check: UNINSTALL kept the mod played and the language in use\n";
 
         // The last run plays No Mod, as the next start of the check does.
         preference_values_.erase(std::string(settings::key::mod_directory));

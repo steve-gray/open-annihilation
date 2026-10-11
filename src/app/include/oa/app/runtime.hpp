@@ -3836,8 +3836,8 @@ class Runtime final : public menu::Host,
     [[nodiscard]] const oa::ui::engine_settings::DialogFonts* engine_settings_fonts();
 
     /// Returns the Open Annihilation icon the settings dialog's header and
-    /// the OA buttons draw: the window icon's visible part, decoded on first
-    /// use.
+    /// the main menu's OA button draw: the window icon's visible part,
+    /// decoded on first use.
     ///
     /// @return the icon's pixels, which last as long as the runtime; an
     ///         empty picture, which draws the OA mark, when it cannot be decoded
@@ -4484,15 +4484,15 @@ class Runtime final : public menu::Host,
     [[nodiscard]] uint64_t library_feed_generation();
 
     /// Opens the Library on the OA layer over the main menu: on a tab, else
-    /// on Updates while updates are waiting, else on Mods. When the Library
-    /// is on the layer already, the screens above it close and it is on top
-    /// again; it is never on the layer twice. Asks the content service to
-    /// refresh, as the player's setting allows, outside unattended runs.
+    /// on Active. When the Library is on the layer already, the screens
+    /// above it close and it is on top again; it is never on the layer
+    /// twice. Asks the content service to refresh, as the player's setting
+    /// allows, outside unattended runs.
     /// Refused, as the settings are, off the main menu, while a package owns
     /// the frame, over a message box, while the saves notice shows, or
     /// without the dialog's fonts.
     ///
-    /// @param tab the tab; nothing chooses Updates or Mods
+    /// @param tab the tab; nothing opens it on Active
     void open_library(std::optional<oa::ui::library::Tab> tab);
 
     /// Closes the Library and every screen above it on the OA layer; the
@@ -4514,8 +4514,8 @@ class Runtime final : public menu::Host,
     /// @return true for a registry that ships with the game
     [[nodiscard]] bool library_registry_built_in(std::string_view registry);
 
-    /// Carries out an entry's ROLL BACK, PLAY NOW, SWITCH OFF or UPDATE,
-    /// UPDATE ALL, or CHECK NOW. ROLL BACK asks the Roll Back Mod question
+    /// Carries out an entry's ROLL BACK, PLAY NOW, SWITCH OFF, UPDATE or
+    /// UNINSTALL, UPDATE ALL, or CHECK NOW. ROLL BACK asks the Roll Back Mod question
     /// over the Library (oa::ui::library::roll_back_question), and ROLL BACK
     /// on it rolls the folder back (roll_back_mod_folder), a refusal told in
     /// a prompt over the Library (MOD NOT ROLLED BACK). PLAY NOW switches the
@@ -4527,7 +4527,7 @@ class Runtime final : public menu::Host,
     /// NOW and SWITCH OFF do nothing during a game, or while the command
     /// line chose the mod. A refusal also shows in the status line. CHECK
     /// NOW asks the registries for their lists again. UPDATE asks
-    /// request_update. UPDATE ALL asks it at once for
+    /// request_update, and UNINSTALL library_uninstall. UPDATE ALL asks it at once for
     /// each update that can be installed and asks nothing first
     /// (oa::ui::library::asks_before_update), in the order the list shows
     /// them, and asks the update question once about the others
@@ -4535,10 +4535,35 @@ class Runtime final : public menu::Host,
     /// them in that order and whose NOT NOW leaves them.
     ///
     /// @param action Action::roll_back, play_now, switch_off, update,
-    ///     update_all or check_now; any other does nothing
+    ///     update_all, uninstall (library_uninstall) or check_now; any other
+    ///     does nothing
     /// @param entry the entry; none for UPDATE ALL and CHECK NOW
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
+
+    /// Carries out an installed entry's UNINSTALL, which library_entry_action
+    /// hands here. For the mod being played, or the language pack the game
+    /// shows its words from, as the Library's model or this run says
+    /// (package_target_in_use, language_pack_in_use), it shows the notice of
+    /// what comes first over the Library and removes nothing. Otherwise it
+    /// asks the Uninstall question (oa::ui::library::uninstall_question),
+    /// whose UNINSTALL looks again and removes the package's folder in the
+    /// player's Mods, Maps or Languages folder, with the copy ROLL BACK
+    /// keeps (package_install::uninstall_package), the folders it drops
+    /// deleted a step a frame. A folder outside those folders is never
+    /// touched, and a refusal shows its notice. Nothing happens while the
+    /// button is off.
+    ///
+    /// @param entry the entry
+    void library_uninstall(const oa::ui::library::EntryId& entry);
+
+    /// Tells whether a language pack's folder is one the game shows its words
+    /// from now: the language shown's, or one of its fallbacks'
+    /// (language_pack_folders).
+    ///
+    /// @param folder the pack's folder
+    /// @return true when it is
+    [[nodiscard]] bool language_pack_in_use(const std::filesystem::path& folder) const;
 
     /// Starts an entry's update: the one place an update reaches the download
     /// queue, from the Library's UPDATE and UPDATE ALL. An update that asks

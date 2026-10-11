@@ -6,10 +6,11 @@
 # and download queue lines, and its words (library.hpp, text.hpp). It draws
 # nothing and reads no file, clock or network. The update question asked
 # before an update that may stop saved games loading (update_question.hpp),
-# and the questions about the mod the game plays: SWITCH OFF's, PLAY NOW's
-# refusal and ROLL BACK's (mod_questions.hpp).
+# the questions about the mod the game plays: SWITCH OFF's, PLAY NOW's
+# refusal and ROLL BACK's (mod_questions.hpp), and UNINSTALL's rules, its
+# question and its notices (uninstall.hpp).
 add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp
-  src/update_question.cpp src/mod_questions.cpp)
+  src/update_question.cpp src/mod_questions.cpp src/uninstall.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).
 target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)
@@ -20,9 +21,9 @@ target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 oa-ui
   oa-data-mod-profile oa-options)
 
 if(BUILD_TESTING)
-  # Entries and their states, blocking, registries, tabs, filters, tags, the
-  # order, selection, buttons, facts, status lines, notes, queue lines and
-  # every text.
+  # Entries and their states, blocking, registries, tabs, each tab's filter,
+  # New, the filters' counts, tags, the Active tab, the order, selection,
+  # buttons, facts, status lines, notes, queue lines and every text.
   add_executable(oa-ui-library-test tests/library_test.cpp)
   target_link_libraries(oa-ui-library-test PRIVATE oa-ui-library oa-data-mod-profile oa-test-support
     oa-options)
@@ -38,6 +39,16 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   add_test(NAME ui-library-update-question COMMAND oa-ui-library-update-question-test)
   set_tests_properties(ui-library-update-question PROPERTIES TIMEOUT 30)
+
+  # UNINSTALL: on for every installed package, off for a map pack in a game
+  # and while queued, what it leads to for the mod being played, the
+  # language pack in use and any other package, its question, its notices
+  # and the note that says why it is off.
+  add_executable(oa-ui-library-uninstall-test tests/uninstall_test.cpp)
+  target_link_libraries(oa-ui-library-uninstall-test PRIVATE oa-ui-library oa-ui-kit
+    oa-test-support oa-options)
+  add_test(NAME ui-library-uninstall COMMAND oa-ui-library-uninstall-test)
+  set_tests_properties(ui-library-uninstall PROPERTIES TIMEOUT 30)
 
   # The search: what ranks first, several words, a missing word, folding,
   # tag prefixes, the cap and ties.
@@ -56,9 +67,9 @@ if(BUILD_TESTING)
   add_test(NAME ui-library-layout COMMAND oa-ui-library-layout-test)
   set_tests_properties(ui-library-layout PROPERTIES TIMEOUT 60)
 
-  # Each class drawn twice in the installed game's fonts, byte for byte the
-  # same and nothing outside the window; with --frames DIR it writes the
-  # pictures for review.
+  # Each class drawn twice in the installed game's fonts, and the Active and
+  # Updates tabs, byte for byte the same and nothing outside the window;
+  # with --frames DIR it writes the pictures for review.
   add_executable(oa-ui-library-draw-test tests/draw_test.cpp)
   target_link_libraries(oa-ui-library-draw-test PRIVATE oa-ui-library oa-ui-kit oa-formats-png
     oa-formats-hpi oa-platform-text-font oa-present oa-test-game-data oa-test-support oa-options)

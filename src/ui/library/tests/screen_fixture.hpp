@@ -148,11 +148,13 @@ inline lib::Badge gradient_badge() {
 }
 
 /// The Library's inputs: fifteen listings across the three kinds from the
-/// built-in registry and an added one; an update of the built-in Ridge that
-/// changes the rules, a blocked update of Ironclad and an update of a map
-/// pack; Highland being played; a GET of Hollow blocked by three missing
-/// hacks; and four queue items: TA Zero downloading, Frontier waiting,
-/// Cinder failed, and Lattice's installed update that changed the rules.
+/// built-in registry and an added one, five of them dated for New; an
+/// update of the built-in Ridge that changes the rules, a blocked update of
+/// Ironclad and an update of a map pack; Highland being played; a GET of
+/// Hollow blocked by three missing hacks; four queue items: TA Zero
+/// downloading, Frontier waiting, Cinder failed, and Lattice's installed
+/// update that changed the rules; and for the Active tab, a language pack in
+/// use and two installed map packs.
 ///
 /// @return the inputs
 inline lib::Inputs fixture_inputs() {
@@ -305,6 +307,11 @@ inline lib::Inputs fixture_inputs() {
     );
     portuguese.coverage = 0.92;
     lib::Listing polish = listing(added, Kind::language, "pl", "Polski", "", 2 * mib, "Polish", {});
+    ridge.published = "2026-10-01";
+    bastion.published = "2026-09-12";
+    dunes.published = "2026-10-11";
+    core_maps.published = "2026-10-08";
+    polish.published = "2026-08-20";
 
     inputs.listings = {
         ridge,
@@ -380,6 +387,12 @@ inline lib::Inputs fixture_inputs() {
     updated.update_from = "revision 2";
     updated.update_to = "revision 3";
     inputs.queue = {downloading, queued(frontier, Phase::waiting), failed, updated};
+
+    inputs.language = {"Polski", "Polski", "1.0"};
+    inputs.map_packs = {
+        {"Core Map Pack", {{"Ridgeline", 4, "16x16"}, {"Twin Rivers", 2, "12x12"}}},
+        {"Island Hopping", {{"Atoll", 6, "20x20"}}},
+    };
     return inputs;
 }
 
@@ -389,6 +402,7 @@ inline lib::Inputs fixture_inputs() {
 inline lib::Library fixture_library() {
     lib::Library library;
     lib::refresh(library, fixture_inputs());
+    lib::set_tab(library, lib::Tab::mods);
     return library;
 }
 

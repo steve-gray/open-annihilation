@@ -118,7 +118,7 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
     const ChangeTexts names = change_texts(installed, update, text);
     UpdateQuestion asked;
     asked.title = filled(text, words::question_title, {{"name", name}});
-    if (same_version(installed, update))
+    if (same_version(installed, update) && installed.revision > 0 && update.to_revision > 0)
         asked.heading = filled(
             text,
             words::question_heading_revision,
@@ -127,12 +127,18 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
              {"from", std::to_string(installed.revision)},
              {"to", std::to_string(update.to_revision)}}
         );
-    else
+    else if (!same_version(installed, update))
         asked.heading = filled(
             text,
             words::question_heading_version,
-            {{"name", name}, {"from", installed.version}, {"to", update.to_version}}
+            {{"name", name}, {"from", names.from}, {"to", names.to}}
         );
+    else if (!installed.version.empty())
+        asked.heading = filled(
+            text, words::question_heading_same, {{"name", name}, {"version", installed.version}}
+        );
+    else
+        asked.heading = name;
     const std::string from_capital = capitalised(names.from);
     const std::string to_capital = capitalised(names.to);
     asked.body = filled(

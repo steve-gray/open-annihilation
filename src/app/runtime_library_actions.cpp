@@ -6,28 +6,36 @@
 // told in a prompt; PLAY NOW, which switches the game to the mod, a refusal
 // told in a note; SWITCH OFF, which asks the Switch Mod question and plays
 // the game with no mod; UPDATE and UPDATE ALL, which start updates through
-// request_update, the one place an update reaches the download queue; and
-// the footer's CHECK NOW, which asks the registries for their lists again.
-// An update that may stop saved games loading, of a mod from a registry the
-// player added, asks the update question first
-// (oa::ui::library::asks_before_update); every other starts at once.
+// request_update, the one place an update reaches the download queue;
+// UNINSTALL, which asks first and removes an installed package's folder,
+// never the mod being played or the language pack in use; and the footer's
+// CHECK NOW, which asks the registries for their lists again. An update that
+// may stop saved games loading, of a mod from a registry the player added,
+// asks the update question first (oa::ui::library::asks_before_update);
+// every other starts at once.
 
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
+#include "package_paths.hpp"
 
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/base/threads.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/uninstall.hpp"
 #include "oa/ui/library/update_question.hpp"
 
+#include <SDL3/SDL.h>
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -48,6 +56,10 @@ namespace install = oa::app::package_install;
 
 namespace {
 
+/// The longest a wait between an uninstall's tries sleeps before the
+/// window's events are pumped again, in milliseconds.
+constexpr uint32_t kUninstallWaitSliceMs = 50;
+
 /// Writes a line of the Library's to standard error, which the log keeps.
 ///
 /// @param line the line
@@ -65,6 +77,54 @@ int32_t button_named(const oa::ui::kit::Question& question, std::string_view id)
         if (question.buttons[place].id == id)
             return static_cast<int32_t>(place);
     return -1;
+}
+
+/// Returns the installer's kind of a Library entry's kind.
+///
+/// @param kind the entry's kind
+/// @return the kind; null when the installer has none of that name
+const install::PackageKind* package_kind_of(library::Kind kind) {
+    switch (kind) {
+    case library::Kind::mod:
+        return install::find_kind("oamod");
+    case library::Kind::map_pack:
+        return install::find_kind("oamap");
+    case library::Kind::language:
+        return install::find_kind("oalang");
+    }
+    return nullptr;
+}
+
+/// Says why an uninstall removed nothing, as its notice says it.
+///
+/// @param refusal the installer's reason
+/// @return the notice's reason
+library::UninstallProblem uninstall_problem_of(install::Refusal refusal) {
+    switch (refusal) {
+    case install::Refusal::busy:
+        return library::UninstallProblem::busy;
+    case install::Refusal::changed:
+        return library::UninstallProblem::changed;
+    case install::Refusal::link:
+        return library::UninstallProblem::link;
+    case install::Refusal::unsafe_name:
+        return library::UninstallProblem::outside;
+    default:
+        return library::UninstallProblem::not_moved;
+    }
+}
+
+/// Waits between an uninstall's tries while another program holds the
+/// folder's files, pumping the window's events so that it stays responsive.
+///
+/// @param milliseconds how long
+void wait_pumping_events(void*, uint32_t milliseconds) {
+    while (milliseconds > 0) {
+        const uint32_t slice = std::min(milliseconds, kUninstallWaitSliceMs);
+        SDL_PumpEvents();
+        oa::base::threads::sleep_ms(slice);
+        milliseconds -= slice;
+    }
 }
 
 } // namespace
@@ -120,6 +180,10 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
             std::ignore = request_update(each);
         if (question)
             ask_before_updates(library::update_prompt(*question, host.model.text), asked_for);
+        return;
+    }
+    if (action == library::Action::uninstall) {
+        library_uninstall(entry);
         return;
     }
     const library::Entry* found = library::find_entry(host.model, entry);
@@ -227,6 +291,126 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
     layer.push(
         std::make_unique<QuestionScreen>(layer, Screen::main_menu, std::move(asked), answers)
     );
+}
+
+void Runtime::library_uninstall(const library::EntryId& entry) {
+    LibraryHost& host = library_host();
+    const library::Entry* found = library::find_entry(host.model, entry);
+    if (found == nullptr || found->installed == nullptr)
+        return;
+    const install::PackageKind* kind = package_kind_of(entry.kind);
+    if (kind == nullptr || kind->read_installed == nullptr)
+        return;
+    // What UNINSTALL leads to now: the model's step, and a notice besides for
+    // a package this run says is in use, though the model's inputs predate it.
+    const auto step_now = [this, kind](const library::Entry& shown) {
+        const library::UninstallStep step = library::uninstall_step(library_host().model, shown);
+        if (step != library::UninstallStep::ask)
+            return step;
+        const fs::path& at = shown.installed->folder;
+        if (shown.id.kind == library::Kind::mod && package_target_in_use(*kind, at))
+            return library::UninstallStep::switch_off_first;
+        if (shown.id.kind == library::Kind::language && language_pack_in_use(at))
+            return library::UninstallStep::language_first;
+        return step;
+    };
+    // A notice over the Library: it goes with the main menu, as the Library does.
+    const auto show_notice = [this](oa::ui::kit::Question told) {
+        QuestionScreen::Host answers;
+        answers.tick = [this] { return screen_ != Screen::main_menu; };
+        OaLayer& layer = oa_layer();
+        layer.push(
+            std::make_unique<QuestionScreen>(layer, Screen::main_menu, std::move(told), answers)
+        );
+    };
+    const library::UninstallStep step = step_now(*found);
+    if (step == library::UninstallStep::off)
+        return;
+    const std::string name(library::entry_name(*found));
+    if (step != library::UninstallStep::ask) {
+        library_log("UNINSTALL: " + name + " is in use; nothing is removed");
+        show_notice(library::uninstall_notice(*found, step, host.model.text));
+        return;
+    }
+    // The question names the folder as the player knows it, under their own
+    // folder, and the answer removes only what the folder holds now.
+    const fs::path folder = found->installed->folder;
+    const std::string shown_folder =
+        std::string(kind->root_folder) + "/" + path_to_utf8(folder.filename());
+    const install::InstalledPackage expected = kind->read_installed(folder);
+    oa::ui::kit::Question asked =
+        library::uninstall_question(*found, shown_folder, host.model.text);
+    int32_t uninstall_button = -1;
+    for (std::size_t place = 0; place < asked.buttons.size(); ++place)
+        if (asked.buttons[place].id == library::uninstall_button_id)
+            uninstall_button = static_cast<int32_t>(place);
+    // UNINSTALL looks again: the entry, still installed, its button still
+    // on and still not in use, then its folder, which must lie in the
+    // player's own folder for its kind and hold what the question named.
+    const auto uninstall_now = [this, kind, entry, expected, step_now, show_notice] {
+        const library::Library& model = library_host().model;
+        const library::Entry* still = library::find_entry(model, entry);
+        if (still == nullptr || still->installed == nullptr)
+            return;
+        const library::UninstallStep again = step_now(*still);
+        if (again == library::UninstallStep::off)
+            return;
+        if (again != library::UninstallStep::ask) {
+            show_notice(library::uninstall_notice(*still, again, model.text));
+            return;
+        }
+        const std::string title(library::entry_name(*still));
+        const fs::path at = still->installed->folder;
+        const fs::path root = user_folder_ / std::string(kind->root_folder);
+        std::optional<library::UninstallProblem> problem;
+        if (user_folder_.empty() || !same_folder(kept_path(at.parent_path()), kept_path(root))) {
+            library_log("UNINSTALL: " + path_to_utf8(at) + " is not in " + path_to_utf8(root));
+            problem = library::UninstallProblem::outside;
+        } else {
+            install::ChangeOptions options{};
+            options.expected = expected;
+            options.hooks.wait = wait_pumping_events;
+            const install::UninstallResult result =
+                install::uninstall_package(*kind, root, path_to_utf8(at.filename()), options);
+            mod_install_state().discarder.add(result.discards);
+            if (!result.removed) {
+                library_log("UNINSTALL: " + title + " not removed: " + result.detail);
+                problem = uninstall_problem_of(result.refusal);
+            }
+        }
+        if (problem) {
+            show_notice(library::uninstall_failed_notice(title, *problem, model.text));
+            return;
+        }
+        library_log("UNINSTALL: removed " + title + " from " + path_to_utf8(at));
+        // What reads the kind's folder reads it again, and the Library's
+        // feed lists what is installed again.
+        package_changed(*kind, at);
+        if (library_) {
+            library_->look_again(*this);
+            library_->refreshed = false;
+        }
+    };
+    QuestionScreen::Host answers;
+    answers.answer = [uninstall_now, uninstall_button](int32_t button) {
+        if (button == uninstall_button)
+            uninstall_now();
+        return true;
+    };
+    // It goes with the main menu, as the Library does.
+    answers.tick = [this] { return screen_ != Screen::main_menu; };
+    OaLayer& layer = oa_layer();
+    layer.push(
+        std::make_unique<QuestionScreen>(layer, Screen::main_menu, std::move(asked), answers)
+    );
+}
+
+bool Runtime::language_pack_in_use(const fs::path& folder) const {
+    const std::string kept = kept_path(folder);
+    for (const fs::path& used : language_pack_folders())
+        if (same_folder(kept_path(used), kept))
+            return true;
+    return false;
 }
 
 void Runtime::ask_before_updates(

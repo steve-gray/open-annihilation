@@ -157,11 +157,11 @@ every request's fields and answers, and the errors it is refused with.
 
 ## OA's own screens
 
-Open Annihilation's own screens (the OA button, Settings, a notice, a
-prompt, and every later one: the Library, the map browser, the gallery)
-are drawn by the engine's UI kit, and `controls` lists them under names of
-one scheme, so that a journey presses them by name as it presses the
-original screens' controls.
+Open Annihilation's own screens (the OA button and the main menu's
+Settings button, Settings, a notice, a prompt, and every later one: the
+Library, the map browser, the gallery) are drawn by the engine's UI kit,
+and `controls` lists them under names of one scheme, so that a journey
+presses them by name as it presses the original screens' controls.
 
 **The names.** Each control is listed as `oa.` followed by its kit name:
 lower-case words of `a`–`z`, `0`–`9` and `-` joined by dots, at most 120
@@ -183,7 +183,8 @@ centre would land on the line between Off and On.
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, where it opens Settings, empty |
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
+| The Settings button (main menu) | `oa.settings-button` | button; no dialog; the settings icon right of the OA button, which opens Settings with no Library under it; its text "Settings" |
 | GET MAP in the battle room, while a joiner lacks the host's pack map | `oa.get-map`, `oa.get-map-text`, `oa.get-map-progress` | no dialog, listed only while they show: the button (its text "GET MAP"); a label, its text the line saying what it fetches; a label, its text how much of the download has come, as a percentage, while the bar shows in the button's place |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
 | A switch, and its halves | `oa.settings.<row>`, `oa.settings.<row>.off`, `oa.settings.<row>.on` | the switch a label with its text; the halves check boxes, checked on the half shown |
@@ -198,13 +199,14 @@ centre would land on the line between Off and On.
 | Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
 | The footer | `oa.settings.restore-defaults`, `oa.settings.cancel`, `oa.settings.ok` | button |
 | The section's scroll bar | `oa.settings.scroll-bar` | slider |
-| The Library's PLAY NOW and SWITCH OFF, on an installed mod not played and on the mod played | `oa.library.action.play-now`, `oa.library.action.switch-off` | button, disabled during a game and while the command line chose the mod |
-| SWITCH OFF's Switch Mod question, and PLAY NOW's note when a folder cannot be played | `oa.prompt.cancel`, `oa.prompt.switch`; `oa.prompt.ok`; `oa.prompt.body` | button; label |
-| The Library's CHECK NOW, in its footer | `oa.library.check-now` | button, disabled while no registry can be asked or one is being asked |
 | A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
+| The Library's UNINSTALL in an installed package's details, its question and its notices | `oa.library.action.uninstall`; the question's `oa.prompt.cancel` and `oa.prompt.uninstall`; a notice's `oa.prompt.ok` | button; UNINSTALL is listed disabled for a map pack during a game and while the package is in the download queue, and `oa.library.note` then says why |
 | The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
+| The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, in that order | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; `updates`' text holds the updates that can be installed, "Updates 2" |
+| The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
+| The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label, its text the line shown: "Ridge 4.8 · rev 3" or "No mod is played"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
 `<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
@@ -213,8 +215,14 @@ is the standard hack's id with its dots kept. `<word>` is a notice's or a
 prompt's own word: `notice` and `prompt` unless the code that raises it
 gives one, as the missing-language question does (`language-notice`). The
 installs' prompts' ids are their answers: `cancel`, `ok`, `replace`,
-`alongside`, `reinstall`, `open-folder`, `play-now`; the Library's mod
-questions' `cancel`, `switch`, `roll-back` and `ok`.
+`alongside`, `reinstall`, `open-folder`, `play-now`. The Library's
+Uninstall question names its buttons `cancel` and `uninstall`, as the
+update question names its `not-now` and `update`, and the notices UNINSTALL
+shows instead of it for the mod being played and the language pack in use
+name their one button `ok`. Its Switch Mod question names its buttons
+`cancel` and `switch`, its Roll Back Mod question `cancel` and
+`roll-back`, and the note PLAY NOW shows for a folder it cannot play its
+one button `ok`.
 
 **The kinds.** Each kit control maps to one kind: a button, a link and a
 row of buttons' button are `button`; a switch, a strip and a row of
@@ -229,8 +237,9 @@ rows being controls of their own.
 
 **Where they are listed.** `dialog` is the OA screen's name after `oa.`:
 `oa.settings`, `oa.notice`, `oa.prompt` (or `oa.<word>`), and `oa.<name>`
-for every later screen; it is null for `oa.button`, so that `screen`'s
-`dialogs` names the screen that is open. The OA screen's controls come
+for every later screen; it is null for `oa.button` and
+`oa.settings-button`, so that `screen`'s `dialogs` names the screen that
+is open. The OA screen's controls come
 right after a message box's, ahead of everything else but an extension's
 windows. While an OA screen takes every input, the controls listed after
 it, the screen's own and its panels', are listed disabled. `rect` is on
@@ -249,16 +258,40 @@ included.
 **An example journey.** Turning the mouse wheel's zoom off and letting the
 map zoom out to the whole map, from the main menu:
 
-1. click `oa.button`, which opens the Library; wait until
-   `oa.library.settings` is listed, click it, and wait until
-   `oa.settings.ok` is listed;
+1. click `oa.settings-button`, which opens Settings, and wait until
+   `oa.settings.ok` is listed (or click `oa.button`, which opens the
+   Library, then its `oa.library.settings`);
 2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
    (its `checked` turns true);
 3. click `oa.settings.max-zoom-out`, then
    `oa.settings.max-zoom-out.whole-map`;
 4. click `oa.settings.ok`: `prefs` then holds
    `open-annihilation.wheel-zoom` `0` and `open-annihilation.max-zoom-out`
-   `whole-map`; click `oa.library.close` to go back to the main menu.
+   `whole-map`, and the main menu shows again (had Settings opened over
+   the Library, the Library shows: click `oa.library.close` to go back to
+   the main menu).
+
+### The Library
+
+The Library (`dialog` `oa.library`) names every control as its module
+lists them ([src/ui/library](../src/ui/library/README.md#the-screens)).
+Its rows and their state icons are listed so:
+
+| Control | Name | Kind, and what it reports |
+|---|---|---|
+| A row of the list | `oa.library.row.<registry>.<key>`, or `oa.library.row.<key>` for a package of the player's own | check box, checked while chosen; its text the package's name |
+| A row's download arrow, its GET | `oa.library.row.<registry>.<key>.get` | button, its text "GET", listed just before its row; disabled while the details offer no GET that can act: blocked, in the download queue, or failed |
+| A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
+| The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.play-now`, `.switch-off`, `.roll-back`, `.uninstall`, `.open-folder`, `.homepage` | button, its text the button's words; SWITCH OFF stands in PLAY NOW's place on the mod being played, and both are listed disabled during a game and while the command line chose the mod |
+| SWITCH OFF's Switch Mod question, and the note PLAY NOW shows for a folder it cannot play | `oa.prompt.cancel`, `oa.prompt.switch`; the note's `oa.prompt.ok`; `oa.prompt.body` | button; label |
+| The footer's CHECK NOW | `oa.library.check-now` | button, its text "CHECK NOW"; disabled while no registry can be asked, while one is being asked and during a game |
+| The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
+
+A row's circled check, installed and up to date, is no control. A click
+at a row's centre chooses it; a click at its icon's centre presses GET or
+UPDATE for that row, as the details' button does, asking the same
+questions. `<registry>` and `<key>` are the registry's id and the package's
+key, lower-cased, every other run of characters one `-`.
 
 ## Input
 

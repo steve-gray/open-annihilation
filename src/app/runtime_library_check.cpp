@@ -3,8 +3,11 @@
 
 // --check-library: the Library over a feed of made-up packages, with no
 // network. With no update waiting the main menu's OA button draws as it
-// always has and opens the Library on Mods, whose CLOSE goes back; with two
-// it wears its dot, says so to automation and opens the Library on Updates.
+// always has and opens the Library on Active, which reads the mod played,
+// the language in use and the installed maps, and whose CLOSE goes back;
+// with two it wears its dot, says so to automation and opens the Library on
+// Active again, whose Updates tab opens on its Updates filter with UPDATE
+// ALL over the list.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
 // openers, ROLL BACK asks the Roll Back Mod question over the Library and
 // PLAY NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
@@ -25,6 +28,7 @@
 #include "user_folder_state.hpp"
 #include "web_link_state.hpp"
 
+#include "oa/app/automation_host.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/updates.hpp"
 #include "oa/app/game_directory.hpp"
@@ -253,7 +257,9 @@ library::Listing mod_listing(
 
 /// Returns the fixture's inputs: two registries, Ridge and Lattice installed
 /// from the built-in one, Cinder to get from it and Dunes from the added one,
-/// queued; with or without an update of each installed mod.
+/// queued; with or without an update of each installed mod. For the Active
+/// tab, Basalt is played from a folder outside the Mods folder, a German
+/// pack shows the game's words and one map pack is installed.
 ///
 /// @param mods the player's Mods folder
 /// @param updates the two updates wait
@@ -319,6 +325,11 @@ library::Inputs fixture_inputs_of(const fs::path& mods, bool updates) {
     inputs.engine = content::this_engine_rules().engine;
     inputs.version_text = "v0.8.0";
     inputs.list_age_seconds = 4 * 60;
+    inputs.playing_mod = library::PlayingMod{"Basalt", "2.1", std::nullopt};
+    inputs.language = {"Deutsch", "Deutsch", "1.2"};
+    inputs.map_packs = {
+        {"Fixture Isles", {{"Isle Hop", 4, "16x16"}, {"Long Strait", 2, "20x12"}}},
+    };
     return inputs;
 }
 
@@ -825,13 +836,40 @@ void Runtime::check_library() {
             );
         }
 
-        // 2. Releasing the press opens the Library on Mods.
+        // 2. Releasing the press opens the Library on Active, whose lines
+        // automation reads and which takes no press.
         press_button();
         require(
-            top_is(library_screen_name) && host.model.tab == library::Tab::mods &&
+            top_is(library_screen_name) && host.model.tab == library::Tab::active &&
                 engine_settings_dialog() == nullptr,
-            "the OA button did not open the Library on Mods" + on
+            "the OA button did not open the Library on Active" + on
         );
+        run_frame(running);
+        {
+            const std::optional<AutomationControl> mod = named("oa.library.active.mod");
+            const std::optional<AutomationControl> language = named("oa.library.active.language");
+            const std::optional<AutomationControl> map = named("oa.library.active.map.2");
+            require(
+                mod.has_value() && mod->text == "Basalt 2.1" && language.has_value() &&
+                    language->text == "Deutsch 1.2" && map.has_value() &&
+                    map->text == "Long Strait · 2 players · 20x12",
+                "the Active tab does not read Basalt, Deutsch 1.2 and Fixture Isles' maps" + on
+            );
+            require(
+                !named("oa.library.search").has_value() &&
+                    !named("oa.library.filter.all").has_value() &&
+                    !named("oa.library.filter").has_value(),
+                "the Active tab shows a search or a filter" + on
+            );
+            const std::size_t asked = fixture.enqueued.size();
+            click_named("oa.library.active.mod");
+            require(
+                top_is(library_screen_name) && host.model.tab == library::Tab::active &&
+                    fixture.enqueued.size() == asked,
+                "a press on the Active tab's line did something" + on
+            );
+        }
+        snapshot("active-" + size);
 
         // 3. CLOSE goes back to the main menu.
         click_named("oa.library.close");
@@ -841,7 +879,8 @@ void Runtime::check_library() {
         );
 
         // 4. With two updates the button wears its dot, says so, and opens
-        // the Library on Updates.
+        // the Library on Active; its Updates tab opens on Updates, with
+        // UPDATE ALL over the list and the filters of the other tabs.
         feed_changes(true);
         require(library_update_count() == 2, "the two updates are not counted" + on);
         {
@@ -869,12 +908,26 @@ void Runtime::check_library() {
         );
         press_button();
         require(
-            top_is(library_screen_name) && host.model.tab == library::Tab::updates,
-            "the OA button did not open the Library on Updates" + on
+            top_is(library_screen_name) && host.model.tab == library::Tab::active,
+            "the OA button did not open the Library on Active" + on
         );
         require(
             named("oa.library.tab.updates").has_value(),
             "automation does not list oa.library.tab.updates" + on
+        );
+        click_named("oa.library.tab.updates");
+        require(
+            host.model.tab == library::Tab::updates &&
+                library::shown_filter(host.model) == library::Filter::updates &&
+                host.model.visible.size() == 2,
+            "the Updates tab did not open on its two updates" + on
+        );
+        run_frame(running);
+        require(
+            named("oa.library.action.update-all").has_value() &&
+                (named("oa.library.filter").has_value() ||
+                 named("oa.library.filter.updates").has_value()),
+            "the Updates tab shows no UPDATE ALL or no filters" + on
         );
         snapshot("updates-" + size);
 
@@ -1098,7 +1151,10 @@ void Runtime::check_library() {
         std::vector<AutomationControl> controls;
         oa_layer().automation_controls(controls);
         for (const AutomationControl& control : controls) {
+            // A row is a check box; its GET or UPDATE icon, listed under the
+            // row's name, is a button.
             if (control.visible && control.window_width > 0 && control.window_height > 0 &&
+                control.kind == AutomationControlKind::check_box &&
                 control.name.compare(0, std::string("oa.library.row.").size(), "oa.library.row.") ==
                     0)
                 return control.name;

@@ -741,10 +741,11 @@ class OaLayer {
 
     /// Appends what the layer shows to the automation endpoint's controls
     /// (docs/automation.md, "OA's own screens"): the OA button while it
-    /// shows, named oa.button with no dialog and enabled while no modal
-    /// screen shows; then each screen that shows, from the top down to the
-    /// first modal one, each control and part of its display list
-    /// (kit::automation_parts) named oa. and its name, of the kind
+    /// shows, named oa.button, and on the main menu the Settings button
+    /// beside it, named oa.settings-button, each with no dialog and enabled
+    /// while no modal screen shows; then each screen that shows, from the
+    /// top down to the first modal one, each control and part of its display
+    /// list (kit::automation_parts) named oa. and its name, of the kind
     /// automation_kind gives, its dialog oa. and the screen's name.
     ///
     /// Each carries its exact rectangle in the window's pixels, as present
@@ -822,7 +823,7 @@ class OaLayer {
     /// @param look how the button looks
     /// @param darkened a modal screen shows over the screen
     /// @param fonts the dialog's fonts
-    /// @param icon the Open Annihilation icon; empty draws the OA mark
+    /// @param icon the icon it shows, the settings icon; empty draws the OA mark
     /// @param fit the button fits the safe area (match_fits_safe_area): the
     ///     face takes the whole-number scale at or above the button's own
     /// @return the face, ingame_button_side source pixels a side at that scale

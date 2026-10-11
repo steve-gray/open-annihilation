@@ -3,11 +3,13 @@
 
 // The canvas's primitives in both forms: the crisp form through the artless
 // painter at a whole scale in the game's fonts, the smooth form through the
-// painter at any scale in the modern fonts, every edge on a whole pixel.
+// painter at any scale in the modern fonts, every edge on a whole pixel; and
+// a coverage map blended at either form's own pixels.
 
 #include "oa/ui/kit/canvas.hpp"
 
 #include "oa/platform/text_font.hpp"
+#include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/paint/painter.hpp"
 
@@ -15,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 
 namespace oa::ui::kit {
@@ -387,6 +390,69 @@ void draw_picture(const Canvas& canvas, const Rect& rect, const renderer::RgbaPi
     }
     if (canvas.surface != nullptr)
         renderer::draw_picture(*canvas.surface, canvas.placement, rect, picture);
+}
+
+Point covered_pixels(const Canvas& canvas, const Rect& rect) noexcept {
+    if (rect.width <= 0 || rect.height <= 0)
+        return {};
+    if (is_smooth(canvas)) {
+        const paint::Box pixels = pixels_of(canvas, rect);
+        return {std::max(pixels.width, 0), std::max(pixels.height, 0)};
+    }
+    const int32_t scale = canvas.placement.scale;
+    if (scale < 1)
+        return {};
+    return {rect.width * scale, rect.height * scale};
+}
+
+void blend_coverage(
+    const Canvas& canvas, const Rect& rect, std::span<const uint8_t> coverage, Colour ink
+) {
+    const Point size = covered_pixels(canvas, rect);
+    if (size.x <= 0 || size.y <= 0)
+        return;
+    const std::size_t count = static_cast<std::size_t>(size.x) * static_cast<std::size_t>(size.y);
+    if (coverage.size() < count)
+        return;
+    if (is_smooth(canvas)) {
+        paint::Painter* painter = painter_of(canvas);
+        if (painter == nullptr)
+            return;
+        const paint::Box box = pixels_of(canvas, rect);
+        painter->draw_coverage(coverage.first(count), size.x, size.y, box.x, box.y, rgba_of(ink));
+        return;
+    }
+    if (canvas.surface == nullptr)
+        return;
+    // One source pixel a surface pixel, from the rectangle's top left: the
+    // placement's clip, in points, becomes the same rows and columns of
+    // surface pixels.
+    const int32_t scale = canvas.placement.scale;
+    renderer::Placement fine;
+    fine.x = canvas.placement.x + rect.x * scale;
+    fine.y = canvas.placement.y + rect.y * scale;
+    fine.scale = 1;
+    const Rect& clip = canvas.placement.clip;
+    if (clip.width > 0 && clip.height > 0)
+        fine.clip = {
+            (clip.x - rect.x) * scale,
+            (clip.y - rect.y) * scale,
+            clip.width * scale,
+            clip.height * scale,
+        };
+    for (int32_t row = 0; row < size.y; ++row)
+        for (int32_t column = 0; column < size.x; ++column) {
+            const uint32_t covered = coverage
+                [static_cast<std::size_t>(row) * static_cast<std::size_t>(size.x) +
+                 static_cast<std::size_t>(column)];
+            if (covered == 0)
+                continue;
+            // The share in 255ths as the painter's opacity in 256ths, to the nearest.
+            const uint32_t opacity = (covered * renderer::blend_opaque + 127U) / 255U;
+            renderer::blend_source_rect(
+                *canvas.surface, fine, {column, row, 1, 1}, rgb(ink), opacity
+            );
+        }
 }
 
 void draw_mark(const Canvas& canvas, const renderer::Mark& bits, Point at, Colour ink) {

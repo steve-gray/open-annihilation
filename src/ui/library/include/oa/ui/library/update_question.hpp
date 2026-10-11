@@ -34,8 +34,10 @@ inline constexpr std::size_t named_updates = 3;
 
 /// What the update question asks, in the language shown.
 struct UpdateQuestion {
-    std::string title{};       ///< "Update {name}", or "Update all"
-    std::string heading{};     ///< "{name} 4.8 · revision 3 → 4"; empty for UPDATE ALL's
+    std::string title{}; ///< "Update {name}", or "Update all"
+    /// "{name} 4.8 · revision 3 → 4", "{name} 4.8 → 4.9", or "{name} 4.8"
+    /// when the version stays and a side names no revision; empty for UPDATE ALL's
+    std::string heading{};
     std::string body{};        ///< what the update does to saved games, and ROLL BACK
     std::vector<Fact> facts{}; ///< Rules and Download; none for UPDATE ALL's
 };

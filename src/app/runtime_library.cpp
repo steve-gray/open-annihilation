@@ -10,7 +10,9 @@
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
+#include "language_state.hpp"
 #include "library_host.hpp"
+#include "map_packs.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 #include "package_paths.hpp"
@@ -29,6 +31,7 @@
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/trust.hpp"
@@ -79,6 +82,10 @@ constexpr std::string_view kSettingsScreen = "settings";
 constexpr std::string_view kRowNamePrefix = "library.row.";
 /// The key of a mod folder whose name gives no word: a folder at a root.
 constexpr std::string_view kOwnModWord = "mod";
+
+/// The author's name a mod's or a map pack's manifest gives when nobody is
+/// known (docs/mods/oamod-standard.md): the details name no author for it.
+constexpr std::string_view kUnknownAuthor = "unknown";
 /// The modifier that holds the Library's Find: Cmd on macOS, Ctrl elsewhere.
 #ifdef SDL_PLATFORM_MACOS
 constexpr uint16_t kCommandModifier = SDL_KMOD_GUI;
@@ -270,6 +277,11 @@ void search_updates(
                   << '\n';
     }
     base::threads::LockGuard guard(work.mutex);
+    // The log says what a search found when it differs from the last one.
+    if (work.searches == 0 || installed.size() != work.installed.size() ||
+        updates.size() != work.updates.size())
+        std::cerr << "open-annihilation: library: " << installed.size() << " installed, "
+                  << updates.size() << (updates.size() == 1 ? " update\n" : " updates\n");
     work.installed = std::move(installed);
     work.matches = std::move(matches);
     work.updates = std::move(updates);
@@ -526,7 +538,10 @@ void Runtime::LibraryHost::rebuild(Runtime& runtime) {
     }
     kept_updates = std::move(still);
     library::refresh(model, std::move(inputs));
-    update_count = library::update_count(model);
+    const std::size_t offered = library::update_count(model);
+    if (offered != update_count)
+        std::cerr << "open-annihilation: library: updates offered: " << offered << '\n';
+    update_count = offered;
     refreshed = true;
     ++model_revision;
 }
@@ -740,6 +755,7 @@ library::Inputs Runtime::library_inputs() {
             listing.hack_ids = package.hack_ids;
             listing.size = package.size;
             listing.coverage = package.coverage;
+            listing.published = package.published;
             for (const data::catalogue::MapEntry& map : package.maps)
                 listing.maps.push_back(
                     {map.name,
@@ -809,6 +825,9 @@ library::Inputs Runtime::library_inputs() {
         shown.name = package.name;
         shown.version = package.version;
         shown.revision = package.revision;
+        // The manifest's author, unless it says nobody is known.
+        if (package.author != kUnknownAuthor)
+            shown.author = package.author;
         shown.registry = listed ? match.registry : std::string{};
         shown.release = listed ? match.release : 0;
         shown.rules = package.rules;
@@ -816,6 +835,8 @@ library::Inputs Runtime::library_inputs() {
                         package_target_in_use(*package.kind, package.folder);
         if (package.has_backup)
             shown.kept = library::Kept{package.backup_version, package.backup_revision};
+        // The language pack the game shows its words from is never uninstalled.
+        shown.in_use = *kind == library::Kind::language && language_pack_in_use(package.folder);
         if (index < pictures.size())
             shown.badge = badge_of(pictures[index]);
         inputs.installed.push_back(std::move(shown));
@@ -937,6 +958,67 @@ library::Inputs Runtime::library_inputs() {
     inputs.version_text = "v" + formats::oamod::engine_version_text(inputs.engine);
     inputs.in_match = screen_ == Screen::match || match_ != nullptr;
     inputs.mod_from_command_line = !options_.mod_dir.empty() || options_.base_game;
+
+    // The Active tab. The mod played, as list_offered_mods finds it: the
+    // folder layered over the game folder, with its title, version and
+    // badge as read at start.
+    const EngineSettingsState& mods = engine_settings_state();
+    if (!mods.playing_mod_folder.empty()) {
+        for (std::size_t index = 0;
+             index < mods.mod_folders.size() && index < mods.mod_names.size() &&
+             index < mods.mod_details.size();
+             ++index) {
+            if (mods.mod_folders[index] != mods.playing_mod_folder)
+                continue;
+            const EngineSettingsState::OfferedMod& details = mods.mod_details[index];
+            library::PlayingMod played;
+            played.name = mods.mod_names[index];
+            if (details.version != mod_summary_no_version)
+                played.version = details.version;
+            played.badge = badge_of(details.badge);
+            inputs.playing_mod = std::move(played);
+            break;
+        }
+    }
+
+    // The language shown, and the first pack that holds it in the order its
+    // words are looked up: the mod's, the player's, then the engine's.
+    const oa::data::languages::Language& language = shown_language();
+    if (language.tag != oa::data::languages::english().tag)
+        inputs.language.name = std::string(language.endonym);
+    if (language_) {
+        for (const auto* packs :
+             {&language_->mod_packs, &language_->player_packs, &language_->engine_packs}) {
+            for (const auto& loaded : *packs) {
+                const oa::data::languages::PackManifest& manifest = loaded->pack.manifest();
+                if (oa::data::languages::find_by_tag(manifest.tag) != &language)
+                    continue;
+                inputs.language.pack =
+                    manifest.name.empty() ? std::string(language.endonym) : manifest.name;
+                inputs.language.version = manifest.version;
+                break;
+            }
+            if (!inputs.language.pack.empty())
+                break;
+        }
+    }
+
+    // The installed map packs' maps, as their manifests list them, one pack
+    // to a folder; the packs are read once and kept until one changes.
+    std::vector<std::filesystem::path> pack_folders;
+    for (const PackMap& map : map_packs().maps()) {
+        const auto found = std::find(pack_folders.begin(), pack_folders.end(), map.folder);
+        const auto place = static_cast<std::size_t>(found - pack_folders.begin());
+        if (found == pack_folders.end()) {
+            pack_folders.push_back(map.folder);
+            library::InstalledMaps added;
+            added.name = map.pack_name;
+            inputs.map_packs.push_back(std::move(added));
+        }
+        inputs.map_packs[place].maps.push_back(
+            {map.title.empty() ? map.stem : map.title, map.players, map.size}
+        );
+    }
     return inputs;
 }
 
@@ -1334,6 +1416,9 @@ struct Runtime::LibraryScreen final : LayerScreen {
         case library::Action::details:
         case library::Action::back:
             return false;
+        case library::Action::uninstall:
+            runtime_.library_entry_action(action, id);
+            return false;
         }
         return false;
     }
@@ -1366,8 +1451,7 @@ void Runtime::open_library(std::optional<library::Tab> tab) {
             host.feed.generation != nullptr ? host.feed.generation(host.feed.context) : 0;
         host.rebuild(*this);
     }
-    const library::Tab shown =
-        tab ? *tab : (host.update_count > 0 ? library::Tab::updates : library::Tab::mods);
+    const library::Tab shown = tab ? *tab : library::Tab::active;
     OaLayer& layer = oa_layer();
     if (layer.find(library_screen_name) != nullptr) {
         // The screens above it close, and it shows the tab asked for.

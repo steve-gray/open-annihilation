@@ -48,17 +48,25 @@ translator finds them together. Every word passes through `Library::text`
     the registry's name, and, on a GET entry, the name of another registry
     the same kind and key is installed from (`replaces_registry_name`).
 
-  It keeps the tab, filter, tag, search and selection. When the selected
-  entry no longer shows, the first visible entry is selected and the
-  details close.
+  It keeps the tab, each tab's filter, the tag, search and selection. When
+  the selected entry no longer shows, the first visible entry is selected
+  and the details close.
 - `set_tab`, `set_filter`, `set_tag`, `set_query`, `select`,
   `move_selection`, `open_details` and `close_details` browse; each
   recomputes `visible`, the entries shown in their order:
-  - Mods, Maps and Languages show their kind, under the filter (All;
-    Installed keeps INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE)
-    and the tag. The Updates tab shows every UPDATE entry of every kind and
-    ignores the filter and tag;
-  - with no search: updates, then the other installed entries, then GET
+  - the tabs are Active, Mods, Maps, Languages and Updates, in that order.
+    A Library opens on Active (`Library::tab`), which lists no entry and
+    selects none: it shows the player's setup (`active_setup`, below);
+  - Mods, Maps and Languages show their kind and Updates every kind, under
+    the tab's own filter (`Library::filters`, `shown_filter`) and the tag:
+    All; New keeps the tab's ten listings (`newest_count`) with the latest
+    `Listing::published` day, ties by name, and never a listing without a
+    day, so a package's release and revision play no part; Installed keeps
+    INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE. Each tab keeps its
+    filter when another is shown: Updates starts on Updates and the others
+    on All;
+  - with no search: under New, the latest day first, then by name; under
+    the others, updates, then the other installed entries, then GET
     entries that can be installed, then blocked ones; within each, by name
     folded to lower case, built-in registries first, then registry id;
   - with a search (`rank`, in `search.cpp`): every word must be found; a
@@ -68,18 +76,36 @@ translator finds them together. Every word passes through `Library::text`
     that start with the first word, then as with no search. The search is
     kept to 64 bytes, cut at a character boundary.
 - `tags_in_tab` counts the tags of the entries a tab shows under its
-  filter; `update_count` counts the updates that can be installed, the
-  number on the Updates tab and the OA button.
+  filter; `filter_count` counts the entries a filter keeps on the tab
+  shown before the tag and the search, so no count moves with them, and
+  `filter_caption` writes it as the filters show it, "Installed (4)"
+  (`words::filter_with_count`); `update_count` counts the updates that can
+  be installed, the number on the Updates tab and the OA button, and
+  `updates_shown` the UPDATE entries the list shows, the Updates tab's
+  "{n} updates".
+- `active_setup` describes the Active tab from the inputs: the mod being
+  played, the installed mod marked playing (its listing's name and badge
+  when a registry lists it) or else `Inputs::playing_mod`, with its
+  version ("Highland 0.4.0"), or "No mod is played"; the language in use,
+  its pack and version (`Inputs::language`: "Polski 1.0") or the language
+  the game holds itself ("English · built in"); and each installed map
+  pack (`Inputs::map_packs`) by name, its maps' names, players ("4
+  players") and sizes.
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
     that can be retried), PLAY NOW, or SWITCH OFF on the mod being played,
-    ROLL BACK, OPEN FOLDER and HOMEPAGE, each with whether it is enabled:
-    PLAY NOW, SWITCH OFF and ROLL BACK are off during a game, and PLAY NOW
-    and SWITCH OFF while `Inputs::mod_from_command_line` says `--mod-dir` or
-    `--base-game` chose the mod;
-  - the facts Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, in
-    a long and a short form. An update's Rules fact says in words whether
+    ROLL BACK, UNINSTALL, OPEN FOLDER and HOMEPAGE, each with whether it is
+    enabled: PLAY NOW, SWITCH OFF and ROLL BACK are off during a game, and
+    PLAY NOW and SWITCH OFF while `Inputs::mod_from_command_line` says
+    `--mod-dir` or `--base-game` chose the mod;
+  - the facts Installed, Latest, Author, Size, Base, Needs, Hacks, Rules,
+    Maps, Coverage and From, in a long and a short form. Installed and
+    Latest are the installed copy's and the listing's version and revision
+    (`release_text`: "4.8 (rev 3)", "1.0" for a revision of 0, "rev 3"
+    without a version), and Author is the listing's author, else its
+    publisher, else the installed manifest's (`Installed::author`); each is
+    left out when it has nothing to say. An update's Rules fact says in words whether
     it changes the game's rules and which saved games stop loading
     ("9c1f 4e0b → 51d2 07aa · changes the game's rules; saved games from
     revision 3 won't load under revision 4"), since a built-in registry's
@@ -102,10 +128,19 @@ translator finds them together. Every word passes through `Library::text`
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
   "188 MB"), download counts (`downloads_text`: "1 download",
   "12,400 downloads"), download progress, ages, the header's list age, rules hashes
-  ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), engine
+  ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), a release as
+  the facts give it (`release_text`: "4.8 (rev 3)"), engine
   requirements, what an update changes from and to (`change_texts`:
-  "revision 3" and "revision 4", or the versions), and the names of tabs,
-  filters, states and buttons.
+  "revision 3" and "revision 4", or the versions, and "the old copy" or
+  "the new copy" for a side no version or revision above 0 names), and the
+  names of tabs, filters, states and buttons.
+- No text says "Revision 0" or "rev 0". A catalogue that names no
+  revision, as Core Prime's does for language packs, leaves it 0: the
+  status line then says "Update available · 3.4 MB to download" for an
+  update of the same version (`status_update_available`); "Revision
+  {revision}" is written only for a revision above 0 of the version
+  installed (`status_line`), and the update question's revision heading
+  only when both revisions are above 0.
 
 ### The update question
 
@@ -163,19 +198,59 @@ default (`oa.prompt.<id>` to automation):
   and returns to the main menu." for the mod the game plays, CANCEL
   (`cancel`) marked and ROLL BACK (`roll-back`) primary.
 
+### Uninstalling
+
+`uninstall.hpp` holds UNINSTALL's rules, its question and its notices. The
+app removes the folder (`Runtime::library_uninstall`,
+`package_install::uninstall_package`).
+
+- `entry_actions` shows UNINSTALL on every installed entry, after ROLL BACK
+  and before OPEN FOLDER, never as the main button. `uninstall_off_reason`
+  turns it off, and says why, for a map pack while a game is played ("Map
+  packs can't be uninstalled during a game.") and for any package with a
+  queue item that has not failed or been installed ("It is in the download
+  queue: CANCEL it before you uninstall it."). `details_note` adds that
+  reason after `playing_note`'s, as the note under the buttons.
+- `uninstall_step(library, entry)` says what pressing it leads to: nothing
+  while it is off, a notice for the mod being played
+  (`Installed::playing`) and for a language pack the game shows its words
+  from (`Installed::in_use`), and the question for every other installed
+  package.
+- `uninstall_question(entry, folder)` makes the kit question: "Uninstall
+  {name}", "Uninstall {name}? Its folder, {folder}, is removed." with ",
+  and with it the copy ROLL BACK keeps." when a copy is kept, then "GET
+  installs it again." for a package a registry lists, or "No registry
+  lists it, so the Library cannot get it again."; CANCEL (`cancel`) marked
+  and answering Escape, B and N, and UNINSTALL (`uninstall`) primary. Its
+  word is the kit's default, so automation lists `oa.prompt.cancel` and
+  `oa.prompt.uninstall`.
+- `uninstall_notice(entry, step)` makes the notice for a package in use,
+  and `uninstall_failed_notice(name, problem)` the one for an uninstall
+  that removed nothing (busy, changed, a link, outside the player's
+  folders, or not moved), each with one OK (`ok`).
+
 ### The screens
 
 - `library_layout(library, state, frame, fonts)` returns the display list of
   the Library in a frame's window (`window_size`: 480 by 324, 720 by 486 or
   960 by 600 points, never larger than the frame), from its top left corner:
+  - **The Active tab**, at every class, shows under the tabs, with no
+    search and no filters, the headings MOD, LANGUAGE and MAPS: the mod's
+    badge, name and version, or "No mod is played"; the language's line;
+    and each map pack's name over its maps, a line each with the name, the
+    players and the size in columns. The lines are labels, scroll as the
+    details do when they are taller than the window, and take no press;
+    Compact's footer holds no DETAILS there;
   - **Compact** shows a list page: the header (the OA mark, "Library" and
-    the list's age), the tabs with short names ("Mods", "Maps", "Lang",
-    "Upd" with the update count), the search field and the filter
-    drop-down (All, Installed, Updates, then "Tag: balance (3)" for each
-    tag of the tab) or, on the Updates tab, "{n} updates" and UPDATE ALL,
-    the list of 28-point rows (the name, then the version, size and an
-    added registry's name, and the state's chip, disabled when GET or
-    UPDATE cannot act), and the footer (the queue's short line with a
+    the list's age), the tabs with short names ("Active", "Mods", "Maps",
+    "Lang", "Upd" with the update count), the search field and the filter
+    drop-down (All, New, Installed and Updates with their counts, "All
+    (11)", then "Tag: balance (3)" for each tag of the tab), on the
+    Updates tab "{n} updates" and UPDATE ALL on a line over the list, the
+    list of 28-point rows (the name, then the version, size and an
+    added registry's name, and the state's icon: a download arrow for GET,
+    a circled up-arrow for UPDATE, a circled check for INSTALLED and
+    PLAYING, dimmed when GET or UPDATE cannot act), and the footer (the queue's short line with a
     progress bar while downloading, CHECK NOW, SETTINGS…, DETAILS and
     CLOSE). While
     `ScreenState::details_page` and the model's `details_open` are both set
@@ -186,19 +261,21 @@ default (`oa.prompt.<id>` to automation):
     note, and in the footer the first three actions, MORE ▾ holding the
     rest, and CLOSE;
   - **Regular** shows "Open Annihilation Library" and "v0.8.0 · list from
-    4 min ago", the tabs and a 240-point search, a row of chips (All,
-    Installed, Updates and the tags while they fit, TAGS ▾ holding the
-    rest; on Updates, "{n} updates" and UPDATE ALL), a 420-point list of
+    4 min ago", the tabs and a 240-point search, a row of chips (All, New,
+    Installed and Updates with their counts, and the tags while they fit,
+    TAGS ▾ holding the rest; on Updates, "{n} updates" and UPDATE ALL on a
+    line over the list), a 420-point list of
     36-point rows (the name and byline, the summary, the version over the
-    size, the chip), the details (a 40-point badge beside the name, chip
-    and status line, the summary in at most six lines, the long facts, the
+    size, the state's icon), the details (a 40-point badge beside the
+    name, its state's icon and the status line, the summary in at most six lines, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
     lines, CHECK NOW, SETTINGS… and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
-    pane (a nav list of All, Installed and Updates, the heading TAGS and the
-    tab's tags with their counts, or UPDATE ALL on Updates) in place of the
+    pane (a nav list of All, New, Installed and Updates with their counts,
+    the heading TAGS and the tab's tags with their counts) in place of the
     chips, a 400-point list of rows of three lines (the tags as chips under
-    the summary), and the details.
+    the summary), on Updates under "{n} updates" and UPDATE ALL, and the
+    details.
 
   A badge is the package's picture, or its letters (`badge_letters`: a
   word's first three, or the first of up to three words) in the kit's ink
@@ -214,14 +291,16 @@ default (`oa.prompt.<id>` to automation):
   layer's screens take it (`ScreenResult`: the action for the host, the
   entry it is for, and whether to draw again):
   - **Keys** (`kit::Key`): Tab and Shift+Tab follow the declared order: the
-    tabs, the search, the filters, the list, the details' actions, the
-    footer's buttons; on Compact's details page, the way back, the actions,
+    tabs, the search, the filters, UPDATE ALL and the list, the details'
+    actions, the footer's buttons (on Active, the tabs and the footer's
+    buttons alone); on Compact's details page, the way back, the actions,
     MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
-    to the ends. Enter on the list opens the details page at Compact and
-    moves the focus to the first enabled action at Regular and Large.
+    to the ends; on Active, the page keys, Home and End scroll its lines.
+    Enter on the list opens the details page at Compact and moves the
+    focus to the first enabled action at Regular and Large.
     Escape clears a search that has the focus and holds words, else leaves
     the details page, else asks to close. On the search, typed text and the
     editing keys search as they are typed. An open drop-down takes Up,
@@ -236,27 +315,37 @@ default (`oa.prompt.<id>` to automation):
     holds the focus.
   - **Pointer and finger**: a press on a row selects it, and at Compact
     opens its details page; no press, double press or tap on a row gets,
-    updates or installs anything. A finger reaches the nearest control
+    updates or installs anything, but for its icon: a row's download arrow
+    is its GET and its circled up-arrow its UPDATE, a control of their own
+    tried before the row, which select the row and ask for that action
+    while the details' first button is that action and enabled, and take
+    no press otherwise (blocked, queued or failed), the press reaching the
+    row. A finger reaches the nearest control
     within its reach (`kit::finger_down`); a finger that moves farther than
     its reach in the list or the details scrolls that pane and presses
     nothing. A press outside an open drop-down only closes it. The wheel
     scrolls the pane under the pointer, or an open drop-down's items.
 - Every control is named for automation (the OA layer lists each as `oa.`
   and its name):
-  - `library.tab.mods`, `library.tab.maps`, `library.tab.languages`,
-    `library.tab.updates` (their text holds the count: "Updates 2");
-    `library.search`;
+  - `library.tab.active`, `library.tab.mods`, `library.tab.maps`,
+    `library.tab.languages`, `library.tab.updates` (their text holds the
+    count: "Updates 2"); `library.search`;
   - `library.filter` (Compact's drop-down, whose items, while it is open,
-    are `library.filter.all`, `.installed`, `.updates` and `.tag-<tag>`),
-    or the chips or nav entries `library.filter.all`,
-    `library.filter.installed` and `library.filter.updates`; the tags'
-    chips or nav entries `library.tag.<tag>`, and `library.tags` (TAGS ▾,
-    its items `library.tags.<tag>` while it is open);
+    are `library.filter.all`, `.new`, `.installed`, `.updates` and
+    `.tag-<tag>`), or the chips or nav entries `library.filter.all`,
+    `library.filter.new`, `library.filter.installed` and
+    `library.filter.updates`, their text the filter and its count ("All
+    (11)"); the tags' chips or nav entries `library.tag.<tag>`, and
+    `library.tags` (TAGS ▾, its items `library.tags.<tag>` while it is
+    open);
   - `library.list` (the list, kind `list`, no text), and one control for
     each row that shows, kind `list_item`, its text the entry's name:
     `library.row.<registry>.<key>`, or `library.row.<key>` for a package of
     the player's own, each word lower-cased with other characters as
-    hyphens;
+    hyphens; a GET or UPDATE row's icon, after it, is
+    `library.row.<registry>.<key>.get` or `.update`, kind `button`, its
+    text "GET" or "UPDATE", listed disabled while it takes no press, and
+    never in Tab's order;
   - `library.action.get`, `.update`, `.update-all`, `.cancel`, `.retry`,
     `.roll-back`, `.play-now`, `.switch-off`, `.open-folder` and
     `.homepage`; on Compact's
@@ -268,7 +357,13 @@ default (`oa.prompt.<id>` to automation):
     `library.from` and `library.rules`: controls of kind `area` that are
     neither enabled nor focusable, whose text is the words shown (the From
     fact's long value, and the Rules fact's value whole, short at Compact
-    and long at Regular and Large).
+    and long at Regular and Large);
+  - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
+    or "No mod is played"), `library.active.language` ("Polski 1.0") and
+    `library.active.map.<n>`, from 1 in the order shown ("Ridgeline · 4
+    players · 16x16"), each with the part of its line that shows as its
+    rectangle, empty while the line is scrolled out; at most 4,000 maps
+    are named.
 - `focused_field(state, list)` gives the search field while it has the
   focus, over which a host keeps the system's text input started.
 
@@ -297,19 +392,23 @@ stay valid until the model's next refresh.
   lookup it is English.
 - The screens are made only of the kit's components and its display list's
   generic parts; every colour is a kit token and every size a kit metric,
-  but for the panes' widths the design gives (Compact's 104 points beside
-  the search, the 240-point search, the 420- and 400-point lists, the
+  but for the panes' widths the design gives (Compact's 128 points beside
+  the search for the filter and its count, the 240-point search, the 420- and 400-point lists, the
   180-point filter pane and the details' 40-point badge). `draw.cpp` only
   paints the display list.
 - The layout decides no rule of the model: which entries show, in which
-  order, their states, what blocks them and their actions are the model's.
+  order, their states, what blocks them, their actions, the filters'
+  counts and what the Active tab says are the model's.
+- Nothing on the Active tab takes a press, a key or Tab.
 - Every action Regular offers is reachable at Compact: on the list page, or
   on the details page, its first three as buttons and the rest in MORE ▾.
-- No two controls meet, but the list and the rows it holds; a row that does
-  not show has no control. Every control that takes the focus is in Tab's
+- No two controls meet, but the list and the rows it holds and each row
+  and its icon; a row that does not show has no control. Every control that takes the focus is in Tab's
   declared order and reached by the arrows from the first tab.
 - An update's Rules fact is shown whole at every class, never cut.
-- A press on a row only selects it, and at Compact opens its details.
+- A press on a row only selects it, and at Compact opens its details; only
+  its download arrow or up-arrow asks for GET or UPDATE, by the same rule
+  as the details' button.
 
 ## Tests
 
@@ -323,8 +422,9 @@ played; UPDATE ALL over a built-in and an added registry's rules-changing
 mods naming only the added one, none to ask, and five named as three and
 "2 more"; the kit question's paragraphs, NOT NOW marked and UPDATE primary,
 its automation names and its text fitting at every class; the questions
-about the mod played, their words, buttons and marks; and a lookup that
-translates.
+about the mod played, their words, buttons and marks; an update that names
+no revision, whose status line and question never say "Revision 0"; and a
+lookup that translates.
 
 `ui-library` builds Libraries over made-up registries and packages: the
 state of a listing alone, a package installed alone, matched with and
@@ -332,15 +432,34 @@ without an update, played with and without one, a blocked update, and each
 queue phase with its status line and button; every reason GET or UPDATE is
 off and their order; installed entries never blocked; built-in and added
 registries, two registries with one key, and a key installed from another
-registry; tabs, filters and tags with their counts; the order with no
-search; the update count; the selection across refreshes and browsing; the
-buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
+registry; the Library opening on Active; tabs, each tab's own filter, the
+Updates tab's filters across every kind, and tags with their counts; the
+filters' counts unmoved by the tag and the search; New's ten newest by
+day, ties by name, never an undated listing, on Mods, Maps and Updates;
+the Active tab's mod, language and map packs in each case; the order with
+no search; the update count; the selection across refreshes and browsing;
+the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
-CHECK NOW can be pressed; the facts with the sample numbers, the Rules fact
-for an unchanged, changed and unknown rules hash in both lengths; status
-lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
-changed the rules and one that kept them; `change_texts` for a new
-revision and a new version; every text function; and a lookup that
+CHECK NOW can be pressed; the facts with the sample numbers, Installed,
+Latest and Author among them, a revision of 0 left out, a version left
+out, a fact with nothing to say left out and the manifest's author
+standing in; the Rules fact for an unchanged, changed and unknown rules
+hash in both lengths; status lines, "Update available" for an update
+that names no revision, bylines with and without a download count, and
+the playing note; the queue lines, after an update that changed the
+rules and one that kept them; `change_texts` for a new revision, a new
+version and a side that names no revision; every text function,
+`release_text` among them; and a lookup that translates.
+
+`ui-library-uninstall` builds a Library over a built-in registry, the
+player's own mod, the mod being played, a map pack and two language packs,
+one of them in use: UNINSTALL on every installed package and on none
+other, in its place among the buttons; off for a map pack during a game
+and in each queue phase but failed and installed, with the note saying
+why; the step for every kind and use; the question's words with and
+without a kept copy, for a listed package and the player's own, CANCEL
+marked and UNINSTALL primary; the notices' words for the mod being played,
+the language in use and each problem, each with one OK; and a lookup that
 translates.
 
 `ui-library-search` checks that a name beats a tag, a tag an author or
@@ -357,8 +476,11 @@ the rules), in a synthetic font, at Compact, Regular and Large and in the
 windows of 640x480 at 1x, 1920x1080 at 2x and 2560x1440 at 2x. At each it
 checks that every part lies inside the window; that no two controls or
 press areas meet; that every action of the selected entry is a control
-(at Compact on its details page, MORE ▾ open), UPDATE ALL on the Updates
-tab, and SETTINGS… and CLOSE; that Tab follows the declared order and the
+(at Compact on its details page, MORE ▾ open), UPDATE ALL over the list
+on the Updates tab beside the Mods tab's filters, and SETTINGS… and CLOSE;
+that the Active tab is first, has no search, filter, list or DETAILS,
+reads its mod, language and maps as labels and keeps only the tabs and
+the footer in Tab's order; that Tab follows the declared order and the
 arrows reach every control that takes the focus from the first tab, and
 no label; that the names are the screen's and unique; that every text
 fits by the kit's measure, and that the Rules and From facts read their
@@ -366,19 +488,28 @@ whole values. Regular shows more rows than Compact, and Large has the
 filter pane. It then drives the screens: Enter at Compact and at Regular,
 Escape's three cases, the tab commands both ways, the controller's X, Y
 and B, the list's keys, Tab's walk, presses, double presses and taps on
-rows (which never get anything), an action's button, CHECK NOW greyed
+rows (which never get anything), a row's up-arrow and download arrow at
+every frame (named after the row, a button whose text is the word,
+pressed as UPDATE and GET, and listed disabled and passing the press to
+the row while blocked or queued), an action's button, CHECK NOW greyed
 until a registry can be asked and then asking, the labels taking no
-press, the wheel and a finger's drag, typing and Backspace, the filter
-drop-down and a press outside it, the tag chips, and MORE ▾.
+press, the wheel and a finger's drag, typing and Backspace, the
+filter drop-down with its counts, each tab keeping its filter, New's
+chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
+Active tab with forty more maps: its lines taking no press and scrolling
+by the wheel, the page keys, Home, End and the right stick.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
-Regular in 1920x1080 and Large in 2560x1440 at 2x, and Compact's details
-page: each twice, byte for byte the same, with nothing drawn outside the
+Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
+page, the Active tab at Compact and Regular, and the Updates tab at
+Compact and Large: each twice, byte for byte the same, with nothing drawn outside the
 window and every pixel of it drawn, every part inside it and every text
 fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
-`library-compact.png`, `library-regular.png`, `library-large.png` and
-`library-details-compact.png` for review.
+`library-compact.png`, `library-regular.png`, `library-large.png`,
+`library-details-compact.png`, `library-active-compact.png`,
+`library-active-regular.png`, `library-updates-compact.png` and
+`library-updates-large.png` for review.
 
 ## Limitations
 

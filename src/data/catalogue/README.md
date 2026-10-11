@@ -15,8 +15,10 @@ is a detached file, one line, over the exact bytes. Nothing here fetches.
   member named twice in one object refuses the catalogue. One package that
   breaks a rule is left out, and the reason is kept when fewer than 100
   reasons are kept already.
-- `valid_reference`, `valid_package_key` and `parse_utc_time` are the rules
-  for a path, a package key and a UTC time.
+- `valid_reference`, `valid_package_key`, `parse_utc_time` and `parse_day`
+  are the rules for a path, a package key, a UTC time and a day written
+  `YYYY-MM-DD`, as a package's `published` names the day its release came
+  out. Any kind may name `published`; a malformed one leaves the entry out.
 - `parse_signature_file` and `signature_file_text` read and write the
   detached signature line.
 - `check_catalogue` checks a fetched catalogue: its size, then for a signed
@@ -43,8 +45,8 @@ None. The caller keeps the catalogue and the previous sequence.
 
 ## Tests
 
-`data-catalogue` reads the format, including skipped entries and refused
-catalogues. `data-catalogue-check` signs catalogues in the test and covers
+`data-catalogue` reads the format, including skipped entries, `published`
+on every kind and malformed days, and refused catalogues. `data-catalogue-check` signs catalogues in the test and covers
 the signature, the sequence, expiry and key rotation.
 
 ## Limitations

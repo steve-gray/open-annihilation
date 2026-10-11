@@ -33,6 +33,8 @@ and answers (`src/app/runtime_mod_install.cpp`,
   the budget, and a step ends after about 4 ms, so that a package of many
   small files never holds a frame long.
 - `commit_change` puts a change in place with renames on one volume.
+- `uninstall_package` removes a package: its folder, and the `.backup`
+  inside it, moved aside whole in one rename for the `Discarder`.
 - `recover_changes` settles what a stop left, and `Discarder` deletes the
   folders a change drops a little at a time.
 - `read_installed_mod` and `read_backup`, the oamod kind's, read what a
@@ -261,6 +263,21 @@ holds the files. The folders it uses lie in Mods, named after the target
 Every rename moves a folder whole, so the origin record inside it goes with
 the folder. A roll back writes no record of its own.
 
+An uninstall (`uninstall_package`) is one rename, T to D, and nothing else:
+the package's folder, with its `.backup` and origin record, leaves Mods
+whole, and the `Discarder` deletes D. It takes only a target that is one
+plain folder of the root (no separator, colon or control character, not
+`.`, `..` or a name starting with `.`), and refuses, removing nothing, while
+another copy of the game holds the lock (busy), a target that is a link or
+junction (link), which is never followed, one that is missing, holds no
+package of the kind or not what the Library listed (changed), and while S,
+O, X or R of the target lies in Mods (busy), since an unfinished change or
+recovery would bring the package back. A refused rename leaves T where it
+was (not_placed). After the rename the root is synced and, on macOS, the
+drive's cache flushed to storage. A stop at any point leaves T whole, or
+only D, whose hidden name nothing reads as a package, and which the next
+start's recovery deletes like any other D.
+
 So three installs keep one version back: after revisions 1, 2 and 3 the
 folder holds 3, its `.backup` 2, and 1 is deleted. A roll back swaps the
 two, so a second undoes the first. A failure before the new files are in
@@ -351,6 +368,17 @@ a replace that fails leaves the previous record as it was.
   tags taken as links, as values, so that it runs everywhere; files made
   anew only; a target that changed; the lock; the room and path checks;
   the files a step makes held to its budget.
+- `app-package-install-uninstall`: a mod and its `.backup` moved aside
+  whole and deleted a step at a time, a later install finding the folder
+  free, and the next discard name taken; links never followed, as the
+  package's folder (refused), its `.backup` and a file inside it, what each
+  names left whole; names that are not one plain folder refused; a folder
+  of the player's own, a file, a missing folder and a changed one refused;
+  each unfinished change's folder in the way and the lock another copy
+  holds refused; a refused rename leaving the mod and its `.backup` where
+  they were; and a deletion stopped before its first step and after one,
+  leaving only D, which a plan never takes for the mod and recovery
+  deletes.
 - `app-mod-install-handoff`: the instance lock and the hand-off folder,
   including a `.oareg` and a `.oalang` taken back in order.
 - `app-package-install-inbox`: `post_opened_file` routes each extension in

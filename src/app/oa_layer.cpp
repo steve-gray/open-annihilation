@@ -640,6 +640,12 @@ void place_control(
 /// The prefix of every name and dialog the layer lists to automation.
 constexpr std::string_view kAutomationPrefix = "oa.";
 
+/// The automation name of the main menu's Settings button.
+constexpr std::string_view kSettingsButtonName = "oa.settings-button";
+
+/// The automation text of the main menu's Settings button.
+constexpr std::string_view kSettingsButtonText = "Settings";
+
 /// GET MAP's screen over the battle room (runtime_get_map.cpp). Its button,
 /// its line and its bar ("get-map", "get-map-text" and "get-map-progress")
 /// stand on the battle room as the OA button stands on the main menu, so
@@ -3130,12 +3136,14 @@ bool OaLayer::refresh_match() {
     const auto pixels =
         static_cast<std::size_t>(look.width) * static_cast<std::size_t>(look.height);
     rgba_.assign(pixels * 4U, 0);
+    // The in-game OA button opens Settings, so it shows the settings icon,
+    // as the main menu's Settings button does.
     const renderer::Surface button = match_button_face(
         laid_out,
         static_cast<settings::ButtonLook>(look.button_look),
         look.darkened,
         *fonts,
-        runtime_.engine_settings_icon(),
+        Runtime::EngineSettingsMenuHost::settings_icon(runtime_),
         fit
     );
     bounds_ = button_at;
@@ -3302,39 +3310,53 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         static_cast<int32_t>(runtime_.surface_.width),
         static_cast<int32_t>(runtime_.surface_.height)
     );
-    // The OA button, on the main menu's picture or in the in-game menu's
-    // column. On the main menu it opens the Library, and says how many
-    // updates wait there.
-    std::optional<layout::Rect> button_at;
-    std::string button_text;
-    if (seen.match) {
-        if (match_button_shown(runtime_))
-            button_at = match_button_rect(runtime_.match_layout_, match_fits_safe_area(runtime_));
-    } else if (Runtime::EngineSettingsMenuHost::button_shown(runtime_)) {
-        const auto square = Runtime::EngineSettingsMenuHost::button_rect(runtime_);
-        button_at = layout::Rect{square.x, square.y, square.width, square.height};
-        button_text = library_button_text(runtime_.library_update_count());
-    }
-    if (button_at) {
+    // A button of the main menu's picture or the in-game menu's column, with
+    // no dialog. Under a modal screen it takes no press.
+    const auto add_button = [&](std::string name, std::string text, const layout::Rect& at) {
         AutomationControl button;
-        button.name = std::string(kAutomationPrefix) + "button";
+        button.name = std::move(name);
         button.kind = AutomationControlKind::button;
-        button.text = std::move(button_text);
+        button.text = std::move(text);
         button.visible = true;
-        // Under a modal screen it takes no press.
         button.enabled = modal == nullptr;
         place_control(
             button,
             place,
             window_rect_of(
                 place,
-                {static_cast<double>(button_at->x),
-                 static_cast<double>(button_at->y),
-                 static_cast<double>(button_at->x + button_at->width),
-                 static_cast<double>(button_at->y + button_at->height)}
+                {static_cast<double>(at.x),
+                 static_cast<double>(at.y),
+                 static_cast<double>(at.x + at.width),
+                 static_cast<double>(at.y + at.height)}
             )
         );
         controls.push_back(std::move(button));
+    };
+    // The OA button, on the main menu's picture or in the in-game menu's
+    // column. On the main menu it opens the Library, and says how many
+    // updates wait there; the Settings button beside it opens Settings. In
+    // the in-game menu the OA button opens Settings.
+    const std::string button_name = std::string(kAutomationPrefix) + "button";
+    if (seen.match) {
+        if (match_button_shown(runtime_))
+            add_button(
+                button_name,
+                {},
+                match_button_rect(runtime_.match_layout_, match_fits_safe_area(runtime_))
+            );
+    } else if (Runtime::EngineSettingsMenuHost::button_shown(runtime_)) {
+        const auto square = Runtime::EngineSettingsMenuHost::button_rect(runtime_);
+        add_button(
+            button_name,
+            library_button_text(runtime_.library_update_count()),
+            {square.x, square.y, square.width, square.height}
+        );
+        const auto beside = Runtime::EngineSettingsMenuHost::settings_button_rect(runtime_);
+        add_button(
+            std::string(kSettingsButtonName),
+            std::string(kSettingsButtonText),
+            {beside.x, beside.y, beside.width, beside.height}
+        );
     }
     // The screens that show, from the top, down to the first that takes
     // every input: nothing under it takes any.
