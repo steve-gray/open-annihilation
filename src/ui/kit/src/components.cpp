@@ -621,6 +621,66 @@ void draw_choice(const Canvas& canvas, const Rect& area, const ChoiceLook& look)
     );
 }
 
+namespace {
+
+/// Returns the row of one choice, when the menu names its rows.
+///
+/// @param look the menu
+/// @param item the choice, from 0
+/// @return the row; null for an ordinary menu, or an item past the rows
+const ChoiceMenuRow* menu_row(const ChoiceMenuLook& look, int32_t item) noexcept {
+    if (item < 0 || static_cast<std::size_t>(item) >= look.items.size())
+        return nullptr;
+    return &look.items[static_cast<std::size_t>(item)];
+}
+
+/// Draws one menu row's label and, to its right, its aside, with a gap
+/// between them. An aside that would meet the label is clipped to the room
+/// left of that gap.
+///
+/// @param canvas where it is drawn
+/// @param box the row
+/// @param label the row's text
+/// @param aside the right-aligned text; empty for none
+/// @param ink the text's colour
+void draw_menu_text(
+    const Canvas& canvas,
+    const Rect& box,
+    std::string_view label,
+    std::string_view aside,
+    Colour ink
+) {
+    const int32_t inner_left = box.x + compact_metrics.choice_item_text_inset;
+    const int32_t inner_right = box.x + box.width - kChoiceTextMargin;
+    int32_t label_right = inner_right;
+    if (!aside.empty()) {
+        // Eight points between the label and the aside, and eight kept for
+        // the label, so a long aside is clipped before it meets the label.
+        constexpr int32_t kGap = 8;
+        constexpr int32_t kMinLabel = 8;
+        int32_t aside_width = 0;
+        if (canvas.fonts != nullptr)
+            aside_width = text_width(*canvas.fonts, FontRole::regular, aside);
+        int32_t room = inner_right - inner_left - kMinLabel - kGap;
+        if (room < 1)
+            room = 1;
+        if (aside_width > room)
+            aside_width = room;
+        const int32_t aside_left = inner_right - aside_width;
+        label_right = aside_left - kGap;
+        const Rect aside_box{aside_left, box.y, aside_width, box.height};
+        paint_text(
+            clipped(canvas, aside_box), FontRole::regular, aside, aside_box, Align::right, ink
+        );
+    }
+    const Rect caption{
+        inner_left, box.y, std::max(label_right - inner_left, int32_t{0}), box.height
+    };
+    paint_text(clipped(canvas, caption), FontRole::regular, label, caption, Align::left, ink);
+}
+
+} // namespace
+
 void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLook& look) {
     if (!drawable(canvas))
         return;
@@ -632,8 +692,21 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
         if (look.total >= 0 && item >= look.total)
             break;
         const Rect box = choice_item(menu, place);
-        Colour text = colour::list_text;
-        if (item == look.chosen) {
+        const ChoiceMenuRow* row = menu_row(look, item);
+        // A divider is a section heading: no selection, no marker, no focus.
+        if (row != nullptr && row->divider) {
+            const Rect heading{
+                box.x + compact_metrics.choice_item_text_inset,
+                box.y,
+                std::max(box.width - compact_metrics.choice_item_text_inset - kChoiceTextMargin, 0),
+                box.height,
+            };
+            draw_heading(canvas, heading, look.shown[static_cast<std::size_t>(place)]);
+            continue;
+        }
+        const bool choosable = row == nullptr || row->choosable;
+        Colour text = choosable ? colour::list_text : colour::quiet;
+        if (choosable && item == look.chosen) {
             renderer::fill_source_rect(
                 *canvas.surface, canvas.placement, box, rgb(colour::list_selected)
             );
@@ -649,28 +722,37 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
             text = colour::text;
         }
         if (item == look.marked) {
-            if (item != look.chosen)
+            if (item != look.chosen || !choosable)
                 renderer::fill_source_rect(
                     *canvas.surface, canvas.placement, box, rgb(colour::hover)
                 );
-            text = colour::text;
+            if (choosable)
+                text = colour::text;
             if (look.focus_shown)
                 renderer::draw_outline(*canvas.surface, canvas.placement, box, rgb(colour::accent));
         }
-        const Rect caption{
-            box.x + compact_metrics.choice_item_text_inset,
-            box.y,
-            box.width - compact_metrics.choice_item_text_inset - kChoiceTextMargin,
-            box.height,
-        };
-        paint_text(
-            clipped(canvas, caption),
-            FontRole::regular,
-            look.shown[static_cast<std::size_t>(place)],
-            caption,
-            Align::left,
-            text
-        );
+        const std::string_view aside =
+            row != nullptr ? std::string_view{row->aside} : std::string_view{};
+        if (aside.empty()) {
+            const Rect caption{
+                box.x + compact_metrics.choice_item_text_inset,
+                box.y,
+                box.width - compact_metrics.choice_item_text_inset - kChoiceTextMargin,
+                box.height,
+            };
+            paint_text(
+                clipped(canvas, caption),
+                FontRole::regular,
+                look.shown[static_cast<std::size_t>(place)],
+                caption,
+                Align::left,
+                text
+            );
+        } else {
+            draw_menu_text(
+                canvas, box, look.shown[static_cast<std::size_t>(place)], aside, text
+            );
+        }
     }
     const int32_t window =
         shown_choices(static_cast<std::size_t>(std::max(look.total, int32_t{0})));
@@ -709,6 +791,39 @@ Rect choice_item(const Rect& menu, int32_t place) noexcept {
         menu.width - 2,
         compact_metrics.choice_item_height
     };
+}
+
+int32_t choice_item_at(const Rect& menu, int32_t x, int32_t y) noexcept {
+    if (x < menu.x || y < menu.y || x >= menu.x + menu.width || y >= menu.y + menu.height)
+        return -1;
+    const int32_t local = y - (menu.y + 1);
+    if (local < 0)
+        return -1;
+    const int32_t place = local / compact_metrics.choice_item_height;
+    const Rect box = choice_item(menu, place);
+    if (x < box.x || y < box.y || x >= box.x + box.width || y >= box.y + box.height)
+        return -1;
+    return place;
+}
+
+int32_t choice_mark_toward(const ChoiceMenuLook& look, int32_t marked, int32_t step) noexcept {
+    const int32_t last = std::max(look.total, int32_t{0}) - 1;
+    if (last < 0)
+        return 0;
+    const auto divider = [&look](int32_t index) noexcept {
+        return index >= 0 && static_cast<std::size_t>(index) < look.items.size() &&
+               look.items[static_cast<std::size_t>(index)].divider;
+    };
+    if (step == 0)
+        return std::clamp(marked, int32_t{0}, last);
+    const int32_t direction = step > 0 ? 1 : -1;
+    int32_t target = std::clamp(marked + step, int32_t{0}, last);
+    if (!divider(target))
+        return target;
+    const int32_t skipped = target + direction;
+    if (skipped < 0 || skipped > last || divider(skipped))
+        return std::clamp(marked, int32_t{0}, last);
+    return skipped;
 }
 
 void draw_lock(const Canvas& canvas, const Rect& area, const LockLook& look) {

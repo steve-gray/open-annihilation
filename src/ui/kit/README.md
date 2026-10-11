@@ -204,10 +204,13 @@ the scroll arithmetic and hit testing.
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item
-control listed once, a row of buttons' buttons and a clipped control's
-press area), and a text field's typing and editing over characters of one
-to four bytes. `ui-kit-components` checks each control's
-pixels, that `paint` matches a direct draw, and the controls' geometry.
+control listed once, a menu with a divider naming the other items by their
+ids and naming the divider not at all, a row of buttons' buttons and a
+clipped control's press area), and a text field's typing and editing over
+characters of one to four bytes. `ui-kit-components` checks each control's
+pixels, that `paint` matches a direct draw, and the controls' geometry,
+including a menu row that is a divider, one with a right-aligned aside and
+one that cannot be chosen.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
 `ui-kit-controls` checks each new control's pixels in the tokens above with
@@ -239,7 +242,11 @@ The metrics hold the settings dialog's, its notices' and its prompts' sizes
 for each class (`regular_metrics`, `large_metrics`, `metrics_of`); the
 Library's and the map browser's are theirs to add. A drop-down's open menu
 keeps above the footer line it is given (`choice_menu`), the Compact
-settings dialog's unless a larger dialog gives its own. The canvas draws at
+settings dialog's unless a larger dialog gives its own. A menu item may be
+a divider, drawn as a section heading and skipped by the focus, with no
+automation name; an item may carry a right-aligned aside, clipped before it
+meets the label; and an item may be greyed so a press does not choose it
+(`ChoiceMenuRow`). The canvas draws at
 whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
 tuned after controller playtests (D30). The screens' colour family converges
 with U13 and U14. The look of the list rows, chips, fields, tabs, cards,

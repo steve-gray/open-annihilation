@@ -1004,6 +1004,49 @@ void an_open_drop_down_lists_its_items_at_choice_item() {
     OA_CHECK(kit::automation_parts(closed, {}).size() == 1u);
 }
 
+/// A menu with a divider names the items it shows by their ids, at the
+/// rectangles it draws them in, and names the divider not at all.
+void a_menu_with_a_divider_lists_the_other_items() {
+    kit::DisplayList list;
+    const kit::Rect field{60, 40, 160, 16};
+    kit::add_choice(list, field, {"English", false, true}, 2, "settings.language");
+    list.controls.back().parts = {"system", "en", "7", "zh-hans"};
+    const kit::Rect menu = kit::choice_menu(field, 4);
+    kit::Item drawn;
+    drawn.role = kit::Role::choice_menu;
+    drawn.rect = menu;
+    kit::ChoiceMenuLook shown;
+    shown.shown = {"English", "AVAILABLE", "Simplified"};
+    shown.first = 1;
+    shown.total = 4;
+    shown.items = {
+        {.id = "system"},
+        {.id = "en"},
+        {.divider = true},
+        {.aside = "4.0 MB", .id = "zh-hans", .choosable = false},
+    };
+    drawn.look = shown;
+    list.items.push_back(std::move(drawn));
+
+    const auto entries = kit::automation_parts(list, {});
+    OA_CHECK(entries.size() == 3u);
+    if (entries.size() != 3u)
+        return;
+    OA_CHECK(entries[0].name == "settings.language" && !entries[0].part);
+    OA_CHECK(entries[1].name == "settings.language.en");
+    OA_CHECK(entries[2].name == "settings.language.zh-hans");
+    const kit::Rect english = kit::choice_item(menu, 0);
+    const kit::Rect simplified = kit::choice_item(menu, 2);
+    OA_CHECK(rect_is(entries[1].rect, english.x, english.y, english.width, english.height));
+    OA_CHECK(
+        rect_is(entries[2].rect, simplified.x, simplified.y, simplified.width, simplified.height)
+    );
+    OA_CHECK(entries[1].enabled && entries[1].text == "English");
+    OA_CHECK(!entries[2].enabled && entries[2].text == "Simplified");
+    for (const kit::AutomationEntry& entry : entries)
+        OA_CHECK(entry.text != "AVAILABLE" && entry.name != "settings.language.7");
+}
+
 /// A row of buttons lists each button it draws; a control's rectangle is
 /// the part of it a press reaches.
 void buttons_list_each_button_and_a_clip_narrows_a_control() {
@@ -1307,6 +1350,7 @@ int main() {
     a_switch_lists_its_two_halves();
     a_strip_lists_its_levels_where_level_at_finds_them();
     an_open_drop_down_lists_its_items_at_choice_item();
+    a_menu_with_a_divider_lists_the_other_items();
     buttons_list_each_button_and_a_clip_narrows_a_control();
     the_keys_keep_their_values();
     typing_inserts_at_the_caret();
