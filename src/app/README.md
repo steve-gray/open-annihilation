@@ -603,10 +603,9 @@ runtime goes).
   each run.
 - **Limitations.** The controller's Y, X, LB, RB and right stick do not
   reach the Library's own commands yet: the D-pad, A, B and the shoulder
-  buttons' Tab drive it as the kit's keys. Download counts come later. A
-  held update is replaced by a ROLL BACK of the mod being played, which
-  waits for the run to end in its place; the download queue has counted
-  the update installed by then.
+  buttons' Tab drive it as the kit's keys. A held update is replaced by a
+  ROLL BACK of the mod being played, which waits for the run to end in its
+  place; the download queue has counted the update installed by then.
 
 ## Files
 
