@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The Library's search, run on the player's machine: which entries a search
-// keeps and how they rank, and the order of the visible list.
+// The Library's search, run on the player's machine: which entries a tab's
+// filter and a search keep and how they rank, and the order of the visible
+// list.
 #include "visible.hpp"
 
 #include <algorithm>
@@ -126,25 +127,65 @@ struct Candidate {
     std::string name{}; ///< folded
 };
 
+/// Returns the day an entry's listing was published.
+///
+/// @param entry the entry
+/// @return the day as written, `YYYY-MM-DD`; empty without a listing or a day
+std::string_view published_day(const Entry& entry) {
+    return entry.listing != nullptr ? std::string_view(entry.listing->published)
+                                    : std::string_view();
+}
+
+/// Orders two candidates of the same name by their registries: built-in
+/// registries first, then by registry id, then by kind and key, which leave
+/// no two entries equal.
+///
+/// @param library the Library
+/// @param left one candidate
+/// @param right another
+/// @return true when `left` comes first
+bool before_by_registry(const Library& library, const Candidate& left, const Candidate& right) {
+    const Entry& left_entry = library.entries[left.index];
+    const Entry& right_entry = library.entries[right.index];
+    if (left_entry.built_in != right_entry.built_in)
+        return left_entry.built_in;
+    return left_entry.id < right_entry.id;
+}
+
+/// Orders two candidates as New does: the later published day first, then
+/// by name, then by registry. A day written `YYYY-MM-DD` orders as its text.
+///
+/// @param library the Library
+/// @param left one candidate
+/// @param right another
+/// @return true when `left` comes first
+bool before_newest(const Library& library, const Candidate& left, const Candidate& right) {
+    const std::string_view left_day = published_day(library.entries[left.index]);
+    const std::string_view right_day = published_day(library.entries[right.index]);
+    if (left_day != right_day)
+        return left_day > right_day;
+    if (left.name != right.name)
+        return left.name < right.name;
+    return before_by_registry(library, left, right);
+}
+
 /// Orders two candidates as the list does with no search.
 ///
-/// By group, then name, then built-in registries first, then registry id,
-/// then kind and key, which leave no two entries equal.
+/// Under New, newest first (before_newest). Under the other filters, by
+/// group, then name, then registry.
 ///
 /// @param library the Library
 /// @param left one candidate
 /// @param right another
 /// @return true when `left` comes first
 bool before_without_search(const Library& library, const Candidate& left, const Candidate& right) {
+    if (shown_filter(library) == Filter::newest)
+        return before_newest(library, left, right);
     if (left.group != right.group)
         return left.group < right.group;
     if (left.name != right.name)
         return left.name < right.name;
-    const Entry& left_entry = library.entries[left.index];
-    const Entry& right_entry = library.entries[right.index];
-    if (left_entry.built_in != right_entry.built_in)
-        return left_entry.built_in;
-    return left_entry.id < right_entry.id;
+    return before_by_registry(library, left, right);
 }
 
 /// Orders two candidates as the list does with a search.
@@ -164,6 +205,46 @@ bool before_with_search(const Library& library, const Candidate& left, const Can
     if (left.rank.name_starts != right.rank.name_starts)
         return left.rank.name_starts;
     return before_without_search(library, left, right);
+}
+
+/// Tells whether a tab holds entries of a kind.
+///
+/// @param tab the tab
+/// @param kind the kind
+/// @return true for its own kind on Mods, Maps and Languages, every kind on
+///     Updates, and none on Active
+bool tab_holds(Tab tab, Kind kind) {
+    switch (tab) {
+    case Tab::active:
+        return false;
+    case Tab::mods:
+        return kind == Kind::mod;
+    case Tab::maps:
+        return kind == Kind::map_pack;
+    case Tab::languages:
+        return kind == Kind::language;
+    case Tab::updates:
+        return true;
+    }
+    return false;
+}
+
+/// Tells whether a filter other than New keeps an entry of the tab's kind.
+///
+/// @param filter the filter
+/// @param entry the entry
+/// @return true when it keeps it
+bool state_kept(Filter filter, const Entry& entry) {
+    switch (filter) {
+    case Filter::all:
+    case Filter::newest:
+        return true;
+    case Filter::installed:
+        return entry.state != State::get;
+    case Filter::updates:
+        return entry.state == State::update;
+    }
+    return false;
 }
 
 } // namespace
@@ -205,27 +286,32 @@ std::optional<Rank> rank(const Entry& entry, std::string_view query) {
     return result;
 }
 
-bool shown_in_tab(const Library& library, const Entry& entry, bool use_tag) {
-    if (library.tab == Tab::updates)
-        return entry.state == State::update;
-    const Kind kind = library.tab == Tab::mods   ? Kind::mod
-                      : library.tab == Tab::maps ? Kind::map_pack
-                                                 : Kind::language;
-    if (entry.id.kind != kind)
-        return false;
-    switch (library.filter) {
-    case Filter::all:
-        break;
-    case Filter::installed:
-        if (entry.state == State::get)
-            return false;
-        break;
-    case Filter::updates:
-        if (entry.state != State::update)
-            return false;
-        break;
+std::vector<bool> kept_by_filter(const Library& library, Filter filter) {
+    std::vector<bool> kept(library.entries.size(), false);
+    if (filter != Filter::newest) {
+        for (std::size_t index = 0; index < library.entries.size(); ++index) {
+            const Entry& entry = library.entries[index];
+            kept[index] = tab_holds(library.tab, entry.id.kind) && state_kept(filter, entry);
+        }
+        return kept;
     }
-    if (!use_tag || library.tag.empty())
+    // New: the tab's listings with a published day, newest first, then cut.
+    std::vector<Candidate> dated;
+    for (std::size_t index = 0; index < library.entries.size(); ++index) {
+        const Entry& entry = library.entries[index];
+        if (tab_holds(library.tab, entry.id.kind) && !published_day(entry).empty())
+            dated.push_back({index, {}, Group::get, folded(entry_name(entry))});
+    }
+    std::sort(dated.begin(), dated.end(), [&](const Candidate& left, const Candidate& right) {
+        return before_newest(library, left, right);
+    });
+    for (std::size_t place = 0; place < dated.size() && place < newest_count; ++place)
+        kept[dated[place].index] = true;
+    return kept;
+}
+
+bool has_shown_tag(const Library& library, const Entry& entry) {
+    if (library.tag.empty())
         return true;
     if (entry.listing == nullptr)
         return false;
@@ -234,10 +320,11 @@ bool shown_in_tab(const Library& library, const Entry& entry, bool use_tag) {
 }
 
 void update_visible(Library& library) {
+    const std::vector<bool> by_filter = kept_by_filter(library, shown_filter(library));
     std::vector<Candidate> kept;
     for (std::size_t index = 0; index < library.entries.size(); ++index) {
         const Entry& entry = library.entries[index];
-        if (!shown_in_tab(library, entry, true))
+        if (!by_filter[index] || !has_shown_tag(library, entry))
             continue;
         const std::optional<Rank> ranked = rank(entry, library.query);
         if (!ranked)

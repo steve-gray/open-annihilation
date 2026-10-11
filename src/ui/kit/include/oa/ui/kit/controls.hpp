@@ -44,7 +44,8 @@ cut_to_width(const Fonts& fonts, FontRole role, std::string_view text, int32_t w
 // ---- List rows ----
 
 /// Returns where a list row draws its chip: at the row's right inset,
-/// centred down the row, chip_height high and as wide as chip_width.
+/// centred down the row, chip_height high and as wide as chip_width, or
+/// state_icon_side square for a chip that shows a state icon.
 ///
 /// A screen whose row chip takes a press adds the chip with this rectangle
 /// and its own control before the row, so that a press there reaches it.
@@ -67,7 +68,10 @@ cut_to_width(const Fonts& fonts, FontRole role, std::string_view text, int32_t w
 /// room, and the tags as chips on the line after the last. The text is
 /// centred down the row; in a row short_list_row_height high it lies as the
 /// Mods row's does. The aside is right-aligned in the hint colour, one entry
-/// a line from the title's, left of the chip, which sits at the right inset.
+/// a line from the title's, left of the chip, which sits at the right inset;
+/// its column is as wide as its widest entry by the canvas's measure and by
+/// the game's fonts', whichever is wider, so that no entry is cut on either
+/// form of the canvas.
 ///
 /// @param canvas where it is drawn
 /// @param rect the row; its height chooses the short form, the full form or a taller one
@@ -89,7 +93,7 @@ void add_list_row(
 // ---- Chips ----
 
 /// Returns a chip's width: its text in the small font and chip_padding
-/// either side.
+/// either side, or state_icon_side for a chip that shows a state icon.
 ///
 /// @param fonts the fonts
 /// @param look the chip
@@ -105,6 +109,13 @@ void add_list_row(
 /// colour. A hovered chip that is not filled takes the hover face. A
 /// disabled chip draws its outline and text in the idle colour, whatever its
 /// state.
+///
+/// A chip with a state icon draws only the icon (draw_state_icon), in the
+/// hint for get, the accent for installed and playing, the lock colour for
+/// update, the online and danger colours, and for a filter the accent while
+/// on and the hint while off; while disabled the hovered border's grey
+/// (control_hover), dimmer than every state's. Hovered and enabled, it
+/// takes the hover face behind the icon.
 ///
 /// @param canvas where it is drawn
 /// @param rect the chip

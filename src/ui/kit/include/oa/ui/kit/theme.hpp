@@ -274,6 +274,8 @@ struct Metrics {
     int32_t chip_padding{};
     /// The columns between two chips side by side.
     int32_t chip_gap{};
+    /// A state icon's side: a chip that shows one is this square.
+    int32_t state_icon_side{};
     /// A strip of tabs' height.
     int32_t tab_height{};
     /// The columns between a tab's edges and its caption and count.
@@ -435,6 +437,7 @@ inline constexpr Metrics compact_metrics{
     .chip_height = 12,
     .chip_padding = 4,
     .chip_gap = 4,
+    .state_icon_side = 14,
     .tab_height = 18,
     .tab_padding = 10,
     .tab_tracking = 1,

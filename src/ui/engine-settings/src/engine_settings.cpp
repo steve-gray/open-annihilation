@@ -583,7 +583,7 @@ EngineSettings read_settings(
     if (const auto found = values.find(std::string{key::mod_directory}); found != values.end()) {
         settings.mod_folder = found->second;
         // A folder the game folder does not offer was picked: it is kept as
-        // the picked one, which the Mods page lists.
+        // the picked one, which the Library lists.
         if (!settings.mod_folder.empty() &&
             std::find(inputs.mod_folders.begin(), inputs.mod_folders.end(), settings.mod_folder) ==
                 inputs.mod_folders.end())
@@ -1115,11 +1115,6 @@ Locks settings_locks(const GameState& state) noexcept {
                                                                     : Lock::none;
     // The language changes only what players read, so no game locks it.
     locks.language = state.language_from_command_line ? Lock::command_line : Lock::none;
-    // A game keeps the mod it plays; the main menu chooses another. The
-    // command line's lock says more, so it wins.
-    locks.mod = state.mod_from_command_line ? Lock::command_line
-                : state.in_game             ? Lock::in_game
-                                            : Lock::none;
     return locks;
 }
 

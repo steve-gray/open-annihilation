@@ -218,14 +218,6 @@ inline constexpr int32_t button_height = oa::ui::kit::compact_metrics.button_hei
 /// Restore defaults' width.
 inline constexpr int32_t restore_button_width = 110;
 
-/// The Switch Mod question's box's width: it keeps Compact's size, and its
-/// parts their places in it, in every size class.
-inline constexpr int32_t question_box_width = 300;
-/// The Switch Mod question's box's height.
-inline constexpr int32_t question_box_height = 150;
-/// The most lines the question's text takes, its note's among them.
-inline constexpr std::size_t question_lines = 5;
-
 using oa::ui::engine_settings::page_count;
 
 /// The clear rows under the last row's line at the end of a section, so
@@ -319,14 +311,6 @@ inline constexpr int32_t developer_footer_gap = 4;
 /// Restore profile values' width.
 inline constexpr int32_t restore_profile_width = 142;
 
-/// OPEN MODS FOLDER's width.
-inline constexpr int32_t mods_folder_button_width = 104;
-/// The rows between Mods' line on the check for updates and OPEN MODS
-/// FOLDER under it.
-inline constexpr int32_t mods_check_gap = 4;
-/// The rows between Mods' list and the line on the check for updates under it.
-inline constexpr int32_t mods_list_gap = 2;
-
 /// The parts of the dialog that move with its size class, in points from its
 /// top left corner: its size, its padding and its section list's width
 /// (kit::metrics_of), and the content column, the body, the footer, the
@@ -356,16 +340,6 @@ struct Sizes {
     SourceRect restore_button{}; ///< Restore defaults, at the footer's left
     SourceRect ok_button{};      ///< OK, at the footer's right
     SourceRect cancel_button{};  ///< Cancel, left of OK
-    /// The Switch Mod question (Dialog::switch_question): a box over the
-    /// middle of the dialog's body.
-    SourceRect question_box{};
-    SourceRect question_heading{};    ///< the question's heading, along its top
-    SourceRect question_badge{};      ///< the badge of the mod the question offers
-    SourceRect question_title{};      ///< the mod's title, right of its badge
-    SourceRect question_version{};    ///< the mod's version, under its title
-    SourceRect question_first_line{}; ///< the question's first text line, under the badge
-    SourceRect question_yes_button{}; ///< SWITCH, at the question's bottom right
-    SourceRect question_no_button{};  ///< CANCEL, left of SWITCH
     /// The view the open section's rows scroll in, under its heading: from
     /// the first row's line to the row above the footer's line.
     SourceRect view{};
@@ -389,18 +363,6 @@ struct Sizes {
     SourceRect active_only_switch{};     ///< Show Active Only's switch, at the footer's right
     SourceRect restore_profile_button{}; ///< Restore profile values, under Show Active Only
     ScrollArea developer_scroll{};       ///< where Developer's list scrolls
-    SourceRect mods_note_first{};        ///< the first line under Mods' list naming its folders
-    SourceRect mods_note_second{};       ///< the second of those lines
-    SourceRect mods_folder_button{};     ///< OPEN MODS FOLDER, over those lines
-    /// The line on the check for updates, directly over OPEN MODS FOLDER and
-    /// under the list.
-    SourceRect mods_check_line{};
-    /// The two lines over Mods' list that say why the page is locked, the
-    /// padlock at the first's left.
-    SourceRect mods_lock_line{};
-    /// The first of those lines' text, right of the padlock; the second lies
-    /// under it.
-    SourceRect mods_lock_text{};
 };
 
 /// Works out the dialog's sizes at a size class from the class's metrics.
@@ -409,8 +371,6 @@ struct Sizes {
 /// @return its sizes; Compact's are 0.7.3's
 [[nodiscard]] constexpr Sizes make_sizes(oa::ui::kit::SizeClass size_class) noexcept {
     const oa::ui::kit::Metrics& metrics = oa::ui::kit::metrics_of(size_class);
-    // The Switch Mod question's box keeps Compact's padding in every class.
-    const int32_t box_padding = oa::ui::kit::compact_metrics.padding;
     Sizes sized{};
     sized.size_class = size_class;
     sized.dialog_width = metrics.dialog_width;
@@ -441,39 +401,6 @@ struct Sizes {
         sized.button_top,
         oa::ui::kit::compact_metrics.button_width,
         button_height
-    };
-    sized.question_box = {
-        (sized.dialog_width - question_box_width) / 2,
-        body_top + (sized.footer_rule_row - body_top - question_box_height) / 2,
-        question_box_width,
-        question_box_height
-    };
-    const SourceRect& box = sized.question_box;
-    sized.question_heading = {box.x + box_padding, box.y + 8, box.width - 2 * box_padding, 12};
-    sized.question_badge = {sized.question_heading.x, sized.question_heading.y + 16, 20, 20};
-    sized.question_title = {
-        sized.question_badge.x + sized.question_badge.width + 6,
-        sized.question_badge.y - 2,
-        sized.question_heading.width - sized.question_badge.width - 6,
-        16
-    };
-    sized.question_version = {
-        sized.question_title.x, sized.question_title.y + 14, sized.question_title.width, 12
-    };
-    sized.question_first_line = {
-        sized.question_heading.x,
-        sized.question_badge.y + sized.question_badge.height + 6,
-        sized.question_heading.width,
-        12
-    };
-    sized.question_yes_button = {
-        box.x + box.width - box_padding - 52,
-        box.y + box.height - 8 - button_height,
-        52,
-        button_height
-    };
-    sized.question_no_button = {
-        sized.question_yes_button.x - 5 - 52, sized.question_yes_button.y, 52, button_height
     };
     sized.view = {
         sized.content_left,
@@ -541,39 +468,6 @@ struct Sizes {
          sized.developer_view.height},
         sized.developer_view.height - 3 * hint_line_height,
     };
-    sized.mods_note_first = {
-        sized.content_left,
-        sized.footer_rule_row - 4 - 2 * hint_line_height,
-        sized.content_width,
-        hint_line_height
-    };
-    sized.mods_note_second = {
-        sized.content_left,
-        sized.mods_note_first.y + hint_line_height,
-        sized.content_width,
-        hint_line_height
-    };
-    sized.mods_folder_button = {
-        sized.content_left,
-        sized.mods_note_first.y - 4 - button_height,
-        mods_folder_button_width,
-        button_height
-    };
-    sized.mods_check_line = {
-        sized.content_left,
-        sized.mods_folder_button.y - mods_check_gap - hint_line_height,
-        sized.content_width,
-        hint_line_height
-    };
-    sized.mods_lock_line = {
-        sized.content_left, first_row_top, sized.content_width, 2 * hint_line_height
-    };
-    sized.mods_lock_text = {
-        sized.mods_lock_line.x + padlock_width + padlock_gap,
-        sized.mods_lock_line.y,
-        sized.mods_lock_line.width - padlock_width - padlock_gap,
-        hint_line_height
-    };
     return sized;
 }
 
@@ -638,23 +532,6 @@ inline constexpr SourceRect restore_button = compact_sizes.restore_button;
 inline constexpr SourceRect ok_button = compact_sizes.ok_button;
 /// Cancel, left of OK, at Compact.
 inline constexpr SourceRect cancel_button = compact_sizes.cancel_button;
-/// The Switch Mod question (Dialog::switch_question): a box over the middle
-/// of the dialog's body, at Compact.
-inline constexpr SourceRect question_box = compact_sizes.question_box;
-/// The question's heading, along its top, at Compact.
-inline constexpr SourceRect question_heading = compact_sizes.question_heading;
-/// The badge of the mod the question offers, under the heading, at Compact.
-inline constexpr SourceRect question_badge = compact_sizes.question_badge;
-/// The mod's title, right of its badge, at Compact.
-inline constexpr SourceRect question_title = compact_sizes.question_title;
-/// The mod's version, under its title, at Compact.
-inline constexpr SourceRect question_version = compact_sizes.question_version;
-/// The question's first text line, under the badge, at Compact; the others follow it.
-inline constexpr SourceRect question_first_line = compact_sizes.question_first_line;
-/// SWITCH, at the question's bottom right, at Compact.
-inline constexpr SourceRect question_yes_button = compact_sizes.question_yes_button;
-/// CANCEL, left of SWITCH, at Compact.
-inline constexpr SourceRect question_no_button = compact_sizes.question_no_button;
 /// The view the open section's rows scroll in, under its heading, at Compact.
 inline constexpr SourceRect view = compact_sizes.view;
 /// What the rows are drawn clipped to, at Compact.
@@ -684,84 +561,6 @@ inline constexpr SourceRect active_only_switch = compact_sizes.active_only_switc
 inline constexpr SourceRect restore_profile_button = compact_sizes.restore_profile_button;
 /// Where Developer's list scrolls, at Compact.
 inline constexpr ScrollArea developer_scroll = compact_sizes.developer_scroll;
-
-// Mods: the list of the mods, one row each, in a view of its own under the
-// heading, under a lock line while the page is locked; under the list, the
-// line on the check for updates with CHECK NOW, OPEN MODS FOLDER and GET MORE
-// MODS… in one row, and two lines naming the folders listed, which stay put.
-// Only the list scrolls.
-
-/// The lines under the list naming the folders it lists: the first, at Compact.
-inline constexpr SourceRect mods_note_first = compact_sizes.mods_note_first;
-/// The second of those lines, at Compact.
-inline constexpr SourceRect mods_note_second = compact_sizes.mods_note_second;
-/// OPEN MODS FOLDER, over those lines, at Compact.
-inline constexpr SourceRect mods_folder_button = compact_sizes.mods_folder_button;
-/// The line on the check for updates, over OPEN MODS FOLDER, at Compact.
-inline constexpr SourceRect mods_check_line = compact_sizes.mods_check_line;
-/// The two lines over the list that say why the page is locked, the
-/// padlock at the first's left, at Compact.
-inline constexpr SourceRect mods_lock_line = compact_sizes.mods_lock_line;
-/// The first of those lines' text, right of the padlock, at Compact; the
-/// second lies under it.
-inline constexpr SourceRect mods_lock_text = compact_sizes.mods_lock_text;
-/// A mod row's height, its border included.
-inline constexpr int32_t mod_row_height = 28;
-/// The rows from a mod row's top to its description line's.
-inline constexpr int32_t mod_description_top = 15;
-/// The rows a mod row grows by while the dialog's words are drawn in the
-/// modern fonts, whose ideographs stand taller than the game's fonts, and
-/// the rows its description moves down then: its title and its description
-/// each keep clear of the other and of its border.
-inline constexpr int32_t tall_mod_row_growth = 6;
-inline constexpr int32_t tall_mod_description_drop = 4;
-/// The rows between two mod rows.
-inline constexpr int32_t mod_row_gap = 3;
-/// A mod row's badge's side, in source pixels.
-inline constexpr int32_t mod_badge_side = 20;
-/// The columns between a mod row's edge and its badge, and between the
-/// badge and the text.
-inline constexpr int32_t mod_row_inset = 4;
-
-/// A mod row's ROLL BACK button's width, at the right of its description line.
-inline constexpr int32_t mod_roll_back_width = 60;
-/// Its height.
-inline constexpr int32_t mod_roll_back_height = 12;
-/// The columns between the description and the ROLL BACK button.
-inline constexpr int32_t mod_roll_back_gap = 4;
-/// The Roll Back Mod question's ROLL BACK button's width.
-inline constexpr int32_t question_roll_back_width = 64;
-/// A mod row's UPDATE button's width, at the right of its description line,
-/// left of ROLL BACK by mod_roll_back_gap when both show.
-inline constexpr int32_t mod_update_width = 60;
-/// Its height.
-inline constexpr int32_t mod_update_height = 12;
-/// The columns between OPEN MODS FOLDER and GET MORE MODS… right of it.
-inline constexpr int32_t mods_library_gap = 6;
-
-/// Returns where Mods' list scrolls: under the heading, or under the lock
-/// line while the page is locked, down to the line on the check for updates
-/// over OPEN MODS FOLDER.
-///
-/// @param locked the page is locked
-/// @param size_class the size class the dialog is laid out at
-/// @return the view, the scroll bar's well and hit area, and Page Up's step
-[[nodiscard]] constexpr ScrollArea mods_scroll(
-    bool locked, oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
-) noexcept {
-    const Sizes& sized = sizes_of(size_class);
-    const int32_t top =
-        locked ? sized.mods_lock_line.y + sized.mods_lock_line.height + 2 : first_row_top;
-    const SourceRect list_view{
-        sized.content_left, top, sized.content_width, sized.mods_check_line.y - mods_list_gap - top
-    };
-    return {
-        list_view,
-        {sized.scroll_well.x, list_view.y, sized.scroll_well.width, list_view.height},
-        {sized.scroll_hit.x, list_view.y, sized.scroll_hit.width, list_view.height},
-        list_view.height - (mod_row_height + mod_row_gap),
-    };
-}
 
 /// An area's or a hack's header in the list: its height.
 inline constexpr int32_t list_header_height = 20;
@@ -951,211 +750,6 @@ struct ScrolledRows {
     int32_t content_height{}; ///< rows from the first row's line to the end gap under the last
 };
 
-/// Tells whether Mods shows: its rows are the dialog's own, not a check's.
-///
-/// @param dialog the dialog
-/// @return true on Mods
-[[nodiscard]] bool mods_page(const Dialog& dialog) noexcept;
-
-/// Returns OPEN MODS FOLDER's control: the one after the last mod row's.
-///
-/// @param rows Mods' rows
-/// @return its control
-[[nodiscard]] int32_t mods_folder_control(const Rows& rows) noexcept;
-
-/// Returns the control of a row's ROLL BACK button: OPEN MODS FOLDER's
-/// control and one more for each row before it and itself.
-///
-/// @param rows Mods' rows
-/// @param index the row's place among them
-/// @return its control
-[[nodiscard]] int32_t roll_back_control(const Rows& rows, std::size_t index) noexcept;
-
-/// Returns the row a ROLL BACK control belongs to.
-///
-/// @param rows Mods' rows
-/// @param control the control
-/// @return the row's place; -1 when the control is no row's ROLL BACK
-[[nodiscard]] int32_t roll_back_row(const Rows& rows, int32_t control) noexcept;
-
-/// Returns a mod row's ROLL BACK button: at the right of its description
-/// line.
-///
-/// @param row the row, placed
-/// @return the button's rectangle
-[[nodiscard]] SourceRect roll_back_button(const Row& row) noexcept;
-
-/// Tells whether a row of Mods offers ROLL BACK: its folder keeps an
-/// earlier version (ModDetails::roll_back_from).
-///
-/// @param dialog the dialog
-/// @param row the row
-/// @return true when it does
-[[nodiscard]] bool offers_roll_back(const Dialog& dialog, const ModRow& row) noexcept;
-
-/// Returns what the host gave of a row of Mods whose registry's list offers
-/// a newer release (ModDetails::update_offered).
-///
-/// @param dialog the dialog
-/// @param row the row
-/// @return its details; null for a row with no update, and for No Mod
-[[nodiscard]] const ModDetails* update_details(const Dialog& dialog, const ModRow& row) noexcept;
-
-/// Tells whether a row of Mods shows UPDATE: its update is offered and the
-/// page is not locked. In a game it is hidden, as the page is locked.
-///
-/// @param dialog the dialog
-/// @param row the row
-/// @return true when the row has its UPDATE button
-[[nodiscard]] bool shows_update(const Dialog& dialog, const ModRow& row) noexcept;
-
-/// Returns the control of a row's UPDATE button: one more than the last
-/// ROLL BACK control could be for each row before it and itself, so that
-/// OPEN MODS FOLDER's and every ROLL BACK's stay as they were.
-///
-/// @param rows Mods' rows
-/// @param index the row's place among them
-/// @return its control
-[[nodiscard]] int32_t update_control(const Rows& rows, std::size_t index) noexcept;
-
-/// Returns the row an UPDATE control belongs to.
-///
-/// @param rows Mods' rows
-/// @param control the control
-/// @return the row's place; -1 when the control is no row's UPDATE
-[[nodiscard]] int32_t update_row(const Rows& rows, int32_t control) noexcept;
-
-/// Returns CHECK NOW's control: the one after the last UPDATE control.
-///
-/// @param rows Mods' rows
-/// @return its control
-[[nodiscard]] int32_t check_now_control(const Rows& rows) noexcept;
-
-/// Returns GET MORE MODS…'s control: the one after CHECK NOW's.
-///
-/// @param rows Mods' rows
-/// @return its control
-[[nodiscard]] int32_t get_more_mods_control(const Rows& rows) noexcept;
-
-/// Returns a mod row's UPDATE button: at the right of its description line,
-/// as ROLL BACK is, and left of ROLL BACK by mod_roll_back_gap when the row
-/// offers both.
-///
-/// @param row the row, placed
-/// @param roll_back the row shows ROLL BACK too
-/// @return the button's rectangle
-[[nodiscard]] SourceRect update_button(const Row& row, bool roll_back) noexcept;
-
-/// Returns the line a row with an update shows in place of its
-/// description: where its update stands while it is queued
-/// (ModDetails::update_progress), why UPDATE is off when it is
-/// (update_blocked), else what the update is (update_text).
-///
-/// @param details the row's details, its update offered
-/// @return the line
-[[nodiscard]] std::string_view mod_update_line(const ModDetails& details) noexcept;
-
-/// Returns the line a row with an update shows in place of its
-/// description, broken between words into the lines it takes whole in the
-/// room left of its UPDATE button, and of ROLL BACK when it shows both. The
-/// lines are counted in characters, a class's hint_line_characters to its
-/// content column, so that a row is as tall whatever the fonts; at most
-/// most_row_lines, the last cut short only past them.
-///
-/// @param dialog the dialog
-/// @param row the row
-/// @return the lines; none for a row with no update
-[[nodiscard]] std::vector<std::string> update_lines(const Dialog& dialog, const ModRow& row);
-
-/// Tells whether CHECK NOW shows after the line on the check for updates:
-/// the host offers it (Dialog::mods_check_offered) and the page is not
-/// locked.
-///
-/// @param dialog the dialog
-/// @return true when it shows
-[[nodiscard]] bool shows_check_now(const Dialog& dialog) noexcept;
-
-/// Tells whether GET MORE MODS… shows right of OPEN MODS FOLDER: the host
-/// offers it (Dialog::mods_library_offered) and the page is not locked.
-///
-/// @param dialog the dialog
-/// @return true when it shows
-[[nodiscard]] bool shows_get_more_mods(const Dialog& dialog) noexcept;
-
-/// Returns the line on the check for updates as it shows: the host's text
-/// (Dialog::mods_check_text), cut short only where CHECK NOW would not fit
-/// after it.
-///
-/// @param dialog the dialog
-/// @return the text's place and its words
-[[nodiscard]] std::pair<SourceRect, std::string> check_line_text(const Dialog& dialog);
-
-/// Returns CHECK NOW's link: after the line's text and " · " at their
-/// estimated widths in the small font (a class's hint_line_characters to its
-/// content column), so that a press lands where it is drawn whatever the
-/// fonts, and never past the line's end.
-///
-/// @param dialog the dialog
-/// @return the link's rectangle
-[[nodiscard]] SourceRect check_now_link(const Dialog& dialog);
-
-/// Returns GET MORE MODS…: right of OPEN MODS FOLDER by mods_library_gap,
-/// as tall, and as wide as its caption at the kit's estimated width
-/// (oa::ui::kit::estimated_width) with the kit's button padding, so that it
-/// is the same whatever the fonts.
-///
-/// @param dialog the dialog
-/// @return the button's rectangle
-[[nodiscard]] SourceRect get_more_mods_button(const Dialog& dialog);
-
-/// Returns the question's answering button: SWITCH, or ROLL BACK, which is
-/// wider.
-///
-/// @param dialog the dialog, its question showing
-/// @return the button's rectangle
-[[nodiscard]] SourceRect question_yes_rect(const Dialog& dialog) noexcept;
-
-/// Returns the question's CANCEL button, left of its answering button.
-///
-/// @param dialog the dialog, its question showing
-/// @return the button's rectangle
-[[nodiscard]] SourceRect question_no_rect(const Dialog& dialog) noexcept;
-
-/// Returns Mods' rows placed in its list at a scroll offset: one for each of
-/// mod_rows, whose control_area is the whole row, label its title, value
-/// its version and hints[0] its description. A row with an update has its
-/// update's lines (update_lines) in hints instead, and grows by a line for
-/// each after the first.
-///
-/// @param dialog the dialog
-/// @param scroll the offset
-/// @return the rows
-[[nodiscard]] Rows place_mod_rows(const Dialog& dialog, int32_t scroll);
-
-/// Returns a mod row's title, version, description and badge.
-struct ModRowText {
-    std::string title;           ///< the title
-    std::string version;         ///< the version
-    std::string description;     ///< the description
-    bool has_profile{true};      ///< the folder holds an oamod.yaml
-    const ModDetails* details{}; ///< what the host read of it; null for No Mod or none
-};
-
-/// Returns what a row of Mods shows.
-///
-/// @param dialog the dialog
-/// @param row the row
-/// @return its texts
-[[nodiscard]] ModRowText mod_row_text(const Dialog& dialog, const ModRow& row);
-
-/// Returns the question's version line: the mod's version, or for a roll
-/// back the version it rolls back from and the one it rolls back to.
-///
-/// @param dialog the dialog, its question showing
-/// @param offered what the question's row shows
-/// @return the line
-[[nodiscard]] std::string question_version_text(const Dialog& dialog, const ModRowText& offered);
-
 /// Cuts a text to a width, ending it with "..." when it is cut.
 ///
 /// @param text the text, in UTF-8
@@ -1164,17 +758,6 @@ struct ModRowText {
 /// @return the text, or as much of it as fits before "..."
 [[nodiscard]] std::string cut_text(
     std::string_view text, int32_t width, const std::function<int32_t(std::string_view)>& text_width
-);
-
-/// Returns the Switch Mod question's text lines: its question, then, for a
-/// folder without an oamod.yaml, its note, each broken into the lines that
-/// fit; a question too long for the lines the note leaves it ends in "...".
-///
-/// @param dialog the dialog, its question showing
-/// @param text_width a small text's width
-/// @return at most question_lines lines; the note's are the last, when there is one
-[[nodiscard]] std::vector<std::string> question_text_lines(
-    const Dialog& dialog, const std::function<int32_t(std::string_view)>& text_width
 );
 
 // The functions from here to hint_is_status read a setting's row in the
@@ -1551,12 +1134,10 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 inline constexpr int32_t section_group = 0;
 /// The scroll group of Developer's list.
 inline constexpr int32_t developer_list_group = 1;
-/// The scroll group of Mods' list: its rows and their ROLL BACK buttons.
-inline constexpr int32_t mods_list_group = 2;
 
 /// The control of an open drop-down list's first item: the items count down
-/// from it, under the question's buttons, by their places in the list.
-inline constexpr int32_t first_menu_item_control = question_no_control - 1;
+/// from it, under no_control, by their places in the list.
+inline constexpr int32_t first_menu_item_control = no_control - 1;
 
 /// Returns the control of an open drop-down list's item.
 ///
@@ -1934,81 +1515,11 @@ break_lines(std::string_view text, std::size_t characters, std::size_t most_line
 inline constexpr std::string_view title_text = "OPEN ANNIHILATION";
 /// The title's last word, drawn muted.
 inline constexpr std::string_view title_suffix_text = "SETTINGS";
-/// Mods' row of no mod.
-inline constexpr std::string_view no_mod_text = "No Mod";
-/// No Mod's version.
-inline constexpr std::string_view no_mod_version_text = "3.1c";
-/// No Mod's description.
-inline constexpr std::string_view no_mod_description_text =
-    "The game's own rules, as 3.1c plays them.";
-/// What a mod row's version says when the folder has no oamod.yaml.
-inline constexpr std::string_view no_profile_version_text = "N/A";
-/// What a mod row's description says when the folder has no oamod.yaml.
-inline constexpr std::string_view no_profile_description_text = "No oamod.yaml present";
-/// The tag beside the title of the mod played.
-inline constexpr std::string_view playing_text = "PLAYING";
-/// The button under Mods' list.
-inline constexpr std::string_view open_mods_folder_text = "OPEN MODS FOLDER";
-/// The button right of it, which opens the Library on Mods.
-inline constexpr std::string_view get_more_mods_text = "GET MORE MODS…";
-/// The link after the line on the check for updates.
-inline constexpr std::string_view check_now_text = "CHECK NOW";
-/// The dot between the line on the check for updates and CHECK NOW.
-/// The line draws a space on each side, so the looked-up text can be a
-/// catalogue section and the player still sees " · ".
-inline constexpr std::string_view check_now_separator = "·";
-
-/// The check line's separator as it is drawn: a space, the looked-up dot, a space.
-///
-/// @return the text the line shows
-[[nodiscard]] inline std::string check_separator_shown() {
-    return std::string(" ") + std::string(shown_text(check_now_separator)) + " ";
-}
-
-/// A mod row's UPDATE caption.
-inline constexpr std::string_view mod_update_caption = "UPDATE";
-/// The lines under Mods' list, naming the folders it lists.
-inline constexpr std::array<std::string_view, 2> mods_folders_text{
-    "Lists the mods in the game folder's mods folder and",
-    "in Documents/Open Annihilation/Mods.",
-};
 /// What a shortened path or text ends or starts with.
 inline constexpr std::string_view path_ellipsis = "...";
-/// The Switch Mod question's heading.
-inline constexpr std::string_view switch_heading_text = "SWITCH MOD";
-/// What the Switch Mod question asks, with the mod's title in its place.
-inline constexpr std::string_view switch_ask_text =
-    "Switch to {title} now? The game reloads its data for the new mod and returns to the main "
-    "menu. Your other settings are kept.";
-/// The question's note for a folder without an oamod.yaml.
-inline constexpr std::string_view switch_no_profile_text =
-    "This folder has no oamod.yaml, so the game's own rules apply.";
-/// The question's SWITCH caption.
-inline constexpr std::string_view yes_text = "SWITCH";
-/// A mod row's ROLL BACK caption, and the Roll Back Mod question's.
-inline constexpr std::string_view roll_back_text = "ROLL BACK";
-/// The Roll Back Mod question's heading.
-inline constexpr std::string_view roll_back_heading_text = "ROLL BACK MOD";
-/// The Roll Back Mod question's version line, filled with the versions.
-inline constexpr std::string_view roll_back_versions_text = "{from} to {to}";
-/// What the Roll Back Mod question asks, filled with the mod's title and
-/// the versions.
-inline constexpr std::string_view roll_back_ask_text =
-    "Roll back {title} to {to}? {from} is kept in its place, and ROLL BACK again brings it back.";
-/// What the Roll Back Mod question adds for the mod the game plays.
-inline constexpr std::string_view roll_back_reload_text =
-    "The game reloads its data for the mod and returns to the main menu.";
-/// The question's CANCEL caption.
-inline constexpr std::string_view no_text = "CANCEL";
-/// What Mods says during a game, which keeps the mod it plays.
-inline constexpr std::string_view mod_in_game_text =
-    "Locked during a game. Choose the mod from the main menu.";
 /// Your files' second hint line while no folder failed to open.
 inline constexpr std::string_view user_folder_hint_text =
     "Saved games, screenshots, films and mods.";
-/// What Mods says when the command line chose this run's mod.
-inline constexpr std::string_view mod_from_command_line_text =
-    "The command line chose this run's mod.";
 /// What the header says while a shared game keeps running.
 inline constexpr std::string_view shared_game_text = "Shared game - still running";
 /// Restore defaults' caption.

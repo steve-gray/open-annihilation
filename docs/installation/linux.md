@@ -180,7 +180,7 @@ Your saved games, screenshots, films, recordings and mods are in the
 | `Screenshots` | screenshots (Ctrl+F9) and posters (`MakePoster`), in a folder for each mod as in `Saves` |
 | `Films` | films (Ctrl+F10), a `MOVIEnnn` folder each, in a folder for each mod as in `Saves` |
 | `Recordings` | recordings of network games, which `--play-demo` plays back, in a folder for each mod as in `Saves` |
-| `Mods` | mods you add, each in a folder of its own, which the settings' Mods page lists besides the game folder's `mods` folder ([mods](../mods/README.md#installing-a-mod)) |
+| `Mods` | mods you add, each in a folder of its own, which the Library lists besides the game folder's `mods` folder ([mods](../mods/README.md#installing-a-mod)) |
 
 The game makes each folder the first time it needs it. In the settings
 (**Ctrl+,**), **Common Tweaks** shows the folder under

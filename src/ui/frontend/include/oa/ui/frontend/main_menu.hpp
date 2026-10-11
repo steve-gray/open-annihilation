@@ -8,12 +8,14 @@
 #include "oa/ui/frontend/options.hpp"
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace oa::ui::frontend {
 
 inline constexpr std::string_view kMainMenuVersionControl = "DebugString";
-inline constexpr std::string_view kMainMenuVersion = "v3.1v1117a";
+// The program's name on the version label. It is not translated.
+inline constexpr std::string_view kMainMenuProgramName = "Open Annihilation";
 // The buttons that play movies: the intro, and the credits over the menu art.
 inline constexpr std::string_view kMainMenuIntroControl = "INTRO";
 inline constexpr std::string_view kMainMenuCreditsControl = "Credits";
@@ -49,10 +51,19 @@ struct MainMenuHost {
     // Whether the game data names the 3.1 revision it is (gamedata/version.tdf);
     // null counts it named.
     bool (*revision_named)(void* context) = nullptr;
-    // The version label's text, such as a mod's own version; null shows
-    // kMainMenuVersion.
+    // The version label's text, such as a mod's own version. Null shows
+    // main_menu_version_text(), the program's name and this build's version.
+    // Neither text is translated.
     const char* version_text = nullptr;
 };
+
+/// The version label when no mod names one: the program's name, then "v" and
+/// this build's version as the Library's header writes it, then "-" and the
+/// build's version label when that label is not empty ("Open Annihilation
+/// v0.8.0", or "Open Annihilation v0.8.0-dev" for a development build).
+///
+/// @return the label's text
+[[nodiscard]] std::string main_menu_version_text();
 
 /// Sets up MAINMENU.GUI after the panel loads.
 ///

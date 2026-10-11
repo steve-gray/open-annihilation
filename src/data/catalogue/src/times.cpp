@@ -4,6 +4,10 @@
 #include "oa/data/catalogue/catalogue.hpp"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string_view>
 
 namespace oa::data::catalogue {
 namespace {
@@ -29,22 +33,52 @@ bool digits(std::string_view text, std::size_t at, std::size_t count, int& out) 
     return true;
 }
 
+/// The bytes of a day written `YYYY-MM-DD`.
+constexpr std::size_t day_bytes = 10;
+
+/// Reads the day a text starts with, written `YYYY-MM-DD`.
+///
+/// @param text the text, at least day_bytes long
+/// @return the day, or nothing when those bytes are not a real Gregorian day
+std::optional<std::chrono::sys_days> leading_day(std::string_view text) noexcept {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    if (!digits(text, 0, 4, year) || text[4] != '-' || !digits(text, 5, 2, month) ||
+        text[7] != '-' || !digits(text, 8, 2, day))
+        return std::nullopt;
+    // sys_days is the civil date in UTC. The local zone is not consulted.
+    const std::chrono::year_month_day date{
+        std::chrono::year{year},
+        std::chrono::month{static_cast<unsigned>(month)},
+        std::chrono::day{static_cast<unsigned>(day)},
+    };
+    if (!date.ok())
+        return std::nullopt;
+    return std::chrono::sys_days{date};
+}
+
 } // namespace
+
+std::optional<int64_t> parse_day(std::string_view text) {
+    if (text.size() != day_bytes)
+        return std::nullopt;
+    const std::optional<std::chrono::sys_days> day = leading_day(text);
+    if (!day)
+        return std::nullopt;
+    return day->time_since_epoch().count();
+}
 
 std::optional<int64_t> parse_utc_time(std::string_view text) {
     // YYYY-MM-DDTHH:MM:SSZ is 20 bytes. A fraction, if present, sits before Z.
     if (text.size() < 20)
         return std::nullopt;
-    int year = 0;
-    int month = 0;
-    int day = 0;
     int hour = 0;
     int minute = 0;
     int second = 0;
-    if (!digits(text, 0, 4, year) || text[4] != '-' || !digits(text, 5, 2, month) ||
-        text[7] != '-' || !digits(text, 8, 2, day) || text[10] != 'T' ||
-        !digits(text, 11, 2, hour) || text[13] != ':' || !digits(text, 14, 2, minute) ||
-        text[16] != ':' || !digits(text, 17, 2, second))
+    const std::optional<std::chrono::sys_days> day = leading_day(text);
+    if (!day || text[10] != 'T' || !digits(text, 11, 2, hour) || text[13] != ':' ||
+        !digits(text, 14, 2, minute) || text[16] != ':' || !digits(text, 17, 2, second))
         return std::nullopt;
     std::size_t index = 19;
     if (index < text.size() && text[index] == '.') {
@@ -58,16 +92,8 @@ std::optional<int64_t> parse_utc_time(std::string_view text) {
         return std::nullopt;
     if (hour > 23 || minute > 59 || second > 59)
         return std::nullopt;
-    // sys_days is the civil date in UTC. The local zone is not consulted.
-    const std::chrono::year_month_day date{
-        std::chrono::year{year},
-        std::chrono::month{static_cast<unsigned>(month)},
-        std::chrono::day{static_cast<unsigned>(day)},
-    };
-    if (!date.ok())
-        return std::nullopt;
-    const auto stamp = std::chrono::sys_days{date} + std::chrono::hours{hour} +
-                       std::chrono::minutes{minute} + std::chrono::seconds{second};
+    const auto stamp = *day + std::chrono::hours{hour} + std::chrono::minutes{minute} +
+                       std::chrono::seconds{second};
     return stamp.time_since_epoch().count();
 }
 

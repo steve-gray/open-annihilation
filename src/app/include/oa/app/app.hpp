@@ -565,10 +565,10 @@ struct Options {
     // notice of the move shown once and closed, and the settings' Your files
     // buttons opening its folders through a recorded opener.
     bool check_user_folder = false;
-    // Switches the mod ten times through the settings' Mods page, between
-    // No Mod and two test profiles in the player's own Mods folder, each a
-    // soft restart on the same window, and requires the working set to
-    // stay level.
+    // Switches the mod ten times through the Library, between no mod and
+    // two test profiles in the player's own Mods folder, each a soft
+    // restart on the same window, and requires the working set to stay
+    // level.
     bool check_mod_switch = false;
     // Writes two map packs into the player's own Maps folder and requires
     // the skirmish list to show their maps after the base maps, the one that
@@ -591,8 +591,8 @@ struct Options {
     // open once the main menu shows; absolute, in the order given.
     std::vector<fs::path> open_files;
     // Installs made-up mod packages through each of the main menu's
-    // questions, by a dropped file and the command line, rolls a mod back on
-    // the Mods page, and replaces and rolls back the mod played across soft
+    // questions, by a dropped file and the command line, rolls a mod back in
+    // the Library, and replaces and rolls back the mod played across soft
     // restarts, checking the player's Mods folder after each.
     bool check_mod_install = false;
     // Installs the pseudo language pack from a dropped file, declines

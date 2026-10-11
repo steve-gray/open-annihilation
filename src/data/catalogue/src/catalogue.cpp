@@ -613,6 +613,14 @@ bool read_package(const json::Json& value, Package& package, std::string& reason
         }
         package.badge = *text;
     }
+    if (const json::Json* published = value.find("published")) {
+        const std::string* text = published->string();
+        if (!text || !parse_day(*text)) {
+            reason = "published is not a day written YYYY-MM-DD";
+            return false;
+        }
+        package.published = *text;
+    }
     if (!read_requires(value, package, reason))
         return false;
     if (const json::Json* sim_hash = value.find("sim_hash")) {

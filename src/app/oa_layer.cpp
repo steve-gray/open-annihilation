@@ -964,9 +964,6 @@ struct Runtime::SettingsScreen final : LayerScreen {
         // The front end draws every frame. A match draws this dialog again
         // only when the revision moves, so a download's progress has to.
         changed = runtime_.refresh_settings_languages(*dialog) || changed;
-        // Mods' updates and its line on the check for updates follow the
-        // Library's model and the registries.
-        changed = runtime_.refresh_settings_mods(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;
@@ -984,14 +981,13 @@ struct Runtime::SettingsScreen final : LayerScreen {
             std::ignore = runtime_.take_engine_settings_action(settings::DialogAction::cancelled);
     }
 
-    /// Puts an action of the dialog in effect and plays its sound: OK and
-    /// SWITCH play the opening sound, Cancel its own.
+    /// Puts an action of the dialog in effect and plays its sound: OK plays
+    /// the opening sound, Cancel its own.
     ///
     /// @param action what the dialog's event asked
     /// @return close when the dialog closed; none when it asked nothing
     LayerAnswer take_action(settings::DialogAction action) {
-        if (action == settings::DialogAction::accepted ||
-            action == settings::DialogAction::switch_mod)
+        if (action == settings::DialogAction::accepted)
             runtime_.play_ui_sound(kOpenSound, 0);
         else if (action == settings::DialogAction::cancelled)
             runtime_.play_ui_sound(kCancelSound, 0);

@@ -1,7 +1,8 @@
 # The Library
 
-The Library is where Open Annihilation finds, installs, updates and rolls
-back mods, map packs and language packs without leaving the game. It lists
+The Library is where Open Annihilation finds, installs, updates, rolls
+back and uninstalls mods, map packs and language packs without leaving the
+game, and where you choose the mod you play. It lists
 every package that Core Prime's registry, built into the game, and any
 registry you added offer, together with what you have installed, and it
 says for each whether you have it, whether an update waits, and what it
@@ -15,9 +16,11 @@ settings and exactly what a download sends and records.
 ## Contents
 
 - [Opening the Library](#opening-the-library)
+- [The Active tab](#the-active-tab)
 - [Tabs and states](#tabs-and-states)
 - [Search and filters](#search-and-filters)
 - [The details](#the-details)
+- [Choosing a mod](#choosing-a-mod)
 - [Keys and controllers](#keys-and-controllers)
 - [Installing](#installing)
 - [The download queue](#the-download-queue)
@@ -25,6 +28,7 @@ settings and exactly what a download sends and records.
 - [Which downloads ask first](#which-downloads-ask-first)
 - [The update question](#the-update-question)
 - [Rolling back](#rolling-back)
+- [Uninstalling](#uninstalling)
 - [Finishes when you leave …](#finishes-when-you-leave-)
 - [Offline, and the list's age](#offline-and-the-lists-age)
 - [Check that you're a person](#check-that-youre-a-person)
@@ -36,15 +40,14 @@ The Library opens on the main menu, from:
 
 - **the OA button**, the Open Annihilation logo at the bottom right of the
   main menu, left of the **Settings** button and its gears. It opens on the
-  Updates tab while updates wait, and on Mods otherwise. While updates you
-  can install wait, the button wears an amber dot in its top right corner,
-  from the moment OA finds them: you need not open the Library to learn of
-  them;
-- **GET MORE MODS…** in Settings › Mods, which opens it on Mods;
+  [Active](#the-active-tab) tab. While updates you can install wait, the
+  button wears an amber dot in its top right corner, from the moment OA
+  finds them: you need not open the Library to learn of them, and its
+  **Updates** tab lists them;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
-  Languages.
+  Languages, over the settings, which stay open under it.
 
-The last two open it over the settings, which stay open under it. The
+The
 skirmish and battle room map lists have **MORE MAPS…** instead, which opens
 the map browser, and the battle room has **GET MAP**, which downloads the
 host's map without a detour ([map packs](maps/README.md)).
@@ -53,11 +56,12 @@ The settings have a button of their own on the main menu, the gears beside
 the OA button, which opens them with no Library under them
 ([settings](settings.md#opening-the-settings)). From the Library they are
 one step away: **SETTINGS…** at the foot of the list, or **Cmd+,** on macOS
-and **Ctrl+,** elsewhere, opens them over the Library. **CLOSE**, or
-Escape, goes back to the main menu. The Library shows only on the main
-menu: it closes when the menu gives way to another screen, and in a game
-the in-game menu's button, which shows the gears too, opens the settings,
-not the Library.
+and **Ctrl+,** elsewhere, opens them over the Library. **CHECK NOW**,
+beside it, asks the registries for their lists at once
+([updates](#updates)). **CLOSE**, or Escape, goes back to the main menu.
+The Library shows only on the main menu: it closes when the menu gives way
+to another screen, and in a game the in-game menu's button, which shows the
+gears too, opens the settings, not the Library.
 
 The Library lays itself out for the room the window gives it, at the
 Interface size in Settings › Graphics ([settings](settings.md#graphics)):
@@ -66,11 +70,30 @@ and an entry's details are a page of their own; in the Regular and Large
 layouts the details sit beside the list, and Large adds a column of
 filters.
 
+## The Active tab
+
+**Active**, the first tab, shows what you are using now, top to bottom:
+
+- **MOD**: the mod you are playing, with its badge, name and version
+  ("Ridge 4.8 · rev 3"), or "No mod is played";
+- **LANGUAGE**: the language pack the game's words come from, with its
+  version ("Deutsch 1.2"), or the language the game holds itself
+  ("English · built in");
+- **MAPS**: each map pack you have installed, by name, with its maps under
+  it: each map's name, how many players it is for and its size ("Ridgeline
+  · 4 players · 16x16"), or "No map packs are installed."
+
+It is a list to read: nothing on it can be chosen or pressed, and it has no
+search and no filters. When it is longer than the window it scrolls with
+the mouse wheel, a finger, Page Up and Page Down, Home and End, and a
+controller's right stick. The other tabs are where packages are got,
+updated and played.
+
 ## Tabs and states
 
-The tabs are **Mods**, **Maps**, **Languages** and **Updates** ("Lang" and
-"Upd" in the Compact layout). Updates carries the number of updates you can
-install now.
+The tabs are **Active**, **Mods**, **Maps**, **Languages** and
+**Updates** ("Lang" and "Upd" in the Compact layout). Updates carries the
+number of updates you can install now.
 
 Each row shows the package's badge (its own picture, or up to three
 letters), its name, its version ("4.8 · rev 4" from its second packaging
@@ -78,18 +101,28 @@ revision on, and a map pack's number of maps), its size and its state. The
 Regular and Large rows add who made it and its summary, with its download
 count where the registry keeps one ("by the Ridge team · 12,400
 downloads"), and Large adds its tags. A Compact row names the registry
-after the size when the package comes from one you added.
+after the size when the package comes from one you added. The version
+always shows whole, revision and all, at every layout.
 
-The state is one of four words:
+The state is an icon at the row's right, and again beside the package's
+name in the details:
 
-| State | Means |
+| Icon | Means |
 |---|---|
-| **GET** | not installed |
-| **INSTALLED** | installed, and no newer release is offered |
-| **UPDATE** | installed, and the registry it came from offers a newer release |
-| **PLAYING** | the mod being played, up to date |
+| a circled check, green | installed, and no newer release is offered; the mod being played shows it too |
+| a circled up-arrow, amber | installed, and the registry it came from offers a newer release |
+| a download arrow, grey | not installed |
 
-A GET or UPDATE that cannot act is greyed, and the details say why:
+The icons are drawn as shapes at the screen's own pixels, so they stay
+sharp at every Interface size. The download arrow is the row's **GET** and
+the circled up-arrow its **UPDATE**: pressing either does exactly what the
+details' GET or UPDATE does, with the same questions, without opening the
+details. Anywhere else on the row, a press only chooses it. To automation
+they are `oa.library.row.<registry>.<key>.get` and `.update`
+([automation](automation.md#the-library)).
+
+A GET or UPDATE that cannot act has its icon dimmed and takes no press,
+and the details say why:
 
 - "Downloads from Core Prime are off (Settings › Downloads)": the
   registry's install ID is off ([the install ID](downloads.md#the-install-id));
@@ -111,12 +144,22 @@ then a tag, then the author, then the summary. Without a search the list
 shows updates first, then what is installed, then what you can get, then
 what you cannot, each by name, Core Prime's first.
 
-The filters are **All**, **Installed** (which keeps updates and the mod
-being played) and **Updates**, and each tag the packages carry, with how
-many have it. They are chips over the list in the Regular layout, with a
-TAGS menu for the tags that do not fit, a column of their own in Large, and
-one drop-down in Compact. Choosing the tag already chosen clears it. The
-Updates tab has no filters: it holds every update, and **UPDATE ALL**.
+The filters are **All**, **New**, **Installed** (which keeps updates and
+the mod being played) and **Updates**, each with how many packages it holds
+on that tab in brackets, "Installed (4)", and each tag the packages carry,
+with how many have it. A filter's count is of the whole tab: the tag and
+the search you choose do not change it. **New** holds the ten packages the
+registries published last, newest first, by the day each release came out;
+a package whose registry gives no day is never among them. The filters are
+chips over the list in the Regular layout, with a TAGS menu for the tags
+that do not fit, a column of their own in Large, and one drop-down in
+Compact. Choosing the tag already chosen clears it.
+
+Each tab keeps its own filter: choosing Installed on Mods leaves Maps and
+Updates as they were. The **Updates** tab holds every kind of package and
+has the same filters, and it opens on Updates, every update together. Over
+its list a line says how many updates it shows ("3 updates"), with **UPDATE
+ALL**.
 
 An empty list says "Nothing matches "*search*".", "No updates.", "Nothing
 to show.", or, with no registry at all, "Nothing here yet. Turn a registry
@@ -130,11 +173,22 @@ name) back to the list.
 
 - **A status line**: "Not installed · 41.0 MB", "Installed", "Playing",
   "Revision 4 available · 3.2 MB to download" or "Version 4.9 available ·
-  …", where the download stands ("Waiting to download", "Downloading ·
+  …", or "Update available · 3.4 MB to download" when the registry names
+  no revision for an update of the same version, "No oamod.yaml present"
+  for a mod folder without one, where the download stands ("Waiting to download", "Downloading ·
   18.2 of 64.0 MB", "Verifying", "Installing"), or why it cannot be got
   ([above](#tabs-and-states)).
-- **The summary.**
+- **The summary**: the registry's, or for a mod of your own its
+  `oamod.yaml`'s description.
 - **The facts**:
+  - **Installed**, the version you have and its packaging revision, "4.8
+    (rev 3)", for a package you have installed;
+  - **Latest**, the same for the release the registry lists, "4.8 (rev
+    4)". A revision the registry or the package does not name is left
+    out ("1.0"), and a package with no version shows its revision alone
+    ("rev 3");
+  - **Author**: the registry's author for it, else its publisher, else the
+    author its own manifest names;
   - **Size**, and with an update how much there is to download;
   - **Base**: "Total Annihilation 3.1c";
   - **Needs**: the Open Annihilation it needs, "Open Annihilation 0.8.0 or
@@ -152,19 +206,62 @@ name) back to the list.
     a file that no registry lists, or, in amber, "*registry* · Not reviewed
     by the OA team" for one from a registry you added
     ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)).
+
+  A fact with nothing to say is left out. These hold alike for mods, map
+  packs and language packs.
 - **The buttons**: **GET** or **UPDATE**, **CANCEL** while it is in the
   download queue, **RETRY** after a download that can be tried again;
   **PLAY NOW** for an installed mod you are not playing, which switches to
-  it; **ROLL BACK** while an earlier copy is kept
-  ([rolling back](#rolling-back)); **OPEN FOLDER** for an installed package;
-  and **HOMEPAGE**, which opens the package's web page in your browser.
+  it, or **SWITCH OFF** in its place for the mod you are playing, which
+  goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod));
+  **ROLL BACK** while an earlier copy is kept
+  ([rolling back](#rolling-back)); **UNINSTALL** and **OPEN FOLDER** for an
+  installed package ([uninstalling](#uninstalling)); and **HOMEPAGE**, which
+  opens the package's web page in your browser.
 - **A note** for mods while you play one: "Finishes when you leave Ridge."
   on the mod being played, or "You are playing Ridge. Updating Cinder
   doesn't restart the game." on another
-  ([finishes when you leave …](#finishes-when-you-leave-)).
+  ([finishes when you leave …](#finishes-when-you-leave-)); on every
+  installed mod, first, "The command line chose this run's mod." while
+  `--mod-dir` or `--base-game` chose it; and, while UNINSTALL is off, why:
+  "Map packs can't be uninstalled during a game." or "It is in the download
+  queue: CANCEL it before you uninstall it."
 
 The Regular and Large layouts show who made a package, and its download
 count, on its row; Compact shows them under the status line.
+
+## Choosing a mod
+
+The Mods tab lists every mod you can play: the ones you installed, from a
+registry or a file, and every other folder the game can play as a mod,
+each marked "Your own copy": the folders in the game folder's `mods`
+folder and in your own Mods folder, `Documents/Open Annihilation/Mods`,
+a folder without an `oamod.yaml`, which shows "N/A" for its version and
+"No oamod.yaml present" in its details and plays with the game's own
+rules, and a folder an earlier version's Pick Folder… chose, while it is
+still the mod you play. A mod of your own shows its `oamod.yaml`'s
+description in its details. The one you play is marked **PLAYING**; with
+no mod none is.
+
+- **PLAY NOW**, on any other mod, plays it: the game reloads its data for
+  that mod and returns to the main menu, without closing the window, and
+  plays it at every later start too. A folder the game cannot play is
+  refused, and a note over the Library says why under **SWITCH MOD**:
+  "That folder cannot be played; the log says why.", with **OK**.
+- **SWITCH OFF**, on the mod you play, goes back to the game as 3.1c plays
+  it. It asks first, **SWITCH MOD**: "Switch to No Mod now? The game
+  reloads its data for the new mod and returns to the main menu. Your
+  other settings are kept.", with **CANCEL**, marked, and **SWITCH**.
+  **SWITCH** (Y) reloads the game with no mod; **CANCEL** (Escape)
+  leaves everything as it was.
+
+Both change the mod only from the main menu: the Library shows only there,
+and a game keeps the mod it started with. While `--mod-dir` or
+`--base-game` chose the run's mod, both are greyed and the details say "The
+command line chose this run's mod." **OPEN FOLDER** shows a mod's folder,
+and **MODS** under Your files in Settings › Common Tweaks your Mods folder,
+where a mod's folder goes to be listed
+([settings](settings.md#common-tweaks)).
 
 ## Keys and controllers
 
@@ -172,7 +269,7 @@ count, on its row; Compact shows them under the status line.
 |---|---|
 | Tab, Shift+Tab | the next and previous control |
 | arrow keys | move by where controls are; on the list, Up and Down choose the row |
-| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus |
+| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
 | Enter, Space | on a row: open its details page in Compact, or go to its first button |
 | Cmd+F (Ctrl+F elsewhere), or `/` | the search |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |
@@ -182,13 +279,15 @@ With a controller, Y focuses the search, X presses the chosen entry's GET,
 UPDATE, CANCEL or RETRY, L1 and R1 change tab, B goes back as Escape does,
 and the right stick scrolls ([gamepad controls](controllers.md#menus)).
 A finger or the mouse presses any control. A press, double click or tap on
-a row only chooses it: nothing installs until you press GET or UPDATE.
+a row chooses it: nothing installs until you press GET or UPDATE, in the
+details or as the row's download arrow or up-arrow.
 
 ## Installing
 
-**GET** installs a package. It is the only way anything gets onto your
-machine from the Library: OA never installs a package, or an update, that
-you did not press a button for.
+**GET** installs a package, in the details or as the download arrow on its
+row. It is the only way anything gets onto your machine from the Library:
+OA never installs a package, or an update, that you did not press a button
+for.
 
 The download goes into the queue, and the package is checked before
 anything is written: its SHA-256 against the signed catalogue's, then the
@@ -244,7 +343,9 @@ stops at its next step, and goes on, shown as waiting, once the game ends.
 OA looks for updates whenever it fetches the registries' lists, which
 **Check for content updates** in Settings › Downloads decides
 ([when OA checks](downloads.md#when-oa-checks-for-content)), and **CHECK
-NOW** in Settings › Mods asks at once.
+NOW** at the foot of the Library asks every registry that is on at once,
+whatever that setting says. It is greyed while no registry is on, and
+while the registries are being asked.
 
 A package is offered an update when the registry it was installed from
 lists the same package at a higher release than the one installed: OA
@@ -257,12 +358,11 @@ registry is not an update.
 
 An update shows:
 
-- as **UPDATE** on the package's row, and in its details with what changes;
-- on the **Updates** tab, every kind together, with **UPDATE ALL**, which
-  starts every update that can be installed;
-- as the dot on the main menu's **OA** button;
-- for a mod, on its row in Settings › Mods, with an **UPDATE** button of its
-  own ([settings](settings.md#mods)).
+- as the circled up-arrow on the package's row, which is its **UPDATE**,
+  and in its details with what changes;
+- on the **Updates** tab, every kind together, with **UPDATE ALL** over the
+  list, which starts every update the list shows that can be installed;
+- as the dot on the main menu's **OA** button.
 
 **UPDATE** and **UPDATE ALL** start updates; OA finds updates by itself, but
 never installs one on its own. A mod that changes its rules is your call,
@@ -361,13 +461,16 @@ do not ask start whatever the answer.
 ## Rolling back
 
 Updating or replacing a mod keeps the copy it replaced, one copy back.
-**ROLL BACK**, in the Library's details or on the mod's row in Settings ›
-Mods, brings it back. It asks first, **ROLL BACK MOD**: "Roll back Ridge to
-4.8 revision 3? 4.8 revision 4 is kept in its place, and ROLL BACK again
-brings it back.", with **CANCEL** and **ROLL BACK**. The two copies swap,
-so a second ROLL BACK undoes the first. The record of where the mod came from goes back
-with it, so the update you rolled back is offered again, and nothing
-installs it until you press UPDATE.
+**ROLL BACK**, in the Library's details, brings it back. It shows on a mod
+only while the copy kept is one the game can play. It asks first, **ROLL
+BACK MOD**: "Roll back Ridge to 4.8 revision 3? 4.8 revision 4 is kept in
+its place, and ROLL BACK again brings it back.", with **CANCEL** and **ROLL
+BACK**. The two copies swap, so a second ROLL BACK undoes the first. The
+record of where the mod came from goes back with it, so the update you
+rolled back is offered again, and nothing installs it until you press
+UPDATE. A roll back that cannot be made, as when the copy kept can no
+longer be played, changes nothing, and **MOD NOT ROLLED BACK** over the
+Library says why.
 
 Rolling back the mod being played reloads the game's data at once and
 returns to the main menu ("The game reloads its data for the mod and
@@ -375,14 +478,58 @@ returns to the main menu."). In 0.8 only mods roll back: the button also
 shows on a map or language pack that keeps an earlier copy, but does
 nothing there.
 
+## Uninstalling
+
+**UNINSTALL**, in an installed package's details after ROLL BACK, removes a
+mod, map pack or language pack you no longer play. It asks first:
+
+> **Uninstall Ridge**
+>
+> Uninstall Ridge? Its folder, Mods/ridge, is removed, and with it the copy
+> ROLL BACK keeps.
+>
+> GET installs it again.
+>
+> **CANCEL** · **UNINSTALL**
+
+The question names the package's folder in your own Open Annihilation
+folder, `Mods/<id>`, `Maps/<id>` or `Languages/<tag>`, and says when the
+copy ROLL BACK keeps goes with it. For a package you installed yourself
+that no registry lists, it says "No registry lists it, so the Library
+cannot get it again." **CANCEL**, or Escape, removes nothing. **UNINSTALL**
+removes the folder and everything in it; the Library then shows the
+package as not installed, with GET, or drops it when no registry lists it.
+
+Some packages cannot go yet, and nothing is removed:
+
+- **the mod you are playing**: a notice says "You are playing Ridge.
+  Switch it off first with SWITCH OFF, then uninstall it.";
+- **the language pack the game is shown in**, or one its words fall back
+  to: a notice says "The game is shown in 简体中文. Choose another language
+  in Settings › Language first, then uninstall it.";
+- **a map pack during a game**: UNINSTALL is off, and the note under the
+  buttons says "Map packs can't be uninstalled during a game.";
+- **a package in the download queue**, while it downloads, is checked or
+  installed, or waits for you to leave the mod being played: UNINSTALL is
+  off until you press CANCEL.
+
+Uninstalling stays inside your Mods, Maps and Languages folders. The
+package's folder is moved aside in one step, under a hidden name the game
+never reads as a package, and then deleted a little at a time; a folder
+that is a link to somewhere else is refused, and a link inside the folder
+is removed without touching what it leads to. If OA stops while it is
+deleting, the next start finishes the job. When it cannot remove the
+folder, because another program is using it, or the folder changed since
+the Library listed it, a notice says so and the package stays as it was.
+
 ## Finishes when you leave …
 
 The mod being played cannot change under the running game, so an update to
-it, from the Library or Settings › Mods, downloads and is checked now, and
-is made when you leave that mod, by switching to another or quitting. Until
-then the details say "Finishes when you leave Ridge.", and the queue and
-the mod's row in Settings › Mods say "Waiting · finishes when you leave
-Ridge". Once it is made, a **MOD UPDATED** notice says so on the main menu.
+it, from the Library, downloads and is checked now, and is made when you
+leave that mod, by switching to another, switching it off or quitting.
+Until then the details say "Finishes when you leave Ridge.", and the queue
+says "Waiting · finishes when you leave Ridge". Once it is made, a **MOD
+UPDATED** notice says so on the main menu.
 **CANCEL** on the waiting update drops it, and leaves the mod as it was; it
 is offered again.
 
@@ -440,6 +587,5 @@ Packages install into your own Open Annihilation folder
 say where it is), each in a folder named by its key: `Mods/<id>`,
 `Maps/<id>` and `Languages/<tag>`. Beside a package's files OA keeps
 `.oa-origin.yaml`, the record of where it came from, and `.backup`, the
-copy an update replaced. The Library has no button to remove a package:
-**OPEN FOLDER** shows its folder, which you can delete while the game is
-not playing it.
+copy an update replaced. **UNINSTALL** removes a package's folder with
+both ([uninstalling](#uninstalling)), and **OPEN FOLDER** shows it.

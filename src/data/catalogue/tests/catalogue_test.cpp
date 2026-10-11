@@ -759,6 +759,41 @@ void test_utc_time() {
     OA_CHECK(!catalogue::parse_utc_time(""));
 }
 
+void test_published() {
+    // Every kind may name the day its release was published; it is kept as written.
+    const auto dated = read_ok(catalogue_of(
+        bare("oamod", "ridge", "\"published\":\"2026-10-12\"") + "," +
+        bare("oamap", "isles", "\"published\":\"2024-02-29\"") + "," +
+        bare("oalang", "pt-BR", "\"published\":\"1999-12-31\"") + "," + bare("oamod", "undated")
+    ));
+    OA_CHECK(dated.packages.size() == 4);
+    OA_CHECK(dated.problems.empty());
+    if (dated.packages.size() == 4) {
+        OA_CHECK(dated.packages[0].published == "2026-10-12");
+        OA_CHECK(dated.packages[1].published == "2024-02-29");
+        OA_CHECK(dated.packages[2].published == "1999-12-31");
+        OA_CHECK(dated.packages[3].published.empty());
+    }
+    // A malformed day leaves the entry out, as any other malformed member does.
+    skips_one(bare("oamod", "late", "\"published\":\"2026-13-01\""), "published");
+    skips_one(bare("oamap", "leap", "\"published\":\"2023-02-29\""), "published");
+    skips_one(bare("oalang", "fr", "\"published\":\"2026-1-01\""), "published");
+    skips_one(bare("oamod", "timed", "\"published\":\"2026-10-12T00:00:00Z\""), "published");
+    skips_one(bare("oamod", "number", "\"published\":20261012"), "published");
+    skips_one(bare("oamod", "blank", "\"published\":\"\""), "published");
+
+    // 1970-01-01 is day 0, and 2000-02-29 is 10957 + 59 = 11016 days on.
+    OA_CHECK(catalogue::parse_day("1970-01-01") == 0);
+    OA_CHECK(catalogue::parse_day("2000-02-29") == 11016);
+    OA_CHECK(catalogue::parse_day("1969-12-31") == -1);
+    OA_CHECK(!catalogue::parse_day("1900-02-29"));
+    OA_CHECK(!catalogue::parse_day("2026-10-12 "));
+    OA_CHECK(!catalogue::parse_day("2026/10/12"));
+    OA_CHECK(!catalogue::parse_day("2026-00-12"));
+    OA_CHECK(!catalogue::parse_day("2026-10-00"));
+    OA_CHECK(!catalogue::parse_day(""));
+}
+
 } // namespace
 
 int main() {
@@ -768,5 +803,6 @@ int main() {
     test_coverage_and_bounds();
     test_structure();
     test_utc_time();
+    test_published();
     return oa::test::check_exit_status();
 }

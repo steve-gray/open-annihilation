@@ -790,9 +790,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             case settings::DialogAction::cancelled:
                 return finish(false);
             case settings::DialogAction::manage_game_files:
-            case settings::DialogAction::switch_mod:
             case settings::DialogAction::open_folder:
-            case settings::DialogAction::roll_back_mod:
             case settings::DialogAction::reset_install_id:
             case settings::DialogAction::empty_downloads:
             case settings::DialogAction::download_language:
@@ -800,8 +798,6 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             case settings::DialogAction::add_mirror:
             case settings::DialogAction::open_library:
             case settings::DialogAction::show_gallery:
-            case settings::DialogAction::update_mod:
-            case settings::DialogAction::check_for_updates:
                 // The Language dialog lists none of the controls that ask
                 // for these, and no language that is only available to download.
                 dirty = true;

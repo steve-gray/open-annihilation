@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// What the Mods page of the settings shows of one mod folder: the title,
+// What the Library shows of one mod folder: the title,
 // version and description its oamod.yaml gives, read without resolving the
 // profile or opening an archive, and its badge, oamod.png, decoded to RGBA.
 // A folder whose files are missing, damaged or hostile still gives a row:
@@ -58,7 +58,7 @@ struct ModBadge {
     std::vector<uint8_t> pixels{};
 };
 
-/// One row of the Mods page.
+/// What the Library shows of one mod folder.
 ///
 /// Every text is one line of UTF-8: a line break, tab or other control
 /// character the file holds is shown as a space.
@@ -83,7 +83,7 @@ struct ModSummary {
     ModBadge badge{};
 };
 
-/// Reads what the Mods page shows of a mod folder.
+/// Reads what the Library shows of a mod folder.
 ///
 /// Finds the folder's oamod.yaml as find_mod_profile does, matched without
 /// case, and takes its top-level name, version and description, the scalars

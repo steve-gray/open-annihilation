@@ -89,6 +89,9 @@ struct Package {
     std::string notes;             ///< what this release changes, up to 2000 bytes
     std::string homepage; ///< an address the game can open; empty when the entry names none
     std::string badge;    ///< a picture reference ending `.png`; empty when the entry names none
+    /// The day this release was published, `YYYY-MM-DD` as written; empty
+    /// when the entry names none.
+    std::string published;
     std::vector<std::string> tags; ///< up to 16 tags, each as a package manifest may write one
     std::string
         requires_engine_text; ///< the engine requirement as written; empty when there is none
@@ -173,5 +176,15 @@ read_catalogue(std::span<const uint8_t> bytes, Catalogue& out, std::string* erro
 /// @param text the time
 /// @return the seconds since 1970, or nothing when the text is not such a time
 [[nodiscard]] std::optional<int64_t> parse_utc_time(std::string_view text);
+
+/// Reads a day written `YYYY-MM-DD`, as a package's `published` names one.
+///
+/// The year is four digits and the month and day two each. The date is a
+/// real day, February 29 included in a Gregorian leap year. Nothing may
+/// come before or after it.
+///
+/// @param text the day
+/// @return the days since 1970-01-01, or nothing when the text is not such a day
+[[nodiscard]] std::optional<int64_t> parse_day(std::string_view text);
 
 } // namespace oa::data::catalogue

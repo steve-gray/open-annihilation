@@ -1,0 +1,157 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// UNINSTALL's rules, its question and its notices, written from the
+// patterns in text.hpp.
+#include "oa/ui/library/uninstall.hpp"
+
+#include "oa/ui/library/text.hpp"
+
+#include <string>
+#include <string_view>
+#include <utility>
+
+namespace oa::ui::library {
+
+namespace {
+
+/// Tells whether a queue item has not ended: it waits, downloads, is checked
+/// or installed, or waits for the player to leave the mod being played.
+///
+/// @param phase the item's phase
+/// @return true until it has failed or is installed
+bool unfinished(QueueItem::Phase phase) {
+    return phase != QueueItem::Phase::failed && phase != QueueItem::Phase::installed;
+}
+
+/// Makes a notice of one paragraph and OK, which every key that answers
+/// a question answers.
+///
+/// @param title its title
+/// @param body its paragraph
+/// @param text how texts are looked up
+/// @return the notice
+oa::ui::kit::Question
+one_button_notice(std::string title, std::string body, const TextHooks& text) {
+    oa::ui::kit::Question notice;
+    notice.title = std::move(title);
+    notice.paragraphs.push_back({std::move(body), false});
+    notice.buttons.push_back(
+        {std::string(shown(text, words::uninstall_ok)), true, std::string(uninstall_ok_button_id)}
+    );
+    notice.cancel_button = 0;
+    notice.primary_button = 0;
+    notice.marked = 0;
+    return notice;
+}
+
+} // namespace
+
+std::string uninstall_off_reason(const Library& library, const Entry& entry) {
+    if (entry.installed == nullptr)
+        return {};
+    if (entry.id.kind == Kind::map_pack && library.inputs.in_match)
+        return std::string(shown(library.text, words::uninstall_off_in_game));
+    if (entry.queued != nullptr && unfinished(entry.queued->phase))
+        return std::string(shown(library.text, words::uninstall_off_queued));
+    return {};
+}
+
+UninstallStep uninstall_step(const Library& library, const Entry& entry) {
+    if (entry.installed == nullptr || !uninstall_off_reason(library, entry).empty())
+        return UninstallStep::off;
+    if (entry.id.kind == Kind::mod && entry.installed->playing)
+        return UninstallStep::switch_off_first;
+    if (entry.id.kind == Kind::language && entry.installed->in_use)
+        return UninstallStep::language_first;
+    return UninstallStep::ask;
+}
+
+oa::ui::kit::Question
+uninstall_question(const Entry& entry, std::string_view folder, const TextHooks& text) {
+    const std::string name(entry_name(entry));
+    const bool kept = entry.installed != nullptr && entry.installed->kept.has_value();
+    oa::ui::kit::Question question;
+    question.title = filled(text, words::uninstall_title, {{"name", name}});
+    question.paragraphs.push_back(
+        {filled(
+             text,
+             kept ? words::uninstall_ask_kept : words::uninstall_ask,
+             {{"name", name}, {"folder", folder}}
+         ),
+         false}
+    );
+    question.paragraphs.push_back(
+        {std::string(
+             shown(text, entry.listing != nullptr ? words::uninstall_listed : words::uninstall_own)
+         ),
+         false}
+    );
+    question.buttons.push_back(
+        {std::string(shown(text, words::action_cancel)),
+         false,
+         std::string(uninstall_cancel_button_id)}
+    );
+    question.buttons.push_back(
+        {std::string(shown(text, words::action_uninstall)), true, std::string(uninstall_button_id)}
+    );
+    question.cancel_button = 0;
+    question.primary_button = 1;
+    question.marked = 0;
+    return question;
+}
+
+oa::ui::kit::Question
+uninstall_notice(const Entry& entry, UninstallStep step, const TextHooks& text) {
+    const std::string name(entry_name(entry));
+    const std::string_view pattern = step == UninstallStep::language_first
+                                         ? words::uninstall_language
+                                         : words::uninstall_playing;
+    return one_button_notice(
+        filled(text, words::uninstall_title, {{"name", name}}),
+        filled(text, pattern, {{"name", name}}),
+        text
+    );
+}
+
+oa::ui::kit::Question
+uninstall_failed_notice(std::string_view name, UninstallProblem problem, const TextHooks& text) {
+    std::string_view reason;
+    switch (problem) {
+    case UninstallProblem::busy:
+        reason = words::uninstall_failed_busy;
+        break;
+    case UninstallProblem::changed:
+        reason = words::uninstall_failed_changed;
+        break;
+    case UninstallProblem::link:
+        reason = words::uninstall_failed_link;
+        break;
+    case UninstallProblem::outside:
+        reason = words::uninstall_failed_outside;
+        break;
+    case UninstallProblem::not_moved:
+        reason = words::uninstall_failed_not_moved;
+        break;
+    }
+    return one_button_notice(
+        filled(text, words::uninstall_title, {{"name", name}}),
+        filled(text, words::uninstall_failed, {{"name", name}, {"reason", shown(text, reason)}}),
+        text
+    );
+}
+
+std::string details_note(const Library& library) {
+    std::string note = playing_note(library);
+    const Entry* entry = selected_entry(library);
+    if (entry == nullptr)
+        return note;
+    const std::string off = uninstall_off_reason(library, *entry);
+    if (off.empty())
+        return note;
+    if (note.empty())
+        return off;
+    return note + " " + off;
+}
+
+} // namespace oa::ui::library
