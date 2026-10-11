@@ -6,11 +6,14 @@
 # and download queue lines, and its words (library.hpp, text.hpp). It draws
 # nothing and reads no file, clock or network.
 add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp)
+# The Library's screens, made of the UI kit's components: their layout at
+# the three size classes, their drawing and their input (screen.hpp).
+target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)
 add_library(oa::ui::library ALIAS oa-ui-library)
 target_include_directories(oa-ui-library PUBLIC include)
 target_compile_features(oa-ui-library PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 PRIVATE oa-data-mod-profile
-  oa-options)
+target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 oa-ui-kit PRIVATE
+  oa-data-mod-profile oa-options)
 
 if(BUILD_TESTING)
   # Entries and their states, blocking, registries, tabs, filters, tags, the

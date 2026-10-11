@@ -189,6 +189,51 @@ inline constexpr std::string_view phase_held = "after you leave it";
 inline constexpr std::string_view phase_failed = "failed";
 inline constexpr std::string_view phase_installed = "installed";
 
+// The screens (screen.hpp): the header.
+/// The title at Compact.
+inline constexpr std::string_view title_library = "Library";
+/// The title's first words at Regular and Large; title_library follows them.
+inline constexpr std::string_view title_open_annihilation = "Open Annihilation";
+/// The header's right at Regular and Large: this build's version, then header_age_text.
+inline constexpr std::string_view header_version_list = "{version} · {list}";
+
+// The search and the filters.
+inline constexpr std::string_view search_mods = "Search mods, authors, tags";
+inline constexpr std::string_view search_maps = "Search maps, authors, tags";
+inline constexpr std::string_view search_languages = "Search languages";
+inline constexpr std::string_view search_updates = "Search updates";
+/// A tag in Compact's filter drop-down.
+inline constexpr std::string_view filter_tag = "Tag: {tag} ({count})";
+/// A tag in the filter pane, with how many entries have it.
+inline constexpr std::string_view tag_with_count = "{tag} ({count})";
+/// The drop-down holding the tags that do not fit, and the filter pane's heading over them.
+inline constexpr std::string_view tags_menu = "TAGS";
+/// The Compact details page's drop-down holding the actions after the first three.
+inline constexpr std::string_view more_menu = "MORE";
+/// How many updates the Updates tab shows.
+inline constexpr std::string_view update_count_one = "{count} update";
+inline constexpr std::string_view update_count_many = "{count} updates";
+
+// A row: the version and size under the name at Compact.
+inline constexpr std::string_view row_version_size = "{version} · {size}";
+/// The line above, from a registry the player added.
+inline constexpr std::string_view row_from_registry = "{line} · {registry}";
+
+// An empty list, and a list the last fetch could not bring up to date.
+inline constexpr std::string_view empty_matches = "Nothing matches \"{query}\".";
+inline constexpr std::string_view empty_updates = "No updates.";
+inline constexpr std::string_view empty_no_registries =
+    "Nothing here yet. Turn a registry on in Settings › Downloads.";
+inline constexpr std::string_view empty_tab = "Nothing to show.";
+inline constexpr std::string_view offline_list =
+    "Showing the list from {age}. OA couldn't reach the registries.";
+
+// The details.
+/// The Compact details page's way back to the list, with the tab's name.
+inline constexpr std::string_view back_to_tab = "‹ {tab}";
+/// After a fact's value that is met.
+inline constexpr std::string_view fact_met = "✓";
+
 } // namespace words
 
 /// One place of a pattern and its value.
