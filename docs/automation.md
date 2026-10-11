@@ -205,6 +205,9 @@ centre would land on the line between Off and On.
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
 | The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
+| The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, in that order | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; `updates`' text holds the updates that can be installed, "Updates 2" |
+| The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
+| The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label, its text the line shown: "Ridge 4.8 · rev 3" or "No mod is played"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
 `<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
@@ -263,6 +266,26 @@ map zoom out to the whole map, from the main menu:
    `whole-map`, and the main menu shows again (had Settings opened over
    the Library, the Library shows: click `oa.library.close` to go back to
    the main menu).
+
+### The Library
+
+The Library (`dialog` `oa.library`) names every control as its module
+lists them ([src/ui/library](../src/ui/library/README.md#the-screens)).
+Its rows and their state icons are listed so:
+
+| Control | Name | Kind, and what it reports |
+|---|---|---|
+| A row of the list | `oa.library.row.<registry>.<key>`, or `oa.library.row.<key>` for a package of the player's own | check box, checked while chosen; its text the package's name |
+| A row's download arrow, its GET | `oa.library.row.<registry>.<key>.get` | button, its text "GET", listed just before its row; disabled while the details offer no GET that can act: blocked, in the download queue, or failed |
+| A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
+| The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.roll-back`, `.play-now`, `.open-folder`, `.homepage` | button, its text the button's words |
+| The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
+
+A row's circled check, installed and up to date, is no control. A click
+at a row's centre chooses it; a click at its icon's centre presses GET or
+UPDATE for that row, as the details' button does, asking the same
+questions. `<registry>` and `<key>` are the registry's id and the package's
+key, lower-cased, every other run of characters one `-`.
 
 ## Input
 

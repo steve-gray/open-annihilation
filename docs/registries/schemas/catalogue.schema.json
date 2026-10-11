@@ -92,6 +92,7 @@
         "notes": { "type": "string", "maxLength": 2000 },
         "homepage": { "type": "string", "minLength": 1, "maxLength": 256 },
         "badge": { "type": "string" },
+        "published": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" },
         "tags": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 32 } },
         "requires": { "$ref": "#/$defs/requires" },
         "sim_hash": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },

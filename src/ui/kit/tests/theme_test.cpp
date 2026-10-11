@@ -169,6 +169,7 @@ void compact_metrics_of_the_new_controls() {
     OA_CHECK(kit::compact_metrics.chip_height == 12);
     OA_CHECK(kit::compact_metrics.chip_padding == 4);
     OA_CHECK(kit::compact_metrics.chip_gap == 4);
+    OA_CHECK(kit::compact_metrics.state_icon_side == 14);
     OA_CHECK(kit::compact_metrics.tab_height == 18);
     OA_CHECK(kit::compact_metrics.tab_padding == 10);
     OA_CHECK(kit::compact_metrics.tab_tracking == 1);

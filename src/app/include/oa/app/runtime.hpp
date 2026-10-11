@@ -4501,15 +4501,15 @@ class Runtime final : public menu::Host,
     [[nodiscard]] uint64_t library_feed_generation();
 
     /// Opens the Library on the OA layer over the main menu: on a tab, else
-    /// on Updates while updates are waiting, else on Mods. When the Library
-    /// is on the layer already, the screens above it close and it is on top
-    /// again; it is never on the layer twice. Asks the content service to
-    /// refresh, as the player's setting allows, outside unattended runs.
+    /// on Active. When the Library is on the layer already, the screens
+    /// above it close and it is on top again; it is never on the layer
+    /// twice. Asks the content service to refresh, as the player's setting
+    /// allows, outside unattended runs.
     /// Refused, as the settings are, off the main menu, while a package owns
     /// the frame, over a message box, while the saves notice shows, or
     /// without the dialog's fonts.
     ///
-    /// @param tab the tab; nothing chooses Updates or Mods
+    /// @param tab the tab; nothing opens it on Active
     void open_library(std::optional<oa::ui::library::Tab> tab);
 
     /// Closes the Library and every screen above it on the OA layer; the

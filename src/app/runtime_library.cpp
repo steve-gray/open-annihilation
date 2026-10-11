@@ -8,7 +8,10 @@
 // main menu's OA button, from Settings › Language and by the runtime.
 
 #include "engine_settings_menu_host.hpp"
+#include "engine_settings_state.hpp"
+#include "language_state.hpp"
 #include "library_host.hpp"
+#include "map_packs.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
 
@@ -26,6 +29,7 @@
 #include "oa/app/user_folder.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/trust.hpp"
@@ -74,6 +78,9 @@ constexpr std::string_view kCloseSound = "Previous";
 constexpr std::string_view kSettingsScreen = "settings";
 /// The words the Library's rows' automation names start with.
 constexpr std::string_view kRowNamePrefix = "library.row.";
+/// The author's name a mod's or a map pack's manifest gives when nobody is
+/// known (docs/mods/oamod-standard.md): the details name no author for it.
+constexpr std::string_view kUnknownAuthor = "unknown";
 /// The modifier that holds the Library's Find: Cmd on macOS, Ctrl elsewhere.
 #ifdef SDL_PLATFORM_MACOS
 constexpr uint16_t kCommandModifier = SDL_KMOD_GUI;
@@ -737,6 +744,7 @@ library::Inputs Runtime::library_inputs() {
             listing.hack_ids = package.hack_ids;
             listing.size = package.size;
             listing.coverage = package.coverage;
+            listing.published = package.published;
             for (const data::catalogue::MapEntry& map : package.maps)
                 listing.maps.push_back(
                     {map.name,
@@ -806,6 +814,9 @@ library::Inputs Runtime::library_inputs() {
         shown.name = package.name;
         shown.version = package.version;
         shown.revision = package.revision;
+        // The manifest's author, unless it says nobody is known.
+        if (package.author != kUnknownAuthor)
+            shown.author = package.author;
         shown.registry = listed ? match.registry : std::string{};
         shown.release = listed ? match.release : 0;
         shown.rules = package.rules;
@@ -874,6 +885,70 @@ library::Inputs Runtime::library_inputs() {
     inputs.engine = content::this_engine_rules().engine;
     inputs.version_text = "v" + formats::oamod::engine_version_text(inputs.engine);
     inputs.in_match = screen_ == Screen::match || match_ != nullptr;
+
+    // The Active tab. The mod played, as Settings › Mods lists it: the
+    // folder layered over the game folder, with its title, version and
+    // badge as read at start.
+    const EngineSettingsState& mods = engine_settings_state();
+    if (!mods.playing_mod_folder.empty()) {
+        for (std::size_t index = 0;
+             index < mods.mod_folders.size() && index < mods.mod_names.size() &&
+             index < mods.mod_details.size();
+             ++index) {
+            if (mods.mod_folders[index] != mods.playing_mod_folder)
+                continue;
+            const settings::ModDetails& details = mods.mod_details[index];
+            library::PlayingMod played;
+            played.name = mods.mod_names[index];
+            if (details.version != mod_summary_no_version)
+                played.version = details.version;
+            if (details.badge_width != 0 && details.badge_height != 0 &&
+                !details.badge_pixels.empty())
+                played.badge =
+                    library::Badge{details.badge_pixels, details.badge_width, details.badge_height};
+            inputs.playing_mod = std::move(played);
+            break;
+        }
+    }
+
+    // The language shown, and the first pack that holds it in the order its
+    // words are looked up: the mod's, the player's, then the engine's.
+    const oa::data::languages::Language& language = shown_language();
+    if (language.tag != oa::data::languages::english().tag)
+        inputs.language.name = std::string(language.endonym);
+    if (language_) {
+        for (const auto* packs :
+             {&language_->mod_packs, &language_->player_packs, &language_->engine_packs}) {
+            for (const auto& loaded : *packs) {
+                const oa::data::languages::PackManifest& manifest = loaded->pack.manifest();
+                if (oa::data::languages::find_by_tag(manifest.tag) != &language)
+                    continue;
+                inputs.language.pack =
+                    manifest.name.empty() ? std::string(language.endonym) : manifest.name;
+                inputs.language.version = manifest.version;
+                break;
+            }
+            if (!inputs.language.pack.empty())
+                break;
+        }
+    }
+
+    // The installed map packs' maps, as their manifests list them, one pack
+    // to a folder; the packs are read once and kept until one changes.
+    std::vector<std::filesystem::path> pack_folders;
+    for (const PackMap& map : map_packs().maps()) {
+        const auto found = std::find(pack_folders.begin(), pack_folders.end(), map.folder);
+        const auto place = static_cast<std::size_t>(found - pack_folders.begin());
+        if (found == pack_folders.end()) {
+            pack_folders.push_back(map.folder);
+            library::InstalledMaps added;
+            added.name = map.pack_name;
+            inputs.map_packs.push_back(std::move(added));
+        }
+        inputs.map_packs[place].maps.push_back(
+            {map.title.empty() ? map.stem : map.title, map.players, map.size}
+        );
+    }
     return inputs;
 }
 
@@ -1301,8 +1376,7 @@ void Runtime::open_library(std::optional<library::Tab> tab) {
             host.feed.generation != nullptr ? host.feed.generation(host.feed.context) : 0;
         host.rebuild(*this);
     }
-    const library::Tab shown =
-        tab ? *tab : (host.update_count > 0 ? library::Tab::updates : library::Tab::mods);
+    const library::Tab shown = tab ? *tab : library::Tab::active;
     OaLayer& layer = oa_layer();
     if (layer.find(library_screen_name) != nullptr) {
         // The screens above it close, and it shows the tab asked for.
