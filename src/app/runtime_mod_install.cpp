@@ -469,6 +469,9 @@ void Runtime::take_handed_mod_files() {
 
 void Runtime::tell_mod_installs() {
     auto& state = mod_install_state();
+    // A run nobody watches, unless its check shows the prompts.
+    const bool nobody_watches =
+        UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts;
     // An unpacking runs on under its prompt, a budget a frame, whatever
     // shows. A mod's prompt is modal on the main menu. A catalogue map pack
     // unpacks with no prompt on any screen but a match.
@@ -476,8 +479,7 @@ void Runtime::tell_mod_installs() {
         state.kind != nullptr) {
         const install::PackageKind& kind = *state.kind;
         const fs::path root = user_folder_ / std::string(kind.root_folder);
-        const bool watched =
-            !UserFolderState::unwatched(options_.unattended) || !state.check_shows_prompts;
+        const bool watched = !nobody_watches;
         if (state.placing) {
             state.placing = false;
             install::ChangeOptions options{};
@@ -991,6 +993,15 @@ void Runtime::tell_mod_installs() {
         begin_package(*opened_file);
         return true;
     };
+    // In a run nobody watches, a chosen mod starts only while the Library is
+    // the top screen: whoever drives the run asked for it there, and the
+    // Library's queue tells what a prompt would. With the Library closed it
+    // waits in the inbox, so a run nobody drives leaves a package an earlier
+    // run's download queue hands over for a run someone watches or drives.
+    const auto library_on_top = [this] {
+        const LayerScreen* top = oa_layer_ ? oa_layer_->top() : nullptr;
+        return top != nullptr && top->name() == library_screen_name;
+    };
     if (!settled) {
         state.settled_frames = 0;
         // Nothing starts while a match loads or runs. A catalogue map pack
@@ -1002,8 +1013,11 @@ void Runtime::tell_mod_installs() {
             return;
         if (take_catalogue_language())
             return;
-        if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts)
+        if (nobody_watches) {
+            if (library_on_top())
+                std::ignore = take_chosen_mod();
             return;
+        }
         if (take_chosen_mod())
             return;
         if (!state.catalogue_question.empty())
@@ -1025,9 +1039,16 @@ void Runtime::tell_mod_installs() {
     if (++state.settled_frames < kPromptMenuFrames || engine_settings_fonts() == nullptr)
         return;
     // A run nobody watches leaves the packages waiting for one someone does,
-    // except a catalogue language pack, which asks nothing.
-    if (UserFolderState::unwatched(options_.unattended) && !state.check_shows_prompts) {
-        std::ignore = take_catalogue_language();
+    // except a catalogue language pack, which asks nothing, and a mod chosen
+    // in the Library while the Library is the top screen, which asks and
+    // installs as it does for a player watching; the folders its changes
+    // drop go a step a frame there too.
+    if (nobody_watches) {
+        if (take_catalogue_language() || !library_on_top())
+            return;
+        if (state.discarder.busy())
+            std::ignore = state.discarder.step();
+        std::ignore = take_chosen_mod();
         return;
     }
     if (state.discarder.busy())

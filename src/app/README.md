@@ -608,6 +608,24 @@ runtime goes).
   in a prompt, the entry then offering PLAY NOW; with the Library closed,
   its questions wait in the OA layer's queue and its prompts show as a
   file's do. Catalogue map packs and language packs keep their own rules.
+
+  In a run nobody watches (`UserFolderState::unwatched`: unattended, on CI,
+  or on a video driver that shows no window, such as SDL's dummy driver),
+  such a mod asks and installs by the same rules, but starts only while the
+  Library is the top screen, where whoever drives the run asked for it: a
+  built-in registry's asks nothing, and an added registry's question is
+  pushed over the Library and waits for its answer, which the automation
+  endpoint can press (`oa.prompt.replace`); the folders its changes drop
+  are deleted a step a frame while the Library stays on top. With the
+  Library closed it waits in the inbox. A file opened outside the game, any
+  other package without a catalogue origin and a catalogue map pack still
+  wait for a run someone watches, and a catalogue language pack still
+  installs. A run nobody watches and nobody drives never shows the Library:
+  a package the download queue left unfinished in an earlier run, which it
+  restores at start while the catalogue still offers that release and
+  hands over again once its file is whole, waits in the inbox, its queue
+  item installing, and stays in the saved queue as the game quits, for the
+  next run someone watches or drives.
 - **Held changes and the quit path.** A chosen mod's update to the mod
   being played is unpacked and checked as a file's, then held in
   `set_pending_change` with no soft restart; the download queue is told
@@ -626,18 +644,26 @@ runtime goes).
   made-up mod packages with catalogue origins as the hand-off does, the
   Library showing over a feed of three registries (`check-builtin` built
   in, `check-added` and `check-added-2` added), and checks each rule above
-  over three runs: the questions each registry asks or does not, the
+  over four runs: the questions each registry asks or does not, the
   `.backup` and origin records after each, the refusals in the queue and
   told with the Library closed, a file still asking UPDATE MOD, ROLL BACK
   and PLAY NOW from the Library, and an update to the mod played held,
   named by `pending_change_target`. CANCEL on that line drops it, the
-  update is taken again and held, and it is made as the mod is switched. A
-  FIXTURES_SETUP test (`library-install-clean`) clears its folders before
-  each run.
+  update is taken again and held, and it is made as the mod is switched.
+  The fourth run is one nobody watches, on the dummy video driver without
+  the prompts the other runs show: a built-in registry's update waits in
+  the inbox with the Library closed and installs with no prompt once the
+  Library shows, an added registry's copy asks REPLACE MOD over the
+  Library, which waits for its answer until REPLACE installs it, and a file
+  opened outside the game stays in the inbox. A FIXTURES_SETUP test
+  (`library-install-clean`) clears its folders before each run.
 - **Limitations.** A held update is replaced by a ROLL BACK of the mod
   being played, which waits for the run to end in its place; the download
   queue has counted the update installed by then. CANCEL on the held line
-  does not drop that roll back.
+  does not drop that roll back. In a run nobody watches, a file opened
+  outside the game that waits first in the inbox holds back every package
+  behind it, a mod chosen in the Library among them, until a run someone
+  watches takes it.
 
 ## The map browser
 
@@ -2979,7 +3005,9 @@ in place, and how what a stop leaves is settled). The runtime's part:
   of it is told: MOD INSTALLED, MOD UPDATED or MOD NOT INSTALLED, with OPEN
   FOLDER and, where the Mod setting is the player's to change, PLAY NOW
   (`Runtime::switch_to_mod_folder`, the Mods page's own switch). A run
-  nobody watches leaves packages waiting.
+  nobody watches leaves packages waiting, but for a catalogue language pack
+  and a mod chosen in the Library while the Library is the top screen
+  ([The Library](#the-library)).
 - **The mod played.** A replace or reinstall of the folder the game plays,
   once unpacked and checked as the Mods page checks a folder, waits in
   `set_pending_change`, holding the Mods folder's lock, and the run ends
