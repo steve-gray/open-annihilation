@@ -448,6 +448,34 @@ void a_point_hits_the_first_enabled_control() {
     OA_CHECK(kit::control_of(drawn, 9) == nullptr);
 }
 
+/// Checks the rule for a disabled control a point lies in: it passes the point on to the
+/// controls under it, as hit does, or blocks it and the point reaches no control; a clip that
+/// hides the point from it lets the point through either way.
+void a_disabled_control_passes_or_blocks_a_point() {
+    kit::DisplayList list;
+    list.controls.push_back(kit::Control{1, {0, 0, 20, 20}, {}, false});
+    list.controls.push_back(kit::Control{3, {20, 20, 20, 20}, {20, 20, 20, 5}, false});
+    list.controls.push_back(kit::Control{2, {0, 0, 40, 40}, {}, true});
+    // On the disabled control.
+    OA_CHECK(kit::hit(list, {5, 5}) == 2);
+    OA_CHECK(kit::hit(list, {5, 5}, kit::DisabledControl::passes) == 2);
+    OA_CHECK(kit::hit(list, {5, 5}, kit::DisabledControl::blocks) == kit::no_control);
+    // On the part of the clipped disabled control a press reaches, and on the part it hides.
+    OA_CHECK(kit::hit(list, {30, 22}, kit::DisabledControl::passes) == 2);
+    OA_CHECK(kit::hit(list, {30, 22}, kit::DisabledControl::blocks) == kit::no_control);
+    OA_CHECK(kit::hit(list, {30, 30}, kit::DisabledControl::blocks) == 2);
+    // On the enabled control alone, and on nothing.
+    OA_CHECK(kit::hit(list, {30, 5}, kit::DisabledControl::blocks) == 2);
+    OA_CHECK(kit::hit(list, {50, 50}, kit::DisabledControl::blocks) == kit::no_control);
+    // An enabled control over a disabled one takes the point under either rule.
+    kit::DisplayList over;
+    over.controls.push_back(kit::Control{4, {0, 0, 10, 10}, {}, true});
+    over.controls.push_back(kit::Control{5, {0, 0, 20, 20}, {}, false});
+    OA_CHECK(kit::hit(over, {5, 5}, kit::DisabledControl::blocks) == 4);
+    OA_CHECK(kit::hit(over, {15, 15}, kit::DisabledControl::blocks) == kit::no_control);
+    OA_CHECK(kit::hit(over, {15, 15}, kit::DisabledControl::passes) == kit::no_control);
+}
+
 /// Measures a line as the made-up font draws it: 6 pixels a character, 7 in bold.
 ///
 /// @param text the line
@@ -541,6 +569,25 @@ void a_text_part_wraps_to_its_room() {
     parts.clear();
     kit::text_part(parts, type, kit::Role::text, {0, 0}, 40, "a\n\nb", look);
     OA_CHECK((parts.front().lines == std::vector<std::string>{"a", "b"}));
+
+    // A path wider than the room breaks after a separator with path_break, and between
+    // characters without it.
+    parts.clear();
+    kit::text_part(parts, type, kit::Role::text, {0, 0}, 40, "/home/deck/Games", look);
+    kit::text_part(
+        parts,
+        type,
+        kit::Role::text,
+        {0, 0},
+        40,
+        "/home/deck/Games",
+        look,
+        kit::TextFit::column,
+        0,
+        kit::path_break
+    );
+    OA_CHECK((parts[0].lines == std::vector<std::string>{"/home/", "deck/G", "ames"}));
+    OA_CHECK((parts[1].lines == std::vector<std::string>{"/home/", "deck/", "Games"}));
 
     // No text, or no room, adds nothing.
     parts.clear();
@@ -792,6 +839,7 @@ int main() {
     arrangements_place_the_rectangles();
     the_scroll_matches_the_settings_dialog();
     a_point_hits_the_first_enabled_control();
+    a_disabled_control_passes_or_blocks_a_point();
     points_round_to_canvas_pixels();
     a_text_part_wraps_to_its_room();
     a_line_part_is_shortened_to_its_room();

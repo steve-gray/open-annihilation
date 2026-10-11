@@ -8,6 +8,7 @@
 // the screen, from the preferences file, before the Runtime starts.
 #include "game_files_screen.hpp"
 #include "language_packs.hpp"
+#include "window_pixels.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/user_folder.hpp"
@@ -380,14 +381,17 @@ struct DialogPlace {
 }
 
 /// Places the dialog on a viewport as the OA layer places its screens: at
-/// the viewport's Auto scale (oa::ui::kit::auto_scale), no larger than lets
-/// Compact's dialog fit the canvas less its safe insets and at least 1, laid
-/// out at the size class of the points left over, and centred in the canvas
-/// less its insets, rounded down.
+/// the scale the Interface size chooses (oa::ui::kit::layer_viewport: the
+/// chosen step, or the Auto scale, no larger than lets Compact's dialog fit
+/// the canvas less its safe insets and at least 1), laid out at the size
+/// class of the points left over, and centred in the canvas less its insets,
+/// rounded down.
 ///
 /// @param viewport the viewport
+/// @param size the Interface size the settings in effect choose
 /// @return the place
-[[nodiscard]] DialogPlace place_dialog(const oa::ui::game_files::Viewport& viewport) noexcept {
+[[nodiscard]] DialogPlace
+place_dialog(const oa::ui::game_files::Viewport& viewport, settings::InterfaceSize size) noexcept {
     namespace kit = oa::ui::kit;
     kit::Viewport canvas;
     canvas.width = viewport.width;
@@ -398,13 +402,9 @@ struct DialogPlace {
     };
     const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
     const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
-    const int32_t fits = std::min(
-        room_width / kit::compact_metrics.dialog_width,
-        room_height / kit::compact_metrics.dialog_height
-    );
+    canvas = kit::layer_viewport(canvas, settings::interface_size_percent(size));
     DialogPlace place;
-    place.scale = std::max(1, std::min(kit::auto_scale(canvas.height, canvas.density), fits));
-    canvas.scale_percent = place.scale * 100;
+    place.scale = canvas.scale_percent / 100;
     place.size_class = kit::frame_of(canvas).size_class;
     place.width = kit::metrics_of(place.size_class).dialog_width;
     place.height = kit::metrics_of(place.size_class).dialog_height;
@@ -526,16 +526,13 @@ dialog_key_of(const SDL_KeyboardEvent& key) noexcept {
     }
 }
 
-/// Tells whether the dialog takes a touch device's fingers: a touch screen's, or the check's.
+/// Tells whether the dialog takes a touch device's fingers: a touch screen's (touch_screen), or
+/// the check's.
 ///
 /// @param device the device
 /// @return true for a direct touch device or the check's
 [[nodiscard]] bool accepted_touch(SDL_TouchID device) noexcept {
-    if (device == SDL_MOUSE_TOUCHID || device == SDL_PEN_TOUCHID)
-        return false;
-    if (device == game_files_check_touch_id)
-        return true;
-    return SDL_GetTouchDeviceType(device) == SDL_TOUCH_DEVICE_DIRECT;
+    return device == game_files_check_touch_id || touch_screen(device);
 }
 
 } // namespace
@@ -624,7 +621,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
     float pointer_y = 0.0F;
     oa::ui::game_files::Viewport viewport =
         hooks.viewport != nullptr ? hooks.viewport(hooks.context) : oa::ui::game_files::Viewport{};
-    DialogPlace place = place_dialog(viewport);
+    DialogPlace place = place_dialog(viewport, current.interface_size);
     dialog.size_class = place.size_class;
     // Canvas pixels to the dialog's own.
     const auto source_x = [&](float x) {
@@ -664,7 +661,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             if (next.width != viewport.width || next.height != viewport.height ||
                 next.px_per_point != viewport.px_per_point) {
                 viewport = next;
-                place = place_dialog(viewport);
+                place = place_dialog(viewport, current.interface_size);
                 dialog.size_class = place.size_class;
                 dirty = true;
             }
