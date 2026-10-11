@@ -28,6 +28,7 @@
 #include "oa/data/registry/trust.hpp"
 #include "oa/formats/png.hpp"
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/looks.hpp"
 #include "oa/ui/map_browser/screen.hpp"
@@ -439,6 +440,66 @@ void Runtime::check_map_browser() {
             "the frame is not the window's size" + on
         );
         write_png(fs::path("map-browser-" + size + ".png"), presented);
+
+        // Acid Foursome is for 2 and 4 players. Its card reads 4, chip 4
+        // lists it and chip 3 does not.
+        constexpr std::string_view foursome = "Foursome";
+        click_named("oa.maps-filter-base");
+        click_named("oa.maps-players-4");
+        click_named("oa.maps-search");
+        {
+            const LayerAnswer typed = shown->text(foursome);
+            oa_layer().take_answer(*shown, typed, 0);
+            frames(1);
+        }
+        {
+            const kit::DisplayList list = shown->display_list();
+            const std::vector<std::string> names = card_names(list);
+            require(names.size() == 1, "chip 4 does not list Acid Foursome alone" + on);
+            std::string lowered = names.front();
+            for (char& letter : lowered)
+                if (letter >= 'A' && letter <= 'Z')
+                    letter = static_cast<char>(letter - 'A' + 'a');
+            require(
+                lowered.find("foursome") != std::string::npos,
+                "chip 4 lists " + names.front() + ", not Acid Foursome" + on
+            );
+            const kit::CardLook* acid = nullptr;
+            for (const kit::Item& item : list.items)
+                if (const auto* card = std::get_if<kit::CardLook>(&item.look);
+                    card != nullptr && !card->title.empty())
+                    acid = card;
+            require(acid != nullptr, "Acid Foursome's card is not shown for 4 players" + on);
+            require(
+                acid->subtitle.starts_with("4 ·"),
+                "Acid Foursome's card reads \"" + acid->subtitle + "\"" + on
+            );
+            click_named("oa.maps-card-" + mb::card_word(names.front()));
+            frames(1);
+            const kit::DisplayList selected = shown->display_list();
+            std::string details;
+            for (const kit::Item& item : selected.items)
+                if (item.role == kit::Role::text && item.text.find("players") != std::string::npos)
+                    details = item.text;
+            require(
+                details.find("4 players") != std::string::npos &&
+                    details.find("10 players") == std::string::npos,
+                "Acid Foursome's card does not read 4 players (" + details + ")" + on
+            );
+            std::cout << "map browser check: Acid Foursome: " << details << '\n';
+        }
+        click_named("oa.maps-players-4");
+        click_named("oa.maps-players-3");
+        frames(1);
+        require(shown_cards().empty(), "chip 3 lists Acid Foursome" + on);
+        click_named("oa.maps-players-3");
+        click_named("oa.maps-filter-all");
+        click_named("oa.maps-search");
+        for (std::size_t left = foursome.size(); left > 0; --left) {
+            const LayerAnswer erased = shown->key(kit::Key::backspace, 0);
+            oa_layer().take_answer(*shown, erased, 0);
+        }
+        frames(1);
 
         // The search narrows the installed maps to one.
         click_named("oa.maps-filter-installed");

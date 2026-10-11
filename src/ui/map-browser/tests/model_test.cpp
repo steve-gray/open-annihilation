@@ -151,13 +151,81 @@ void source_filter() {
     OA_CHECK(browser.shown.size() == 7);
 }
 
+/// A card whose only count is `players`, as a pack map's manifest gives it.
+///
+/// @param players the count
+/// @return the card
+mb::MapCard one_count(int32_t players) {
+    mb::MapCard made;
+    made.players = players;
+    made.player_counts = {players};
+    return made;
+}
+
+void numplayers_list() {
+    // A listed count is kept, and the start-position count is not used.
+    const mb::BaseMapPlayers two_and_four = mb::base_map_players("2, 4", 10);
+    OA_CHECK(two_and_four.from_numplayers);
+    OA_CHECK(two_and_four.counts == (std::vector<int32_t>{2, 4}));
+    OA_CHECK(two_and_four.players == 4);
+    const mb::BaseMapPlayers four = mb::base_map_players("4", 10);
+    OA_CHECK(four.counts == (std::vector<int32_t>{4}) && four.players == 4);
+    const mb::BaseMapPlayers spaced = mb::base_map_players("2,3, 4", 10);
+    OA_CHECK(spaced.counts == (std::vector<int32_t>{2, 3, 4}) && spaced.players == 4);
+    // Out of order, repeated, and a number outside 2 to 10 dropped.
+    const mb::BaseMapPlayers ordered = mb::base_map_players("4, 2, 4, 12", 10);
+    OA_CHECK(ordered.counts == (std::vector<int32_t>{2, 4}) && ordered.players == 4);
+    // No count in 2 to 10: the start-position count, alone.
+    const mb::BaseMapPlayers empty = mb::base_map_players("", 7);
+    OA_CHECK(!empty.from_numplayers);
+    OA_CHECK(empty.counts == (std::vector<int32_t>{7}) && empty.players == 7);
+    const mb::BaseMapPlayers twelve = mb::base_map_players("12", 7);
+    OA_CHECK(!twelve.from_numplayers && twelve.counts == (std::vector<int32_t>{7}));
+    const mb::BaseMapPlayers junk = mb::base_map_players("junk", 7);
+    OA_CHECK(!junk.from_numplayers && junk.players == 7 && junk.counts.size() == 1);
+}
+
 void players_filter() {
-    OA_CHECK(mb::players_match(2, 2) && !mb::players_match(2, 3));
-    OA_CHECK(mb::players_match(4, 4) && !mb::players_match(4, 5));
-    OA_CHECK(mb::players_match(mb::many_players_chip, 5));
-    OA_CHECK(mb::players_match(mb::many_players_chip, 10));
-    OA_CHECK(!mb::players_match(mb::many_players_chip, 4));
-    OA_CHECK(!mb::players_match(mb::many_players_chip, 11));
+    OA_CHECK(mb::players_match(2, one_count(2)) && !mb::players_match(2, one_count(3)));
+    OA_CHECK(mb::players_match(4, one_count(4)) && !mb::players_match(4, one_count(5)));
+    OA_CHECK(mb::players_match(mb::many_players_chip, one_count(5)));
+    OA_CHECK(mb::players_match(mb::many_players_chip, one_count(10)));
+    OA_CHECK(!mb::players_match(mb::many_players_chip, one_count(4)));
+    OA_CHECK(!mb::players_match(mb::many_players_chip, one_count(11)));
+    // A card that lists no counts is matched on players alone.
+    mb::MapCard lone = card("lone", "Lone", 6, "8x8");
+    OA_CHECK(mb::players_match(mb::many_players_chip, lone) && !mb::players_match(4, lone));
+
+    // Counts 2 and 4: chips 2 and 4 find it, chip 3 and 5–10 do not.
+    mb::MapCard foursome = card("Acid Foursome", "Acid Foursome", 10, "13 x 13");
+    foursome.player_counts = {2, 4};
+    OA_CHECK(mb::shown_players(foursome) == 4);
+    OA_CHECK(mb::players_match(2, foursome) && mb::players_match(4, foursome));
+    OA_CHECK(!mb::players_match(3, foursome));
+    OA_CHECK(!mb::players_match(mb::many_players_chip, foursome));
+    mb::Browser several;
+    several.cards = {foursome};
+    several.filters.players = {2};
+    mb::apply_filters(several);
+    OA_CHECK(shown_names(several) == (std::vector<std::string>{"Acid Foursome"}));
+    several.filters.players = {4};
+    mb::apply_filters(several);
+    OA_CHECK(shown_names(several) == (std::vector<std::string>{"Acid Foursome"}));
+    several.filters.players = {3};
+    mb::apply_filters(several);
+    OA_CHECK(several.shown.empty());
+    several.filters.players = {mb::many_players_chip};
+    mb::apply_filters(several);
+    OA_CHECK(several.shown.empty());
+    // 5–10 matches a map that is also for 2, when one count is from 5 to 10.
+    several.cards[0].player_counts = {2, 6};
+    several.cards[0].players = 6;
+    several.filters.players = {2};
+    mb::apply_filters(several);
+    OA_CHECK(several.shown.size() == 1);
+    several.filters.players = {mb::many_players_chip};
+    mb::apply_filters(several);
+    OA_CHECK(several.shown.size() == 1);
 
     mb::Browser browser = sample();
     browser.filters.players = {4};
@@ -305,6 +373,7 @@ int main() {
     merging();
     order();
     source_filter();
+    numplayers_list();
     players_filter();
     size_filter();
     search();

@@ -614,6 +614,31 @@ void wheel_and_drag_scroll() {
     OA_CHECK(state.scroll == 0);
 }
 
+void card_reads_the_largest_count() {
+    mb::MapCard map;
+    map.name = "Acid Foursome";
+    map.title = "Acid Foursome";
+    map.size = "13 x 13";
+    map.players = 10;
+    map.player_counts = {2, 4};
+    map.origin = mb::MapCard::Origin::base;
+    mb::Browser browser;
+    browser.cards = {map};
+    browser.selected = 0;
+    mb::apply_filters(browser);
+    const kit::DisplayList list = laid_out(browser, {}, frames()[1].frame);
+    bool subtitle = false;
+    bool details = false;
+    for (const kit::Item& item : list.items) {
+        if (const auto* look = std::get_if<kit::CardLook>(&item.look))
+            subtitle = look->title == "Acid Foursome" && look->subtitle == "4 · 13×13";
+        if (item.role == kit::Role::text && item.text == "Base game · 4 players · 13×13")
+            details = true;
+    }
+    OA_CHECK(subtitle);
+    OA_CHECK(details);
+}
+
 void header_and_footer_words() {
     const kit::Frame frame = frames()[2].frame;
     mb::Browser browser = many_maps();
@@ -664,5 +689,6 @@ void layout_tests() {
     tab_follows_the_declared_order();
     pointer_and_keys();
     wheel_and_drag_scroll();
+    card_reads_the_largest_count();
     header_and_footer_words();
 }
