@@ -1386,9 +1386,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         result.check_scroll_bars || result.check_engine_settings || result.check_registered_kit ||
         result.check_user_folder || result.check_mod_switch || result.check_mod_warning ||
         result.check_mod_install || result.check_language_install || result.check_challenge ||
-        result.check_renderer_ladder ||
-        result.check_match_orders || result.check_factory_orders || result.check_unit_speech ||
-        result.check_download_builds || result.check_stockpile_builds ||
+        result.check_renderer_ladder || result.check_match_orders || result.check_factory_orders ||
+        result.check_unit_speech || result.check_download_builds || result.check_stockpile_builds ||
         result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||
         !result.check_unit_pages.empty() || result.check_kill_board ||
         !result.check_unit_language.empty() || result.check_language_switch ||
