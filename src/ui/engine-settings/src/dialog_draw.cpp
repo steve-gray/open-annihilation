@@ -20,6 +20,7 @@
 #include "oa/data/mod_profile/registry.hpp"
 
 #include "developer.hpp"
+#include "downloads_page.hpp"
 #include "geometry.hpp"
 
 #include <algorithm>
@@ -1036,12 +1037,16 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
     if (dialog.open_list == no_control)
         return;
     for (const layout::Row& row : open.rows.rows) {
-        if (row.control != dialog.open_list || row.lock != Lock::none ||
-            layout::kind_of(row.setting) != kit::RowKind::choice)
+        const bool downloads_choice = row.downloads >= 0 && downloads::is_choice(row);
+        if (row.control != dialog.open_list || row.lock != Lock::none)
             continue;
-        const auto& spec = layout::row_spec(row.setting);
+        if (!downloads_choice && layout::kind_of(row.setting) != kit::RowKind::choice)
+            continue;
+        const auto& spec =
+            downloads_choice ? layout::row_spec(Setting::language) : layout::row_spec(row.setting);
         const layout::SettingsModel model = layout::reading(dialog.chosen, dialog);
-        const int32_t choices = kit::row_count(spec, model);
+        const int32_t choices =
+            downloads_choice ? downloads::choice_count() : kit::row_count(spec, model);
         const SourceRect menu = layout::choice_list(
             row.control_area, static_cast<std::size_t>(choices), dialog.size_class
         );
@@ -1049,20 +1054,30 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
         kit::ChoiceMenuLook look;
         look.first = dialog.list_first;
         look.total = choices;
-        look.chosen = kit::row_index(spec, model);
+        look.chosen =
+            downloads_choice ? downloads::choice_index(dialog) : kit::row_index(spec, model);
         look.marked = dialog.list_marked;
         look.focus_shown = dialog.focused != no_control;
         for (int32_t place = 0; place < shown; ++place) {
             const int32_t choice = dialog.list_first + place;
             if (choice >= choices)
                 break;
-            look.shown.emplace_back(layout::shown_text(kit::row_caption(spec, model, choice)));
+            const std::string caption =
+                downloads_choice
+                    ? downloads::choice_caption(choice)
+                    : std::string(layout::shown_text(kit::row_caption(spec, model, choice)));
+            const std::string word = downloads_choice ? downloads::choice_id(choice)
+                                                      : layout::choice_word(spec, model, choice);
+            look.shown.push_back(
+                downloads_choice ? std::string(layout::shown_text(caption)) : caption
+            );
             kit::Control added = control_of(
                 layout::menu_item_control(choice),
                 layout::choice_item(menu, place),
                 named(
-                    std::string(layout::setting_name(row.setting)) + "." +
-                    layout::choice_word(spec, model, choice)
+                    (downloads_choice ? std::string("content-updates")
+                                      : std::string(layout::setting_name(row.setting))) +
+                    "." + word
                 ),
                 kit::ControlKind::list_item
             );

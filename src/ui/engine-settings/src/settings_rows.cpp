@@ -171,6 +171,8 @@ constexpr std::array<Setting, 3> kModChatRows{
     Setting::chat_backdrop,
     Setting::panel_background,
 };
+/// Downloads builds its rows from the host's offer, not from settings.
+constexpr std::array<Setting, 0> kDownloadsRows{};
 
 /// What each section shows, in Page's order.
 constexpr std::array<std::span<const Setting>, page_count> kPageRows{
@@ -183,6 +185,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kControllerRows,
     kDeveloperRows,
     kGameFilesRows,
+    kDownloadsRows,
     kModKeysRows,
     kModPatrolRows,
     kModGuardRows,
@@ -200,6 +203,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Controller",
     "Developer",
     "Game files",
+    "Downloads",
     "Keys",
     "Patrolling",
     "Guarding",
@@ -217,6 +221,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "CONTROLLER",
     "DEVELOPER",
     "GAME FILES",
+    "DOWNLOADS",
     "MOD KEYS",
     "PATROLLING BUILDERS",
     "GUARDING BUILDERS",
@@ -235,6 +240,7 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "controller",
     "developer",
     "game-files",
+    "downloads",
     "mod-keys",
     "mod-patrol",
     "mod-guard",

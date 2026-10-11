@@ -16,8 +16,12 @@
 #include "oa/app/user_folder.hpp"
 
 #include "oa/app/acceleration_status.hpp"
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/service.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
+#include "oa/data/registry/descriptor.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/mod_profile/overrides.hpp"
 #include "render_host.hpp"
@@ -44,6 +48,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -73,6 +78,124 @@ static_assert(
 
 // The settings dialog keeps the mod folder the game starts with.
 static_assert(mod_directory_preference == settings::key::mod_directory);
+
+namespace {
+
+namespace content = oa::app::content;
+
+/// What Downloads shows, from the registries in effect and the stored IDs.
+/// No ID is made here.
+///
+/// @param values the preference values
+/// @param snapshot the registries in effect; null lists no install ID
+/// @param folder the downloads folder
+/// @param busy a download is queued, running or paused
+/// @return the offer
+[[nodiscard]] settings::DownloadsOffer downloads_offer_of(
+    const std::map<std::string, std::string>& values,
+    const std::shared_ptr<const content::Snapshot>& snapshot,
+    const std::filesystem::path& folder,
+    bool busy
+) {
+    settings::DownloadsOffer offer;
+    if (snapshot) {
+        for (const content::RegistryView& listed : snapshot->registries) {
+            if (listed.registry.descriptor.install_id != oa::data::registry::InstallIdUse::required)
+                continue;
+            const content::InstallId stored =
+                content::read_install_id(values, listed.registry.descriptor.id);
+            settings::InstallIdRow row;
+            row.registry_id = listed.registry.descriptor.id;
+            row.registry_name = listed.registry.descriptor.name;
+            row.on = stored.state != content::InstallIdState::off;
+            row.made = stored.state == content::InstallIdState::on;
+            row.id_text = content::install_id_shown(stored.text);
+            offer.install_ids.push_back(std::move(row));
+        }
+    }
+    offer.kept_bytes = content::downloaded_bytes(folder);
+    offer.downloads_busy = busy;
+    return offer;
+}
+
+/// Gives the dialog the offer Downloads shows now.
+///
+/// @param[in,out] dialog the dialog
+/// @param values the preference values
+/// @param service the content service, for its registries
+/// @param downloads the queue, for whether it is busy
+/// @param folder the downloads folder
+void give_downloads(
+    settings::Dialog& dialog,
+    const std::map<std::string, std::string>& values,
+    content::Service& service,
+    content::Downloads& downloads,
+    const std::filesystem::path& folder
+) {
+    settings::set_downloads_offer(
+        dialog, downloads_offer_of(values, service.snapshot(), folder, downloads.busy())
+    );
+}
+
+/// Stores each install-ID switch the player moved. A switch turned on makes
+/// no ID; the next download asks for one.
+///
+/// @param[in,out] values the preference values
+/// @param opened the switches as the dialog opened
+/// @param chosen the switches the player leaves
+void store_install_switches(
+    std::map<std::string, std::string>& values,
+    const std::vector<settings::InstallIdChoice>& opened,
+    const std::vector<settings::InstallIdChoice>& chosen
+) {
+    const std::size_t count = std::min(opened.size(), chosen.size());
+    for (std::size_t index = 0; index < count; ++index) {
+        if (opened[index].on == chosen[index].on)
+            continue;
+        if (chosen[index].on)
+            content::turn_install_id_on(values, chosen[index].registry_id);
+        else
+            content::turn_install_id_off(values, chosen[index].registry_id);
+    }
+}
+
+/// Tells the queue each install-ID switch the player moved: nothing, so a
+/// switch turned off stops that registry's downloads, and one turned on
+/// waits until the next download asks.
+///
+/// @param downloads the queue
+/// @param opened the switches as the dialog opened
+/// @param chosen the switches the player leaves
+void tell_install_switches(
+    content::Downloads& downloads,
+    const std::vector<settings::InstallIdChoice>& opened,
+    const std::vector<settings::InstallIdChoice>& chosen
+) {
+    const std::size_t count = std::min(opened.size(), chosen.size());
+    for (std::size_t index = 0; index < count; ++index) {
+        if (opened[index].on == chosen[index].on)
+            continue;
+        downloads.set_install_id(chosen[index].registry_id, std::nullopt);
+    }
+}
+
+/// The content service's check that matches the dialog's.
+///
+/// @param check the dialog's choice
+/// @return the service's
+[[nodiscard]] content::CheckForUpdates check_mode(settings::ContentCheck check) noexcept {
+    switch (check) {
+    case settings::ContentCheck::automatically:
+        return content::CheckForUpdates::automatically;
+    case settings::ContentCheck::when_library_opens:
+        return content::CheckForUpdates::library_only;
+    case settings::ContentCheck::never:
+        return content::CheckForUpdates::never;
+    }
+    return content::CheckForUpdates::automatically;
+}
+
+} // namespace
 
 namespace {
 
@@ -1097,6 +1220,14 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     dialog.steam_input = pad_steam_input();
     dialog.steam_deck_panel_hz = state.steam_deck_panel_hz;
     fill_game_files_rows(dialog);
+    // Downloads: the registries that use an install ID, none made here, and
+    // the downloaded files. Opening settings starts the content service.
+    {
+        content::Downloads& downloads = content_downloads();
+        give_downloads(
+            dialog, preference_values_, content_service(), downloads, content_downloads_folder()
+        );
+    }
     // Your files shows the player's own folder.
     dialog.user_folder = path_to_utf8(user_folder_);
     // The languages whose packs turn Unicode chat on.
@@ -1164,6 +1295,8 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             // the setting stays as it was.
             settings::EngineSettings live = dialog->chosen;
             live.screen_size = dialog->opened.screen_size;
+            // The check for content updates takes effect at OK, as Screen size does.
+            live.content_check = dialog->opened.content_check;
             apply_engine_settings(live);
         }
         return false;
@@ -1221,8 +1354,17 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             (state.window_screen_size_shown && !dialog->window_screen_size);
         if (screen_size_moved)
             chosen.screen_size = EngineSettingsState::stored_screen_size(*this, chosen.screen_size);
+        const bool check_changed = chosen.content_check != dialog->opened.content_check;
+        const settings::ContentCheck chosen_check = chosen.content_check;
+        const std::vector<settings::InstallIdChoice> switches_opened = dialog->install_id_opened;
+        const std::vector<settings::InstallIdChoice> switches_chosen = dialog->install_id_chosen;
+        // The switches are stored before the settings, so one save writes both.
+        store_install_switches(preference_values_, switches_opened, switches_chosen);
         apply_engine_settings(chosen);
         const auto failure = save_engine_settings(dialog->opened, chosen, dialog->restored);
+        tell_install_switches(content_downloads(), switches_opened, switches_chosen);
+        if (check_changed)
+            content_service().set_check_for_updates(check_mode(chosen_check));
         state.last_page = dialog->page;
         state.last_developer_list = dialog->developer;
         state.dialog.reset();
@@ -1264,6 +1406,36 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
     case settings::DialogAction::manage_game_files:
         // The dialog stays open under the Game files screen.
         open_game_files_manage();
+        return false;
+    case settings::DialogAction::reset_install_id: {
+        // A new ID is stored at once. Cancel does not put the old one back.
+        // Nothing is made when the generator cannot be read, and the dialog
+        // stays open either way. The ID is not written to the log.
+        const std::string registry = dialog->install_id_registry;
+        if (!content::reset_install_id(preference_values_, registry))
+            return false;
+        preferences_dirty_ = true;
+        flush_preferences();
+        const content::InstallId stored = content::read_install_id(preference_values_, registry);
+        content::Downloads& downloads = content_downloads();
+        if (stored.state == content::InstallIdState::on)
+            downloads.set_install_id(registry, stored.text);
+        give_downloads(
+            *dialog, preference_values_, content_service(), downloads, content_downloads_folder()
+        );
+        return false;
+    }
+    case settings::DialogAction::empty_downloads:
+        // Files a download is using stay. The dialog stays open, and Cancel
+        // does not put the removed files back.
+        static_cast<void>(empty_content_downloads());
+        give_downloads(
+            *dialog,
+            preference_values_,
+            content_service(),
+            content_downloads(),
+            content_downloads_folder()
+        );
         return false;
     case settings::DialogAction::roll_back_mod:
         // The dialog stays open, unless the mod played rolls back as the
