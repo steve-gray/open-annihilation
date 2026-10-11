@@ -268,6 +268,7 @@ void check_game_files_options(Options& options) {
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_map_packs, "--check-map-packs"},
+        {options.check_map_browser, "--check-map-browser"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
         {options.check_language_install, "--check-language-install"},
@@ -528,6 +529,7 @@ void check_director_options(Options& options) {
         {options.check_user_folder, "--check-user-folder"},
         {options.check_mod_switch, "--check-mod-switch"},
         {options.check_map_packs, "--check-map-packs"},
+        {options.check_map_browser, "--check-map-browser"},
         {options.check_mod_warning, "--check-mod-warning"},
         {options.check_mod_install, "--check-mod-install"},
         {options.check_language_install, "--check-language-install"},
@@ -600,6 +602,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_user_folder, "--check-user-folder"},
             {options.check_mod_switch, "--check-mod-switch"},
             {options.check_map_packs, "--check-map-packs"},
+            {options.check_map_browser, "--check-map-browser"},
             {options.check_mod_warning, "--check-mod-warning"},
             {options.check_mod_install, "--check-mod-install"},
             {options.check_language_install, "--check-language-install"},
@@ -744,6 +747,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-user-folder", &Options::check_user_folder},
     {"--check-mod-switch", &Options::check_mod_switch},
     {"--check-map-packs", &Options::check_map_packs},
+    {"--check-map-browser", &Options::check_map_browser},
     {"--check-mod-warning", &Options::check_mod_warning},
     {"--check-mod-install", &Options::check_mod_install},
     {"--check-language-install", &Options::check_language_install},
@@ -1240,6 +1244,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
                    "[--check-registered-kit] [--check-kit-gallery] "
                    "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
+                   "[--check-map-browser] "
                    "[--check-mod-warning] "
                    "[--check-mod-install] [--check-language-install] [--check-challenge] "
                    "[--check-registries] "
@@ -1422,7 +1427,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||
         result.check_director_render || result.check_interpolation || result.check_unit_playout ||
-        result.check_paused_save || result.check_simulation_hash || result.check_map_packs;
+        result.check_paused_save || result.check_simulation_hash || result.check_map_packs ||
+        result.check_map_browser;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The badge pictures' cache: the requests the main thread makes, and the
+// The catalogue pictures' cache: the requests the main thread makes, and the
 // worker's reads, fetches, checks and writes.
 #include "oa/app/content/pictures.hpp"
 
@@ -48,6 +48,7 @@ enum class PictureState : uint8_t {
 struct PictureEntry {
     PictureState state{PictureState::waiting}; ///< where it stands
     ModBadge badge{};                          ///< the decoded picture, once ready
+    std::vector<uint8_t> bytes{};              ///< the checked file, once ready
 };
 
 /// What reading or fetching one picture came to.
@@ -119,16 +120,20 @@ struct PictureCache::State {
     /// @param http the worker's client
     /// @param match_running a match is running
     /// @param[out] badge the decoded picture, when ready
+    /// @param[out] bytes the checked file, when ready
     /// @return what it came to
     Obtained obtain(
-        const std::string& url, netgame::http::Client& http, bool match_running, ModBadge& badge
+        const std::string& url,
+        netgame::http::Client& http,
+        bool match_running,
+        ModBadge& badge,
+        std::vector<uint8_t>& bytes
     ) const {
         const std::optional<base::sha256::Digest> digest = picture_digest(url);
         if (!digest)
             return Obtained::refused;
         const std::array<char, base::sha256::hex_size> hex = base::sha256::to_hex(*digest);
         const std::string name = std::string(hex.data(), hex.size()) + std::string(picture_suffix);
-        std::vector<uint8_t> bytes;
         if (!folder.empty() && read_small_file(folder / name, bytes) &&
             checked_badge(bytes, *digest, badge))
             return Obtained::ready;
@@ -143,8 +148,10 @@ struct PictureCache::State {
             return Obtained::cancelled;
         if (response.failure != netgame::http::Failure::none || response.status != 200)
             return Obtained::refused;
-        if (!checked_badge(bytes, *digest, badge))
+        if (!checked_badge(bytes, *digest, badge)) {
+            bytes.clear();
             return Obtained::refused;
+        }
         // A picture the folder cannot keep is still shown this time.
         if (!folder.empty())
             std::ignore = oa::platform::replace_file(folder / name, bytes, nullptr);
@@ -177,6 +184,24 @@ std::optional<ModBadge> PictureCache::take(std::string_view registry, std::strin
     ModBadge badge = std::move(found->second.badge);
     state_->entries.erase(found);
     return badge;
+}
+
+std::optional<std::vector<uint8_t>>
+PictureCache::take_bytes(std::string_view registry, std::string_view url) {
+    const PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    const auto found = state_->entries.find(key);
+    if (found == state_->entries.end() || found->second.state != PictureState::ready)
+        return std::nullopt;
+    std::vector<uint8_t> bytes = std::move(found->second.bytes);
+    state_->entries.erase(found);
+    return bytes;
+}
+
+bool PictureCache::refused(std::string_view registry, std::string_view url) const {
+    const PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    return state_->refused.count(key) != 0;
 }
 
 void PictureCache::drop_all() {
@@ -212,7 +237,8 @@ void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running
             key = next->first;
         }
         ModBadge badge;
-        const Obtained obtained = state_->obtain(key.second, http, match_running, badge);
+        std::vector<uint8_t> bytes;
+        const Obtained obtained = state_->obtain(key.second, http, match_running, badge, bytes);
         base::threads::LockGuard guard(state_->mutex);
         // drop_all may have forgotten the picture meanwhile; what was
         // fetched stays in the folder.
@@ -222,6 +248,7 @@ void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running
             if (found != state_->entries.end()) {
                 found->second.state = PictureState::ready;
                 found->second.badge = std::move(badge);
+                found->second.bytes = std::move(bytes);
                 state_->generation.fetch_add(1);
             }
             break;

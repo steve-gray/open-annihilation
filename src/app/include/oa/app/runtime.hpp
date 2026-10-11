@@ -4598,6 +4598,38 @@ class Runtime final : public menu::Host,
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();
 
+    // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
+    // over the skirmish map list and over the host's map list in the battle
+    // room opens it.
+
+    /// The MORE MAPS… button over a map list, a screen of the OA layer named
+    /// more-maps.
+    struct MoreMapsScreen;
+
+    /// The map browser, a screen of the OA layer named map-browser.
+    struct MapBrowserScreen;
+
+    /// Keeps MORE MAPS… on the OA layer while the skirmish map list (SELMAP)
+    /// shows, or the host's map dialog in the battle room: pushes it when the
+    /// layer has none. OaLayer::tick calls it once a frame.
+    void keep_more_maps_screen();
+
+    /// Writes --check-map-browser's registry list into the player's folder,
+    /// every built-in registry turned off, before the content service reads
+    /// it, so that the check fetches nothing.
+    void prepare_map_browser_check();
+
+    /// Runs --check-map-browser: the map pack check's two packs in the
+    /// player's own folder, and at 640x480, 1280x720, 1920x1080 and 2560x1440
+    /// SELMAP's MORE MAPS… and the map browser: its size class, scale and
+    /// columns, everything inside its window, the installed packs' two maps,
+    /// the search, the clashing map greyed with its reason, and Select moving
+    /// SELMAP's selection. Writes each size's frame as map-browser-<w>x<h>.png
+    /// in the working folder.
+    ///
+    /// Throws std::runtime_error naming the first step that failed.
+    void check_map_browser();
+
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
     /// which does not respond until it is closed, then refreshes the section's rows
     /// (runtime_game_files.cpp).

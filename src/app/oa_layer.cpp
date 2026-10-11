@@ -2400,6 +2400,7 @@ void OaLayer::tick() {
     // The window's size, and with it the screens' class, may have changed.
     lay_out_screens();
     runtime_.keep_presence_card_screen();
+    runtime_.keep_more_maps_screen();
     runtime_.keep_get_map_screen();
     // A tick may close a screen, or open another. The screens waiting are
     // ticked too, so that one whose screen of the game goes leaves the queue.

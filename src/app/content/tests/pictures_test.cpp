@@ -4,7 +4,9 @@
 // The badge pictures' cache against a local fixture: a good picture, one
 // whose bytes hash to another name, one too large, one the server does not
 // have, one the folder already holds and is read with no request, and none
-// fetched while a match runs. No request carries an install ID.
+// fetched while a match runs. No request carries an install ID. A picture's
+// checked file is handed over whole (take_bytes), and never for a picture
+// refused.
 #include "oa/app/content/pictures.hpp"
 
 #include "oa/app/mod_summary.hpp"
@@ -243,6 +245,60 @@ void test_fetches() {
     server.stop();
 }
 
+void test_bytes() {
+    const fs::path folder =
+        oa::test::make_scratch_directory("app-content-pictures-bytes") / "pictures";
+    fixture::Server server;
+    std::string error;
+    OA_CHECK(server.start(&error));
+    const std::vector<uint8_t> good = badge_file(0xb0);
+    const std::string good_path = picture_path(sha::digest_of(good));
+    server.serve_bytes(good_path, good, "image/png");
+    const std::vector<uint8_t> other = badge_file(0xb1);
+    const std::string wrong_path = picture_path(sha::digest_of(badge_file(0xb2)));
+    server.serve_bytes(wrong_path, other, "image/png");
+    std::vector<uint8_t> large = badge_file(0xb3);
+    large.resize(static_cast<std::size_t>(content::max_picture_bytes) + 1, 0);
+    const std::string large_path = picture_path(sha::digest_of(large));
+    server.serve_bytes(large_path, large, "image/png");
+
+    http::Client client;
+    {
+        content::PictureCache cache(folder);
+        for (const std::string& path : {good_path, wrong_path, large_path})
+            cache.request(kRegistry, server.url(path));
+        OA_CHECK(!cache.take_bytes(kRegistry, server.url(good_path)));
+        cache.fetch_waiting(client, false);
+
+        // The good picture's file, byte for byte, then nothing once taken.
+        const std::optional<std::vector<uint8_t>> bytes =
+            cache.take_bytes(kRegistry, server.url(good_path));
+        OA_CHECK(bytes && *bytes == good);
+        OA_CHECK(!cache.take_bytes(kRegistry, server.url(good_path)));
+        OA_CHECK(!cache.take(kRegistry, server.url(good_path)));
+        OA_CHECK(!cache.refused(kRegistry, server.url(good_path)));
+
+        // The wrong hash and the file over the largest give nothing, and are refused.
+        for (const std::string& path : {wrong_path, large_path}) {
+            OA_CHECK(!cache.take_bytes(kRegistry, server.url(path)));
+            OA_CHECK(cache.refused(kRegistry, server.url(path)));
+        }
+    }
+
+    // Read again from the folder with no request: the same bytes.
+    server.clear_log();
+    {
+        content::PictureCache cache(folder);
+        cache.request(kRegistry, server.url(good_path));
+        cache.fetch_waiting(client, false);
+        const std::optional<std::vector<uint8_t>> bytes =
+            cache.take_bytes(kRegistry, server.url(good_path));
+        OA_CHECK(bytes && *bytes == good);
+        OA_CHECK(server.requests().empty());
+    }
+    server.stop();
+}
+
 void test_cancel() {
     fixture::Server server;
     std::string error;
@@ -268,6 +324,7 @@ void test_cancel() {
 int main() {
     test_names();
     test_fetches();
+    test_bytes();
     test_cancel();
     return oa::test::check_exit_status();
 }

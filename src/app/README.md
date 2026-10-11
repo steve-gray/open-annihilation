@@ -635,6 +635,85 @@ runtime goes).
   ROLL BACK of the mod being played, which waits for the run to end in its
   place; the download queue has counted the update installed by then.
 
+## The map browser
+
+OA's map browser shows every map a player could play as one grid of cards:
+the base maps the start's scan found (`BaseMapSummary`), the installed pack
+maps (`map_packs()`), and the pack maps the catalogues offer (the content
+service's snapshot, entries of kind `oamap`). Its model and screen are
+[src/ui/map-browser](../ui/map-browser/README.md); `runtime_map_browser.cpp`
+hosts them on the OA layer.
+
+- **MORE MAPS….** A screen of the layer of its own (`more-maps`, not modal,
+  no backdrop), kept on the layer while the skirmish setup's map picker
+  (SELMAP) shows, or the host's map dialog in the battle room
+  (`multiplayer_map_list_rect`), by `keep_more_maps_screen`, which
+  `OaLayer::tick` calls once a frame, and taken off when they close. It is
+  one kit button, `oa.more-maps` to automation, directly under the picker's
+  MAPNAMES list with its right edge on the list's, or above the list when
+  that place meets another gadget of the picker, at the layer's scale. It
+  hides while a message box shows. It takes a press or a tap on the button,
+  the controller's Y and Cmd+F (Ctrl+F elsewhere), which the pickers leave
+  unused, and answers `pass` to everything else, a pointer move that only
+  changes its hover included, so the picker sees every other click, key and
+  move as before.
+- **The browser.** Pressing MORE MAPS… pushes the browser (`map-browser`),
+  modal over a backdrop, centred at its size class's dialog size; it closes
+  when its picker closes or a match starts. The controller's A and B are
+  Enter and Escape there, the D-pad the arrows, Y gives the search the
+  focus and the right stick scrolls the grid. Its cards: base maps, which fit;
+  installed pack maps, whose fit is P08's `pack_map_fit`, checked as each
+  card comes into view or is selected (a failure is the mod's fit while a
+  mod plays, the game's otherwise); and online maps, whose fit is the
+  catalogue's `compatible` table, `ta-3.1c` for the game and
+  `<id>@<release>` for the mod being played, its release from the mod
+  folder's origin record when it came from a catalogue, and unknown
+  otherwise. An online map whose name an installed pack already gives shows
+  once, as installed.
+- **Pictures.** The browser keeps its own preview cache
+  (`oa::ui::map_previews::PreviewCache`): the layout asks for the cards in
+  view and the row after them, and each frame the browser forgets the rest
+  (`new_frame`), decodes up to four (`pump`) and lays itself out again
+  before anything draws. A base map's picture is its terrain file's header
+  and minimap; an installed pack's is its preview file; an online map's is
+  the catalogue picture the Library's worker reads or fetches through its
+  picture cache (`PictureCache::request`, `take_bytes`), checked against its
+  SHA-256 name, never during a match.
+- **Select.** Select moves the picker's selection to the map and closes the
+  browser; the player still chooses the map with the picker's LOAD. In
+  SELMAP a pack installed since the list was made joins it after the base
+  maps first, then `preview_map_index` selects and previews it; in the
+  battle room `multiplayer_offer_map` builds the screens' map list again
+  when it lacks the map, fills the dialog's list, selects the row and
+  previews it, sending nothing.
+- **Download and select.** An online map's pack is queued as the Library's
+  GET queues it (`queue_download`, reason `install`), never during a match;
+  the browser stays open with the download's progress in its footer, and
+  once the installer has put the pack in place and `map_packs()` lists the
+  map, it acts as Select. A failure, the installer's refusal among them,
+  shows its reason in the footer, and the button comes back. Cancel closes
+  the browser and changes nothing; a download under way goes on in the
+  queue, which the Library shows.
+- **The check.** `native-map-browser` (`--check-map-browser`,
+  `runtime_map_browser_check.cpp`) writes the map pack check's two packs
+  (`write_map_pack_check_packs`) into its own `--user-folder`, turns every
+  built-in registry off there before the content service starts
+  (`prepare_map_browser_check`), and at 640x480, 1280x720, 1920x1080 and
+  2560x1440 opens SELMAP and presses MORE MAPS…. It requires the layer's
+  size class and scale (Compact 1x, Large 1x, Regular 2x, Large 2x) and the
+  grid's columns (3, 6, 4, 6); MORE MAPS… over none of SELMAP's gadgets;
+  every card and control inside the browser's window; Online empty;
+  Installed packs showing the two check maps alone; the clashing map's card
+  greyed, "New names" in the footer and Select disabled; the search "isle"
+  leaving one map; and Select on `check_isle@oa-check-isles` closing the
+  browser with SELMAP's selection on it. It writes each size's frame as
+  `map-browser-<w>x<h>.png` in its folder for review. A FIXTURES_SETUP test
+  (`map-browser-clean`) clears its folders before each run.
+- **Limitations.** The fit of an installed pack map is checked on the main
+  thread as its card comes into view, once per pack. A map pack installed
+  while SELMAP is open joins its list as Select or Download and select
+  chooses it.
+
 ## Files
 
 - `app.hpp`, `runtime.hpp`, `runtime.cpp`, `runtime_frontend_host.cpp`,
