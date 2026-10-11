@@ -72,6 +72,21 @@ struct Reached {
 /// @return the control and the point the press takes
 [[nodiscard]] Reached reach(const DisplayList& list, Point finger, int32_t reach) noexcept;
 
+/// Returns where a finger's press lands, with a reach that may be a fraction
+/// of a point, as a screen at a fractional scale has it.
+///
+/// As the reach above: on a control, the finger's own point; otherwise the
+/// nearest point of the nearest enabled control whose press area lies no
+/// farther from the finger than the reach, the first in list order of equal
+/// distances; with nothing within reach, the finger's own point and no
+/// control. A reach of 0 or less does not search.
+///
+/// @param list the display list
+/// @param finger the finger, in the same points as the controls
+/// @param within how far a control may lie from the finger, in points
+/// @return the control and the point the press takes
+[[nodiscard]] Reached reach(const DisplayList& list, Point finger, float within) noexcept;
+
 /// What a pointer and the keys have done on a screen, between events.
 struct Interaction {
     ControlId hovered{no_control}; ///< the control under the pointer
@@ -144,6 +159,15 @@ finger_down(Interaction& interaction, const DisplayList& list, Point finger, int
 /// @return activated, redraw or none
 [[nodiscard]] PointerOutcome
 pointer_up(Interaction& interaction, const DisplayList& list, Point point);
+
+/// Shows an interaction on the parts that draw its controls: a part is
+/// focused when it draws the focused control and a key has shown the focus,
+/// and pressed when it draws the held control. A part that draws no control
+/// is neither.
+///
+/// @param[in,out] list the display list; its items' focused and pressed states change
+/// @param interaction the focus and the held control
+void mark_states(DisplayList& list, const Interaction& interaction) noexcept;
 
 /// Returns the next control in the declared order.
 ///

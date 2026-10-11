@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Points, scale, size classes, arrangements, scroll areas and the display list.
+// Points, scale, size classes, arrangements, scroll areas and the display list,
+// and the parts of a screen drawn in the modern fonts.
 
 #include "oa/ui/kit/layout.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <stdint.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace oa::ui::kit {
 
@@ -290,6 +295,354 @@ const Control* control_of(const DisplayList& list, ControlId id) noexcept {
         if (control.id == id)
             return &control;
     return nullptr;
+}
+
+int32_t canvas_pixels(const Typesetter& type, float points) noexcept {
+    return static_cast<int32_t>(std::lround(points * type.px_per_point));
+}
+
+int32_t canvas_font(const Typesetter& type, float points) noexcept {
+    return std::max(int32_t{1}, canvas_pixels(type, points));
+}
+
+int32_t text_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    Role role,
+    Point at,
+    int32_t room,
+    std::string_view words,
+    const Lettering& look,
+    TextFit sits,
+    std::size_t most_lines
+) {
+    if (words.empty() || room <= 0)
+        return 0;
+    const int32_t size = canvas_font(type, look.points);
+    const Measure measure = [&type, size, &look](std::string_view shown) {
+        return measured_width(type.measure, shown, size, look.bold);
+    };
+    WrapRules rules;
+    rules.newlines = true;
+    rules.wide_scripts = false;
+    rules.most_lines = most_lines;
+    rules.shorten_last = [&measure, room](std::string_view joined) {
+        return fit(std::string(joined) + std::string(ellipsis), room, measure);
+    };
+    std::vector<std::string> lines = wrap(words, room, measure, rules);
+    lines.erase(
+        std::remove_if(
+            lines.begin(), lines.end(), [](const std::string& line) { return line.empty(); }
+        ),
+        lines.end()
+    );
+    if (lines.empty())
+        return 0;
+    int32_t widest = 0;
+    for (const std::string& line : lines)
+        widest = std::max(widest, measure(line));
+    const int32_t width = sits == TextFit::column ? room : std::min(room, widest);
+    Item part{};
+    part.role = role;
+    part.rect = {
+        sits == TextFit::tight_right ? at.x + room - width : at.x,
+        at.y,
+        width,
+        measured_line(type.measure, size, look.bold) * static_cast<int32_t>(lines.size())
+    };
+    part.colour = look.colour;
+    part.lines = std::move(lines);
+    part.pixel_size = size;
+    part.bold = look.bold;
+    part.style = look.style;
+    parts.push_back(std::move(part));
+    return parts.back().rect.height;
+}
+
+int32_t line_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    int32_t x,
+    int32_t middle,
+    int32_t room,
+    std::string_view words,
+    const Lettering& look,
+    TextFit sits,
+    Role role
+) {
+    if (words.empty() || room <= 0)
+        return 0;
+    const int32_t size = canvas_font(type, look.points);
+    const Measure measure = [&type, size, &look](std::string_view shown) {
+        return measured_width(type.measure, shown, size, look.bold);
+    };
+    std::string line = fit(words, room, measure);
+    if (line.empty())
+        return 0;
+    const int32_t line_height = measured_line(type.measure, size, look.bold);
+    const int32_t width = std::min(room, measure(line));
+    Item part{};
+    part.role = role;
+    part.rect = {
+        sits == TextFit::tight_right ? x - width : x, middle - line_height / 2, width, line_height
+    };
+    part.colour = look.colour;
+    part.lines = {std::move(line)};
+    part.pixel_size = size;
+    part.bold = look.bold;
+    part.style = look.style;
+    parts.push_back(std::move(part));
+    return width;
+}
+
+namespace {
+
+/// Returns the room a button's mark takes before its label: the mark's side and the gap
+/// after it.
+///
+/// @param type the scale
+/// @param button the button
+/// @param label_size the label's pixel size
+/// @return the room, in canvas pixels; 0 for a button with no mark
+[[nodiscard]] int32_t
+mark_room(const Typesetter& type, const ButtonSpec& button, int32_t label_size) noexcept {
+    if (button.glyph == Glyph::none)
+        return 0;
+    const int32_t side =
+        button.glyph_points > 0.0F ? canvas_pixels(type, button.glyph_points) : label_size;
+    return side +
+           static_cast<int32_t>(std::lround(static_cast<float>(label_size) * button_mark_gap_em));
+}
+
+} // namespace
+
+int32_t button_span(
+    const Typesetter& type,
+    const ButtonSpec& button,
+    float text_points,
+    float pad_points,
+    float least_points
+) {
+    const int32_t size = canvas_font(type, text_points);
+    const int32_t natural = measured_width(type.measure, button.label, size, true) +
+                            mark_room(type, button, size) + 2 * canvas_pixels(type, pad_points);
+    return std::max(natural, canvas_pixels(type, least_points));
+}
+
+void button_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    const Rect& box,
+    const ButtonSpec& button,
+    float text_points
+) {
+    Item part{};
+    part.role = button.role;
+    part.rect = box;
+    part.style = TextStyle::button;
+    part.pixel_size = canvas_font(type, text_points);
+    part.bold = true;
+    part.colour = button.role == Role::button_main     ? screen_colour::ink
+                  : button.role == Role::button_danger ? screen_colour::red
+                                                       : screen_colour::button_text;
+    part.glyph = button.glyph;
+    if (button.glyph != Glyph::none && button.glyph_points > 0.0F)
+        part.glyph_size = canvas_pixels(type, button.glyph_points);
+    part.control = button.control;
+    part.state.disabled = !button.enabled;
+    part.state.on = button.role == Role::button_main;
+    const int32_t size = part.pixel_size;
+    const int32_t room = box.width - mark_room(type, button, size) - 2 * canvas_pixels(type, 4.0F);
+    std::string label = fit(button.label, room, [&type, size](std::string_view shown) {
+        return measured_width(type.measure, shown, size, true);
+    });
+    if (!label.empty())
+        part.lines = {std::move(label)};
+    parts.push_back(std::move(part));
+}
+
+int32_t button_row(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    Point at,
+    int32_t room,
+    std::span<const ButtonSpec> left,
+    std::span<const ButtonSpec> right,
+    const ButtonRowSizes& sizes
+) {
+    const int32_t height = canvas_pixels(type, sizes.height);
+    const int32_t gap = canvas_pixels(type, sizes.gap);
+    std::vector<int32_t> widths;
+    int32_t total = 0;
+    const auto measure_button = [&](const ButtonSpec& button) {
+        const float least = button.role == Role::button_main ? sizes.least_main : 0.0F;
+        widths.push_back(std::min(room, button_span(type, button, sizes.text, sizes.pad, least)));
+        total += widths.back() + (widths.size() > 1 ? gap : 0);
+    };
+    for (const ButtonSpec& button : left)
+        measure_button(button);
+    for (const ButtonSpec& button : right)
+        measure_button(button);
+    if (widths.empty())
+        return 0;
+    if (!left.empty() && !right.empty())
+        total += gap * 2; // the space between the two groups
+    if (total <= room) {
+        int32_t column = at.x;
+        for (std::size_t index = 0; index < left.size(); ++index) {
+            button_part(
+                parts, type, {column, at.y, widths[index], height}, left[index], sizes.text
+            );
+            column += widths[index] + gap;
+        }
+        int32_t right_width = 0;
+        for (std::size_t index = 0; index < right.size(); ++index)
+            right_width += widths[left.size() + index] + (index > 0 ? gap : 0);
+        column = at.x + room - right_width;
+        for (std::size_t index = 0; index < right.size(); ++index) {
+            const int32_t width = widths[left.size() + index];
+            button_part(parts, type, {column, at.y, width, height}, right[index], sizes.text);
+            column += width + gap;
+        }
+        return height;
+    }
+    int32_t column = at.x;
+    int32_t top = at.y;
+    std::size_t index = 0;
+    const auto place = [&](const ButtonSpec& button) {
+        const int32_t width = widths[index++];
+        if (column > at.x && column + width > at.x + room) {
+            column = at.x;
+            top += height + gap;
+        }
+        button_part(parts, type, {column, top, width, height}, button, sizes.text);
+        column += width + gap;
+    };
+    for (const ButtonSpec& button : left)
+        place(button);
+    for (const ButtonSpec& button : right)
+        place(button);
+    return top + height - at.y;
+}
+
+void icon_part(std::vector<Item>& parts, const Rect& box, Glyph glyph, Colour colour, bool framed) {
+    if (glyph == Glyph::none && !framed)
+        return;
+    Item part{};
+    part.role = Role::icon;
+    part.rect = box;
+    part.glyph = glyph;
+    part.colour = colour;
+    part.state.on = framed;
+    parts.push_back(std::move(part));
+}
+
+void plain_part(std::vector<Item>& parts, Role role, const Rect& box, Colour colour) {
+    Item part{};
+    part.role = role;
+    part.rect = box;
+    part.colour = colour;
+    parts.push_back(std::move(part));
+}
+
+void move_parts(std::vector<Item>& to, std::vector<Item>& from, int32_t down) {
+    for (Item& part : from) {
+        part.rect.y += down;
+        to.push_back(std::move(part));
+    }
+    from.clear();
+}
+
+void move_parts(std::vector<Item>& to, std::vector<Item>& from, int32_t down, const Rect& clip) {
+    for (Item& part : from) {
+        part.rect.y += down;
+        part.clip = clip;
+        to.push_back(std::move(part));
+    }
+    from.clear();
+}
+
+ScrollColumn scroll_column(
+    const Rect& area,
+    int32_t top_height,
+    int32_t body_height,
+    int32_t bottom_height,
+    int32_t gap,
+    int32_t least_body,
+    int32_t offset
+) noexcept {
+    const int32_t between = body_height > 0 && bottom_height > 0 ? gap : 0;
+    const int32_t natural = top_height + body_height + between + bottom_height;
+    const int32_t wanted = std::max(int32_t{0}, offset);
+    ScrollColumn placed{};
+    if (natural <= area.height) {
+        placed.top = area.y;
+        placed.body = area.y + top_height;
+        placed.bottom = area.y + top_height + body_height + between;
+        placed.scroll.content_height = natural;
+        return placed;
+    }
+    const int32_t body_room = area.height - top_height - bottom_height - between;
+    if (body_height > 0 && body_room >= least_body) {
+        const Rect view{area.x, area.y + top_height, area.width, body_room};
+        placed.scroll.view = view;
+        placed.scroll.content_height = body_height;
+        placed.scroll.limit = body_height - body_room;
+        placed.scroll.offset = std::min(wanted, placed.scroll.limit);
+        placed.top = area.y;
+        placed.body = view.y - placed.scroll.offset;
+        placed.body_clip = view;
+        placed.bottom = view.y + body_room + between;
+        return placed;
+    }
+    placed.scroll.view = area;
+    placed.scroll.content_height = natural;
+    placed.scroll.limit = natural - area.height;
+    placed.scroll.offset = std::min(wanted, placed.scroll.limit);
+    placed.top = area.y - placed.scroll.offset;
+    placed.body = area.y + top_height - placed.scroll.offset;
+    placed.bottom = area.y + top_height + body_height + between - placed.scroll.offset;
+    placed.top_clip = area;
+    placed.body_clip = area;
+    placed.bottom_clip = area;
+    return placed;
+}
+
+std::size_t first_live_part(const DisplayList& list) noexcept {
+    std::size_t first = 0;
+    for (std::size_t index = 0; index < list.items.size(); ++index)
+        if (list.items[index].role == Role::backdrop)
+            first = index + 1;
+    return first;
+}
+
+void list_part_controls(DisplayList& list) {
+    list.controls.clear();
+    list.tab_order.clear();
+    const std::size_t first = first_live_part(list);
+    for (std::size_t index = list.items.size(); index-- > first;) {
+        const Item& part = list.items[index];
+        if (part.control == no_control)
+            continue;
+        Control control{};
+        control.id = part.control;
+        control.rect = part.rect;
+        control.clip = part.clip;
+        control.enabled = !part.state.disabled;
+        control.kind = part.role == Role::toggle ? ControlKind::toggle : ControlKind::button;
+        control.checked = part.role == Role::toggle && part.state.on;
+        if (!part.lines.empty())
+            control.text = part.lines.front();
+        list.controls.push_back(std::move(control));
+    }
+    for (std::size_t index = first; index < list.items.size(); ++index) {
+        const Item& part = list.items[index];
+        if (part.control == no_control || part.state.disabled)
+            continue;
+        if (std::find(list.tab_order.begin(), list.tab_order.end(), part.control) ==
+            list.tab_order.end())
+            list.tab_order.push_back(part.control);
+    }
 }
 
 } // namespace oa::ui::kit

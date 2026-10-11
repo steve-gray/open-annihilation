@@ -391,6 +391,68 @@ enum class Role : uint8_t {
     hover_card, ///< a hover card; the item's HoverCardLook, the rectangle the card without its arrow
     link,       ///< a link; the item's LinkLook
     progress,   ///< a progress bar; the item's ProgressLook says how far it has come
+    // The parts of a screen drawn in the modern fonts, the Game files screen
+    // and the folder chooser. Its own painter draws them from the item's
+    // rectangle, lines, glyph, colour and state, with small rounded corners
+    // and hairlines; the crisp canvas draws nothing for them. Such a screen
+    // also draws its text as Role::text, its plain buttons as Role::button and
+    // its OFF/ON switches as Role::toggle, from the item's lines rather than a
+    // look.
+    header_bar,     ///< a header bar: a band darker than the screen, a hairline under it
+    badge,          ///< the OA badge: the Open Annihilation icon filling the rectangle, no text
+    header_text,    ///< the words of a header bar
+    version,        ///< a version's words
+    title,          ///< a title's lines
+    panel,          ///< a panel with an outline: a card, the rows' panel, an option's row
+    icon,           ///< a glyph in the middle of the rectangle; on: in an outlined frame
+    banner,         ///< a banner: a warm band, a bar of the item's colour at its left
+    row,            ///< a row's flat ground in a panel
+    divider,        ///< a line between two rows, in the item's colour
+    button_main,    ///< the main button, filled with the accent
+    button_danger,  ///< a button that removes something, outlined and lettered in red
+    progress_track, ///< a progress bar's track
+    progress_fill,  ///< a progress bar's fill, its fraction of the track
+    progress_busy,  ///< a busy bar: the track striped, with no fraction
+    backdrop,       ///< the dimming behind a sheet; no press reaches a part under it
+    sheet,          ///< a sheet over a backdrop: a panel with a shadow
+};
+
+/// A mark a screen drawn in the modern fonts places in a part: an icon, a
+/// banner's or a button's. Its own painter draws it, as strokes on a square;
+/// the crisp canvas draws none.
+enum class Glyph : uint8_t {
+    none,    ///< no mark
+    folder,  ///< a folder
+    device,  ///< the device
+    disk,    ///< a disk
+    clock,   ///< a clock
+    warning, ///< a warning triangle
+    check,   ///< a check mark
+    cross,   ///< a cross
+    dash,    ///< a dash
+    info,    ///< an information mark
+    stop,    ///< a stop square
+    play,    ///< a play triangle
+    trash,   ///< a bin
+    refresh, ///< a circular arrow
+    plus,    ///< a plus
+    file,    ///< a file
+    oa,      ///< the Open Annihilation icon, or the OA mark without it
+};
+
+/// The part a text plays on a screen drawn in the modern fonts. The painter
+/// draws a text at its pixel size and weight; the style says what the text is.
+enum class TextStyle : uint8_t {
+    header,     ///< the header bar
+    title,      ///< a step's title
+    subtitle,   ///< under the title
+    lead,       ///< a card's or banner's lead line
+    body,       ///< ordinary text
+    small,      ///< footers and hints
+    row_title,  ///< a row's name
+    row_detail, ///< a row's detail
+    button,     ///< a button's label
+    mark_text,  ///< text beside a mark
 };
 
 /// How a control looks, for the item that draws it.
@@ -406,6 +468,11 @@ struct State {
 };
 
 /// One thing a screen draws, in the order it is drawn.
+///
+/// A screen drawn in the modern fonts (the Game files screen and the folder
+/// chooser) lays its parts out in canvas pixels, where the kit's other
+/// screens use points: its rectangles and clips are canvas pixels, and its
+/// texts are its lines at a pixel size, drawn by its own painter.
 struct Item {
     Role role{};                   ///< what is drawn
     Rect rect{};                   ///< where, in points
@@ -421,6 +488,15 @@ struct Item {
     /// How a component is drawn. Empty for a generic role. A component's look
     /// owns its texts, so the list outlives the words it was built from.
     Look look{};
+    /// A modern-font text, already broken into lines, top to bottom; empty
+    /// for none. A button's label is its one line, a switch's are OFF and ON.
+    std::vector<std::string> lines{};
+    int32_t pixel_size{};             ///< the lines' size, in canvas pixels
+    bool bold{};                      ///< the lines are bold
+    TextStyle style{TextStyle::body}; ///< the part the lines play
+    Glyph glyph{Glyph::none};         ///< the mark of an icon, a banner or a button
+    int32_t glyph_size{};             ///< a button's mark's side, in canvas pixels; 0: pixel_size
+    float fraction{};                 ///< a progress fill's share of its track, 0 to 1
 };
 
 /// What a control is. A screen maps these when it lists controls to automation.
@@ -496,5 +572,284 @@ struct DisplayList {
 /// @param id the control's number
 /// @return the control, or null when the list has none of that number; the first when it has several
 [[nodiscard]] const Control* control_of(const DisplayList& list, ControlId id) noexcept;
+
+// Parts of a screen drawn in the modern fonts, laid out in canvas pixels at a
+// scale that may be a fraction of a pixel a point (the Game files screen and
+// the folder chooser).
+
+/// How a screen drawn in the modern fonts turns points into canvas pixels and
+/// measures its text.
+struct Typesetter {
+    TextMeasureHooks measure{}; ///< the bundled fonts' measure
+    float px_per_point{1.0F};   ///< canvas pixels per point
+};
+
+/// Returns a length in points as whole canvas pixels: the length times the
+/// pixels a point, in single precision, rounded to the nearest pixel, a half
+/// away from zero.
+///
+/// @param type the scale
+/// @param points the length, in points
+/// @return the length, in canvas pixels
+[[nodiscard]] int32_t canvas_pixels(const Typesetter& type, float points) noexcept;
+
+/// Returns a text's size in points as its pixel size: canvas_pixels, and at
+/// least 1.
+///
+/// @param type the scale
+/// @param points the size, in points
+/// @return the pixel size
+[[nodiscard]] int32_t canvas_font(const Typesetter& type, float points) noexcept;
+
+/// A modern-font text's look.
+struct Lettering {
+    float points{};                     ///< its size, in points
+    bool bold{};                        ///< bold
+    Colour colour{screen_colour::text}; ///< its colour
+    TextStyle style{TextStyle::body};   ///< the part it plays
+};
+
+/// How a text part's rectangle sits in the room it is given.
+enum class TextFit : uint8_t {
+    column,      ///< as wide as the room, at its left
+    tight_left,  ///< as wide as its widest line, at the room's left
+    tight_right, ///< as wide as its widest line, at the room's right
+};
+
+/// Adds a text broken into lines no wider than a room, as one part.
+///
+/// The text breaks at its spaces, every new line starts a paragraph, and a
+/// word wider than the room breaks between its characters; Chinese, Japanese
+/// and Korean break as other text does. An empty line is dropped. When there
+/// are more lines than most_lines, the last one kept takes the rest of the
+/// text and ends with an ellipsis, shortened to the room (fit). The part is a
+/// line high (measured_line) for each line, and as wide as `sits` says.
+///
+/// @param[in,out] parts the parts it is added to
+/// @param type the scale and the measure
+/// @param role the part's role: text, title, header_text or version
+/// @param at the room's left and the text's top, in canvas pixels
+/// @param room the room's width, in canvas pixels
+/// @param words the text, in UTF-8
+/// @param look its size, weight, colour and style
+/// @param sits how the part sits in the room
+/// @param most_lines the most lines; 0 for no limit
+/// @return the part's height, in canvas pixels; 0 when it was not added (no text, no room)
+int32_t text_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    Role role,
+    Point at,
+    int32_t room,
+    std::string_view words,
+    const Lettering& look,
+    TextFit sits = TextFit::column,
+    std::size_t most_lines = 0
+);
+
+/// Adds one line of text, shortened with an ellipsis to a room (fit), as one
+/// part as wide as the line and a line high, centred on a row.
+///
+/// @param[in,out] parts the parts it is added to
+/// @param type the scale and the measure
+/// @param x the line's left, or its right with TextFit::tight_right, in canvas pixels
+/// @param middle the row the line is centred on, in canvas pixels
+/// @param room the most width it may take, in canvas pixels
+/// @param words the line, in UTF-8
+/// @param look its size, weight, colour and style
+/// @param sits tight_right for a line that ends at x; any other starts at x
+/// @param role the part's role
+/// @return the width it takes, in canvas pixels; 0 when it was not added
+int32_t line_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    int32_t x,
+    int32_t middle,
+    int32_t room,
+    std::string_view words,
+    const Lettering& look,
+    TextFit sits = TextFit::tight_left,
+    Role role = Role::text
+);
+
+/// The share of a button's label size between its mark and the label.
+inline constexpr float button_mark_gap_em = 0.5F;
+
+/// A modern-font button: its label, its look, its mark and its control.
+struct ButtonSpec {
+    std::string label{};           ///< the words, already looked up
+    Role role{Role::button};       ///< button, button_main or button_danger
+    Glyph glyph{Glyph::none};      ///< the mark before the label
+    float glyph_points{};          ///< the mark's side, in points; 0: the label's pixel size
+    ControlId control{no_control}; ///< the control it is
+    bool enabled{true};            ///< a press reaches it
+};
+
+/// Returns the width a button takes: its label in bold, its mark and the gap
+/// after it (button_mark_gap_em of the label's size), and the padding on each
+/// side, and at least a least width.
+///
+/// @param type the scale and the measure
+/// @param button the button
+/// @param text_points the label's size, in points
+/// @param pad_points the padding on each side, in points
+/// @param least_points the least width, in points
+/// @return the width, in canvas pixels
+[[nodiscard]] int32_t button_span(
+    const Typesetter& type,
+    const ButtonSpec& button,
+    float text_points,
+    float pad_points,
+    float least_points
+);
+
+/// Adds a button as one part. Its label, bold, is shortened (fit) to what its
+/// mark and 4 points on each side leave of the box. A main button's label is
+/// the ink on the accent, a danger button's red, a plain one's the button
+/// text; the main button's state is on, a button that takes no press is
+/// disabled.
+///
+/// @param[in,out] parts the parts it is added to
+/// @param type the scale and the measure
+/// @param box the button, in canvas pixels
+/// @param button the button
+/// @param text_points the label's size, in points
+void button_part(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    const Rect& box,
+    const ButtonSpec& button,
+    float text_points
+);
+
+/// The sizes of a row of buttons, in points.
+struct ButtonRowSizes {
+    float text{};       ///< a label's size
+    float pad{};        ///< the padding on each side of a label
+    float least_main{}; ///< the least width of the main button
+    float gap{};        ///< between two buttons; twice it between the two groups
+    float height{};     ///< every button's height
+};
+
+/// Adds a row of buttons, each as wide as button_span gives and at most the
+/// room: the left group from the room's left and the right group ending at
+/// its right when both fit on one line with twice the gap between them; else
+/// every button from the left, left group first, a button that would pass the
+/// room's right starting a new line.
+///
+/// @param[in,out] parts the parts they are added to
+/// @param type the scale and the measure
+/// @param at the room's left and the row's top, in canvas pixels
+/// @param room the room's width, in canvas pixels
+/// @param left the buttons at the left, left to right
+/// @param right the buttons at the right, left to right
+/// @param sizes the buttons' sizes
+/// @return the height the row takes, in canvas pixels; 0 with no button
+int32_t button_row(
+    std::vector<Item>& parts,
+    const Typesetter& type,
+    Point at,
+    int32_t room,
+    std::span<const ButtonSpec> left,
+    std::span<const ButtonSpec> right,
+    const ButtonRowSizes& sizes
+);
+
+/// Adds a glyph in a box as an icon part, its state on when it is framed.
+/// Nothing is added for no glyph and no frame.
+///
+/// @param[in,out] parts the parts it is added to
+/// @param box the box, in canvas pixels
+/// @param glyph the mark
+/// @param colour the mark's colour
+/// @param framed true to draw the box's outline too
+void icon_part(std::vector<Item>& parts, const Rect& box, Glyph glyph, Colour colour, bool framed);
+
+/// Adds a part with no text and no control: a header bar, a panel, a row, a
+/// banner, a divider, a sheet, a backdrop or a bar.
+///
+/// @param[in,out] parts the parts it is added to
+/// @param role what it draws
+/// @param box where, in canvas pixels
+/// @param colour its colour: a banner's bar, a divider's line
+void plain_part(std::vector<Item>& parts, Role role, const Rect& box, Colour colour);
+
+/// Moves parts down and appends them to a list, in their order, leaving the
+/// list they came from empty.
+///
+/// @param[in,out] to the list they are appended to
+/// @param[in,out] from the parts; empty afterwards
+/// @param down how far they move down, in canvas pixels
+void move_parts(std::vector<Item>& to, std::vector<Item>& from, int32_t down);
+
+/// Moves parts down, gives each a clip, and appends them to a list, in their
+/// order, leaving the list they came from empty.
+///
+/// @param[in,out] to the list they are appended to
+/// @param[in,out] from the parts; empty afterwards
+/// @param down how far they move down, in canvas pixels
+/// @param clip each part's clip; empty for none
+void move_parts(std::vector<Item>& to, std::vector<Item>& from, int32_t down, const Rect& clip);
+
+/// Where the three blocks of a column lie in an area: a fixed top, a body,
+/// and a fixed bottom a gap under the body.
+struct ScrollColumn {
+    int32_t top{};      ///< the top block's first row, scrolled
+    int32_t body{};     ///< the body's first row, scrolled
+    int32_t bottom{};   ///< the bottom block's first row, scrolled
+    Rect top_clip{};    ///< the top block's clip; empty for none
+    Rect body_clip{};   ///< the body's clip; empty for none
+    Rect bottom_clip{}; ///< the bottom block's clip; empty for none
+    /// What scrolls: the view, empty when nothing does; the content's height;
+    /// the limit and the offset, clamped to it.
+    ScrollArea scroll{};
+};
+
+/// Places a column's blocks in an area.
+///
+/// The gap lies between the body and the bottom when both have height. When
+/// the blocks fit the area's height they lie one after another from its top,
+/// and nothing scrolls. Else, when the body has height and the area less the
+/// top, the gap and the bottom leaves it least_body or more, the body scrolls
+/// in that view between the fixed top and bottom, clipped to it. Else the
+/// whole column scrolls in the area, every block clipped to it. The limit is
+/// what does not fit, and the offset the wanted one, at most the limit and at
+/// least 0.
+///
+/// @param area the area, in canvas pixels
+/// @param top_height the top block's height
+/// @param body_height the body's height
+/// @param bottom_height the bottom block's height
+/// @param gap the gap between the body and the bottom
+/// @param least_body the least view the body scrolls in alone
+/// @param offset how far the column is wanted scrolled
+/// @return where the blocks lie
+[[nodiscard]] ScrollColumn scroll_column(
+    const Rect& area,
+    int32_t top_height,
+    int32_t body_height,
+    int32_t bottom_height,
+    int32_t gap,
+    int32_t least_body,
+    int32_t offset
+) noexcept;
+
+/// Returns the index of the first part a press can reach: the one after the
+/// last backdrop, or 0 with none.
+///
+/// @param list the display list
+/// @return the index
+[[nodiscard]] std::size_t first_live_part(const DisplayList& list) noexcept;
+
+/// Lists a display list's controls from its parts, for a screen whose parts
+/// carry their controls. Every part from first_live_part that draws a control
+/// becomes one, the last drawn first, so a point is tested against the top
+/// part first: its rectangle and clip are the part's, it is enabled unless
+/// the part is disabled, a toggle for a switch and a button otherwise. Each
+/// enabled control joins the Tab order once, in drawing order. A part under a
+/// backdrop takes no press and no focus.
+///
+/// @param[in,out] list the display list; its controls and Tab order are replaced
+void list_part_controls(DisplayList& list);
 
 } // namespace oa::ui::kit
