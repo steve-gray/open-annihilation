@@ -552,6 +552,11 @@ struct Options {
     // window sizes, the screen opened by name, and the notice, the prompt
     // and the saves notice one at a time. Needs --preferences-file.
     bool check_registered_kit = false;
+    // Opens the UI kit gallery from Settings › Developer on 640x480,
+    // 1280x720 and 1920x1080 windows: its size class and scale, its pixels
+    // over the darkened main menu, Tab through every control, and Escape
+    // back to Developer. Needs --preferences-file.
+    bool check_kit_gallery = false;
     // Drives the player's own folder through the SDL presenter: the saved
     // games moved once from beside the preferences file, the main menu's
     // notice of the move shown once and closed, and the settings' Your files
