@@ -124,7 +124,6 @@ constexpr std::array<std::string_view, kLevelCount> kLevelWords{"off", "basic", 
 constexpr std::array<std::string_view, 4> kLanguageWords{
     "english", "deutsch", "espanol", "francais"
 };
-constexpr std::array<std::string_view, kChipCount> kFilterChips{"Balance", "Units", "Maps"};
 constexpr std::array<std::string_view, kNavCount> kNavCaptions{
     "Mods", "Language", "Graphics", "Downloads"
 };
@@ -1073,6 +1072,7 @@ int32_t chips_section(Builder& b, Point at, int32_t width, std::string_view word
                }
            ) +
            kLineGap;
+    constexpr std::array<std::string_view, kChipCount> kFilterChips{"Balance", "Units", "Maps"};
     std::array<ChipLook, kChipCount> filters{};
     for (std::size_t place = 0; place < kChipCount; ++place) {
         const ControlId id = kFirstChip + static_cast<ControlId>(place);
@@ -1586,7 +1586,7 @@ struct Section {
 };
 
 /// The sections, in the order they show.
-constexpr std::array<Section, 20> kSections{{
+constexpr auto kSections = std::to_array<Section>({
     {"WINDOW CHROME", "window-chrome", &window_chrome},
     {"TABS", "tabs", &tabs},
     {"BUTTONS", "buttons", &buttons_section},
@@ -1607,7 +1607,7 @@ constexpr std::array<Section, 20> kSections{{
     {"NOTICE", "notice", &notice_section},
     {"QUESTION", "question", &question_section},
     {"OA MARK", "oa-mark", &oa_mark},
-}};
+});
 
 /// Adds a section: its heading, the rule under it and its samples.
 ///
