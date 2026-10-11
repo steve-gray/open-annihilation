@@ -20,6 +20,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/rows.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -82,10 +83,13 @@ enum class Page : uint8_t {
     mod_guard,  ///< what guarding builders do
     mod_tools,  ///< the build tools and the mex snap
     mod_chat,   ///< the wreck snap, the chat and the resource bar
+    /// One registered page the engine's settings show, laid out from the row
+    /// specs set_registered_pages gave. A mod's options never list one.
+    registered,
 };
 
-/// The number of sections, of every kind of dialog.
-inline constexpr std::size_t page_count = 14;
+/// The number of sections, of every kind of dialog, counting the registered page.
+inline constexpr std::size_t page_count = 15;
 /// The most sections a dialog lists: the engine's settings' nine with
 /// Touch, Controller and Game files, six without them; a mod's options have
 /// five.
@@ -292,19 +296,34 @@ static_assert(
 );
 static_assert(
     static_cast<std::size_t>(Page::developer) < most_listed_pages &&
-        static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
-    "every section of the engine's settings has an entry's number, and every section a scroll"
+        static_cast<std::size_t>(Page::registered) + 1 == page_count,
+    "every engine section has an entry's number, and every section a scroll"
 );
+
+/// The first registered page's entry. Each next page's counts down from it,
+/// under the question's buttons and an open list's items.
+inline constexpr int32_t first_registered_nav_control = -10000;
+
+/// Returns a registered page's entry's control.
+///
+/// @param index the page's place in the pages set_registered_pages gave, from 0
+/// @return its control's number
+[[nodiscard]] constexpr int32_t registered_nav_control(std::size_t index) noexcept {
+    return first_registered_nav_control - static_cast<int32_t>(index);
+}
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
 /// listed, so that Touch is 5, Controller 6, Developer 7 and Game files 8
 /// in every dialog of the engine's settings, and a dialog without Touch has
-/// no control 5, one without Controller no control 6.
+/// no control 5, one without Controller no control 6. The registered page
+/// has no entry of this form; its entries are registered_nav_control.
 ///
 /// @param page the section
-/// @return its control's number
+/// @return its control's number, or no_control for the registered page
 [[nodiscard]] constexpr int32_t page_control(Page page) noexcept {
+    if (page == Page::registered)
+        return no_control;
     const auto index = static_cast<int32_t>(page);
     const auto first_mod = static_cast<int32_t>(Page::mod_keys);
     return first_page_control + (index >= first_mod ? index - first_mod : index);
@@ -562,6 +581,27 @@ inline constexpr int32_t no_question = -2;
 /// @return one row for No Mod and one for each offered mod folder
 [[nodiscard]] std::vector<ModRow> mod_rows(const Dialog& dialog);
 
+/// One registered settings page the engine's dialog lists after its own
+/// sections, under a divider naming its owner. The rows stay the caller's.
+struct RegisteredPage {
+    std::string id;                           ///< the page's word in automation names
+    std::string title;                        ///< the section heading, as registered
+    std::string owner;                        ///< the divider's name, as registered
+    const oa::ui::kit::PreferenceRow* rows{}; ///< the page's rows; the caller keeps them
+    std::size_t row_count{};                  ///< how many rows
+    /// Called by the host once per key OK changed, after the preferences are written.
+    void (*applied)(void* state, const char* key, const char* value){};
+    void* state{}; ///< what applied is called with
+};
+
+/// One key OK changed on a registered page, and who the host tells once it is saved.
+struct RegisteredWrite {
+    std::string key;   ///< the preference key
+    std::string value; ///< the text to store; empty when the key is cleared
+    void (*applied)(void* state, const char* key, const char* value){}; ///< the page's applied
+    void* state{};                                                      ///< the page's state
+};
+
 /// One open dialog. A host reads opened, chosen, defaults, restored, page
 /// and forget_renderer_failures, sets acceleration, and reads and may keep
 /// developer between openings; section_hooks is set only by tests and
@@ -722,6 +762,22 @@ struct Dialog {
     /// the room it has; the scroll offsets are held to the class's limits
     /// wherever they are used.
     oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
+    /// Registered pages listed after the engine's sections. Empty leaves the
+    /// list as the engine's own, Developer pinned at its foot.
+    std::vector<RegisteredPage> registered_pages;
+    /// Which registered page is open while page is Page::registered.
+    std::size_t registered_page{};
+    /// The preference values the registered rows show.
+    oa::ui::kit::PreferenceModel registered_values{};
+    /// Those values as the pages were given. Cancel puts them back, and OK
+    /// writes a key whose text differs.
+    oa::ui::kit::PreferenceModel registered_opened{};
+    /// The section list's scroll, in source pixels, while registered pages
+    /// make the list taller than its room.
+    int32_t nav_scroll{};
+    /// The part of a source pixel the wheel has turned over the section list
+    /// and not yet scrolled.
+    float nav_wheel_rows{};
 };
 
 /// Returns every standard hack as Developer Mode shows it: as the profile
@@ -805,6 +861,26 @@ struct ModOffer {
     /// The mod folder the game plays now; empty for none.
     std::string_view playing{};
 };
+
+/// Gives the engine's dialog the registered pages to list, and the preference
+/// values their rows read. A dialog that is not the engine's settings keeps
+/// none. The rows stay the caller's for as long as the dialog shows them.
+///
+/// @param[in,out] dialog the dialog
+/// @param pages the pages, in the order the list shows them
+/// @param values the stored preferences the rows read and OK writes back
+void set_registered_pages(
+    Dialog& dialog,
+    std::span<const RegisteredPage> pages,
+    const oa::platform::preferences::Values& values
+);
+
+/// Returns the registered keys whose stored text differs from the values the
+/// dialog was given. A key missing from either side compares as empty.
+///
+/// @param dialog the dialog
+/// @return one write for each changed key, in page order then row order
+[[nodiscard]] std::vector<RegisteredWrite> registered_writes(const Dialog& dialog);
 
 /// Opens the dialog over settings in effect.
 ///

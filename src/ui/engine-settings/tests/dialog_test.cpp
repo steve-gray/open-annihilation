@@ -2095,7 +2095,7 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     CHECK(settings::page_control(Page::developer) == 7);
     CHECK(settings::page_control(Page::game_files) == 8);
     CHECK(settings::most_listed_pages == 9);
-    CHECK(settings::page_count == 14);
+    CHECK(settings::page_count == 15);
     CHECK(settings::restore_control == 9);
     CHECK(settings::cancel_control == 10);
     CHECK(settings::ok_control == 11);
@@ -9022,6 +9022,208 @@ void the_larger_classes_press_each_control_where_it_is_drawn() {
     }
 }
 
+/// The nav's texts, top to bottom: entries and owner names. The footer's
+/// captions sit in the same columns and are not part of the list.
+std::vector<std::string> nav_texts(const settings::Dialog& dialog) {
+    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    std::vector<settings::LayoutPart> nav;
+    for (const auto& part : settings::dialog_layout(dialog)) {
+        if (part.text.empty() || part.rect.y < geometry::list_first_top ||
+            part.rect.y >= sized.footer_rule_row || part.rect.x >= sized.content_left)
+            continue;
+        nav.push_back(part);
+    }
+    std::sort(
+        nav.begin(),
+        nav.end(),
+        [](const settings::LayoutPart& left, const settings::LayoutPart& right) {
+            return left.rect.y < right.rect.y;
+        }
+    );
+    std::vector<std::string> texts;
+    for (const auto& part : nav)
+        texts.push_back(part.text);
+    return texts;
+}
+
+/// Registered pages: two owners in order under labelled dividers, sixteen
+/// pages scrolling at Compact with Tab reaching every entry, each page's
+/// rows inside the dialog at every size class, Tab in row order, OK writing
+/// a changed toggle and choice, Cancel writing nothing, and Restore defaults
+/// putting the page's keys back. A mod's options list none of them.
+void registered_pages_list_under_their_owners_and_write_on_ok() {
+    namespace kit = oa::ui::kit;
+    static const kit::PreferenceRow kToggle =
+        kit::preference_toggle("toggle", "Toggle", "check.toggle", "1");
+    static const std::array<std::string_view, 2> kModeIds{"quiet", "loud"};
+    static const std::array<std::string_view, 2> kModeCaptions{"Quiet", "Loud"};
+    static const kit::PreferenceRow kMode =
+        kit::preference_choice("mode", "Mode", "check.mode", "quiet", kModeIds, kModeCaptions);
+    static const std::array<kit::PreferenceRow, 2> kRows{kToggle, kMode};
+    static const kit::PreferenceRow kOne = kit::preference_toggle("one", "One", "alpha.one", "1");
+
+    const auto page_of = [](std::string id,
+                            std::string title,
+                            std::string owner,
+                            const kit::PreferenceRow* rows,
+                            std::size_t count) {
+        settings::RegisteredPage page;
+        page.id = std::move(id);
+        page.title = std::move(title);
+        page.owner = std::move(owner);
+        page.rows = rows;
+        page.row_count = count;
+        return page;
+    };
+
+    settings::Dialog listed = opened(Page::mods);
+    const std::array<settings::RegisteredPage, 3> owners{
+        page_of("alpha.one", "One", "Alpha", &kOne, 1),
+        page_of("alpha.two", "Two", "Alpha", &kOne, 1),
+        page_of("beta.three", "Three", "Beta", &kOne, 1),
+    };
+    settings::set_registered_pages(listed, owners, {});
+    const auto texts = nav_texts(listed);
+    const auto developer = std::find(texts.begin(), texts.end(), "Developer");
+    CHECK(developer != texts.end());
+    const std::vector<std::string> tail(developer + 1, texts.end());
+    CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta", "Three"}));
+
+    settings::Dialog options = opened_mod_options(Page::mod_keys);
+    settings::set_registered_pages(options, owners, {});
+    CHECK(options.registered_pages.empty());
+    for (const auto& text : nav_texts(options))
+        CHECK(text != "Alpha" && text != "Beta");
+
+    std::array<settings::RegisteredPage, 16> many{};
+    for (std::size_t index = 0; index < many.size(); ++index) {
+        many[index] =
+            page_of("n" + std::to_string(index), "Page " + std::to_string(index), "Pack", &kOne, 1);
+    }
+    settings::Dialog crowded = opened(Page::mods);
+    settings::set_registered_pages(crowded, many, {});
+    std::set<int32_t> reached;
+    for (int32_t press = 0; press < 200; ++press) {
+        if (settings::dialog_key(crowded, DialogKey::tab) != DialogAction::redraw)
+            break;
+        if (crowded.focused < settings::restore_control)
+            reached.insert(crowded.focused);
+    }
+    for (const Page page : settings::dialog_pages(settings::DialogKind::engine))
+        CHECK(reached.count(settings::page_control(page)) == 1);
+    for (std::size_t index = 0; index < many.size(); ++index)
+        CHECK(reached.count(settings::registered_nav_control(index)) == 1);
+    const int32_t last = settings::registered_nav_control(many.size() - 1);
+    for (int32_t press = 0; press < 200 && crowded.focused != last; ++press)
+        CHECK(settings::dialog_key(crowded, DialogKey::tab) == DialogAction::redraw);
+    CHECK(crowded.focused == last);
+    CHECK(crowded.nav_scroll > 0);
+    CHECK(find_part(settings::dialog_layout(crowded), {}, crowded.focused) != nullptr);
+    crowded.nav_scroll = 0;
+    CHECK(
+        settings::dialog_wheel(crowded, geometry::edge + 4, geometry::body_top + 4, -1.0F) ==
+        DialogAction::redraw
+    );
+    CHECK(crowded.nav_scroll > 0);
+
+    const settings::RegisteredPage sample =
+        page_of("check.page", "Check", "Check", kRows.data(), kRows.size());
+    for (const auto size_class :
+         {kit::SizeClass::compact, kit::SizeClass::regular, kit::SizeClass::large}) {
+        settings::Dialog dialog = opened(Page::mods);
+        dialog.size_class = size_class;
+        settings::set_registered_pages(dialog, std::span(&sample, 1), {});
+        dialog.page = Page::registered;
+        check_parts_inside_and_apart(dialog);
+        const auto parts = settings::dialog_layout(dialog);
+        CHECK(find_part(parts, "Toggle", settings::no_control) != nullptr);
+        CHECK(find_part(parts, "Mode", settings::no_control) != nullptr);
+        CHECK(find_part(parts, "Check", settings::no_control) != nullptr);
+    }
+
+    settings::Dialog dialog = opened(Page::mods);
+    settings::set_registered_pages(dialog, std::span(&sample, 1), {});
+    dialog.page = Page::registered;
+    dialog.focused = settings::no_control;
+    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::first_row_control);
+    CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::first_row_control + 1);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
+    CHECK(dialog.registered_values.values.at("check.mode") == "loud");
+
+    const settings::LayoutPart* off = nullptr;
+    for (const auto& part : settings::dialog_layout(dialog)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (off == nullptr || part.rect.x < off->rect.x)
+            off = &part;
+    }
+    CHECK(off != nullptr);
+    CHECK(click(dialog, centre(off->rect)) == DialogAction::changed);
+    CHECK(dialog.registered_values.values.at("check.toggle") == "0");
+    const auto* ok = find_part(settings::dialog_layout(dialog), {}, settings::ok_control);
+    CHECK(ok != nullptr);
+    CHECK(click(dialog, centre(ok->rect)) == DialogAction::accepted);
+    const auto writes = settings::registered_writes(dialog);
+    bool wrote_toggle = false;
+    bool wrote_mode = false;
+    for (const auto& write : writes) {
+        if (write.key == "check.toggle" && write.value == "0")
+            wrote_toggle = true;
+        if (write.key == "check.mode" && write.value == "loud")
+            wrote_mode = true;
+    }
+    CHECK(wrote_toggle && wrote_mode);
+
+    settings::Dialog cancelled = opened(Page::mods);
+    settings::set_registered_pages(cancelled, std::span(&sample, 1), {});
+    cancelled.page = Page::registered;
+    const settings::LayoutPart* cancel_off = nullptr;
+    for (const auto& part : settings::dialog_layout(cancelled)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (cancel_off == nullptr || part.rect.x < cancel_off->rect.x)
+            cancel_off = &part;
+    }
+    CHECK(cancel_off != nullptr);
+    CHECK(click(cancelled, centre(cancel_off->rect)) == DialogAction::changed);
+    const auto* cancel =
+        find_part(settings::dialog_layout(cancelled), {}, settings::cancel_control);
+    CHECK(cancel != nullptr);
+    CHECK(click(cancelled, centre(cancel->rect)) == DialogAction::cancelled);
+    CHECK(settings::registered_writes(cancelled).empty());
+    CHECK(cancelled.registered_values.values.count("check.toggle") == 0);
+
+    settings::Dialog restored = opened(Page::mods);
+    settings::set_registered_pages(restored, std::span(&sample, 1), {});
+    restored.page = Page::registered;
+    const settings::LayoutPart* restore_off = nullptr;
+    for (const auto& part : settings::dialog_layout(restored)) {
+        if (part.control != settings::first_row_control)
+            continue;
+        if (restore_off == nullptr || part.rect.x < restore_off->rect.x)
+            restore_off = &part;
+    }
+    CHECK(restore_off != nullptr);
+    CHECK(click(restored, centre(restore_off->rect)) == DialogAction::changed);
+    restored.focused = settings::restore_control;
+    CHECK(settings::dialog_key(restored, DialogKey::space) == DialogAction::changed);
+    CHECK(restored.registered_values.values.at("check.toggle") == "1");
+    CHECK(restored.registered_values.values.at("check.mode") == "quiet");
+
+    const auto list = geometry::dialog_list(dialog, nullptr);
+    bool named_toggle = false;
+    bool named_nav = false;
+    for (const auto& control : list.controls) {
+        if (control.name == "settings.check.page.toggle")
+            named_toggle = true;
+        if (control.name == "settings.nav.check.page")
+            named_nav = true;
+    }
+    CHECK(named_toggle && named_nav);
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -9128,6 +9330,7 @@ int main(int argc, char** argv) {
         the_larger_classes_show_more_graphics_rows();
         the_larger_classes_keep_the_footer_buttons();
         the_larger_classes_press_each_control_where_it_is_drawn();
+        registered_pages_list_under_their_owners_and_write_on_ok();
     }
     if (failures != 0)
         return 1;

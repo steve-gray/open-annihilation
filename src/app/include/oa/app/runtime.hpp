@@ -4336,6 +4336,10 @@ class Runtime final : public menu::Host,
     /// the settings taking effect.
     void check_engine_settings();
 
+    /// Runs --check-registered-kit: a registered settings page, kit screen,
+    /// notice and prompt, hosted from inside the engine.
+    void check_registered_kit();
+
     /// Checks that set_unit_limit stores the unit limit preference and clamps
     /// it as the setting does (part of --check-engine-settings).
     void check_unit_limit_preference();
