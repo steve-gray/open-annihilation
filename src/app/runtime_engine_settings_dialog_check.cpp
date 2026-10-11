@@ -804,12 +804,8 @@ void Runtime::check_engine_settings_dialog() {
         past_map_edge_share() == 0.25,
         "View past the map's edge 25% is not the view's limits' share"
     );
-    focus(settings::first_row_control + 4, "Escape opens the game menu");
-    click(settings::first_row_control + 4, "ON", "Escape opens the game menu's On");
-    chosen.escape_opens_menu = true;
-    expect("Escape opens the game menu On");
-    focus(settings::first_row_control + 5, "Select groups without Alt");
-    click(settings::first_row_control + 5, "ON", "Select groups without Alt's On");
+    focus(settings::first_row_control + 4, "Select groups without Alt");
+    click(settings::first_row_control + 4, "ON", "Select groups without Alt's On");
     chosen.switch_alt = true;
     expect("Select groups without Alt On");
     require(
@@ -817,8 +813,15 @@ void Runtime::check_engine_settings_dialog() {
         "Select groups without Alt did not set SwitchAlt"
     );
     // A click on the side a switch already shows changes nothing.
-    click(settings::first_row_control + 5, "ON", "Select groups without Alt's On");
+    click(settings::first_row_control + 4, "ON", "Select groups without Alt's On");
     expect("a second click on On");
+
+    // Escape opens the game menu, the last row of User Interface.
+    click(settings::page_control(settings::Page::user_interface), {}, "User Interface's entry");
+    focus(settings::first_row_control + 4, "Escape opens the game menu");
+    click(settings::first_row_control + 4, "ON", "Escape opens the game menu's On");
+    chosen.escape_opens_menu = true;
+    expect("Escape opens the game menu On");
 
     click(settings::page_control(settings::Page::common_tweaks), {}, "Common Tweaks' entry");
     focus(settings::first_row_control + 1, "Unit limit");
@@ -974,20 +977,11 @@ void Runtime::check_engine_settings_dialog() {
         presentation() == SDL_LOGICAL_PRESENTATION_LETTERBOX,
         "Sharp does not letterbox the main menu"
     );
-    focus(settings::first_row_control + 5, "Menu scaling");
-    click(settings::first_row_control + 5, "Whole steps", "Menu scaling's Whole steps");
-    chosen.menu_scaling = settings::MenuScaling::whole_steps;
-    expect("Menu scaling Whole steps");
-    require(
-        presentation() == (held_whole() ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
-                                        : SDL_LOGICAL_PRESENTATION_LETTERBOX),
-        "Menu scaling Whole steps did not set the window's presentation at once"
-    );
     // Native pixel density: On is kept for the next start, and the window
     // keeps the density it opened at.
     const bool dense = native_density_window();
-    focus(settings::first_row_control + 6, "Native pixel density");
-    click(settings::first_row_control + 6, "ON", "Native pixel density's On");
+    focus(settings::first_row_control + 5, "Native pixel density");
+    click(settings::first_row_control + 5, "ON", "Native pixel density's On");
     chosen.native_density = true;
     expect("Native pixel density On");
     require(
@@ -996,13 +990,24 @@ void Runtime::check_engine_settings_dialog() {
         "Native pixel density On changed the open window, or does not say when it applies"
     );
     // Explosion flash: Reduced is the level the next frame draws.
-    focus(settings::first_row_control + 7, "Explosion flash");
-    click(settings::first_row_control + 7, "Reduced", "Explosion flash's Reduced");
+    focus(settings::first_row_control + 6, "Explosion flash");
+    click(settings::first_row_control + 6, "Reduced", "Explosion flash's Reduced");
     chosen.explosion_flash = settings::ExplosionFlash::reduced;
     expect("Explosion flash Reduced");
     require(
         explosion_flash() == settings::ExplosionFlash::reduced,
         "Explosion flash Reduced is not the level the frames draw"
+    );
+    // Menu scaling, the first row of User Interface.
+    click(settings::page_control(settings::Page::user_interface), {}, "User Interface's entry");
+    focus(settings::first_row_control, "Menu scaling");
+    click(settings::first_row_control, "Whole steps", "Menu scaling's Whole steps");
+    chosen.menu_scaling = settings::MenuScaling::whole_steps;
+    expect("Menu scaling Whole steps");
+    require(
+        presentation() == (held_whole() ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
+                                        : SDL_LOGICAL_PRESENTATION_LETTERBOX),
+        "Menu scaling Whole steps did not set the window's presentation at once"
     );
 
     // The text drawing reads the Language section at once. Text size
@@ -2106,7 +2111,9 @@ void Runtime::check_engine_settings_window_sizes() {
                 end_limit > 0 && dialog->scroll[static_cast<std::size_t>(page)] == end_limit &&
                     (expected_layout.size_class != oa::ui::kit::SizeClass::compact ||
                      end_limit == kGraphicsScrollLimit),
-                "End did not scroll Graphics to its end" + on
+                "End did not scroll Graphics to its end (" +
+                    std::to_string(dialog->scroll[static_cast<std::size_t>(page)]) + " of " +
+                    std::to_string(end_limit) + ")" + on
             );
             shows_dialog("Graphics at its end");
             snapshot("menu-dialog-graphics-end-" + size);
@@ -2223,24 +2230,24 @@ void Runtime::check_engine_settings_window_sizes() {
                           << "x\n";
         }
 
-        // Choosing a size redraws at once and leaves the dialog on Graphics,
-        // its scroll as near as the new size allows, and the focus on
-        // Interface size. Escape puts back the size the dialog opened with.
+        // Choosing a size redraws at once and leaves the dialog on User
+        // Interface, its scroll as near as the new size allows, and the focus
+        // on Interface size. Escape puts back the size the dialog opened with.
         // The preference stays as it was until OK.
         {
             const std::string chosen_now = "Interface size 100%" + on;
             tap(SDLK_COMMA, kShortcutModifier);
             auto* sized = engine_settings_dialog();
             require(sized != nullptr, "the shortcut did not open the dialog" + on);
-            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
-            tap(SDLK_END);
-            const int32_t size_row =
-                settings::first_row_control +
-                static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+            click_control(
+                settings::page_control(settings::Page::user_interface), {}, "User Interface's entry"
+            );
+            const int32_t size_row = settings::first_row_control + kInterfaceSizeRow;
+            // Tab walks the section's rows to Interface size.
             for (int press = 0; press < 64 && sized->focused != size_row; ++press)
-                tap(SDLK_DOWN);
+                tap(SDLK_TAB);
             require(sized->focused == size_row, "Interface size's row did not take the focus" + on);
-            const auto scroll_index = static_cast<std::size_t>(settings::Page::graphics);
+            const auto scroll_index = static_cast<std::size_t>(settings::Page::user_interface);
             const int32_t scroll_before = sized->scroll[scroll_index];
             const auto stored_before =
                 preference_values_.find(std::string(settings::key::interface_size));
@@ -2255,8 +2262,8 @@ void Runtime::check_engine_settings_window_sizes() {
             const std::string preference_now =
                 stored_now == preference_values_.end() ? std::string{} : stored_now->second;
             require(
-                engine_settings_dialog() == sized && sized->page == settings::Page::graphics &&
-                    sized->focused == size_row &&
+                engine_settings_dialog() == sized &&
+                    sized->page == settings::Page::user_interface && sized->focused == size_row &&
                     sized->chosen.interface_size == settings::InterfaceSize::size_100 &&
                     engine_settings().interface_size == settings::InterfaceSize::size_100 &&
                     oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&

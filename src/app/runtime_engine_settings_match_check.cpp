@@ -38,6 +38,10 @@ namespace oa::app {
 
 namespace {
 
+/// Graphics' scroll limit in a game at Compact, now that User Interface holds
+/// Menu scaling, Window frame, HUD scaling and Interface size.
+constexpr int32_t kMatchGraphicsEnd = 336;
+
 namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
 namespace library = oa::ui::library;
@@ -783,28 +787,20 @@ void Runtime::check_engine_settings_in_match() {
             ),
             "a game played alone says it is shared" + on
         );
-        // Graphics at its end in a game played alone: Window frame and HUD
-        // scaling among its last rows, and neither Hardware
+        // Graphics at its end in a game played alone: neither Hardware
         // acceleration nor Vertical sync locked by the game.
         show_page(settings::Page::graphics, on);
         tap_key(SDLK_END, SDL_KMOD_NONE);
         {
             const auto* graphics = engine_settings_dialog();
-            // Its end: at Compact 513, and the 79 rows of its last row,
-            // Interface size; a larger class's view shows more and scrolls
-            // less.
+            // Its end: at Compact kMatchGraphicsEnd; a larger class's view
+            // shows more and scrolls less.
+            const int32_t limit = graphics != nullptr ? settings::scroll_limit(*graphics) : -1;
             require(
                 graphics != nullptr &&
-                    graphics->scroll[static_cast<std::size_t>(settings::Page::graphics)] ==
-                        settings::scroll_limit(*graphics) &&
-                    (graphics->size_class != kit::SizeClass::compact ||
-                     settings::scroll_limit(*graphics) == 513 + 79),
-                "End did not scroll Graphics to its end" + on
-            );
-            const auto parts = settings::dialog_layout(*graphics);
-            require(
-                shows_text(parts, "Window frame") && shows_text(parts, "HUD scaling"),
-                "Graphics at its end does not show its last rows" + on
+                    graphics->scroll[static_cast<std::size_t>(settings::Page::graphics)] == limit &&
+                    (graphics->size_class != kit::SizeClass::compact || limit == kMatchGraphicsEnd),
+                "End did not scroll Graphics to its end (" + std::to_string(limit) + ")" + on
             );
             require(
                 graphics->locks.hardware_acceleration != settings::Lock::in_game &&
@@ -815,6 +811,16 @@ void Runtime::check_engine_settings_in_match() {
         // No snapshot here: a frame drawn while the game is paused would move
         // the later shared game's clock, and with it the snapshots taken there.
         tap_key(SDLK_HOME, SDL_KMOD_NONE);
+        // Window frame and HUD scaling are on User Interface in a game too.
+        show_page(settings::Page::user_interface, on);
+        {
+            const auto parts = settings::dialog_layout(*engine_settings_dialog());
+            require(
+                shows_text(parts, "Window frame") && shows_text(parts, "HUD scaling"),
+                "User Interface does not show Window frame and HUD scaling" + on
+            );
+        }
+        show_page(settings::Page::graphics, on);
 
         // The wheel over the dialog reaches it and not the battlefield: given
         // a section taller than its view, a notch scrolls it, the zoom stays
@@ -1211,19 +1217,17 @@ void Runtime::check_engine_settings_in_match() {
         const std::string preference_before = preference_of();
         open_engine_settings_in_match();
         require(engine_settings_dialog() != nullptr, "the settings did not open in the game");
-        show_page(settings::Page::graphics, " for Interface size");
-        tap_key(SDLK_END, SDL_KMOD_NONE);
-        const int32_t size_row =
-            settings::first_row_control +
-            static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+        show_page(settings::Page::user_interface, " for Interface size");
+        // Interface size, the fourth row of User Interface, which Tab reaches.
+        const int32_t size_row = settings::first_row_control + 3;
         for (int press = 0; press < 64 && engine_settings_dialog()->focused != size_row; ++press)
-            tap_key(SDLK_DOWN, SDL_KMOD_NONE);
+            tap_key(SDLK_TAB, SDL_KMOD_NONE);
         auto* dialog = engine_settings_dialog();
         require(
             dialog != nullptr && dialog->focused == size_row,
             "Interface size's row did not take the focus in a game"
         );
-        const auto scroll_index = static_cast<std::size_t>(settings::Page::graphics);
+        const auto scroll_index = static_cast<std::size_t>(settings::Page::user_interface);
         const int32_t scroll_before = dialog->scroll[scroll_index];
         tap_key(SDLK_RIGHT, SDL_KMOD_NONE);
         dialog = engine_settings_dialog();
@@ -1233,7 +1237,7 @@ void Runtime::check_engine_settings_in_match() {
         const int32_t shown_scroll =
             std::clamp(dialog->scroll[scroll_index], int32_t{0}, limit_now);
         require(
-            dialog->page == settings::Page::graphics && dialog->focused == size_row &&
+            dialog->page == settings::Page::user_interface && dialog->focused == size_row &&
                 dialog->chosen.interface_size == settings::InterfaceSize::size_100 &&
                 engine_settings().interface_size == settings::InterfaceSize::size_100 &&
                 dialog->size_class == kit::SizeClass::large &&
