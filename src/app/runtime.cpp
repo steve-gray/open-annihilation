@@ -369,6 +369,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_registered_kit) {
+            check_registered_kit();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_user_folder) {
             check_user_folder();
             flush_preferences();
@@ -396,6 +401,11 @@ int Runtime::run() {
         }
         if (options_.check_language_install) {
             check_language_install();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_challenge) {
+            check_challenge();
             flush_preferences();
             return 0;
         }
@@ -759,6 +769,7 @@ void Runtime::idle_tick() {
     // A catalogue that moved on adds its language packs to the registry.
     note_catalogue_languages();
     tell_mod_installs();
+    tell_challenges();
     render();
     presentation_alpha_ = 1.0F;
     capture_film_frame();

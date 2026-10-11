@@ -937,7 +937,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/modern_text.cpp src/app/text_input_area.cpp
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
-  src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_package_kinds.cpp
+  src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_challenge.cpp
+  src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
   src/app/pack_map_source.cpp
   src/app/mod_install_watch.cpp
@@ -990,10 +991,11 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
   src/app/runtime_map_packs_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
-  src/app/runtime_language_install_check.cpp
+  src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
+  src/app/runtime_registered_kit_check.cpp
   src/app/oa_layer_check.cpp
   src/app/runtime_engine_settings_match_check.cpp src/app/runtime_engine_settings_dialog_check.cpp
   src/app/runtime_renderer_ladder_check.cpp src/app/runtime_visual_rules_check.cpp
@@ -1464,6 +1466,18 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-engine-settings PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_engine_settings_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # A settings page, a kit screen, a notice and a prompt registered from
+      # inside the engine: the page under its owner's divider at 640x480,
+      # 1280x720 and 1920x1080, the screen opened by name, and the notice,
+      # the prompt and the saves notice one at a time.
+      set(oa_registered_kit_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/registered-kit")
+      file(MAKE_DIRECTORY "${oa_registered_kit_dir}")
+      add_test(NAME native-registered-kit COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-registered-kit
+        --preferences-file "${oa_registered_kit_dir}/registered-kit.conf")
+      set_tests_properties(native-registered-kit PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_registered_kit_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # The simulation hash an extension reads: the plain baseline with no
       # mod, a mod profile's when that profile changes the simulation, a
       # different hash after a Developer Mode override of a rule in the same
@@ -1603,6 +1617,19 @@ if(OA_BUILD_PLATFORM)
         --user-folder "${oa_mod_warning_dir}/Open Annihilation")
       set_tests_properties(native-mod-warning PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_mod_warning_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # A made-up download check over the main menu: the code, OPEN THE CHECK
+      # recording the page, the window closing once the download goes on, TRY
+      # AGAIN, CANCEL of that registry's waiting downloads, and nothing shown
+      # while a skirmish runs.
+      set(oa_challenge_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/challenge")
+      file(MAKE_DIRECTORY "${oa_challenge_dir}")
+      add_test(NAME native-challenge COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-challenge
+        --preferences-file "${oa_challenge_dir}/challenge.conf"
+        --user-folder "${oa_challenge_dir}/Open Annihilation")
+      set_tests_properties(native-challenge PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_challenge_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # Each renderer failure the game handles while it runs, forced on the
       # renderer the walk of SDL's render drivers makes, which on the dummy

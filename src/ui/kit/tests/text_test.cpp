@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // UTF-8 helpers, the estimated width, the stand-in characters, and the one
-// wrap checked against copies of the six wraps it replaces.
+// wrap checked against copies of the six wraps it replaces; fit and
+// fitting_start against the Game files screen's copies, and the modern
+// fonts' measure through its hooks.
 
 #include "oa/base/text/line_break.hpp"
 #include "oa/formats/fnt.hpp"
@@ -843,6 +845,98 @@ void the_paint_wrap_keeps_its_lines() {
     );
 }
 
+/// Checks fit and fitting_start against the Game files screen's own copies, which they
+/// replace, over the wrap's texts and rooms with both measures.
+void fit_matches_the_screens_copies() {
+    const std::string wides(40, 'w');
+    const std::string_view texts[] = {
+        "",
+        " ",
+        "word",
+        "Screenshots, films and mods now go here.",
+        wides,
+        "建造完成，单位已就绪",
+        "trailing spaces   before the cut",
+        "Open Annihilation \u203A Total Annihilation",
+        "a\u2026b",
+    };
+    const before_kit::Measure measures[] = {columns_width, proportional_width};
+    const int32_t widths[] = {-5, 0, 1, 5, 6, 12, 30, 60, 120, 400};
+    for (const before_kit::Measure& measure : measures) {
+        for (const int32_t width : widths) {
+            for (const std::string_view text : texts) {
+                OA_CHECK(
+                    kit::fit(text, width, measure) == before_kit::files_fit(text, width, measure)
+                );
+                const std::string ended = std::string(text) + std::string(ellipsis);
+                OA_CHECK(
+                    kit::fit(ended, width, measure) == before_kit::files_fit(ended, width, measure)
+                );
+                OA_CHECK(
+                    kit::fitting_start(text, width, measure) ==
+                    before_kit::fitting_start(text, width, measure)
+                );
+            }
+        }
+    }
+    // A line that fits is whole; one too long keeps no space before its ellipsis.
+    OA_CHECK(kit::fit("word", 24, columns_width) == "word");
+    OA_CHECK(kit::fit("ab cd", 20, proportional_width) == "ab\u2026");
+    OA_CHECK(kit::fit("abcd", 5, columns_width).empty());
+    OA_CHECK(kit::ellipsis == ellipsis);
+}
+
+/// A width hook that counts its calls: 10 pixels a character, 12 in bold.
+int measured_calls = 0;
+
+/// Measures a line for the hooks' check.
+///
+/// @param context unused
+/// @param text the line
+/// @param pixel_size unused
+/// @param bold the weight
+/// @return pixels
+int counted_width(void* context, std::string_view text, int pixel_size, bool bold) {
+    static_cast<void>(context);
+    static_cast<void>(pixel_size);
+    ++measured_calls;
+    return static_cast<int>(text.size()) * (bold ? 12 : 10);
+}
+
+/// Gives a line's height for the hooks' check: the size less 20, so a small size gives 0 or less.
+///
+/// @param context unused
+/// @param pixel_size the size
+/// @param bold unused
+/// @return pixels
+int short_line(void* context, int pixel_size, bool bold) {
+    static_cast<void>(context);
+    static_cast<void>(bold);
+    return pixel_size - 20;
+}
+
+/// Checks the modern fonts' measure: the hooks when they are set, an estimate when not, and
+/// an empty line measured as nothing without asking the hook.
+void the_measure_uses_its_hooks() {
+    const kit::TextMeasureHooks none{};
+    OA_CHECK(kit::measured_width(none, "", 10, false) == 0);
+    OA_CHECK(kit::measured_width(none, "abc", 10, false) == 17);
+    OA_CHECK(kit::measured_width(none, "a\u2026b", 20, true) == 33);
+    OA_CHECK(kit::measured_line(none, 10, false) == 13);
+    OA_CHECK(kit::measured_line(none, 8, true) == 10);
+    kit::TextMeasureHooks hooks{};
+    hooks.width = counted_width;
+    hooks.line_height = short_line;
+    measured_calls = 0;
+    OA_CHECK(kit::measured_width(hooks, "", 10, false) == 0);
+    OA_CHECK(measured_calls == 0);
+    OA_CHECK(kit::measured_width(hooks, "abc", 10, false) == 30);
+    OA_CHECK(kit::measured_width(hooks, "abc", 10, true) == 36);
+    OA_CHECK(measured_calls == 2);
+    OA_CHECK(kit::measured_line(hooks, 30, false) == 10);
+    OA_CHECK(kit::measured_line(hooks, 12, false) == 1);
+}
+
 } // namespace
 
 int main() {
@@ -851,5 +945,7 @@ int main() {
     the_known_notice_lines_stay();
     the_wrap_matches_every_old_wrap();
     the_paint_wrap_keeps_its_lines();
+    fit_matches_the_screens_copies();
+    the_measure_uses_its_hooks();
     return oa::test::check_exit_status();
 }

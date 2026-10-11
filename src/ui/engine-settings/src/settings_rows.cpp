@@ -41,7 +41,7 @@ using Stepper = kit::Stepper<SettingsModel>;
 using Hint = std::array<std::string_view, 2>;
 
 /// The number of settings: Setting's enumerators.
-constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::hud_scaling) + 1;
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::interface_size) + 1;
 
 // ---------------------------------------------------------------------------
 // The sections' rows.
@@ -65,8 +65,9 @@ constexpr std::array<Setting, 3> kCommonTweaksRows{
     Setting::path_search,
 };
 /// Graphics' rows: how units look zoomed out, the zoom they look so from
-/// right under the way, then the window's frame and the HUD's scaling.
-constexpr std::array<Setting, 12> kGraphicsRows{
+/// right under the way, then the window's frame, the HUD's scaling and,
+/// last, the size Open Annihilation's own screens are drawn at.
+constexpr std::array<Setting, 13> kGraphicsRows{
     Setting::max_frame_rate,
     Setting::anti_aliasing,
     Setting::screen_size,
@@ -79,6 +80,7 @@ constexpr std::array<Setting, 12> kGraphicsRows{
     Setting::zoomed_out_after,
     Setting::window_frame,
     Setting::hud_scaling,
+    Setting::interface_size,
 };
 /// Language's rows: the language first, and the text size right
 /// under the switch it needs.
@@ -189,6 +191,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kModGuardRows,
     kModToolsRows,
     kModChatRows,
+    {},
 };
 /// Each section's name, as its list entry shows it, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageNames{
@@ -206,6 +209,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Guarding",
     "Build tools",
     "Snap & chat",
+    "",
 };
 /// Each section's heading, in capitals, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageHeadings{
@@ -223,6 +227,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "GUARDING BUILDERS",
     "BUILD TOOLS",
     "SNAP & CHAT",
+    "",
 };
 /// Each section's name in kebab case, Page's enumerator with '_' as '-',
 /// in Page's order.
@@ -241,9 +246,10 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "mod-guard",
     "mod-tools",
     "mod-chat",
+    "registered",
 };
 static_assert(
-    static_cast<std::size_t>(Page::mod_chat) + 1 == page_count,
+    static_cast<std::size_t>(Page::registered) + 1 == page_count,
     "every section has its rows, its name, its heading and its word"
 );
 
@@ -293,6 +299,14 @@ constexpr std::array<std::string_view, 2> kWindowFrameCaptions{"Hidden in play",
 static_assert(
     kWindowFrameCaptions.size() == window_frame_choices.size(),
     "every way of Window frame has its caption"
+);
+/// Interface size's choices' texts, in interface_size_choices' order.
+constexpr std::array<std::string_view, 5> kInterfaceSizeCaptions{
+    "Auto", "100%", "200%", "300%", "400%"
+};
+static_assert(
+    kInterfaceSizeCaptions.size() == interface_size_choices.size(),
+    "every Interface size has its caption"
 );
 /// One-finger drag's captions, in touch_drag_choices' order.
 constexpr std::array<std::string_view, 3> kTouchDragCaptions{"Automatic", "Box", "Scroll"};
@@ -1987,6 +2001,11 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
     {.setting = S::hud_scaling,
      .spec = changing(engine_switch<&E::hud_scaling>("hud-scaling", "HUD scaling", {}),
                       &hud_scaling_hint, &lines<2>)},
+    {.setting = S::interface_size,
+     .spec = wide(kit::choice("interface-size", "Interface size",
+                              DropDown<InterfaceSize, 5, interface_size_choices, &E::interface_size, kInterfaceSizeCaptions, &text_word<&interface_size_text, InterfaceSize>>::stepper(),
+                              {"How large Open Annihilation's own screens", "are drawn. Auto suits the window's height."}),
+                  choice_width)},
 }};
 // clang-format on
 
@@ -2060,6 +2079,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "zoomed-out-after",
     "window-frame",
     "hud-scaling",
+    "interface-size",
 };
 
 /// Tells whether every row stands at its setting's place and is named by

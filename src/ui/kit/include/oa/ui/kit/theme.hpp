@@ -97,16 +97,16 @@ namespace screen_colour {
 inline constexpr Colour background = colour::panel;
 /// Cards, rows and sheets.
 inline constexpr Colour panel{0x23, 0x27, 0x21};
-/// Outlines and dividers.
-inline constexpr Colour line{0x3a, 0x40, 0x37};
-/// Text.
-inline constexpr Colour text{0xe8, 0xea, 0xe4};
+/// Outlines and dividers: the dialog's control border.
+inline constexpr Colour line = colour::control_border;
+/// Text: the dialog's text.
+inline constexpr Colour text = colour::text;
 /// Secondary text.
 inline constexpr Colour dim{0x9a, 0xa0, 0x94};
 /// The main button, found and done.
 inline constexpr Colour green = colour::accent;
-/// Warnings.
-inline constexpr Colour amber{0xe8, 0xb4, 0x4c};
+/// Warnings: the dialog's lock.
+inline constexpr Colour amber = colour::lock;
 /// Problems and removals.
 inline constexpr Colour red{0xe0, 0x6c, 0x5c};
 /// The main button's text, dark ink on the green fill.

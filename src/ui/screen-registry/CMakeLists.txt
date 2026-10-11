@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 # The registry of frontend screens that the ui modules and the app fill.
-add_library(oa-ui-screen-registry src/screen_registry.cpp)
+add_library(oa-ui-screen-registry src/screen_registry.cpp src/kit_registrations.cpp)
 add_library(oa::ui::screen_registry ALIAS oa-ui-screen-registry)
 target_include_directories(oa-ui-screen-registry PUBLIC include)
-target_link_libraries(oa-ui-screen-registry PUBLIC oa-options)
+target_link_libraries(oa-ui-screen-registry PUBLIC oa-options oa-ui-kit)
 if(BUILD_TESTING)
   add_executable(oa-screen-registry-test tests/screen_registry_test.cpp)
   target_link_libraries(oa-screen-registry-test PRIVATE oa-ui-screen-registry oa-ui-frontend-state oa-options)
