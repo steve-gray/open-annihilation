@@ -252,6 +252,9 @@ struct InstalledPackage {
     /// The manifest's author.name, as written; empty when it has none or the
     /// kind's manifest names no author.
     std::string author{};
+    /// The manifest's description, as written; empty when it has none or the
+    /// kind's manifest gives none.
+    std::string description{};
 };
 
 /// Tells whether two reads of a folder found the same: kind, id, version

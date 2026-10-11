@@ -153,7 +153,7 @@ optional.
 | `id` | The mod's stable id: lower-case words of `a`-`z` and `0`-`9` joined by single hyphens | `id: example-mod` |
 | `name` | The mod's display name, a string | `name: Example Mod` |
 | `version` | The mod's version, a string | `version: "2.1"` |
-| `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. The Mods page of the Open Annihilation settings shows it under the mod's name and version. | `description: "Larger armies and renamed data directories."` |
+| `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. | `description: "Larger armies and renamed data directories."` |
 | `homepage` | The mod's site: an `http` or `https` address of 1 to 256 bytes, the scheme in either case, with no space or control character. The Library links to it. | `homepage: "https://example.org/example-mod"` |
 | `tags` | One to eight tags the Library files the mod under. Each is 1 to 32 bytes of lower-case words of `a`-`z` and `0`-`9` joined by single hyphens, and none is repeated. An empty list is refused: leave the key out instead. | `tags: [balance, ai]` |
 | `requires` | The base game, the registry catalogue and the Open Annihilation the profile runs on. `base` must be `ta-3.1c` and `catalogue` must be `1`. `engine` is a requirement such as `">= 0.8.0"`, quoted. | `requires: {base: ta-3.1c, catalogue: 1, engine: ">= 0.8.0"}` |
@@ -399,20 +399,21 @@ One profile plays per run. The profile comes from, in order:
    the one the preferences remember;
 3. else the game folder's own `oamod.yaml`, for a copied install.
 
-The **Mods** page of the Open Annihilation settings lists the mod folders
-in the game folder's `mods` folder and in the player's own
-`Documents/Open Annihilation/Mods` folder, the mod being played first. Each
-row shows the mod's badge ([4.5](#45-the-badge)), and from its `oamod.yaml`
-its `name`, its `version` and its `description`; a folder without an
-`oamod.yaml` shows the folder's name, "N/A" and "No oamod.yaml present".
-Choosing another mod there, once the player confirms it, reloads the game's
-data for that mod and returns to the main menu without restarting the game,
-and the choice is remembered for later starts. A remembered mod folder that
-is gone is dropped with a notice. There is no detection of installed mods
-and no built-in list of mods. The [mod support overview](README.md#choosing-a-mod)
-describes the page.
+The Library's **Mods** tab lists, beside the mods installed from packages,
+the mod folders in the game folder's `mods` folder and in the player's own
+`Documents/Open Annihilation/Mods` folder. Each shows the mod's badge
+([4.5](#45-the-badge)), and from its `oamod.yaml` its `name` and its
+`version`, and its details its `description`; a folder without an
+`oamod.yaml` shows the folder's name, "N/A" and, in its details, "No
+oamod.yaml present". PLAY NOW on another mod reloads the game's data for
+that mod and returns to the main menu without restarting the game, and the
+choice is remembered for later starts; SWITCH OFF on the mod being played,
+once the player confirms it, does the same with no mod. A remembered mod
+folder that is gone is dropped with a notice. There is no detection of
+installed mods and no built-in list of mods. The
+[mod support overview](README.md#choosing-a-mod) describes choosing a mod.
 
-The page lists no folder whose name starts with a dot, as file managers
+The Library lists no folder whose name starts with a dot, as file managers
 hide such folders: the folders an install of a `.oamod` package keeps in
 `Mods` while it works are named so.
 
@@ -453,8 +454,8 @@ Game folders are never written to.
 ### 4.5 The badge
 
 A mod folder can hold a badge: a PNG image named `oamod.png`, matched
-without case, beside its `oamod.yaml`. The Mods page shows it, about 40
-pixels across, at the left of the mod's row.
+without case, beside its `oamod.yaml`. The Library shows it beside the
+mod's name.
 
 - Make it square, 64 by 64 pixels. A badge larger than that is scaled down
   to fit within 64 by 64 as it is read, keeping its proportions.
@@ -523,7 +524,7 @@ revisions 1, 2 and 3 leave 3 in the folder and 2 in `.backup`. A reinstall
 leaves `.backup` as it is. Rolling back swaps the folder's version and the
 one in `.backup`, so it can be undone, one version deep. `.backup` is
 invisible to the game: never layered over the game folder, never searched
-for archives, never listed on the Mods page.
+for archives, never listed in the Library.
 
 **How it is put in place.** The files are unpacked into a staging folder
 inside `Mods`, a little at a time, each made anew and synced to storage,
@@ -1162,8 +1163,8 @@ limits) and [src/app](../../src/app/README.md#mod-profile-and-mod-folders)
    when it names one other than 3.1c's `v3.1`. Otherwise the label reads
    "Open Annihilation" and this build's version when the game data names
    its revision, and stays hidden when it does not. It shows the profile's
-   name, version, description and badge on the Mods page of the
-   settings, keeps the game's settings under its registry root, seeds its registry
+   name, version, description and badge in the Library, keeps the game's
+   settings under its registry root, seeds its registry
    values on a first run, and keeps its saves in `Saves/<id>`
    ([4.4](#44-saves-and-settings)).
 

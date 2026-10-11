@@ -195,7 +195,7 @@ latched the closing key and drew a backdrop.
   it rather than stacking a second.
 - **Pushed or queued.** A screen somebody asked for at that moment joins at
   once with `push`: Settings, or a question a screen asks of its own over
-  that screen (the Mods page's refused ROLL BACK over Settings). One nobody
+  that screen (the Library's Switch Mod question over the Library). One nobody
   asked for at that moment, such as a notice or an install's question,
   joins with `show_when_free`: the screens wait first in, first out, and the
   first is pushed while no modal screen shows, no frontend message box is
@@ -524,7 +524,7 @@ runtime goes).
   worker last found, the download queue (each item's state as the Library
   names it; a cancelled one left out) and the run (this build's version,
   the mod played, a match), and for the Active tab what the run already
-  holds: the mod played as Settings › Mods lists it, the language shown and
+  holds: the mod played as list_offered_mods finds it, the language shown and
   the first loaded pack that holds it, and the installed map packs' maps
   (`MapPacks`). GET goes to `queue_download`, UPDATE to
   `request_update` (below), CANCEL and RETRY to the queue's latest item of
@@ -560,11 +560,11 @@ runtime goes).
 - **The actions.** OPEN FOLDER shows the package's folder
   (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
   both recorded in a run nobody watches. SETTINGS… opens Settings over the
-  Library and CLOSE closes it. UPDATE, UPDATE ALL, PLAY NOW and ROLL BACK
-  go through `library_entry_action` (`runtime_library_actions.cpp`):
-  UPDATE calls `Runtime::request_update`, the one place an update reaches
-  the download queue (`DownloadReason::update`), as Settings › Mods' UPDATE
-  does. An added registry's mod whose rules hash changes or cannot be known
+  Library and CLOSE closes it. UPDATE, UPDATE ALL, PLAY NOW, SWITCH OFF,
+  ROLL BACK and CHECK NOW go through `library_entry_action`
+  (`runtime_library_actions.cpp`): UPDATE calls `Runtime::request_update`,
+  the one place an update reaches the download queue
+  (`DownloadReason::update`). An added registry's mod whose rules hash changes or cannot be known
   (`library::asks_before_update`) asks the update question first
   (`update_question`), pushed at once over the screen that asked, NOT NOW
   marked; its UPDATE queues the update and NOT NOW leaves it. Every other
@@ -573,12 +573,20 @@ runtime goes).
   asks nothing, in list order, and asks one question about the others
   (`update_all_question`), whose UPDATE queues them in list order; PLAY NOW
   switches the game to the installed mod's folder (`switch_to_mod_folder`,
-  the soft restart); ROLL BACK asks the Mods page's Roll Back Mod question
-  in its own words (`settings::roll_back_prompt`, with the reload line for
-  the mod being played), pushed over the Library at once, CANCEL marked,
-  and its ROLL BACK rolls the folder back as the Mods page does
-  (`roll_back_mod_folder`), the feed looking again afterwards. A refusal of
-  either shows in the status line. UNINSTALL goes there too, to
+  the soft restart), and a folder it cannot play is told in a note over the
+  Library (`library::switch_refused_note`); SWITCH OFF, on the mod played,
+  asks the Switch Mod question of No Mod (`library::switch_off_question`),
+  pushed over the Library at once, CANCEL marked, whose SWITCH plays no mod
+  through the same switch; ROLL BACK asks the Roll Back Mod question
+  (`library::roll_back_question`, with the reload line for the mod being
+  played), pushed and marked the same way, and its ROLL BACK rolls the
+  folder back (`roll_back_mod_folder`), the feed looking again afterwards,
+  a refusal told in MOD NOT ROLLED BACK over the Library. Every refusal
+  shows in the status line too. PLAY NOW and SWITCH OFF do nothing during
+  a game or while `--mod-dir` or `--base-game` chose the mod, where the
+  Library greys them. CHECK NOW asks the registries again
+  (`content::RefreshReason::check_now`, due whatever Check for updates
+  says). UNINSTALL goes there too, to
   `library_uninstall`: for the mod being played or the language pack in use
   (`Installed::playing`, `Installed::in_use`, which `language_pack_in_use`
   fills, or `package_target_in_use` and `language_pack_in_use` now) it shows
@@ -2863,40 +2871,50 @@ A mod plays in one of two ways, which give the same game:
   layered over a plain game folder: `--mod-dir PATH`, or the folder the
   preferences remember (`open-annihilation.mod-directory`); `--base-game`
   plays without the remembered one, and one that is gone is dropped with a
-  notice (the settings then show No Mod, and their next save stores the
-  choice over it: `EngineSettingsState::dropped_mod_folder`). Either flag
-  locks the Mod setting for the run (`GameState::mod_from_command_line`),
-  and a match locks it while it runs. A game folder holding its own
+  notice (the game then plays no mod, and the next save of the settings
+  stores that over it: `EngineSettingsState::dropped_mod_folder`). Either
+  flag greys the Library's PLAY NOW and SWITCH OFF for the run
+  (`library::Inputs::mod_from_command_line`), as a match does while it
+  runs. A game folder holding its own
   `oamod.yaml` cannot carry a mod folder. A mod folder without an
   `oamod.yaml` layers over the game folder with no profile, by 3.1c's own
   rules, which the start says on standard output.
 
-The settings' **Mods** page (`runtime_engine_settings.cpp`) lists the mod
-folders of the game folder's `mods` folder (`list_mod_folders`), of the
+The **Library** chooses the mod (`runtime_library.cpp`); Settings has no
+Mods page. `list_offered_mods` (`runtime_engine_settings.cpp`) finds the
+mod folders of the game folder's `mods` folder (`list_mod_folders`), of the
 player's own `Documents/Open Annihilation/Mods` (`list_mods_in`), the folder
 an earlier version's Pick Folder... stored
 (`open-annihilation.picked-mod-directory`) while it is the mod stored
 (`open-annihilation.mod-directory`) and still a folder, and the one played;
-a folder listed twice shows once. Once another mod or No Mod is stored, the
-picked folder is forgotten: the save erases its key, a start that finds the
-key naming another folder erases it with the next save, and the folder is
-listed only while the game folder's `mods` folder or the player's own Mods
-holds it. `read_mod_summary`
-(`mod_summary.hpp`) reads each row from the folder alone, without resolving
-its profile: its `oamod.yaml`'s name, version and description, and its
-`oamod.png` badge, decoded by the engine's PNG reader
-(`oa/formats/png.hpp`); a folder without an `oamod.yaml` shows its folder
-name, "N/A" and "No oamod.yaml present". OPEN MODS FOLDER opens
-`Documents/Open Annihilation/Mods` with the Your files buttons' opener.
+a folder found twice counts once. `library_inputs` lists each that the
+installs' own records do not as an installed mod of its own, its key the
+profile's id or the folder's name. Once another mod or No Mod is stored,
+the picked folder is forgotten: the save erases its key, a start that
+finds the key naming another folder erases it with the next save, and the
+folder is listed only while the game folder's `mods` folder or the
+player's own Mods holds it. `read_mod_summary` (`mod_summary.hpp`) reads
+each from the folder alone, without resolving its profile: its
+`oamod.yaml`'s name, version and description, and its `oamod.png` badge,
+decoded by the engine's PNG reader (`oa/formats/png.hpp`), which the
+Library's row shows. The details show the description where no listing
+gives a summary (`library::entry_summary`), as they show the description
+an installed package's manifest gives (`package_install::InstalledPackage`,
+`content::InstalledPackage`); a folder without an `oamod.yaml` shows "N/A"
+for its version and "No oamod.yaml present" in its status line
+(`library::Installed::without_manifest`), and one that cannot be read says
+why in the details. Settings › Your files' Mods opens
+`Documents/Open Annihilation/Mods`.
 
-Choosing another row asks Switch Mod. SWITCH (`DialogAction::switch_mod`)
-first checks the folder as the next start will play it
-(`check_picked_mod_folder`): one it could not play is refused, the line under
-the list says why, and the dialog stays open. Otherwise it puts the dialog's
-settings in effect and saves them as OK does, the new Mod among them, then
-asks for a soft restart (`Runtime::soft_restart_requested`); a save that
-fails leaves the game as it is and says so. The runtime's loop ends after
-that frame. `main()` (`run_once`) frees the textures the runtime made on the
+PLAY NOW on a mod not played, and SWITCH OFF's SWITCH on the mod played,
+call `Runtime::switch_to_mod_folder` (`runtime_mod_install.cpp`), with no
+folder for no mod. A folder is first checked as the next start will play
+it (`check_picked_mod_folder`): one it could not play is refused, a note
+over the Library says why, and nothing changes. Otherwise the new Mod is
+put in effect and saved with the other settings, then a soft restart is
+asked for (`Runtime::soft_restart_requested`); a save that fails leaves
+the game as it is and says so. The runtime's loop ends after that
+frame. `main()` (`run_once`) frees the textures the runtime made on the
 renderer (`Runtime::release_renderer_textures`), destroys the Runtime and the
 mounted archives, runs the game-folder search again, which reads the newly
 stored mod and resolves its profile, sets the data layout again, mounts the
@@ -2929,9 +2947,10 @@ start and play without them, a side without its intgaf's GAF drawn without
 panels and one without its font in COMIX, unmeasured, as sides that name
 none (`Runtime::match_side_file`). The game played without a mod ends its
 start instead when such a file is missing, naming the first: every side's
-intgaf before any side's font (`Runtime::require_side_files`). The Mods
-page refuses a folder without a profile whose start would end on a side's
-missing section or no side at all, before anything is stored
+intgaf before any side's font (`Runtime::require_side_files`). The
+Library's PLAY NOW refuses a folder without a profile whose start would
+end on a side's missing section or no side at all, before anything is
+stored
 (`Runtime::side_data_problem_over`). SIDEDATA and the files its sides name
 are looked for in the language folders of the language the game starts in
 first (`gamedata-German`, `anims-German`, `fonts-German`), once for the
@@ -2952,7 +2971,7 @@ same (`Runtime::start_skirmish_from_setup`) leaves no match and sets the
 skirmish setup up again, with the warning or the failure in a message box,
 in place of ending the program. `--check-mod-warning`
 (`native-mod-warning`, `runtime_mod_warning_check.cpp`) checks the warning
-and the refused start through the Mods page's Switch Mod question, the
+and the refused start through the Library's PLAY NOW and its note, the
 main menu's warning in 1280x720 and 1920x1080 windows at Large 1× and
 Regular 2× too.
 
@@ -3061,13 +3080,13 @@ in place, and how what a stop leaves is settled). The runtime's part:
   pumping events while it waits for files another program holds. What came
   of it is told: MOD INSTALLED, MOD UPDATED or MOD NOT INSTALLED, with OPEN
   FOLDER and, where the Mod setting is the player's to change, PLAY NOW
-  (`Runtime::switch_to_mod_folder`, the Mods page's own switch). A run
+  (`Runtime::switch_to_mod_folder`, the Library's own switch). A run
   nobody watches leaves packages waiting, but for a catalogue language
   pack, a mod chosen in the Library while the Library is the top screen,
   and a catalogue map pack while the map browser is the top screen or GET
   MAP shows over the battle room ([The Library](#the-library)).
 - **The mod played.** A replace or reinstall of the folder the game plays,
-  once unpacked and checked as the Mods page checks a folder, waits in
+  once unpacked and checked as PLAY NOW checks a folder, waits in
   `set_pending_change`, holding the Mods folder's lock, and the run ends
   (`request_soft_restart`); `main()` makes the change between runs, once
   the runtime and its archives are gone, and the next run tells it. A mod
@@ -3077,19 +3096,16 @@ in place, and how what a stop leaves is settled). The runtime's part:
   for each kind's root folder (Mods for a mod, Maps for a map pack), before the mod
   folder is resolved, so that a stop mid-change never drops the Mod
   setting. A file of no known kind is told NOT INSTALLED and is not read.
-- **ROLL BACK** on the Mods page (`Runtime::roll_back_mod_folder`, which
-  takes the folder and the Library calls too): a folder
-  of the player's own Mods folder whose `.backup` keeps an earlier version
-  of its mod, one a pick would accept, offers it
-  (`ModDetails::roll_back_from`, filled by `list_offered_mods`). The kept
-  version is checked again first; then the folder is swapped at once, or,
-  for the mod played, as the run ends, Settings keeping its choices,
-  saving them and closing as SWITCH does. A roll back refused, the kept
-  version changed since the page listed it or the swap undone, is told in
-  a prompt over the dialog (MOD NOT ROLLED BACK,
-  `ModInstallState::roll_back_refusal`), pushed over it at once with
-  Settings darkened under it, whose OK returns to it; the Library shows the
-  same words in the status line.
+- **ROLL BACK** in the Library (`Runtime::roll_back_mod_folder`, which
+  takes the folder): a folder of the player's own Mods folder whose
+  `.backup` keeps an earlier version of its mod, one PLAY NOW would accept,
+  offers it (`OfferedMod::roll_back`, filled by `list_offered_mods`; the
+  Library hides the kept version otherwise). The kept version is checked
+  again first; then the folder is swapped at once, or, for the mod played,
+  as the run ends. A roll back refused, the kept version changed since it
+  was listed or the swap undone, is told in a prompt over the Library (MOD
+  NOT ROLLED BACK, `ModInstallState::roll_back_refusal`), pushed over it at
+  once, whose OK returns to it; the status line shows the same words.
 - **Registering the file type.** A start someone plays makes the game the
   opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files for the player
   where the system registers at run

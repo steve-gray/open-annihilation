@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// What the Library's entries ask of the game: ROLL BACK, which asks the Mods
-// page's Roll Back Mod question over the Library and rolls the folder back as
-// the Mods page does; PLAY NOW, which switches the game to the mod; UPDATE
-// and UPDATE ALL, which start updates through request_update, the one place
-// an update reaches the download queue; and UNINSTALL, which asks first and
-// removes an installed package's folder, never the mod being played or the
-// language pack in use. Settings › Mods' UPDATE comes here too. An update
-// that may stop saved games loading, of a mod from a registry the player
-// added, asks the update question first (oa::ui::library::asks_before_update);
+// What the Library's entries ask of the game: ROLL BACK, which asks the Roll
+// Back Mod question over the Library and rolls the folder back, a refusal
+// told in a prompt; PLAY NOW, which switches the game to the mod, a refusal
+// told in a note; SWITCH OFF, which asks the Switch Mod question and plays
+// the game with no mod; UPDATE and UPDATE ALL, which start updates through
+// request_update, the one place an update reaches the download queue;
+// UNINSTALL, which asks first and removes an installed package's folder,
+// never the mod being played or the language pack in use; and the footer's
+// CHECK NOW, which asks the registries for their lists again. An update that
+// may stop saved games loading, of a mod from a registry the player added,
+// asks the update question first (oa::ui::library::asks_before_update);
 // every other starts at once.
 
 #include "library_host.hpp"
@@ -18,13 +20,15 @@
 #include "package_paths.hpp"
 
 #include "oa/app/content/downloads.hpp"
+#include "oa/app/content/service.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/base/threads.hpp"
-#include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/text.hpp"
 #include "oa/ui/library/uninstall.hpp"
 #include "oa/ui/library/update_question.hpp"
@@ -47,14 +51,10 @@
 
 namespace oa::app {
 
-namespace settings = oa::ui::engine_settings;
 namespace library = oa::ui::library;
 namespace install = oa::app::package_install;
 
 namespace {
-
-/// The name the Roll Back question's ROLL BACK has to automation.
-constexpr std::string_view kRollBackWord = "roll-back";
 
 /// The longest a wait between an uninstall's tries sleeps before the
 /// window's events are pumped again, in milliseconds.
@@ -65,6 +65,18 @@ constexpr uint32_t kUninstallWaitSliceMs = 50;
 /// @param line the line
 void library_log(std::string_view line) {
     std::cerr << "open-annihilation: library: " << line << '\n';
+}
+
+/// Returns the place of a question's button with an id.
+///
+/// @param question the question
+/// @param id the button's name to automation
+/// @return its place, from 0; -1 when the question has none such
+int32_t button_named(const oa::ui::kit::Question& question, std::string_view id) {
+    for (std::size_t place = 0; place < question.buttons.size(); ++place)
+        if (question.buttons[place].id == id)
+            return static_cast<int32_t>(place);
+    return -1;
 }
 
 /// Returns the installer's kind of a Library entry's kind.
@@ -119,6 +131,12 @@ void wait_pumping_events(void*, uint32_t milliseconds) {
 
 void Runtime::library_entry_action(library::Action action, const library::EntryId& entry) {
     LibraryHost& host = library_host();
+    if (action == library::Action::check_now) {
+        // CHECK NOW: the registries are asked for their lists again; the
+        // header's age and CHECK NOW itself follow the check.
+        content_service().refresh(content::RefreshReason::check_now);
+        return;
+    }
     if (action == library::Action::update) {
         std::ignore = request_update(entry);
         return;
@@ -172,23 +190,69 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
     if (found == nullptr || found->installed == nullptr)
         return;
     const fs::path folder = found->installed->folder;
+    OaLayer& layer = oa_layer();
+    // The mod played changes only from the main menu, and never while the
+    // command line chose it: PLAY NOW and SWITCH OFF are off then.
+    const bool switching =
+        action == library::Action::play_now || action == library::Action::switch_off;
+    if (switching && (screen_ == Screen::match || match_ != nullptr || !options_.mod_dir.empty() ||
+                      options_.base_game))
+        return;
     if (action == library::Action::play_now) {
         std::string refusal;
         if (!switch_to_mod_folder(folder, refusal)) {
             status_ = refusal;
             library_log("PLAY NOW: " + refusal);
+            // The refusal is told over the Library, under the Switch Mod
+            // question's title, until OK.
+            QuestionScreen::Host told;
+            told.tick = [this] { return screen_ != Screen::main_menu; };
+            layer.push(
+                std::make_unique<QuestionScreen>(
+                    layer,
+                    Screen::main_menu,
+                    library::switch_refused_note(
+                        oa::data::languages::interface_text(refusal), host.model.text
+                    ),
+                    told
+                )
+            );
         }
+        return;
+    }
+    if (action == library::Action::switch_off) {
+        // The Switch Mod question of no mod: CANCEL leaves the mod played,
+        // SWITCH plays none.
+        oa::ui::kit::Question asked = library::switch_off_question(host.model.text);
+        const int32_t switch_button = button_named(asked, library::switch_button_id);
+        QuestionScreen::Host answers;
+        answers.answer = [this, switch_button](int32_t button) {
+            if (button != switch_button)
+                return true;
+            std::string refusal;
+            if (!switch_to_mod_folder({}, refusal)) {
+                status_ = refusal;
+                library_log("SWITCH OFF: " + refusal);
+            }
+            return true;
+        };
+        answers.tick = [this] { return screen_ != Screen::main_menu; };
+        layer.push(
+            std::make_unique<QuestionScreen>(layer, Screen::main_menu, std::move(asked), answers)
+        );
         return;
     }
     if (action != library::Action::roll_back)
         return;
-    // A refusal shows in the status line, and the Library's feed looks
-    // again: the version put back may have an update.
+    // A refusal is told in a prompt over the Library (MOD NOT ROLLED BACK)
+    // and in the status line, and the Library's feed looks again: the
+    // version put back may have an update.
     const auto roll_back = [this, folder] {
         std::string refusal;
         if (!roll_back_mod_folder(folder, refusal)) {
             status_ = refusal;
             library_log("ROLL BACK: " + refusal);
+            mod_install_state().tell_roll_back_refusal(*this);
         }
         if (library_) {
             library_->look_again(*this);
@@ -203,21 +267,19 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
         roll_back();
         return;
     }
-    // The Mods page's Roll Back Mod question, in its words, over the
-    // Library: CANCEL closes it, ROLL BACK rolls the folder back.
+    // The Roll Back Mod question over the Library: CANCEL closes it, ROLL
+    // BACK rolls the folder back.
     const bool same_version = installed.version == kept->version;
     const std::string title =
         installed.name.empty() ? std::string(library::entry_name(*found)) : installed.name;
-    settings::Prompt asked = settings::roll_back_prompt(
+    oa::ui::kit::Question asked = library::roll_back_question(
         title,
         install::oamod::version_label(installed.version, installed.revision, same_version),
         install::oamod::version_label(kept->version, kept->revision, same_version),
-        package_target_in_use(install::mod_kind(), folder)
+        package_target_in_use(install::mod_kind(), folder),
+        host.model.text
     );
-    int32_t roll_back_button = -1;
-    for (std::size_t place = 0; place < asked.buttons.size(); ++place)
-        if (asked.buttons[place].id == kRollBackWord)
-            roll_back_button = static_cast<int32_t>(place);
+    const int32_t roll_back_button = button_named(asked, library::roll_back_button_id);
     QuestionScreen::Host answers;
     answers.answer = [roll_back, roll_back_button](int32_t button) {
         if (button == roll_back_button)
@@ -226,7 +288,6 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
     };
     // It goes with the main menu, as the Library does.
     answers.tick = [this] { return screen_ != Screen::main_menu; };
-    OaLayer& layer = oa_layer();
     layer.push(
         std::make_unique<QuestionScreen>(layer, Screen::main_menu, std::move(asked), answers)
     );

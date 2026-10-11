@@ -19,6 +19,7 @@
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
 
@@ -32,8 +33,10 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -59,6 +62,7 @@ namespace {
 
 namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
+namespace library = oa::ui::library;
 namespace artless = oa::ui::frontend_renderer;
 namespace layout = oa::ui::display_layout;
 
@@ -181,8 +185,6 @@ void require(bool ok, std::string_view what) {
 /// @return a short name
 std::string_view page_slug(settings::Page page) {
     switch (page) {
-    case settings::Page::mods:
-        return "mods";
     case settings::Page::controls:
         return "controls";
     case settings::Page::common_tweaks:
@@ -214,8 +216,7 @@ std::string_view page_slug(settings::Page page) {
 }
 
 /// The dialog's sections, in the order its list shows them.
-constexpr std::array<settings::Page, 6> kPages{
-    settings::Page::mods,
+constexpr std::array<settings::Page, 5> kPages{
     settings::Page::controls,
     settings::Page::common_tweaks,
     settings::Page::language,
@@ -334,10 +335,6 @@ std::string_view label_of(settings::Setting setting) {
         return "Text size";
     case settings::Setting::language:
         return "Language";
-    case settings::Setting::mod:
-        // Mods' rows draw their texts inside the row; the button under them
-        // is what the layout names.
-        return "OPEN MODS FOLDER";
     case settings::Setting::user_folder:
         return "Your files";
     case settings::Setting::kit_gallery:
@@ -1521,15 +1518,17 @@ void Runtime::check_engine_settings_dialog() {
             "Escape did not put Haptics back"
         );
     }
-    // Mods: the mod played first, marked PLAYING, then the mods by title as
-    // their oamod.yaml names them, a folder without one by its name, and a
-    // folder an earlier version's Pick Folder... stored while it is the mod
-    // stored and still a folder. A click on another row asks the Switch Mod
-    // question, which CANCEL puts away with nothing changed. --base-game
-    // locks the page and says so; SWITCH from the picked folder played to No
-    // Mod forgets the folder, as a start does a picked folder that is not
-    // the mod stored; a stored mod folder that is gone reads as No Mod,
-    // played, and OK replaces it.
+    // Settings has no Mods section: the mods are chosen in the Library, as
+    // the run's own feed lists them. No mod plays, so none is PLAYING; the
+    // mods are listed by title as their oamod.yaml names them, a folder
+    // without one by its name, and a folder an earlier version's Pick
+    // Folder... stored while it is the mod stored and still a folder, each
+    // with PLAY NOW, which the main menu offers. --base-game turns PLAY NOW
+    // off and says so; SWITCH OFF on the picked folder played asks the
+    // Switch Mod question, which Escape and CANCEL put away with nothing
+    // changed, and SWITCH plays no mod and forgets the folder, as a start
+    // does a picked folder that is not the mod stored; a stored mod folder
+    // that is gone reads as no mod played, and OK replaces it.
     {
         auto& state = engine_settings_state();
         const fs::path base = fs::absolute(preference_path_).parent_path();
@@ -1549,116 +1548,96 @@ void Runtime::check_engine_settings_dialog() {
         preference_values_[picked_key] = picked;
         list_offered_mods();
         const auto parts_now = [&] { return settings::dialog_layout(*engine_settings_dialog()); };
-        open("for Mods");
-        click(settings::page_control(settings::Page::mods), {}, "Mods' entry");
-        // Out of a game the main menu chooses the mod: the page is not locked.
-        require(
-            engine_settings_dialog()->locks.mod == settings::Lock::none &&
-                !shows_text(
-                    parts_now(), "Locked during a game. Choose the mod from the main menu."
-                ),
-            "Mods is locked on the main menu"
-        );
+        open("without Mods");
         {
             const auto listed = parts_now();
-            const auto* listing = engine_settings_dialog();
-            const auto rows = settings::mod_rows(*listing);
-            const auto titled = std::find(
-                listing->mod_names.begin(), listing->mod_names.end(), "Picked folder check"
-            );
             require(
-                !rows.empty() && rows.front().playing &&
-                    rows.front().offered == settings::no_mod_row &&
-                    titled != listing->mod_names.end() &&
-                    listing->mod_folders[static_cast<std::size_t>(
-                        std::distance(listing->mod_names.begin(), titled)
-                    )] == picked &&
-                    shows_text(listed, "OPEN MODS FOLDER"),
-                "Mods does not list No Mod played first and the stored picked folder by its title"
+                !shows_text(listed, "Mods") && !shows_text(listed, "OPEN MODS FOLDER") &&
+                    !shows_text(listed, "No Mod"),
+                "Settings still lists a Mods section"
             );
         }
-        const auto row_of = [&](const std::string& folder) {
-            const auto* dialog_now = engine_settings_dialog();
-            const auto rows = settings::mod_rows(*dialog_now);
-            for (std::size_t index = 0; index < rows.size(); ++index)
-                if (rows[index].offered >= 0 &&
-                    dialog_now->mod_folders[static_cast<std::size_t>(rows[index].offered)] ==
-                        folder)
-                    return settings::first_row_control + static_cast<int32_t>(index);
-            return settings::no_control;
+        click(settings::cancel_control, "CANCEL", "Cancel");
+        // The Library over the mod folders the run lists.
+        LibraryHost& host = library_host();
+        // A Library opens on Active: the mods are chosen on its Mods tab.
+        const auto library_now = [&] {
+            list_offered_mods();
+            host.rebuild(*this);
+            library::set_tab(host.model, library::Tab::mods);
         };
-        const int32_t picked_row = row_of(picked);
-        require(picked_row != settings::no_control, "Mods does not list the stored picked folder");
-        click(picked_row, {}, "the picked folder's row");
-        {
-            const auto asked = parts_now();
-            require(
-                engine_settings_dialog()->switch_question != settings::no_question &&
-                    shows_text(asked, "SWITCH MOD") &&
-                    find_part(asked, settings::question_yes_control, "SWITCH") != nullptr &&
-                    find_part(asked, settings::question_no_control, "CANCEL") != nullptr,
-                "a click on another mod's row did not ask the Switch Mod question"
-            );
-        }
-        if (!options_.snapshot.empty())
-            write_ppm(step_snapshot(options_.snapshot, "menu-dialog-mod-question"), frame());
-        tap(SDLK_ESCAPE);
-        require(
-            engine_settings_dialog() != nullptr &&
-                engine_settings_dialog()->switch_question == settings::no_question &&
-                engine_settings_dialog()->chosen.mod_folder.empty() &&
-                engine_settings().mod_folder.empty(),
-            "Escape on the question did not put it away and keep the Mod as it was"
-        );
-        click(picked_row, {}, "the picked folder's row");
-        click(settings::question_no_control, "CANCEL", "the question's CANCEL");
-        require(
-            engine_settings_dialog()->switch_question == settings::no_question &&
-                engine_settings_dialog()->chosen.mod_folder.empty(),
-            "CANCEL changed the Mod"
-        );
-        click(settings::cancel_control, "CANCEL", "Cancel");
-        // --base-game sets the Mod setting aside for the run: the page keeps
-        // the stored choice under its lock and says so.
-        options_.base_game = true;
-        open("with --base-game");
-        click(settings::page_control(settings::Page::mods), {}, "Mods' entry");
-        {
-            const auto locked_parts = parts_now();
-            require(
-                engine_settings_locks().mod == settings::Lock::command_line &&
-                    shows_text(locked_parts, "The command line chose this run's mod."),
-                "--base-game does not lock Mods and say so"
-            );
-        }
-        if (!options_.snapshot.empty())
-            write_ppm(step_snapshot(options_.snapshot, "menu-dialog-mod-locked"), frame());
-        // A locked row answers to no control: a press on its place and the
-        // keys ask nothing.
-        {
-            auto* locked = engine_settings_dialog();
-            auto unlocked = *locked;
-            unlocked.locks = {};
-            const int32_t control = row_of(picked);
-            for (const auto& part : settings::dialog_layout(unlocked))
-                if (part.control == control) {
-                    const int32_t x = part.rect.x + part.rect.width / 2;
-                    const int32_t y = part.rect.y + part.rect.height / 2;
-                    std::ignore = settings::dialog_pointer_down(*locked, x, y);
-                    std::ignore = settings::dialog_pointer_up(*locked, x, y);
+        const auto entry_at = [&host](const std::string& folder) -> const library::Entry* {
+            for (const library::Entry& each : host.model.entries)
+                if (each.id.kind == library::Kind::mod && each.installed != nullptr &&
+                    path_to_utf8(fs::absolute(each.installed->folder).lexically_normal()) == folder)
+                    return &each;
+            return nullptr;
+        };
+        const auto offers = [&host](const library::Entry& entry, library::Action wanted) {
+            for (const library::ActionButton& button : library::entry_actions(host.model, entry))
+                if (button.action == wanted)
+                    return button.enabled ? 1 : 0;
+            return -1;
+        };
+        const auto none_playing = [&host] {
+            return std::none_of(
+                host.model.entries.begin(),
+                host.model.entries.end(),
+                [](const library::Entry& each) {
+                    return each.installed != nullptr && each.installed->playing;
                 }
-            for (const auto key : {SDLK_DOWN, SDLK_SPACE, SDLK_Y})
-                tap(key);
+            );
+        };
+        // Answers the question on top of the OA layer with a key, as the layer does.
+        const auto answer = [this](oa::ui::kit::Key key, uint32_t sdl_key) {
+            LayerScreen* top = oa_layer().top();
+            require(top != nullptr, "no question shows to answer");
+            oa_layer().take_answer(*top, top->key(key, sdl_key), sdl_key);
+            oa_layer().forget_latched_key();
+        };
+        const auto switch_question = [this]() -> const QuestionScreen* {
+            const auto* asked = dynamic_cast<const QuestionScreen*>(oa_layer().top());
+            if (asked == nullptr || asked->question().title != "SWITCH MOD")
+                return nullptr;
+            return asked;
+        };
+        library_now();
+        {
+            const library::Entry* listed = entry_at(picked);
+            require(
+                none_playing() && listed != nullptr &&
+                    listed->installed->name == "Picked folder check" &&
+                    offers(*listed, library::Action::play_now) == 1 &&
+                    offers(*listed, library::Action::switch_off) == -1,
+                "the Library does not list the stored picked folder by its title with PLAY NOW, "
+                "no mod played"
+            );
         }
-        require(
-            engine_settings_dialog() != nullptr &&
-                engine_settings_dialog()->switch_question == settings::no_question,
-            "a locked row asked the Switch Mod question under --base-game"
-        );
-        click(settings::cancel_control, "CANCEL", "Cancel");
+        // --base-game sets the Mod setting aside for the run: PLAY NOW is
+        // off, the details say why, and PLAY NOW asks nothing.
+        options_.base_game = true;
+        library_now();
+        {
+            const library::Entry* listed = entry_at(picked);
+            require(listed != nullptr, "the Library does not list the picked folder");
+            const library::EntryId id = listed->id;
+            library::select(host.model, id);
+            require(
+                offers(*listed, library::Action::play_now) == 0 &&
+                    library::playing_note(host.model) == "The command line chose this run's mod.",
+                "--base-game does not turn PLAY NOW off and say so"
+            );
+            library_entry_action(library::Action::play_now, id);
+            require(
+                !soft_restart_requested() && engine_settings().mod_folder.empty() &&
+                    switch_question() == nullptr,
+                "PLAY NOW switched the mod or asked under --base-game"
+            );
+        }
         options_.base_game = false;
-        // SWITCH from the picked folder played to No Mod erases both keys,
-        // and the next start, which plays No Mod, no longer lists the folder.
+        // SWITCH OFF from the picked folder played to no mod erases both
+        // keys, and the next start, which plays no mod, no longer lists the
+        // folder.
         {
             const auto lists_picked = [&] {
                 return std::find(state.mod_folders.begin(), state.mod_folders.end(), picked) !=
@@ -1674,15 +1653,45 @@ void Runtime::check_engine_settings_dialog() {
                     preference_values_.contains(picked_key),
                 "the picked folder stored does not play"
             );
-            open("over the picked folder played");
-            click(settings::page_control(settings::Page::mods), {}, "Mods' entry");
-            int32_t no_mod_control = settings::no_control;
-            const auto rows = settings::mod_rows(*engine_settings_dialog());
-            for (std::size_t index = 0; index < rows.size(); ++index)
-                if (rows[index].offered == settings::no_mod_row)
-                    no_mod_control = settings::first_row_control + static_cast<int32_t>(index);
-            click(no_mod_control, {}, "No Mod's row");
-            click(settings::question_yes_control, "SWITCH", "the question's SWITCH");
+            library_now();
+            const library::Entry* played = entry_at(picked);
+            require(
+                played != nullptr && played->installed->playing &&
+                    offers(*played, library::Action::switch_off) == 1 &&
+                    offers(*played, library::Action::play_now) == -1,
+                "the picked folder played offers no SWITCH OFF"
+            );
+            const library::EntryId id = played->id;
+            library_entry_action(library::Action::switch_off, id);
+            {
+                const QuestionScreen* asked = switch_question();
+                require(
+                    asked != nullptr && asked->question().buttons.size() == 2 &&
+                        asked->question().buttons[0].id == "cancel" &&
+                        asked->question().buttons[1].id == "switch" &&
+                        asked->question().buttons[1].caption == "SWITCH" &&
+                        asked->question().marked == 0,
+                    "SWITCH OFF did not ask the Switch Mod question"
+                );
+            }
+            if (!options_.snapshot.empty())
+                write_ppm(step_snapshot(options_.snapshot, "menu-switch-off-question"), frame());
+            answer(oa::ui::kit::Key::escape, SDLK_ESCAPE);
+            require(
+                switch_question() == nullptr && !soft_restart_requested() &&
+                    engine_settings().mod_folder == picked,
+                "Escape on the question did not put it away and keep the Mod as it was"
+            );
+            library_entry_action(library::Action::switch_off, id);
+            require(switch_question() != nullptr, "a second SWITCH OFF did not ask again");
+            answer(oa::ui::kit::Key::enter, SDLK_RETURN);
+            require(
+                switch_question() == nullptr && !soft_restart_requested() &&
+                    engine_settings().mod_folder == picked,
+                "CANCEL changed the Mod"
+            );
+            library_entry_action(library::Action::switch_off, id);
+            answer(oa::ui::kit::Key::yes, SDLK_Y);
             const auto switched = oa::platform::preferences::load(preference_path_);
             require(
                 soft_restart_requested() && engine_settings_dialog() == nullptr &&
@@ -1693,7 +1702,11 @@ void Runtime::check_engine_settings_dialog() {
             exit_requested_ = false;
             options_.game_folders = game_folders;
             load_engine_settings();
-            require(!lists_picked(), "Mods lists the picked folder after a switch away from it");
+            library_now();
+            require(
+                !lists_picked() && entry_at(picked) == nullptr,
+                "the Library lists the picked folder after a switch away from it"
+            );
             // A picked folder's key that names a folder other than the mod
             // stored is erased at start, and the folder is not listed.
             preference_values_[picked_key] = picked;
@@ -1703,8 +1716,8 @@ void Runtime::check_engine_settings_dialog() {
                 "a start kept a picked folder that is not the mod stored"
             );
         }
-        // A stored mod folder that is gone, which the start dropped: No Mod
-        // shows as played, and OK replaces the stored folder.
+        // A stored mod folder that is gone, which the start dropped: no mod
+        // plays, and OK replaces the stored folder.
         const std::string gone = path_to_utf8((base / "gone-mod").lexically_normal());
         preference_values_[mod_key] = gone;
         oa::platform::preferences::save(preference_path_, preference_values_);
@@ -1713,16 +1726,9 @@ void Runtime::check_engine_settings_dialog() {
             engine_settings().mod_folder.empty() && state.dropped_mod_folder == gone,
             "a gone mod folder stored did not read as No Mod"
         );
+        library_now();
+        require(none_playing(), "the Library over a gone mod folder shows a mod played");
         open("over a gone mod folder");
-        click(settings::page_control(settings::Page::mods), {}, "Mods' entry");
-        {
-            const auto rows = settings::mod_rows(*engine_settings_dialog());
-            require(
-                !rows.empty() && rows.front().playing &&
-                    rows.front().offered == settings::no_mod_row,
-                "Mods over a gone mod folder does not show No Mod as played"
-            );
-        }
         click(settings::ok_control, "OK", "OK");
         const auto saved_mod = oa::platform::preferences::load(preference_path_);
         require(

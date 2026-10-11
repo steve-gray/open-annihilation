@@ -21,17 +21,18 @@
 // leave the mod, CANCEL on that line drops it and the update is taken again
 // and held, and PLAY NOW switches to another mod; the third finds the
 // update put in place as the mod was switched, then asks for made-up updates:
-// an added registry's whose rules change asks the update question first,
-// from the Library and from Settings › Mods, NOT NOW leaving it and UPDATE
-// queuing it, and one that keeps the rules is queued at once; the built-in
-// registry's whose rules change, or cannot be known, are queued at once from
-// both, their rows and Rules facts saying so before; and UPDATE ALL queues
-// the built-in one at once and asks about the added one only; then UNINSTALL:
-// off for a map pack during a game, a notice for the language pack in use
-// and for the mod being played, each keeping its folder, the question for a
-// built-in registry's mod, CANCEL removing nothing and UNINSTALL its folder
-// with the copy ROLL BACK keeps, its row staying not installed, and a mod of
-// the player's own leaving the Library. The fourth is
+// an added registry's whose rules change asks the update question first, NOT
+// NOW leaving it and UPDATE queuing it, and one that keeps the rules is
+// queued at once; the built-in registry's whose rules change, or cannot be
+// known, are queued at once, their status lines and Rules facts saying so
+// before, and again each in turn, CHECK NOW offered once a registry can be
+// asked; and UPDATE ALL queues the built-in one at once and asks about the
+// added one only; then UNINSTALL: off for a map pack during a game, a notice
+// for the language pack in use and for the mod being played, each keeping
+// its folder, the question for a built-in registry's mod, CANCEL removing
+// nothing and UNINSTALL its folder with the copy ROLL BACK keeps, its row
+// staying not installed, and a mod of the player's own leaving the Library.
+// The fourth is
 // a run nobody watches, on SDL's dummy video driver without the prompts the
 // other runs show: a built-in registry's update waits in the inbox while the
 // Library is closed, then installs with no prompt once the Library shows,
@@ -775,7 +776,7 @@ void Runtime::check_library_install() {
                     question.paragraphs[0].text ==
                         "Roll back Ridge to 1.0 revision 3? 1.0 revision 4 is kept in its place, "
                         "and ROLL BACK again brings it back.",
-                "ROLL BACK's question is not the Mods page's for Ridge"
+                "ROLL BACK's question is not the Roll Back Mod question for Ridge"
             );
         }
         tap(SDLK_ESCAPE);
@@ -1245,64 +1246,79 @@ void Runtime::check_library_install() {
             "the built-in registry's update with unknown rules asked or was not queued"
         );
 
-        // From Settings › Mods: the rows say what the updates do; the
-        // built-in registry's are queued at once, and Ember asks over the
-        // dialog.
-        close_the_library();
-        open_engine_settings_from_menu();
-        frames();
-        require(top_is("settings") && engine_settings_dialog() != nullptr, "Settings did not open");
-        click_named("oa.settings.nav.mods");
-        frames();
+        // Again, each in turn: each
+        // entry's status line and Rules fact say what its update does, CHECK
+        // NOW can ask the registries, the built-in registry's updates are
+        // queued at once, and Ember asks over the Library.
+        const auto status_says = [&](std::string_view part) {
+            const std::optional<AutomationControl> status = named("oa.library.status");
+            return status.has_value() && status->text.find(part) != std::string::npos;
+        };
+        show_entry("oa.library.row.check-builtin.ridge");
+        require(
+            status_says("Revision 6 available · 3.2 MB") && rules_say("changes the game's rules"),
+            "the Library does not say what Ridge's update does"
+        );
+        show_entry("oa.library.row.check-builtin.lattice");
+        require(
+            status_says("Revision 2 available · 3.2 MB") && rules_say("unknown"),
+            "the Library does not say what Lattice's update does"
+        );
+        show_entry("oa.library.row.check-added.ember");
+        require(
+            status_says("Revision 2 available · 3.2 MB") && rules_say("changes the game's rules"),
+            "the Library does not say what Ember's update does"
+        );
         {
-            const settings::Dialog* dialog = engine_settings_dialog();
-            const auto line_of = [&](const fs::path& folder) -> std::string {
-                for (std::size_t index = 0;
-                     index < dialog->mod_folders.size() && index < dialog->mod_details.size();
-                     ++index)
-                    if (dialog->mod_folders[index] == kept_path(folder) &&
-                        dialog->mod_details[index].update_offered)
-                        return dialog->mod_details[index].update_text;
-                return {};
-            };
+            // CHECK NOW is in the list's footer: Compact's details page goes
+            // back to the list first.
+            if (named("oa.library.back"))
+                click_named("oa.library.back");
+            const std::optional<AutomationControl> off = named("oa.library.check-now");
             require(
-                dialog != nullptr && dialog->page == settings::Page::mods &&
-                    line_of(ridge) == "Revision 6 changes the rules · 3.2 MB" &&
-                    line_of(mods / std::string(kLattice)) ==
-                        "Revision 2 may change the rules · 3.2 MB" &&
-                    line_of(mods / std::string(kEmber)) == "Revision 2 changes the rules · 3.2 MB",
-                "Settings › Mods' rows do not say what their updates do"
+                off.has_value() && !off->enabled,
+                "the Library offers CHECK NOW with no registry to ask"
             );
+            fixture.inputs.can_check = true;
+            ++fixture.generation;
+            frames();
+            const std::optional<AutomationControl> on = named("oa.library.check-now");
             require(
-                !dialog->mods_check_text.empty() && dialog->mods_library_offered,
-                "Settings › Mods shows no line on the check for updates, or no GET MORE MODS…"
+                on.has_value() && on->enabled,
+                "the Library offers no CHECK NOW to ask the registries"
             );
+            fixture.inputs.can_check = false;
+            ++fixture.generation;
+            frames();
         }
-        click_named("oa.settings.mod.ridge.update");
+        show_entry("oa.library.row.check-builtin.ridge");
+        press_action("update");
         require(
-            top_is("settings") && fixture.queued.size() == 5 && queued_now(kBuiltIn, kRidge),
-            "UPDATE on Ridge's row asked or did not queue its update"
+            top_is(library_screen_name) && fixture.queued.size() == 5 &&
+                queued_now(kBuiltIn, kRidge),
+            "UPDATE on Ridge's entry asked or did not queue its update"
         );
-        click_named("oa.settings.mod.lattice.update");
+        show_entry("oa.library.row.check-builtin.lattice");
+        press_action("update");
         require(
-            top_is("settings") && fixture.queued.size() == 6 && queued_now(kBuiltIn, kLattice),
-            "UPDATE on Lattice's row asked or did not queue its update"
+            top_is(library_screen_name) && fixture.queued.size() == 6 &&
+                queued_now(kBuiltIn, kLattice),
+            "UPDATE on Lattice's entry asked or did not queue its update"
         );
-        click_named("oa.settings.mod.ember.update");
-        asks_update("Update Ember", "settings");
+        show_entry("oa.library.row.check-added.ember");
+        press_action("update");
+        asks_update("Update Ember", library_screen_name);
         tap(SDLK_ESCAPE);
         require(
-            top_is("settings") && fixture.queued.size() == 6,
-            "NOT NOW on the update question over Settings queued Ember's update"
+            top_is(library_screen_name) && fixture.queued.size() == 6,
+            "NOT NOW on the update question over the Library queued Ember's update"
         );
         std::cout << "library install check: built-in update queued with no question\n";
 
         // UPDATE ALL: the built-in registry's updates, and the added one's
         // that keeps the rules, at once in list order; one question about
         // Ember alone, NOT NOW leaving it.
-        tap(SDLK_ESCAPE);
-        frame();
-        require(engine_settings_dialog() == nullptr, "Escape did not close Settings");
+        close_the_library();
         fixture.queued.clear();
         list_installed();
         open_library(library::Tab::updates);

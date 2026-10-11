@@ -38,7 +38,7 @@ and answers (`src/app/runtime_mod_install.cpp`,
 - `recover_changes` settles what a stop left, and `Discarder` deletes the
   folders a change drops a little at a time.
 - `read_installed_mod` and `read_backup`, the oamod kind's, read what a
-  folder and its `.backup` hold, for the plan and the Mods page's ROLL BACK.
+  folder and its `.backup` hold, for the plan and the Library's ROLL BACK.
 
 `oa/app/package_install/inbox.hpp` keeps what outlives each run of the game in
 one process: the packages waiting for the main menu (`post_package_file`,

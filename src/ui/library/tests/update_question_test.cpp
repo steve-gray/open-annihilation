@@ -7,13 +7,14 @@
 // pack), its words for a new revision, a new version, an unknown rules hash
 // and the mod being played, with the design's sample numbers; UPDATE ALL's
 // one question, naming only the added registries' updates; the kit question
-// with NOT NOW marked and UPDATE primary; Settings › Mods' lines on an
-// update, on an update the queue holds and on the check for updates; an
-// update that names no revision, which never says "Revision 0"; and a
-// lookup that translates.
+// with NOT NOW marked and UPDATE primary; the questions about the mod the
+// game plays (SWITCH OFF's, PLAY NOW's refusal and ROLL BACK's), their words
+// and buttons; an update that names no revision, which never says "Revision
+// 0"; and a lookup that translates.
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/text.hpp"
 #include "oa/ui/library/update_question.hpp"
 
@@ -32,7 +33,6 @@ namespace lib = oa::ui::library;
 namespace kit = oa::ui::kit;
 using lib::Kind;
 using Rules = lib::UpdateNote::Rules;
-using Phase = lib::QueueItem::Phase;
 
 /// Checks that a text is what a case expects, printing both when it is not.
 ///
@@ -426,71 +426,10 @@ void update_all_asks_once_about_the_added_registries_updates() {
         OA_CHECK(two->body.starts_with("2 updates change the game's rules: Alder, Cedar. "));
 }
 
-void settings_mods_lines_say_what_an_update_does() {
-    const lib::Library library = library_of({
-        {core, Kind::mod, "ridge", "Ridge", "4.8", "4.8", Rules::same},
-        {core, Kind::mod, "ridge-v", "Ridge V", "4.8", "4.9", Rules::same},
-        {core, Kind::mod, "lattice", "Lattice", "3.0", "3.0", Rules::changes},
-        {core, Kind::mod, "lattice-v", "Lattice V", "3.0", "3.1", Rules::changes},
-        {extra, Kind::mod, "cinder", "Cinder", "1.2", "1.2", Rules::unknown},
-        {extra, Kind::mod, "cinder-v", "Cinder V", "1.2", "1.3", Rules::unknown},
-    });
-
-    struct Case {
-        std::string_view registry{};
-        std::string_view key{};
-        std::string_view line{};
-    };
-
-    for (const Case& each : {
-             Case{core, "ridge", "Revision 4 available · 3.2 MB"},
-             Case{core, "ridge-v", "Version 4.9 available · 3.2 MB"},
-             Case{core, "lattice", "Revision 4 changes the rules · 3.2 MB"},
-             Case{core, "lattice-v", "Version 3.1 changes the rules · 3.2 MB"},
-             Case{extra, "cinder", "Revision 4 may change the rules · 3.2 MB"},
-             Case{extra, "cinder-v", "Version 1.3 may change the rules · 3.2 MB"},
-         }) {
-        const lib::Entry* entry = at(library, each.registry, Kind::mod, each.key);
-        if (entry != nullptr && entry->installed != nullptr)
-            OA_CHECK_TEXT(lib::update_line(*entry->installed, *entry->update), each.line);
-    }
-
-    // An update the queue holds.
-    lib::QueueItem item;
-    item.name = "Ridge";
-    item.total_bytes = 1000;
-
-    struct Progress {
-        Phase phase{Phase::waiting};
-        uint64_t done{};
-        std::string_view line{};
-    };
-
-    for (const Progress& each : {
-             Progress{Phase::waiting, 0, "Updating · 0%"},
-             Progress{Phase::downloading, 280, "Updating · 28%"},
-             Progress{Phase::downloading, 1000, "Updating · 100%"},
-             Progress{Phase::verifying, 1000, "Updating · 100%"},
-             Progress{Phase::checking, 1000, "Updating · 100%"},
-             Progress{Phase::installing, 1000, "Updating · 100%"},
-             Progress{Phase::held, 1000, "Waiting · finishes when you leave Ridge"},
-             Progress{Phase::failed, 500, ""},
-             Progress{Phase::installed, 1000, ""},
-         }) {
-        item.phase = each.phase;
-        item.done_bytes = each.done;
-        OA_CHECK_TEXT(lib::update_progress(item), each.line);
-    }
-    item.phase = Phase::downloading;
-    item.total_bytes = 0;
-    item.done_bytes = 300;
-    OA_CHECK_TEXT(lib::update_progress(item), "Updating · 0%");
-}
-
 /// An update that keeps the version and names no revision, as a catalogue
-/// that leaves the revision out gives one, never says "Revision 0": Settings
-/// › Mods' line and the status line call it an update, and its question's
-/// heading names the version alone and its body the new copy.
+/// that leaves the revision out gives one, never says "Revision 0": the
+/// status line calls it an update, and its question's heading names the
+/// version alone and its body the new copy.
 void an_update_without_a_revision_never_says_revision_0() {
     const lib::Library made = library_of({
         {core, Kind::language, "pt-br", "Portugues", "1.0", "1.0", Rules::same},
@@ -503,22 +442,6 @@ void an_update_without_a_revision_never_says_revision_0() {
     lib::Library library;
     lib::refresh(library, std::move(inputs));
 
-    struct Case {
-        std::string_view registry{};
-        Kind kind{Kind::mod};
-        std::string_view key{};
-        std::string_view line{};
-    };
-
-    for (const Case& each : {
-             Case{core, Kind::language, "pt-br", "Update available · 3.2 MB"},
-             Case{core, Kind::mod, "lattice", "Update changes the rules · 3.2 MB"},
-             Case{extra, Kind::mod, "cinder", "Update may change the rules · 3.2 MB"},
-         }) {
-        const lib::Entry* entry = at(library, each.registry, each.kind, each.key);
-        if (entry != nullptr && entry->installed != nullptr)
-            OA_CHECK_TEXT(lib::update_line(*entry->installed, *entry->update), each.line);
-    }
     if (const lib::Entry* language = at(library, core, Kind::language, "pt-br"))
         OA_CHECK_TEXT(
             lib::status_line(library, *language), "Update available · 3.2 MB to download"
@@ -538,29 +461,70 @@ void an_update_without_a_revision_never_says_revision_0() {
     }
 }
 
-void the_check_line_says_where_the_check_stands() {
-    struct Case {
-        lib::UpdateCheck check{};
-        std::string_view text{};
-        bool warning{};
-        bool check_now{};
-    };
-
-    for (const Case& each : {
-             Case{{true, false, false, 4 * 60}, "Checked for updates 4 min ago", false, true},
-             Case{{true, false, false, 10}, "Checked for updates just now", false, true},
-             Case{{true, false, false, std::nullopt}, "Not checked for updates yet", false, true},
-             Case{{true, true, false, 4 * 60}, "Checking for updates…", false, false},
-             Case{{true, true, true, 4 * 60}, "Checking for updates…", false, false},
-             Case{{true, false, true, 4 * 60}, "Couldn't check for updates", true, true},
-             Case{{false, false, false, 4 * 60}, "No registries are on.", false, false},
-             Case{{false, true, true, std::nullopt}, "No registries are on.", false, false},
-         }) {
-        const lib::UpdateCheckLine line = lib::update_check_line(each.check);
-        OA_CHECK_TEXT(line.text, each.text);
-        OA_CHECK(line.warning == each.warning);
-        OA_CHECK(line.check_now == each.check_now);
+void the_questions_about_the_mod_played_keep_the_mods_pages_words() {
+    // SWITCH OFF's: the Switch Mod question of No Mod, CANCEL marked.
+    const kit::Question off = lib::switch_off_question();
+    OA_CHECK_TEXT(off.title, "SWITCH MOD");
+    OA_CHECK(off.paragraphs.size() == 1);
+    if (off.paragraphs.size() == 1)
+        OA_CHECK_TEXT(
+            off.paragraphs[0].text,
+            "Switch to No Mod now? The game reloads its data for the new mod and returns to the "
+            "main menu. Your other settings are kept."
+        );
+    OA_CHECK(off.buttons.size() == 2);
+    if (off.buttons.size() == 2) {
+        OA_CHECK(off.buttons[0].caption == "CANCEL" && off.buttons[0].id == "cancel");
+        OA_CHECK(!off.buttons[0].accent);
+        OA_CHECK(off.buttons[1].caption == "SWITCH" && off.buttons[1].id == "switch");
+        OA_CHECK(off.buttons[1].accent);
     }
+    OA_CHECK(off.cancel_button == 0 && off.primary_button == 1 && off.marked == 0);
+
+    // PLAY NOW's refusal: the reason under the same title, and OK.
+    const kit::Question refused =
+        lib::switch_refused_note("That folder cannot be played; the log says why.");
+    OA_CHECK_TEXT(refused.title, "SWITCH MOD");
+    OA_CHECK(refused.paragraphs.size() == 1);
+    if (refused.paragraphs.size() == 1)
+        OA_CHECK_TEXT(
+            refused.paragraphs[0].text, "That folder cannot be played; the log says why."
+        );
+    OA_CHECK(refused.buttons.size() == 1);
+    if (refused.buttons.size() == 1)
+        OA_CHECK(
+            refused.buttons[0].caption == "OK" && refused.buttons[0].id == "ok" &&
+            refused.buttons[0].accent
+        );
+    OA_CHECK(refused.cancel_button == 0 && refused.primary_button == 0 && refused.marked == 0);
+
+    // ROLL BACK's: the Roll Back Mod question, with the reload line for the
+    // mod the game plays.
+    const kit::Question back =
+        lib::roll_back_question("Ridge", "4.8 revision 3", "4.8 revision 2", false);
+    OA_CHECK_TEXT(back.title, "ROLL BACK MOD");
+    OA_CHECK(back.paragraphs.size() == 1);
+    if (back.paragraphs.size() == 1)
+        OA_CHECK_TEXT(
+            back.paragraphs[0].text,
+            "Roll back Ridge to 4.8 revision 2? 4.8 revision 3 is kept in its place, and ROLL "
+            "BACK again brings it back."
+        );
+    OA_CHECK(back.buttons.size() == 2);
+    if (back.buttons.size() == 2) {
+        OA_CHECK(back.buttons[0].caption == "CANCEL" && back.buttons[0].id == "cancel");
+        OA_CHECK(back.buttons[1].caption == "ROLL BACK" && back.buttons[1].id == "roll-back");
+        OA_CHECK(back.buttons[1].accent);
+    }
+    OA_CHECK(back.cancel_button == 0 && back.primary_button == 1 && back.marked == 0);
+    const kit::Question played = lib::roll_back_question("Ridge", "1.1", "1.0", true);
+    OA_CHECK(played.paragraphs.size() == 1);
+    if (played.paragraphs.size() == 1)
+        OA_CHECK_TEXT(
+            played.paragraphs[0].text,
+            "Roll back Ridge to 1.0? 1.1 is kept in its place, and ROLL BACK again brings it "
+            "back. The game reloads its data for the mod and returns to the main menu."
+        );
 }
 
 /// A lookup that shows a few patterns in other words, keeping their places.
@@ -574,10 +538,12 @@ std::string_view other_words(void* /*context*/, std::string_view english) {
         return "PAS MAINTENANT";
     if (english == lib::words::question_fact)
         return "{label} : {value}";
-    if (english == lib::words::mods_checked)
-        return "Vérifié {age}";
-    if (english == lib::words::age_minutes)
-        return "il y a {count} min";
+    if (english == lib::words::switch_title)
+        return "CHANGER DE MOD";
+    if (english == lib::words::switch_ask)
+        return "Passer à {title} ?";
+    if (english == lib::words::no_mod)
+        return "Aucun mod";
     return english;
 }
 
@@ -599,9 +565,11 @@ void every_word_is_looked_up() {
     OA_CHECK(paragraphs_of(question).size() == 4);
     if (paragraphs_of(question).size() == 4)
         OA_CHECK_TEXT(paragraphs_of(question)[2], "Rules : 9c1f 4e0b → 51d2 07aa");
-    OA_CHECK_TEXT(
-        lib::update_check_line({true, false, false, 4 * 60}, hooks).text, "Vérifié il y a 4 min"
-    );
+    const kit::Question off = lib::switch_off_question(hooks);
+    OA_CHECK_TEXT(off.title, "CHANGER DE MOD");
+    OA_CHECK(off.paragraphs.size() == 1);
+    if (off.paragraphs.size() == 1)
+        OA_CHECK_TEXT(off.paragraphs[0].text, "Passer à Aucun mod ?");
 }
 
 } // namespace
@@ -611,9 +579,8 @@ int main() {
     the_question_reads_as_the_design_shows_it();
     a_new_version_and_an_unknown_rules_hash_say_so();
     update_all_asks_once_about_the_added_registries_updates();
-    settings_mods_lines_say_what_an_update_does();
     an_update_without_a_revision_never_says_revision_0();
-    the_check_line_says_where_the_check_stands();
+    the_questions_about_the_mod_played_keep_the_mods_pages_words();
     every_word_is_looked_up();
     return oa::test::check_exit_status();
 }
