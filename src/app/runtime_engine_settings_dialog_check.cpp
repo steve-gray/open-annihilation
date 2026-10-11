@@ -31,6 +31,7 @@
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -1949,21 +1950,46 @@ void Runtime::check_engine_settings_window_sizes() {
             );
         }
         // The window as it shows the dialog now: the closed frame darkened,
-        // the dialog drawn at its class and a scale at its place.
-        const auto shows_dialog_at = [&](std::string_view what, int32_t drawn_scale) {
+        // the dialog drawn at its class and a scale at its place: at a whole
+        // scale by draw_dialog, and at 150% offscreen on the kit canvas's
+        // smooth form in the modern fonts.
+        const auto shows_dialog_at = [&](std::string_view what, int32_t drawn_percent) {
             point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
             const LayerPlacement at = placed();
             renderer::Surface drawing;
-            drawing.width = static_cast<uint32_t>(at.shown.width);
-            drawing.height = static_cast<uint32_t>(at.shown.height);
-            drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
-            settings::draw_dialog(
-                drawing,
-                {0, 0, drawn_scale},
-                *engine_settings_dialog(),
-                *engine_settings_fonts(),
-                engine_settings_icon()
-            );
+            if (drawn_percent % 100 == 0) {
+                drawing.width = static_cast<uint32_t>(at.shown.width);
+                drawing.height = static_cast<uint32_t>(at.shown.height);
+                drawing.rgb.assign(
+                    static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0
+                );
+                settings::draw_dialog(
+                    drawing,
+                    {0, 0, drawn_percent / 100},
+                    *engine_settings_dialog(),
+                    *engine_settings_fonts(),
+                    engine_settings_icon()
+                );
+            } else {
+                const settings::Dialog& shown_dialog = *engine_settings_dialog();
+                drawing = layer_drawing(
+                    at.points_width,
+                    at.points_height,
+                    drawn_percent,
+                    engine_settings_fonts(),
+                    oa_layer().smooth_fonts(),
+                    engine_settings_icon(),
+                    [&shown_dialog](const oa::ui::kit::Canvas& canvas) {
+                        settings::draw_dialog(canvas, shown_dialog);
+                    }
+                );
+                require(
+                    drawing.width == static_cast<uint32_t>(at.shown.width) &&
+                        drawing.height == static_cast<uint32_t>(at.shown.height),
+                    "the dialog drawn at " + std::to_string(drawn_percent) +
+                        "% is not as large as its place" + on
+                );
+            }
             apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
             const auto expected = expected_layer_frame(closed, drawing, at);
             const auto shown = presented_frame();
@@ -1981,7 +2007,7 @@ void Runtime::check_engine_settings_window_sizes() {
         };
         // The window as it shows the dialog at this window's own scale.
         const auto shows_dialog = [&](std::string_view what) {
-            shows_dialog_at(what, expected_layout.scale);
+            shows_dialog_at(what, expected_layout.scale * 100);
         };
         // Each section, through its entry where the window shows it.
         for (const auto page : kPages) {
@@ -2140,7 +2166,7 @@ void Runtime::check_engine_settings_window_sizes() {
                     chosen_size + " does not centre the dialog at its class's size"
                 );
             }
-            shows_dialog_at("the dialog at " + chosen_size, size_step.scale);
+            shows_dialog_at("the dialog at " + chosen_size, size_step.scale * 100);
             snapshot(
                 "menu-dialog-interface-size-" +
                 std::string(settings::interface_size_text(size_step.size)) + '-' + size
@@ -2152,6 +2178,156 @@ void Runtime::check_engine_settings_window_sizes() {
                           << " on the " << size << " window is "
                           << size_class_name(size_step.size_class) << ", " << size_step.scale
                           << "x\n";
+        }
+
+        // 150%, which the drop-down offers only with Use modern fonts for
+        // game text On: they are turned On through the dialog, 150% chosen
+        // and OK pressed. The dialog opens again at Large, laid out for the
+        // points at 1.5x and drawn on the kit canvas's smooth form, and the
+        // window shows it as the dialog drawn offscreen there. Turning the
+        // modern fonts Off shows 100% again, which OK puts in effect at
+        // Large, 1x; then Auto goes back.
+        const std::string fractional = "Interface size 150%" + on;
+        const int32_t size_row =
+            settings::first_row_control +
+            static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+        // Opens Interface size's drop-down at Graphics' end.
+        const auto open_sizes = [&](settings::Dialog& shown_dialog) {
+            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+            tap(SDLK_END);
+            click_control(size_row, {}, "Interface size's field");
+            require(
+                shown_dialog.open_list == size_row,
+                "a click on Interface size's field did not open its list" + on
+            );
+        };
+        require(
+            !engine_settings().modern_fonts &&
+                engine_settings().interface_size == settings::InterfaceSize::automatic,
+            "the modern fonts are not Off and Auto not in effect before 150% is chosen" + on
+        );
+        // The shortcut opens the dialog; the OA button opens the Library.
+        tap(SDLK_COMMA, kShortcutModifier);
+        auto* fraction_dialog = engine_settings_dialog();
+        require(fraction_dialog != nullptr, "the shortcut did not open the dialog" + on);
+        // On the main menu MORE IN THE LIBRARY… stands right under
+        // Language's row, and the rows under it come one control later.
+        const int32_t fonts_row =
+            settings::first_row_control + 1 + (fraction_dialog->library_link ? 1 : 0);
+        open_sizes(*fraction_dialog);
+        require(
+            !shows_text(settings::dialog_layout(*fraction_dialog), "150%"),
+            "Interface size offers 150% while the modern fonts are Off" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(
+            engine_settings_dialog() == fraction_dialog &&
+                fraction_dialog->open_list == settings::no_control,
+            "Escape did not close Interface size's list" + on
+        );
+        click_control(settings::page_control(settings::Page::language), {}, "Language's entry");
+        click_control(fonts_row, "ON", "Use modern fonts for game text's On");
+        require(
+            fraction_dialog->chosen.modern_fonts,
+            "a click on Use modern fonts for game text's On did not turn them on" + on
+        );
+        open_sizes(*fraction_dialog);
+        click_control(settings::no_control, "150%", "Interface size's 150%");
+        require(
+            fraction_dialog->chosen.interface_size == settings::InterfaceSize::size_150 &&
+                fraction_dialog->open_list == settings::no_control,
+            "a click on " + fractional + " did not choose it"
+        );
+        require(
+            oa_layer().screen_scale_percent() == expected_layout.scale * 100,
+            fractional + " took effect before OK"
+        );
+        click_control(settings::ok_control, "OK", "OK");
+        require(
+            engine_settings_dialog() == nullptr &&
+                engine_settings().interface_size == settings::InterfaceSize::size_150 &&
+                engine_settings().modern_fonts,
+            "OK did not keep " + fractional + " with the modern fonts On"
+        );
+        {
+            const auto stored = preference_values_.find(std::string(settings::key::interface_size));
+            require(
+                stored != preference_values_.end() && stored->second == "150",
+                "OK did not store " + fractional
+            );
+        }
+        tap(SDLK_COMMA, kShortcutModifier);
+        const auto* fraction_reopened = engine_settings_dialog();
+        require(fraction_reopened != nullptr, "the dialog did not open again" + on);
+        point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+        require(
+            oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&
+                oa_layer().screen_scale_percent() == oa::ui::kit::fractional_scale_percent &&
+                fraction_reopened->size_class == oa::ui::kit::SizeClass::large,
+            fractional + " is not Large, 1.5x"
+        );
+        {
+            // Large's 960 by 600 points at 1.5x: 1440 by 900 pixels, centred.
+            const LayerPlacement at = placed();
+            require(
+                at.points_width == oa::ui::kit::large_metrics.dialog_width &&
+                    at.points_height == oa::ui::kit::large_metrics.dialog_height &&
+                    at.shown.x == 240 && at.shown.y == 90 && at.shown.width == 1440 &&
+                    at.shown.height == 900,
+                fractional + " does not show the dialog at 1440x900 at (240, 90)"
+            );
+        }
+        shows_dialog_at("the dialog at " + fractional, oa::ui::kit::fractional_scale_percent);
+        snapshot("menu-dialog-interface-size-150-" + size);
+        std::cout << "engine settings check: Interface size 150% on the " << size
+                  << " window is Large, 1.5x\n";
+        // The modern fonts turned Off take 150% back to 100%, shown at once.
+        click_control(settings::page_control(settings::Page::language), {}, "Language's entry");
+        click_control(fonts_row, "OFF", "Use modern fonts for game text's Off");
+        require(
+            !fraction_reopened->chosen.modern_fonts &&
+                fraction_reopened->chosen.interface_size == settings::InterfaceSize::size_100,
+            "turning the modern fonts Off did not show Interface size 100%" + on
+        );
+        click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+        tap(SDLK_END);
+        {
+            const auto parts_now = settings::dialog_layout(*fraction_reopened);
+            require(
+                find_part(parts_now, size_row, "100%") != nullptr,
+                "Interface size does not show 100% with the modern fonts Off" + on
+            );
+        }
+        click_control(settings::ok_control, "OK", "OK");
+        require(
+            engine_settings_dialog() == nullptr &&
+                engine_settings().interface_size == settings::InterfaceSize::size_100 &&
+                !engine_settings().modern_fonts,
+            "OK did not keep 100% with the modern fonts Off" + on
+        );
+        tap(SDLK_COMMA, kShortcutModifier);
+        require(engine_settings_dialog() != nullptr, "the dialog did not open again" + on);
+        point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+        require(
+            oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&
+                oa_layer().screen_scale_percent() == 100 &&
+                engine_settings_dialog()->size_class == oa::ui::kit::SizeClass::large,
+            "Interface size 100% with the modern fonts Off is not Large, 1x" + on
+        );
+        // Auto goes back.
+        open_sizes(*engine_settings_dialog());
+        click_control(settings::no_control, "Auto", "Interface size's Auto");
+        click_control(settings::ok_control, "OK", "OK");
+        {
+            const auto stored = preference_values_.find(std::string(settings::key::interface_size));
+            require(
+                engine_settings_dialog() == nullptr &&
+                    engine_settings().interface_size == settings::InterfaceSize::automatic &&
+                    stored != preference_values_.end() && stored->second == "automatic" &&
+                    oa_layer().screen_class() == expected_layout.size_class &&
+                    oa_layer().screen_scale() == expected_layout.scale,
+                "Interface size Auto did not go back" + on
+            );
         }
     }
     if (!SDL_SetWindowSize(sdl_.window, kDefaultWindowWidth, kDefaultWindowHeight) ||
