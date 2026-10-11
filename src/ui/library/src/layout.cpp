@@ -3,8 +3,9 @@
 
 // The Library's layout at Compact, Regular and Large, made of the UI kit's
 // components: the window's face, header and footer, the tabs, the search,
-// the filters, the list and the details, every control named for
-// automation. It reads the model and decides none of its rules.
+// the filters with their counts, the list and the details, and the Active
+// tab's setup, every control named for automation. It reads the model and
+// decides none of its rules.
 #include "oa/ui/library/screen.hpp"
 
 #include "oa/ui/kit/chrome.hpp"
@@ -37,8 +38,9 @@ namespace {
 
 // The Library's own sizes, from the design; every other size is a kit metric.
 
-/// The columns Compact's search row keeps right of the search field, for the filter drop-down.
-constexpr int32_t compact_filter_room = 104;
+/// The columns Compact's search row keeps right of the search field, for the
+/// filter drop-down and its count, such as "Installed (12)".
+constexpr int32_t compact_filter_room = 128;
 /// The search field's width at Regular and Large.
 constexpr int32_t wide_search_width = 240;
 /// The list pane's width at Regular.
@@ -77,13 +79,21 @@ constexpr int32_t progress_whole = 1000;
 constexpr std::string_view name_prefix = "library.";
 
 /// The tabs, in the order they are shown.
-constexpr std::array<Tab, 4> tab_order{Tab::mods, Tab::maps, Tab::languages, Tab::updates};
+constexpr std::array<Tab, tab_total> tab_order{
+    Tab::active, Tab::mods, Tab::maps, Tab::languages, Tab::updates
+};
 /// The words the tabs are named by, in that order.
-constexpr std::array<std::string_view, 4> tab_words{"mods", "maps", "languages", "updates"};
+constexpr std::array<std::string_view, tab_total> tab_words{
+    "active", "mods", "maps", "languages", "updates"
+};
 /// The filters, in the order they are shown.
-constexpr std::array<Filter, 3> filter_order{Filter::all, Filter::installed, Filter::updates};
+constexpr std::array<Filter, filter_total> filter_order{
+    Filter::all, Filter::newest, Filter::installed, Filter::updates
+};
 /// The words the filters are named by, in that order.
-constexpr std::array<std::string_view, 3> filter_words{"all", "installed", "updates"};
+constexpr std::array<std::string_view, filter_total> filter_words{
+    "all", "new", "installed", "updates"
+};
 
 /// Returns the word an action's button is named by.
 ///
@@ -565,6 +575,20 @@ std::string entry_size(const Library& library, const Entry& entry) {
     return size_text(entry.listing->size, library.text);
 }
 
+/// Returns a badge's picture.
+///
+/// @param badge the badge; may be null
+/// @return the picture, which points into the badge; empty without one
+oa::ui::frontend_renderer::RgbaPicture picture_of(const Badge* badge) {
+    oa::ui::frontend_renderer::RgbaPicture picture;
+    if (badge == nullptr)
+        return picture;
+    picture.width = badge->width;
+    picture.height = badge->height;
+    picture.pixels = std::span<const uint8_t>(badge->rgba);
+    return picture;
+}
+
 /// Returns an entry's badge picture: its listing's, else its installed copy's.
 ///
 /// @param entry the entry
@@ -575,13 +599,7 @@ oa::ui::frontend_renderer::RgbaPicture badge_picture(const Entry& entry) {
         badge = &*entry.listing->badge;
     else if (entry.installed != nullptr && entry.installed->badge)
         badge = &*entry.installed->badge;
-    oa::ui::frontend_renderer::RgbaPicture picture;
-    if (badge == nullptr)
-        return picture;
-    picture.width = badge->width;
-    picture.height = badge->height;
-    picture.pixels = std::span<const uint8_t>(badge->rgba);
-    return picture;
+    return picture_of(badge);
 }
 
 /// Returns a row's name: library.row., then its registry's word and its
@@ -761,9 +779,11 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
 /// Returns the search field's words while it is empty, for the open tab.
 ///
 /// @param library the model
-/// @return the words, looked up
+/// @return the words, looked up; none on the Active tab, which has no search
 std::string_view placeholder_of(const Library& library) {
     switch (library.tab) {
+    case Tab::active:
+        return {};
     case Tab::mods:
         return shown(library.text, words::search_mods);
     case Tab::maps:
@@ -871,36 +891,31 @@ int32_t drop_down_width(
     return width;
 }
 
-/// Appends "{n} updates" and UPDATE ALL along a row, the button at its right.
+/// Appends the Updates tab's line over its list: "{n} updates" at its
+/// left, counting the updates the list shows, and UPDATE ALL at its right.
 ///
 /// @param[in,out] building the layout
 /// @param row the row
-/// @return the column left of the words
-int32_t add_update_all(Building& building, const kit::Rect& row) {
+void add_updates_line(Building& building, const kit::Rect& row) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
     const std::string_view caption = action_text(Action::update_all, library.text);
     const int32_t width = std::min(button_width(building, caption), row.width);
     const kit::Rect button{row.x + row.width - width, row.y, width, metrics.button_height};
-    const std::size_t shown_count = library.visible.size();
+    const std::size_t shown_count = updates_shown(library);
     const std::string count = filled(
         library.text,
         shown_count == 1 ? words::update_count_one : words::update_count_many,
         {{"count", std::to_string(shown_count)}}
     );
-    const int32_t count_width = std::min(
-        width_of(building, kit::FontRole::small, count),
-        std::max(button.x - metrics.label_gap - row.x, int32_t{0})
-    );
-    const kit::Rect words_box{
-        button.x - metrics.label_gap - count_width, row.y, count_width, metrics.button_height
-    };
+    const int32_t count_room = std::max(button.x - metrics.label_gap - row.x, int32_t{0});
+    const kit::Rect words_box{row.x, row.y, count_room, metrics.button_height};
     add_text(
         building,
         kit::FontRole::small,
-        cut(building, kit::FontRole::small, count, count_width),
+        cut(building, kit::FontRole::small, count, count_room),
         words_box,
-        kit::Align::right,
+        kit::Align::left,
         kit::colour::hint,
         {}
     );
@@ -916,39 +931,15 @@ int32_t add_update_all(Building& building, const kit::Rect& row) {
         {},
         -1
     );
-    return words_box.x;
 }
 
-/// Appends Compact's search row: the search field, and the filter drop-down
-/// or, on the Updates tab, the updates' count and UPDATE ALL.
+/// Appends Compact's search row: the search field and the filter drop-down.
 ///
 /// @param[in,out] building the layout
 /// @param row the row
 void add_compact_search_row(Building& building, const kit::Rect& row) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
-    if (library.tab == Tab::updates) {
-        // The filters do not apply on Updates: the field leaves room for the count and the button.
-        const std::string_view caption = action_text(Action::update_all, library.text);
-        const std::size_t shown_count = library.visible.size();
-        const std::string count = filled(
-            library.text,
-            shown_count == 1 ? words::update_count_one : words::update_count_many,
-            {{"count", std::to_string(shown_count)}}
-        );
-        const int32_t taken = button_width(building, caption) + metrics.label_gap +
-                              width_of(building, kit::FontRole::small, count) + metrics.label_gap;
-        const int32_t field_width = std::max(row.width - taken, int32_t{0});
-        add_search(building, {row.x, row.y, field_width, metrics.field_height});
-        add_update_all(
-            building,
-            {row.x + field_width + metrics.label_gap,
-             row.y,
-             row.width - field_width - metrics.label_gap,
-             row.height}
-        );
-        return;
-    }
     const int32_t field_width = std::max(row.width - compact_filter_room, int32_t{0});
     add_search(building, {row.x, row.y, field_width, metrics.field_height});
     std::vector<controls::MenuItem> items = controls::menu_items(library, MenuKind::filter, {});
@@ -970,19 +961,14 @@ void add_compact_search_row(Building& building, const kit::Rect& row) {
     );
 }
 
-/// Appends Regular's chips: All, Installed and Updates, the tab's tags
-/// while they fit, and TAGS ▾ with the rest; or, on the Updates tab, the
-/// updates' count and UPDATE ALL.
+/// Appends Regular's chips: All, New, Installed and Updates with their
+/// counts, the tab's tags while they fit, and TAGS ▾ with the rest.
 ///
 /// @param[in,out] building the layout
 /// @param row the row
 void add_chip_row(Building& building, const kit::Rect& row) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
-    if (library.tab == Tab::updates) {
-        static_cast<void>(add_update_all(building, row));
-        return;
-    }
     const int32_t chip_top = row.y + (row.height - metrics.chip_height) / 2;
     int32_t left = row.x;
     const auto add_chip = [&](const kit::ChipLook& look, kit::ControlId id, std::string name) {
@@ -998,9 +984,9 @@ void add_chip_row(Building& building, const kit::Rect& row) {
     };
     for (std::size_t index = 0; index < filter_order.size(); ++index) {
         kit::ChipLook look;
-        look.text = std::string(filter_text(filter_order[index], library.text));
+        look.text = filter_caption(library, filter_order[index]);
         look.state = kit::ChipState::filter;
-        look.selected = library.filter == filter_order[index];
+        look.selected = shown_filter(library) == filter_order[index];
         add_chip(
             look,
             controls::filter_control(filter_order[index]),
@@ -1067,10 +1053,9 @@ void add_chip_row(Building& building, const kit::Rect& row) {
     );
 }
 
-/// Appends Large's filter pane: a nav list of All, Installed and Updates,
-/// the heading TAGS and a nav list of the tab's tags with their counts,
-/// TAGS ▾ holding those that do not fit; or, on the Updates tab, the
-/// updates' count and UPDATE ALL.
+/// Appends Large's filter pane: a nav list of All, New, Installed and
+/// Updates with their counts, the heading TAGS and a nav list of the tab's
+/// tags with their counts, TAGS ▾ holding those that do not fit.
 ///
 /// @param[in,out] building the layout
 /// @param pane the pane
@@ -1086,13 +1071,6 @@ void add_filter_pane(Building& building, const kit::Rect& pane) {
     // The kit's nav draws an entry's caption from 12 columns in, and keeps 4 clear at its right.
     const int32_t caption_room =
         entry_width - kit::compact_metrics.padding - kit::compact_metrics.list_row_inset;
-    if (library.tab == Tab::updates) {
-        add_item(building.list, kit::Role::nav, pane, {}).look = std::move(nav);
-        static_cast<void>(add_update_all(
-            building, {entry_left, pane.y + inset, entry_width, metrics.button_height}
-        ));
-        return;
-    }
     const int32_t entry_height = metrics.regular_line + metrics.list_row_inset;
     const int32_t step = entry_height + metrics.hairline;
     int32_t top = pane.y + inset;
@@ -1113,8 +1091,8 @@ void add_filter_pane(Building& building, const kit::Rect& pane) {
         };
     for (std::size_t index = 0; index < filter_order.size(); ++index)
         add_entry(
-            std::string(filter_text(filter_order[index], library.text)),
-            library.filter == filter_order[index],
+            filter_caption(library, filter_order[index]),
+            shown_filter(library) == filter_order[index],
             controls::filter_control(filter_order[index]),
             named("filter." + std::string(filter_words[index]))
         );
@@ -1182,7 +1160,7 @@ std::string empty_words(const Library& library) {
         return std::string(shown(library.text, words::empty_no_registries));
     if (!library.query.empty())
         return filled(library.text, words::empty_matches, {{"query", library.query}});
-    if (library.tab == Tab::updates)
+    if (shown_filter(library) == Filter::updates)
         return std::string(shown(library.text, words::empty_updates));
     return std::string(shown(library.text, words::empty_tab));
 }
@@ -1296,6 +1274,40 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
     tab_stop(building, building.panes.back());
 }
 
+/// Appends a badge as the details show one: its picture, or a name's
+/// letters on the badge's colour, as a row's badge.
+///
+/// @param[in,out] building the layout
+/// @param picture the picture; empty for the letters
+/// @param name the name whose letters show without a picture
+/// @param rect the badge's square
+/// @param clip what drawing may touch
+void add_badge_of(
+    Building& building,
+    const oa::ui::frontend_renderer::RgbaPicture& picture,
+    std::string_view name,
+    const kit::Rect& rect,
+    const kit::Rect& clip
+) {
+    if (oa::ui::frontend_renderer::picture_drawable(picture)) {
+        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{picture};
+        add_item(building.list, kit::Role::outline, rect, clip).colour =
+            kit::colour::control_border;
+        return;
+    }
+    add_item(building.list, kit::Role::fill, rect, clip).colour = badge_face;
+    const std::string letters = badge_letters(name);
+    add_text(
+        building,
+        kit::FontRole::small,
+        cut(building, kit::FontRole::small, letters, rect.width),
+        rect,
+        kit::Align::centre,
+        kit::colour::on_accent,
+        clip
+    );
+}
+
 /// Appends an entry's badge as the details show it: its picture, or its
 /// letters on the badge's colour, as a row's badge.
 ///
@@ -1306,24 +1318,7 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
 void add_badge(
     Building& building, const Entry& entry, const kit::Rect& rect, const kit::Rect& clip
 ) {
-    const oa::ui::frontend_renderer::RgbaPicture picture = badge_picture(entry);
-    if (oa::ui::frontend_renderer::picture_drawable(picture)) {
-        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{picture};
-        add_item(building.list, kit::Role::outline, rect, clip).colour =
-            kit::colour::control_border;
-        return;
-    }
-    add_item(building.list, kit::Role::fill, rect, clip).colour = badge_face;
-    const std::string letters = badge_letters(entry_name(entry));
-    add_text(
-        building,
-        kit::FontRole::small,
-        cut(building, kit::FontRole::small, letters, rect.width),
-        rect,
-        kit::Align::centre,
-        kit::colour::on_accent,
-        clip
-    );
+    add_badge_of(building, badge_picture(entry), entry_name(entry), rect, clip);
 }
 
 /// Tells whether a fact is the Rules fact.
@@ -1686,8 +1681,287 @@ void add_details_pane(Building& building, const kit::Rect& pane) {
     }
 }
 
+/// Appends a heading of the Active tab, and returns the row under it.
+///
+/// @param[in,out] building the layout
+/// @param words_shown the heading, looked up
+/// @param left its left column
+/// @param top its top row
+/// @param width its width
+/// @param clip what drawing may touch
+/// @return the row under it and the gap after it
+int32_t add_active_heading(
+    Building& building,
+    std::string_view words_shown,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    kit::Item& heading =
+        add_item(building.list, kit::Role::heading, {left, top, width, metrics.small_line}, clip);
+    heading.text = std::string(words_shown);
+    heading.look = kit::HeadingLook{std::string(words_shown)};
+    return top + metrics.small_line + metrics.hint_gap;
+}
+
+/// Appends the Active tab's parts, scrolled up by an offset: under a
+/// heading each, the mod being played (its badge, name and version) or that
+/// none is, the language in use, and each installed map pack's name over
+/// its maps (name, players and size). Each line is a label in the details'
+/// scroll area, its rectangle the part of the line that shows, empty while
+/// it is scrolled out of the area; none takes a press, a key or Tab.
+///
+/// @param[in,out] building the layout
+/// @param setup what the tab shows
+/// @param view the area, which clips them
+/// @param width the columns they take from the area's left
+/// @param offset how far they are scrolled up, in points
+/// @return the parts' height, in points
+int32_t add_active_content(
+    Building& building,
+    const ActiveSetup& setup,
+    const kit::Rect& view,
+    int32_t width,
+    int32_t offset
+) {
+    const Library& library = *building.library;
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t first = view.y - offset;
+    const int32_t left = view.x;
+    const std::size_t first_item = building.list.items.size();
+    int32_t top = first;
+
+    top = add_active_heading(
+        building, shown(library.text, words::active_heading_mod), left, top, width, view
+    );
+    if (setup.mod_name.empty()) {
+        const kit::Rect line{left, top, width, metrics.small_line};
+        add_text(
+            building,
+            kit::FontRole::small,
+            cut(building, kit::FontRole::small, setup.mod_line, width),
+            line,
+            kit::Align::left,
+            kit::colour::hint,
+            view
+        );
+        add_label(
+            building.detail,
+            controls::active_mod,
+            kit::intersect(line, view),
+            unique_name(building, named("active.mod")),
+            setup.mod_line,
+            view,
+            controls::details_group
+        );
+        top += metrics.small_line;
+    } else {
+        const int32_t side = metrics.list_row_badge;
+        add_badge_of(
+            building, picture_of(setup.mod_badge), setup.mod_name, {left, top, side, side}, view
+        );
+        const int32_t text_left = left + side + metrics.list_row_gap;
+        const int32_t text_room = std::max(left + width - text_left, int32_t{0});
+        const std::string version =
+            cut(building, kit::FontRole::small, setup.mod_version, text_room / 2);
+        const int32_t version_width = width_of(building, kit::FontRole::small, version);
+        const int32_t name_room = std::max(
+            text_room - (version.empty() ? 0 : version_width + metrics.label_gap), int32_t{0}
+        );
+        const std::string name = cut(building, kit::FontRole::regular, setup.mod_name, name_room);
+        const int32_t name_width = width_of(building, kit::FontRole::regular, name);
+        add_text(
+            building,
+            kit::FontRole::regular,
+            name,
+            {text_left, top + (side - metrics.regular_line) / 2, name_width, metrics.regular_line},
+            kit::Align::left,
+            kit::colour::text,
+            view
+        );
+        add_text(
+            building,
+            kit::FontRole::small,
+            version,
+            {text_left + name_width + metrics.label_gap,
+             top + (side - metrics.small_line) / 2,
+             version_width,
+             metrics.small_line},
+            kit::Align::left,
+            kit::colour::hint,
+            view
+        );
+        add_label(
+            building.detail,
+            controls::active_mod,
+            kit::intersect({left, top, width, side}, view),
+            unique_name(building, named("active.mod")),
+            setup.mod_line,
+            view,
+            controls::details_group
+        );
+        top += side;
+    }
+    top += metrics.paragraph_gap;
+
+    top = add_active_heading(
+        building, shown(library.text, words::active_heading_language), left, top, width, view
+    );
+    const kit::Rect language{left, top, width, metrics.small_line};
+    add_text(
+        building,
+        kit::FontRole::small,
+        cut(building, kit::FontRole::small, setup.language_line, width),
+        language,
+        kit::Align::left,
+        kit::colour::text,
+        view
+    );
+    add_label(
+        building.detail,
+        controls::active_language,
+        kit::intersect(language, view),
+        unique_name(building, named("active.language")),
+        setup.language_line,
+        view,
+        controls::details_group
+    );
+    top += metrics.small_line + metrics.paragraph_gap;
+
+    top = add_active_heading(
+        building, shown(library.text, words::active_heading_maps), left, top, width, view
+    );
+    if (setup.packs.empty()) {
+        add_text(
+            building,
+            kit::FontRole::small,
+            cut(building, kit::FontRole::small, shown(library.text, words::active_no_maps), width),
+            {left, top, width, metrics.small_line},
+            kit::Align::left,
+            kit::colour::hint,
+            view
+        );
+        top += metrics.small_line;
+    }
+    // The maps' names, players and sizes in three columns, each as wide as
+    // its widest words, the players and the sizes no more than a quarter of
+    // the width each and the names taking what is left.
+    int32_t name_width = 0;
+    int32_t players_width = 0;
+    int32_t size_width = 0;
+    for (const ActivePack& pack : setup.packs)
+        for (const ActiveMap& map : pack.maps) {
+            name_width = std::max(name_width, width_of(building, kit::FontRole::small, map.name));
+            players_width =
+                std::max(players_width, width_of(building, kit::FontRole::small, map.players));
+            size_width = std::max(size_width, width_of(building, kit::FontRole::small, map.size));
+        }
+    const int32_t map_left = left + metrics.list_row_inset;
+    const int32_t map_width = std::max(left + width - map_left, int32_t{0});
+    players_width = std::min(players_width, map_width / 4);
+    size_width = std::min(size_width, map_width / 4);
+    name_width = std::max(
+        std::min(name_width, map_width - players_width - size_width - 2 * metrics.label_gap),
+        int32_t{0}
+    );
+    const int32_t players_left = map_left + name_width + metrics.label_gap;
+    const int32_t size_left = players_left + players_width + metrics.label_gap;
+    std::size_t number = 0;
+    for (const ActivePack& pack : setup.packs) {
+        add_text(
+            building,
+            kit::FontRole::regular,
+            cut(building, kit::FontRole::regular, pack.name, width),
+            {left, top, width, metrics.regular_line},
+            kit::Align::left,
+            kit::colour::text,
+            view
+        );
+        top += metrics.regular_line;
+        for (const ActiveMap& map : pack.maps) {
+            ++number;
+            const auto column = [&](const std::string& words_shown,
+                                    int32_t column_left,
+                                    int32_t column_width,
+                                    kit::Align align,
+                                    kit::Colour ink) {
+                add_text(
+                    building,
+                    kit::FontRole::small,
+                    cut(building, kit::FontRole::small, words_shown, column_width),
+                    {column_left, top, column_width, metrics.small_line},
+                    align,
+                    ink,
+                    view
+                );
+            };
+            column(map.name, map_left, name_width, kit::Align::left, kit::colour::list_text);
+            column(map.players, players_left, players_width, kit::Align::right, kit::colour::hint);
+            column(map.size, size_left, size_width, kit::Align::right, kit::colour::hint);
+            if (number <= controls::most_active_maps)
+                add_label(
+                    building.detail,
+                    controls::first_active_map + static_cast<kit::ControlId>(number - 1),
+                    kit::intersect({map_left, top, map_width, metrics.small_line}, view),
+                    unique_name(building, named("active.map." + std::to_string(number))),
+                    map.line,
+                    view,
+                    controls::details_group
+                );
+            top += metrics.small_line;
+        }
+        top += metrics.hint_gap;
+    }
+    const std::optional<controls::Extent> extent =
+        controls::clipped_extent(building.list, view, first_item);
+    return extent ? extent->bottom - first : 0;
+}
+
+/// Appends the Active tab: its parts in an area that scrolls when they are
+/// taller than it, with a column for the scroll bar at its right.
+///
+/// @param[in,out] building the layout
+/// @param area the area
+void add_active(Building& building, const kit::Rect& area) {
+    const kit::Metrics& metrics = *building.metrics;
+    const ActiveSetup setup = active_setup(*building.library);
+    // Laid out once at the area's width to learn its height, then again
+    // narrower when that is taller than the area.
+    Building trial = building;
+    trial.list = {};
+    trial.detail.clear();
+    trial.order.clear();
+    const int32_t whole_height = add_active_content(trial, setup, area, area.width, 0);
+    const int32_t well_width = metrics.scroll_thumb_width + 2;
+    const bool scrolls = whole_height > area.height;
+    const int32_t width = scrolls ? area.width - well_width - metrics.button_gap : area.width;
+    int32_t height = whole_height;
+    if (scrolls) {
+        trial = building;
+        trial.list = {};
+        trial.detail.clear();
+        trial.order.clear();
+        height = add_active_content(trial, setup, area, width, 0);
+    }
+    const int32_t limit = kit::ScrollArea::limit_for(height, area.height);
+    const int32_t offset = std::clamp(building.state->details_scroll, int32_t{0}, limit);
+    add_active_content(building, setup, area, width, offset);
+    if (limit > 0) {
+        kit::ScrollArea scroll;
+        scroll.view = area;
+        scroll.well = {area.x + area.width - well_width, area.y, well_width, area.height};
+        scroll.content_height = height;
+        scroll.limit = limit;
+        scroll.offset = offset;
+        add_item(building.list, kit::Role::scroll_bar, scroll.well, {}).look =
+            kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), false};
+    }
+}
+
 /// Appends the footer's band, the queue's words at its left and its buttons
-/// at its right: SETTINGS…, DETAILS at Compact, and CLOSE.
+/// at its right: SETTINGS…, DETAILS at Compact but on the Active tab, and CLOSE.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -1710,7 +1984,7 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
     };
 
     std::vector<FooterButton> buttons{{Action::settings, controls::settings, true}};
-    if (compact)
+    if (compact && library.tab != Tab::active)
         buttons.push_back({Action::details, controls::details, library.selected.has_value()});
     buttons.push_back({Action::close, controls::close, true});
     int32_t total = 0;
@@ -1955,7 +2229,7 @@ menu_items(const Library& library, MenuKind menu, const std::vector<bool>& tag_s
     case MenuKind::filter: {
         for (std::size_t index = 0; index < filter_order.size(); ++index) {
             MenuItem item;
-            item.caption = std::string(filter_text(filter_order[index], library.text));
+            item.caption = filter_caption(library, filter_order[index]);
             item.word = std::string(filter_words[index]);
             item.filter = filter_order[index];
             items.push_back(std::move(item));
@@ -2018,7 +2292,7 @@ int32_t chosen_item(const Library& library, MenuKind menu, const std::vector<Men
         const bool tag_chosen = item.tag && *item.tag < tags.size() && !library.tag.empty() &&
                                 tags[*item.tag].first == library.tag;
         const bool filter_chosen =
-            item.filter && library.tag.empty() && *item.filter == library.filter;
+            item.filter && library.tag.empty() && *item.filter == shown_filter(library);
         if (tag_chosen || filter_chosen)
             return static_cast<int32_t>(place);
     }
@@ -2131,17 +2405,33 @@ kit::DisplayList library_layout(
     }
     const int32_t content_width = window.right - window.left;
     int32_t top = window.body_top + window.gap;
+    const bool active = library.tab == Tab::active;
+    // The Updates tab's line, count and UPDATE ALL, takes a row over its list.
+    const bool updates_line = library.tab == Tab::updates;
+    const int32_t updates_row = metrics.button_height + window.gap;
     if (compact) {
         add_tabs(building, {window.left, top, content_width, metrics.tab_height}, true);
         top += metrics.tab_height + window.gap;
-        const int32_t row_height_points = std::max(metrics.field_height, metrics.button_height);
-        add_compact_search_row(building, {window.left, top, content_width, row_height_points});
-        top += row_height_points + window.gap;
-        add_list(
-            building,
-            {window.left, top, content_width, window.footer_rule - window.gap - top},
-            RowForm::compact
-        );
+        if (active) {
+            add_active(
+                building, {window.left, top, content_width, window.footer_rule - window.gap - top}
+            );
+        } else {
+            const int32_t row_height_points = std::max(metrics.field_height, metrics.button_height);
+            add_compact_search_row(building, {window.left, top, content_width, row_height_points});
+            top += row_height_points + window.gap;
+            if (updates_line) {
+                add_updates_line(
+                    building, {window.left, top, content_width, metrics.button_height}
+                );
+                top += updates_row;
+            }
+            add_list(
+                building,
+                {window.left, top, content_width, window.footer_rule - window.gap - top},
+                RowForm::compact
+            );
+        }
     } else {
         add_tabs(
             building,
@@ -2151,32 +2441,44 @@ kit::DisplayList library_layout(
              metrics.tab_height},
             false
         );
-        add_search(
-            building,
-            {window.right - wide_search_width,
-             top + (metrics.tab_height - metrics.field_height) / 2,
-             wide_search_width,
-             metrics.field_height}
-        );
+        if (!active)
+            add_search(
+                building,
+                {window.right - wide_search_width,
+                 top + (metrics.tab_height - metrics.field_height) / 2,
+                 wide_search_width,
+                 metrics.field_height}
+            );
         top += metrics.tab_height + window.gap;
-        if (!large) {
-            add_chip_row(building, {window.left, top, content_width, metrics.button_height});
-            top += metrics.button_height + window.gap;
+        if (active) {
+            add_active(
+                building, {window.left, top, content_width, window.footer_rule - window.gap - top}
+            );
+        } else {
+            if (!large) {
+                add_chip_row(building, {window.left, top, content_width, metrics.button_height});
+                top += metrics.button_height + window.gap;
+            }
+            const int32_t panes_height = window.footer_rule - window.gap - top;
+            int32_t left = window.left;
+            if (large) {
+                add_filter_pane(building, {left, top, filter_pane_width, panes_height});
+                left += filter_pane_width + window.padding;
+            }
+            const int32_t list_width = large ? large_list_width : regular_list_width;
+            int32_t list_top = top;
+            if (updates_line) {
+                add_updates_line(building, {left, top, list_width, metrics.button_height});
+                list_top += updates_row;
+            }
+            add_list(
+                building,
+                {left, list_top, list_width, window.footer_rule - window.gap - list_top},
+                large ? RowForm::large : RowForm::regular
+            );
+            left += list_width + window.padding;
+            add_details_pane(building, {left, top, window.right - left, panes_height});
         }
-        const int32_t panes_height = window.footer_rule - window.gap - top;
-        int32_t left = window.left;
-        if (large) {
-            add_filter_pane(building, {left, top, filter_pane_width, panes_height});
-            left += filter_pane_width + window.padding;
-        }
-        const int32_t list_width = large ? large_list_width : regular_list_width;
-        add_list(
-            building,
-            {left, top, list_width, panes_height},
-            large ? RowForm::large : RowForm::regular
-        );
-        left += list_width + window.padding;
-        add_details_pane(building, {left, top, window.right - left, panes_height});
     }
     add_list_footer(building, window, compact);
     return finish(building, window);

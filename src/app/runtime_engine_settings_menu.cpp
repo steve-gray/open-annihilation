@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The main menu's OA button, an overlay on the main menu under the
-// extensions' overlays, which opens the Library over the darkened main menu
-// (runtime_library.cpp) and wears a dot while updates wait there; and the
-// settings dialog as a screen of the OA layer (oa_layer.hpp), which the
-// shortcut, the requests and the Library's SETTINGS… open on whichever
-// screen can show them.
+// The main menu's two buttons, an overlay on the main menu under the
+// extensions' overlays: the OA button, which opens the Library over the
+// darkened main menu (runtime_library.cpp) and wears a dot while updates
+// wait there, and beside it the Settings button, which opens Settings with
+// no Library under it; and the settings dialog as a screen of the OA layer
+// (oa_layer.hpp), which the Settings button, the shortcut, the requests and
+// the Library's SETTINGS… open on whichever screen can show them.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
@@ -23,7 +24,9 @@
 
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace oa::app {
@@ -34,15 +37,31 @@ namespace kit = oa::ui::kit;
 
 namespace {
 
-/// The OA button's gap to the picture's right edge, and to its bottom edge
-/// (top edge while an extension's overlay stands over the main menu), in
-/// source pixels.
+/// The Settings button's gap to the picture's right edge, and the buttons'
+/// gap to its bottom edge (top edge while an extension's overlay stands
+/// over the main menu), in source pixels.
 constexpr int32_t kButtonInset = 12;
+/// The gap between the OA button and the Settings button: a quarter of a
+/// button's side, in source pixels.
+constexpr int32_t kButtonGap = settings::menu_button_side / 4;
 /// The button overlay's z: under the extensions' overlays, which draw over
 /// the button and see input before it.
 constexpr int16_t kButtonOverlayZ = -100;
-/// The sound the OA button plays as it opens the dialog.
+/// The sound Settings plays as it opens on the main menu.
 constexpr std::string_view kOpenSound = "Options";
+
+/// Returns how a main-menu button looks: lit under the pointer, sunk while
+/// a press on it is held there, and at rest under a modal screen.
+///
+/// @param hovered the pointer is over the button
+/// @param pressed a press on the button is held
+/// @param covered a modal screen of the OA layer shows
+/// @return the look
+settings::ButtonLook button_look(bool hovered, bool pressed, bool covered) noexcept {
+    if (covered || !hovered)
+        return settings::ButtonLook::idle;
+    return pressed ? settings::ButtonLook::pressed : settings::ButtonLook::hovered;
+}
 
 /// Tells whether a point lies in a rectangle.
 ///
@@ -85,21 +104,49 @@ bool Runtime::EngineSettingsMenuHost::button_shown(Runtime& runtime) {
 }
 
 artless::SourceRect Runtime::EngineSettingsMenuHost::button_rect(const Runtime& runtime) {
+    const artless::SourceRect beside = settings_button_rect(runtime);
+    return {beside.x - kButtonGap - beside.width, beside.y, beside.width, beside.height};
+}
+
+artless::SourceRect Runtime::EngineSettingsMenuHost::settings_button_rect(const Runtime& runtime) {
     constexpr int32_t side = settings::menu_button_side;
     const int32_t y =
         runtime.main_menu_overlay_ ? kButtonInset : kCanvasHeight - kButtonInset - side;
     return {kCanvasWidth - kButtonInset - side, y, side, side};
 }
 
+artless::RgbaPicture Runtime::EngineSettingsMenuHost::settings_icon(Runtime& runtime) {
+    auto& host = runtime.engine_settings_menu_host();
+    if (!host.settings_picture && !host.settings_picture_missing) {
+        WindowIcon decoded;
+        std::string error;
+        if (decode_window_icon(settings_icon_png(), decoded, error))
+            host.settings_picture = visible_part(decoded);
+        if (!host.settings_picture || host.settings_picture->pixels.empty()) {
+            host.settings_picture.reset();
+            host.settings_picture_missing = true;
+            std::cerr << "open-annihilation: the settings icon is missing"
+                      << (error.empty() ? std::string{} : ": " + error) << '\n';
+        }
+    }
+    if (!host.settings_picture)
+        return {};
+    return {
+        host.settings_picture->width, host.settings_picture->height, host.settings_picture->pixels
+    };
+}
+
 int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*) {
     auto& runtime = *static_cast<Runtime*>(context->host);
     auto& host = runtime.engine_settings_menu_host();
     const auto& input = *context->input;
-    // Under a modal screen of the OA layer the button sees no input: the
+    // Under a modal screen of the OA layer the buttons see no input: the
     // layer takes it first.
     if (runtime.oa_layer().modal_shown(false) || !button_shown(runtime)) {
         host.button_hovered = false;
         host.button_pressed = false;
+        host.settings_hovered = false;
+        host.settings_pressed = false;
         return 0;
     }
     if (input.kind == ScreenInputKind::key_down &&
@@ -110,27 +157,38 @@ int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*)
     int32_t x = 0;
     int32_t y = 0;
     pointer_pixel(input, x, y);
-    const bool over = contains(button_rect(runtime), x, y);
+    const bool over_library = contains(button_rect(runtime), x, y);
+    const bool over_settings = contains(settings_button_rect(runtime), x, y);
     switch (input.kind) {
     case ScreenInputKind::pointer_move:
-        host.button_hovered = over;
+        host.button_hovered = over_library;
+        host.settings_hovered = over_settings;
         return 0;
     case ScreenInputKind::pointer_down:
-        host.button_hovered = over;
-        if (input.button != SDL_BUTTON_LEFT || !over)
+        host.button_hovered = over_library;
+        host.settings_hovered = over_settings;
+        if (input.button != SDL_BUTTON_LEFT || (!over_library && !over_settings))
             return 0;
-        host.button_pressed = true;
+        host.button_pressed = over_library;
+        host.settings_pressed = over_settings;
         return 1;
     case ScreenInputKind::pointer_up: {
-        host.button_hovered = over;
-        if (input.button != SDL_BUTTON_LEFT || !host.button_pressed)
+        host.button_hovered = over_library;
+        host.settings_hovered = over_settings;
+        if (input.button != SDL_BUTTON_LEFT || (!host.button_pressed && !host.settings_pressed))
             return 0;
-        // A press opens the Library when it is released over the button,
-        // on Updates while updates wait; released elsewhere it does
-        // nothing. The shortcut and the Library's SETTINGS… open Settings.
+        // A press opens what its button opens when it is released over that
+        // button: the OA button the Library, on its Active tab,
+        // and the Settings button Settings, with no Library under it.
+        // Released elsewhere it does nothing.
+        const bool opens_library = host.button_pressed && over_library;
+        const bool opens_settings = host.settings_pressed && over_settings;
         host.button_pressed = false;
-        if (over)
+        host.settings_pressed = false;
+        if (opens_library)
             runtime.open_library(std::nullopt);
+        else if (opens_settings)
+            runtime.open_engine_settings_from_menu();
         return 1;
     }
     default:
@@ -143,9 +201,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
     if (!button_shown(runtime) || context->surface == nullptr)
         return;
     const auto& host = runtime.engine_settings_menu_host();
-    auto look = settings::ButtonLook::idle;
-    if (!runtime.oa_layer().modal_shown(false) && host.button_hovered)
-        look = host.button_pressed ? settings::ButtonLook::pressed : settings::ButtonLook::hovered;
+    const bool covered = runtime.oa_layer().modal_shown(false);
     const auto rect = button_rect(runtime);
     // The dot shows while the Library has updates that can be installed;
     // without it the button is drawn as it always was.
@@ -155,8 +211,23 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
          runtime.engine_settings_fonts(),
          runtime.engine_settings_icon()},
         rect.width,
-        static_cast<kit::OaButtonState>(look),
+        static_cast<kit::OaButtonState>(
+            button_look(host.button_hovered, host.button_pressed, covered)
+        ),
         runtime.library_update_count() > 0
+    );
+    // The Settings button never wears the dot.
+    const auto beside = settings_button_rect(runtime);
+    kit::draw_oa_button(
+        {context->surface,
+         {beside.x, beside.y, 1},
+         runtime.engine_settings_fonts(),
+         settings_icon(runtime)},
+        beside.width,
+        static_cast<kit::OaButtonState>(
+            button_look(host.settings_hovered, host.settings_pressed, covered)
+        ),
+        false
     );
 }
 
@@ -191,6 +262,8 @@ void Runtime::open_engine_settings_from_menu() {
     auto& host = engine_settings_menu_host();
     host.button_hovered = false;
     host.button_pressed = false;
+    host.settings_hovered = false;
+    host.settings_pressed = false;
     play_ui_sound(kOpenSound, 0);
 }
 

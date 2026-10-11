@@ -27,7 +27,7 @@ inline constexpr kit::ControlId filter_menu = 11;
 inline constexpr kit::ControlId tags_menu = 12;
 /// The Compact details page's MORE ▾ (library.action).
 inline constexpr kit::ControlId more_menu = 13;
-/// The All chip or nav entry; Installed and Updates follow in Filter's order.
+/// The All chip or nav entry; New, Installed and Updates follow in Filter's order.
 inline constexpr kit::ControlId first_filter = 20;
 /// UPDATE ALL.
 inline constexpr kit::ControlId update_all = 30;
@@ -51,12 +51,23 @@ inline constexpr kit::ControlId note = 62;
 inline constexpr kit::ControlId from = 63;
 /// The Rules fact's label.
 inline constexpr kit::ControlId rules = 64;
+/// The Active tab's line on the mod being played.
+inline constexpr kit::ControlId active_mod = 65;
+/// The Active tab's line on the language in use.
+inline constexpr kit::ControlId active_language = 66;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.
 inline constexpr kit::ControlId first_tag = 1000;
-/// An open drop-down's item: this and the item's place among its items.
+/// An open drop-down's item: this and the item's place among its items,
+/// below first_active_map.
 inline constexpr kit::ControlId first_menu_item = 3000;
+/// The Active tab's line on a map: this and the map's place among the
+/// lines, from 0, below first_row.
+inline constexpr kit::ControlId first_active_map = 6000;
+/// The most maps whose lines are labels; the lines after them are drawn
+/// but not named.
+inline constexpr std::size_t most_active_maps = 4000;
 /// A row: this and the entry's place in the model's visible entries, below first_row_icon.
 inline constexpr kit::ControlId first_row = 10000;
 /// A row's state icon that is pressed as GET or UPDATE: this and the
@@ -120,9 +131,10 @@ struct MenuItem {
 
 /// Lists a drop-down's items.
 ///
-/// Compact's filter holds All, Installed and Updates, then every tag of the
-/// tab; the tags drop-down the tags without a chip or nav entry of their
-/// own; MORE the selected entry's actions after its first three.
+/// Compact's filter holds All, New, Installed and Updates with their counts,
+/// then every tag of the tab; the tags drop-down the tags without a chip or
+/// nav entry of their own; MORE the selected entry's actions after its
+/// first three.
 ///
 /// @param library the model
 /// @param menu the drop-down

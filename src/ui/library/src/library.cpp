@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The Library's entries built from its inputs, browsing and selection, and
-// what the details and the footer say about them.
+// The Library's entries built from its inputs, browsing, each tab's filter
+// and the filters' counts, selection, what the details and the footer say
+// about the entries, and what the Active tab says of the player's setup.
 #include "oa/ui/library/library.hpp"
 
 #include "oa/data/mod_profile/registry.hpp"
@@ -496,8 +497,12 @@ void set_tab(Library& library, Tab tab) {
 }
 
 void set_filter(Library& library, Filter filter) {
-    library.filter = filter;
+    library.filters[static_cast<std::size_t>(library.tab)] = filter;
     recompute(library);
+}
+
+Filter shown_filter(const Library& library) {
+    return library.filters[static_cast<std::size_t>(library.tab)];
 }
 
 void set_tag(Library& library, std::string_view tag) {
@@ -574,14 +579,30 @@ std::string_view entry_name(const Entry& entry) {
 }
 
 std::vector<std::pair<std::string, std::size_t>> tags_in_tab(const Library& library) {
+    const std::vector<bool> kept = kept_by_filter(library, shown_filter(library));
     std::map<std::string, std::size_t> counts;
-    for (const Entry& entry : library.entries) {
-        if (entry.listing == nullptr || !shown_in_tab(library, entry, false))
+    for (std::size_t index = 0; index < library.entries.size(); ++index) {
+        const Entry& entry = library.entries[index];
+        if (entry.listing == nullptr || !kept[index])
             continue;
         for (const std::string& tag : entry.listing->tags)
             ++counts[tag];
     }
     return {counts.begin(), counts.end()};
+}
+
+std::size_t filter_count(const Library& library, Filter filter) {
+    const std::vector<bool> kept = kept_by_filter(library, filter);
+    return static_cast<std::size_t>(std::count(kept.begin(), kept.end(), true));
+}
+
+std::string filter_caption(const Library& library, Filter filter) {
+    return filled(
+        library.text,
+        words::filter_with_count,
+        {{"filter", filter_text(filter, library.text)},
+         {"count", std::to_string(filter_count(library, filter))}}
+    );
 }
 
 std::size_t update_count(const Library& library) {
@@ -590,6 +611,94 @@ std::size_t update_count(const Library& library) {
             return entry.state == State::update && entry.can_act;
         })
     );
+}
+
+std::size_t updates_shown(const Library& library) {
+    return static_cast<std::size_t>(
+        std::count_if(library.visible.begin(), library.visible.end(), [&](std::size_t index) {
+            return library.entries[index].state == State::update;
+        })
+    );
+}
+
+ActiveSetup active_setup(const Library& library) {
+    const TextHooks& text = library.text;
+    const Inputs& inputs = library.inputs;
+    ActiveSetup setup;
+
+    const Entry* playing = nullptr;
+    for (const Entry& entry : library.entries)
+        if (entry.id.kind == Kind::mod && entry.installed != nullptr && entry.installed->playing) {
+            playing = &entry;
+            break;
+        }
+    if (playing != nullptr) {
+        setup.mod_name = entry_name(*playing);
+        setup.mod_version = version_text(*playing->installed, text);
+        if (playing->listing != nullptr && playing->listing->badge)
+            setup.mod_badge = &*playing->listing->badge;
+        else if (playing->installed->badge)
+            setup.mod_badge = &*playing->installed->badge;
+    } else if (inputs.playing_mod) {
+        setup.mod_name = inputs.playing_mod->name;
+        setup.mod_version = inputs.playing_mod->version;
+        if (inputs.playing_mod->badge)
+            setup.mod_badge = &*inputs.playing_mod->badge;
+    }
+    if (playing == nullptr && !inputs.playing_mod)
+        setup.mod_line = shown(text, words::active_no_mod);
+    else if (setup.mod_version.empty())
+        setup.mod_line = setup.mod_name;
+    else
+        setup.mod_line = filled(
+            text, words::active_package, {{"name", setup.mod_name}, {"version", setup.mod_version}}
+        );
+
+    const LanguageInUse& language = inputs.language;
+    if (!language.pack.empty()) {
+        setup.language_line = language.version.empty()
+                                  ? language.pack
+                                  : filled(
+                                        text,
+                                        words::active_package,
+                                        {{"name", language.pack}, {"version", language.version}}
+                                    );
+    } else {
+        const std::string name = language.name.empty()
+                                     ? std::string(shown(text, words::language_english))
+                                     : language.name;
+        setup.language_line = filled(text, words::active_language_built_in, {{"language", name}});
+    }
+
+    for (const InstalledMaps& pack : inputs.map_packs) {
+        ActivePack shown_pack;
+        shown_pack.name = pack.name;
+        for (const MapLine& map : pack.maps) {
+            ActiveMap line;
+            line.name = map.name;
+            line.players = filled(
+                text,
+                map.players == 1 ? words::active_players_one : words::active_players_many,
+                {{"count", std::to_string(map.players)}}
+            );
+            line.size = map.size;
+            line.line = filled(
+                text,
+                words::active_map,
+                {{"map", line.name}, {"players", line.players}, {"size", line.size}}
+            );
+            shown_pack.maps.push_back(std::move(line));
+        }
+        setup.packs.push_back(std::move(shown_pack));
+    }
+    std::stable_sort(
+        setup.packs.begin(),
+        setup.packs.end(),
+        [](const ActivePack& left, const ActivePack& right) {
+            return folded(left.name) < folded(right.name);
+        }
+    );
+    return setup;
 }
 
 std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry) {

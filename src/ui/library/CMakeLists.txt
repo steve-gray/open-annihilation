@@ -19,9 +19,9 @@ target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 oa-ui
   oa-data-mod-profile oa-options)
 
 if(BUILD_TESTING)
-  # Entries and their states, blocking, registries, tabs, filters, tags, the
-  # order, selection, buttons, facts, status lines, notes, queue lines and
-  # every text.
+  # Entries and their states, blocking, registries, tabs, each tab's filter,
+  # New, the filters' counts, tags, the Active tab, the order, selection,
+  # buttons, facts, status lines, notes, queue lines and every text.
   add_executable(oa-ui-library-test tests/library_test.cpp)
   target_link_libraries(oa-ui-library-test PRIVATE oa-ui-library oa-data-mod-profile oa-test-support
     oa-options)
@@ -55,9 +55,9 @@ if(BUILD_TESTING)
   add_test(NAME ui-library-layout COMMAND oa-ui-library-layout-test)
   set_tests_properties(ui-library-layout PROPERTIES TIMEOUT 60)
 
-  # Each class drawn twice in the installed game's fonts, byte for byte the
-  # same and nothing outside the window; with --frames DIR it writes the
-  # pictures for review.
+  # Each class drawn twice in the installed game's fonts, and the Active and
+  # Updates tabs, byte for byte the same and nothing outside the window;
+  # with --frames DIR it writes the pictures for review.
   add_executable(oa-ui-library-draw-test tests/draw_test.cpp)
   target_link_libraries(oa-ui-library-draw-test PRIVATE oa-ui-library oa-ui-kit oa-formats-png
     oa-formats-hpi oa-platform-text-font oa-present oa-test-game-data oa-test-support oa-options)

@@ -74,8 +74,8 @@ struct Runtime::EngineSettingsState {
     oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::mods};
     std::optional<oa::ui::engine_settings::DialogFonts> fonts; ///< loaded on first use
     bool fonts_missing{}; ///< loading the fonts failed; they are not tried again
-    /// The icon the header and the OA buttons draw: the window icon's
-    /// visible part, decoded on first use.
+    /// The icon the header and the main menu's OA button draw: the window
+    /// icon's visible part, decoded on first use.
     std::optional<WindowIcon> icon;
     bool icon_missing{}; ///< decoding the icon failed; it is not tried again
     /// The pointer event being taken comes from a finger: its mouse is
