@@ -14,9 +14,11 @@ target_link_libraries(oa-ui-folder-chooser PUBLIC oa-ui-game-files PRIVATE oa-da
 
 if(BUILD_TESTING)
   # The list and the browser laid out at 1280x800 and 852x393 with its safe
-  # area, the focus order, the keys, presses and scrolling.
+  # area, the focus order, the keys, presses and scrolling, and every layout
+  # against the digest tests/layout-digests.txt records for it.
   add_executable(oa-ui-folder-chooser-test tests/folder_chooser_test.cpp)
-  target_link_libraries(oa-ui-folder-chooser-test PRIVATE oa-ui-folder-chooser oa-test-support
-    oa-options)
-  add_test(NAME ui-folder-chooser COMMAND oa-ui-folder-chooser-test)
+  target_link_libraries(oa-ui-folder-chooser-test PRIVATE oa-ui-folder-chooser oa-base-sha256
+    oa-test-support oa-options)
+  add_test(NAME ui-folder-chooser COMMAND oa-ui-folder-chooser-test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/layout-digests.txt)
 endif()

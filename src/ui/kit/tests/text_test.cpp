@@ -3,8 +3,8 @@
 
 // UTF-8 helpers, the estimated width, the stand-in characters, and the one
 // wrap checked against copies of the six wraps it replaces; fit and
-// fitting_start against the Game files screen's copies, and the modern
-// fonts' measure through its hooks.
+// fitting_start against the Game files screen's copies, path_break against
+// the folder chooser's, and the modern fonts' measure through its hooks.
 
 #include "oa/base/text/line_break.hpp"
 #include "oa/formats/fnt.hpp"
@@ -766,7 +766,7 @@ void the_wrap_matches_every_old_wrap() {
                         }
                         if (site.path_break) {
                             rules.break_word = [&](std::string_view word) {
-                                return before_kit::breaking_point(word, width, measure);
+                                return kit::path_break(word, width, measure);
                             };
                         }
                         if (site.limit_lines) {
@@ -886,6 +886,47 @@ void fit_matches_the_screens_copies() {
     OA_CHECK(kit::ellipsis == ellipsis);
 }
 
+/// Checks path_break: where it breaks a path, at a separator that fits and not at the one the
+/// path starts with, and that it breaks every word as the folder chooser's own copy, which it
+/// replaces, did, over the wrap's texts and rooms with both measures.
+void a_path_breaks_after_a_separator() {
+    // Six pixels a character: the room of ten characters holds "/home/deck".
+    OA_CHECK(kit::path_break("/home/deck/Games", 60, columns_width) == 6);
+    OA_CHECK(kit::path_break("C:\\Games\\TA", 54, columns_width) == 9);
+    // No separator, or only the one it starts with: the characters that fit.
+    OA_CHECK(kit::path_break("abcdefghij", 30, columns_width) == 5);
+    OA_CHECK(kit::path_break("/abcdefgh", 30, columns_width) == 5);
+    // A path that fits is whole; the first character is kept however narrow the room.
+    OA_CHECK(kit::path_break("/a/b", 60, columns_width) == 4);
+    OA_CHECK(kit::path_break("/abc", 3, columns_width) == 1);
+    OA_CHECK(kit::path_break("", 30, columns_width) == 0);
+    const kit::WordBreak rule = kit::path_break;
+    OA_CHECK(rule("/home/deck/Games", 60, columns_width) == 6);
+
+    const std::string wides(40, 'w');
+    const std::string_view words[] = {
+        "",
+        "/",
+        "word",
+        wides,
+        "建造完成/单位已就绪",
+        "C:\\Users\\player\\Documents\\Open_Annihilation\\Saves",
+        "/home/player/Documents/Open_Annihilation/Saves",
+        "/run/media/deck/SD/SteamLibrary/steamapps/common/Total_Annihilation",
+        "//double//separators//",
+        "a\u2026b/c\u203Ad",
+    };
+    const before_kit::Measure measures[] = {columns_width, proportional_width};
+    const int32_t widths[] = {-5, 0, 1, 5, 6, 12, 30, 60, 120, 400};
+    for (const before_kit::Measure& measure : measures)
+        for (const int32_t width : widths)
+            for (const std::string_view word : words)
+                OA_CHECK(
+                    kit::path_break(word, width, measure) ==
+                    before_kit::breaking_point(word, width, measure)
+                );
+}
+
 /// A width hook that counts its calls: 10 pixels a character, 12 in bold.
 int measured_calls = 0;
 
@@ -946,6 +987,7 @@ int main() {
     the_wrap_matches_every_old_wrap();
     the_paint_wrap_keeps_its_lines();
     fit_matches_the_screens_copies();
+    a_path_breaks_after_a_separator();
     the_measure_uses_its_hooks();
     return oa::test::check_exit_status();
 }

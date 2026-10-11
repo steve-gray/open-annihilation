@@ -2,51 +2,53 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The chooser's hit test, presses, keys, focus and scrolling
-// (folder_chooser.hpp). Arrows move the focus to the nearest target in their
-// direction, Tab through the focus order, and a target the focus reaches is
-// scrolled into view.
+// (folder_chooser.hpp), over the kit's display list. A press reaches the
+// target the kit's reach finds, a disabled one holding it to no target; the
+// arrows move the focus by the kit's two-dimensional focus, judged with the
+// rows laid out whole; Tab moves through the focus order, and a target the
+// focus reaches is scrolled into view.
 #include "oa/ui/folder_chooser.hpp"
+
+#include "folder_chooser_internal.hpp"
+
+#include "oa/ui/kit/input.hpp"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
+#include <cstddef>
 #include <optional>
+#include <span>
 
 namespace oa::ui::folder_chooser {
 
+namespace detail {
+
+const oa::ui::kit::Item* target_part(const oa::ui::kit::DisplayList& list, int32_t place) noexcept {
+    if (place < 0)
+        return nullptr;
+    int32_t seen = 0;
+    for (const oa::ui::kit::Item& part : list.items) {
+        if (part.control == oa::ui::kit::no_control)
+            continue;
+        if (seen == place)
+            return &part;
+        ++seen;
+    }
+    return nullptr;
+}
+
+} // namespace detail
+
 namespace {
 
-/// How much more the distance across a direction counts than the distance along it, when the
-/// arrows pick the nearest target in their direction.
-constexpr int64_t across_weight = 2;
+namespace kit = oa::ui::kit;
 
-/// Returns the part of a target's box that can be seen and pressed: the box, cut by its clip.
-///
-/// @param hit the target
-/// @return the visible box; empty when none of it shows
-Rect visible_box(const HitBox& hit) noexcept {
-    if (hit.clip.width <= 0 || hit.clip.height <= 0)
-        return hit.box;
-    const int left = std::max(hit.box.x, hit.clip.x);
-    const int top = std::max(hit.box.y, hit.clip.y);
-    const int right = std::min(hit.box.x + hit.box.width, hit.clip.x + hit.clip.width);
-    const int bottom = std::min(hit.box.y + hit.box.height, hit.clip.y + hit.clip.height);
-    if (right <= left || bottom <= top)
-        return {};
-    return {left, top, right - left, bottom - top};
-}
+/// The bits under a target's kind in its control number: its index.
+constexpr int index_bits = 16;
+/// The bits of a control number that hold the target's index.
+constexpr kit::ControlId index_mask = 0xffff;
 
-/// Tells whether a point lies in a box.
-///
-/// @param box the box
-/// @param point the point
-/// @return true when it does
-bool contains(Rect box, Point point) noexcept {
-    return box.width > 0 && box.height > 0 && point.x >= box.x && point.x < box.x + box.width &&
-           point.y >= box.y && point.y < box.y + box.height;
-}
-
-/// Returns how far a press reaches beyond a box: pick_reach_points at the layout's density.
+/// Returns how far a press reaches beyond a part: pick_reach_points at the layout's density.
 ///
 /// @param layout the layout
 /// @return canvas pixels
@@ -55,15 +57,36 @@ int press_reach(const Layout& layout) noexcept {
     return static_cast<int>(std::lround(oa::ui::game_files::pick_reach_points * scale));
 }
 
-/// Finds a target's box.
+/// Finds the part that draws a target.
 ///
 /// @param layout the layout
 /// @param target the target
-/// @return its place in Layout::targets; none when it is not laid out
-std::optional<std::size_t> hit_of(const Layout& layout, Target target) noexcept {
-    for (std::size_t index = 0; index < layout.targets.size(); ++index)
-        if (layout.targets[index].target == target)
-            return index;
+/// @return the part; null when the target is not laid out
+const kit::Item* part_of(const Layout& layout, Target target) noexcept {
+    const kit::ControlId id = control_id(target);
+    if (id == kit::no_control)
+        return nullptr;
+    for (const kit::Item& part : layout.paint.list.items)
+        if (part.control == id)
+            return &part;
+    return nullptr;
+}
+
+/// Finds a target's place in the order the targets were laid out.
+///
+/// @param layout the layout
+/// @param target the target
+/// @return its place; none when it is not laid out
+std::optional<int32_t> place_of(const Layout& layout, Target target) noexcept {
+    const kit::ControlId id = control_id(target);
+    int32_t seen = 0;
+    for (const kit::Item& part : layout.paint.list.items) {
+        if (part.control == kit::no_control)
+            continue;
+        if (part.control == id)
+            return seen;
+        ++seen;
+    }
     return std::nullopt;
 }
 
@@ -99,136 +122,100 @@ Outcome outcome_of(Target target) noexcept {
     return {};
 }
 
-/// Scrolls the rows so that a target's box shows whole in its scrolling region, as far as
+/// Scrolls the rows so that a target's part shows whole in its scrolling region, as far as
 /// the layout's range allows.
 ///
 /// @param layout the layout
 /// @param[in,out] state what the chooser keeps between frames
 /// @param target the target
 void scroll_into_view(const Layout& layout, UiState& state, Target target) noexcept {
-    const auto index = hit_of(layout, target);
-    if (!index)
+    const kit::Item* part = part_of(layout, target);
+    if (part == nullptr || part->clip.height <= 0)
         return;
-    const HitBox& hit = layout.targets[*index];
-    if (hit.clip.height <= 0)
-        return;
+    const Rect& box = part->rect;
+    const Rect& clip = part->clip;
     const float scale = layout.paint.px_per_point > 0.0f ? layout.paint.px_per_point : 1.0f;
     int32_t points = 0;
-    if (hit.box.y < hit.clip.y)
-        points =
-            -static_cast<int32_t>(std::ceil(static_cast<float>(hit.clip.y - hit.box.y) / scale));
-    else if (hit.box.y + hit.box.height > hit.clip.y + hit.clip.height)
-        points = static_cast<int32_t>(std::ceil(
-            static_cast<float>(hit.box.y + hit.box.height - (hit.clip.y + hit.clip.height)) / scale
-        ));
+    if (box.y < clip.y)
+        points = -static_cast<int32_t>(std::ceil(static_cast<float>(clip.y - box.y) / scale));
+    else if (box.y + box.height > clip.y + clip.height)
+        points = static_cast<int32_t>(
+            std::ceil(static_cast<float>(box.y + box.height - (clip.y + clip.height)) / scale)
+        );
     if (points != 0)
         scroll(layout, state, points);
 }
 
-/// Returns where a target's box would lie with the rows unscrolled and laid out whole: the
-/// scrolled ones moved back by the scroll, and the buttons below the rows moved down past
-/// all of them. Directions are judged there, so that rows scrolled out of view lie between
-/// the fixed parts as they do in the column.
+/// Returns the rows' scroll area as the arrows judge it: the scrolling region, scrolled as far
+/// as the chooser keeps it, and the layout's range, in canvas pixels.
 ///
 /// @param layout the layout
-/// @param state the scroll it was laid out with
-/// @param hit the target
-/// @return the box in the column's own coordinates
-Rect column_box(const Layout& layout, const UiState& state, const HitBox& hit) noexcept {
+/// @param state the scroll the chooser keeps
+/// @return the scroll area; an empty view when nothing scrolls
+kit::ScrollArea rows_area(const Layout& layout, const UiState& state) noexcept {
     const float scale = layout.paint.px_per_point > 0.0f ? layout.paint.px_per_point : 1.0f;
     const int32_t most = std::max(0, layout.scroll_max_points);
-    const int scrolled = static_cast<int>(
+    kit::ScrollArea area{};
+    area.view = layout.paint.rows;
+    area.offset = static_cast<int32_t>(
         std::lround(static_cast<float>(std::clamp(state.scroll_points, 0, most)) * scale)
     );
-    const int whole = static_cast<int>(std::lround(static_cast<float>(most) * scale));
-    Rect box = hit.box;
-    const Rect& rows = layout.paint.rows;
-    if (hit.clip.height > 0)
-        box.y += scrolled;
-    else if (rows.height > 0 && box.y >= rows.y + rows.height)
-        box.y += whole;
-    return box;
+    area.limit = static_cast<int32_t>(std::lround(static_cast<float>(most) * scale));
+    return area;
 }
 
-/// Picks the nearest target of the focus order in a direction from the focused one.
+/// Picks the target of the focus order the arrows move the focus to from the focused one, by
+/// the kit's two-dimensional focus with the rows laid out whole: rows scrolled out of view lie
+/// between the fixed parts as they do in the column.
 ///
 /// @param layout the layout
 /// @param state the scroll it was laid out with
 /// @param from the focused entry of the focus order
-/// @param dx the direction across: -1 left, 1 right, 0 neither
-/// @param dy the direction down: -1 up, 1 down, 0 neither
+/// @param direction the way the focus moves
 /// @return the entry of the focus order; none when nothing lies that way
-std::optional<int32_t> nearest_in_direction(
-    const Layout& layout, const UiState& state, int32_t from, int dx, int dy
+std::optional<int32_t> arrow_target(
+    const Layout& layout, const UiState& state, int32_t from, kit::Direction direction
 ) noexcept {
-    const auto from_hit = hit_of(layout, layout.focus_order[static_cast<std::size_t>(from)]);
-    if (!from_hit)
+    const kit::ScrollArea rows = rows_area(layout, state);
+    const kit::ControlId next = kit::focus_toward(
+        layout.paint.list,
+        control_id(layout.focus_order[static_cast<std::size_t>(from)]),
+        direction,
+        std::span<const kit::ScrollArea>(&rows, 1)
+    );
+    if (next == kit::no_control)
         return std::nullopt;
-    const Rect origin = column_box(layout, state, layout.targets[*from_hit]);
-    const int64_t origin_x = int64_t{origin.x} * 2 + origin.width;
-    const int64_t origin_y = int64_t{origin.y} * 2 + origin.height;
-    std::optional<int32_t> best;
-    int64_t best_score = 0;
-    for (std::size_t index = 0; index < layout.focus_order.size(); ++index) {
-        if (static_cast<int32_t>(index) == from)
-            continue;
-        const auto hit = hit_of(layout, layout.focus_order[index]);
-        if (!hit)
-            continue;
-        const Rect box = column_box(layout, state, layout.targets[*hit]);
-        // Centres in doubled pixels, so that halves stay whole.
-        const int64_t along_x = int64_t{box.x} * 2 + box.width - origin_x;
-        const int64_t along_y = int64_t{box.y} * 2 + box.height - origin_y;
-        const int64_t along = dx != 0 ? along_x * dx : along_y * dy;
-        const int64_t across = dx != 0 ? std::llabs(along_y) : std::llabs(along_x);
-        if (along <= 0)
-            continue;
-        // Across a row, only targets that share some of the focused one's height count.
-        if (dx != 0 && (box.y >= origin.y + origin.height || box.y + box.height <= origin.y))
-            continue;
-        const int64_t score = along + across_weight * across;
-        if (!best || score < best_score) {
-            best = static_cast<int32_t>(index);
-            best_score = score;
-        }
-    }
-    return best;
+    const Target target = target_of(next);
+    for (std::size_t index = 0; index < layout.focus_order.size(); ++index)
+        if (layout.focus_order[index] == target)
+            return static_cast<int32_t>(index);
+    return std::nullopt;
 }
 
 } // namespace
 
+kit::ControlId control_id(Target target) noexcept {
+    if (target.kind == TargetKind::none)
+        return kit::no_control;
+    return (static_cast<kit::ControlId>(target.kind) << index_bits) |
+           static_cast<kit::ControlId>(target.index);
+}
+
+Target target_of(kit::ControlId id) noexcept {
+    if (id <= 0)
+        return {};
+    const kit::ControlId kind = id >> index_bits;
+    if (kind <= static_cast<kit::ControlId>(TargetKind::none) ||
+        kind > static_cast<kit::ControlId>(TargetKind::back))
+        return {};
+    return {static_cast<TargetKind>(kind), static_cast<uint16_t>(id & index_mask)};
+}
+
 Target hit_test(const Layout& layout, Point point, int reach_px) noexcept {
     // A target that holds the point takes it; a disabled one holds it to no target.
-    for (std::size_t index = layout.targets.size(); index-- > 0;) {
-        const HitBox& hit = layout.targets[index];
-        if (contains(visible_box(hit), point))
-            return hit.enabled ? hit.target : Target{};
-    }
-    Target nearest{};
-    double nearest_distance = static_cast<double>(std::max(0, reach_px));
-    bool found = false;
-    for (std::size_t index = layout.targets.size(); index-- > 0;) {
-        const HitBox& hit = layout.targets[index];
-        if (!hit.enabled)
-            continue;
-        const Rect box = visible_box(hit);
-        if (box.width <= 0 || box.height <= 0)
-            continue;
-        const int dx = point.x < box.x                ? box.x - point.x
-                       : point.x >= box.x + box.width ? point.x - (box.x + box.width - 1)
-                                                      : 0;
-        const int dy = point.y < box.y                 ? box.y - point.y
-                       : point.y >= box.y + box.height ? point.y - (box.y + box.height - 1)
-                                                       : 0;
-        const double distance =
-            std::sqrt(static_cast<double>(dx) * dx + static_cast<double>(dy) * dy);
-        if (distance <= nearest_distance && (!found || distance < nearest_distance)) {
-            nearest = hit.target;
-            nearest_distance = distance;
-            found = true;
-        }
-    }
-    return found ? nearest : Target{};
+    return target_of(
+        kit::reach(layout.paint.list, point, reach_px, kit::DisabledControl::blocks).control
+    );
 }
 
 void press_down(const Layout& layout, UiState& state, Point point) noexcept {
@@ -237,30 +224,31 @@ void press_down(const Layout& layout, UiState& state, Point point) noexcept {
     const Target target = hit_test(layout, point, press_reach(layout));
     if (target.kind == TargetKind::none)
         return;
-    if (const auto index = hit_of(layout, target))
-        state.pressed = static_cast<int32_t>(*index);
+    if (const auto place = place_of(layout, target))
+        state.pressed = *place;
 }
 
 Outcome press_up(const Layout& layout, UiState& state, Point point) noexcept {
     const int32_t pressed = state.pressed;
     state.pressed = -1;
-    if (pressed < 0 || static_cast<std::size_t>(pressed) >= layout.targets.size())
+    const kit::Item* held = detail::target_part(layout.paint.list, pressed);
+    if (held == nullptr)
         return {};
-    const HitBox& held = layout.targets[static_cast<std::size_t>(pressed)];
-    if (!held.enabled || hit_test(layout, point, press_reach(layout)) != held.target)
+    const Target target = target_of(held->control);
+    if (held->state.disabled || hit_test(layout, point, press_reach(layout)) != target)
         return {};
     // The focus follows the press, for keys or a pad that come next.
     for (std::size_t index = 0; index < layout.focus_order.size(); ++index)
-        if (layout.focus_order[index] == held.target)
+        if (layout.focus_order[index] == target)
             state.focus = static_cast<int32_t>(index);
-    return outcome_of(held.target);
+    return outcome_of(target);
 }
 
 Outcome key(const Layout& layout, UiState& state, Key key) noexcept {
     const int32_t count = static_cast<int32_t>(layout.focus_order.size());
     if (key == Key::escape) {
         // Back from the browser to the list; the list has nowhere to go back to.
-        if (hit_of(layout, Target{TargetKind::back, 0}))
+        if (part_of(layout, Target{TargetKind::back, 0}) != nullptr)
             return {Command::back_to_list, 0};
         return {};
     }
@@ -292,16 +280,16 @@ Outcome key(const Layout& layout, UiState& state, Key key) noexcept {
         next = (state.focus + count - 1) % count;
         break;
     case Key::up:
-        next = nearest_in_direction(layout, state, state.focus, 0, -1);
+        next = arrow_target(layout, state, state.focus, kit::Direction::up);
         break;
     case Key::down:
-        next = nearest_in_direction(layout, state, state.focus, 0, 1);
+        next = arrow_target(layout, state, state.focus, kit::Direction::down);
         break;
     case Key::left:
-        next = nearest_in_direction(layout, state, state.focus, -1, 0);
+        next = arrow_target(layout, state, state.focus, kit::Direction::left);
         break;
     case Key::right:
-        next = nearest_in_direction(layout, state, state.focus, 1, 0);
+        next = arrow_target(layout, state, state.focus, kit::Direction::right);
         break;
     case Key::enter:
         return outcome_of(layout.focus_order[static_cast<std::size_t>(state.focus)]);
