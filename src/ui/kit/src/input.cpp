@@ -646,6 +646,7 @@ KeyOutcome key(Interaction& interaction, const DisplayList& list, Key pressed) {
         return outcome_of(KeyResult::cancel, no_control, pressed);
     case Key::yes:
     case Key::no:
+    case Key::info:
         return outcome_of(KeyResult::none, no_control, pressed);
     case Key::backspace:
     case Key::delete_forward:

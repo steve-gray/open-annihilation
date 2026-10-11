@@ -144,7 +144,10 @@ its hover card's timer in its own state.
   its caret stands on a character boundary: `insert_text` refuses anything
   else whole, and `edit_text` deletes and steps over whole characters.
 - `kit::Key` keeps the settings dialog's keys' values up to No; the editing
-  keys, Backspace and Delete, follow it.
+  keys, Backspace and Delete, follow it, and then the information key,
+  Info, which the OA layer gives F1 outside a match. `key` does nothing
+  with Info, as with Yes and No: a screen that has more to tell about what
+  the pointer or the focus is on answers it before it calls `key`.
 - A hover card is due only once the pointer has rested on one control for
   `hover_card_delay_ms`. The timer is the screen's: the kit keeps none.
 - A notice and a question place their parts from the Compact metrics, but
@@ -222,7 +225,7 @@ parts against the settings dialog's own placement, their display lists'
 names, kinds and Tab order, a word of their own (`language-notice`) and
 their text's control, which changes what no press or finger finds at any
 point of the box, where a finger lands, every key (the editing
-keys, which do nothing, among them), that `paint` matches `draw_notice` and
+keys and Info, which do nothing, among them), that `paint` matches `draw_notice` and
 `draw_question`, and the progress bar's fill.
 `ui-kit-rows` lays out, draws, focuses and changes a page of every row
 kind from a table: the placement of rows shaped as the settings dialog's
