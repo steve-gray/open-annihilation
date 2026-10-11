@@ -334,6 +334,8 @@ std::string_view label_of(settings::Setting setting) {
         return "OPEN MODS FOLDER";
     case settings::Setting::user_folder:
         return "Your files";
+    case settings::Setting::kit_gallery:
+        return "UI kit gallery";
     default:
         return {};
     }

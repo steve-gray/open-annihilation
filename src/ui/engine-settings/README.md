@@ -68,6 +68,7 @@ the locks a running game puts on them (`settings_locks`).
 | Downloads, listed in every dialog of the engine's settings, before Developer | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
 | Developer | Enable Developer Mode | Off, On | Off | `open-annihilation.developer-mode` |
 | | Show performance statistics | Off, On | Off | `open-annihilation.frame-stats` |
+| | UI kit gallery: SHOW opens the gallery of every part of OA's own screens (`DialogAction::show_gallery`) | | | none |
 | | The overrides of the profile's standard hacks, in Developer Mode's list | any hack on or off, with its parameters | none | `open-annihilation.hack-overrides.<id>`, the id of the profile the game plays, `ta-3.1c` without a mod, `folder:<path>` for a mod folder without a profile |
 
 Mouse wheel zoom, while on, also leaves a profile's megamap off for the
@@ -974,9 +975,21 @@ It lies in the Developer section, which holds, top to bottom, in the
 dialog's own fonts, colours, switches and sliders:
 
 - at its top, **Enable Developer Mode**, an Off/On switch, Off by default,
-  with its hint, and under it **Show performance statistics**, which
-  Developer Mode leaves alone: two rows that never scroll, with half the
-  clear pixels of a section's rows round them, so that the list has room;
+  with its hint, under it **Show performance statistics**, which
+  Developer Mode leaves alone, and under that **UI kit gallery**, its hint
+  "Every part of OA's own screens, in each of its states, at this size."
+  and a **SHOW** button (`settings.kit-gallery.show` to automation) that
+  asks the host to show the UI kit gallery over the dialog
+  (`DialogAction::show_gallery`; [src/ui/kit](../kit/README.md#gallery)),
+  the dialog staying open under it and no setting changing: three rows
+  that never scroll, with half the clear pixels of a section's rows round
+  them, so that the list has room. Each takes a label line and one hint
+  line, but the gallery's hint takes two at Compact, where its line holds
+  fewer characters: the list starts 51 points lower than with two rows at
+  Compact, and 39 at Regular and Large (`developer_rule_for`). Where the
+  rows end lower still, as in a language whose hints take more lines or
+  while hints lie further apart in the modern fonts, the list starts under
+  them (`developer_list_scroll`);
 - under them, the list of every standard hack of the registry
   (`oa::data::mod_profile::standard_hacks`), in a view of its own that
   scrolls as a long section does, with its scroll bar in the margin, and
@@ -1290,7 +1303,17 @@ presses (`oa.settings.wheel-zoom.off`, `oa.settings.max-zoom-out.whole-map`,
 `ui-engine-settings-pixels` and `ui-engine-settings-pixels-data` hold the
 dialog, its notices, its prompts and the OA button to the pictures they
 drew when the kit was taken out of the dialog: a SHA-256 of each scene,
-with a stand-in font and with the installed game's fonts.
+with a stand-in font and with the installed game's fonts. The Developer
+scenes (at its top, with Developer Mode on and its first area open, and at
+scale 2) were recorded again when UI kit gallery joined Developer's rows,
+which moved its list down; no other scene changed.
+
+`ui-engine-settings-dialog` also holds UI kit gallery's row: its label,
+its hint in two lines at Compact and one at Regular and Large, and SHOW,
+which asks for the gallery by a press and by Space and changes no
+setting; Developer's list exactly the row's height lower than with two
+rows at every class; and every other section's Compact parts, as a digest
+of each, as they were before the row was added.
 
 The dialog's tests cover ROLL BACK: shown only on a row whose folder keeps
 a version, its control and focus, its question by pointer and keys, and

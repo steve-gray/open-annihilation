@@ -1459,6 +1459,11 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open under the Game files screen.
         open_game_files_manage();
         return false;
+    case settings::DialogAction::show_gallery:
+        // The gallery covers the window over the dialog, which stays open
+        // under it; Escape and its CLOSE come back to Developer.
+        oa_layer().open_gallery();
+        return false;
     case settings::DialogAction::reset_install_id: {
         // A new ID is stored at once. Cancel does not put the old one back.
         // Nothing is made when the generator cannot be read, and the dialog
