@@ -175,7 +175,7 @@ latched the closing key and drew a backdrop.
 - **A screen** is a `LayerScreen`: a name, a placement, whether it is modal
   and darkens what lies under it, whether it is opaque, a layout at the
   view's size class (`lay_out`), a drawing from its own top left corner at
-  the canvas's whole scale, its answers to the pointer, the keys, the wheel
+  the canvas's scale, its answers to the pointer, the keys, the wheel
   and typed text, a text field, its display list and interaction (what
   automation lists), a tick and a revision. No call of it names an SDL
   type. A screen joins with
@@ -326,8 +326,9 @@ latched the closing key and drew a backdrop.
   the backdrop covers the whole window; every screen under it darkens too,
   as its drawing is darkened before it is copied: a question over Settings
   darkens the menu twice and Settings once. The screens are drawn through a
-  `kit::Canvas` at the view's scale onto a picture of their size in points
-  times the scale, never drawn at 1× and enlarged, and copied pixel for
+  `kit::Canvas` at the view's scale, crisp at a whole scale and smooth at
+  150%, onto a picture of their size in points at the scale, never drawn at
+  another scale and enlarged, and copied pixel for
   pixel to their places in the window's own pixels
   (`RenderState::use_window_pixels`); then the software cursor is
   presented above them, and the frame holds no cursor while a screen shows
