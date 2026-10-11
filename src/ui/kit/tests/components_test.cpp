@@ -839,9 +839,7 @@ void a_menu_draws_a_divider_an_aside_and_a_greyed_row() {
     const kit::Rect divider = kit::choice_item(menu_rect, 1);
     OA_CHECK(kit::choice_item_at(menu_rect, divider.x + 20, divider.y + 8) == 1);
     const kit::Rect offered = kit::choice_item(menu_rect, 2);
-    OA_CHECK(
-        kit::choice_item_at(menu_rect, offered.x + offered.width - 6, offered.y + 8) == 2
-    );
+    OA_CHECK(kit::choice_item_at(menu_rect, offered.x + offered.width - 6, offered.y + 8) == 2);
     const kit::Rect grey = kit::choice_item(menu_rect, 3);
     OA_CHECK(kit::choice_item_at(menu_rect, grey.x + 16, grey.y + 8) == 3);
     OA_CHECK(kit::choice_item_at(menu_rect, menu_rect.x - 1, menu_rect.y + 8) == -1);
@@ -879,27 +877,23 @@ void a_menu_draws_a_divider_an_aside_and_a_greyed_row() {
     const int32_t gap_x = aside_left - gap / 2;
     bool gap_clear = true;
     for (int32_t y = row.y; y < row.y + row.height; ++y) {
-        const std::size_t at =
-            (static_cast<std::size_t>(y) * clipped_surface.width + static_cast<std::size_t>(gap_x)) *
-            3;
+        const std::size_t at = (static_cast<std::size_t>(y) * clipped_surface.width +
+                                static_cast<std::size_t>(gap_x)) *
+                               3;
         if (clipped_surface.rgb[at] != 0x17 || clipped_surface.rgb[at + 1] != 0x1a ||
             clipped_surface.rgb[at + 2] != 0x15)
             gap_clear = false;
     }
     OA_CHECK(gap_clear);
+    OA_CHECK(region_has(
+        clipped_surface,
+        {inner_left, row.y, std::max(gap_x - inner_left, int32_t{1}), row.height},
+        0xa3,
+        0xaa,
+        0x98
+    ));
     OA_CHECK(
-        region_has(
-            clipped_surface,
-            {inner_left, row.y, std::max(gap_x - inner_left, int32_t{1}), row.height},
-            0xa3,
-            0xaa,
-            0x98
-        )
-    );
-    OA_CHECK(
-        region_has(
-            clipped_surface, {aside_left, row.y, aside_width, row.height}, 0xa3, 0xaa, 0x98
-        )
+        region_has(clipped_surface, {aside_left, row.y, aside_width, row.height}, 0xa3, 0xaa, 0x98)
     );
 }
 

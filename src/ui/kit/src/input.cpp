@@ -384,7 +384,8 @@ strip_levels(const Control& control, const Rect& area, const LevelsLook& look) {
             if (row != nullptr && !row->id.empty())
                 part.word = row->id;
             else
-                part.word = part_word(control, static_cast<std::size_t>(std::max(index, int32_t{0})));
+                part.word =
+                    part_word(control, static_cast<std::size_t>(std::max(index, int32_t{0})));
             part.rect = choice_item(item.rect, static_cast<int32_t>(place));
             part.inside = false;
             part.enabled = row == nullptr || row->choosable;

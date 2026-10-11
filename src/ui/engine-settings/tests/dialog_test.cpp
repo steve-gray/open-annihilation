@@ -1102,12 +1102,8 @@ void language_drop_down_locks_by_the_command_line() {
 }
 
 /// One pack the test lists under AVAILABLE TO DOWNLOAD.
-settings::AvailableLanguage downloadable(
-    std::string tag,
-    std::string endonym,
-    std::string english_name,
-    std::string aside
-) {
+settings::AvailableLanguage
+downloadable(std::string tag, std::string endonym, std::string english_name, std::string aside) {
     settings::AvailableLanguage pack;
     pack.tag = std::move(tag);
     pack.endonym = std::move(endonym);
@@ -1117,9 +1113,8 @@ settings::AvailableLanguage downloadable(
 }
 
 /// The parts of an open list, in the order the layout lists them.
-std::vector<const settings::LayoutPart*> listed_in(
-    const std::vector<settings::LayoutPart>& parts, const renderer::SourceRect& list
-) {
+std::vector<const settings::LayoutPart*>
+listed_in(const std::vector<settings::LayoutPart>& parts, const renderer::SourceRect& list) {
     std::vector<const settings::LayoutPart*> found;
     for (const settings::LayoutPart& part : parts)
         if (inside(part.rect, list))
@@ -1210,8 +1205,7 @@ void available_languages_at(oa::ui::kit::SizeClass size_class) {
     CHECK(problem.empty());
     bool saw_simplified = false;
     bool saw_portuguese = false;
-    for (const oa::ui::kit::AutomationEntry& entry :
-         oa::ui::kit::automation_parts(display, {})) {
+    for (const oa::ui::kit::AutomationEntry& entry : oa::ui::kit::automation_parts(display, {})) {
         CHECK(entry.text != "AVAILABLE TO DOWNLOAD");
         CHECK(entry.name != "settings.language.7");
         if (entry.name == "settings.language.zh-hans")
@@ -1323,16 +1317,27 @@ void available_languages_at(oa::ui::kit::SizeClass size_class) {
         std::string field;
         std::string hint;
     };
+
     const ShownState states[] = {
-        {settings::AvailableLanguage::State::offered, 0, simplified,
+        {settings::AvailableLanguage::State::offered,
+         0,
+         simplified,
          "Downloads, then switches to it."},
-        {settings::AvailableLanguage::State::waiting, 0, simplified + " \u00B7 waiting",
+        {settings::AvailableLanguage::State::waiting,
+         0,
+         simplified + " \u00B7 waiting",
          "Downloads, then switches to it."},
-        {settings::AvailableLanguage::State::downloading, 40, simplified + " \u00B7 40%",
+        {settings::AvailableLanguage::State::downloading,
+         40,
+         simplified + " \u00B7 40%",
          "Downloads, then switches to it."},
-        {settings::AvailableLanguage::State::installing, 0, simplified + " \u00B7 installing",
+        {settings::AvailableLanguage::State::installing,
+         0,
+         simplified + " \u00B7 installing",
          "Downloads, then switches to it."},
-        {settings::AvailableLanguage::State::failed, 0, simplified + " \u00B7 failed",
+        {settings::AvailableLanguage::State::failed,
+         0,
+         simplified + " \u00B7 failed",
          "The download failed: the pack was refused. Choose it again to try again."},
     };
     for (const auto& state : states) {

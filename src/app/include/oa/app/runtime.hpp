@@ -6603,12 +6603,12 @@ class Runtime final : public menu::Host,
     /// One language pack a catalogue offers that is not installed, and the
     /// registry that lists it. A check may pass these in place of a snapshot.
     struct CatalogueLanguage {
-        std::string registry;                         ///< the registry id
-        bool reviewed = true;                         ///< true for a built-in registry
-        oa::data::languages::LanguageEntry entry;     ///< the tag, names, word and locales
-        std::string publisher;                        ///< who published it; empty when unnamed
-        std::optional<double> coverage;              ///< the fraction translated, when named
-        uint64_t bytes = 0;                           ///< the pack's size
+        std::string registry;                     ///< the registry id
+        bool reviewed = true;                     ///< true for a built-in registry
+        oa::data::languages::LanguageEntry entry; ///< the tag, names, word and locales
+        std::string publisher;                    ///< who published it; empty when unnamed
+        std::optional<double> coverage;           ///< the fraction translated, when named
+        uint64_t bytes = 0;                       ///< the pack's size
     };
 
     /// Rebuilds the available languages from the catalogues and registers them.

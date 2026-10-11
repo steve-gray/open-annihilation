@@ -95,9 +95,9 @@ struct ChoiceLook {
 /// aside, choosable, and named by the control's parts. items is one entry per
 /// choice, from 0, not only the ones on screen.
 struct ChoiceMenuRow {
-    std::string aside{}; ///< right-aligned text; empty for none
-    std::string id{};    ///< the automation word; empty on a divider, which is not named
-    bool divider{false}; ///< a heading, not a choice: no focus, no press, no name
+    std::string aside{};  ///< right-aligned text; empty for none
+    std::string id{};     ///< the automation word; empty on a divider, which is not named
+    bool divider{false};  ///< a heading, not a choice: no focus, no press, no name
     bool choosable{true}; ///< a press on it chooses it; a greyed row is not
 };
 

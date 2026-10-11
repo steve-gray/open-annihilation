@@ -749,9 +749,7 @@ void draw_choice_menu(const Canvas& canvas, const Rect& menu, const ChoiceMenuLo
                 text
             );
         } else {
-            draw_menu_text(
-                canvas, box, look.shown[static_cast<std::size_t>(place)], aside, text
-            );
+            draw_menu_text(canvas, box, look.shown[static_cast<std::size_t>(place)], aside, text);
         }
     }
     const int32_t window =

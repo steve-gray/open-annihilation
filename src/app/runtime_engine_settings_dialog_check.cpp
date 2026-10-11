@@ -1176,10 +1176,7 @@ void Runtime::check_engine_settings_dialog() {
         for (const settings::LayoutPart& part : parts) {
             if (part.text.empty())
                 continue;
-            require(
-                modern_fonts_draw(part.text),
-                "a settings part does not draw: " + part.text
-            );
+            require(modern_fonts_draw(part.text), "a settings part does not draw: " + part.text);
         }
         std::cout << "engine settings check: injected row " << simplified << '\n';
         std::cout << "engine settings check: injected row " << portuguese << '\n';
