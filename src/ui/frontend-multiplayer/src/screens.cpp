@@ -1021,8 +1021,14 @@ bool load(
     return true;
 }
 
-// Places a stacked panel: its own background image when given, otherwise a
-// darkened copy of the screen below, with the panel rectangle filled.
+// The address question names no picture. paint_address_panel lays the common
+// panel tiles in its rectangle; every other dialog without a picture darkens.
+bool paint_address_panel(const Resources& modal, Image& image);
+
+// Places a stacked panel. One with its own picture is centred over the screen
+// below. The address question has none: the common panel tiles are laid in
+// its rectangle over that screen. Any other panel without a picture darkens
+// the rectangle it covers.
 bool load_modal(
     ScreenContext* ctx,
     ModalKind kind,
@@ -1046,8 +1052,11 @@ bool load_modal(
     if (full_screen || !state.base.loaded)
         return true;
     if (background == nullptr) {
-        // Dialog without its own art: dim the rectangle it covers.
+        // No picture of its own. The address question takes the common panel
+        // tiles; every other such dialog darkens the rectangle it covers.
         image = state.base.screen.background;
+        if (paint_address_panel(state.modal, image))
+            return true;
         for (int32_t y = std::max(0, static_cast<int32_t>(root.y));
              y < root.y + height && y < static_cast<int32_t>(image.height);
              ++y)
@@ -1176,6 +1185,223 @@ std::string_view template_name(const Resources& res, const Control& control) {
     if (control.source < 0 || static_cast<std::size_t>(control.source) >= res.source.gadgets.size())
         return {};
     return res.source.gadgets[static_cast<std::size_t>(control.source)].common.name;
+}
+
+/// Tells whether a panel is the address question.
+///
+/// @param panel the panel
+/// @return true when it was loaded from the address question's layout
+bool address_question(const Panel& panel) {
+    return std::string_view(panel.name.data()) == oa::data::defs::gui_path("tcp.gui");
+}
+
+// The common panel tiles, used when a question names no picture and no panel
+// sequence of its own. The common list-box tiles frame a text box that is
+// not drawn as a solid field, grown this far past each edge.
+constexpr const char* kPanelTiles = "BackTile";
+constexpr const char* kTextBoxTiles = "Listbox";
+constexpr int32_t kTextBoxFrameMargin = 3;
+
+const formats::gaf::Sequence*
+find_sequence(const formats::gaf::Archive& archive, std::string_view name);
+
+const PaletteBytes& screen_palette(const renderer::ScreenResources& screen) {
+    return screen.background.palette.has_value() ? *screen.background.palette : screen.gui_palette;
+}
+
+/// Copies a frame's covered pixels into an RGB image through a palette.
+///
+/// A pixel the frame does not cover keeps what is already there. The frame's
+/// origin is not applied: the common panel tiles are drawn with theirs
+/// cleared, and these screens draw every other frame at the position given.
+///
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param frame the rendered frame
+/// @param x the frame's left column
+/// @param y the frame's top row
+/// @param palette the palette the frame's indices select from
+void blit_covered(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const formats::gaf::RenderedFrame& frame,
+    int32_t x,
+    int32_t y,
+    const PaletteBytes& palette
+) {
+    const auto pixel_count = static_cast<std::size_t>(frame.width) * frame.height;
+    const auto image_bytes = static_cast<uint64_t>(image_width) * image_height * 3U;
+    if (frame.pixels.size() != pixel_count || frame.coverage.size() != pixel_count ||
+        image_width == 0 || image_height == 0 || image_bytes > rgb.size())
+        return;
+    const auto frame_w = static_cast<int64_t>(frame.width);
+    const auto frame_h = static_cast<int64_t>(frame.height);
+    const auto first_column = std::max<int64_t>(0, -static_cast<int64_t>(x));
+    const auto first_row = std::max<int64_t>(0, -static_cast<int64_t>(y));
+    const auto end_column = std::min<int64_t>(frame_w, static_cast<int64_t>(image_width) - x);
+    const auto end_row = std::min<int64_t>(frame_h, static_cast<int64_t>(image_height) - y);
+    if (first_column >= end_column || first_row >= end_row)
+        return;
+    constexpr std::size_t entry_bytes = 4;
+    for (auto row = first_row; row < end_row; ++row) {
+        const auto source = static_cast<std::size_t>(row * frame_w);
+        auto* out = rgb.data() + (static_cast<std::size_t>(y + row) * image_width +
+                                  static_cast<std::size_t>(x + first_column)) *
+                                     3U;
+        for (auto column = first_column; column < end_column; ++column, out += 3) {
+            const auto offset = source + static_cast<std::size_t>(column);
+            if (frame.coverage[offset] == 0)
+                continue;
+            const auto* color =
+                palette.data() + static_cast<std::size_t>(frame.pixels[offset]) * entry_bytes;
+            std::memcpy(out, color, 3);
+        }
+    }
+}
+
+/// Lays a skin's tiles over a rectangle, in the order the tiles are drawn.
+///
+/// Fewer than two frames draws the first at the rectangle's top-left. Two or
+/// more are tiled from the skin's first frame, the far column and row ending
+/// flush with the rectangle.
+///
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param skin the skin, with its frames
+/// @param origin_x the rectangle's left column
+/// @param origin_y the rectangle's top row
+/// @param width the rectangle's width
+/// @param height the rectangle's height
+/// @param palette the palette the frames' indices select from
+/// @return false when a frame the skin needs cannot be drawn
+bool paint_skin(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const formats::gaf::Sequence& skin,
+    int32_t origin_x,
+    int32_t origin_y,
+    int32_t width,
+    int32_t height,
+    const PaletteBytes& palette
+) {
+    if (skin.frames.empty() || width < 1 || height < 1)
+        return false;
+    std::vector<std::optional<formats::gaf::RenderedFrame>> rendered(skin.frames.size());
+    std::vector<char> tried(skin.frames.size(), 0);
+    const auto frame_at = [&](std::size_t index) -> const formats::gaf::RenderedFrame* {
+        if (index >= skin.frames.size())
+            return nullptr;
+        if (tried[index] == 0) {
+            tried[index] = 1;
+            auto result = formats::gaf::render_normal(skin.frames[index]);
+            if (result.ok())
+                rendered[index] = std::move(result.frame);
+        }
+        return rendered[index] ? &*rendered[index] : nullptr;
+    };
+
+    struct Spot {
+        const formats::gaf::RenderedFrame* frame = nullptr;
+        int32_t x = 0;
+        int32_t y = 0;
+    };
+
+    std::vector<Spot> spots;
+    if (skin.frames.size() < 2) {
+        const auto* frame = frame_at(0);
+        if (frame == nullptr)
+            return false;
+        spots.push_back({frame, origin_x, origin_y});
+    } else {
+        const auto tiles = oa::ui::gui_layout::skin_tiles(
+            width, height, skin.frames[0].width, skin.frames[0].height
+        );
+        if (tiles.empty())
+            return false;
+        spots.reserve(tiles.size());
+        for (const auto& tile : tiles) {
+            const auto* frame = frame_at(tile.frame);
+            if (frame == nullptr)
+                return false;
+            spots.push_back({frame, origin_x + tile.x, origin_y + tile.y});
+        }
+    }
+    for (const auto& spot : spots)
+        blit_covered(rgb, image_width, image_height, *spot.frame, spot.x, spot.y, palette);
+    return true;
+}
+
+/// The sequence the address question's panel is drawn with.
+///
+/// A sequence the layout names is taken from the shared GUI art. With none
+/// named, or none there, the common panel tiles are used.
+///
+/// @param modal the question's resources
+/// @return the sequence, or null when the shared art has neither
+const formats::gaf::Sequence* address_panel_skin(const Resources& modal) {
+    const auto& shared = modal.screen.shared_sprites;
+    if (!modal.source.gadgets.empty()) {
+        const auto* fields =
+            std::get_if<ui::gui_layout::PanelFields>(&modal.source.gadgets.front().fields);
+        if (fields != nullptr && !fields->panel.empty()) {
+            if (const auto* named = find_sequence(shared, fields->panel))
+                return named;
+        }
+    }
+    return find_sequence(shared, kPanelTiles);
+}
+
+bool paint_address_panel(const Resources& modal, Image& image) {
+    if (!address_question(modal.panel) || modal.panel.count < 1)
+        return false;
+    const auto* skin = address_panel_skin(modal);
+    if (skin == nullptr)
+        return false;
+    const auto& root = modal.panel.controls[0];
+    return paint_skin(
+        image.rgb,
+        image.width,
+        image.height,
+        *skin,
+        root.x,
+        root.y,
+        root.width,
+        root.height,
+        image.palette.has_value() ? *image.palette : modal.screen.gui_palette
+    );
+}
+
+/// Draws the list-box frame around an address question's text box.
+///
+/// The frame is the common list-box tiles, grown past the box on every side,
+/// under the letters and the cursor.
+///
+/// @param[in,out] surface the drawn screen
+/// @param res the question's resources
+/// @param control the text box
+void paint_address_text_box(
+    renderer::Surface& surface, const Resources& res, const Control& control
+) {
+    if ((control.attributes & ui::gui_layout::attribute::horizontal) != 0)
+        return;
+    const auto* skin = find_sequence(res.screen.shared_sprites, kTextBoxTiles);
+    if (skin == nullptr)
+        return;
+    (void)paint_skin(
+        surface.rgb,
+        surface.width,
+        surface.height,
+        *skin,
+        control.x + res.offset_x - kTextBoxFrameMargin,
+        control.y + res.offset_y - kTextBoxFrameMargin,
+        control.width + kTextBoxFrameMargin * 2,
+        control.height + kTextBoxFrameMargin * 2,
+        screen_palette(res.screen)
+    );
 }
 
 const formats::gaf::Sequence*
@@ -2338,6 +2564,8 @@ void draw_text_boxes(renderer::Surface& surface, Resources& res) {
         const auto& control = panel.controls[static_cast<std::size_t>(index)];
         if (control.type != ControlType::text_box || control.active == 0)
             continue;
+        if (address_question(panel))
+            paint_address_text_box(surface, res, control);
         std::string text(control_text(control));
         const bool focused = index == panel.focus;
         const bool cursor = focused && ((elapsed_ms() / 500U) & 1U) == 0;
