@@ -299,9 +299,10 @@ fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
 - An update that cannot be installed is described with the detail its
   update note carries, as the app wrote it; the model does not reread the
   catalogue for it.
-- The screens are not hosted yet: the OA layer's Library screen fills the
-  inputs, places the window and maps the platform's keys and the
-  controller to `kit::Key` and `ScreenCommand`.
+- The OA layer's Library screen ([src/app](../../app/README.md#the-library))
+  fills the inputs, places the window and maps the keyboard's own keys to
+  `ScreenCommand`; the controller's Y, X, LB, RB and right stick do not
+  reach `library_command` and `library_stick` yet.
 - Only rows that show have controls: a journey scrolls or searches before
   it presses a row that does not show.
 - Large shows as many tags in its filter pane as fit, and TAGS ▾ holds the
