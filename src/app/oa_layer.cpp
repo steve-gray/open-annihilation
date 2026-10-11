@@ -1222,52 +1222,52 @@ GalleryScreen::GalleryScreen(OaLayer& layer, bool in_match) noexcept
 }
 
 kit::Frame GalleryScreen::frame_for(const LayerView& view) const {
-    kit::Frame frame{};
+    kit::Frame given{};
     if (view.match != in_match_ || layer_.screen_fonts() == nullptr)
-        return frame;
+        return given;
     if (view.match) {
         if (view.match_layout == nullptr)
-            return frame;
-        frame = OaLayer::match_gallery(*view.match_layout, view.interface_percent);
+            return given;
+        given = OaLayer::match_gallery(*view.match_layout, view.interface_percent);
     } else {
         // The view's room at its scale, and the class of its points.
-        frame = view.frame;
-        frame.scale_percent = view.scale_percent;
+        given = view.frame;
+        given.scale_percent = view.scale_percent;
     }
-    frame.area.x = 0;
-    frame.area.y = 0;
-    return frame;
+    given.area.x = 0;
+    given.area.y = 0;
+    return given;
 }
 
 LayerPlacement GalleryScreen::placement(const LayerView& view) const {
-    const kit::Frame frame = frame_for(view);
-    if (frame.area.width <= 0 || frame.area.height <= 0)
+    const kit::Frame given = frame_for(view);
+    if (given.area.width <= 0 || given.area.height <= 0)
         return {};
     if (!view.match)
-        return centred_placement(view, frame.area.width, frame.area.height);
+        return centred_placement(view, given.area.width, given.area.height);
     // The match's canvas at the gallery's own scale, centred in its safe area.
     const auto safe = OaLayer::match_safe_area(*view.match_layout);
-    const kit::Rect drawn = kit::to_canvas(frame.area, frame.scale_percent);
+    const kit::Rect drawn = kit::to_canvas(given.area, given.scale_percent);
     return {
         {safe.x + (safe.width - drawn.width) / 2,
          safe.y + (safe.height - drawn.height) / 2,
          drawn.width,
          drawn.height},
-        frame.area.width,
-        frame.area.height,
-        frame.scale_percent
+        given.area.width,
+        given.area.height,
+        given.scale_percent
     };
 }
 
 void GalleryScreen::lay_out(const LayerView& view) {
-    const kit::Frame frame = frame_for(view);
+    const kit::Frame given = frame_for(view);
     const kit::Fonts* fonts = layer_.screen_fonts();
-    if (fonts == nullptr || frame.area.width <= 0 || frame.area.height <= 0)
+    if (fonts == nullptr || given.area.width <= 0 || given.area.height <= 0)
         return;
-    if (frame.area.width == frame_.area.width && frame.area.height == frame_.area.height &&
-        frame.size_class == frame_.size_class && frame.scale_percent == frame_.scale_percent)
+    if (given.area.width == frame_.area.width && given.area.height == frame_.area.height &&
+        given.size_class == frame_.size_class && given.scale_percent == frame_.scale_percent)
         return;
-    frame_ = frame;
+    frame_ = given;
     layout_ = kit::gallery_layout(model_, frame_, *fonts);
     ++revision_;
 }
