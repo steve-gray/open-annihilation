@@ -697,7 +697,16 @@ another use of a private `Runtime` name. Network play keeps its state for
 each runtime in its own object, freed through a hook as the runtime goes;
 its use of `Runtime`'s private names, and the `Runtime` members an
 extension still adds, are frozen and may only shrink. Raise
-`OA_EXTENSION_API_VERSION` with any change to the table's contract.
+`OA_EXTENSION_API_VERSION` with any change to the table's contract. From
+version 15 the OA UI kit's public headers, `oa/ui/kit/*.hpp`, and the
+registrations and services the table names (`oa/ui/screen_registry.hpp`,
+`oa/ui/screen_registry/kit.hpp`) are part of that contract: an extension
+builds its Settings pages, kit screens, notices, prompts and overlay
+components from them. A change to a kit header before 0.8.0, the first
+release that carries version 15, keeps 15 and updates the engine's own
+followers and the test extensions in the same change; from that release
+on, any change to a kit header raises the version, though the kit stays
+provisional and changes as the engine's screens need.
 A hook reports an error by throwing `std::runtime_error`, as the engine
 code around it does. The engine calls every hook through one guarded call,
 `call_hook` (`src/app/include/oa/app/hook_call.hpp`), which catches what
@@ -710,8 +719,8 @@ frozen members.
 - **Why:** an extension that is not part of the engine must be able to
   build on it without the engine naming it, and to tell, at compile time,
   whether the engine it builds against offers the contract it expects.
-- **Applies to:** `src/app`, `src/app/netgame`, `cmake/OaExtensions.cmake`,
-  `run.sh`.
+- **Applies to:** `src/app`, `src/app/netgame`, `src/ui/kit/include`,
+  `src/ui/screen-registry`, `cmake/OaExtensions.cmake`, `run.sh`.
 - **Checked by:** `runtime-surface-names` and `runtime-surface-selftest`
   (`tools/check_runtime_surface.py`, within
   `tools/runtime-surface-baseline.json`); `hook-calls` and
@@ -719,7 +728,9 @@ frozen members.
   engine code calls a hook pointer other than through `call_hook`, and
   `app-hook-call`, which throws from a hook of each handling;
   `app-extension-list` and the
-  extension tests in `tests/extension`; `netgame-runtime-surface`; CI builds
+  extension tests in `tests/extension`, among them `extension-kit`, whose
+  test extension uses the kit through the table alone;
+  `netgame-runtime-surface`; CI builds
   and starts `open-annihilation`, and builds and tests it with the recorder
   test extensions beside network play in the extension-recorder job.
 
