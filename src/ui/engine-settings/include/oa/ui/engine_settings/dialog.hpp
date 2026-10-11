@@ -243,6 +243,10 @@ enum class Setting : uint8_t {
     /// Library on Languages, listed only while Dialog::library_link is set;
     /// it changes no setting
     more_in_library,
+    /// UI kit gallery: Developer's row whose SHOW opens the gallery of every
+    /// part of Open Annihilation's own screens (DialogAction::show_gallery);
+    /// it changes no setting
+    kit_gallery,
 };
 
 /// Returns the settings a section shows, top to bottom.
@@ -286,9 +290,9 @@ inline constexpr int32_t scroll_bar_control = ok_control + 1;
 /// The open section's first row's control; the next rows' follow it, one
 /// for each row the section has.
 inline constexpr int32_t first_row_control = scroll_bar_control + 1;
-/// Developer's rows, over its list: Enable Developer Mode, then Show
-/// performance statistics.
-inline constexpr int32_t developer_row_count = 2;
+/// Developer's rows, over its list: Enable Developer Mode, Show
+/// performance statistics, then UI kit gallery.
+inline constexpr int32_t developer_row_count = 3;
 /// Developer's Enable Developer Mode switch, its first row's control.
 inline constexpr int32_t developer_mode_control = first_row_control;
 /// Developer's Show Active Only switch, under its list.
@@ -535,6 +539,9 @@ enum class DialogAction : uint8_t {
     /// MORE IN THE LIBRARY… was pressed: the host opens the Library on
     /// Dialog::library_tab over the dialog, which stays open under it
     open_library,
+    /// SHOW on Developer's UI kit gallery: the host opens the gallery over
+    /// the dialog, which stays open under it
+    show_gallery,
 };
 
 /// One of the Library's tabs, as the dialog asks the host to open it

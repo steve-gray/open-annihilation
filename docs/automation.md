@@ -195,7 +195,7 @@ centre would land on the line between Off and On.
 | Your files' buttons | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
 | Language's MORE IN THE LIBRARY… (main menu only) | `oa.settings.more-in-library` | button |
 | A mod's row and its ROLL BACK | `oa.settings.mod.<mod>.switch`, `oa.settings.mod.<mod>.roll-back`; OPEN MODS FOLDER `oa.settings.open-mods-folder` | check box, checked on the mod played; button |
-| Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
+| Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.kit-gallery.show` (SHOW, which opens the UI kit gallery), `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
 | Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
 | The footer | `oa.settings.restore-defaults`, `oa.settings.cancel`, `oa.settings.ok` | button |
 | The Switch Mod question | `oa.settings.question.yes`, `oa.settings.question.no` | button |
@@ -203,6 +203,7 @@ centre would land on the line between Off and On.
 | A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
+| The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
 `<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored

@@ -531,6 +531,43 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                 room.width,
                 room.height
             );
+        } else if (action == "gallery") {
+            // The settings dialog opened beside the in-game menu at
+            // Developer, and the UI kit gallery's SHOW taken as the dialog
+            // takes it: the gallery over the whole window, at the layer's
+            // scale capped by the side column's and the class of the
+            // canvas's points.
+            namespace settings = oa::ui::engine_settings;
+            engine_settings_state().last_page = settings::Page::developer;
+            open_engine_settings_in_match();
+            if (engine_settings_dialog() == nullptr)
+                throw std::runtime_error(where + ": the settings dialog did not open");
+            take_settings_screen_action(settings::DialogAction::show_gallery);
+            const auto* gallery = dynamic_cast<const GalleryScreen*>(oa_layer().top());
+            if (gallery == nullptr || gallery->name() != GalleryScreen::screen_name)
+                throw std::runtime_error(where + ": the gallery did not open");
+            // Where it shows, in the match canvas's pixels, its class and its
+            // scale, as 2x or 1.5x.
+            const LayerPlacement placed = oa_layer().placement_of(GalleryScreen::screen_name);
+            const oa::ui::kit::Frame& laid_for = gallery->frame();
+            std::string_view class_name = "Compact";
+            if (laid_for.size_class == oa::ui::kit::SizeClass::regular)
+                class_name = "Regular";
+            else if (laid_for.size_class == oa::ui::kit::SizeClass::large)
+                class_name = "Large";
+            std::string scale_text = std::to_string(laid_for.scale_percent / 100);
+            if (laid_for.scale_percent % 100 != 0)
+                scale_text += "." + std::to_string(laid_for.scale_percent % 100 / 10);
+            std::printf(
+                "stage: gallery at %d,%d %dx%d %.*s %sx\n",
+                placed.shown.x,
+                placed.shown.y,
+                placed.shown.width,
+                placed.shown.height,
+                static_cast<int>(class_name.size()),
+                class_name.data(),
+                scale_text.c_str()
+            );
         } else if (action == "pointer") {
             // The pointer moved to a point of the window, whose unit the
             // bottom bar then shows.

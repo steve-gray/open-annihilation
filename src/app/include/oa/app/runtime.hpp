@@ -4579,6 +4579,12 @@ class Runtime final : public menu::Host,
     /// notice and prompt, hosted from inside the engine.
     void check_registered_kit();
 
+    /// Runs --check-kit-gallery: the UI kit gallery opened from Settings ›
+    /// Developer on 640x480, 1280x720 and 1920x1080 windows, its size class,
+    /// scale, pixels and focus, and Escape back to Developer
+    /// (runtime_kit_gallery_check.cpp).
+    void check_kit_gallery();
+
     /// Checks that set_unit_limit stores the unit limit preference and clamps
     /// it as the setting does (part of --check-engine-settings).
     void check_unit_limit_preference();

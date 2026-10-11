@@ -1003,7 +1003,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
-  src/app/runtime_registered_kit_check.cpp
+  src/app/runtime_registered_kit_check.cpp src/app/runtime_kit_gallery_check.cpp
   src/app/oa_layer_check.cpp
   src/app/runtime_engine_settings_match_check.cpp src/app/runtime_engine_settings_dialog_check.cpp
   src/app/runtime_renderer_ladder_check.cpp src/app/runtime_visual_rules_check.cpp
@@ -1487,6 +1487,24 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-registered-kit PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_registered_kit_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The UI kit gallery from Settings › Developer on 640x480, 1280x720 and
+      # 1920x1080 windows: Compact at 1x, Large at 1x and Regular at 2x over
+      # the whole window, its pixels against the gallery drawn offscreen over
+      # the darkened main menu, Tab through every control, and Escape back to
+      # Developer. A previous run's preferences would be read as the game
+      # starts, before the check empties them, so they go first.
+      set(oa_kit_gallery_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/kit-gallery")
+      file(MAKE_DIRECTORY "${oa_kit_gallery_dir}")
+      add_test(NAME kit-gallery-clean COMMAND ${CMAKE_COMMAND} -E rm -f
+        "${oa_kit_gallery_dir}/kit-gallery.conf")
+      set_tests_properties(kit-gallery-clean PROPERTIES FIXTURES_SETUP kit-gallery-clean)
+      add_test(NAME native-kit-gallery COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-kit-gallery
+        --preferences-file "${oa_kit_gallery_dir}/kit-gallery.conf")
+      set_tests_properties(native-kit-gallery PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_kit_gallery_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED kit-gallery-clean)
       # The simulation hash an extension reads: the plain baseline with no
       # mod, a mod profile's when that profile changes the simulation, a
       # different hash after a Developer Mode override of a rule in the same

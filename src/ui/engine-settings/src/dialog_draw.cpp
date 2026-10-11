@@ -787,6 +787,17 @@ std::string list_row_name(const layout::ListRow& row) {
     return name + "." + std::to_string(row.item + 1);
 }
 
+/// Returns what Developer's list is drawn clipped to: its view, wider on each
+/// side by a focus outline (Sizes::developer_view_clip at the view's place).
+///
+/// @param view the list's view
+/// @return the clip
+SourceRect developer_clip(const SourceRect& view) noexcept {
+    return {
+        view.x - layout::focus_inset, view.y, view.width + 2 * layout::focus_inset, view.height
+    };
+}
+
 /// Adds one row of Developer's list: an area's or a hack's header, a line
 /// under a hack, or a parameter's control.
 ///
@@ -794,12 +805,17 @@ std::string list_row_name(const layout::ListRow& row) {
 /// @param dialog the dialog
 /// @param row the row
 /// @param first the row is the list's first, which the line over the list tops
+/// @param view the list's view (layout::developer_list_scroll)
 void add_list_row(
-    Building& building, const Dialog& dialog, const layout::ListRow& row, bool first
+    Building& building,
+    const Dialog& dialog,
+    const layout::ListRow& row,
+    bool first,
+    const SourceRect& view
 ) {
     kit::DisplayList& list = building.list;
     const layout::Sizes& sized = layout::sizes_of(dialog);
-    const SourceRect& clip = sized.developer_view_clip;
+    const SourceRect clip = developer_clip(view);
     const bool header =
         row.kind == layout::ListRowKind::area || row.kind == layout::ListRowKind::hack;
     const bool takes = header || !row.locked;
@@ -910,7 +926,7 @@ void add_list_row(
     else if (row.kind == layout::ListRowKind::slider)
         kind = kit::ControlKind::slider;
     kit::Control added = control_of(row.control, row.control_area, list_row_name(row), kind);
-    added.clip = sized.developer_view;
+    added.clip = view;
     added.steps = true;
     added.group = layout::developer_list_group;
     added.checked = row.on;
@@ -933,14 +949,14 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
         return dialog.hovered == control || dialog.pressed == control;
     };
     for (std::size_t index = 0; index < open.list.rows.size(); ++index)
-        add_list_row(building, dialog, open.list.rows[index], index == 0);
+        add_list_row(building, dialog, open.list.rows[index], index == 0, open.area.view);
     // Scrolled from its top, the view's first row keeps a line.
     if (open.scroll > 0)
         fill(
             list,
-            {sized.content_left, sized.developer_view.y, sized.content_width, 1},
+            {sized.content_left, open.area.view.y, sized.content_width, 1},
             kit::colour::rule,
-            sized.developer_view_clip
+            developer_clip(open.area.view)
         );
     if (open.limit > 0)
         scroll_bar(
