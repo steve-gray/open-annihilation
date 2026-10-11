@@ -485,7 +485,7 @@ struct Runtime::GetMapScreen final : LayerScreen {
         const std::vector<content::DownloadView>& items,
         const kit::Fonts& fonts
     ) {
-        const std::string key = pack_key(host_);
+        const std::string release_key = pack_key(host_);
         const mp::LocalPack local = runtime_.local_map_pack(host_.id, host_.sha256);
         mp::Offer offer;
         uint64_t done = 0;
@@ -502,10 +502,10 @@ struct Runtime::GetMapScreen final : LayerScreen {
             if (offer.bytes == 0)
                 offer.bytes = item.target.size;
         }
-        const bool failed = !failure_.empty() && failure_for_ == key;
+        const bool failed = !failure_.empty() && failure_for_ == release_key;
         mp::GetMap stage =
             mp::get_map_state(room.host_map, room.host_pack, local, offer, downloading, failed);
-        if (!pending_.empty() && pending_ != key)
+        if (!pending_.empty() && pending_ != release_key)
             pending_.clear();
         if (!pending_.empty()) {
             if (stage == mp::GetMap::get) {
@@ -708,7 +708,7 @@ struct Runtime::GetMapScreen final : LayerScreen {
     /// SHA-256, releases the mounted layer when it is this pack's, and holds
     /// the pack's maps from being mounted until the install ends.
     void fetch() {
-        const std::string key = pack_key(host_);
+        const std::string release_key = pack_key(host_);
         const std::shared_ptr<const content::Snapshot> snapshot =
             runtime_.content_service().snapshot();
         const oa::data::catalogue::Package* listed =
@@ -716,7 +716,7 @@ struct Runtime::GetMapScreen final : LayerScreen {
         // The catalogue's release must be the host's: the queue checks the
         // file against the catalogue's SHA-256.
         if (listed == nullptr || hex_text(listed->sha256) != host_.sha256) {
-            fail(key, content::failure_text(content::DownloadFailure::not_offered));
+            fail(release_key, content::failure_text(content::DownloadFailure::not_offered));
             return;
         }
         std::string why;
@@ -724,7 +724,7 @@ struct Runtime::GetMapScreen final : LayerScreen {
             host_.registry_id, listed->id, content::DownloadReason::offered_in_lobby, &why
         );
         if (!queued) {
-            fail(key, why);
+            fail(release_key, why);
             return;
         }
         // Another release's files may be mounted under the same map name:
@@ -734,7 +734,7 @@ struct Runtime::GetMapScreen final : LayerScreen {
             runtime_.release_pack_map();
         runtime_.hold_pack_maps(host_.id, *queued);
         item_ = *queued;
-        item_for_ = key;
+        item_for_ = release_key;
         log_line(
             "downloading " + host_.id + " release " + std::to_string(host_.release) + " from " +
             host_.registry_id
@@ -743,10 +743,10 @@ struct Runtime::GetMapScreen final : LayerScreen {
 
     /// Remembers why a fetch failed, for the line.
     ///
-    /// @param key the pack and release it was for
+    /// @param release_key the pack and release it was for
     /// @param reason why, in English as the queue says it
-    void fail(const std::string& key, std::string_view reason) {
-        failure_for_ = key;
+    void fail(const std::string& release_key, std::string_view reason) {
+        failure_for_ = release_key;
         failure_ = std::string(oa::data::languages::interface_text(reason));
         if (failure_.empty())
             failure_ = std::string(
