@@ -93,4 +93,10 @@ void draw_prompt(
     kit::draw_question({&target, placement, &fonts, icon}, prompt);
 }
 
+void draw_prompt(const kit::Canvas& canvas, const Prompt& prompt) {
+    if (canvas.fonts == nullptr)
+        return;
+    kit::draw_question(canvas, prompt);
+}
+
 } // namespace oa::ui::engine_settings

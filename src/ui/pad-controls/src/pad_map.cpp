@@ -330,6 +330,8 @@ Binding menus_binding(PadButton role) noexcept {
         return bind(Action::back);
     case PadButton::menu:
         return bind(Action::default_button);
+    case PadButton::view:
+        return bind(Action::info);
     case PadButton::r2:
     case PadButton::right_pad:
         return bind(Action::left_button);

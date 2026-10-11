@@ -327,9 +327,10 @@ settings dialog, the Game files screen and the folder chooser.
 | Right trackpad (or the stick cursor), R2, L2 | The pointer, a left click and a right click |
 | D-pad, left stick | Move the focus between buttons and list rows; held, they repeat after 400 ms, then every 120 ms |
 | L1 and R1 | The previous and next group of buttons (Shift+Tab and Tab) |
-| A | Presses the focused button. With none focused, as when the main menu opens, the 640×480 menus focus their first button and the other screens press their default |
+| A | Presses the focused button. With none focused, as when the main menu opens, the 640×480 menus focus their first button and the other screens press their default. In the battle room, on another player's row, it opens that player's card as View does, and does nothing when that row has no card |
 | B | Back (Escape), as each screen has it |
 | Menu | Enter: the screen's default button; on the 640×480 menus, as A |
+| View | Information about the focused item, as F1. In the battle room it opens the focused player's card |
 | Right stick ↑ and ↓ | The wheel: steps the map and mission lists |
 | A twice quickly on a list row | Starts the campaign, mission or map, as a double click does |
 

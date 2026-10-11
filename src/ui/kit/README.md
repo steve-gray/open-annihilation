@@ -22,20 +22,27 @@ until then.
   and `red` (e06c5c, the kit's `colour::danger`) are the screens' own.
 - `text.hpp`: the game's two text faces, their width, drawing a line and a
   boxed line, and the one wrap; `fitting_start`, where the wrap breaks a word
-  wider than a line; `fit`, a line shortened to a width with the `ellipsis`;
+  wider than a line; `path_break`, a `WordBreak` that breaks a folder's path
+  wider than a line after its last separator that fits (the folder
+  chooser's texts break so); `fit`, a line shortened to a width with the
+  `ellipsis`;
   and, for a screen drawn in the modern fonts, `TextMeasureHooks` (the app
   measures with the bundled fonts) with `measured_width` and
   `measured_line`, which estimate what a null hook leaves out.
 - `layout.hpp`: points, the Auto scale and the three size classes,
   `layer_viewport` (the scale an Interface size gives a canvas, held to
-  what fits Compact's dialog), `metrics_of` (a class's metrics, which a screen takes its window's sizes
-  from), rows, columns, grids, splits and scroll areas, and the display
-  list. A screen drawn in the modern fonts (the Game files screen and the
+  what fits Compact's dialog: a whole step, or 150%,
+  `fractional_scale_percent`, where Compact fits at one and a half), `metrics_of` (a class's metrics, which a screen takes its window's sizes
+  from), `to_canvas` (points as canvas pixels, each edge rounded to the
+  nearest pixel on its own), rows, columns, grids, splits and scroll
+  areas, and the display list. A screen drawn in the modern fonts (the Game files screen and the
   folder chooser) lays its parts out in canvas pixels at a scale that may
   be a fraction (`Typesetter`, `canvas_pixels`, `canvas_font`) with:
   - `text_part`, a text wrapped to a room in a `Lettering` (size, weight,
     colour and `TextStyle`), at most so many lines, the last ending with an
-    ellipsis, as wide as the room or its widest line (`TextFit`);
+    ellipsis, as wide as the room or its widest line (`TextFit`), a word
+    wider than the room breaking where a `WordBreak` such as `path_break`
+    says;
   - `line_part`, one line fitted to a room and centred on a row;
   - `button_span` and `button_part`, a button of a `ButtonSpec` (its label,
     look, `Glyph` and control), and `button_row`, its left and right groups
@@ -47,10 +54,18 @@ until then.
     the others, else the whole column scrolling, as a `ScrollArea`;
   - `first_live_part` and `list_part_controls`, the controls of the parts
     above the last backdrop, the top one first, and the Tab order.
+
+  `hit` takes a `DisabledControl` rule for a disabled control a point lies
+  in: it `passes` the point on to the controls under it (the rule without
+  one, the Game files screen's), or `blocks` it, and the point reaches no
+  control (the folder chooser's).
 - `input.hpp`: a pointer and a finger's reach (in whole points, or in a
-  fraction of a point for a screen at a fractional scale), `mark_states`
-  (the focused and held parts of an `Interaction`), the keys, Tab in a
-  declared order, the arrows by where controls sit, the wheel, and a text
+  fraction of a point for a screen at a fractional scale, and by the
+  `DisabledControl` rule, a disabled control the finger is on blocking the
+  press and every search), `mark_states` (the focused and held parts of an
+  `Interaction`), the keys, Tab in a declared order, the arrows by where
+  controls sit (`focus_toward`; given the scroll areas, judged with them
+  laid out whole), the wheel, and a text
   field's editing: `insert_text` for typed text and `edit_text` for Backspace,
   Delete, Left, Right, Home and End. For automation, `automation_entries`
   lists the named controls, and `automation_parts` lists each control
@@ -64,8 +79,12 @@ until then.
 - `looks.hpp`: how a control looks. A look owns its texts. A text field's
   state, `TextField`, is its text and its caret. A picture item draws its
   `PictureLook`'s picture, such as a mod's badge, or else the canvas's icon.
-- `components.hpp`: the controls, drawn on a crisp-backend canvas. One
-  button, five looks. `paint` draws a display list.
+- `canvas.hpp`: the canvas the components draw on, `Canvas`, in its two
+  forms, and the primitives every draw function draws through: `fill_rect`,
+  `blend_rect`, `outline_rect`, `bevel_rect`, `rule_rect`, `box_text`,
+  `measure_text`, `draw_picture`, `draw_mark`, `clipped` and `placed_at`.
+- `components.hpp`: the controls, drawn through the canvas's primitives on
+  either form. One button, five looks. `paint` draws a display list.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
   the nav list, and a section's heading, row, rule and locked fade.
 - `controls.hpp`: the controls of the Library, the map browser and the
@@ -156,8 +175,47 @@ look, are `header_bar`, `badge`, `header_text`, `version`, `title`, `panel`
 `CardLook`), `icon`, `banner`, `row`, `divider`, `button_main`,
 `button_danger`, `progress_track`, `progress_fill` (the kit's `progress` is a
 whole bar drawn from its `ProgressLook`), `progress_busy`, `backdrop` and
-`sheet`. Their painter is the screen's own; `paint` on the crisp canvas
-draws nothing for them.
+`sheet`. Their painter is the screen's own; `paint` draws nothing for them on either
+form of the canvas.
+
+## The canvas's two forms
+
+A `Canvas` draws in one of two forms, and the components keep one set of
+draw functions for both: each draws through the canvas's primitives, and
+only the primitives know the form.
+
+- The crisp form, a canvas with a `surface`, draws with the artless painter
+  at a whole scale (`placement.scale`) in the game's own fonts, the modern
+  faces drawing only the characters they lack. It is the 0.7.3 look, pixel
+  for pixel at every whole scale, and the OA layer draws with it at 100%,
+  200%, 300% and 400%.
+- The smooth form, a canvas whose `smooth` has a painter, draws with the
+  painter of `oa/ui/paint` into an RGBA canvas at a scale in percent
+  (`SmoothCanvas::scale_percent`), in the bundled modern fonts
+  (`SmoothCanvas::fonts`). The OA layer draws with it at 150%, which the
+  game's bitmap fonts cannot take: they are never scaled by a fraction.
+
+Places stay in points on both. On the smooth form a point's edge is
+`lround(point * scale)` (`to_canvas`, a half away from zero), each edge of
+a rectangle rounded on its own, so a fill covers whole pixels, two fills that
+share an edge in points share it in pixels, and a 10 by 10 point fill at
+1.5x covers 15 by 15 pixels. An outline, a raised edge and a rule are
+`max(1, lround(points * scale))` whole pixels thick, two at 1.5x, from
+their first edge. A one-bit mark is a fill of each set point. Text is drawn
+antialiased at `lround(smooth_text_points * scale)` pixels per em: 12 points
+for the regular font, drawn bold as the game's heavy title, label and value
+font is, and 10 for the small one, so 18 and 15 pixels at 1.5x; tracking is
+`lround(tracking * scale)` pixels. Its capitals are centred on its box's
+height as the game font's are, and a text wider than its box at that size
+steps down a pixel at a time until it fits, to three quarters of its size at
+the least, as the layout measured the box for the game's narrower fonts.
+`measure_text` gives the smooth width in points, rounded up. A picture,
+such as the Open Annihilation icon, is drawn filtered, never by the nearest
+pixel. A clip is the clipped rectangle's pixels, and `placed_at` moves the
+origin in points.
+
+The layout, the hit tests and the display list are the same on both forms:
+the game's fonts measure the texts in points whichever form draws them.
 
 ## State
 
@@ -224,8 +282,10 @@ its hover card's timer in its own state.
   whether the pointer is over the button or holds it.
 - `paint` draws a display list's items in the list's order. A control is
   added with its automation name.
-- The canvas is the crisp backend: whole scales and the game's fonts. U24
-  adds the smooth one.
+- The crisp form of the canvas draws every whole scale exactly as 0.7.3
+  does; the smooth form puts every rectangle's edge on a whole pixel and
+  never scales a game font. Both draw through the same primitives, from the
+  same draw functions.
 - The display list is the only record of what a screen drew and where its
   controls are. Hit testing reads `controls`. Drawing reads `items`.
 - Every control of a kit screen carries a unique name: words of a-z, 0-9 and
@@ -247,7 +307,12 @@ first, including rows the area does not show. The focus leaves that area only
 when nothing in it lies that way, and a move from outside never lands on a
 row the area hides. A control in no scroll area, such as a footer button or
 an entry of a section list, has no area of its own: every control that shows
-is searched at once. Tab follows the declared order and wraps. Up and Down
+is searched at once. Given the scroll areas (`focus_toward` with `areas`),
+the arrows judge every control where it lies with the areas laid out whole:
+a row moved back by its area's offset, a control under an area's view moved
+down by its limit, every row a candidate whether its area shows it or not,
+so that from a button under a list Up reaches the list's last row, as the
+folder chooser's arrows do. Tab follows the declared order and wraps. Up and Down
 never follow that order. Left and Right go to a focused text field, which
 moves its caret, as do Home, End, Backspace and Delete. Tabs and cards do not
 take Left and Right: the arrows move the focus between them. Enter goes to a
@@ -263,18 +328,31 @@ else, and that each class's dialog and notices fit the least window of their
 class. `ui-kit-text` checks the UTF-8
 helpers, the estimated width, the stand-ins, the wrap against copies of
 the six wraps it replaces, `fit` and `fitting_start` against the Game files
-screen's copies, and the modern fonts' measure through its hooks and
+screen's copies, `path_break` at its separators and against the folder
+chooser's copy, and the modern fonts' measure through its hooks and
 without them. `ui-kit-layout` checks the Auto scale, the design's
-window sizes, the Interface size's examples and Auto at each window, that
-`metrics_of` gives each class its metrics, arrangements, the scroll
-arithmetic and hit testing, and each helper of a screen drawn in the modern
-fonts with a made-up measure: points to canvas pixels, a text part's wrap,
-line limit and fit, a line part, a button's span, label and look, a row of
-buttons on one line and wrapped, icons, plain parts and moved parts, the
-three ways a column is placed, and the controls listed from parts under and
-above a backdrop.
-`ui-kit-input` checks reach (with a reach of a fraction of a point too),
-`mark_states`, the pointer, Tab, the arrows, the keys and
+window sizes, the Interface size's examples and Auto at each window, 150%
+where Compact fits at one and a half and 1x where it does not, that
+`metrics_of` gives each class its metrics, `to_canvas`'s rounding at 1.5x,
+arrangements, the scroll arithmetic and hit testing (a disabled control
+passing a point on or blocking it), and each helper of a screen drawn in the
+modern fonts with a made-up measure: points to canvas pixels, a text part's
+wrap, line limit, fit and path break, a line part, a button's span, label and
+look, a row of buttons on one line and wrapped, icons, plain parts and moved
+parts, the three ways a column is placed, and the controls listed from parts
+under and above a backdrop.
+`ui-kit-smooth` checks the smooth form at 1.5x: a 10 by 10 point fill
+covering exactly 15 by 15 pixels from `lround(x * 1.5)`, at even and odd
+points, fills sharing their edges, outlines, raised edges and rules of whole
+pixels, text measured wider than at 1x and narrower than at 2x, drawn
+antialiased with its capitals centred, the regular font bold, a text too
+wide for its box drawn smaller inside it, tracking, a clip that keeps what
+lies outside it, a picture drawn filtered, a mark, a moved origin, and a
+button and a display list drawn through the same functions as on the crisp
+form. Its text checks read the bundled fonts beside the test.
+`ui-kit-input` checks reach (with a reach of a fraction of a point too, and
+a disabled control blocking a finger), `mark_states`, the pointer, Tab, the
+arrows (with a scroll area laid out whole too), the keys and
 their values, the wheel's fractions, the names, the parts automation lists
 (a switch's halves splitting it, a strip's levels where `level_at` finds
 them, an open drop-down's items at `choice_item` and a screen's own item
@@ -320,8 +398,10 @@ settings dialog's unless a larger dialog gives its own. A menu item may be
 a divider, drawn as a section heading and skipped by the focus, with no
 automation name; an item may carry a right-aligned aside, clipped before it
 meets the label; and an item may be greyed so a press does not choose it
-(`ChoiceMenuRow`). The canvas draws at
-whole scales; fractional sizes are U24's. The arrows' rule is one function, its weight named, and is to be
+(`ChoiceMenuRow`). The smooth form lays
+the screens out in the game's fonts' widths and draws them in the modern
+fonts, so a text that would not fit its box is drawn a little smaller; the
+only fractional scale the layer offers is 150%. The arrows' rule is one function, its weight named, and is to be
 tuned after controller playtests (D30). The look of the list rows, chips, fields, tabs, cards,
 hover cards and links follows the design's components mockup in the kit's
 tokens; it is reviewed in the gallery (U12) and pinned by golden frames

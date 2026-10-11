@@ -10,14 +10,15 @@
 # check (engine_settings/challenge.hpp), and the missing-language notice
 # (engine_settings/language_notice.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
-  src/developer.cpp src/language_page.cpp src/language_notice.cpp src/mods.cpp src/notice.cpp
-  src/prompt.cpp src/challenge.cpp src/registered.cpp src/settings_rows.cpp)
+  src/developer.cpp src/downloads_page.cpp src/language_page.cpp src/language_notice.cpp
+  src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp src/registered.cpp
+  src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-data-languages oa-data-limits
   oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi
-  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-options oa-base-text)
+  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-options oa-base-text)
 
 if(BUILD_TESTING)
   add_executable(oa-ui-engine-settings-test tests/engine_settings_test.cpp)
@@ -48,6 +49,13 @@ if(BUILD_TESTING)
   # The test places parts through the dialog's own geometry (src/geometry.hpp).
   target_include_directories(oa-ui-engine-settings-dialog-test PRIVATE src)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)
+
+  # Downloads: the section list, the check, install IDs and the downloaded files.
+  add_executable(oa-ui-engine-settings-downloads-test tests/downloads_page_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-downloads-test PRIVATE oa-ui-engine-settings
+    oa-test-support oa-options)
+  target_include_directories(oa-ui-engine-settings-downloads-test PRIVATE src)
+  add_test(NAME ui-engine-settings-downloads COMMAND oa-ui-engine-settings-downloads-test)
   # The dialog's fonts from the installed game, and its texts in them.
   oa_add_game_data_test(ui-engine-settings-dialog-data oa-ui-engine-settings-dialog-test --data)
 

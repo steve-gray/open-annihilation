@@ -80,4 +80,10 @@ void draw_notice(
     kit::draw_notice({&target, placement, &fonts, icon}, notice, geometry::shown_text);
 }
 
+void draw_notice(const kit::Canvas& canvas, const Notice& notice) {
+    if (canvas.fonts == nullptr)
+        return;
+    kit::draw_notice(canvas, notice, geometry::shown_text);
+}
+
 } // namespace oa::ui::engine_settings

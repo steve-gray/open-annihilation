@@ -937,6 +937,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/modern_text.cpp src/app/text_input_area.cpp
   src/app/runtime_user_folder.cpp
   src/app/runtime_mod_warning.cpp
+  src/app/runtime_presence_card.cpp
   src/app/runtime_mod_install.cpp src/app/runtime_content.cpp src/app/runtime_challenge.cpp
   src/app/runtime_package_kinds.cpp
   src/app/runtime_pack_maps.cpp
@@ -967,7 +968,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_game_files.cpp
   src/app/runtime_pad.cpp src/app/runtime_pad_actions.cpp src/app/runtime_pad_pointer.cpp
   src/app/runtime_pad_haptics.cpp src/app/runtime_text_input.cpp
-  src/app/folder_chooser_screen.cpp src/app/runtime_found_install.cpp
+  src/app/folder_chooser_screen.cpp src/app/window_pixels.cpp src/app/runtime_found_install.cpp
   src/app/simulation_hash.cpp
   src/app/presence_facts.cpp)
 # The self-checks: the --check-* options with which the game drives itself
@@ -2961,6 +2962,14 @@ if(TARGET oa-game)
   # The built-in registry descriptors, beside the fonts
   # (cmake/OaRegistries.cmake).
   oa_copy_registries(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
+  # The engine ships no language packs. Builds before 0.8 copied zh-Hans into
+  # the languages folder beside the game, and the game reads a pack there as
+  # the packager's, so a build folder that held one would still offer it.
+  # The folder is removed after each link.
+  add_custom_command(TARGET oa-game POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    VERBATIM)
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")
 set(oa_notice_files "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_CURRENT_SOURCE_DIR}/ATTRIBUTIONS.md"

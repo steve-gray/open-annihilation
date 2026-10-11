@@ -262,6 +262,24 @@ wrap_path(std::string_view path, int32_t width, const Measure& measure);
 [[nodiscard]] std::size_t
 fitting_start(std::string_view word, int32_t width, const Measure& measure);
 
+/// Where a word wider than a line breaks, as WrapRules::break_word says, with
+/// the room and the measure the line is wrapped to: the bytes of the word's
+/// first piece, at least its first character.
+using WordBreak = std::size_t (*)(std::string_view word, int32_t width, const Measure& measure);
+
+/// Returns where a folder's path, a word wider than a line, breaks: after the
+/// last path separator ('/' or '\\') among the whole characters of its start
+/// that fit a width, so that a line ends with a folder's name and its
+/// separator; with no such separator, where fitting_start breaks it. A
+/// separator the path starts with is no place to break, and a word that fits
+/// whole is not broken. The folder chooser breaks its texts this way.
+///
+/// @param word the word, in UTF-8
+/// @param width the room, in the measure's units
+/// @param measure a text's width
+/// @return the bytes of the first piece; 0 for an empty word
+[[nodiscard]] std::size_t path_break(std::string_view word, int32_t width, const Measure& measure);
+
 /// The ellipsis that ends a shortened line.
 inline constexpr std::string_view ellipsis = "\xE2\x80\xA6";
 

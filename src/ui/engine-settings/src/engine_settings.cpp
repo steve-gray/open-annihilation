@@ -329,6 +329,13 @@ static_assert(on_stop(62, lowest_frame_rate, highest_frame_rate, frame_rate_step
 static_assert(on_stop(63, lowest_frame_rate, highest_frame_rate, frame_rate_step) == 65);
 static_assert(on_stop(240, lowest_frame_rate, highest_frame_rate, frame_rate_step) == 120);
 
+/// Check for content updates' words, in the order the Downloads page lists them.
+constexpr std::array<ChoiceWord<ContentCheck>, 3> content_check_words{{
+    {ContentCheck::automatically, "automatically"},
+    {ContentCheck::when_library_opens, "library"},
+    {ContentCheck::never, "never"},
+}};
+
 } // namespace
 
 EngineSettings default_settings(const Inputs& inputs) {
@@ -457,6 +464,8 @@ std::string_view interface_size_text(InterfaceSize size) noexcept {
         return "automatic";
     case InterfaceSize::size_100:
         return "100";
+    case InterfaceSize::size_150:
+        return "150";
     case InterfaceSize::size_200:
         return "200";
     case InterfaceSize::size_300:
@@ -564,6 +573,9 @@ EngineSettings read_settings(
     for (const TextSwitch& entry : text_switches)
         if (const auto number = stored_number(values, entry.key))
             settings.*entry.member = *number > 0;
+    // 150% is drawn in the modern fonts: read with them off, it is 100%.
+    settings.interface_size =
+        interface_size_with_fonts(settings.interface_size, settings.modern_fonts);
     if (const auto number = stored_number(values, key::text_size))
         settings.text_size = clamped(*number, lowest_text_size, highest_text_size);
     settings.language = stored_language(values, inputs.players_own_profile);
@@ -617,6 +629,8 @@ EngineSettings read_settings(
     if (!inputs.profile_id.empty())
         if (const auto found = values.find(overrides_key(inputs.profile_id)); found != values.end())
             settings.hack_overrides = mod_profile::read_overrides(found->second);
+    // Unknown text leaves the default read_settings started from.
+    read_word(values, key::content_check, content_check_words, settings.content_check);
     return settings;
 }
 
@@ -982,6 +996,15 @@ void write_settings(
             chosen.*entry.member == defaults.*entry.member,
             restored
         );
+    store_word(
+        values,
+        key::content_check,
+        content_check_words,
+        opened.content_check,
+        chosen.content_check,
+        defaults.content_check,
+        restored
+    );
     // Restore defaults keeps the overrides: Restore profile values clears them.
     if (!profile_id.empty() && chosen.hack_overrides != opened.hack_overrides) {
         if (chosen.hack_overrides.empty())

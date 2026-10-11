@@ -645,39 +645,39 @@ std::vector<int32_t> tab_order(const settings::Dialog& dialog) {
 
 void tab_follows_the_dialogs_focus_order() {
     // Controls: its rows, the footer, then the sections' entries, Game files
-    // listed before Developer.
+    // then Downloads, listed before Developer.
     const TwoMods mods;
     const settings::Dialog controls =
         engine_dialog_of(mods, {}, settings::Page::controls, true, true, true);
     OA_CHECK(
         tab_order(controls) ==
-        (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 8, 7})
+        (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 10, 11, 12, 0, 1, 2, 3, 4, 5, 6, 8, 9, 7})
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none;
     // Interface size, the last row, does.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
-    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{13, 14, 15, 16, 17, 18, 19, 20,
-                                                          21, 23, 24, 25, 9,  10, 11, 0,
-                                                          1,  2,  3,  4,  5,  6,  8,  7}));
+    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 20, 21, 22,
+                                                          24, 25, 26, 10, 11, 12, 0,  1,  2,
+                                                          3,  4,  5,  6,  8,  9,  7}));
     // Developer with its first area open: its rows, its list's headers,
     // Show Active Only and Restore profile values, then the rest.
     settings::Dialog developer = controls;
     developer.page = settings::Page::developer;
     developer.chosen.developer_mode = true;
     developer.developer.areas_open[0] = 1;
-    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{13, 14, 17, 18, 19, 20, 21, 22, 23,
-                                                           24, 25, 26, 27, 28, 29, 30, 31, 32,
-                                                           33, 34, 35, 36, 37, 38, 39, 40, 41,
-                                                           42, 43, 15, 16, 9,  10, 11, 0,  1,
-                                                           2,  3,  4,  5,  6,  8,  7}));
+    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{14, 15, 18, 19, 20, 21, 22, 23, 24,
+                                                           25, 26, 27, 28, 29, 30, 31, 32, 33,
+                                                           34, 35, 36, 37, 38, 39, 40, 41, 42,
+                                                           43, 44, 16, 17, 10, 11, 12, 0,  1,
+                                                           2,  3,  4,  5,  6,  8,  9,  7}));
     // Mods with two mods: each row, Beta's ROLL BACK after Beta, then OPEN
     // MODS FOLDER.
     settings::Dialog two_mods = controls;
     two_mods.page = settings::Page::mods;
     OA_CHECK(
         tab_order(two_mods) ==
-        (std::vector<int32_t>{13, 14, 15, 19, 16, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 8, 7})
+        (std::vector<int32_t>{14, 15, 16, 20, 17, 10, 11, 12, 0, 1, 2, 3, 4, 5, 6, 8, 9, 7})
     );
 }
 

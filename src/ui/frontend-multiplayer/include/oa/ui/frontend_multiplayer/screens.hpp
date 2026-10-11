@@ -392,6 +392,32 @@ struct PresenceBadgeSpot {
 ///         or a dialog covers it, or its GUI has no CD<slot> control
 int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) noexcept;
 
+/// Returns the slot of the battle room's row whose name has the keyboard's
+/// focus: the front panel's focused control when it is a remote player's
+/// PLAYER<slot> name (the local player's own row is a label and takes no
+/// focus). Tab and the arrow keys, which are also the pad's D-pad, move
+/// the focus onto those rows after the lists and before the chat line.
+/// Up and Down stay inside a list, and Left and Right stay in the chat line.
+/// Return and the pad's A open that row's card when it shows an OA badge,
+/// and otherwise do nothing; they never press the row.
+///
+/// @return the slot, 0..9; -1 while the battle room is not shown, a dialog
+///     covers it, or the focus is on no player's row
+[[nodiscard]] int32_t multiplayer_focused_player_slot() noexcept;
+
+class PresenceCardTrigger;
+
+/// Hands the battle room the card trigger Return and the pad's A use.
+///
+/// While a remote player's row has the focus, those keys open its card when
+/// the row shows an OA badge, and do nothing otherwise. They never press
+/// the row. A null trigger still takes the key and opens no card. The
+/// binding survives multiplayer_reset. The presence card screen binds its
+/// own trigger and clears the binding when that screen goes.
+///
+/// @param trigger the card's trigger, or null
+void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept;
+
 /// Returns the gadget records of the current base screen as its loader left them.
 [[nodiscard]] const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept;
 

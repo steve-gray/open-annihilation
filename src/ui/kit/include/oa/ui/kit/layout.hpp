@@ -197,6 +197,10 @@ struct Frame {
 /// @return the frame
 [[nodiscard]] Frame frame_of(const Viewport& viewport) noexcept;
 
+/// The one fractional scale an Interface size offers, in percent: one and a
+/// half, drawn on the canvas's smooth form in the modern fonts.
+inline constexpr int32_t fractional_scale_percent = 150;
+
 /// Returns the viewport OA's own screens are laid out on, at the scale an
 /// Interface size chooses for a canvas.
 ///
@@ -206,22 +210,28 @@ struct Frame {
 /// included, on a touch canvas as on a desktop one. The scale is the
 /// largest whole step, no larger than the chosen one, at which Compact's
 /// dialog (compact_metrics' dialog_width by dialog_height points) fits the
-/// room, the canvas less its safe insets, and at least 1. frame_of of the
-/// result gives the size class of the room's points at that scale.
+/// room, the canvas less its safe insets, and at least 1. 150%
+/// (fractional_scale_percent) is held the same way: it is used where
+/// Compact's dialog fits the room at one and a half, and otherwise 1.
+/// frame_of of the result gives the size class of the room's points at
+/// that scale.
 ///
 /// @param canvas the canvas: its pixels, density and safe insets; its
 ///     scale_percent is not read
 /// @param chosen_percent the Interface size in percent, 100 a step: 100,
-///     200, 300 or 400; 0 for Auto. A percent between two steps takes the
-///     step below it.
-/// @return the canvas with scale_percent set to that scale times 100
+///     150, 200, 300 or 400; 0 for Auto. Any other percent between two
+///     steps takes the step below it.
+/// @return the canvas with scale_percent set to that scale: 150, or a
+///     whole step times 100
 [[nodiscard]] Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept;
 
 /// Returns a rectangle of points as canvas pixels.
 ///
 /// Each edge is that edge in points times the percentage, divided by 100 and
-/// rounded down, so two rectangles that share an edge in points share it in
-/// pixels, with no gap and no overlap. A scale of 0 or less counts as 1%.
+/// rounded to the nearest pixel, a half away from zero (lround of the point
+/// times the scale), each edge on its own, so two rectangles that share an
+/// edge in points share it in pixels, with no gap and no overlap, and every
+/// edge falls on a whole pixel. A scale of 0 or less counts as 1%.
 ///
 /// @param points the rectangle, in points
 /// @param scale_percent the scale, as a percentage
@@ -586,6 +596,27 @@ struct DisplayList {
 /// @return that control's number, or no_control when none holds the point
 [[nodiscard]] ControlId hit(const DisplayList& list, Point point) noexcept;
 
+/// What a disabled control does to a press inside it.
+enum class DisabledControl : uint8_t {
+    passes, ///< the press passes on to the controls under it, as if it were not there
+    blocks, ///< the press stops there and reaches no control
+};
+
+/// Returns the control a point reaches, by a rule for disabled controls.
+///
+/// Controls are tried in list order, each where hit tries it. The first
+/// enabled one the point lies in is the answer. A disabled one it lies in is
+/// skipped with DisabledControl::passes, as hit does; with
+/// DisabledControl::blocks it ends the search, and the point reaches no
+/// control. The folder chooser blocks; the Game files screen passes.
+///
+/// @param list the display list
+/// @param point the point, in the same points as the controls
+/// @param disabled what a disabled control the point lies in does
+/// @return the control's number, or no_control when the point reaches none
+[[nodiscard]] ControlId
+hit(const DisplayList& list, Point point, DisabledControl disabled) noexcept;
+
 /// Returns a list's control of a number.
 ///
 /// @param list the display list
@@ -639,11 +670,13 @@ enum class TextFit : uint8_t {
 /// Adds a text broken into lines no wider than a room, as one part.
 ///
 /// The text breaks at its spaces, every new line starts a paragraph, and a
-/// word wider than the room breaks between its characters; Chinese, Japanese
-/// and Korean break as other text does. An empty line is dropped. When there
-/// are more lines than most_lines, the last one kept takes the rest of the
-/// text and ends with an ellipsis, shortened to the room (fit). The part is a
-/// line high (measured_line) for each line, and as wide as `sits` says.
+/// word wider than the room breaks between its characters, or where
+/// break_word says when one is given (path_break breaks a folder's path after
+/// a separator); Chinese, Japanese and Korean break as other text does. An
+/// empty line is dropped. When there are more lines than most_lines, the last
+/// one kept takes the rest of the text and ends with an ellipsis, shortened
+/// to the room (fit). The part is a line high (measured_line) for each line,
+/// and as wide as `sits` says.
 ///
 /// @param[in,out] parts the parts it is added to
 /// @param type the scale and the measure
@@ -654,6 +687,7 @@ enum class TextFit : uint8_t {
 /// @param look its size, weight, colour and style
 /// @param sits how the part sits in the room
 /// @param most_lines the most lines; 0 for no limit
+/// @param break_word where a word wider than the room breaks; null breaks it between characters
 /// @return the part's height, in canvas pixels; 0 when it was not added (no text, no room)
 int32_t text_part(
     std::vector<Item>& parts,
@@ -664,7 +698,8 @@ int32_t text_part(
     std::string_view words,
     const Lettering& look,
     TextFit sits = TextFit::column,
-    std::size_t most_lines = 0
+    std::size_t most_lines = 0,
+    WordBreak break_word = nullptr
 );
 
 /// Adds one line of text, shortened with an ellipsis to a room (fit), as one

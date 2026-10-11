@@ -154,6 +154,9 @@ inline constexpr std::string_view game_files_backed_up = "open-annihilation.game
 /// oa::data::mod_profile::overrides_text writes it
 /// (EngineSettings::hack_overrides).
 inline constexpr std::string_view hack_overrides = "open-annihilation.hack-overrides.";
+/// "automatically", "library" or "never" (EngineSettings::content_check).
+/// When Open Annihilation looks for new content and updates.
+inline constexpr std::string_view content_check = "open-annihilation.content-updates";
 } // namespace key
 
 /// Tells whether two tags are the same, ignoring ASCII case and reading '_' as '-'.
@@ -454,29 +457,49 @@ enum class InterfaceSize : uint8_t {
     /// below the display's density
     automatic,
     size_100, ///< one window pixel a point
+    /// One and a half window pixels a point, drawn in the modern fonts: it
+    /// is offered, and kept, only while Use modern fonts for game text is On
+    /// (interface_size_with_fonts), as the game's own fonts take whole steps
+    size_150,
     size_200, ///< two window pixels a point
     size_300, ///< three window pixels a point
     size_400, ///< four window pixels a point
 };
 
-/// The Interface sizes, in the order the dialog offers them.
-inline constexpr std::array<InterfaceSize, 5> interface_size_choices{
+/// The Interface sizes, in the order the dialog offers them; it offers
+/// size_150 only while it shows Use modern fonts for game text On.
+inline constexpr std::array<InterfaceSize, 6> interface_size_choices{
     InterfaceSize::automatic,
     InterfaceSize::size_100,
+    InterfaceSize::size_150,
     InterfaceSize::size_200,
     InterfaceSize::size_300,
     InterfaceSize::size_400,
 };
 
+/// Returns the Interface size a choice is while Use modern fonts for game
+/// text is On or Off: 150% is drawn in the modern fonts, so with them Off it
+/// is 100%; every other size is itself.
+///
+/// @param size the Interface size chosen
+/// @param modern_fonts Use modern fonts for game text is On
+/// @return the size
+[[nodiscard]] constexpr InterfaceSize
+interface_size_with_fonts(InterfaceSize size, bool modern_fonts) noexcept {
+    return size == InterfaceSize::size_150 && !modern_fonts ? InterfaceSize::size_100 : size;
+}
+
 /// Returns the scale an Interface size chooses, as the OA layer takes it
 /// (oa::ui::kit::layer_viewport).
 ///
 /// @param size the Interface size
-/// @return the scale in percent: 100, 200, 300 or 400; 0 for Auto
+/// @return the scale in percent: 100, 150, 200, 300 or 400; 0 for Auto
 [[nodiscard]] constexpr int32_t interface_size_percent(InterfaceSize size) noexcept {
     switch (size) {
     case InterfaceSize::size_100:
         return 100;
+    case InterfaceSize::size_150:
+        return 150;
     case InterfaceSize::size_200:
         return 200;
     case InterfaceSize::size_300:
@@ -773,6 +796,14 @@ inline constexpr ControlSize steam_deck_control_size = ControlSize::larger;
     return static_cast<uint32_t>(lowest + (held - lowest + step / 2) / step * step);
 }
 
+/// When Open Annihilation looks for new content and updates. It never
+/// installs anything until the player says so.
+enum class ContentCheck : uint8_t {
+    automatically,      ///< at start and when the Library opens
+    when_library_opens, ///< only when the Library opens
+    never,              ///< only when the player asks
+};
+
 /// The settings, as the dialog shows them and the game puts them in effect.
 struct EngineSettings {
     /// Path nodes the path search may visit in a game tick, all players
@@ -857,9 +888,10 @@ struct EngineSettings {
     /// keep their own sizes either way.
     bool hud_scaling{true};
     /// How large Open Annihilation's own screens are drawn outside a match:
-    /// the window's Auto scale, or a whole step the OA layer holds to what
-    /// fits the smallest layout in the window. It takes effect when the
-    /// dialog's OK is pressed, and changes no game text, HUD or menu.
+    /// the window's Auto scale, or a step the OA layer holds to what fits
+    /// the smallest layout in the window; 150% only with modern_fonts On. It
+    /// takes effect when the dialog's OK is pressed, and changes no game
+    /// text, HUD or menu.
     InterfaceSize interface_size{InterfaceSize::automatic};
     /// Game text is drawn in the modern fonts, which hold the letters of
     /// many languages, rather than the game's own 8-bit fonts. On by default
@@ -908,6 +940,9 @@ struct EngineSettings {
     /// The mod's own options, which only a dialog opened for them changes;
     /// read_settings and write_settings leave them out.
     ModOptions mod_options{};
+    /// When Open Annihilation looks for new content and updates. It takes
+    /// effect when OK is pressed; Cancel and Restore defaults apply.
+    ContentCheck content_check{ContentCheck::automatically};
 
     friend bool operator==(const EngineSettings&, const EngineSettings&) = default;
 };
@@ -1055,8 +1090,10 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 /// "icons" among them, gives the default. Window frame reads
 /// "hidden-in-play" or "always-shown", and any other value gives the
 /// default. Interface size reads the words interface_size_text writes, and
-/// any other value, "150", "0" and an empty one among them, gives Auto. A
-/// stored value always wins over a Steam Deck's defaults.
+/// any other value, "0" and an empty one among them, gives Auto; "150" read
+/// while Use modern fonts for game text reads Off gives 100%
+/// (interface_size_with_fonts). A stored value always wins over a Steam
+/// Deck's defaults.
 ///
 /// @param values the preferences
 /// @param inputs the platform, the preferences file and the installation
@@ -1193,13 +1230,13 @@ hardware_acceleration_from_text(std::string_view text) noexcept;
 /// Returns the word the preferences keep an Interface size as.
 ///
 /// @param size the Interface size
-/// @return "automatic", "100", "200", "300" or "400"
+/// @return "automatic", "100", "150", "200", "300" or "400"
 [[nodiscard]] std::string_view interface_size_text(InterfaceSize size) noexcept;
 
 /// Returns the Interface size a word names.
 ///
 /// @param text the word, as interface_size_text gives it
-/// @return the size; nothing for any other text, "150" and "0" among them
+/// @return the size; nothing for any other text, "0" among them
 [[nodiscard]] std::optional<InterfaceSize> interface_size_from_text(std::string_view text) noexcept;
 
 /// Returns the word the preferences keep a way of One-finger drag as.

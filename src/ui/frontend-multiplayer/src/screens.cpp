@@ -3,6 +3,7 @@
 
 // Multiplayer screens: resources, input routing, dialogs and drawing.
 #include "oa/ui/frontend_multiplayer/screens.hpp"
+#include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/decoded.hpp"
 
 #include "oa/base/game_loop.hpp"
@@ -31,6 +32,7 @@
 #include "oa/platform/system.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
@@ -84,8 +86,13 @@ constexpr uint16_t kMachineMemoryMb = 256; // stand-in for the physical memory p
 constexpr uint32_t kSdlKeyReturn = 0x0d;
 constexpr uint32_t kSdlKeyEscape = 0x1b;
 constexpr uint32_t kSdlKeyBackspace = 0x08;
-constexpr uint32_t kSdlKeyUp = 0x40000052;
+constexpr uint32_t kSdlKeyTab = 0x09;
+constexpr uint32_t kSdlKeyRight = 0x4000004F;
+constexpr uint32_t kSdlKeyLeft = 0x40000050;
 constexpr uint32_t kSdlKeyDown = 0x40000051;
+constexpr uint32_t kSdlKeyUp = 0x40000052;
+/// Either Shift key, as the platform reports it on a key.
+constexpr uint16_t kSdlModifierShift = 0x0003;
 constexpr uint8_t kSdlRightButton = 3;
 constexpr uint8_t kMenuTickFlag = 1;
 // The frontend signal a state starts with.
@@ -1543,6 +1550,9 @@ renderer::ButtonPresentation button_presentation(
     const auto& control = res.panel.controls[static_cast<std::size_t>(index)];
     renderer::ButtonPresentation presentation;
     presentation.name = gadget.common.name;
+    // The screen's own focus marker, lit round a focused button. A label, a
+    // list and the chat line show none, so a room with no focused row is unchanged.
+    presentation.focused = index == res.panel.focus;
     // A button shows itself held only while the pointer that pressed it is over it.
     const bool held = index == res.pressed && res.pressed == res.hovered;
     if (control.grayed)
@@ -3132,6 +3142,131 @@ void drop_composition(std::string& value) {
     composition.clear();
 }
 
+/// Returns the slot a PLAYER<slot> control names.
+///
+/// @param name the control's name
+/// @return the slot, 0..9; -1 when the name is not a player's row
+int32_t player_row_slot(std::string_view name) noexcept {
+    constexpr std::string_view row_name = "PLAYER";
+    if (name.size() != row_name.size() + 1 || !name.starts_with(row_name))
+        return -1;
+    const char digit = name.back();
+    if (digit < '0' || digit > '9')
+        return -1;
+    const auto slot = static_cast<int32_t>(digit - '0');
+    return slot < kSlotCount ? slot : -1;
+}
+
+/// Tells whether a list takes a place in the battle room's focus order.
+///
+/// @param control the control
+/// @return true for a shown list a key can select
+bool focusable_list(const Control& control) noexcept {
+    return control.active != 0 && control.type == ControlType::list_box &&
+           (control.attributes & ui::gui_layout::attribute::no_focus) == 0 &&
+           (control.attributes & ui::gui_layout::attribute::cycle_frames) == 0;
+}
+
+/// Tells whether a remote player's row takes a place in the focus order.
+///
+/// The local player's row is a label and takes none. An empty slot takes
+/// none: it is not another player's row.
+///
+/// @param lobby the battle room
+/// @param control the control
+/// @return true for a shown row of a remote or computer player
+bool focusable_player_row(Lobby& lobby, const Control& control) noexcept {
+    if (control.active == 0 || control.grayed || control.type != ControlType::button)
+        return false;
+    if ((control.attributes & ui::gui_layout::attribute::no_focus) != 0)
+        return false;
+    const int32_t slot = player_row_slot(control_name(control));
+    if (slot < 0)
+        return false;
+    const Player& player = slot_player(lobby, slot);
+    return slot_active(player) && player.status != kSlotLocal;
+}
+
+/// The battle room's focus order: its lists, then each remote player's row
+/// in slot order, then the chat line.
+struct FocusOrder {
+    std::array<int32_t, kPanelControls> index{}; ///< control indexes
+    int32_t count = 0;                           ///< how many indexes are set
+};
+
+/// Builds the battle room's focus order.
+///
+/// @param panel the battle room's panel
+/// @param lobby the battle room
+/// @return the order, lists then remote rows then the chat line
+FocusOrder battle_room_focus_order(const Panel& panel, Lobby& lobby) noexcept {
+    FocusOrder order;
+    const auto add = [&](int32_t index) {
+        if (order.count < static_cast<int32_t>(order.index.size()))
+            order.index[static_cast<std::size_t>(order.count++)] = index;
+    };
+    for (int32_t index = 1; index < panel.count; ++index)
+        if (focusable_list(panel.controls[static_cast<std::size_t>(index)]))
+            add(index);
+    std::array<int32_t, kSlotCount> player_at{};
+    player_at.fill(kNoControl);
+    for (int32_t index = 1; index < panel.count; ++index) {
+        const auto& control = panel.controls[static_cast<std::size_t>(index)];
+        if (!focusable_player_row(lobby, control))
+            continue;
+        const int32_t slot = player_row_slot(control_name(control));
+        if (player_at[static_cast<std::size_t>(slot)] == kNoControl)
+            player_at[static_cast<std::size_t>(slot)] = index;
+    }
+    for (int32_t slot = 0; slot < kSlotCount; ++slot)
+        if (player_at[static_cast<std::size_t>(slot)] != kNoControl)
+            add(player_at[static_cast<std::size_t>(slot)]);
+    for (int32_t index = 1; index < panel.count; ++index) {
+        const auto& control = panel.controls[static_cast<std::size_t>(index)];
+        if (control.active != 0 && takes_any_character(control) &&
+            (control.attributes & ui::gui_layout::attribute::no_focus) == 0)
+            add(index);
+    }
+    return order;
+}
+
+/// Moves the battle room's focus one place along its order, wrapping.
+///
+/// @param[in,out] panel the battle room's panel; its focus moves
+/// @param forward true toward the chat line, false back toward the lists
+void move_battle_room_focus(Panel& panel, bool forward) noexcept {
+    const FocusOrder order = battle_room_focus_order(panel, ui().lobby);
+    if (order.count == 0)
+        return;
+    int32_t place = -1;
+    for (int32_t index = 0; index < order.count; ++index) {
+        if (order.index[static_cast<std::size_t>(index)] == panel.focus) {
+            place = index;
+            break;
+        }
+    }
+    int32_t next = forward ? 0 : order.count - 1;
+    if (place >= 0)
+        next = forward ? (place + 1) % order.count : (place + order.count - 1) % order.count;
+    const int32_t chosen = order.index[static_cast<std::size_t>(next)];
+    if (panel.focus == chosen)
+        return;
+    panel.focus = chosen;
+    panel.dirty = true;
+}
+
+/// Tells whether the battle room itself is the screen taking keys.
+///
+/// @return true while it shows and no dialog covers it
+bool battle_room_keys() noexcept {
+    const auto& state = ui();
+    return state.screen == kScreenBattleroom && state.base.loaded && &front() == &state.base;
+}
+
+/// The card trigger Return and the pad's A use while a remote row is focused.
+/// The presence card screen binds its own; null opens no card.
+PresenceCardTrigger* row_key_trigger = nullptr;
+
 } // namespace
 
 int screen_event(ScreenContext* ctx, void*) {
@@ -3150,6 +3285,8 @@ int screen_event(ScreenContext* ctx, void*) {
     auto& panel = res.panel;
     const auto px = static_cast<int32_t>(input->x) - res.offset_x;
     const auto py = static_cast<int32_t>(input->y) - res.offset_y;
+    // Declared here: a variable inside one case cannot be jumped over by another.
+    const bool focus_valid = panel.focus > 0 && panel.focus < panel.count;
     switch (input->kind) {
     case ScreenInputKind::pointer_move:
         res.hovered = panel_hit(panel, px, py);
@@ -3214,35 +3351,75 @@ int screen_event(ScreenContext* ctx, void*) {
             }
         }
         if (input->key == kSdlKeyBackspace && panel.focus > 0 && panel.focus < panel.count) {
-            // Backspace takes the last character away: a whole UTF-8
-            // sequence of the chat line where game text holds UTF-8, else
-            // one byte.
+            // Backspace takes the last character away from a text box: a
+            // whole UTF-8 sequence of the chat line where game text holds
+            // UTF-8, else one byte. A focused player's row is not a text box.
             auto& control = panel.controls[static_cast<std::size_t>(panel.focus)];
-            std::string text(control_text(control));
-            if (control.type == ControlType::text_box && takes_any_character(control) &&
-                oa::present::game_text_settings().utf8)
-                std::ignore = oa::present::erase_last_character(text);
-            else if (!text.empty())
-                text.pop_back();
-            set_control_text(control, text);
+            if (control.type == ControlType::text_box) {
+                std::string text(control_text(control));
+                if (takes_any_character(control) && oa::present::game_text_settings().utf8)
+                    std::ignore = oa::present::erase_last_character(text);
+                else if (!text.empty())
+                    text.pop_back();
+                set_control_text(control, text);
+            }
             return 1;
         }
-        if (input->key == kSdlKeyReturn && panel.focus > 0 && panel.focus < panel.count) {
+        if (input->key == kSdlKeyReturn && focus_valid) {
+            // A focused remote row takes Return and the pad's A as the
+            // information key. The card opens when that row shows an OA
+            // badge, and nothing happens otherwise. The row is not pressed,
+            // so a player is not rejected and an AI is not cycled. A click
+            // on the row still presses it.
+            const auto& focused = panel.controls[static_cast<std::size_t>(panel.focus)];
+            if (battle_room_keys() && focusable_player_row(state.lobby, focused)) {
+                if (row_key_trigger != nullptr) {
+                    const int32_t slot = player_row_slot(control_name(focused));
+                    PresenceBadgeSpot spots[kSlotCount]{};
+                    const auto count = multiplayer_presence_badges(spots, kSlotCount);
+                    for (int32_t index = 0; index < count; ++index) {
+                        if (spots[static_cast<std::size_t>(index)].slot == slot) {
+                            row_key_trigger->key_info(slot);
+                            break;
+                        }
+                    }
+                }
+                return 1;
+            }
             if (panel_press(panel, panel.focus))
                 dispatch(ctx);
             return 1;
         }
         // Up and Down move a focused list's selection a row and run its
         // handler for a new selection, as 3.1c does; they never click it.
-        if ((input->key == kSdlKeyUp || input->key == kSdlKeyDown) && panel.focus > 0 &&
-            panel.focus < panel.count) {
+        if ((input->key == kSdlKeyUp || input->key == kSdlKeyDown) && focus_valid) {
             const auto& focused = panel.controls[static_cast<std::size_t>(panel.focus)];
             if (focused.type == ControlType::list_box && focused.list_item_height != 0) {
                 panel_step_list(panel, panel.focus, input->key == kSdlKeyDown);
                 list_changed(res, panel.focus);
+                return 1;
+            }
+        }
+        // In the battle room, Tab and the pad's D-pad (the arrow keys) walk
+        // the focus order: the lists, then each remote player's row, then
+        // the chat line. Left and Right stay in the chat line. Up and Down
+        // stay in a list, where they move its selection.
+        if (battle_room_keys() &&
+            (input->key == kSdlKeyTab || input->key == kSdlKeyUp || input->key == kSdlKeyDown ||
+             input->key == kSdlKeyLeft || input->key == kSdlKeyRight)) {
+            const bool along_chat =
+                (input->key == kSdlKeyLeft || input->key == kSdlKeyRight) && focus_valid &&
+                takes_any_character(panel.controls[static_cast<std::size_t>(panel.focus)]);
+            if (!along_chat) {
+                const bool backward =
+                    input->key == kSdlKeyUp || input->key == kSdlKeyLeft ||
+                    (input->key == kSdlKeyTab && (input->modifiers & kSdlModifierShift) != 0);
+                move_battle_room_focus(panel, !backward);
             }
             return 1;
         }
+        if ((input->key == kSdlKeyUp || input->key == kSdlKeyDown) && focus_valid)
+            return 1;
         if (input->key == kSdlKeyEscape) {
             for (const char* name : {"PREVMENU", "PREV", "CANCEL", "Cancel", "CHOICE2", "OK"})
                 if (panel_find(panel, name) != kNoControl) {
@@ -3477,6 +3654,20 @@ int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) no
     return presence_badge_spots(state.base, state.lobby, out, capacity);
 }
 
+int32_t multiplayer_focused_player_slot() noexcept {
+    auto& state = ui();
+    // As the badges: the battle room shows, with no dialog over it.
+    if (!state.showing || state.screen != kScreenBattleroom || !state.base.loaded ||
+        &front() != &state.base)
+        return -1;
+    const auto& panel = state.base.panel;
+    if (panel.focus <= 0 || panel.focus >= panel.count)
+        return -1;
+    const auto& name = panel.controls[static_cast<std::size_t>(panel.focus)].name;
+    const std::string_view focused(name.data(), ::strnlen(name.data(), name.size()));
+    return player_row_slot(focused);
+}
+
 const ui::gui_layout::Layout& multiplayer_screen_layout() noexcept {
     return ui().base.source;
 }
@@ -3611,6 +3802,10 @@ void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
     state.map = -1;
     clear_pack_refusal();
     state.pack_prepared = false;
+}
+
+void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept {
+    row_key_trigger = trigger;
 }
 
 void multiplayer_reset() noexcept {

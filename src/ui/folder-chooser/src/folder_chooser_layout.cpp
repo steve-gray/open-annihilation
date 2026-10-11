@@ -1,34 +1,48 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The chooser's layouts, painted in the Game files screen's look
-// (folder_chooser.hpp). Each view is the header bar, then a column of three
-// blocks: a fixed top (the title, the lines under it, the notice and, in the
-// browser, the places and the verdict), a body that scrolls when the column
-// does not fit (the rows), and a fixed bottom (the buttons). When even the
-// fixed blocks leave the body too little room, the whole column scrolls.
-// Every control is at least min_button_points high, and each one's box is a
-// target of its own, in the order the focus moves.
-#include "oa/ui/folder_chooser.hpp"
+// The chooser's layouts in the Game files screen's look, built from the kit's
+// parts (folder_chooser.hpp). Each view is the header bar, then a column of
+// three blocks: a fixed top (the title, the lines under it, the notice and,
+// in the browser, the places and the verdict), a body that scrolls when the
+// column does not fit (the rows), and a fixed bottom (the buttons). When even
+// the fixed blocks leave the body too little room, the whole column scrolls
+// (the kit's scroll_column). The kit measures, fits and wraps the texts, a
+// path breaking after its separators (path_break), and lays out the text
+// parts, the buttons and their rows, the icons and the plain parts; the
+// chooser's own compositions (its header, banners, title and rows) place
+// them. Every control is at least min_button_points high, and each one's part
+// carries its target, in the order the focus moves.
+#include "folder_chooser_internal.hpp"
 
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/ui/folder_chooser.hpp"
+#include "oa/ui/kit/input.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace oa::ui::folder_chooser {
 
 namespace {
 
 namespace gf = oa::ui::game_files;
+namespace kit = oa::ui::kit;
 using gf::Colour;
 using gf::Glyph;
-using Item = oa::ui::kit::Item;
-using ItemRole = oa::ui::kit::Role;
-using TextRole = oa::ui::kit::TextStyle;
+using kit::Lettering;
+using kit::Role;
+using kit::TextFit;
+using kit::TextStyle;
+using detail::rows_area_group;
+using detail::target_part;
 
 /// The sizes of one form, in points.
 struct Metrics {
@@ -134,20 +148,16 @@ constexpr Metrics compact_metrics{
 constexpr float compact_short_side_points = 600.0f;
 /// The least height, in points, a scrolling body keeps before the whole column scrolls.
 constexpr float least_body_points = 96.0f;
-/// The space, in points, a label keeps from its button's edges when shortened.
-constexpr float label_margin_points = 4.0f;
 /// The space, in points, the header's version needs before "GAME FOLDER" shows beside the title.
 constexpr float header_word_room_points = 40.0f;
 /// The most lines the title takes.
-constexpr int most_title_lines = 2;
+constexpr std::size_t most_title_lines = 2;
 /// The most lines the text under the title takes.
-constexpr int most_subtitle_lines = 4;
+constexpr std::size_t most_subtitle_lines = 4;
 /// The most lines a banner takes.
-constexpr int most_banner_lines = 8;
+constexpr std::size_t most_banner_lines = 8;
 /// The most lines a row's verdict takes.
-constexpr int most_verdict_lines = 2;
-/// The ellipsis that ends a shortened line.
-constexpr std::string_view ellipsis = "\xE2\x80\xA6";
+constexpr std::size_t most_verdict_lines = 2;
 
 /// Returns one of the chooser's words in the installed language.
 ///
@@ -157,396 +167,48 @@ std::string tr(std::string_view english) {
     return std::string(oa::data::languages::interface_text(english));
 }
 
-/// Returns the place after the UTF-8 character that starts at a place.
-///
-/// @param text the text
-/// @param at the character's first byte
-/// @return the place after the character
-std::size_t next_character(std::string_view text, std::size_t at) noexcept {
-    constexpr unsigned two_byte_mask = 0xe0u;
-    constexpr unsigned two_byte_lead = 0xc0u;
-    constexpr unsigned three_byte_mask = 0xf0u;
-    constexpr unsigned three_byte_lead = 0xe0u;
-    constexpr unsigned four_byte_mask = 0xf8u;
-    constexpr unsigned four_byte_lead = 0xf0u;
-    if (at >= text.size())
-        return text.size();
-    const auto lead = static_cast<unsigned char>(text[at]);
-    std::size_t length = 1;
-    if ((lead & two_byte_mask) == two_byte_lead)
-        length = 2;
-    else if ((lead & three_byte_mask) == three_byte_lead)
-        length = 3;
-    else if ((lead & four_byte_mask) == four_byte_lead)
-        length = 4;
-    return std::min(text.size(), at + length);
-}
-
-/// A text's look.
-struct Style {
-    float points{};                 ///< size in points
-    bool bold{};                    ///< bold
-    Colour colour{gf::text_colour}; ///< colour
-    TextRole role{TextRole::body};  ///< its role
+/// The form being laid out: the model, the form's sizes and the kit's typesetter.
+struct Form {
+    const Model& model;     ///< what to show
+    const Metrics& metrics; ///< the form's sizes
+    kit::Typesetter type{}; ///< the scale and the text measure
 };
 
-/// Items and targets laid out in a block, with boxes relative to the block's top.
+/// Parts laid out in a block, their rectangles relative to the block's top.
 struct Block {
-    std::vector<Item> items{};  ///< in painting order
-    std::vector<HitBox> hits{}; ///< the block's targets, in focus order
-    int height{};               ///< pixels
+    std::vector<kit::Item> items{}; ///< in painting order
+    int height{};                   ///< pixels
 };
 
-/// The targets laid out so far: how many, and the focus order.
-struct Tally {
-    int32_t targets{};                 ///< targets added
-    std::vector<Target> focus_order{}; ///< the enabled ones, in order
-};
-
-/// What every part of the layout reads: the model, the state, the measure and the form.
-struct Context {
-    const Model& model;              ///< what to show
-    const UiState& state;            ///< what the chooser keeps between frames
-    const TextMeasureHooks& measure; ///< the text measure
-    const Metrics& metrics;          ///< the form's sizes
-    float scale{1.0f};               ///< canvas pixels per point
-
-    /// Converts points to whole canvas pixels.
-    ///
-    /// @param points the length
-    /// @return pixels, rounded
-    [[nodiscard]] int px(float points) const noexcept {
-        return static_cast<int>(std::lround(points * scale));
-    }
-
-    /// Converts a text size in points to a pixel size.
-    ///
-    /// @param points the size
-    /// @return pixels, at least 1
-    [[nodiscard]] int font(float points) const noexcept { return std::max(1, px(points)); }
-
-    /// Measures a line.
-    ///
-    /// @param text UTF-8 text
-    /// @param size pixel size
-    /// @param bold bold
-    /// @return its width in pixels
-    [[nodiscard]] int width(std::string_view text, int size, bool bold) const {
-        constexpr double fallback_em_per_character = 0.55;
-        if (text.empty())
-            return 0;
-        if (measure.width != nullptr)
-            return measure.width(measure.context, text, size, bold);
-        std::size_t characters = 0;
-        for (std::size_t at = 0; at < text.size(); at = next_character(text, at))
-            ++characters;
-        return static_cast<int>(
-            std::ceil(fallback_em_per_character * size * static_cast<double>(characters))
-        );
-    }
-
-    /// Gives a line's height.
-    ///
-    /// @param size pixel size
-    /// @param bold bold
-    /// @return pixels
-    [[nodiscard]] int line(int size, bool bold) const {
-        constexpr double fallback_line_em = 1.25;
-        if (measure.line_height != nullptr)
-            return std::max(1, measure.line_height(measure.context, size, bold));
-        return static_cast<int>(std::ceil(fallback_line_em * size));
-    }
-
-    /// Shortens a line to a width, ending it with an ellipsis.
-    ///
-    /// @param text the line
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @return the line itself when it fits, else its longest start that fits with the
-    ///     ellipsis; empty when not even the ellipsis fits
-    [[nodiscard]] std::string fit(std::string_view text, int size, bool bold, int room) const {
-        if (width(text, size, bold) <= room)
-            return std::string(text);
-        if (width(ellipsis, size, bold) > room)
-            return {};
-        std::vector<std::size_t> ends;
-        for (std::size_t at = 0; at < text.size();) {
-            at = next_character(text, at);
-            ends.push_back(at);
-        }
-        std::size_t low = 0;
-        std::size_t high = ends.size();
-        std::string best(ellipsis);
-        while (low < high) {
-            const std::size_t middle = (low + high + 1) / 2;
-            std::string candidate(text.substr(0, ends[middle - 1]));
-            while (!candidate.empty() && candidate.back() == ' ')
-                candidate.pop_back();
-            candidate += ellipsis;
-            if (width(candidate, size, bold) <= room) {
-                best = std::move(candidate);
-                low = middle;
-            } else {
-                high = middle - 1;
-            }
-        }
-        return best;
-    }
-
-    /// Finds where to break a word wider than a line: after the last path separator that
-    /// fits, else after the last character that fits, at least one character.
-    ///
-    /// @param word the word
-    /// @param size pixel size
-    /// @param bold bold
-    /// @param room the width, pixels
-    /// @return the bytes of the first piece
-    [[nodiscard]] std::size_t
-    breaking_point(std::string_view word, int size, bool bold, int room) const {
-        std::size_t fits = next_character(word, 0);
-        std::size_t separator = 0;
-        for (std::size_t at = fits; at < word.size();) {
-            const std::size_t next = next_character(word, at);
-            if (width(word.substr(0, next), size, bold) > room)
-                break;
-            fits = next;
-            if (word[next - 1] == '/' || word[next - 1] == '\\')
-                separator = next;
-            at = next;
-        }
-        if (fits < word.size() && separator > 0)
-            return separator;
-        return fits;
-    }
-};
-
-/// Adds a text item, wrapped to a column.
+/// Returns one of the chooser's buttons as the kit lays a button out.
 ///
-/// @param context the layout's context
-/// @param[in,out] block the block
-/// @param x the column's left, pixels
-/// @param y the text's top, pixels
-/// @param room the column's width, pixels
-/// @param text the text
-/// @param style its look
-/// @param most_lines the most lines (0: no limit)
-/// @param role the item's role
-/// @return the text's height, pixels; 0 for no text
-int add_text(
-    const Context& context,
-    Block& block,
-    int x,
-    int y,
-    int room,
-    std::string_view text,
-    const Style& style,
-    int most_lines = 0,
-    ItemRole role = ItemRole::text
-) {
-    if (text.empty() || room <= 0)
-        return 0;
-    const int size = context.font(style.points);
-    const auto measure = [&](std::string_view shown) {
-        return context.width(shown, size, style.bold);
-    };
-    oa::ui::kit::WrapRules rules;
-    rules.newlines = true;
-    rules.wide_scripts = false;
-    rules.most_lines = most_lines > 0 ? static_cast<std::size_t>(most_lines) : 0;
-    rules.break_word = [&](std::string_view word) {
-        return context.breaking_point(word, size, style.bold, room);
-    };
-    rules.shorten_last = [&](std::string_view joined) {
-        return context.fit(std::string(joined) + std::string(ellipsis), size, style.bold, room);
-    };
-    std::vector<std::string> lines = oa::ui::kit::wrap(text, room, measure, rules);
-    lines.erase(
-        std::remove_if(
-            lines.begin(), lines.end(), [](const std::string& line) { return line.empty(); }
-        ),
-        lines.end()
-    );
-    if (lines.empty())
-        return 0;
-    Item item{};
-    item.role = role;
-    item.style = style.role;
-    item.pixel_size = size;
-    item.bold = style.bold;
-    item.colour = style.colour;
-    item.rect = {x, y, room, context.line(size, style.bold) * static_cast<int>(lines.size())};
-    item.lines = std::move(lines);
-    block.items.push_back(std::move(item));
-    return block.items.back().rect.height;
-}
-
-/// Adds one line of text, shortened to fit, centred on a middle line.
-///
-/// @param context the layout's context
-/// @param[in,out] block the block
-/// @param x its left, pixels (its right with `from_right`)
-/// @param middle the line's middle, pixels
-/// @param room the most width, pixels
-/// @param text the text
-/// @param style its look
-/// @param from_right `x` is the line's right edge
-/// @param role the item's role
-/// @return the width taken, pixels; 0 for none
-int add_line(
-    const Context& context,
-    Block& block,
-    int x,
-    int middle,
-    int room,
-    std::string_view text,
-    const Style& style,
-    bool from_right = false,
-    ItemRole role = ItemRole::text
-) {
-    if (text.empty() || room <= 0)
-        return 0;
-    const int size = context.font(style.points);
-    std::string line = context.fit(text, size, style.bold, room);
-    if (line.empty())
-        return 0;
-    const int line_height = context.line(size, style.bold);
-    const int line_width = std::min(room, context.width(line, size, style.bold));
-    Item item{};
-    item.role = role;
-    item.style = style.role;
-    item.pixel_size = size;
-    item.bold = style.bold;
-    item.colour = style.colour;
-    item.rect = {
-        from_right ? x - line_width : x, middle - line_height / 2, line_width, line_height
-    };
-    item.lines = {std::move(line)};
-    block.items.push_back(std::move(item));
-    return line_width;
-}
-
-/// Adds a mark: a glyph in a box.
-///
-/// @param[in,out] block the block
-/// @param box its box, pixels
-/// @param glyph the mark
-/// @param colour its colour
-void add_icon(Block& block, Rect box, Glyph glyph, Colour colour) {
-    if (glyph == Glyph::none)
-        return;
-    Item item{};
-    item.role = ItemRole::icon;
-    item.rect = box;
-    item.glyph = glyph;
-    item.colour = colour;
-    block.items.push_back(std::move(item));
-}
-
-/// Adds a container (card, banner, divider) with no text.
-///
-/// @param[in,out] block the block
-/// @param role its role
-/// @param box its box, pixels
-/// @param colour its colour (a banner's rule)
-void add_box(Block& block, ItemRole role, Rect box, Colour colour = gf::line_colour) {
-    Item item{};
-    item.role = role;
-    item.rect = box;
-    item.colour = colour;
-    block.items.push_back(std::move(item));
-}
-
-/// Adds a control's item and its target: the item is marked focused or pressed from the
-/// chooser's state, by the target's place in the order they are laid out.
-///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
-/// @param[in,out] block the block
-/// @param item the control's item, its box set
-/// @param target what a press on it reaches
+/// @param label its upper-case label
+/// @param target what a press reaches
 /// @param enabled a press reaches it
-void add_control(
-    const Context& context, Tally& tally, Block& block, Item item, Target target, bool enabled
+/// @param glyph the mark beside the label
+/// @param role main or plain
+/// @return its label, look, mark and control
+kit::ButtonSpec button_of(
+    std::string label,
+    Target target,
+    bool enabled = true,
+    Glyph glyph = Glyph::none,
+    Role role = Role::button
 ) {
-    const int32_t target_index = tally.targets++;
-    item.state.disabled = !enabled;
-    item.state.pressed = enabled && context.state.pressed == target_index;
-    if (enabled) {
-        item.state.focused = context.state.focus_shown &&
-                             context.state.focus == static_cast<int32_t>(tally.focus_order.size());
-        tally.focus_order.push_back(target);
-    }
-    block.hits.push_back(HitBox{item.rect, target, enabled, {}});
-    block.items.push_back(std::move(item));
+    kit::ButtonSpec button{};
+    button.label = std::move(label);
+    button.role = role;
+    button.glyph = glyph;
+    button.control = control_id(target);
+    button.enabled = enabled;
+    return button;
 }
 
-/// One button: its label, its look and what it reaches.
-struct Button {
-    std::string label{};             ///< upper-case label
-    Target target{};                 ///< what a press reaches
-    ItemRole role{ItemRole::button}; ///< main or plain
-    Glyph glyph{Glyph::none};        ///< the mark beside the label
-    bool enabled{true};              ///< a press reaches it
-};
-
-/// Gives the width a button takes: its label, its glyph and its padding.
+/// Adds a row of the chooser's buttons with the kit's button row at the form's sizes: a
+/// button's label and padding, the main button's least width, the gap, and the least height
+/// a control keeps.
 ///
-/// @param context the layout's context
-/// @param button the button
-/// @return pixels
-int button_width(const Context& context, const Button& button) {
-    const Metrics& metrics = context.metrics;
-    const int size = context.font(metrics.button_text);
-    const int glyph =
-        button.glyph == Glyph::none
-            ? 0
-            : size +
-                  static_cast<int>(std::lround(static_cast<float>(size) * gf::button_glyph_gap_em));
-    const int natural =
-        context.width(button.label, size, true) + glyph + 2 * context.px(metrics.button_pad);
-    const float least = button.role == ItemRole::button_main ? metrics.button_min_width : 0.0f;
-    return std::max(natural, context.px(least));
-}
-
-/// Adds a button.
-///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
-/// @param[in,out] block the block
-/// @param box its box, pixels
-/// @param button the button
-void add_button(
-    const Context& context, Tally& tally, Block& block, Rect box, const Button& button
-) {
-    Item item{};
-    item.role = button.role;
-    item.rect = box;
-    item.style = TextRole::button;
-    item.pixel_size = context.font(context.metrics.button_text);
-    item.bold = true;
-    item.colour = button.role == ItemRole::button_main ? oa::ui::kit::screen_colour::ink
-                                                       : oa::ui::kit::screen_colour::button_text;
-    item.glyph = button.glyph;
-    item.state.on = button.role == ItemRole::button_main;
-    const int glyph =
-        button.glyph == Glyph::none
-            ? 0
-            : item.pixel_size + static_cast<int>(std::lround(
-                                    static_cast<float>(item.pixel_size) * gf::button_glyph_gap_em
-                                ));
-    const int room = box.width - glyph - 2 * context.px(label_margin_points);
-    std::string label = context.fit(button.label, item.pixel_size, true, room);
-    if (!label.empty())
-        item.lines = {std::move(label)};
-    add_control(context, tally, block, std::move(item), button.target, button.enabled);
-}
-
-/// Adds a row of buttons: the left ones from the left, the right ones from the right, or,
-/// when they do not fit on one line, every button from the left, wrapping.
-///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the row's top, pixels
@@ -554,65 +216,29 @@ void add_button(
 /// @param left the buttons at the left, left to right
 /// @param right the buttons at the right, left to right
 /// @return the height taken, pixels
-int add_button_row(
-    const Context& context,
-    Tally& tally,
+int button_row_of(
+    const Form& form,
     Block& block,
     int x,
     int y,
     int room,
-    const std::vector<Button>& left,
-    const std::vector<Button>& right
+    const std::vector<kit::ButtonSpec>& left,
+    const std::vector<kit::ButtonSpec>& right
 ) {
-    const int height = context.px(gf::min_button_points);
-    const int gap = context.px(context.metrics.button_gap);
-    std::vector<int> widths;
-    int total = 0;
-    for (const auto* group : {&left, &right})
-        for (const Button& button : *group) {
-            widths.push_back(std::min(room, button_width(context, button)));
-            total += widths.back() + (widths.size() > 1 ? gap : 0);
-        }
-    if (widths.empty())
-        return 0;
-    if (!left.empty() && !right.empty())
-        total += gap * 2;
-    if (total <= room) {
-        int at = x;
-        for (std::size_t index = 0; index < left.size(); ++index) {
-            add_button(context, tally, block, {at, y, widths[index], height}, left[index]);
-            at += widths[index] + gap;
-        }
-        int right_width = 0;
-        for (std::size_t index = 0; index < right.size(); ++index)
-            right_width += widths[left.size() + index] + (index > 0 ? gap : 0);
-        at = x + room - right_width;
-        for (std::size_t index = 0; index < right.size(); ++index) {
-            const int width = widths[left.size() + index];
-            add_button(context, tally, block, {at, y, width, height}, right[index]);
-            at += width + gap;
-        }
-        return height;
-    }
-    int at = x;
-    int top = y;
-    std::size_t index = 0;
-    for (const auto* group : {&left, &right})
-        for (const Button& button : *group) {
-            const int width = widths[index++];
-            if (at > x && at + width > x + room) {
-                at = x;
-                top += height + gap;
-            }
-            add_button(context, tally, block, {at, top, width, height}, button);
-            at += width + gap;
-        }
-    return top + height - y;
+    const Metrics& metrics = form.metrics;
+    const kit::ButtonRowSizes sizes{
+        metrics.button_text,
+        metrics.button_pad,
+        metrics.button_min_width,
+        metrics.button_gap,
+        gf::min_button_points,
+    };
+    return kit::button_row(block.items, form.type, {x, y}, room, left, right, sizes);
 }
 
 /// Adds a banner: its mark and its text.
 ///
-/// @param context the layout's context
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the banner's top, pixels
@@ -622,7 +248,7 @@ int add_button_row(
 /// @param colour its rule and mark
 /// @return the height taken, pixels
 int add_banner(
-    const Context& context,
+    const Form& form,
     Block& block,
     int x,
     int y,
@@ -631,30 +257,31 @@ int add_banner(
     Glyph glyph,
     Colour colour
 ) {
-    const Metrics& metrics = context.metrics;
-    const int pad_x = context.px(metrics.banner_pad_x);
-    const int pad_y = context.px(metrics.banner_pad_y);
-    const int icon = context.px(metrics.banner_icon);
-    const int gap = context.px(metrics.row_gap);
+    const Metrics& metrics = form.metrics;
+    const int pad_x = kit::canvas_pixels(form.type, metrics.banner_pad_x);
+    const int pad_y = kit::canvas_pixels(form.type, metrics.banner_pad_y);
+    const int icon = kit::canvas_pixels(form.type, metrics.banner_icon);
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
     const int text_x = x + pad_x + icon + gap;
-    Block inner;
-    const int text_height = add_text(
-        context,
+    std::vector<kit::Item> inner;
+    const int text_height = kit::text_part(
         inner,
-        text_x,
-        0,
+        form.type,
+        Role::text,
+        {text_x, 0},
         x + room - pad_x - text_x,
         text,
-        {metrics.banner_text, false, gf::text_colour, TextRole::lead},
-        most_banner_lines
+        Lettering{metrics.banner_text, false, gf::text_colour, TextStyle::lead},
+        TextFit::column,
+        most_banner_lines,
+        kit::path_break
     );
     const int height = pad_y + std::max(text_height, icon) + pad_y;
-    add_box(block, ItemRole::banner, {x, y, room, height}, colour);
-    add_icon(block, {x + pad_x, y + (height - icon) / 2, icon, icon}, glyph, colour);
-    for (Item& item : inner.items) {
-        item.rect.y += y + (height - text_height) / 2;
-        block.items.push_back(std::move(item));
-    }
+    kit::plain_part(block.items, Role::banner, {x, y, room, height}, colour);
+    kit::icon_part(
+        block.items, {x + pad_x, y + (height - icon) / 2, icon, icon}, glyph, colour, false
+    );
+    kit::move_parts(block.items, inner, y + (height - text_height) / 2);
     return height;
 }
 
@@ -662,7 +289,7 @@ int add_banner(
 struct RowLine {
     std::string text{};            ///< the words
     Colour colour{gf::dim_colour}; ///< their colour
-    int most_lines{1};             ///< the most lines they wrap to
+    std::size_t most_lines{1};     ///< the most lines they wrap to
 };
 
 /// One row: a mark, a title, the lines under it and words at its right.
@@ -680,170 +307,167 @@ struct Row {
 };
 
 /// Adds rows in a panel, with dividers between them; each row is a control at least
-/// min_button_points high.
+/// min_button_points high, its part carrying its target.
 ///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the panel's left, pixels
 /// @param y its top, pixels
 /// @param room its width, pixels
 /// @param rows the rows
 /// @return the height taken, pixels
-int add_rows(
-    const Context& context,
-    Tally& tally,
-    Block& block,
-    int x,
-    int y,
-    int room,
-    const std::vector<Row>& rows
-) {
+int add_rows(const Form& form, Block& block, int x, int y, int room, const std::vector<Row>& rows) {
     if (rows.empty())
         return 0;
-    const Metrics& metrics = context.metrics;
-    const int border = std::max(1, context.px(1.0f));
-    const int pad_x = context.px(metrics.row_pad_x);
-    const int pad_y = context.px(metrics.row_pad_y);
-    const int icon = context.px(metrics.row_icon);
-    const int gap = context.px(metrics.row_gap);
-    const int least = context.px(gf::min_button_points);
-    const int panel_index = static_cast<int>(block.items.size());
-    add_box(block, ItemRole::panel, {x, y, room, 0});
+    const Metrics& metrics = form.metrics;
+    const int border = std::max(1, kit::canvas_pixels(form.type, 1.0f));
+    const int pad_x = kit::canvas_pixels(form.type, metrics.row_pad_x);
+    const int pad_y = kit::canvas_pixels(form.type, metrics.row_pad_y);
+    const int icon = kit::canvas_pixels(form.type, metrics.row_icon);
+    const int gap = kit::canvas_pixels(form.type, metrics.row_gap);
+    const int least = kit::canvas_pixels(form.type, gf::min_button_points);
+    const std::size_t panel_index = block.items.size();
+    kit::plain_part(block.items, Role::panel, {x, y, room, 0}, gf::line_colour);
     int at = y + border;
     const int inner_x = x + border;
     const int inner_room = room - 2 * border;
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const Row& row = rows[index];
         if (index > 0) {
-            add_box(block, ItemRole::divider, {inner_x, at, inner_room, border});
+            kit::plain_part(
+                block.items, Role::divider, {inner_x, at, inner_room, border}, gf::line_colour
+            );
             at += border;
         }
         // The texts are laid out first, to size the row.
-        Block texts;
+        std::vector<kit::Item> texts;
         int right_edge = inner_x + inner_room - pad_x;
-        const Style right_style{metrics.row_detail, false, row.right_colour, TextRole::row_detail};
+        const Lettering right_look =
+            Lettering{metrics.row_detail, false, row.right_colour, TextStyle::row_detail};
         const int text_x = inner_x + pad_x + icon + gap;
         if (!row.right.empty()) {
-            const int size = context.font(right_style.points);
-            const int wanted = context.width(row.right, size, false);
+            const int size = kit::canvas_font(form.type, right_look.points);
+            const int wanted = kit::measured_width(form.type.measure, row.right, size, false);
             const int width = std::min(wanted, (right_edge - text_x) / 3);
             if (width > 0)
                 right_edge -= width + gap;
         }
         const int text_room = std::max(0, right_edge - text_x);
-        const Style title_style{
-            metrics.row_title, row.title_bold, row.title_colour, TextRole::row_title
-        };
-        const int title_size = context.font(title_style.points);
-        const int title_height = context.line(title_size, row.title_bold);
+        const Lettering title_look =
+            Lettering{metrics.row_title, row.title_bold, row.title_colour, TextStyle::row_title};
+        const int title_size = kit::canvas_font(form.type, title_look.points);
+        const int title_height = kit::measured_line(form.type.measure, title_size, row.title_bold);
         int text_height = 0;
-        if (add_line(context, texts, text_x, title_height / 2, text_room, row.title, title_style) >
-            0)
+        if (kit::line_part(
+                texts, form.type, text_x, title_height / 2, text_room, row.title, title_look
+            ) > 0)
             text_height = title_height;
         for (const RowLine& line : row.lines)
-            text_height += add_text(
-                context,
+            text_height += kit::text_part(
                 texts,
-                text_x,
-                text_height,
+                form.type,
+                Role::text,
+                {text_x, text_height},
                 text_room,
                 line.text,
-                {metrics.row_detail, false, line.colour, TextRole::row_detail},
-                line.most_lines
+                Lettering{metrics.row_detail, false, line.colour, TextStyle::row_detail},
+                TextFit::column,
+                line.most_lines,
+                kit::path_break
             );
         const int height = std::max(least, text_height + 2 * pad_y);
-        Item item{};
-        item.role = ItemRole::row;
-        item.rect = {inner_x, at, inner_room, height};
-        item.colour = gf::panel_colour;
-        add_control(context, tally, block, std::move(item), row.target, row.enabled);
-        const int middle = at + height / 2;
-        add_icon(
-            block, {inner_x + pad_x, middle - icon / 2, icon, icon}, row.glyph, row.glyph_colour
+        kit::plain_part(
+            block.items, Role::row, {inner_x, at, inner_room, height}, gf::panel_colour
         );
-        const int text_top = at + (height - text_height) / 2;
-        for (Item& text : texts.items) {
-            text.rect.y += text_top;
-            block.items.push_back(std::move(text));
-        }
+        block.items.back().control = control_id(row.target);
+        block.items.back().state.disabled = !row.enabled;
+        const int middle = at + height / 2;
+        kit::icon_part(
+            block.items,
+            {inner_x + pad_x, middle - icon / 2, icon, icon},
+            row.glyph,
+            row.glyph_colour,
+            false
+        );
+        kit::move_parts(block.items, texts, at + (height - text_height) / 2);
         if (!row.right.empty())
-            add_line(
-                context,
-                block,
+            kit::line_part(
+                block.items,
+                form.type,
                 inner_x + inner_room - pad_x,
                 middle,
                 (inner_x + inner_room - pad_x - text_x) / 3,
                 row.right,
-                right_style,
-                true
+                right_look,
+                TextFit::tight_right
             );
         at += height;
     }
     at += border;
-    block.items[static_cast<std::size_t>(panel_index)].rect.height = at - y;
+    block.items[panel_index].rect.height = at - y;
     return at - y;
 }
 
 /// Adds the header bar: the OA badge, "OPEN ANNIHILATION  GAME FOLDER" and the version.
 ///
-/// @param context the layout's context
+/// @param form the form laid out
 /// @param[in,out] block the block (canvas coordinates)
 /// @param safe the safe area, pixels
 /// @return the header's bottom, pixels
-int add_header(const Context& context, Block& block, Rect safe) {
-    const Metrics& metrics = context.metrics;
-    const Rect bar{safe.x, safe.y, safe.width, context.px(metrics.header_height)};
-    add_box(block, ItemRole::header_bar, bar);
-    const int pad = context.px(metrics.header_pad);
-    const int gap = context.px(metrics.header_gap);
+int add_header(const Form& form, Block& block, Rect safe) {
+    const Metrics& metrics = form.metrics;
+    const Rect bar{
+        safe.x, safe.y, safe.width, kit::canvas_pixels(form.type, metrics.header_height)
+    };
+    kit::plain_part(block.items, Role::header_bar, bar, gf::line_colour);
+    const int pad = kit::canvas_pixels(form.type, metrics.header_pad);
+    const int gap = kit::canvas_pixels(form.type, metrics.header_gap);
     const int middle = bar.y + bar.height / 2;
-    const int badge = context.px(metrics.badge);
-    Item badge_item{};
-    badge_item.role = ItemRole::badge;
-    badge_item.rect = {bar.x + pad, middle - badge / 2, badge, badge};
-    badge_item.colour = gf::green_colour;
-    badge_item.glyph = Glyph::oa;
-    block.items.push_back(badge_item);
+    const int badge = kit::canvas_pixels(form.type, metrics.badge);
+    kit::Item badge_part{};
+    badge_part.role = Role::badge;
+    badge_part.rect = {bar.x + pad, middle - badge / 2, badge, badge};
+    badge_part.colour = gf::green_colour;
+    badge_part.glyph = Glyph::oa;
+    block.items.push_back(std::move(badge_part));
     int right = bar.x + bar.width - pad;
     const int text_x = bar.x + pad + badge + gap;
-    const int version = add_line(
-        context,
-        block,
+    const int version = kit::line_part(
+        block.items,
+        form.type,
         right,
         middle,
         std::max(0, right - text_x),
-        context.model.version,
-        {metrics.version_text, false, gf::dim_colour, TextRole::small},
-        true,
-        ItemRole::version
+        form.model.version,
+        Lettering{metrics.version_text, false, gf::dim_colour, TextStyle::small},
+        TextFit::tight_right,
+        Role::version
     );
     if (version > 0)
         right -= version + gap;
-    const Style header{metrics.header_text, true, gf::text_colour, TextRole::header};
-    const int title = add_line(
-        context,
-        block,
+    const int title = kit::line_part(
+        block.items,
+        form.type,
         text_x,
         middle,
         right - text_x,
         "OPEN ANNIHILATION",
-        header,
-        false,
-        ItemRole::header_text
+        Lettering{metrics.header_text, true, gf::text_colour, TextStyle::header},
+        TextFit::tight_left,
+        Role::header_text
     );
     const int after = text_x + title + gap;
-    if (title > 0 && right - after > context.px(header_word_room_points))
-        add_line(
-            context,
-            block,
+    if (title > 0 && right - after > kit::canvas_pixels(form.type, header_word_room_points))
+        kit::line_part(
+            block.items,
+            form.type,
             after,
             middle,
             right - after,
             tr("GAME FOLDER"),
-            {metrics.header_text, false, gf::dim_colour, TextRole::header},
-            false,
-            ItemRole::header_text
+            Lettering{metrics.header_text, false, gf::dim_colour, TextStyle::header},
+            TextFit::tight_left,
+            Role::header_text
         );
     return bar.y + bar.height;
 }
@@ -857,7 +481,7 @@ struct Column {
 
 /// Adds the title and the lines under it to a block.
 ///
-/// @param context the layout's context
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
@@ -865,41 +489,45 @@ struct Column {
 /// @param lines the lines under it, each a paragraph; empty ones are left out
 /// @return the height taken, with the gap after it
 int add_title(
-    const Context& context,
+    const Form& form,
     Block& block,
     int x,
     int room,
     std::string_view title,
     const std::vector<std::string>& lines
 ) {
-    const Metrics& metrics = context.metrics;
-    int y = add_text(
-        context,
-        block,
-        x,
-        0,
+    const Metrics& metrics = form.metrics;
+    const int title_gap = kit::canvas_pixels(form.type, metrics.title_gap);
+    int y = kit::text_part(
+        block.items,
+        form.type,
+        Role::title,
+        {x, 0},
         room,
         title,
-        {metrics.title, true, gf::text_colour, TextRole::title},
+        Lettering{metrics.title, true, gf::text_colour, TextStyle::title},
+        TextFit::column,
         most_title_lines,
-        ItemRole::title
+        kit::path_break
     );
-    y += context.px(metrics.title_gap);
+    y += title_gap;
     for (const std::string& line : lines) {
-        const int height = add_text(
-            context,
-            block,
-            x,
-            y,
+        const int height = kit::text_part(
+            block.items,
+            form.type,
+            Role::text,
+            {x, y},
             room,
             line,
-            {metrics.subtitle, false, gf::dim_colour, TextRole::subtitle},
-            most_subtitle_lines
+            Lettering{metrics.subtitle, false, gf::dim_colour, TextStyle::subtitle},
+            TextFit::column,
+            most_subtitle_lines,
+            kit::path_break
         );
         if (height > 0)
-            y += height + context.px(metrics.title_gap);
+            y += height + title_gap;
     }
-    return y - context.px(metrics.title_gap) + context.px(metrics.block_gap);
+    return y - title_gap + kit::canvas_pixels(form.type, metrics.block_gap);
 }
 
 /// Returns the words that start a row's title, its first letter raised: "Your Steam library".
@@ -914,14 +542,14 @@ std::string raised_first(std::string words) {
 
 /// Lays out the list: the found folders, the other ways to a folder, and Quit.
 ///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column list_column(const Context& context, Tally& tally, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column list_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
+    const int block_gap = kit::canvas_pixels(form.type, metrics.block_gap);
     Column column;
     std::string lead;
     if (model.installs.size() > 1)
@@ -936,14 +564,13 @@ Column list_column(const Context& context, Tally& tally, int x, int room) {
         lead =
             tr("Choose the folder that holds totala1.hpi, or the folder that holds the "
                "installer of the Total Annihilation demo (1997).");
-    int y = add_title(
-        context, column.top, x, room, tr("Choose your Total Annihilation folder"), {lead}
-    );
+    int y =
+        add_title(form, column.top, x, room, tr("Choose your Total Annihilation folder"), {lead});
     if (!model.notice.empty())
         y += add_banner(
-                 context, column.top, x, y, room, model.notice, Glyph::warning, gf::amber_colour
+                 form, column.top, x, y, room, model.notice, Glyph::warning, gf::amber_colour
              ) +
-             context.px(metrics.block_gap);
+             block_gap;
     column.top.height = y;
 
     int at = 0;
@@ -966,18 +593,20 @@ Column list_column(const Context& context, Tally& tally, int x, int room) {
             row.enabled = install.usable;
             rows.push_back(std::move(row));
         }
-        at += add_rows(context, tally, column.body, x, at, room, rows) +
-              context.px(metrics.block_gap);
-        at += add_text(
-                  context,
-                  column.body,
-                  x,
-                  at,
+        at += add_rows(form, column.body, x, at, room, rows) + block_gap;
+        at += kit::text_part(
+                  column.body.items,
+                  form.type,
+                  Role::text,
+                  {x, at},
                   room,
                   tr("Or find the folder yourself:"),
-                  {metrics.heading, true, gf::dim_colour, TextRole::small}
+                  Lettering{metrics.heading, true, gf::dim_colour, TextStyle::small},
+                  TextFit::column,
+                  0,
+                  kit::path_break
               ) +
-              context.px(metrics.title_gap);
+              kit::canvas_pixels(form.type, metrics.title_gap);
     }
     std::vector<Row> ways;
     Row browse;
@@ -1009,13 +638,12 @@ Column list_column(const Context& context, Tally& tally, int x, int room) {
         dialog.target = {TargetKind::dialog, 0};
         ways.push_back(std::move(dialog));
     }
-    at += add_rows(context, tally, column.body, x, at, room, ways);
+    at += add_rows(form, column.body, x, at, room, ways);
     column.body.height = at;
 
-    Button quit;
-    quit.label = tr("QUIT");
-    quit.target = {TargetKind::quit, 0};
-    column.bottom.height = add_button_row(context, tally, column.bottom, x, 0, room, {}, {quit});
+    column.bottom.height = button_row_of(
+        form, column.bottom, x, 0, room, {}, {button_of(tr("QUIT"), {TargetKind::quit, 0})}
+    );
     return column;
 }
 
@@ -1041,38 +669,32 @@ std::string folder_title(std::string_view folder) {
 /// Lays out the browser: the folder, its places, its verdict, its folders, Back and "Play this
 /// folder".
 ///
-/// @param context the layout's context
-/// @param[in,out] tally the targets so far
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
-Column browse_column(const Context& context, Tally& tally, int x, int room) {
-    const Model& model = context.model;
-    const Metrics& metrics = context.metrics;
+Column browse_column(const Form& form, int x, int room) {
+    const Model& model = form.model;
+    const Metrics& metrics = form.metrics;
+    const int block_gap = kit::canvas_pixels(form.type, metrics.block_gap);
     Column column;
     int y = add_title(
-        context, column.top, x, room, folder_title(model.folder), {model.folder, model.hint}
+        form, column.top, x, room, folder_title(model.folder), {model.folder, model.hint}
     );
     if (!model.notice.empty())
         y += add_banner(
-                 context, column.top, x, y, room, model.notice, Glyph::warning, gf::amber_colour
+                 form, column.top, x, y, room, model.notice, Glyph::warning, gf::amber_colour
              ) +
-             context.px(metrics.block_gap);
-    std::vector<Button> places;
-    for (std::size_t index = 0; index < model.place_labels.size(); ++index) {
-        Button place;
-        place.label = model.place_labels[index];
-        place.target = {TargetKind::place, static_cast<uint16_t>(index)};
-        places.push_back(std::move(place));
-    }
-    Button parent;
-    parent.label = tr("PARENT FOLDER");
-    parent.glyph = Glyph::folder;
-    parent.target = {TargetKind::parent, 0};
-    parent.enabled = model.has_parent;
-    places.push_back(std::move(parent));
-    y += add_button_row(context, tally, column.top, x, y, room, places, {}) +
-         context.px(metrics.block_gap);
+             block_gap;
+    std::vector<kit::ButtonSpec> places;
+    for (std::size_t index = 0; index < model.place_labels.size(); ++index)
+        places.push_back(
+            button_of(model.place_labels[index], {TargetKind::place, static_cast<uint16_t>(index)})
+        );
+    places.push_back(
+        button_of(tr("PARENT FOLDER"), {TargetKind::parent, 0}, model.has_parent, Glyph::folder)
+    );
+    y += button_row_of(form, column.top, x, y, room, places, {}) + block_gap;
     if (!model.folder_verdict.empty()) {
         // The sentence is translated whole, with the verdict in its place.
         std::string text = model.folder_verdict;
@@ -1082,7 +704,7 @@ Column browse_column(const Context& context, Tally& tally, int x, int room) {
                 text.replace(at, std::string_view("{folder}").size(), model.folder_verdict);
         }
         y += add_banner(
-                 context,
+                 form,
                  column.top,
                  x,
                  y,
@@ -1091,19 +713,22 @@ Column browse_column(const Context& context, Tally& tally, int x, int room) {
                  model.folder_usable ? Glyph::check : Glyph::info,
                  model.folder_usable ? gf::green_colour : gf::dim_colour
              ) +
-             context.px(metrics.block_gap);
+             block_gap;
     }
     column.top.height = y;
 
     if (model.entries.empty()) {
-        column.body.height = add_text(
-            context,
-            column.body,
-            x,
-            0,
+        column.body.height = kit::text_part(
+            column.body.items,
+            form.type,
+            Role::text,
+            {x, 0},
             room,
             tr("No folders here."),
-            {metrics.subtitle, false, gf::dim_colour, TextRole::body}
+            Lettering{metrics.subtitle, false, gf::dim_colour, TextStyle::body},
+            TextFit::column,
+            0,
+            kit::path_break
         );
     } else {
         std::vector<Row> rows;
@@ -1122,42 +747,25 @@ Column browse_column(const Context& context, Tally& tally, int x, int room) {
             row.target = {TargetKind::entry, static_cast<uint16_t>(index)};
             rows.push_back(std::move(row));
         }
-        column.body.height = add_rows(context, tally, column.body, x, 0, room, rows);
+        column.body.height = add_rows(form, column.body, x, 0, room, rows);
     }
 
-    Button back;
-    back.label = tr("BACK");
-    back.target = {TargetKind::back, 0};
-    Button choose;
-    choose.label = tr("PLAY THIS FOLDER");
-    choose.role = ItemRole::button_main;
-    choose.glyph = Glyph::play;
-    choose.target = {TargetKind::choose, 0};
-    choose.enabled = model.folder_usable;
-    column.bottom.height =
-        add_button_row(context, tally, column.bottom, x, 0, room, {back}, {choose});
+    column.bottom.height = button_row_of(
+        form,
+        column.bottom,
+        x,
+        0,
+        room,
+        {button_of(tr("BACK"), {TargetKind::back, 0})},
+        {button_of(
+            tr("PLAY THIS FOLDER"),
+            {TargetKind::choose, 0},
+            model.folder_usable,
+            Glyph::play,
+            Role::button_main
+        )}
+    );
     return column;
-}
-
-/// Moves a block's items and targets down by a distance into the layout, clipped.
-///
-/// @param[in,out] layout the layout
-/// @param[in,out] block the block, emptied
-/// @param dy pixels to move them down
-/// @param clip the scrolling region they lie in; empty for none
-void put(Layout& layout, Block& block, int dy, Rect clip) {
-    for (Item& item : block.items) {
-        item.rect.y += dy;
-        item.clip = clip;
-        layout.paint.list.items.push_back(std::move(item));
-    }
-    for (HitBox& hit : block.hits) {
-        hit.box.y += dy;
-        hit.clip = clip;
-        layout.targets.push_back(hit);
-    }
-    block.items.clear();
-    block.hits.clear();
 }
 
 } // namespace
@@ -1183,64 +791,66 @@ Layout lay_out(
     const bool compact = layout.paint.device == gf::DeviceClass::phone ||
                          static_cast<float>(std::min(viewport.width, viewport.height)) / scale <
                              compact_short_side_points;
-    const Context context{model, state, measure, compact ? compact_metrics : tablet_metrics, scale};
-    const Metrics& metrics = context.metrics;
+    const Form form{
+        model, compact ? compact_metrics : tablet_metrics, kit::Typesetter{measure, scale}
+    };
+    const Metrics& metrics = form.metrics;
+    std::vector<kit::Item>& parts = layout.paint.list.items;
 
     Block header;
-    const int header_bottom = add_header(context, header, safe);
-    put(layout, header, 0, {});
+    const int header_bottom = add_header(form, header, safe);
+    kit::move_parts(parts, header.items, 0);
 
-    int side = context.px(metrics.side_pad);
+    int side = kit::canvas_pixels(form.type, metrics.side_pad);
     if (metrics.max_content_width > 0.0f)
-        side = std::max(side, (safe.width - context.px(metrics.max_content_width)) / 2);
+        side = std::max(
+            side, (safe.width - kit::canvas_pixels(form.type, metrics.max_content_width)) / 2
+        );
     side = std::min(side, safe.width / 4);
     const int x = safe.x + side;
     const int room = safe.width - 2 * side;
-    Tally tally;
-    Column column = model.view == View::browse ? browse_column(context, tally, x, room)
-                                               : list_column(context, tally, x, room);
-    layout.focus_order = std::move(tally.focus_order);
+    Column column =
+        model.view == View::browse ? browse_column(form, x, room) : list_column(form, x, room);
 
-    const int area_top = header_bottom + context.px(metrics.content_top);
-    const int area_bottom = safe.y + safe.height - context.px(metrics.content_bottom);
+    const int area_top = header_bottom + kit::canvas_pixels(form.type, metrics.content_top);
+    const int area_bottom =
+        safe.y + safe.height - kit::canvas_pixels(form.type, metrics.content_bottom);
     const Rect area{safe.x, area_top, safe.width, std::max(1, area_bottom - area_top)};
-    const int between =
-        column.body.height > 0 && column.bottom.height > 0 ? context.px(metrics.block_gap) : 0;
-    const int natural = column.top.height + column.body.height + between + column.bottom.height;
-    const int wanted = std::max(0, context.px(static_cast<float>(state.scroll_points)));
-    int scroll_max = 0;
-    if (natural <= area.height) {
-        put(layout, column.top, area.y, {});
-        put(layout, column.body, area.y + column.top.height, {});
-        put(layout, column.bottom, area.y + column.top.height + column.body.height + between, {});
-    } else {
-        const int body_room = area.height - column.top.height - column.bottom.height - between;
-        if (column.body.height > 0 && body_room >= context.px(least_body_points)) {
-            // The rows scroll between the fixed top and bottom.
-            const Rect rows{area.x, area.y + column.top.height, area.width, body_room};
-            scroll_max = column.body.height - body_room;
-            const int scroll = std::min(wanted, scroll_max);
-            put(layout, column.top, area.y, {});
-            put(layout, column.body, rows.y - scroll, rows);
-            put(layout, column.bottom, rows.y + body_room + between, {});
-            layout.paint.rows = rows;
-        } else {
-            // Too little room for the rows alone: the whole column scrolls.
-            scroll_max = natural - area.height;
-            const int scroll = std::min(wanted, scroll_max);
-            put(layout, column.top, area.y - scroll, area);
-            put(layout, column.body, area.y + column.top.height - scroll, area);
-            put(layout,
-                column.bottom,
-                area.y + column.top.height + column.body.height + between - scroll,
-                area);
-            layout.paint.rows = area;
-        }
-    }
+    const kit::ScrollColumn placed = kit::scroll_column(
+        area,
+        column.top.height,
+        column.body.height,
+        column.bottom.height,
+        kit::canvas_pixels(form.type, metrics.block_gap),
+        kit::canvas_pixels(form.type, least_body_points),
+        kit::canvas_pixels(form.type, static_cast<float>(state.scroll_points))
+    );
+    kit::move_parts(parts, column.top.items, placed.top, placed.top_clip);
+    kit::move_parts(parts, column.body.items, placed.body, placed.body_clip);
+    kit::move_parts(parts, column.bottom.items, placed.bottom, placed.bottom_clip);
+    layout.paint.rows = placed.scroll.view;
+    const int32_t limit = placed.scroll.limit;
     layout.scroll_max_points =
-        scroll_max > 0 ? static_cast<int32_t>(std::ceil(static_cast<float>(scroll_max) / scale))
-                       : 0;
+        limit > 0 ? static_cast<int32_t>(std::ceil(static_cast<float>(limit) / scale)) : 0;
     layout.paint.scroll_max_points = layout.scroll_max_points;
+
+    // The targets' parts become the list's controls, the top one first; those in the
+    // scrolling region are its scroll area, and the enabled ones in order are the focus order.
+    kit::list_part_controls(layout.paint.list);
+    for (kit::Control& control : layout.paint.list.controls)
+        if (control.clip.width > 0 && control.clip.height > 0)
+            control.group = rows_area_group;
+    for (const kit::ControlId id : layout.paint.list.tab_order)
+        layout.focus_order.push_back(target_of(id));
+    // The focus and the press the chooser keeps show on the parts.
+    kit::Interaction shown{};
+    shown.focus_shown = state.focus_shown;
+    if (state.focus >= 0 && static_cast<std::size_t>(state.focus) < layout.focus_order.size())
+        shown.focused = control_id(layout.focus_order[static_cast<std::size_t>(state.focus)]);
+    if (const kit::Item* held = target_part(layout.paint.list, state.pressed);
+        held != nullptr && !held->state.disabled)
+        shown.pressed = held->control;
+    kit::mark_states(layout.paint.list, shown);
     return layout;
 }
 

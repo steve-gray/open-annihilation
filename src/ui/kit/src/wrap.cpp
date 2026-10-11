@@ -166,6 +166,21 @@ std::size_t fitting_start(std::string_view word, int32_t width, const Measure& m
     return fits;
 }
 
+std::size_t path_break(std::string_view word, int32_t width, const Measure& measure) {
+    std::size_t fits = one_character(word);
+    std::size_t separator = 0;
+    for (std::size_t at = fits; at < word.size();) {
+        const std::size_t next = at + one_character(word.substr(at));
+        if (next <= at || measure(word.substr(0, next)) > width)
+            break;
+        fits = next;
+        if (word[next - 1] == '/' || word[next - 1] == '\\')
+            separator = next;
+        at = next;
+    }
+    return fits < word.size() && separator > 0 ? separator : fits;
+}
+
 std::vector<std::string>
 wrap(std::string_view text, int32_t width, const Measure& measure, const WrapRules& rules) {
     std::vector<std::string> lines;
