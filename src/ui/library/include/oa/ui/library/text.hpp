@@ -211,6 +211,8 @@ inline constexpr std::string_view status_version_available =
 inline constexpr std::string_view status_update_available = "Update available · {size} to download";
 inline constexpr std::string_view status_installed = "Installed";
 inline constexpr std::string_view status_playing = "Playing";
+/// The status of a mod folder with no oamod.yaml, installed or played.
+inline constexpr std::string_view status_without_manifest = "No oamod.yaml present";
 inline constexpr std::string_view status_not_installed = "Not installed · {size}";
 inline constexpr std::string_view status_waiting = "Waiting to download";
 inline constexpr std::string_view status_downloading = "Downloading · {progress}";

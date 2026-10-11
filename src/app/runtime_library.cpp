@@ -828,6 +828,7 @@ library::Inputs Runtime::library_inputs() {
         // The manifest's author, unless it says nobody is known.
         if (package.author != kUnknownAuthor)
             shown.author = package.author;
+        shown.description = package.description;
         shown.registry = listed ? match.registry : std::string{};
         shown.release = listed ? match.release : 0;
         shown.rules = package.rules;
@@ -893,6 +894,19 @@ library::Inputs Runtime::library_inputs() {
             shown.folder = path;
             shown.name = offered.mod_names[index];
             shown.version = details.version;
+            // Its oamod.yaml's description. A folder with no oamod.yaml says
+            // so in its status line, and one that cannot be read says why,
+            // in the language shown.
+            if (details.description == mod_summary_no_profile)
+                shown.without_manifest = true;
+            else if (
+                details.description == mod_summary_unreadable_profile ||
+                details.description == mod_summary_unreadable_folder
+            )
+                shown.description =
+                    std::string(oa::data::languages::interface_text(details.description));
+            else
+                shown.description = details.description;
             shown.playing = package_target_in_use(package_install::mod_kind(), path);
             if (details.roll_back)
                 shown.kept = library::Kept{details.kept_version, details.kept_revision};

@@ -115,6 +115,12 @@ struct Installed {
     std::optional<Kept> kept{};   ///< the copy ROLL BACK restores
     std::optional<Badge> badge{}; ///< the badge, when the app has it
     std::string author{};         ///< the manifest's author's name; empty when it names none
+    /// The manifest's description; empty when it gives none. The details
+    /// show it where the listing has no summary (entry_summary).
+    std::string description{};
+    /// A mod folder with no oamod.yaml, which layers over the game folder
+    /// and plays by the game's own rules: its status line says so.
+    bool without_manifest{};
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -423,6 +429,14 @@ void close_details(Library& library);
 /// @param entry the entry
 /// @return the name
 [[nodiscard]] std::string_view entry_name(const Entry& entry);
+
+/// Returns the words the details show under an entry's name: its listing's
+/// summary, else, as for a mod of the player's own, its installed
+/// manifest's description.
+///
+/// @param entry the entry
+/// @return the words; empty when neither gives any
+[[nodiscard]] std::string_view entry_summary(const Entry& entry);
 
 /// Lists the tags of the entries a tab shows under its filter, with how many have each.
 ///

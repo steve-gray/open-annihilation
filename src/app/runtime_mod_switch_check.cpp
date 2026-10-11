@@ -57,15 +57,17 @@ constexpr uint32_t kFirstSwitchOff = 2;
 /// One test profile of the check: its folder's name in the player's Mods
 /// folder, and its oamod.yaml.
 struct TestMod {
-    std::string_view folder;  ///< the folder's name
-    std::string_view id;      ///< the profile's id
-    std::string_view profile; ///< the oamod.yaml's text
+    std::string_view folder;      ///< the folder's name
+    std::string_view id;          ///< the profile's id
+    std::string_view description; ///< the description its oamod.yaml gives
+    std::string_view profile;     ///< the oamod.yaml's text
 };
 
 /// The two test profiles, which change nothing of the game's rules.
 constexpr std::array<TestMod, 2> kTestMods{{
     {"switch-check-alpha",
      "switch-check-alpha",
+     "The first profile the mod switch check plays.",
      "oamod: 1\n"
      "id: switch-check-alpha\n"
      "name: Switch Check Alpha\n"
@@ -76,6 +78,7 @@ constexpr std::array<TestMod, 2> kTestMods{{
      "packaging: {revision: 1, date: 2026-10-04, packager: Open Annihilation}\n"},
     {"switch-check-beta",
      "switch-check-beta",
+     "The second profile the mod switch check plays.",
      "oamod: 1\n"
      "id: switch-check-beta\n"
      "name: Switch Check Beta\n"
@@ -158,6 +161,10 @@ void Runtime::check_mod_switch() {
     for (std::size_t turn = 1; turn < turns.size(); ++turn) {
         const library::Entry* listed = entry_of(turns[turn]);
         require(listed != nullptr, "the Library does not list a test profile");
+        require(
+            library::entry_summary(*listed) == kTestMods[turn - 1].description,
+            "the Library's details do not show a test profile's description"
+        );
         const bool played = turn == playing_turn;
         require(
             listed->installed->playing == played &&

@@ -70,6 +70,7 @@ inline constexpr std::string_view interface_words[] = {
     words::filter_new,
     words::active_no_maps,
     words::active_no_mod,
+    words::status_without_manifest,
     words::empty_updates,
     words::blocked_in_match,
     words::status_not_installed,

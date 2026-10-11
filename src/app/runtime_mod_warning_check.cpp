@@ -334,23 +334,31 @@ void Runtime::check_mod_warning() {
         require(screen_ == screen, std::string("closing the warning left ") + std::string(where));
     };
     // PLAY NOW on a mod folder's entry in the Library, as the run's own
-    // feed lists it.
+    // feed lists it. A folder without an oamod.yaml is marked so, which its
+    // status line says.
     const auto press_switch = [&](const std::string& folder) {
         list_offered_mods();
         LibraryHost& host = library_host();
         host.rebuild(*this);
         std::optional<library::EntryId> wanted;
         bool offered = false;
+        bool marked = false;
         for (const library::Entry& each : host.model.entries) {
             if (each.id.kind != library::Kind::mod || each.installed == nullptr ||
                 kept_path(each.installed->folder) != folder)
                 continue;
             wanted = each.id;
+            marked = each.installed->without_manifest;
             for (const library::ActionButton& button : library::entry_actions(host.model, each))
                 offered = offered || (button.action == library::Action::play_now && button.enabled);
         }
         require(wanted.has_value(), "the Library does not list the test profile");
         require(offered, "the test profile's entry offers no PLAY NOW");
+        std::error_code missing;
+        require(
+            marked == !fs::exists(path_from_utf8(folder) / "oamod.yaml", missing),
+            "the Library does not mark whether a mod folder has an oamod.yaml"
+        );
         library_entry_action(library::Action::play_now, *wanted);
     };
     // PLAY NOW, which ends the run.

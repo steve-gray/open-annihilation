@@ -118,7 +118,12 @@ translator finds them together. Every word passes through `Library::text`
     more. The count does not change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
     Ridge."), after "The command line chose this run's mod." on every
-    installed mod while the command line chose it.
+    installed mod while the command line chose it;
+  - the status line says "No oamod.yaml present" for a mod folder without
+    one (`Installed::without_manifest`), installed or played.
+- `entry_summary` gives the words under the details' status line: the
+  listing's summary, else the installed manifest's description
+  (`Installed::description`), as for a mod of the player's own.
 - `can_check_now` says whether the footer's CHECK NOW can be pressed: a
   registry is on that it can ask (`Inputs::can_check`), none is being asked
   (`Inputs::checking`), and no game is being played.
@@ -440,7 +445,9 @@ the Active tab's mod, language and map packs in each case; the order with
 no search; the update count; the selection across refreshes and browsing;
 the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
-CHECK NOW can be pressed; the facts with the sample numbers, Installed,
+CHECK NOW can be pressed; the summary, the manifest's description standing
+in for a listing's for a mod of the player's own, and "No oamod.yaml
+present" for a folder without one; the facts with the sample numbers, Installed,
 Latest and Author among them, a revision of 0 left out, a version left
 out, a fact with nothing to say left out and the manifest's author
 standing in; the Rules fact for an unchanged, changed and unknown rules
@@ -484,7 +491,8 @@ the footer in Tab's order; that Tab follows the declared order and the
 arrows reach every control that takes the focus from the first tab, and
 no label; that the names are the screen's and unique; that every text
 fits by the kit's measure, and that the Rules and From facts read their
-whole values. Regular shows more rows than Compact, and Large has the
+whole values; and that a mod of the player's own shows its description in
+the details. Regular shows more rows than Compact, and Large has the
 filter pane. It then drives the screens: Enter at Compact and at Regular,
 Escape's three cases, the tab commands both ways, the controller's X, Y
 and B, the list's keys, Tab's walk, presses, double presses and taps on

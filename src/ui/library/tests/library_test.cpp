@@ -1134,6 +1134,50 @@ void test_switch_off() {
     );
 }
 
+void test_own_mod_description() {
+    // The details show the listing's summary, else the installed manifest's
+    // description, as for a mod of the player's own; a folder with no
+    // oamod.yaml says so in its status line, installed or played.
+    lib::Inputs inputs = base_inputs();
+    inputs.listings.push_back(listing(core, Kind::mod, "fixture-mod", "Fixture Mod"));
+    inputs.listings.back().summary = "The listing's summary.";
+    inputs.installed.push_back(installed(core, Kind::mod, "fixture-mod", "Fixture Mod"));
+    inputs.installed.back().description = "The manifest's description.";
+    inputs.installed.push_back(installed("", Kind::mod, "own-mod", "Own Mod"));
+    inputs.installed.back().description = "A mod of the player's own.";
+    inputs.installed.push_back(installed("", Kind::mod, "plain", "plain"));
+    inputs.installed.back().version = "N/A";
+    inputs.installed.back().without_manifest = true;
+    inputs.installed.push_back(installed("", Kind::mod, "plain-played", "plain-played"));
+    inputs.installed.back().without_manifest = true;
+    inputs.installed.back().playing = true;
+    inputs.installed.push_back(installed("", Kind::mod, "silent", "Silent"));
+    const lib::Library library = built(inputs);
+    const auto summary_of = [&library](std::string_view registry, std::string_view key) {
+        const lib::Entry* entry = at(library, registry, Kind::mod, key);
+        OA_CHECK(entry != nullptr);
+        return entry != nullptr ? std::string(lib::entry_summary(*entry)) : std::string("?");
+    };
+    const auto status_of = [&library](std::string_view key) {
+        const lib::Entry* entry = at(library, "", Kind::mod, key);
+        OA_CHECK(entry != nullptr);
+        return entry != nullptr ? lib::status_line(library, *entry) : std::string("?");
+    };
+    OA_CHECK_TEXT(summary_of(core, "fixture-mod"), "The listing's summary.");
+    OA_CHECK_TEXT(summary_of("", "own-mod"), "A mod of the player's own.");
+    OA_CHECK_TEXT(summary_of("", "plain"), "");
+    OA_CHECK_TEXT(summary_of("", "silent"), "");
+    OA_CHECK_TEXT(status_of("own-mod"), "Installed");
+    OA_CHECK_TEXT(status_of("plain"), "No oamod.yaml present");
+    OA_CHECK_TEXT(status_of("plain-played"), "No oamod.yaml present");
+
+    // A listing with no summary leaves the manifest's description.
+    inputs.listings.back().summary.clear();
+    const lib::Library unsummed = built(inputs);
+    if (const lib::Entry* entry = at(unsummed, core, Kind::mod, "fixture-mod"))
+        OA_CHECK_TEXT(lib::entry_summary(*entry), "The manifest's description.");
+}
+
 void test_check_now() {
     // CHECK NOW can be pressed while a registry is on to ask, none is being
     // asked, and no game is being played.
@@ -1765,6 +1809,7 @@ int main() {
     test_entry_actions();
     test_switch_off();
     test_check_now();
+    test_own_mod_description();
     test_facts();
     test_status_lines_and_bylines();
     test_playing_note();

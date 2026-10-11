@@ -524,7 +524,7 @@ runtime goes).
   worker last found, the download queue (each item's state as the Library
   names it; a cancelled one left out) and the run (this build's version,
   the mod played, a match), and for the Active tab what the run already
-  holds: the mod played as Settings › Mods lists it, the language shown and
+  holds: the mod played as list_offered_mods finds it, the language shown and
   the first loaded pack that holds it, and the installed map packs' maps
   (`MapPacks`). GET goes to `queue_download`, UPDATE to
   `request_update` (below), CANCEL and RETRY to the queue's latest item of
@@ -2895,9 +2895,16 @@ finds the key naming another folder erases it with the next save, and the
 folder is listed only while the game folder's `mods` folder or the
 player's own Mods holds it. `read_mod_summary` (`mod_summary.hpp`) reads
 each from the folder alone, without resolving its profile: its
-`oamod.yaml`'s name and version, and its `oamod.png` badge, decoded by the
-engine's PNG reader (`oa/formats/png.hpp`), which the Library's row shows.
-Settings › Your files' Mods opens `Documents/Open Annihilation/Mods`.
+`oamod.yaml`'s name, version and description, and its `oamod.png` badge,
+decoded by the engine's PNG reader (`oa/formats/png.hpp`), which the
+Library's row shows. The details show the description where no listing
+gives a summary (`library::entry_summary`), as they show the description
+an installed package's manifest gives (`package_install::InstalledPackage`,
+`content::InstalledPackage`); a folder without an `oamod.yaml` shows "N/A"
+for its version and "No oamod.yaml present" in its status line
+(`library::Installed::without_manifest`), and one that cannot be read says
+why in the details. Settings › Your files' Mods opens
+`Documents/Open Annihilation/Mods`.
 
 PLAY NOW on a mod not played, and SWITCH OFF's SWITCH on the mod played,
 call `Runtime::switch_to_mod_folder` (`runtime_mod_install.cpp`), with no

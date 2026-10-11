@@ -1599,10 +1599,10 @@ int32_t add_details_content(
     int32_t top = first + std::max(details_badge_side, status_bottom - first) +
                   building.metrics->paragraph_gap;
 
-    if (entry.listing != nullptr && !entry.listing->summary.empty()) {
-        const std::vector<std::string> summary = wrapped(
-            building, kit::FontRole::small, entry.listing->summary, width, wide_summary_lines
-        );
+    // The listing's summary, or a mod of the player's own's description.
+    if (const std::string_view about = entry_summary(entry); !about.empty()) {
+        const std::vector<std::string> summary =
+            wrapped(building, kit::FontRole::small, about, width, wide_summary_lines);
         top = add_lines(building, summary, left, top, width, kit::colour::list_text, view) +
               metrics.paragraph_gap;
     }
@@ -2582,10 +2582,9 @@ kit::DisplayList details_page_layout(
             top += metrics.small_line;
         }
         top += metrics.paragraph_gap;
-        if (entry->listing != nullptr && !entry->listing->summary.empty()) {
-            const std::vector<std::string> summary = wrapped(
-                into, kit::FontRole::small, entry->listing->summary, width, compact_summary_lines
-            );
+        if (const std::string_view about = entry_summary(*entry); !about.empty()) {
+            const std::vector<std::string> summary =
+                wrapped(into, kit::FontRole::small, about, width, compact_summary_lines);
             top = add_lines(into, summary, view.x, top, width, kit::colour::list_text, view) +
                   metrics.paragraph_gap;
         }

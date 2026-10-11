@@ -641,6 +641,37 @@ void rows_name_their_entries() {
     OA_CHECK(lib::badge_letters("ab") == "AB");
 }
 
+/// A mod of the player's own, which no listing describes, shows its
+/// manifest's description in the details.
+void an_own_mods_details_show_its_description() {
+    lib::Inputs inputs = fixture::fixture_inputs();
+    lib::Installed own;
+    own.kind = lib::Kind::mod;
+    own.key = "own-description";
+    own.folder = "own-description";
+    own.name = "Own Description";
+    own.version = "1.0";
+    own.description = "A mod of the player's own.";
+    inputs.installed.push_back(own);
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::mods);
+    lib::select(library, {"", lib::Kind::mod, "own-description"});
+    OA_CHECK(library.selected.has_value());
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        if (named.frame.size_class == kit::SizeClass::compact)
+            continue;
+        const kit::DisplayList list = laid_out(library, {}, named.frame);
+        bool shown = false;
+        for (const kit::Item& item : list.items)
+            shown = shown ||
+                    (item.role == kit::Role::text && item.text == "A mod of the player's own.");
+        if (!shown)
+            std::fprintf(stderr, "%s: the description is not in the details\n", named.name.c_str());
+        OA_CHECK(shown);
+    }
+}
+
 /// An empty list says why, and a list the last fetch could not refresh says so above it.
 void empty_and_offline_lists_say_why() {
     lib::Library library = with_ridge();
@@ -1290,6 +1321,7 @@ int main() {
     larger_classes_show_more();
     rows_name_their_entries();
     empty_and_offline_lists_say_why();
+    an_own_mods_details_show_its_description();
     enter_opens_details_or_reaches_the_actions();
     escape_clears_leaves_or_closes();
     tab_commands_change_tabs();

@@ -579,6 +579,14 @@ std::string_view entry_name(const Entry& entry) {
     return entry.id.key;
 }
 
+std::string_view entry_summary(const Entry& entry) {
+    if (entry.listing != nullptr && !entry.listing->summary.empty())
+        return entry.listing->summary;
+    if (entry.installed != nullptr)
+        return entry.installed->description;
+    return {};
+}
+
 std::vector<std::pair<std::string, std::size_t>> tags_in_tab(const Library& library) {
     const std::vector<bool> kept = kept_by_filter(library, shown_filter(library));
     std::map<std::string, std::size_t> counts;
@@ -926,9 +934,13 @@ std::string status_line(const Library& library, const Entry& entry) {
         return filled(text, words::status_update_available, {{"size", size}});
     }
     case State::installed:
-        return std::string(shown(text, words::status_installed));
     case State::playing:
-        return std::string(shown(text, words::status_playing));
+        // A folder with no oamod.yaml says so, as Settings › Mods said it.
+        if (entry.installed != nullptr && entry.installed->without_manifest)
+            return std::string(shown(text, words::status_without_manifest));
+        return std::string(shown(
+            text, entry.state == State::playing ? words::status_playing : words::status_installed
+        ));
     case State::get:
         return filled(
             text, words::status_not_installed, {{"size", size_text(entry.listing->size, text)}}
