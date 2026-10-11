@@ -82,13 +82,19 @@ translator finds them together. Every word passes through `Library::text`
     revision 3 won't load under revision 4"), since a built-in registry's
     update asks no question that would say it. From says "Not reviewed by
     the OA team" for an added registry;
+  - the byline names the author, or the publisher when there is no author.
+    When the listing carries a download count it continues
+    " · 12,400 downloads". With no author and no publisher the count is
+    the whole line ("1 download"). A listing with no count shows nothing
+    more. The count does not change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
     Ridge.").
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
-  "188 MB"), download progress, ages, the header's list age, rules hashes
+  "188 MB"), download counts (`downloads_text`: "1 download",
+  "12,400 downloads"), download progress, ages, the header's list age, rules hashes
   ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), engine
   requirements, what an update changes from and to (`change_texts`:
   "revision 3" and "revision 4", or the versions), and the names of tabs,
@@ -251,7 +257,7 @@ registry; tabs, filters and tags with their counts; the order with no
 search; the update count; the selection across refreshes and browsing; the
 buttons of every state; the facts with the sample numbers, the Rules fact
 for an unchanged, changed and unknown rules hash in both lengths; status
-lines, bylines and the playing note; the queue lines, after an update that
+lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
 changed the rules and one that kept them; `change_texts` for a new
 revision and a new version; every text function; and a lookup that
 translates.
