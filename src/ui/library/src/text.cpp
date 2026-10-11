@@ -302,6 +302,8 @@ std::string engine_short_text(const formats::oamod::EngineRange& range, const Te
 
 std::string_view tab_text(Tab tab, bool compact, const TextHooks& text) {
     switch (tab) {
+    case Tab::active:
+        return shown(text, words::tab_active);
     case Tab::mods:
         return shown(text, words::tab_mods);
     case Tab::maps:
@@ -318,6 +320,8 @@ std::string_view filter_text(Filter filter, const TextHooks& text) {
     switch (filter) {
     case Filter::all:
         return shown(text, words::filter_all);
+    case Filter::newest:
+        return shown(text, words::filter_new);
     case Filter::installed:
         return shown(text, words::filter_installed);
     case Filter::updates:

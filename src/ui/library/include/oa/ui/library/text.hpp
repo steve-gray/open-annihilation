@@ -23,6 +23,7 @@ namespace oa::ui::library {
 namespace words {
 
 // Tabs and filters.
+inline constexpr std::string_view tab_active = "Active";
 inline constexpr std::string_view tab_mods = "Mods";
 inline constexpr std::string_view tab_maps = "Maps";
 inline constexpr std::string_view tab_languages = "Languages";
@@ -30,8 +31,13 @@ inline constexpr std::string_view tab_languages_short = "Lang";
 inline constexpr std::string_view tab_updates = "Updates";
 inline constexpr std::string_view tab_updates_short = "Upd";
 inline constexpr std::string_view filter_all = "All";
+inline constexpr std::string_view filter_new = "New";
 inline constexpr std::string_view filter_installed = "Installed";
 inline constexpr std::string_view filter_updates = "Updates";
+/// A filter and how many entries it keeps on the tab shown, before the tag
+/// and the search: "Installed (4)". The filter column, the chips and
+/// Compact's drop-down all show it.
+inline constexpr std::string_view filter_with_count = "{filter} ({count})";
 
 // A row's state.
 inline constexpr std::string_view state_get = "GET";
@@ -219,6 +225,25 @@ inline constexpr std::string_view more_menu = "MORE";
 /// How many updates the Updates tab shows.
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
+
+// The Active tab: the mod being played, the language in use and the
+// installed maps, under one heading each.
+inline constexpr std::string_view active_heading_mod = "MOD";
+inline constexpr std::string_view active_heading_language = "LANGUAGE";
+inline constexpr std::string_view active_heading_maps = "MAPS";
+/// The mod being played, or the language pack in use: its name, then its version.
+inline constexpr std::string_view active_package = "{name} {version}";
+inline constexpr std::string_view active_no_mod = "No mod is played";
+/// A language no pack holds, which the game shows from its own words.
+inline constexpr std::string_view active_language_built_in = "{language} · built in";
+/// The language the game shows with no language chosen.
+inline constexpr std::string_view language_english = "English";
+/// How many players a map is for: one, and every other count.
+inline constexpr std::string_view active_players_one = "{count} player";
+inline constexpr std::string_view active_players_many = "{count} players";
+/// One map of an installed map pack, as automation reads its line.
+inline constexpr std::string_view active_map = "{map} · {players} · {size}";
+inline constexpr std::string_view active_no_maps = "No map packs are installed.";
 
 // A row: the version and size under the name at Compact.
 inline constexpr std::string_view row_version_size = "{version} · {size}";

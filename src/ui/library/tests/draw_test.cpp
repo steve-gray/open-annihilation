@@ -7,10 +7,12 @@
 // Each is laid out and drawn twice into a picture with a margin round the
 // window: the two drawings are byte for byte the same, the margin keeps its
 // colour, and every pixel of the window is drawn. In the game's fonts every
-// text fits and every part lies in the window. The characters the game's
-// fonts lack are drawn in the modern fonts beside the test, as the game
-// draws them. Given --frames DIR, it writes library-<class>.png and
-// library-details-compact.png there.
+// text fits and every part lies in the window. The same holds for the
+// Active tab at Compact and Regular, and the Updates tab at Compact and
+// Large. The characters the game's fonts lack are drawn in the modern fonts
+// beside the test, as the game draws them. Given --frames DIR, it writes
+// library-<class>.png, library-details-compact.png, library-active-<class>.png
+// and library-updates-<class>.png there.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -110,9 +112,10 @@ std::shared_ptr<const oa::present::TextMask> draw_modern(
 
 /// One picture the test draws.
 struct Scene {
-    std::string name{};     ///< the file's name after "library-"
-    kit::Viewport window{}; ///< the window it is laid out for
-    bool details_page{};    ///< Compact's details page instead of the list
+    std::string name{};           ///< the file's name after "library-"
+    kit::Viewport window{};       ///< the window it is laid out for
+    bool details_page{};          ///< Compact's details page instead of the list
+    lib::Tab tab{lib::Tab::mods}; ///< the tab shown
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -130,6 +133,7 @@ struct Drawing {
 Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
     lib::Library library = fixture::fixture_library();
     lib::select(library, fixture::ridge_id());
+    lib::set_tab(library, scene.tab);
     lib::ScreenState state;
     if (scene.details_page) {
         lib::open_details(library);
@@ -307,6 +311,10 @@ int main(int argc, char** argv) {
         {"regular", window_of(1920, 1080, 200), false},
         {"large", window_of(2560, 1440, 200), false},
         {"details-compact", window_of(640, 480, 100), true},
+        {"active-compact", window_of(640, 480, 100), false, lib::Tab::active},
+        {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active},
+        {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
+        {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
     };
     for (const Scene& scene : scenes) {
         const Drawing first = draw_scene(scene, fonts);

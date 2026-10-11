@@ -6,13 +6,14 @@
 // 640x480 (1x), 1920x1080 (2x) and 2560x1440 (2x). At each frame: every
 // part lies inside the window; no two controls meet, nor their press areas;
 // every action of the selected entry is a control (Compact: on its details
-// page, MORE's open); UPDATE ALL is one on the Updates tab, SETTINGS... and
-// CLOSE always are; Tab follows the declared order and the arrows reach
-// every control that takes the focus; the names are step 8's and unique;
-// every text fits, and the Rules fact is shown whole. Then the keys, the
-// controller's buttons, the pointer, a finger, the wheel and typing, each
-// changing the model as the screen promises, and no press on a row
-// getting anything.
+// page, MORE's open); UPDATE ALL is one on the Updates tab, over its list
+// beside the same filters as Mods, SETTINGS... and CLOSE always are; Tab
+// follows the declared order and the arrows reach every control that takes
+// the focus; the names are step 8's and unique; every text fits, and the
+// Rules fact is shown whole. The Active tab is first, has no search and no
+// filters, and its lines take nothing. Then the keys, the controller's
+// buttons, the pointer, a finger, the wheel and typing, each changing the
+// model as the screen promises, and no press on a row getting anything.
 //
 // The synthetic font's glyph for byte b is 2 + b % 4 columns by 8 rows.
 
@@ -177,8 +178,8 @@ std::vector<std::string> meeting_controls(const kit::DisplayList& list) {
 }
 
 /// Returns the place a control's name gives it in the declared order: the
-/// tabs, the search, the filters, the list, the details' actions, then the
-/// footer's buttons.
+/// tabs, the search, the filters, UPDATE ALL over the list and the list,
+/// the details' actions, then the footer's buttons.
 ///
 /// @param name the name
 /// @return the place, or -1 for a name of none
@@ -188,10 +189,9 @@ int declared_place(std::string_view name) {
     if (name == "library.search")
         return 1;
     if (name == "library.filter" || starts(name, "library.filter.") ||
-        starts(name, "library.tag.") || name == "library.tags" ||
-        name == "library.action.update-all")
+        starts(name, "library.tag.") || name == "library.tags")
         return 2;
-    if (name == "library.list")
+    if (name == "library.action.update-all" || name == "library.list")
         return 3;
     if (name == "library.action" || starts(name, "library.action.") || name == "library.back")
         return 4;
@@ -267,18 +267,26 @@ std::vector<std::string> order_problems(const kit::DisplayList& list) {
 /// @return true when it is
 bool designed_name(const std::string& name) {
     static const std::regex pattern(
-        "library\\.(tab\\.(mods|maps|languages|updates)|search|filter|"
-        "filter\\.(all|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]+|"
+        "library\\.(tab\\.(active|mods|maps|languages|updates)|search|filter|"
+        "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
+        "+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
-        "details|back|settings|close|status|queue|note|from|rules)"
+        "details|back|settings|close|status|queue|note|from|rules|"
+        "active\\.(mod|language|map\\.[1-9][0-9]*))"
     );
     return std::regex_match(name, pattern);
 }
 
 /// The labels: lines a journey reads, which take nothing.
-constexpr std::array<std::string_view, 5> label_names{
-    "library.status", "library.queue", "library.note", "library.from", "library.rules"
+constexpr std::array<std::string_view, 7> label_names{
+    "library.status",
+    "library.queue",
+    "library.note",
+    "library.from",
+    "library.rules",
+    "library.active.mod",
+    "library.active.language",
 };
 
 /// Lists what is wrong with the controls' names: the kit's rules, step 8's
@@ -305,6 +313,10 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
         if (label->kind != kit::ControlKind::area || label->enabled || label->focusable)
             problems.push_back(std::string(name) + " takes a press, a key or Tab");
     }
+    for (const kit::Control& control : list.controls)
+        if (starts(control.name, "library.active.") &&
+            (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
+            problems.push_back(control.name + " takes a press, a key or Tab");
     return problems;
 }
 
@@ -498,6 +510,22 @@ void check_frame(const fixture::NamedFrame& named) {
     const kit::DisplayList updates_list = laid_out(updates, state, frame);
     const kit::Control* update_all = fixture::named(updates_list, "library.action.update-all");
     OA_CHECK(update_all != nullptr && update_all->enabled);
+    // UPDATE ALL sits over the list, and the filters are the Mods tab's.
+    const kit::Control* updates_pane = fixture::named(updates_list, "library.list");
+    OA_CHECK(
+        updates_pane != nullptr && update_all != nullptr &&
+        update_all->rect.y + update_all->rect.height <= updates_pane->rect.y
+    );
+    if (compact) {
+        OA_CHECK(fixture::named(updates_list, "library.filter") != nullptr);
+    } else {
+        for (const std::string_view word : {"all", "new", "installed", "updates"})
+            OA_CHECK(
+                fixture::named(updates_list, "library.filter." + std::string(word)) != nullptr
+            );
+        const kit::Control* chosen = fixture::named(updates_list, "library.filter.updates");
+        OA_CHECK(chosen != nullptr && chosen->checked && chosen->text == "Updates (3)");
+    }
     OA_CHECK(fixture::named(updates_list, "library.settings") != nullptr);
     OA_CHECK(fixture::named(updates_list, "library.close") != nullptr);
     OA_EXPECT_NONE(fixture::outside_window(updates_list, window), named.name + " updates");
@@ -507,6 +535,45 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_EXPECT_NONE(fixture::texts_not_fitting(updates_list, fonts()), named.name + " updates");
     const kit::Control* updates_tab = fixture::named(updates_list, "library.tab.updates");
     OA_CHECK(updates_tab != nullptr && updates_tab->text == (compact ? "Upd 2" : "Updates 2"));
+
+    // The Active tab: first, no search, no filters and no list; its lines
+    // are labels, and Tab reaches only the tabs and the footer's buttons.
+    lib::Library active = with_ridge();
+    lib::set_tab(active, lib::Tab::active);
+    const kit::DisplayList active_list = laid_out(active, state, frame);
+    OA_EXPECT_NONE(fixture::outside_window(active_list, window), named.name + " active");
+    OA_EXPECT_NONE(meeting_controls(active_list), named.name + " active");
+    OA_EXPECT_NONE(order_problems(active_list), named.name + " active");
+    OA_EXPECT_NONE(name_problems(active_list), named.name + " active");
+    OA_EXPECT_NONE(fixture::texts_not_fitting(active_list, fonts()), named.name + " active");
+    const kit::Control* active_tab = fixture::named(active_list, "library.tab.active");
+    const kit::Control* mods_tab = fixture::named(active_list, "library.tab.mods");
+    OA_CHECK(active_tab != nullptr && active_tab->checked && active_tab->text == "Active");
+    OA_CHECK(mods_tab != nullptr && active_tab != nullptr && active_tab->rect.x < mods_tab->rect.x);
+    for (const std::string_view absent :
+         {"library.search",
+          "library.filter",
+          "library.filter.all",
+          "library.list",
+          "library.details",
+          "library.action.update-all"})
+        OA_CHECK(fixture::named(active_list, absent) == nullptr);
+    for (const kit::ControlId id : active_list.tab_order) {
+        const kit::Control* stop = kit::control_of(active_list, id);
+        OA_CHECK(
+            stop != nullptr && (starts(stop->name, "library.tab.") ||
+                                stop->name == "library.settings" || stop->name == "library.close")
+        );
+    }
+    const kit::Control* mod_line = fixture::named(active_list, "library.active.mod");
+    OA_CHECK(mod_line != nullptr && mod_line->text == "Highland 0.4.0");
+    const kit::Control* language_line = fixture::named(active_list, "library.active.language");
+    OA_CHECK(language_line != nullptr && language_line->text == "Polski 1.0");
+    const kit::Control* first_map = fixture::named(active_list, "library.active.map.1");
+    OA_CHECK(first_map != nullptr && first_map->text == "Ridgeline · 4 players · 16x16");
+    const kit::Control* last_map = fixture::named(active_list, "library.active.map.3");
+    OA_CHECK(last_map != nullptr && last_map->text == "Atoll · 6 players · 20x20");
+    OA_CHECK(fixture::named(active_list, "library.active.map.4") == nullptr);
 }
 
 /// Checks every frame.
@@ -536,7 +603,9 @@ void larger_classes_show_more() {
     OA_CHECK(all_entry != nullptr && all_entry->kind == kit::ControlKind::tab);
     OA_CHECK(fixture::named(regular, "library.filter.all") != nullptr);
     OA_CHECK(fixture::named(compact, "library.filter") != nullptr);
-    // Compact's tabs take their short names.
+    // Compact's tabs take their short names; Active is the first.
+    const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
+    OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
     OA_CHECK(languages != nullptr && languages->text == "Lang");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
@@ -577,6 +646,7 @@ void empty_and_offline_lists_say_why() {
     inputs.offline = true;
     lib::Library offline;
     lib::refresh(offline, std::move(inputs));
+    lib::set_tab(offline, lib::Tab::mods);
     const kit::DisplayList offline_list = laid_out(offline, {}, fixture::frames()[0].frame);
     bool noted = false;
     for (const kit::Item& item : offline_list.items)
@@ -589,6 +659,7 @@ void empty_and_offline_lists_say_why() {
 
     lib::Library none;
     lib::refresh(none, {});
+    lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
     bool told = false;
     for (const kit::Item& item : none_list.items)
@@ -673,7 +744,13 @@ void tab_commands_change_tabs() {
     OA_CHECK(library.tab == lib::Tab::mods);
     list = laid_out(library, state, regular);
     static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::previous_tab));
+    OA_CHECK(library.tab == lib::Tab::active);
+    list = laid_out(library, state, regular);
+    static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::previous_tab));
     OA_CHECK(library.tab == lib::Tab::updates);
+    list = laid_out(library, state, regular);
+    static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::next_tab));
+    OA_CHECK(library.tab == lib::Tab::active);
     list = laid_out(library, state, regular);
     static_cast<void>(lib::library_command(library, state, list, lib::ScreenCommand::next_tab));
     OA_CHECK(library.tab == lib::Tab::mods);
@@ -791,6 +868,7 @@ void tab_follows_the_declared_order() {
     };
     const kit::Frame compact = fixture::frames()[0].frame;
     const std::vector<std::string> compact_order{
+        "library.tab.active",
         "library.tab.mods",
         "library.tab.maps",
         "library.tab.languages",
@@ -831,7 +909,8 @@ void tab_follows_the_declared_order() {
     OA_CHECK(regular.size() > regular_end.size() + 5);
     OA_CHECK(std::equal(regular_end.rbegin(), regular_end.rend(), regular.rbegin()));
     OA_CHECK(
-        regular.size() > 7 && regular[4] == "library.search" && regular[5] == "library.filter.all"
+        regular.size() > 8 && regular[5] == "library.search" &&
+        regular[6] == "library.filter.all" && regular[7] == "library.filter.new"
     );
 }
 
@@ -968,10 +1047,22 @@ void filters_and_tags() {
     list = laid_out(library, state, all[0].frame);
     OA_CHECK(fixture::named(list, "library.filter.installed") != nullptr);
     OA_CHECK(fixture::named(list, "library.filter.tag-balance") != nullptr);
+    // The drop-down's filters carry their counts, as the chips and the column do.
+    const kit::Control* all_item = fixture::named(list, "library.filter.all");
+    OA_CHECK(all_item != nullptr && all_item->text == "All (11)");
+    const kit::Control* new_item = fixture::named(list, "library.filter.new");
+    OA_CHECK(new_item != nullptr && new_item->text == "New (3)");
     OA_EXPECT_NONE(name_problems(list), "filter menu open");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "filter menu open");
     static_cast<void>(click(library, state, list, "library.filter.installed"));
-    OA_CHECK(library.filter == lib::Filter::installed && state.menu == lib::MenuKind::none);
+    OA_CHECK(
+        lib::shown_filter(library) == lib::Filter::installed && state.menu == lib::MenuKind::none
+    );
+    // Each tab keeps its own: Updates still opens on Updates, and Mods keeps Installed.
+    lib::set_tab(library, lib::Tab::updates);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::updates);
+    lib::set_tab(library, lib::Tab::mods);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::installed);
     list = laid_out(library, state, all[0].frame);
     static_cast<void>(click(library, state, list, "library.filter"));
     list = laid_out(library, state, all[0].frame);
@@ -989,7 +1080,78 @@ void filters_and_tags() {
     OA_CHECK(wide.tag.empty());
     wide_list = laid_out(wide, wide_state, all[1].frame);
     static_cast<void>(click(wide, wide_state, wide_list, "library.filter.updates"));
-    OA_CHECK(wide.filter == lib::Filter::updates);
+    OA_CHECK(lib::shown_filter(wide) == lib::Filter::updates);
+    wide_list = laid_out(wide, wide_state, all[1].frame);
+    static_cast<void>(click(wide, wide_state, wide_list, "library.filter.new"));
+    OA_CHECK(lib::shown_filter(wide) == lib::Filter::newest);
+    OA_CHECK(
+        !wide.visible.empty() && wide.entries[wide.visible.front()].id.key == "dunes" &&
+        wide.visible.size() == 3
+    );
+}
+
+/// The Active tab's lines take no press, and with more maps than fit they
+/// scroll by the wheel, a finger, the page keys and the right stick.
+void active_tab_takes_nothing_and_scrolls() {
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::Inputs inputs = fixture::fixture_inputs();
+    lib::InstalledMaps many;
+    many.name = "Many Maps";
+    for (int32_t index = 1; index <= 40; ++index)
+        many.maps.push_back({"Map " + std::to_string(index), 2, "16x16"});
+    inputs.map_packs.push_back(std::move(many));
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    OA_CHECK(library.tab == lib::Tab::active);
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(library, state, compact);
+    OA_EXPECT_NONE(fixture::outside_window(list, {480, 324}), "active, many maps");
+    OA_EXPECT_NONE(meeting_controls(list), "active, many maps");
+    OA_EXPECT_NONE(name_problems(list), "active, many maps");
+    OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "active, many maps");
+    OA_CHECK(fixture::named(list, "library.active.map.43") != nullptr);
+    const bool has_bar =
+        std::any_of(list.items.begin(), list.items.end(), [](const kit::Item& item) {
+            return item.role == kit::Role::scroll_bar;
+        });
+    OA_CHECK(has_bar);
+
+    // A press on a line does nothing.
+    const kit::Control* mod_line = fixture::named(list, "library.active.mod");
+    OA_CHECK(mod_line != nullptr);
+    if (mod_line == nullptr)
+        return;
+    const kit::Point on_line = centre_of(*mod_line);
+    OA_CHECK(kit::hit(list, on_line) != mod_line->id);
+    static_cast<void>(
+        lib::library_pointer(library, state, list, lib::PointerKind::down, 1, on_line, 0)
+    );
+    const lib::ScreenResult pressed =
+        lib::library_pointer(library, state, list, lib::PointerKind::up, 1, on_line, 0);
+    OA_CHECK(!pressed.action && !library.selected && library.tab == lib::Tab::active);
+
+    // The wheel scrolls the lines; so do the page keys, End and Home.
+    OA_CHECK(lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
+    OA_CHECK(state.details_scroll > 0);
+    list = laid_out(library, state, compact);
+    static_cast<void>(lib::library_key(library, state, list, kit::Key::home));
+    OA_CHECK(state.details_scroll == 0);
+    list = laid_out(library, state, compact);
+    static_cast<void>(lib::library_key(library, state, list, kit::Key::page_down));
+    OA_CHECK(state.details_scroll > 0);
+    list = laid_out(library, state, compact);
+    static_cast<void>(lib::library_key(library, state, list, kit::Key::end));
+    const int32_t bottom = state.details_scroll;
+    list = laid_out(library, state, compact);
+    OA_CHECK(!lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
+    OA_CHECK(state.details_scroll == bottom);
+    OA_EXPECT_NONE(fixture::outside_window(list, {480, 324}), "active, scrolled");
+    // The right stick scrolls them too, and another tab starts at its top.
+    OA_CHECK(lib::library_stick(library, state, list, 1.0F).redraw);
+    OA_CHECK(state.details_scroll < bottom);
+    list = laid_out(library, state, compact);
+    static_cast<void>(click(library, state, list, "library.tab.mods"));
+    OA_CHECK(library.tab == lib::Tab::mods && state.details_scroll == 0);
 }
 
 /// On Compact's details page the page keys and the arrows never change the
@@ -1049,6 +1211,7 @@ int main() {
     wheel_and_drag_scroll();
     typing_searches();
     filters_and_tags();
+    active_tab_takes_nothing_and_scrolls();
     more_holds_the_rest();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();

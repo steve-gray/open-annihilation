@@ -178,7 +178,7 @@ int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*)
         if (input.button != SDL_BUTTON_LEFT || (!host.button_pressed && !host.settings_pressed))
             return 0;
         // A press opens what its button opens when it is released over that
-        // button: the OA button the Library, on Updates while updates wait,
+        // button: the OA button the Library, on its Active tab,
         // and the Settings button Settings, with no Library under it.
         // Released elsewhere it does nothing.
         const bool opens_library = host.button_pressed && over_library;

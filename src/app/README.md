@@ -501,8 +501,8 @@ the host's (`Runtime::LibraryHost`, made on first use, joined as the
 runtime goes).
 
 - **How it opens.** The main menu's OA button opens it
-  (`Runtime::open_library`) when a press is released over it, on Updates
-  while updates wait and on Mods otherwise, with the button's sound;
+  (`Runtime::open_library`) when a press is released over it, on Active,
+  with the button's sound;
   Settings › Language's MORE IN THE LIBRARY… opens it on Languages over
   Settings (`DialogAction::open_library`). It opens only where the
   settings do: on the main menu, never over a message box, a frame a
@@ -523,7 +523,10 @@ runtime goes).
   off, and each catalogue entry), the installed packages and updates the
   worker last found, the download queue (each item's state as the Library
   names it; a cancelled one left out) and the run (this build's version,
-  the mod played, a match). GET goes to `queue_download`, UPDATE to
+  the mod played, a match), and for the Active tab what the run already
+  holds: the mod played as Settings › Mods lists it, the language shown and
+  the first loaded pack that holds it, and the installed map packs' maps
+  (`MapPacks`). GET goes to `queue_download`, UPDATE to
   `request_update` (below), CANCEL and RETRY to the queue's latest item of
   that package, and `library_registry_built_in` answers from the same
   snapshot as the inputs' `Registry::built_in`. An update queued from the
@@ -582,8 +585,9 @@ runtime goes).
   `runtime_library_check.cpp`) gives the Library a feed of made-up
   packages and no network, with its data and the player's folder in the
   build tree, at 640x480 and 1920x1080: the button drawn as before with no
-  update, the Library opened on Mods and closed, the dot and
-  `oa.button`'s "Library · 2 updates" with two, the Library on Updates,
+  update, the Library opened on Active, its lines read and taking no
+  press, and closed, the dot and `oa.button`'s "Library · 2 updates" with
+  two, the Library on Active and its Updates tab on its two updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
   recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft
   restart, Settings over the Library and the Library over Settings, never
