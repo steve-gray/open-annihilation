@@ -2256,11 +2256,12 @@ GalleryScreen& OaLayer::open_gallery() {
 }
 
 bool OaLayer::open_registered_screen(std::string_view name) {
+    const ScreenRegistry& registry = runtime_.screens_;
     const KitScreenDesc* found = nullptr;
-    for (uint32_t index = 0; index < kit_screens_.screen_count; ++index) {
-        const char* registered = kit_screens_.screens[index].name;
+    for (uint32_t index = 0; index < registry.kit_screen_count; ++index) {
+        const char* registered = registry.kit_screens[index].name;
         if (registered != nullptr && name == registered) {
-            found = &kit_screens_.screens[index];
+            found = &registry.kit_screens[index];
             break;
         }
     }

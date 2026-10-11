@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -69,11 +70,22 @@ struct BuiltinScreens {
         static_cast<Runtime*>(host)->write_number(section, key, value);
     }
 
+    // A null section reads the key as a whole, as a Settings page's row
+    // stores it.
     static int
     read_string(void* host, const char* section, const char* key, char* out, std::size_t capacity) {
-        if (capacity == 0)
+        if (capacity == 0 || key == nullptr || out == nullptr)
             return 0;
-        const auto found = static_cast<Runtime*>(host)->read_string(section, key, capacity);
+        auto& runtime = *static_cast<Runtime*>(host);
+        std::optional<std::string> found;
+        if (section != nullptr) {
+            found = runtime.read_string(section, key, capacity);
+        } else if (
+            const auto stored = runtime.preference_values_.find(key);
+            stored != runtime.preference_values_.end() && stored->second.size() < capacity
+        ) {
+            found = stored->second;
+        }
         if (!found)
             return 0;
         std::memcpy(out, found->c_str(), found->size() + 1U);
@@ -169,6 +181,23 @@ struct BuiltinScreens {
     // The pass runs from apply_screen_request, never inside a callback.
     static void run_frontend(void* host) {
         static_cast<Runtime*>(host)->frontend_pass_requested_ = true;
+    }
+
+    // Kit screens, notices and prompts: the OA layer hosts them.
+    static int open_kit_screen(void* host, const char* name) {
+        if (name == nullptr)
+            return 0;
+        return static_cast<Runtime*>(host)->oa_layer().open_registered_screen(name) ? 1 : 0;
+    }
+
+    static uint32_t show_notice(void* host, const NoticeRequest* request) {
+        return request != nullptr ? static_cast<Runtime*>(host)->oa_layer().queue_notice(*request)
+                                  : 0;
+    }
+
+    static uint32_t ask_prompt(void* host, const PromptRequest* request) {
+        return request != nullptr ? static_cast<Runtime*>(host)->oa_layer().queue_prompt(*request)
+                                  : 0;
     }
 
     static renderer::MainMenuResources load_main_menu(Runtime& runtime) {
@@ -615,7 +644,10 @@ constexpr ScreenServices kRuntimeServices{
     BuiltinScreens::quit,
     BuiltinScreens::stop_sounds,
     BuiltinScreens::play_sound_alternate,
-    BuiltinScreens::run_frontend
+    BuiltinScreens::run_frontend,
+    BuiltinScreens::open_kit_screen,
+    BuiltinScreens::show_notice,
+    BuiltinScreens::ask_prompt
 };
 
 bool overlay_applies(const OverlayDesc& overlay, ScreenId screen) {

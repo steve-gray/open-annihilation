@@ -236,10 +236,7 @@ void Runtime::check_registered_kit() {
     screen.lay_out = lay_screen;
     screen.act = on_act;
     screen.closed = on_closed;
-    require(
-        kit_screen_register(&oa_layer().registered_screens(), screen) == 1,
-        "the screen was not registered"
-    );
+    require(kit_screen_register(&screens_, screen), "the screen was not registered");
 
     const auto tap = [this](SDL_Keycode code, SDL_Keymod modifiers = SDL_KMOD_NONE) {
         bool running = true;

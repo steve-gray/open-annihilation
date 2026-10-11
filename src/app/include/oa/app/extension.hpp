@@ -506,11 +506,15 @@ struct Extension {
     /// @param[in,out] runtime the runtime being built
     void (*startup)(void* context, Runtime& runtime){};
 
-    /// Registers the extension's screens, overlays and dispatcher steps.
+    /// Registers the extension's screens, overlays, dispatcher steps and kit
+    /// screens.
     ///
     /// Called once while the runtime is built, after the engine's own
-    /// screen packages (screens.inc) register. A registration the registry
-    /// rejects stops the start once this hook returns.
+    /// screen packages (screens.inc) register. A kit screen
+    /// (kit_screen_register) is opened by name through
+    /// ScreenServices::open_kit_screen, with the services an overlay's or a
+    /// screen's ScreenContext gives. A registration the registry rejects
+    /// stops the start once this hook returns.
     ///
     /// @param context Extension::context
     /// @param[in,out] registry the runtime's registry; the state a

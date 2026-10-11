@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Registry table behaviour: duplicate rejection, lookups, overlay z order and
-// the dispatcher-query table.
+// Registry table behaviour: duplicate rejection, lookups, overlay z order,
+// the dispatcher-query table, Settings pages and kit screens.
 #include "oa/ui/frontend_state/dispatcher.hpp"
 #include "oa/ui/kit/rows.hpp"
 #include "oa/ui/screen_registry.hpp"
@@ -96,8 +96,8 @@ int act_check(void*, const oa::app::KitScreenAction&) {
     return 0;
 }
 
-// A page and a screen are taken. Bad ids and keys, a duplicate, a full
-// registry and an engine section's word are rejected.
+// A page is taken. Bad ids and keys, a duplicate, a full registry and an
+// engine section's word are rejected, the first refusal's reason kept.
 void test_kit_registrations() {
     using namespace oa::app;
     namespace kit = oa::ui::kit;
@@ -190,32 +190,75 @@ void test_kit_registrations() {
         "a full registry is rejected"
     );
     expect(full.page_count == kMaxSettingsPages, "a full registry keeps its pages");
+}
 
-    KitScreenRegistry screens{};
+// Kit screens join the registry beside its screens: a screen is taken, and a
+// duplicate name, a malformed one, a screen with no binding and a full table
+// are refused, the first refusal's name kept in rejected.
+void test_kit_screens() {
+    using namespace oa::app;
     KitScreenDesc screen{};
     screen.name = "check.screen";
     screen.lay_out = lay_check;
     screen.act = act_check;
-    expect(kit_screen_register(&screens, screen) == 1, "a screen is taken");
-    expect(kit_screen_register(&screens, screen) == 0, "a duplicate screen is rejected");
-    expect(screens.rejected != nullptr, "rejected names the duplicate screen");
-    screen.name = "Not a name";
-    expect(kit_screen_register(&screens, screen) == 0, "a bad screen name is rejected");
-    expect(screens.rejected != nullptr, "rejected names the bad screen name");
 
-    KitScreenRegistry full_screens{};
+    static ScreenRegistry screens{};
+    expect(kit_screen_register(&screens, screen), "a kit screen is taken");
+    expect(
+        screens.kit_screen_count == 1 && screens.kit_screens[0].lay_out == lay_check &&
+            screens.kit_screens[0].act == act_check && screens.rejected == nullptr,
+        "a taken kit screen is copied and records nothing"
+    );
+    expect(screens.screen_count == 0, "a kit screen takes no screen's entry");
+    expect(!kit_screen_register(&screens, screen), "a duplicate kit screen is rejected");
+    expect(
+        screens.rejected != nullptr && std::strcmp(screens.rejected, "check.screen") == 0,
+        "rejected names the duplicate kit screen"
+    );
+    expect(screens.kit_screen_count == 1, "a rejected kit screen takes no entry");
+    KitScreenDesc other = screen;
+    other.name = "check.other";
+    expect(kit_screen_register(&screens, other), "a second kit screen is taken");
+    expect(
+        screens.rejected != nullptr && std::strcmp(screens.rejected, "check.screen") == 0,
+        "a kit screen taken after a refusal keeps the first refusal"
+    );
+    expect(!kit_screen_register(nullptr, other), "a null registry takes nothing");
+
+    static ScreenRegistry malformed{};
+    screen.name = "Not a name";
+    expect(!kit_screen_register(&malformed, screen), "a malformed kit screen name is rejected");
+    expect(
+        malformed.rejected != nullptr && std::strcmp(malformed.rejected, "Not a name") == 0,
+        "rejected names the malformed kit screen"
+    );
+    static ScreenRegistry unnamed{};
+    screen.name = nullptr;
+    expect(!kit_screen_register(&unnamed, screen), "a kit screen with no name is rejected");
+    expect(
+        unnamed.rejected != nullptr && std::strcmp(unnamed.rejected, "(unnamed)") == 0,
+        "rejected says the kit screen had no name"
+    );
+    static ScreenRegistry unbound{};
+    screen.name = "check.unbound";
+    screen.act = nullptr;
+    expect(!kit_screen_register(&unbound, screen), "a kit screen with no act is rejected");
+    expect(unbound.kit_screen_count == 0, "a kit screen with no act takes no entry");
+    screen.act = act_check;
+
+    static ScreenRegistry full_screens{};
     std::string names[kMaxKitScreens + 1];
     for (uint32_t index = 0; index < kMaxKitScreens + 1; ++index) {
         names[index] = "screen." + std::to_string(index);
         screen.name = names[index].c_str();
-        const int taken = kit_screen_register(&full_screens, screen);
-        expect(taken == (index < kMaxKitScreens ? 1 : 0), "the screen table fills");
+        const bool taken = kit_screen_register(&full_screens, screen);
+        expect(taken == (index < kMaxKitScreens), "the kit screen table fills");
     }
     expect(
-        full_screens.rejected != nullptr &&
-            std::strcmp(full_screens.rejected, "the registry is full") == 0,
-        "a full screen registry is rejected"
+        full_screens.rejected != nullptr && full_screens.rejected == names[kMaxKitScreens].c_str(),
+        "a full kit screen table rejects the next and names it"
     );
+    expect(full_screens.kit_screen_count == kMaxKitScreens, "a full table keeps its kit screens");
 }
 
 } // namespace
@@ -251,5 +294,6 @@ int main() {
     expect(step_find(&registry, Step::setup_skirmish) == nullptr, "unknown step absent");
     test_queries();
     test_kit_registrations();
+    test_kit_screens();
     return failures == 0 ? 0 : 1;
 }

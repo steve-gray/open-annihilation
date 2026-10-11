@@ -231,9 +231,11 @@ latched the closing key and drew a backdrop.
   notice are made by `UserFolderState::show_notice`, and the installs'
   prompts by `ModInstallState::show`.
 - **Registered pages, screens, notices and prompts.** Code outside the
-  engine's own screens registers them on the layer for this runtime
-  (`registered_settings`, `registered_screens`, `oa/ui/screen_registry/kit.hpp`).
-  A settings page is listed by the engine's Settings dialog, under a divider
+  engine's own screens registers them for this runtime: a settings page in
+  the layer's registry (`registered_settings`), a kit screen in the
+  runtime's `ScreenRegistry` (`kit_screen_register`), as
+  `oa/ui/screen_registry/kit.hpp` describes them. An extension registers
+  them through its table ([Extensions](#extensions), version 15). A settings page is listed by the engine's Settings dialog, under a divider
   naming its owner, after the engine's own sections, and laid out from its
   preference rows. OK writes the keys that changed and, once the preferences
   are saved, calls the page's `applied`; Cancel writes nothing, and a mod's
