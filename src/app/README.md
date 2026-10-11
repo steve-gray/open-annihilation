@@ -422,11 +422,11 @@ latched the closing key and drew a backdrop.
 
 ## The Library
 
-`library_host.hpp` and `runtime_library.cpp` host the Library
-([src/ui/library](../ui/library/README.md)) as a screen of the OA layer on
-the main menu, named `library`: modal over a backdrop, laid out at the
-view's size class (`library::window_size`, `library_layout`) and centred
-in the window at its scale. Its model, its screen's state and its feed are
+`library_host.hpp`, `runtime_library.cpp` and `runtime_library_actions.cpp`
+host the Library ([src/ui/library](../ui/library/README.md)) as a screen of
+the OA layer on the main menu, named `library`: modal over a backdrop, laid
+out at the view's size class (`library::window_size`, `library_layout`) and
+centred in the window at its scale. Its model, its screen's state and its feed are
 the host's (`Runtime::LibraryHost`, made on first use, joined as the
 runtime goes).
 
@@ -452,11 +452,17 @@ runtime goes).
   off, and each catalogue entry), the installed packages and updates the
   worker last found, the download queue (each item's state as the Library
   names it; a cancelled one left out) and the run (this build's version,
-  the mod played, a match). GET and UPDATE go to `queue_download`, CANCEL
-  and RETRY to the queue's latest item of that package, and
-  `library_registry_built_in` answers from the same snapshot as the inputs'
-  `Registry::built_in`. An update queued from the Library keeps what it
-  changes (`KeptUpdate`) for its queue line while the queue lists it.
+  the mod played, a match). GET goes to `queue_download`, UPDATE to
+  `request_update` (below), CANCEL and RETRY to the queue's latest item of
+  that package, and `library_registry_built_in` answers from the same
+  snapshot as the inputs' `Registry::built_in`. An update queued from the
+  Library keeps what it changes (`KeptUpdate`) for its queue line while the
+  queue lists it. What the installer noted of a mod chosen here
+  (`ModInstallState::library_notes`) goes on its queue item as the model is
+  built, whatever the feed: why the installer refused it, in its own words,
+  and, while its change waits for the player to leave the mod being played
+  (`package_install::pending_change_target`), that it is held ("Waiting ·
+  finishes when you leave Ridge").
   `tick_library` rebuilds the model, at most once a frame on the main
   menu, whenever the feed's generation moves (the service's, the queue's,
   the worker's searches and its pictures, added).
@@ -480,12 +486,18 @@ runtime goes).
 - **The actions.** OPEN FOLDER shows the package's folder
   (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
   both recorded in a run nobody watches. SETTINGS… opens Settings over the
-  Library, CLOSE closes it, UPDATE ALL queues every update that can act in
-  list order. PLAY NOW and ROLL BACK go through
-  `library_entry_action`: PLAY NOW switches the game to the installed
-  mod's folder (`switch_to_mod_folder`, a refusal shown in the status
-  line), and ROLL BACK opens Settings over the Library on Mods with the
-  Roll Back Mod question asked for its folder. The Library's own keys are
+  Library and CLOSE closes it. UPDATE, UPDATE ALL, PLAY NOW and ROLL BACK
+  go through `library_entry_action` (`runtime_library_actions.cpp`):
+  UPDATE calls `Runtime::request_update`, the one place an update reaches
+  the download queue (`DownloadReason::update`), and UPDATE ALL calls it
+  for every update that can act and is not queued, in list order; PLAY NOW
+  switches the game to the installed mod's folder (`switch_to_mod_folder`,
+  the soft restart); ROLL BACK asks the Mods page's Roll Back Mod question
+  in its own words (`settings::roll_back_prompt`, with the reload line for
+  the mod being played), pushed over the Library at once, CANCEL marked,
+  and its ROLL BACK rolls the folder back as the Mods page does
+  (`roll_back_mod_folder`), the feed looking again afterwards. A refusal of
+  either shows in the status line. The Library's own keys are
   Cmd+F (Ctrl+F elsewhere) and `/` outside the search for Find, and
   Ctrl+Tab and Ctrl+Shift+Tab for the tabs; Cmd+, opens Settings over it.
 - **The check.** `native-library` (`--check-library`,
@@ -495,14 +507,62 @@ runtime goes).
   update, the Library opened on Mods and closed, the dot and
   `oa.button`'s "Library · 2 updates" with two, the Library on Updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
-  recorded openers, ROLL BACK's question, PLAY NOW's soft restart,
-  Settings over the Library and the Library over Settings, never two of
-  either, the shortcut opening Settings, and in a skirmish the in-game OA
-  button opening Settings and the Library opening nowhere.
+  recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft
+  restart, Settings over the Library and the Library over Settings, never
+  two of either, the shortcut opening Settings, and in a skirmish the
+  in-game OA button opening Settings and the Library opening nowhere.
+- **Installing from the Library.** A mod the player chose in the Library
+  reaches the installer as F10's hand-off posts it: an oamod package whose
+  inbox origin (`Incoming::origin`) is a catalogue, which is the only way
+  it is told from a file. Its registry decides what it asks, by
+  `library_registry_built_in` of that origin's registry, asked once:
+  - a built-in registry's asks nothing: an update, a reinstall or another
+    version replaces whatever copy the folder holds (the same registry's,
+    another's, a file's or one with no record), the copy going to
+    `.backup` for ROLL BACK; a folder of the player's own that does not
+    hold the mod is never replaced nor joined, and the install is refused;
+  - an added registry's replaces its own copy, and a copy with no record,
+    with no question; asks REPLACE MOD (CANCEL, REPLACE) over another
+    registry's copy of the same mod; asks FOLDER IN USE beside a folder of
+    the player's own; and over a file's copy asks what the file would.
+
+  It starts on the settled main menu, and also while the Library is the top
+  screen over the main menu (`catalogue_mod_may_start`), never in a match,
+  on a loading screen or under Settings, a notice or a question; a file
+  waits for the settled main menu as before. While the Library shows, its
+  questions are pushed over the Library at once, and its progress, a
+  refusal ("Mods/cinder is a folder of your own, not Cinder. Move or rename
+  it, then RETRY.") and its outcome show in the Library's queue rather than
+  in a prompt, the entry then offering PLAY NOW; with the Library closed,
+  its questions wait in the OA layer's queue and its prompts show as a
+  file's do. Catalogue map packs and language packs keep their own rules.
+- **Held changes and the quit path.** A chosen mod's update to the mod
+  being played is unpacked and checked as a file's, then held in
+  `set_pending_change` with no soft restart; the download queue is told
+  it is installed, so that it is not fetched again. Switching mod makes the
+  change as a soft restart does, and quitting makes it too: `main()` calls
+  `finish_pending_change` after every run, on the way out as after a soft
+  restart, with the runtime and its archives gone. After a crash the next
+  start's `recover_package_installs` settles the staged files away, the
+  folder whole.
+- **The install check.** `native-library-install`
+  (`--check-library-install`, `runtime_library_actions_check.cpp`) posts
+  made-up mod packages with catalogue origins as the hand-off does, the
+  Library showing over a feed of three registries (`check-builtin` built
+  in, `check-added` and `check-added-2` added), and checks each rule above
+  over three runs: the questions each registry asks or does not, the
+  `.backup` and origin records after each, the refusals in the queue and
+  told with the Library closed, a file still asking UPDATE MOD, ROLL BACK
+  and PLAY NOW from the Library, and an update to the mod played held,
+  named by `pending_change_target`, and made as the mod is switched. A
+  FIXTURES_SETUP test (`library-install-clean`) clears its folders before
+  each run.
 - **Limitations.** The controller's Y, X, LB, RB and right stick do not
   reach the Library's own commands yet: the D-pad, A, B and the shoulder
-  buttons' Tab drive it as the kit's keys. The installer's questions for
-  catalogue installs, the mod being played and download counts come later.
+  buttons' Tab drive it as the kit's keys. Download counts come later. A
+  held update is replaced by a ROLL BACK of the mod being played, which
+  waits for the run to end in its place; the download queue has counted
+  the update installed by then.
 
 ## Files
 
@@ -2742,20 +2802,26 @@ in place, and how what a stop leaves is settled). The runtime's part:
   once unpacked and checked as the Mods page checks a folder, waits in
   `set_pending_change`, holding the Mods folder's lock, and the run ends
   (`request_soft_restart`); `main()` makes the change between runs, once
-  the runtime and its archives are gone, and the next run tells it. Every
+  the runtime and its archives are gone, and the next run tells it. A mod
+  chosen in the Library is held instead until the player leaves the mod
+  (switching mod or quitting; [The Library](#the-library)). Every
   run starts with `recover_package_installs`, which runs `recover_changes`
   for each kind's root folder (Mods for a mod, Maps for a map pack), before the mod
   folder is resolved, so that a stop mid-change never drops the Mod
   setting. A file of no known kind is told NOT INSTALLED and is not read.
-- **ROLL BACK** on the Mods page (`Runtime::roll_back_mod_folder`): a folder
+- **ROLL BACK** on the Mods page (`Runtime::roll_back_mod_folder`, which
+  takes the folder and the Library calls too): a folder
   of the player's own Mods folder whose `.backup` keeps an earlier version
   of its mod, one a pick would accept, offers it
   (`ModDetails::roll_back_from`, filled by `list_offered_mods`). The kept
   version is checked again first; then the folder is swapped at once, or,
-  for the mod played, as the run ends. A roll back refused, the kept
+  for the mod played, as the run ends, Settings keeping its choices,
+  saving them and closing as SWITCH does. A roll back refused, the kept
   version changed since the page listed it or the swap undone, is told in
-  a prompt over the dialog (MOD NOT ROLLED BACK), pushed over it at once
-  with Settings darkened under it, whose OK returns to it.
+  a prompt over the dialog (MOD NOT ROLLED BACK,
+  `ModInstallState::roll_back_refusal`), pushed over it at once with
+  Settings darkened under it, whose OK returns to it; the Library shows the
+  same words in the status line.
 - **Registering the file type.** A start someone plays makes the game the
   opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files for the player
   where the system registers at run
