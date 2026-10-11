@@ -9,7 +9,9 @@
 // (multiplayer_presence_badges), and while a card is open draws the kit's
 // hover card by its badge at the layer's scale and size class. It takes F1,
 // Escape and a tap only as the card's trigger says (PresenceCardTrigger),
-// and lets every other input go on to the battle room.
+// and lets every other input go on to the battle room. Return and the pad's
+// A on a focused row go on too: the battle room opens this screen's trigger
+// when the row has an OA badge, and presses nothing.
 
 #include "oa_layer.hpp"
 
@@ -139,11 +141,17 @@ kit::Rect arrow_rect(const kit::Rect& placed, const kit::HoverCardLook& look, in
 class PresenceCardScreen final : public LayerScreen {
   public:
 
-    /// Makes the screen.
+    /// Makes the screen, and binds its trigger so Return on a focused row
+    /// opens the same card as F1.
     ///
     /// @param layer the layer it shows on, whose fonts it is drawn in and
     ///     which tells it when a modal screen shows
-    explicit PresenceCardScreen(OaLayer& layer) : layer_(layer) {}
+    explicit PresenceCardScreen(OaLayer& layer) : layer_(layer) {
+        mp::multiplayer_bind_row_key(&trigger_);
+    }
+
+    /// Clears the Return binding this screen set.
+    ~PresenceCardScreen() override { mp::multiplayer_bind_row_key(nullptr); }
 
     /// Returns "presence-card".
     ///
