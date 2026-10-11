@@ -386,7 +386,7 @@ void paint_item(const Canvas& canvas, const Item& item) {
     case Role::backdrop:
     case Role::sheet:
         // A screen drawn in the modern fonts draws these parts with its own
-        // painter; the crisp canvas has nothing to draw for them.
+        // painter; the kit's canvas, in either form, draws nothing for them.
         break;
     }
 }
