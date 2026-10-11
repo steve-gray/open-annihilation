@@ -109,6 +109,20 @@ struct Runtime::LanguageState {
     /// The bytes of the last file of the language folders a pack answered,
     /// which TranslationHooks::language_file's answer points to.
     std::string language_file;
+
+    /// Language packs the catalogues offer that are not installed, each with
+    /// the registry that lists it. The first of two with one tag is kept.
+    std::vector<Runtime::CatalogueLanguage> available;
+    /// The catalogue generation `available` was read from.
+    uint64_t catalogue_generation{};
+    /// True once `available` has been read from the catalogues or a check.
+    bool catalogue_seen{};
+    /// A check's list stays until the check lets the catalogues replace it.
+    bool hold_available{};
+    /// The download queue generation the open dialog was last filled from.
+    uint64_t dialog_downloads_generation{};
+    /// True once the open dialog was filled for those generations.
+    bool dialog_languages_filled{};
 };
 
 } // namespace oa::app

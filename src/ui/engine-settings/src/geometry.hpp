@@ -1089,13 +1089,16 @@ void set_strip_level(EngineSettings& settings, Setting setting, std::size_t leve
 ///
 /// @param dialog the dialog
 /// @param setting a drop-down setting
-/// @return the items; for Language, 1 and the offered languages; 0 for a
-///     setting that is no drop-down
+/// @return the items; for Language, System default, the offered languages
+///     and, when packs can be downloaded, a divider and those packs; 0 for
+///     a setting that is no drop-down
 [[nodiscard]] std::size_t choice_count(const Dialog& dialog, Setting setting);
 
 /// Returns a drop-down's choice as the drop-down names it: Language's first
 /// is System default with the operating system's language named in itself,
 /// "System default (Deutsch)", and the others each language named in itself.
+/// An available pack is named in itself, or in English when its endonym
+/// cannot be drawn. The divider reads AVAILABLE TO DOWNLOAD.
 ///
 /// @param dialog the dialog, whose mods and system language the choices name
 /// @param setting a drop-down setting
@@ -1107,7 +1110,8 @@ void set_strip_level(EngineSettings& settings, Setting setting, std::size_t leve
 ///
 /// @param dialog the dialog, whose chosen settings count
 /// @param setting a drop-down setting
-/// @return the choice, from 0; 0, System default, for a value not offered
+/// @return the choice, from 0; 0, System default, for a value that is neither
+///     offered nor available to download
 [[nodiscard]] std::size_t choice_index(const Dialog& dialog, Setting setting);
 
 /// Sets a drop-down setting to a choice, through its row.
