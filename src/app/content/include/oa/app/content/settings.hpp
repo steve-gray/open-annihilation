@@ -7,6 +7,7 @@
 
 #include "oa/app/content/service.hpp"
 #include "oa/platform/preferences.hpp"
+#include "oa/ui/engine_settings.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -27,7 +28,8 @@ inline constexpr std::string_view install_id_key_prefix = "open-annihilation.ins
 inline constexpr std::string_view install_id_off_value = "off";
 
 /// The preference key for when catalogues are checked for updates.
-inline constexpr std::string_view content_updates_key = "open-annihilation.content-updates";
+/// The words are `automatically`, `library` and `never`.
+inline constexpr std::string_view content_updates_key = oa::ui::engine_settings::key::content_check;
 
 /// The folder name, under the content folder, that holds downloaded packages.
 inline constexpr std::string_view downloads_folder_name = "downloads";

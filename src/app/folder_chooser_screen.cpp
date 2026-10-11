@@ -6,13 +6,16 @@
 // the wheel, the keys and gamepads mapped to the chooser's presses and keys
 // (src/ui/folder-chooser), the folders found and the browsed folder checked
 // with the engine's own inspection, the layout painted in the Game files
-// screen's look and presented on the game's window.
+// screen's look and presented on the game's window. The window's canvas, the
+// frame shown on it and the pointer read in canvas pixels are the Game files
+// screen's too (window_pixels.hpp); the gamepads are the chooser's own.
 #include "folder_chooser_screen.hpp"
 
 #include "game_files_paint.hpp"
 #include "game_files_screen.hpp"
 #include "render_host.hpp"
 #include "render_state.hpp"
+#include "window_pixels.hpp"
 
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/game_files_import.hpp"
@@ -47,10 +50,6 @@ namespace text_font = oa::platform::text_font;
 /// How long the loop waits for an event while a held direction or a stick needs its timer,
 /// or while the renderer's start-up frames are counted, in milliseconds.
 constexpr int32_t frame_wait_ms = 16;
-/// How far a press may move over the rows before it scrolls them, in points.
-constexpr float drag_threshold_points = 10.0F;
-/// How far one notch of the wheel scrolls the rows, in points.
-constexpr float wheel_notch_points = 40.0F;
 /// The most entries of a folder the browser reads.
 constexpr std::size_t browse_listing_limit = 8192;
 /// The most folders the browser lists.
@@ -211,14 +210,12 @@ class ChooserScreen {
         const GameFilesNeeded& needed
     )
         : options_(options), host_(host), window_(window), renderer_(renderer), needed_(needed),
-          render_state_(renderer) {}
+          render_state_(renderer), frame_(renderer, "the folder chooser") {}
 
-    /// Closes the gamepads it opened and lets go of its texture.
+    /// Closes the gamepads it opened.
     ~ChooserScreen() {
         for (const OpenPad& pad : pads_)
             SDL_CloseGamepad(pad.pad);
-        if (texture_ != nullptr)
-            SDL_DestroyTexture(texture_);
     }
 
     ChooserScreen(const ChooserScreen&) = delete;
@@ -243,18 +240,6 @@ class ChooserScreen {
     struct OpenPad {
         SDL_JoystickID id{}; ///< its instance
         SDL_Gamepad* pad{};  ///< its handle
-    };
-
-    /// A press of a finger or the pointer's button under way.
-    struct Press {
-        bool active{};       ///< a press is under way
-        bool finger{};       ///< it is a finger's
-        SDL_TouchID touch{}; ///< the finger's device
-        SDL_FingerID id{};   ///< the finger
-        float start_x{};     ///< where it went down, canvas pixels
-        float start_y{};     ///< where it went down, canvas pixels
-        float last_y{};      ///< where it was last, canvas pixels
-        bool scrolling{};    ///< it scrolls the rows
     };
 
     /// Opens the fonts, the gamepads already there, the list and the first frame.
@@ -354,9 +339,7 @@ class ChooserScreen {
             dirty_ = true;
             return;
         case SDL_EVENT_RENDER_DEVICE_RESET:
-            if (texture_ != nullptr)
-                SDL_DestroyTexture(texture_);
-            texture_ = nullptr;
+            frame_.drop_texture();
             render_state_.use_window_pixels();
             dirty_ = true;
             return;
@@ -365,70 +348,15 @@ class ChooserScreen {
             dirty_ = true;
             return;
         case SDL_EVENT_FINGER_DOWN:
-            if (accepted_touch(event.tfinger.touchID))
-                press_at(
-                    event.tfinger.x * static_cast<float>(viewport_.width),
-                    event.tfinger.y * static_cast<float>(viewport_.height),
-                    true,
-                    event.tfinger.touchID,
-                    event.tfinger.fingerID
-                );
-            return;
         case SDL_EVENT_FINGER_MOTION:
-            if (press_.active && press_.finger && event.tfinger.touchID == press_.touch &&
-                event.tfinger.fingerID == press_.id)
-                move_to(event.tfinger.y * static_cast<float>(viewport_.height));
-            return;
         case SDL_EVENT_FINGER_UP:
         case SDL_EVENT_FINGER_CANCELED:
-            if (press_.active && press_.finger && event.tfinger.touchID == press_.touch &&
-                event.tfinger.fingerID == press_.id) {
-                if (event.type == SDL_EVENT_FINGER_CANCELED) {
-                    ui_.pressed = -1;
-                    press_ = {};
-                    dirty_ = true;
-                } else {
-                    release_at(
-                        event.tfinger.x * static_cast<float>(viewport_.width),
-                        event.tfinger.y * static_cast<float>(viewport_.height)
-                    );
-                }
-            }
-            return;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            // SDL's mouse events made from a finger are left out: the finger itself is taken.
-            if (event.button.which != SDL_TOUCH_MOUSEID && event.button.button == SDL_BUTTON_LEFT)
-                press_at(
-                    event.button.x * viewport_.px_per_point,
-                    event.button.y * viewport_.px_per_point,
-                    false,
-                    0,
-                    0
-                );
-            return;
         case SDL_EVENT_MOUSE_MOTION:
-            if (event.motion.which != SDL_TOUCH_MOUSEID && press_.active && !press_.finger)
-                move_to(event.motion.y * viewport_.px_per_point);
-            return;
         case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (event.button.which != SDL_TOUCH_MOUSEID && event.button.button == SDL_BUTTON_LEFT &&
-                press_.active && !press_.finger)
-                release_at(
-                    event.button.x * viewport_.px_per_point, event.button.y * viewport_.px_per_point
-                );
+        case SDL_EVENT_MOUSE_WHEEL:
+            take_pointer(read_pointer(event, viewport_, press_));
             return;
-        case SDL_EVENT_MOUSE_WHEEL: {
-            if (event.wheel.which == SDL_TOUCH_MOUSEID)
-                return;
-            float notches = event.wheel.y;
-            if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
-                notches = -notches;
-            chooser::scroll(
-                layout_, ui_, static_cast<int32_t>(std::lround(-notches * wheel_notch_points))
-            );
-            dirty_ = true;
-            return;
-        }
         case SDL_EVENT_KEY_DOWN:
             take_key(event.key);
             return;
@@ -452,15 +380,35 @@ class ChooserScreen {
         }
     }
 
-    /// Tells whether a touch device's fingers reach the chooser: a touch screen's, never the
-    /// pointer's or a pen's made into fingers.
+    /// Takes what an event does to the press: a touch screen's finger (touch_screen) or the
+    /// pointer's button going down presses, a move may scroll the rows, coming up carries out
+    /// the target's command, a cancelled finger lets go, and the wheel scrolls the rows.
     ///
-    /// @param device the device
-    /// @return true for a touch screen
-    [[nodiscard]] static bool accepted_touch(SDL_TouchID device) noexcept {
-        if (device == SDL_MOUSE_TOUCHID || device == SDL_PEN_TOUCHID)
-            return false;
-        return SDL_GetTouchDeviceType(device) == SDL_TOUCH_DEVICE_DIRECT;
+    /// @param pointer the event, read in canvas pixels
+    void take_pointer(const PointerEvent& pointer) {
+        switch (pointer.step) {
+        case PointerStep::none:
+            return;
+        case PointerStep::down:
+            if (!pointer.finger || touch_screen(pointer.touch))
+                press_at(pointer.x, pointer.y, pointer.finger, pointer.touch, pointer.id);
+            return;
+        case PointerStep::move:
+            move_to(pointer.y);
+            return;
+        case PointerStep::up:
+            release_at(pointer.x, pointer.y);
+            return;
+        case PointerStep::cancel:
+            ui_.pressed = -1;
+            press_ = {};
+            dirty_ = true;
+            return;
+        case PointerStep::wheel:
+            chooser::scroll(layout_, ui_, static_cast<int32_t>(std::lround(pointer.wheel_points)));
+            dirty_ = true;
+            return;
+        }
     }
 
     /// Starts a press.
@@ -474,8 +422,8 @@ class ChooserScreen {
         if (press_.active)
             return;
         lay_out_if_stale();
-        press_ = Press{true, finger, touch, id, x, y, y, false};
-        chooser::press_down(layout_, ui_, point_of(x, y));
+        press_ = WindowPress{true, finger, touch, id, x, y, y, false};
+        chooser::press_down(layout_, ui_, canvas_point(x, y));
         dirty_ = true;
     }
 
@@ -487,13 +435,7 @@ class ChooserScreen {
             return;
         const float scale = std::max(viewport_.px_per_point, 0.01F);
         if (!press_.scrolling) {
-            const view::Rect rows = layout_.paint.rows;
-            const bool over_rows = rows.width > 0 && rows.height > 0 &&
-                                   press_.start_x >= static_cast<float>(rows.x) &&
-                                   press_.start_x < static_cast<float>(rows.x + rows.width) &&
-                                   press_.start_y >= static_cast<float>(rows.y) &&
-                                   press_.start_y < static_cast<float>(rows.y + rows.height);
-            if (!over_rows || std::fabs(y - press_.start_y) <= drag_threshold_points * scale)
+            if (!press_scrolls(press_, layout_.paint.rows, y, scale))
                 return;
             // The press becomes a scroll: what it held is let go.
             press_.scrolling = true;
@@ -516,23 +458,14 @@ class ChooserScreen {
     void release_at(float x, float y) {
         if (!press_.active)
             return;
-        const Press finished = press_;
+        const WindowPress finished = press_;
         press_ = {};
         dirty_ = true;
         if (finished.scrolling) {
             ui_.pressed = -1;
             return;
         }
-        act(chooser::press_up(layout_, ui_, point_of(x, y)));
-    }
-
-    /// Converts canvas pixels to a whole point.
-    ///
-    /// @param x across, canvas pixels
-    /// @param y down, canvas pixels
-    /// @return the point
-    [[nodiscard]] static chooser::Point point_of(float x, float y) noexcept {
-        return {static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))};
+        act(chooser::press_up(layout_, ui_, canvas_point(x, y)));
     }
 
     /// Takes a key.
@@ -971,37 +904,7 @@ class ChooserScreen {
 
     /// Reads the window's size, density and safe area into the viewport.
     void refresh_viewport() {
-        int window_width = 0;
-        int window_height = 0;
-        int output_width = 0;
-        int output_height = 0;
-        if (!SDL_GetWindowSize(window_, &window_width, &window_height) ||
-            !SDL_GetRenderOutputSize(renderer_, &output_width, &output_height) ||
-            window_width <= 0 || window_height <= 0 || output_width <= 0 || output_height <= 0)
-            return;
-        view::Viewport next;
-        next.width = output_width;
-        next.height = output_height;
-        next.px_per_point = static_cast<float>(output_width) / static_cast<float>(window_width);
-        SDL_Rect safe{};
-        if (SDL_GetWindowSafeArea(window_, &safe) && safe.w > 0 && safe.h > 0) {
-            const float scale = next.px_per_point;
-            next.safe.left = static_cast<int>(std::lround(static_cast<float>(safe.x) * scale));
-            next.safe.top = static_cast<int>(std::lround(static_cast<float>(safe.y) * scale));
-            next.safe.right = static_cast<int>(
-                std::lround(static_cast<float>(window_width - safe.x - safe.w) * scale)
-            );
-            next.safe.bottom = static_cast<int>(
-                std::lround(static_cast<float>(window_height - safe.y - safe.h) * scale)
-            );
-        }
-        const bool same =
-            next.width == viewport_.width && next.height == viewport_.height &&
-            next.px_per_point == viewport_.px_per_point && next.safe.left == viewport_.safe.left &&
-            next.safe.top == viewport_.safe.top && next.safe.right == viewport_.safe.right &&
-            next.safe.bottom == viewport_.safe.bottom;
-        if (!same) {
-            viewport_ = next;
+        if (read_window_viewport(window_, renderer_, viewport_)) {
             dirty_ = true;
             stale_ = true;
         }
@@ -1044,37 +947,9 @@ class ChooserScreen {
     void present() {
         // While the renderer's start-up stage stands, the last frame is shown again each pass.
         const bool counting = host_ != nullptr && host_->start_stage_open();
-        if ((!painted_ && !counting) || canvas_.width <= 0 || canvas_.height <= 0)
+        if (!painted_ && !counting)
             return;
-        if (texture_ == nullptr || texture_width_ != canvas_.width ||
-            texture_height_ != canvas_.height) {
-            if (texture_ != nullptr)
-                SDL_DestroyTexture(texture_);
-            texture_ = SDL_CreateTexture(
-                renderer_,
-                SDL_PIXELFORMAT_RGBA32,
-                SDL_TEXTUREACCESS_STREAMING,
-                canvas_.width,
-                canvas_.height
-            );
-            if (texture_ == nullptr) {
-                std::cerr << "open-annihilation: the folder chooser cannot make its texture: "
-                          << SDL_GetError() << '\n';
-                return;
-            }
-            SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
-            SDL_SetTextureScaleMode(texture_, SDL_SCALEMODE_NEAREST);
-            texture_width_ = canvas_.width;
-            texture_height_ = canvas_.height;
-        }
-        SDL_UpdateTexture(texture_, nullptr, canvas_.rgba.data(), canvas_.width * 4);
-        render_state_.use_window_pixels();
-        const view::Colour back = view::background_colour;
-        SDL_SetRenderDrawColor(renderer_, back.r, back.g, back.b, SDL_ALPHA_OPAQUE);
-        SDL_RenderClear(renderer_);
-        SDL_RenderTexture(renderer_, texture_, nullptr, nullptr);
-        if (SDL_RenderPresent(renderer_) && host_ != nullptr)
-            host_->note_presented_frame(0);
+        static_cast<void>(frame_.show(canvas_, render_state_, host_));
     }
 
     const Options& options_;   ///< the parsed command line
@@ -1083,22 +958,20 @@ class ChooserScreen {
     SDL_Renderer* renderer_{}; ///< its renderer
     GameFilesNeeded needed_{}; ///< why there is no folder, and the folders found
     RenderState render_state_; ///< the renderer's state to put back
+    WindowFrame frame_;        ///< the frame shown on the window
     std::unique_ptr<text_font::FontStack> fonts_{}; ///< the bundled fonts, when open
     chooser::Model model_{};                        ///< what the chooser shows
     chooser::UiState ui_{};                         ///< what the chooser keeps between frames
     chooser::Layout layout_{};                      ///< the layout last made
     view::Viewport viewport_{};                     ///< the window's canvas
     paint::Canvas canvas_{};                        ///< the frame last painted
-    SDL_Texture* texture_{};                        ///< the frame's texture
-    int texture_width_{};                           ///< its width
-    int texture_height_{};                          ///< its height
     bool dirty_{true};                              ///< the frame must be painted again
     bool stale_{true};                      ///< the layout must be made again before input reads it
     bool painted_{};                        ///< this pass painted a frame
     bool done_{};                           ///< the chooser has ended
     bool kept_{};                           ///< it ended with a folder chosen
     std::optional<GameDirectory> chosen_{}; ///< the folder chosen
-    Press press_{};                         ///< the press under way
+    WindowPress press_{};                   ///< the press under way
     std::vector<OpenPad> pads_{};           ///< the gamepads opened
     Direction held_{Direction::none};       ///< the direction held down
     HoldSource hold_source_{HoldSource::dpad};   ///< what holds it

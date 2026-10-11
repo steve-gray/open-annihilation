@@ -304,6 +304,7 @@ enum class Action : uint8_t {
     press,          ///< menus: presses the focused control
     back,           ///< menus: back, as Escape
     default_button, ///< menus: the dialog's default button, as Enter
+    info,           ///< menus: information about the focused item, as F1
     wheel_up,       ///< menus: a wheel step up
     wheel_down,     ///< menus: a wheel step down
 };

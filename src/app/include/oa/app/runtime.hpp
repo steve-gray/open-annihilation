@@ -4578,6 +4578,11 @@ class Runtime final : public menu::Host,
     /// @param in_match the dialog was opened in a match; otherwise on the main menu
     void push_settings_screen(bool in_match);
 
+    /// Keeps the presence card's screen (runtime_presence_card.cpp) on the OA
+    /// layer while the multiplayer screens show: pushes it when the layer
+    /// has none. OaLayer::tick calls it once a frame.
+    void keep_presence_card_screen();
+
     /// Hands the settings screen on the OA layer an action of the dialog, as
     /// its own events do: its sound, the settings, and the layer taking the
     /// screen off when the dialog closes. Without the screen, the action
@@ -8137,9 +8142,12 @@ class Runtime final : public menu::Host,
     /// without the cursor (frame_without_cursor_).
     ///
     /// On a window at native density the cursor over the match's layers is
-    /// drawn with them at the display's pixels (one_to_one_scale_mode), and
-    /// over any other frame with SDL's own LINEAR; on any other window its
-    /// texture keeps SDL's own filter.
+    /// drawn with them at the display's pixels (one_to_one_scale_mode). Above
+    /// an OA screen it is stamped into a texture the size of the picture, at
+    /// the same whole pixels as the cursor in the picture, and enlarged with
+    /// the picture's own scaling (standard_frame_scale_mode). Over any other
+    /// frame, on a window at native density or a scaled frame, it uses SDL's
+    /// own LINEAR; otherwise its texture keeps SDL's own filter.
     ///
     /// @param match_layers the cursor goes over the match's layers
     void present_software_cursor(bool match_layers);
@@ -13340,7 +13348,7 @@ class Runtime final : public menu::Host,
     std::string permitted_player_counts_text() override;
 
     /// Returns the selected map's description, the map object's summary text:
-    /// lowered and looked up in gamedata\translate.tdf, as 3.1c reads a map's
+    /// lowered and looked up in gamedata\\translate.tdf, as 3.1c reads a map's
     /// description, else as the map writes it.
     ///
     /// @return the description; empty without a selected map

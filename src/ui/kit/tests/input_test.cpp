@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <initializer_list>
 #include <limits>
+#include <span>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -63,6 +64,36 @@ void a_finger_takes_the_nearer_of_two_buttons() {
     OA_CHECK(landed(kit::reach(list, {90, 10}, 22), 2, 100, 10));
     // The disabled button's nearest point is closer than either, and is not taken.
     OA_CHECK(landed(kit::reach(list, {30, 10}, 22), 1, 19, 10));
+}
+
+/// A disabled control the finger is on blocks the press by the blocking rule: no control,
+/// and nothing within reach is searched. By the rule that passes, the press goes on to the
+/// nearest enabled control, and off every control both rules search alike.
+void a_disabled_control_can_block_a_finger() {
+    kit::DisplayList list;
+    kit::Control disabled = placed(1, {0, 0, 40, 20});
+    disabled.enabled = false;
+    list.controls.push_back(disabled);
+    list.controls.push_back(placed(2, {0, 24, 40, 20}));
+    kit::Control hidden = placed(3, {0, 50, 40, 20});
+    hidden.clip = {0, 50, 40, 5};
+    hidden.enabled = false;
+    list.controls.push_back(hidden);
+
+    // On the disabled control: fourteen rows above the enabled one.
+    OA_CHECK(landed(kit::reach(list, {10, 10}, 22, kit::DisabledControl::passes), 2, 10, 24));
+    OA_CHECK(landed(
+        kit::reach(list, {10, 10}, 22, kit::DisabledControl::blocks), kit::no_control, 10, 10
+    ));
+    // On the enabled control, on nothing, and on the part of a disabled one its clip hides.
+    OA_CHECK(landed(kit::reach(list, {10, 30}, 22, kit::DisabledControl::blocks), 2, 10, 30));
+    OA_CHECK(landed(kit::reach(list, {60, 10}, 30, kit::DisabledControl::blocks), 2, 39, 24));
+    OA_CHECK(landed(kit::reach(list, {60, 10}, 30, kit::DisabledControl::passes), 2, 39, 24));
+    OA_CHECK(landed(kit::reach(list, {10, 60}, 22, kit::DisabledControl::blocks), 2, 10, 43));
+    // On the part of the clipped one a press reaches.
+    OA_CHECK(landed(
+        kit::reach(list, {10, 52}, 22, kit::DisabledControl::blocks), kit::no_control, 10, 52
+    ));
 }
 
 /// Equal distances take the first control. A reach one short of the distance takes none.
@@ -476,6 +507,44 @@ void a_scroll_area_is_searched_before_what_is_outside_it() {
     OA_CHECK(kit::focus_toward(list, 11, kit::Direction::up) == 4);
     OA_CHECK(kit::focus_toward(list, 11, kit::Direction::down) == kit::no_control);
     OA_CHECK(kit::focus_toward(list, 1, kit::Direction::up) == kit::no_control);
+}
+
+/// A scroll area of ten rows, four of them in view and scrolled down three rows, a button
+/// above the view and one under it. Judged where they lie, the arrows stay in view. Judged
+/// with the rows laid out whole, Up from the button under the view reaches the last row and
+/// Down from the one above reaches the first, both out of view; the rows step one by one and
+/// leave the area for the buttons at its ends.
+void the_rows_laid_out_whole_reach_past_the_view() {
+    kit::DisplayList list;
+    list.controls.push_back(placed(21, {0, 0, 80, 20}));
+    list.tab_order.push_back(21);
+    kit::ScrollArea area{};
+    area.view = {0, 30, 100, 80};
+    area.offset = 60;
+    area.limit = 10 * 20 - 80;
+    for (int32_t index = 0; index < 10; ++index) {
+        kit::Control row = placed(index + 1, {0, 30 + index * 20 - area.offset, 80, 20});
+        row.clip = area.view;
+        row.group = 0;
+        list.controls.push_back(row);
+        list.tab_order.push_back(row.id);
+    }
+    list.controls.push_back(placed(22, {0, 120, 80, 20}));
+    list.tab_order.push_back(22);
+    const std::span<const kit::ScrollArea> areas(&area, 1);
+
+    // Where they lie, rows 4 to 7 show.
+    OA_CHECK(kit::focus_toward(list, 22, kit::Direction::up) == 7);
+    OA_CHECK(kit::focus_toward(list, 21, kit::Direction::down) == 4);
+    // Laid out whole.
+    OA_CHECK(kit::focus_toward(list, 22, kit::Direction::up, areas) == 10);
+    OA_CHECK(kit::focus_toward(list, 21, kit::Direction::down, areas) == 1);
+    OA_CHECK(kit::focus_toward(list, 5, kit::Direction::down, areas) == 6);
+    OA_CHECK(kit::focus_toward(list, 6, kit::Direction::up, areas) == 5);
+    OA_CHECK(kit::focus_toward(list, 10, kit::Direction::down, areas) == 22);
+    OA_CHECK(kit::focus_toward(list, 1, kit::Direction::up, areas) == 21);
+    OA_CHECK(kit::focus_toward(list, 21, kit::Direction::up, areas) == kit::no_control);
+    OA_CHECK(kit::focus_toward(list, 22, kit::Direction::down, areas) == kit::no_control);
 }
 
 /// Controls in no scroll area are not an area of their own: from a list of
@@ -1375,6 +1444,7 @@ void a_text_field_and_a_tab_take_their_keys() {
 int main() {
     a_finger_takes_the_nearer_of_two_buttons();
     equal_distances_take_the_first_button();
+    a_disabled_control_can_block_a_finger();
     a_finger_out_of_reach_takes_nothing();
     a_covered_point_is_passed_over();
     a_finger_on_a_control_lands_unshifted();
@@ -1392,6 +1462,7 @@ int main() {
     the_beam_beats_a_nearer_diagonal();
     down_from_the_last_row_reaches_the_footer_under_it();
     a_scroll_area_is_searched_before_what_is_outside_it();
+    the_rows_laid_out_whole_reach_past_the_view();
     controls_in_no_area_search_every_control_at_once();
     right_reaches_the_button_inside_a_row();
     an_earlier_place_in_tab_order_wins_a_tie();

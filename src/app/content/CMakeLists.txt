@@ -15,7 +15,7 @@ target_compile_features(oa-app-content PUBLIC cxx_std_20)
 # pictures.hpp hands over the badge oa-app-mod-profile decodes (read_mod_badge).
 target_link_libraries(oa-app-content
   PUBLIC oa-data-registry oa-data-catalogue oa-netgame-http oa-formats-url oa-options
-    oa-app-package-install oa-platform-preferences oa-app-mod-profile
+    oa-app-package-install oa-platform-preferences oa-ui-engine-settings oa-app-mod-profile
   PRIVATE oa-formats-oamod oa-formats-json oa-platform-shims oa-base-sha256 oa-base-threads
     oa-app-user-folder oa-data-mod-profile oa-platform-random)
 set_property(SOURCE src/updates.cpp src/download_api.cpp APPEND PROPERTY COMPILE_DEFINITIONS

@@ -586,6 +586,27 @@ struct DisplayList {
 /// @return that control's number, or no_control when none holds the point
 [[nodiscard]] ControlId hit(const DisplayList& list, Point point) noexcept;
 
+/// What a disabled control does to a press inside it.
+enum class DisabledControl : uint8_t {
+    passes, ///< the press passes on to the controls under it, as if it were not there
+    blocks, ///< the press stops there and reaches no control
+};
+
+/// Returns the control a point reaches, by a rule for disabled controls.
+///
+/// Controls are tried in list order, each where hit tries it. The first
+/// enabled one the point lies in is the answer. A disabled one it lies in is
+/// skipped with DisabledControl::passes, as hit does; with
+/// DisabledControl::blocks it ends the search, and the point reaches no
+/// control. The folder chooser blocks; the Game files screen passes.
+///
+/// @param list the display list
+/// @param point the point, in the same points as the controls
+/// @param disabled what a disabled control the point lies in does
+/// @return the control's number, or no_control when the point reaches none
+[[nodiscard]] ControlId
+hit(const DisplayList& list, Point point, DisabledControl disabled) noexcept;
+
 /// Returns a list's control of a number.
 ///
 /// @param list the display list
@@ -639,11 +660,13 @@ enum class TextFit : uint8_t {
 /// Adds a text broken into lines no wider than a room, as one part.
 ///
 /// The text breaks at its spaces, every new line starts a paragraph, and a
-/// word wider than the room breaks between its characters; Chinese, Japanese
-/// and Korean break as other text does. An empty line is dropped. When there
-/// are more lines than most_lines, the last one kept takes the rest of the
-/// text and ends with an ellipsis, shortened to the room (fit). The part is a
-/// line high (measured_line) for each line, and as wide as `sits` says.
+/// word wider than the room breaks between its characters, or where
+/// break_word says when one is given (path_break breaks a folder's path after
+/// a separator); Chinese, Japanese and Korean break as other text does. An
+/// empty line is dropped. When there are more lines than most_lines, the last
+/// one kept takes the rest of the text and ends with an ellipsis, shortened
+/// to the room (fit). The part is a line high (measured_line) for each line,
+/// and as wide as `sits` says.
 ///
 /// @param[in,out] parts the parts it is added to
 /// @param type the scale and the measure
@@ -654,6 +677,7 @@ enum class TextFit : uint8_t {
 /// @param look its size, weight, colour and style
 /// @param sits how the part sits in the room
 /// @param most_lines the most lines; 0 for no limit
+/// @param break_word where a word wider than the room breaks; null breaks it between characters
 /// @return the part's height, in canvas pixels; 0 when it was not added (no text, no room)
 int32_t text_part(
     std::vector<Item>& parts,
@@ -664,7 +688,8 @@ int32_t text_part(
     std::string_view words,
     const Lettering& look,
     TextFit sits = TextFit::column,
-    std::size_t most_lines = 0
+    std::size_t most_lines = 0,
+    WordBreak break_word = nullptr
 );
 
 /// Adds one line of text, shortened with an ellipsis to a room (fit), as one
