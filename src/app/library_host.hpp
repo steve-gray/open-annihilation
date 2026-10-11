@@ -109,11 +109,15 @@ struct KeptUpdate {
     std::string registry{};       ///< the package's registry
     oa::ui::library::Kind kind{}; ///< its kind
     std::string key{};            ///< its key
+    /// Whether the update changes the rules saved games are tied to, as its
+    /// update note said when it was queued.
     oa::ui::library::UpdateNote::Rules rules{oa::ui::library::UpdateNote::Rules::same};
     std::string from{}; ///< what ROLL BACK restores, as change_texts gives it
     std::string to{};   ///< what the update installs
 };
 
+/// The Library's host: its model and screen state, its feed, the pictures
+/// it holds, the updates it keeps for the queue and its worker.
 struct Runtime::LibraryHost {
     /// Makes the host, its worker not started.
     LibraryHost() = default;
