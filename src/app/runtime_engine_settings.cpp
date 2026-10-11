@@ -1102,6 +1102,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     dialog.user_folder = path_to_utf8(user_folder_);
     // The languages whose packs turn Unicode chat on.
     dialog.unicode_chat_languages = unicode_chat_language_tags();
+    // Languages a catalogue offers that are not installed, and where a
+    // download of one of them stands.
+    std::ignore = refresh_settings_languages(dialog);
     // Developer Mode opens as it was left: its open areas and hacks and its filter.
     if (state.last_developer_list) {
         dialog.developer.areas_open = state.last_developer_list->areas_open;
@@ -1306,6 +1309,25 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open, unless the mod played rolls back as the
         // run ends.
         return roll_back_mod_folder(*dialog);
+    case settings::DialogAction::download_language: {
+        // The dialog stays open. The language applies when the pack arrives.
+        std::string why;
+        const bool queued = download_language(dialog->download_request, why);
+        for (settings::AvailableLanguage& pack : dialog->available_languages) {
+            if (pack.tag != dialog->download_request)
+                continue;
+            if (queued) {
+                pack.state = settings::AvailableLanguage::State::waiting;
+                pack.percent = 0;
+                pack.failure.clear();
+            } else {
+                pack.state = settings::AvailableLanguage::State::failed;
+                pack.failure = std::move(why);
+            }
+            break;
+        }
+        return false;
+    }
     }
     return false;
 }

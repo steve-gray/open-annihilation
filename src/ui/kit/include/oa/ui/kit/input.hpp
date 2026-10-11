@@ -378,9 +378,12 @@ automation_entries(const DisplayList& list, const Interaction& interaction);
 ///   checked on the chosen level and enabled only where it is offered;
 /// - a row of buttons (ControlKind::buttons): each button the list draws for it;
 /// - a drop-down whose menu is open (Role::choice, ChoiceLook::open): each
-///   item the menu (Role::choice_menu) shows, at choice_item, checked on the
-///   chosen item. A control of the list that bears such an item's name is
-///   that item, and is listed once, as the part.
+///   item the menu (Role::choice_menu) shows, at the rectangle the menu draws
+///   it in, checked on the chosen item. A divider is not listed. An item
+///   whose row gives an id is named by that id; another by the control's
+///   parts word for it, else its place from 1. A row that is not choosable
+///   is listed and is not enabled. A control of the list that bears such an
+///   item's name is that item, and is listed once, as the part.
 ///
 /// A part is named <name>.<word>, its word the control's parts word for it,
 /// else its place from 1; a switch's are off and on. A part's kind is its

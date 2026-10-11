@@ -212,6 +212,17 @@ the run, and the row shows "Set on the command line". A new choice shows at
 once in what is drawn each frame; screens and panels already open show it
 once they open again.
 
+Languages a catalogue offers, and the game does not have yet, are listed
+under AVAILABLE TO DOWNLOAD. The host fills `Dialog::available_languages`.
+Each `AvailableLanguage` carries the tag, the endonym, the English name,
+the aside, whether the endonym draws, whether the row can be chosen, and
+where its download stands. `src/language_page.cpp` builds the menu from
+that list. Choosing one asks the host to queue the download, and the
+closed field then shows the language and its progress. An available item's
+automation name is `oa.settings.language.` and the tag in lower case:
+`oa.settings.language.zh-hans`, `oa.settings.language.pt-br`. The divider
+above those rows has no automation name.
+
 The rest of the Language settings say how game text is drawn. Use modern fonts
 for game text draws it in modern fonts, which hold the letters of many
 languages, in place of the game's own 8-bit fonts; Text size scales every
@@ -793,7 +804,8 @@ its spec's id; a drop-down's item's or a strip's level's `<value>` is its
 id (`kit::Stepper::id`): the word the preferences keep it as
 (`stored_words.hpp`, or the text functions such as `menu_scaling_text`),
 lower case with every other character a `-` (`1/32` gives `1-32`, a
-language's tag `zh-Hans` gives `zh-hans`, System default `system`), and
+language's tag `zh-Hans` gives `zh-hans` (`oa.settings.language.zh-hans`),
+System default `system`), and
 for Zoomed out units' Icons, which no preference keeps yet, `icons`.
 `geometry::choice_word` gives it, and the dialog names an open menu's item
 controls by it. The kit lists the parts of a control that take a press of
