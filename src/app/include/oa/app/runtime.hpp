@@ -137,6 +137,13 @@ namespace oa::media::director {
 struct EngineView;
 } // namespace oa::media::director
 
+namespace oa::ui::library {
+enum class Tab : uint8_t;
+enum class Action : uint8_t;
+struct EntryId;
+struct Inputs;
+} // namespace oa::ui::library
+
 namespace oa::data::map_fit {
 struct Fit;
 } // namespace oa::data::map_fit
@@ -4321,6 +4328,100 @@ class Runtime final : public menu::Host,
     /// Opens the dialog over the darkened main menu, as the OA layer's
     /// settings screen.
     void open_engine_settings_from_menu();
+
+    // The Library on the OA layer (library_host.hpp, runtime_library.cpp):
+    // the main menu's OA button opens it, Settings › Language links to it,
+    // and it is fed from the content service, the updates its worker finds
+    // and the download queue.
+
+    /// The Library's host: its model, its screen's state, its feed and its worker.
+    struct LibraryHost;
+
+    /// The Library as a screen of the OA layer, named library.
+    struct LibraryScreen;
+
+    /// Frees the Library's host, stopping and joining its worker.
+    ///
+    /// @param host the host to free; null is allowed
+    static void destroy_library_host(LibraryHost* host) noexcept;
+
+    /// Returns the Library's host, made on first use with the runtime's own
+    /// feed.
+    ///
+    /// @return the host
+    LibraryHost& library_host();
+
+    /// Builds the Library's inputs from the runtime's own sources: the
+    /// registries and catalogues of the content service's snapshot, the
+    /// installed packages and their updates as the Library's worker last
+    /// found them, the download queue, the badge pictures the worker has
+    /// read, and the run (this build's version, the mod played, a match).
+    /// Reads no file and waits on nothing.
+    ///
+    /// @return the inputs
+    [[nodiscard]] oa::ui::library::Inputs library_inputs();
+
+    /// Returns a count that moves on whenever library_inputs would give
+    /// something else: the content service's generation, the download
+    /// queue's, the searches the Library's worker has done and the pictures
+    /// it has read, added. A match coming or going is not counted.
+    ///
+    /// @return the count
+    [[nodiscard]] uint64_t library_feed_generation();
+
+    /// Opens the Library on the OA layer over the main menu: on a tab, else
+    /// on Updates while updates are waiting, else on Mods. When the Library
+    /// is on the layer already, the screens above it close and it is on top
+    /// again; it is never on the layer twice. Asks the content service to
+    /// refresh, as the player's setting allows, outside unattended runs.
+    /// Refused, as the settings are, off the main menu, while a package owns
+    /// the frame, over a message box, while the saves notice shows, or
+    /// without the dialog's fonts.
+    ///
+    /// @param tab the tab; nothing chooses Updates or Mods
+    void open_library(std::optional<oa::ui::library::Tab> tab);
+
+    /// Closes the Library and every screen above it on the OA layer; the
+    /// screen under it shows again. Without the Library, nothing.
+    void close_library();
+
+    /// Counts the updates the Library offers that can be installed, as its
+    /// Updates tab and the main menu's OA button show them, from the last
+    /// inputs its feed gave.
+    ///
+    /// @return the updates
+    [[nodiscard]] std::size_t library_update_count();
+
+    /// Tells whether a registry is built in, as the Library's feed says: the
+    /// same answer the Library shows as Registry::built_in. A built-in
+    /// registry's downloads never ask before they install.
+    ///
+    /// @param registry the registry's id
+    /// @return true for a registry that ships with the game
+    [[nodiscard]] bool library_registry_built_in(std::string_view registry);
+
+    /// Carries out an entry's ROLL BACK or PLAY NOW. PLAY NOW switches the
+    /// game to the installed mod's folder (switch_to_mod_folder), a refusal
+    /// shown in the status line; ROLL BACK opens Settings over the Library on
+    /// Mods with the Roll Back Mod question asked for its folder.
+    ///
+    /// @param action Action::roll_back or Action::play_now; any other does nothing
+    /// @param entry the entry
+    void
+    library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
+
+    /// Brings the Library up to date once a frame: on the main menu its
+    /// worker finds the updates again after a catalogue refresh or an
+    /// install, its model follows its feed, and its pictures wait while a
+    /// match runs.
+    void tick_library();
+
+    /// Runs --check-library: the main menu's OA button, its dot and the
+    /// Library over a feed of fixtures, its actions, Settings over it and it
+    /// over Settings, and the in-match OA button, at 640x480 and 1920x1080.
+    ///
+    /// Throws std::runtime_error naming the first step that failed.
+    void check_library();
 
     /// Opens the Game files screen over the main menu (Settings › Game files › Manage…),
     /// which does not respond until it is closed, then refreshes the section's rows
@@ -14934,6 +15035,11 @@ class Runtime final : public menu::Host,
     // The main menu's OA button; null until first used.
     std::unique_ptr<EngineSettingsMenuHost, void (*)(EngineSettingsMenuHost*) noexcept>
         engine_settings_menu_{nullptr, destroy_engine_settings_menu_host};
+    // The Library's host and its worker, joined as the runtime goes; null
+    // until first used.
+    std::unique_ptr<LibraryHost, void (*)(LibraryHost*) noexcept> library_{
+        nullptr, destroy_library_host
+    };
     // The player's own folder for this run (start_user_folder); empty
     // before it is chosen.
     fs::path user_folder_;

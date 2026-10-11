@@ -5,6 +5,9 @@
 // campaign matches.
 #include "oa/app/runtime.hpp"
 #include "engine_settings_state.hpp"
+#include "oa_layer.hpp"
+#include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "match_models.hpp"
 #include "stage_state.hpp"
 #include "oa/sim/selection.hpp"
@@ -79,6 +82,15 @@ constexpr int32_t kBusyCombatCargoOffset = 24;
 // word of a frame is folded in with.
 constexpr uint64_t kFramesDigestBasis = 0xcbf29ce484222325ULL;
 constexpr uint64_t kFramesDigestMultiplier = 0x9e3779b97f4a7c15ULL;
+// The room the settings dialog's header keeps for its version text, in the
+// dialog's points, which a stage's settings line names so that a golden
+// frame can leave the version out: from this far left of the version's
+// right edge to this far right of it, and from the header's row this to the
+// row that.
+constexpr int32_t kVersionRoomLeft = 71;
+constexpr int32_t kVersionRoomRight = 5;
+constexpr int32_t kVersionRoomTop = 6;
+constexpr int32_t kVersionRoomBottom = 22;
 
 /// Folds a drawn layer into a frame run's frames digest: its size, then its
 /// bytes eight at a time, little-endian, the last word padded with zeros.
@@ -460,9 +472,65 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                 throw std::runtime_error(where + ": the settings have no section " + rest);
             engine_settings_state().last_page = *page;
             open_engine_settings_in_match();
-            if (engine_settings_dialog() == nullptr)
+            const settings::Dialog* opened = engine_settings_dialog();
+            if (opened == nullptr)
                 throw std::runtime_error(where + ": the settings dialog did not open");
-            std::printf("stage: settings %s\n", rest.c_str());
+            // Where the dialog shows, and the room its header keeps for the
+            // version text, in the match canvas's pixels: the header's
+            // version part, as the dialog's class lays it out, widened.
+            const LayerPlacement placed = oa_layer().placement_of("settings");
+            const auto opened_layout = settings::dialog_layout(*opened);
+            const auto version_part = std::find_if(
+                opened_layout.begin(),
+                opened_layout.end(),
+                [opened](const settings::LayoutPart& part) {
+                    return part.control == settings::no_control && part.text == opened->version;
+                }
+            );
+            if (version_part == opened_layout.end() || placed.points_width <= 0 ||
+                placed.points_height <= 0)
+                throw std::runtime_error(where + ": the settings dialog shows no version");
+            const int32_t version_right = version_part->rect.x + version_part->rect.width;
+            const oa::ui::kit::Rect room_points{
+                version_right - kVersionRoomLeft,
+                kVersionRoomTop,
+                kVersionRoomLeft + kVersionRoomRight,
+                kVersionRoomBottom - kVersionRoomTop
+            };
+            // Drawn at its scale as large as its place; fitted to a phone's
+            // safe area, by the place's size.
+            oa::ui::kit::Rect room = oa::ui::kit::to_canvas(room_points, placed.scale_percent);
+            if (placed.scale_percent <= 0) {
+                const auto along = [](int32_t points, int32_t shown, int32_t whole) {
+                    return static_cast<int32_t>(static_cast<int64_t>(points) * shown / whole);
+                };
+                const int32_t left = along(room_points.x, placed.shown.width, placed.points_width);
+                const int32_t top = along(room_points.y, placed.shown.height, placed.points_height);
+                room = {
+                    left,
+                    top,
+                    along(
+                        room_points.x + room_points.width, placed.shown.width, placed.points_width
+                    ) - left,
+                    along(
+                        room_points.y + room_points.height,
+                        placed.shown.height,
+                        placed.points_height
+                    ) - top
+                };
+            }
+            std::printf(
+                "stage: settings %s at %d,%d %dx%d, version at %d,%d %dx%d\n",
+                rest.c_str(),
+                placed.shown.x,
+                placed.shown.y,
+                placed.shown.width,
+                placed.shown.height,
+                placed.shown.x + room.x,
+                placed.shown.y + room.y,
+                room.width,
+                room.height
+            );
         } else if (action == "pointer") {
             // The pointer moved to a point of the window, whose unit the
             // bottom bar then shows.

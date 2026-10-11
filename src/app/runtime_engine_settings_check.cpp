@@ -483,14 +483,14 @@ void Runtime::check_engine_settings_under_overlay() {
         "under an extension's overlay the OA button is not at 596,12"
     );
     // A click on the button reaches it through the extensions' overlays, and
-    // Escape closes the dialog it opens, which stands over them.
+    // Escape closes the Library it opens, which stands over them.
     const oa::ui::display_layout::Point centre{top.x + top.width / 2, top.y + top.height / 2};
     send_check_pointer(SDL_EVENT_MOUSE_MOTION, centre, 0);
     send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, centre, SDL_BUTTON_LEFT);
     send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre, SDL_BUTTON_LEFT);
     require(
-        engine_settings_dialog() != nullptr && screen_ == Screen::main_menu,
-        "under an extension's overlay a click on the OA button did not open the dialog"
+        oa_layer().find("library") != nullptr && screen_ == Screen::main_menu,
+        "under an extension's overlay a click on the OA button did not open the Library"
     );
     for (const auto type : {SDL_EVENT_KEY_DOWN, SDL_EVENT_KEY_UP}) {
         SDL_Event event{};
@@ -501,13 +501,13 @@ void Runtime::check_engine_settings_under_overlay() {
         event.key.down = type == SDL_EVENT_KEY_DOWN;
         bool running = true;
         dispatch_event(event, running);
-        require(running, "Escape in the dialog ended the run");
+        require(running, "Escape in the Library ended the run");
     }
-    require(engine_settings_dialog() == nullptr, "Escape did not close the dialog");
+    require(oa_layer().find("library") == nullptr, "Escape did not close the Library");
     send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
     fake_frontend_tick_ = previous_tick;
     std::cout << "engine settings check: under an extension's overlay the OA button at " << top.x
-              << ',' << top.y << " opens the dialog\n";
+              << ',' << top.y << " opens the Library\n";
 }
 
 void Runtime::check_engine_settings_in_menu() {
@@ -627,15 +627,16 @@ void Runtime::check_engine_settings_in_menu() {
         "a press let go off the OA button opened the dialog"
     );
 
-    // A click opens the dialog over the darkened main menu.
+    // A click opens the Library over the darkened main menu, not the
+    // dialog, which the shortcut opens below.
     click(centre(bottom));
     require(
-        engine_settings_dialog() != nullptr && oa_layer().find("settings") != nullptr &&
+        oa_layer().find("library") != nullptr && engine_settings_dialog() == nullptr &&
             screen_ == Screen::main_menu,
-        "a click on the OA button did not open the dialog"
+        "a click on the OA button did not open the Library"
     );
-    require(release(SDLK_ESCAPE) && press(SDLK_ESCAPE), "Escape in the dialog ended the run");
-    require(engine_settings_dialog() == nullptr, "Escape did not close the dialog");
+    require(release(SDLK_ESCAPE) && press(SDLK_ESCAPE), "Escape in the Library ended the run");
+    require(oa_layer().find("library") == nullptr, "Escape did not close the Library");
     require(release(SDLK_ESCAPE), "Escape's release ended the run");
 
     // The darkened menu and the dialog, drawn from the same sparks as the
@@ -785,14 +786,15 @@ void Runtime::check_engine_settings_in_menu() {
     require(press(SDLK_RETURN) && release(SDLK_RETURN), "Enter in the dialog ended the run");
     require(engine_settings() == opened, "the settings did not go back as they were");
 
-    // Under an extension's overlay, the button in the top-right corner opens it.
+    // Under an extension's overlay, the button in the top-right corner opens
+    // the Library.
     main_menu_overlay_ = true;
     click(centre(top));
-    const bool opened_at_top = engine_settings_dialog() != nullptr;
-    require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+    const bool opened_at_top = oa_layer().find("library") != nullptr;
+    require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the Library ended the run");
     main_menu_overlay_ = false;
-    require(opened_at_top, "under an extension's overlay the OA button did not open the dialog");
-    require(engine_settings_dialog() == nullptr, "Escape did not close the dialog");
+    require(opened_at_top, "under an extension's overlay the OA button did not open the Library");
+    require(oa_layer().find("library") == nullptr, "Escape did not close the Library");
 
     // Nothing opens over a message box or over a frame a package owns.
     show_frontend_message("Settings check", 300, 1, 1);
@@ -835,7 +837,7 @@ void Runtime::check_engine_settings_in_menu() {
 
     // The layer passes on what its screens do not take. A screen that is
     // not modal and passes everything lets a click through it reach the OA
-    // button, which opens Settings over it.
+    // button, which opens the Library over it.
     {
         const oa::ui::display_layout::Rect over_button{
             bottom.x - 8, bottom.y - 8, bottom.width + 16, bottom.height + 16
@@ -844,19 +846,19 @@ void Runtime::check_engine_settings_in_menu() {
         oa_layer().push(std::make_unique<CheckScreen>("check-pass", over_button, false, passed));
         click(centre(bottom));
         require(
-            engine_settings_dialog() != nullptr && oa_layer().top() != nullptr &&
-                oa_layer().top()->name() == "settings" && oa_layer().find("check-pass") != nullptr,
-            "a click through a screen that takes nothing did not open Settings over it"
+            oa_layer().top() != nullptr && oa_layer().top()->name() == "library" &&
+                oa_layer().find("check-pass") != nullptr,
+            "a click through a screen that takes nothing did not open the Library over it"
         );
         require(
             passed->presses == 1 && passed->releases == 1 && passed->moves >= 1,
             "the screen that takes nothing did not see the click it passed on"
         );
-        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the Library ended the run");
         require(
-            engine_settings_dialog() == nullptr && oa_layer().top() != nullptr &&
+            oa_layer().find("library") == nullptr && oa_layer().top() != nullptr &&
                 oa_layer().top()->name() == "check-pass",
-            "Escape did not close Settings back to the screen under it"
+            "Escape did not close the Library back to the screen under it"
         );
         oa_layer().close_top();
         require(oa_layer().find("check-pass") == nullptr, "the screen did not close");
@@ -891,12 +893,11 @@ void Runtime::check_engine_settings_in_menu() {
         );
         click(centre(bottom));
         require(
-            engine_settings_dialog() != nullptr && oa_layer().top() != nullptr &&
-                oa_layer().top()->name() == "settings",
+            oa_layer().top() != nullptr && oa_layer().top()->name() == "library",
             "a click outside the screen did not reach the menu's OA button"
         );
-        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
-        require(engine_settings_dialog() == nullptr, "Escape did not close Settings");
+        require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the Library ended the run");
+        require(oa_layer().find("library") == nullptr, "Escape did not close the Library");
         point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
         SDL_Event typed{};
         typed.type = SDL_EVENT_TEXT_INPUT;

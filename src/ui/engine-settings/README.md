@@ -44,7 +44,7 @@ the locks a running game puts on them (`settings_locks`).
 | | After zoom, a drop-down, locked "Needs Dots" while Zoomed out units is Rendered | 1/2, 1/3, 1/4, 1/6, 1/8, 1/12, 1/16 of normal size | 1/6 | `open-annihilation.zoomed-out-after` (`1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`) |
 | | Window frame: whether a window shows its title bar and borders while a game is played; the game menu, a panel it opens and every other screen show them | Hidden in play, Always shown | Hidden in play | `open-annihilation.window-frame` (`hidden-in-play` or `always-shown`) |
 | | HUD scaling: whether a game's side column and bars grow with the window, up to twice the original game's size, or keep its size | Off, On | On | `open-annihilation.hud-scaling` |
-| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn outside a match, held to the largest step at which Compact's dialog fits the window ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
+| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn, held to the largest step at which Compact's dialog fits the window, and in a match Settings no larger than the side column's scale ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 150% (offered only while the dialog shows Use modern fonts for game text On), 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `150`, `200`, `300` or `400`; `150` read with the modern fonts Off reads as 100%; any other text, `0` among them, reads as Auto) |
 | Touch, listed only while the game has touch controls | One-finger drag | Automatic (a selection box on a tablet, scrolling on a phone), Box, Scroll | Automatic | `open-annihilation.touch-drag` (`automatic`, `box` or `scroll`) |
 | | Hold delay | 250 to 700 ms, steps of 50; a stored delay is held to the range and put on its nearest step | 350 ms | `open-annihilation.touch-hold-delay` |
 | | QUEUE and ADD | Stay on, One action | Stay on | `open-annihilation.touch-latches` (`stay-on` or `one-action`) |
@@ -224,6 +224,16 @@ automation name is `oa.settings.language.` and the tag in lower case:
 `oa.settings.language.zh-hans`, `oa.settings.language.pt-br`. The divider
 above those rows has no automation name.
 
+While the host says the Library can open over the dialog
+(`Dialog::library_link`, which the game sets on the main menu's engine
+settings alone), MORE IN THE LIBRARY… stands right under Language's row, a
+link (`Setting::more_in_library`, named `settings.more-in-library`) whose
+hint says "More languages are in the Library.". Its press sets
+`Dialog::library_tab` to Languages and asks the host for the Library
+(`DialogAction::open_library`); the dialog stays open under it. In a match
+and in Language alone it is not listed, and Language's rows stand as
+`page_settings` gives them.
+
 The rest of the Language settings say how game text is drawn. Use modern fonts
 for game text draws it in modern fonts, which hold the letters of many
 languages, in place of the game's own 8-bit fonts; Text size scales every
@@ -281,7 +291,8 @@ so the dialog keeps the size it opened at while it is open; on OK the
 OA layer lays its screens out again at the new size from the next frame
 (`Runtime::apply_engine_settings`). It changes no game text (Text size),
 no part of a game's interface (HUD scaling) and no 3.1c menu (Menu
-scaling). In a match the in-game Settings keeps its own size.
+scaling). In a match the in-game Settings starts from it too, held to the
+side column's scale ([Sizes](#sizes)).
 
 150% is drawn in the modern fonts, as the game's bitmap fonts take only
 whole steps, so the drop-down offers it, between 100% and 200%, only while
@@ -749,6 +760,29 @@ window, and 1× where they do not. On a 1920 by 1080 window
 1440 by 900 pixels) and 400% is Compact at 3×, as 4× does not fit Compact
 in 1080 rows; on 1280 by 720 150% is Compact at 1.5× (853 by 480 points),
 and on 640 by 480 it is 1×.
+
+In a match the dialog is laid out and drawn beside the in-game menu's side
+column at a class and scale of its own (`OaLayer::match_dialog`,
+[src/app](../../app/README.md#the-oa-layer)), never drawn at 1× and
+enlarged. Its scale starts as the layer's on the match's canvas, the
+Interface size's or Auto's, and is capped by HUD scaling, as the dialog
+always was: above the side column's scale it is the largest whole step at
+or below that scale, and at least 1. Where Compact's 480 by 324 points do
+not fit the area right of the column at that scale, it is the largest
+whole step at which they do. The class comes from that area's points, and
+the dialog, its class's size at the scale, is centred in it:
+
+| Window | HUD scaling | Scale | Points right of the column | Class |
+|---|---|---|---|---|
+| 640 by 480 | On | 1× | 512 by 480 | Compact |
+| 1280 by 720 | On | 1× | 1088 by 720 | Regular |
+| 1920 by 1080 | On | 2× | 832 by 540 | Compact |
+| 2560 by 1080 | On | 2× | 1152 by 540 | Regular |
+| 1920 by 1080 | Off | 1× | 1792 by 1080 | Large |
+
+A 640 by 480 window shows the dialog at (144, 78), pixel for pixel as
+before. On a phone with touch controls the dialog is still Compact, drawn
+at 1× and fitted to the safe area.
 
 ## The rows' table
 
@@ -1270,7 +1304,11 @@ With touch controls on it finds Touch listed between Graphics and
 Developer with its rows at their defaults, and a finger's press beside
 Haptics' switch taking it where a mouse press there does nothing; in the
 match, it checks that on a phone the dialog and the OA button fit the
-safe area.
+safe area, and on each window of the in-match table under
+[Sizes](#sizes) that the dialog takes
+its class and scale, its class's points at the scale centred right of the
+column, is drawn there pixel for pixel as the dialog drawn offscreen at
+them, and shows a section a click on its entry's middle asks for.
 On Mods it finds No Mod played first and a folder stored by an earlier
 version's Pick Folder... listed by its oamod.yaml's name; a click on that
 row asks the Switch Mod question, which Escape and CANCEL put away with the

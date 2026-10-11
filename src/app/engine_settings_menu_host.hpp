@@ -3,7 +3,8 @@
 
 // The main menu's OA button (Runtime::EngineSettingsMenuHost), which
 // runtime_engine_settings_menu.cpp draws and drives as an overlay on the
-// main menu. The dialog it opens is a screen of the OA layer (oa_layer.hpp).
+// main menu. The Library it opens is a screen of the OA layer (oa_layer.hpp,
+// runtime_library.cpp).
 #pragma once
 
 #include "oa/app/runtime.hpp"
