@@ -399,20 +399,21 @@ One profile plays per run. The profile comes from, in order:
    the one the preferences remember;
 3. else the game folder's own `oamod.yaml`, for a copied install.
 
-The **Mods** page of the Open Annihilation settings lists the mod folders
-in the game folder's `mods` folder and in the player's own
-`Documents/Open Annihilation/Mods` folder, the mod being played first. Each
-row shows the mod's badge ([4.5](#45-the-badge)), and from its `oamod.yaml`
-its `name`, its `version` and its `description`; a folder without an
-`oamod.yaml` shows the folder's name, "N/A" and "No oamod.yaml present".
-Choosing another mod there, once the player confirms it, reloads the game's
-data for that mod and returns to the main menu without restarting the game,
-and the choice is remembered for later starts. A remembered mod folder that
-is gone is dropped with a notice. There is no detection of installed mods
-and no built-in list of mods. The [mod support overview](README.md#choosing-a-mod)
-describes the page.
+The Library's **Mods** tab lists, beside the mods installed from packages,
+the mod folders in the game folder's `mods` folder and in the player's own
+`Documents/Open Annihilation/Mods` folder. Each shows the mod's badge
+([4.5](#45-the-badge)), and from its `oamod.yaml` its `name` and its
+`version`, and its details its `description`; a folder without an
+`oamod.yaml` shows the folder's name, "N/A" and, in its details, "No
+oamod.yaml present". PLAY NOW on another mod reloads the game's data for
+that mod and returns to the main menu without restarting the game, and the
+choice is remembered for later starts; SWITCH OFF on the mod being played,
+once the player confirms it, does the same with no mod. A remembered mod
+folder that is gone is dropped with a notice. There is no detection of
+installed mods and no built-in list of mods. The
+[mod support overview](README.md#choosing-a-mod) describes choosing a mod.
 
-The page lists no folder whose name starts with a dot, as file managers
+The Library lists no folder whose name starts with a dot, as file managers
 hide such folders: the folders an install of a `.oamod` package keeps in
 `Mods` while it works are named so.
 

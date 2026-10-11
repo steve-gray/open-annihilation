@@ -174,10 +174,12 @@ name) back to the list.
 - **A status line**: "Not installed · 41.0 MB", "Installed", "Playing",
   "Revision 4 available · 3.2 MB to download" or "Version 4.9 available ·
   …", or "Update available · 3.4 MB to download" when the registry names
-  no revision for an update of the same version, where the download stands ("Waiting to download", "Downloading ·
+  no revision for an update of the same version, "No oamod.yaml present"
+  for a mod folder without one, where the download stands ("Waiting to download", "Downloading ·
   18.2 of 64.0 MB", "Verifying", "Installing"), or why it cannot be got
   ([above](#tabs-and-states)).
-- **The summary.**
+- **The summary**: the registry's, or for a mod of your own its
+  `oamod.yaml`'s description.
 - **The facts**:
   - **Installed**, the version you have and its packaging revision, "4.8
     (rev 3)", for a package you have installed;
@@ -235,9 +237,11 @@ registry or a file, and every other folder the game can play as a mod,
 each marked "Your own copy": the folders in the game folder's `mods`
 folder and in your own Mods folder, `Documents/Open Annihilation/Mods`,
 a folder without an `oamod.yaml`, which shows "N/A" for its version and
-plays with the game's own rules, and a folder an earlier version's Pick
-Folder… chose, while it is still the mod you play. The one you play is
-marked **PLAYING**; with no mod none is.
+"No oamod.yaml present" in its details and plays with the game's own
+rules, and a folder an earlier version's Pick Folder… chose, while it is
+still the mod you play. A mod of your own shows its `oamod.yaml`'s
+description in its details. The one you play is marked **PLAYING**; with
+no mod none is.
 
 - **PLAY NOW**, on any other mod, plays it: the game reloads its data for
   that mod and returns to the main menu, without closing the window, and

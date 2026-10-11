@@ -76,7 +76,8 @@ says so on standard output. This suits a folder of extra units or maps
 made for 3.1c itself.
 
 A profile can give a one-line `description`, and a mod folder can hold an
-`oamod.png` badge beside its `oamod.yaml`; the Library shows the badge.
+`oamod.png` badge beside its `oamod.yaml`; the Library shows the badge, and
+the description in the mod's details when no registry lists it.
 [The OAMOD standard](oamod-standard.md) describes them.
 
 ### From the Library
@@ -210,9 +211,10 @@ the game folder's `mods` folder and in your own Mods folder, and the folder
 an earlier version's Pick Folder... chose, while it is still your chosen
 mod and still exists. Once you switch to another mod or to none, the game
 forgets that folder. Each shows its badge (its `oamod.png`, or letters of
-its name) and, from its `oamod.yaml`, its title and version. A folder
-without an `oamod.yaml` shows the folder's name and "N/A"; it plays with
-the game's own rules. The mod being played is marked PLAYING.
+its name) and, from its `oamod.yaml`, its title and version, and its
+details its description. A folder without an `oamod.yaml` shows the
+folder's name and "N/A", and its details say "No oamod.yaml present"; it
+plays with the game's own rules. The mod being played is marked PLAYING.
 
 To play a mod folder kept elsewhere, put it in the Mods folder. **MODS**
 under Your files in Settings › Common Tweaks opens your Mods folder in the
