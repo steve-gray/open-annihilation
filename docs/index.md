@@ -19,9 +19,21 @@ Every document in the repository, by what you want to do.
 - [settings.md](settings.md): Open Annihilation's own settings, with a
   picture of each section: opening them, OK, Cancel and Restore defaults,
   and what every setting in Mods, Controls, Common Tweaks, Language,
-  Graphics, Touch, Controller, Game files and Developer does, its default,
-  when it takes effect and when to change it; the command-line options
-  that set them for one run, and where they are kept.
+  Graphics (Interface size among them), Touch, Controller, Game files,
+  Downloads and Developer does, its default, when it takes effect and when
+  to change it; the command-line options that set them for one run, and
+  where they are kept.
+- [library.md](library.md): the Library, where mods, map packs and
+  language packs are found, installed, updated and rolled back from inside
+  the game: opening it, its tabs and states, search and filters, the
+  details, the download queue, updates, which downloads ask first and the
+  update question, "Finishes when you leave …", offline use and the check
+  that you are a person.
+- [downloads.md](downloads.md): registries and downloads: Core Prime's
+  built-in registry, adding one by its address or an `.oareg` file, "Not
+  reviewed by the OA team", mirrors, the Downloads settings and the install
+  ID, and privacy: exactly what a download sends, what Core Prime records
+  and for how long, and what plain HTTP shows to someone on the network.
 - [touch-controls.md](touch-controls.md): playing with fingers on an iPad,
   an iPhone or a touch screen: the gestures, the tablet and phone layouts,
   QUEUE, ADD and x5, the order wheel, building, the Touch settings, the
@@ -42,12 +54,15 @@ Every document in the repository, by what you want to do.
   keyboard and the Steam Deck's.
 - [languages.md](languages.md): the language the game shows its text in:
   how it is chosen (3.1c's command line, the Language setting, the
-  operating system), what the game data translates in German, French,
-  Italian and Spanish, the engine's own words, and adding a language.
+  operating system), the notice at start for a language to download, what
+  the game data translates in German, French, Italian and Spanish,
+  language packs and where to get them, Simplified Chinese, the engine's
+  own words, and adding a language.
 - [Network games from the command line](../README.md#network-games-from-the-command-line)
-  in the README: hosting a TCP/IP game with `--host` or joining one with
-  `--join ADDRESS`, with `--player-name`, `--game-name` and
-  `--game-password`, and what the game prints as it goes.
+  in the README: the OA badge and player card in the battle room and the
+  presence record behind them, hosting a TCP/IP game with `--host` or
+  joining one with `--join ADDRESS`, with `--player-name`, `--game-name`
+  and `--game-password`, and what the game prints as it goes.
 - [Demo Recorder](../README.md#demo-recorder) in the README: playing back a
   recorded game (`.tad`) from the command line with `--play-demo`, what a
   recording needs to play, and recording network games.
@@ -64,8 +79,9 @@ Every document in the repository, by what you want to do.
   `--fark-address` and `--fark-file`, connecting with the token, the
   requests, input through the event queue, events, what it never does,
   and the ` REMOTED` line in the battle room.
-- [mods/README.md](mods/README.md): mod support: installing a mod in a mod
-  folder or as a copied install, choosing it in the settings or with
+- [mods/README.md](mods/README.md): mod support: installing a mod from the
+  Library, in a mod folder or as a copied install, its updates and rolling
+  them back, choosing it in the settings or with
   `--mod-dir`, network play and saves under a mod, and the tables of every
   standard hack, each with its own page under
   [mods/standard-hacks/](mods/standard-hacks), and of every script
@@ -79,8 +95,11 @@ Every document in the repository, by what you want to do.
   Specification, version 1: the descriptor and `.oareg` file, the
   catalogue and its signature, packages, the download API, running a
   registry and mirrors.
-- [maps/README.md](maps/README.md): map packs, which add maps and what those
-  maps draw, and where a pack installs.
+- [maps/README.md](maps/README.md): map packs for players: installing an
+  `.oamap` from a registry or a file, map names with `@`, one map's files
+  at a time, whether a map fits the game and the mod and why one is
+  refused, MORE MAPS… and the map browser, GET MAP in the battle room, and
+  what 3.1c players see.
 - [maps/oamap-standard.md](maps/oamap-standard.md): the OAMAP standard, the
   format of a map pack's manifest (`oamap.yaml`) and its rules: the index,
   map names, what a pack holds and how a map fits.

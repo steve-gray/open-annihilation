@@ -21,6 +21,11 @@ mod is installed: a folder without a profile plays exactly as 3.1c.
 
 ## Installing a mod
 
+A mod published to a registry, Core Prime's or one you added, installs from
+the Library: the **OA** button on the main menu opens it, and **GET** on a
+mod installs it ([from the Library](#from-the-library)). A mod you have as
+a folder or a file installs as follows:
+
 1. Put the mod's folder in the **Mods** folder of your own Open Annihilation
    folder, `Documents/Open Annihilation/Mods` (where that is on each system:
    "Where it keeps its files" in the
@@ -28,8 +33,9 @@ mod is installed: a folder without a profile plays exactly as 3.1c.
    or in the game folder's `mods` folder. A mod that comes as a `.oamod` file
    installs itself there when you open the file
    ([Installing a .oamod file](#installing-a-oamod-file)).
-2. Open the settings (the **OA** button on the main menu), choose the mod on
-   **Mods**, and confirm with **Switch**. The game reloads its data for the
+2. Open the settings (**Cmd+,** on macOS, **Ctrl+,** elsewhere, or
+   **SETTINGS…** in the Library), choose the mod on **Mods**, and confirm
+   with **Switch**. The game reloads its data for the
    mod and returns to the main menu playing it.
 
 The Mods page's **Open Mods Folder** and the **Your files** row under
@@ -72,6 +78,43 @@ made for 3.1c itself.
 A profile can give a one-line `description`, and a mod folder can hold an
 `oamod.png` badge beside its `oamod.yaml`; the Mods page shows both.
 [The OAMOD standard](oamod-standard.md) describes them.
+
+### From the Library
+
+The Library lists every mod of the registries that are on, with what each
+does to the game: how many standard hacks change the game and how many
+only the view, the base game and the Open Annihilation it needs, and its
+rules hash. A mod that needs hacks this build does not have is listed, and
+says which, but cannot be got. **GET** downloads the mod, checks it as a
+`.oamod` file is checked, and installs it in your Mods folder as
+`Mods/<id>`; **PLAY NOW** then switches to it
+([the Library](../library.md)).
+
+**Where it came from.** The installer writes `.oa-origin.yaml` in the
+mod's folder: the registry, the mod's key there, its release and the
+package's SHA-256. That record is how OA knows a mod's updates: an update
+is the same mod at a higher release in the same registry. A mod you
+installed from a `.oamod` file is matched to a registry's release by its
+SHA-256, and offered that registry's updates from then on; one no registry
+lists, and a folder installed by an earlier version or made by hand, is
+your own and is never offered an update.
+
+**Updates.** When the registry lists a newer release, the mod's row in
+Settings › Mods says so ("Revision 4 available · 3.2 MB", or "… changes the
+rules") with an **UPDATE** button, and so does the Library, on its row, in
+its details and on its Updates tab; the main menu's **OA** button wears a
+dot. Nothing updates until you press UPDATE or UPDATE ALL. An update from
+Core Prime's registry installs with no question; a mod from a registry you
+added asks before an update that changes the rules, or before it replaces
+a copy you did not get from that registry
+([which downloads ask first](../library.md#which-downloads-ask-first)). An
+update to the mod being played waits until you switch mod or quit ("Finishes
+when you leave …").
+
+**Rolling back an update.** The update keeps the version it replaced, as a
+file's replace does ([one version back](#installing-a-oamod-file)), and
+**ROLL BACK** brings it back, with its record of where it came from: the
+update is then offered again, and installs only when you press UPDATE.
 
 ### Installing a .oamod file
 
@@ -160,8 +203,8 @@ delay an install by a few seconds.
 
 ### Choosing a mod
 
-Open Annihilation's settings (the **OA** button on the main menu) choose
-the mod on **Mods**, the first page. Its list scrolls with the mouse wheel,
+Open Annihilation's settings (**Cmd+,** or **Ctrl+,**, or **SETTINGS…** in
+the Library) choose the mod on **Mods**, the first page. Its list scrolls with the mouse wheel,
 its scroll bar and the keyboard. Each row shows the mod's badge (its
 `oamod.png`, or a blank placeholder), then, from its `oamod.yaml`, its
 title, its version at the top right and a line describing it. No Mod shows
@@ -378,7 +421,7 @@ registry root, and a mod's first run fills in the values its profile seeds.
 ## Developer Mode
 
 Developer Mode, in the **Developer** section at the foot of Open
-Annihilation's settings (the **OA** button), changes the standard hacks of
+Annihilation's settings, changes the standard hacks of
 the profile the game plays without editing its `oamod.yaml`, which is never
 written. It is for trying a hack, or a hack's values, before writing them
 into a profile. With no mod it changes the plain 3.1c baseline, so it can

@@ -109,12 +109,18 @@ Total Annihilation: Kingdoms:
 
 ## Settings
 
-Open Annihilation's own settings open from the **OA** button at the bottom
-right of the main menu, or under Resume in the in-game menu (F2), and with
-**Cmd+,** on macOS (also **Settings…** in the application menu) or
-**Ctrl+,** elsewhere. [docs/settings.md](docs/settings.md) shows each
+Open Annihilation's own settings open with **Cmd+,** on macOS (also
+**Settings…** in the application menu) or **Ctrl+,** elsewhere, from
+**SETTINGS…** in the Library, and from the **OA** button under Resume in
+the in-game menu (F2). [docs/settings.md](docs/settings.md) shows each
 section of the settings and explains every setting: what it does, its
 default, when it takes effect and when you might change it.
+
+The **OA** button at the bottom right of the main menu opens the Library,
+where mods, map packs and languages are found, installed, updated and
+rolled back without leaving the game: see [docs/library.md](docs/library.md),
+and [docs/downloads.md](docs/downloads.md) for registries and exactly what
+a download sends and records.
 
 ## Mods
 
@@ -122,18 +128,35 @@ Open Annihilation plays mods as well as 3.1c: a mod describes how it differs
 from 3.1c in one `oamod.yaml` file, and the engine applies the standard
 hacks it names, with no code for any particular mod. See
 [Mod support](docs/mods/README.md) for installing and choosing a mod, the
-profile format and every standard hack.
+profile format and every standard hack. Mods published to a registry are
+installed and updated from [the Library](docs/library.md), and map packs
+add maps the same way ([docs/maps/README.md](docs/maps/README.md)).
 
 ## Network games from the command line
 
 Network play goes through the Multiplayer screens, as in 3.1c, but asks
 for no game disc: START never counts discs. Every OA player still tells the
-other machines it has one, since a 3.1c host counts them, and the battle
-room shows a CD icon only for a player on 3.1c. OA tells its own players
-from those on 3.1c by the setup block each sends (record 0x20): OA writes
-`O` and `A` at +0xAD and +0xAE, bytes 3.1c carries unchanged and never
-reads. An OA build older than this one writes no mark, so its players show
-a CD icon too.
+other machines it has one, since a 3.1c host counts them. In the battle
+room a player on 3.1c shows the CD icon, and an OA player the OA badge in
+its place. OA tells its own players from those on 3.1c by the setup block
+each sends (record 0x20): OA writes `O` and `A` at +0xAD and +0xAE, bytes
+3.1c carries unchanged and never reads. OA builds before 0.7.4 write no
+mark, so their players show a CD icon too.
+
+Rest the pointer on an OA badge for a moment and that player's card opens:
+their Open Annihilation version and platform, their mod and its revision,
+whether their rules are the host's, how many hacks change the game or only
+the view, Developer Mode, and on the host's card the map pack its map comes
+from. F1 or Return on a player's row, reached with Tab or the arrow keys,
+opens it too, as do View and A on a controller and a tap on the badge;
+Escape closes it. A dot on a badge means that player's rules differ from
+the host's. The card shows what that player's machine sent in its
+presence record, which OA sends only to the players whose setup blocks
+carry the mark, each alone in its frame. OA 0.7.4 players carry the mark
+too: they receive the record and ignore it, and their cards say only "Open
+Annihilation (before 0.8)". No 3.1c machine receives one, and a 3.1c
+player sees nothing new. The setup block carries nothing else new:
+the five bytes +0xAF to +0xB3 stay zero, as 0.7.4 sends them.
 
 To host or join a TCP/IP game without the screens, start the game with:
 
