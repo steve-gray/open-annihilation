@@ -197,7 +197,7 @@ Outcome act(Model& model, Control control) {
     return {};
 }
 
-/// Scrolls the rows so that a control's item shows whole (or its top, when taller).
+/// Scrolls the rows so that a control's part shows whole (or its top, when taller).
 ///
 /// @param[in,out] model the model
 /// @param layout the layout last drawn

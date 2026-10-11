@@ -290,7 +290,7 @@ kit::ButtonSpec spec_of(const Action& action) {
 /// button's label and padding, the main button's least width, the gap, and the least
 /// height a control keeps.
 ///
-/// @param form the form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the row's left, pixels
 /// @param y the row's top, pixels
@@ -327,7 +327,7 @@ int button_row_of(
 /// Adds a banner: its mark, its text and its buttons at the right (below the text when the
 /// banner is narrow).
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the banner's top, pixels
@@ -436,7 +436,7 @@ bool banner_on_step(Step step, Banner banner, bool pending) noexcept {
 
 /// Adds the step's banner, when it has one, and the gap after it.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y where it goes, pixels
@@ -467,7 +467,7 @@ int add_step_banner(const Form& form, Block& block, int x, int y, int room) {
 
 /// Adds a step's title and the line under it.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
@@ -587,7 +587,7 @@ std::vector<Option> first_run_options(const Model& model) {
 
 /// Adds S1's ways in as cards in a row.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the cards' top, pixels
@@ -659,7 +659,7 @@ int add_cards(
 
 /// Adds S1's ways in as rows: icon, title, one line and the button at the right.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the column's left, pixels
 /// @param y the first row's top, pixels
@@ -789,7 +789,7 @@ void add_panel(Block& block, Rect box, Block& inner) {
 
 /// Adds one part's row.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the row's left, pixels
 /// @param y its top, pixels
@@ -984,7 +984,7 @@ std::vector<ShownRow> shown_rows(const Model& model) {
 
 /// Adds the parts' rows in a panel, with dividers between them.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block
 /// @param x the panel's left, pixels
 /// @param y its top, pixels
@@ -1029,7 +1029,7 @@ int add_rows_panel(const Form& form, Block& block, int x, int y, int room) {
 /// FILES", the version and, except in the management state, the OA · Aa button (the icon and
 /// "Aa").
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] block the block (canvas coordinates)
 /// @param safe the safe area, pixels
 /// @return the header's bottom, pixels
@@ -1115,7 +1115,7 @@ int add_header(const Form& form, Block& block, Rect safe) {
 
 /// Lays out S1: the title, the lead, the banner, the ways in and the footer.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1233,7 +1233,7 @@ Column first_run_column(const Form& form, int x, int room) {
 
 /// Lays out S2 while the source is listed: the count growing, CANCEL and a busy bar.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1331,7 +1331,7 @@ std::string nested_name(std::string_view relative) {
 
 /// Lays out S2's offer of a game folder found inside the chosen one.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1430,7 +1430,7 @@ Column nested_column(const Form& form, int x, int room) {
 
 /// Lays out S2's answer when the chosen folder is the game folder itself.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1479,7 +1479,7 @@ std::string short_space_text(const Model& model) {
 
 /// Lays out S3: the parts, what is left out, the space and the check, and COPY.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1627,7 +1627,7 @@ Column ready_to_copy_column(const Form& form, int x, int room) {
 
 /// Lays out S4: the progress, STOP, the parts ticking and the hint.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1751,7 +1751,7 @@ Column copying_column(const Form& form, int x, int room) {
 
 /// Lays out S5 while the engine checks the copy (or unpacks the demo).
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1792,7 +1792,7 @@ Column checking_column(const Form& form, int x, int room) {
 /// Lays out S5's Ready to play: what the game will play, the space, the warnings, the backups
 /// line, the folder set aside, and PLAY.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1926,7 +1926,7 @@ Column ready_to_play_column(const Form& form, int x, int room) {
 
 /// Lays out S6: the problem's mark, title, texts and buttons.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -1975,7 +1975,7 @@ Column problem_column(const Form& form, int x, int room) {
 /// Lays out S8: the summary, CHECK AGAIN and ADD FILES…, the banner, the parts with REMOVE,
 /// and the foot's REPLACE, REMOVE ALL and DONE.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -2073,7 +2073,7 @@ Column manage_column(const Form& form, int x, int room) {
 
 /// Lays out the model's step.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param x the column's left, pixels
 /// @param room the column's width, pixels
 /// @return the column
@@ -2107,7 +2107,7 @@ Column step_column(const Form& form, int x, int room) {
 /// they fit; else the body scrolls between the fixed top and bottom; else, when that leaves
 /// the body less than least_body_points, the whole column scrolls.
 ///
-/// @param form the form
+/// @param form the form laid out
 /// @param[out] items where the placed parts go
 /// @param area the area, pixels
 /// @param[in,out] column the blocks; their parts are moved out
@@ -2150,7 +2150,7 @@ int32_t scroll_limit_points(const kit::ScrollArea& scroll, float scale) noexcept
 /// Lays out the model's sheet over a backdrop: its title, text, list and buttons, the list
 /// scrolling when the sheet does not fit.
 ///
-/// @param form the layout's form
+/// @param form the form laid out
 /// @param[in,out] layout the layout
 /// @param viewport the canvas
 /// @param safe the safe area, pixels
