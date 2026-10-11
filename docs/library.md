@@ -1,7 +1,8 @@
 # The Library
 
 The Library is where Open Annihilation finds, installs, updates and rolls
-back mods, map packs and language packs without leaving the game. It lists
+back mods, map packs and language packs without leaving the game, and where
+you choose the mod you play. It lists
 every package that Core Prime's registry, built into the game, and any
 registry you added offer, together with what you have installed, and it
 says for each whether you have it, whether an update waits, and what it
@@ -18,6 +19,7 @@ settings and exactly what a download sends and records.
 - [Tabs and states](#tabs-and-states)
 - [Search and filters](#search-and-filters)
 - [The details](#the-details)
+- [Choosing a mod](#choosing-a-mod)
 - [Keys and controllers](#keys-and-controllers)
 - [Installing](#installing)
 - [The download queue](#the-download-queue)
@@ -39,17 +41,18 @@ The Library opens on the main menu, from:
   can install wait, the button wears an amber dot in its top right corner,
   from the moment OA finds them: you need not open the Library to learn of
   them;
-- **GET MORE MODS…** in Settings › Mods, which opens it on Mods;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
-  Languages.
+  Languages, over the settings, which stay open under it.
 
-The last two open it over the settings, which stay open under it. The
+The
 skirmish and battle room map lists have **MORE MAPS…** instead, which opens
 the map browser, and the battle room has **GET MAP**, which downloads the
 host's map without a detour ([map packs](maps/README.md)).
 
 The settings are one step away: **SETTINGS…** at the foot of the list, or
 **Cmd+,** on macOS and **Ctrl+,** elsewhere, opens them over the Library.
+**CHECK NOW**, beside it, asks the registries for their lists at once
+([updates](#updates)).
 **CLOSE**, or Escape, goes back to the main menu. The Library shows only on
 the main menu: it closes when the menu gives way to another screen, and in
 a game the in-game menu's OA button opens the settings, not the Library.
@@ -150,16 +153,51 @@ name) back to the list.
 - **The buttons**: **GET** or **UPDATE**, **CANCEL** while it is in the
   download queue, **RETRY** after a download that can be tried again;
   **PLAY NOW** for an installed mod you are not playing, which switches to
-  it; **ROLL BACK** while an earlier copy is kept
+  it, or **SWITCH OFF** in its place for the mod you are playing, which
+  goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod));
+  **ROLL BACK** while an earlier copy is kept
   ([rolling back](#rolling-back)); **OPEN FOLDER** for an installed package;
   and **HOMEPAGE**, which opens the package's web page in your browser.
 - **A note** for mods while you play one: "Finishes when you leave Ridge."
   on the mod being played, or "You are playing Ridge. Updating Cinder
   doesn't restart the game." on another
-  ([finishes when you leave …](#finishes-when-you-leave-)).
+  ([finishes when you leave …](#finishes-when-you-leave-)); and on every
+  installed mod, first, "The command line chose this run's mod." while
+  `--mod-dir` or `--base-game` chose it.
 
 The Regular and Large layouts show who made a package, and its download
 count, on its row; Compact shows them under the status line.
+
+## Choosing a mod
+
+The Mods tab lists every mod you can play: the ones you installed, from a
+registry or a file, and every other folder the game can play as a mod,
+each marked "Your own copy": the folders in the game folder's `mods`
+folder and in your own Mods folder, `Documents/Open Annihilation/Mods`,
+a folder without an `oamod.yaml`, which shows "N/A" for its version and
+plays with the game's own rules, and a folder an earlier version's Pick
+Folder… chose, while it is still the mod you play. The one you play is
+marked **PLAYING**; with no mod none is.
+
+- **PLAY NOW**, on any other mod, plays it: the game reloads its data for
+  that mod and returns to the main menu, without closing the window, and
+  plays it at every later start too. A folder the game cannot play is
+  refused, and a note over the Library says why under **SWITCH MOD**:
+  "That folder cannot be played; the log says why.", with **OK**.
+- **SWITCH OFF**, on the mod you play, goes back to the game as 3.1c plays
+  it. It asks first, **SWITCH MOD**: "Switch to No Mod now? The game
+  reloads its data for the new mod and returns to the main menu. Your
+  other settings are kept.", with **CANCEL**, marked, and **SWITCH**.
+  **SWITCH** (Y) reloads the game with no mod; **CANCEL** (Escape)
+  leaves everything as it was.
+
+Both change the mod only from the main menu: the Library shows only there,
+and a game keeps the mod it started with. While `--mod-dir` or
+`--base-game` chose the run's mod, both are greyed and the details say "The
+command line chose this run's mod." **OPEN FOLDER** shows a mod's folder,
+and **MODS** under Your files in Settings › Common Tweaks your Mods folder,
+where a mod's folder goes to be listed
+([settings](settings.md#common-tweaks)).
 
 ## Keys and controllers
 
@@ -239,7 +277,9 @@ stops at its next step, and goes on, shown as waiting, once the game ends.
 OA looks for updates whenever it fetches the registries' lists, which
 **Check for content updates** in Settings › Downloads decides
 ([when OA checks](downloads.md#when-oa-checks-for-content)), and **CHECK
-NOW** in Settings › Mods asks at once.
+NOW** at the foot of the Library asks every registry that is on at once,
+whatever that setting says. It is greyed while no registry is on, and
+while the registries are being asked.
 
 A package is offered an update when the registry it was installed from
 lists the same package at a higher release than the one installed: OA
@@ -255,9 +295,7 @@ An update shows:
 - as **UPDATE** on the package's row, and in its details with what changes;
 - on the **Updates** tab, every kind together, with **UPDATE ALL**, which
   starts every update that can be installed;
-- as the dot on the main menu's **OA** button;
-- for a mod, on its row in Settings › Mods, with an **UPDATE** button of its
-  own ([settings](settings.md#mods)).
+- as the dot on the main menu's **OA** button.
 
 **UPDATE** and **UPDATE ALL** start updates; OA finds updates by itself, but
 never installs one on its own. A mod that changes its rules is your call,
@@ -356,13 +394,16 @@ do not ask start whatever the answer.
 ## Rolling back
 
 Updating or replacing a mod keeps the copy it replaced, one copy back.
-**ROLL BACK**, in the Library's details or on the mod's row in Settings ›
-Mods, brings it back. It asks first, **ROLL BACK MOD**: "Roll back Ridge to
-4.8 revision 3? 4.8 revision 4 is kept in its place, and ROLL BACK again
-brings it back.", with **CANCEL** and **ROLL BACK**. The two copies swap,
-so a second ROLL BACK undoes the first. The record of where the mod came from goes back
-with it, so the update you rolled back is offered again, and nothing
-installs it until you press UPDATE.
+**ROLL BACK**, in the Library's details, brings it back. It shows on a mod
+only while the copy kept is one the game can play. It asks first, **ROLL
+BACK MOD**: "Roll back Ridge to 4.8 revision 3? 4.8 revision 4 is kept in
+its place, and ROLL BACK again brings it back.", with **CANCEL** and **ROLL
+BACK**. The two copies swap, so a second ROLL BACK undoes the first. The
+record of where the mod came from goes back with it, so the update you
+rolled back is offered again, and nothing installs it until you press
+UPDATE. A roll back that cannot be made, as when the copy kept can no
+longer be played, changes nothing, and **MOD NOT ROLLED BACK** over the
+Library says why.
 
 Rolling back the mod being played reloads the game's data at once and
 returns to the main menu ("The game reloads its data for the mod and
@@ -373,11 +414,11 @@ nothing there.
 ## Finishes when you leave …
 
 The mod being played cannot change under the running game, so an update to
-it, from the Library or Settings › Mods, downloads and is checked now, and
-is made when you leave that mod, by switching to another or quitting. Until
-then the details say "Finishes when you leave Ridge.", and the queue and
-the mod's row in Settings › Mods say "Waiting · finishes when you leave
-Ridge". Once it is made, a **MOD UPDATED** notice says so on the main menu.
+it, from the Library, downloads and is checked now, and is made when you
+leave that mod, by switching to another, switching it off or quitting.
+Until then the details say "Finishes when you leave Ridge.", and the queue
+says "Waiting · finishes when you leave Ridge". Once it is made, a **MOD
+UPDATED** notice says so on the main menu.
 **CANCEL** on the waiting update drops it, and leaves the mod as it was; it
 is offered again.
 

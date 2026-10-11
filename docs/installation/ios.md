@@ -222,11 +222,10 @@ My iPhone (or On My iPad) › Open Annihilation › Open Annihilation, beside
 the Total Annihilation folder. Each of its Saves, Screenshots, Films and
 Recordings folders holds a folder for each mod, and `default` for games
 without one. The buttons of **Common Tweaks › Your files**
-in the OA settings, and **Open Mods Folder** on the **Mods** page, open the
-Files app at its Saves, Screenshots or Mods folder; the Files app's status
-bar leads back to the game. A mod copied into that Mods folder is offered
-on the Mods page, and choosing it reloads the game for it without leaving
-the app. A `.oamod` file installs itself there: tap it in the Files app, or
+in the OA settings open the Files app at its Saves, Screenshots or Mods
+folder; the Files app's status bar leads back to the game. A mod copied
+into that Mods folder is offered in the Library, and its PLAY NOW reloads
+the game for it without leaving the app. A `.oamod` file installs itself there: tap it in the Files app, or
 share it to Open Annihilation
 ([mods](../mods/README.md#installing-a-oamod-file)).
 

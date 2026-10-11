@@ -153,7 +153,7 @@ optional.
 | `id` | The mod's stable id: lower-case words of `a`-`z` and `0`-`9` joined by single hyphens | `id: example-mod` |
 | `name` | The mod's display name, a string | `name: Example Mod` |
 | `version` | The mod's version, a string | `version: "2.1"` |
-| `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. The Mods page of the Open Annihilation settings shows it under the mod's name and version. | `description: "Larger armies and renamed data directories."` |
+| `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. | `description: "Larger armies and renamed data directories."` |
 | `homepage` | The mod's site: an `http` or `https` address of 1 to 256 bytes, the scheme in either case, with no space or control character. The Library links to it. | `homepage: "https://example.org/example-mod"` |
 | `tags` | One to eight tags the Library files the mod under. Each is 1 to 32 bytes of lower-case words of `a`-`z` and `0`-`9` joined by single hyphens, and none is repeated. An empty list is refused: leave the key out instead. | `tags: [balance, ai]` |
 | `requires` | The base game, the registry catalogue and the Open Annihilation the profile runs on. `base` must be `ta-3.1c` and `catalogue` must be `1`. `engine` is a requirement such as `">= 0.8.0"`, quoted. | `requires: {base: ta-3.1c, catalogue: 1, engine: ">= 0.8.0"}` |
@@ -453,8 +453,8 @@ Game folders are never written to.
 ### 4.5 The badge
 
 A mod folder can hold a badge: a PNG image named `oamod.png`, matched
-without case, beside its `oamod.yaml`. The Mods page shows it, about 40
-pixels across, at the left of the mod's row.
+without case, beside its `oamod.yaml`. The Library shows it beside the
+mod's name.
 
 - Make it square, 64 by 64 pixels. A badge larger than that is scaled down
   to fit within 64 by 64 as it is read, keeping its proportions.
@@ -523,7 +523,7 @@ revisions 1, 2 and 3 leave 3 in the folder and 2 in `.backup`. A reinstall
 leaves `.backup` as it is. Rolling back swaps the folder's version and the
 one in `.backup`, so it can be undone, one version deep. `.backup` is
 invisible to the game: never layered over the game folder, never searched
-for archives, never listed on the Mods page.
+for archives, never listed in the Library.
 
 **How it is put in place.** The files are unpacked into a staging folder
 inside `Mods`, a little at a time, each made anew and synced to storage,
@@ -1159,8 +1159,8 @@ limits) and [src/app](../../src/app/README.md#mod-profile-and-mod-folders)
 7. **Display rules.** The visual hacks change only what this machine draws
    and plays and how its input works, never what another machine is told.
 8. **The front end** shows the profile's display version on the main menu
-   and its name, version, description and badge on the Mods page of the
-   settings, keeps the game's settings under its registry root, seeds its registry
+   and its name, version and badge in the Library, keeps the game's
+   settings under its registry root, seeds its registry
    values on a first run, and keeps its saves in `Saves/<id>`
    ([4.4](#44-saves-and-settings)).
 

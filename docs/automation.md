@@ -194,12 +194,13 @@ centre would land on the line between Off and On.
 | A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
 | Your files' buttons | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
 | Language's MORE IN THE LIBRARY… (main menu only) | `oa.settings.more-in-library` | button |
-| A mod's row and its ROLL BACK | `oa.settings.mod.<mod>.switch`, `oa.settings.mod.<mod>.roll-back`; OPEN MODS FOLDER `oa.settings.open-mods-folder` | check box, checked on the mod played; button |
 | Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.kit-gallery.show` (SHOW, which opens the UI kit gallery), `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
 | Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
 | The footer | `oa.settings.restore-defaults`, `oa.settings.cancel`, `oa.settings.ok` | button |
-| The Switch Mod question | `oa.settings.question.yes`, `oa.settings.question.no` | button |
 | The section's scroll bar | `oa.settings.scroll-bar` | slider |
+| The Library's PLAY NOW and SWITCH OFF, on an installed mod not played and on the mod played | `oa.library.action.play-now`, `oa.library.action.switch-off` | button, disabled during a game and while the command line chose the mod |
+| SWITCH OFF's Switch Mod question, and PLAY NOW's note when a folder cannot be played | `oa.prompt.cancel`, `oa.prompt.switch`; `oa.prompt.ok`; `oa.prompt.body` | button; label |
+| The Library's CHECK NOW, in its footer | `oa.library.check-now` | button, disabled while no registry can be asked or one is being asked |
 | A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
 | A prompt's buttons | `oa.<word>.<id>`, or `oa.<word>.button-<n>` from 1 where a button has no id | button |
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
@@ -207,14 +208,13 @@ centre would land on the line between Off and On.
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `mod-keys`),
 `<row>` the setting's (`wheel-zoom`, `hud-scaling`), `<value>` the stored
-word (`whole-map`, `whole-steps`, `1-32`). `<mod>` is the mod's profile id,
-`no-mod` for No Mod, a folder without a profile taking its folder's name in
-that form, a second row of the same word `-2` and a third `-3`. `<hack>`
+word (`whole-map`, `whole-steps`, `1-32`). `<hack>`
 is the standard hack's id with its dots kept. `<word>` is a notice's or a
 prompt's own word: `notice` and `prompt` unless the code that raises it
 gives one, as the missing-language question does (`language-notice`). The
 installs' prompts' ids are their answers: `cancel`, `ok`, `replace`,
-`alongside`, `reinstall`, `open-folder`, `play-now`.
+`alongside`, `reinstall`, `open-folder`, `play-now`; the Library's mod
+questions' `cancel`, `switch`, `roll-back` and `ok`.
 
 **The kinds.** Each kit control maps to one kind: a button, a link and a
 row of buttons' button are `button`; a switch, a strip and a row of
