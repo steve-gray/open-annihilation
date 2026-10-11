@@ -36,6 +36,8 @@
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
+#include "oa/ui/library/library.hpp"
+#include "oa/ui/library/update_question.hpp"
 #include "oa/ui/touch_hud.hpp"
 
 #include <SDL3/SDL.h>
@@ -44,7 +46,9 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
@@ -196,6 +200,144 @@ void tell_install_switches(
         return content::CheckForUpdates::never;
     }
     return content::CheckForUpdates::automatically;
+}
+
+namespace library = oa::ui::library;
+
+/// What comes between a registry's id and a package's key in
+/// ModDetails::update_entry, which the host gives a row and reads back.
+constexpr char kUpdateEntryJoin = '\n';
+
+/// Returns one of the Library's words in the language shown, as the Library
+/// itself looks them up.
+///
+/// @param english the word, in English as the Library's text.hpp writes it
+/// @return its translation, or the English
+std::string_view library_word(void* /*context*/, std::string_view english) {
+    return oa::data::languages::interface_text(english);
+}
+
+/// Returns a folder's path as Mods keeps it: absolute, normal, in UTF-8.
+///
+/// @param folder the folder
+/// @return its path
+std::string mods_path_of(const fs::path& folder) {
+    std::error_code error;
+    const fs::path absolute = fs::absolute(folder, error);
+    return path_to_utf8((error ? folder : absolute).lexically_normal());
+}
+
+/// Returns the seconds since 1970 by the system's clock.
+///
+/// @return the seconds
+int64_t seconds_since_1970() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch()
+    )
+        .count();
+}
+
+/// What Mods shows of one folder's update.
+struct ModUpdate {
+    std::string text{};     ///< ModDetails::update_text
+    bool offered{};         ///< ModDetails::update_offered
+    bool enabled{};         ///< ModDetails::update_enabled
+    std::string blocked{};  ///< ModDetails::update_blocked
+    std::string progress{}; ///< ModDetails::update_progress
+    std::string entry{};    ///< ModDetails::update_entry
+
+    friend bool operator==(const ModUpdate&, const ModUpdate&) = default;
+};
+
+/// Returns what Mods shows of an installed package's update: the line on
+/// it, where the queue holds it, whether UPDATE can be pressed and why not,
+/// and the entry it names.
+///
+/// @param entry the Library's entry of the package; null for none
+/// @param text how the Library's words are looked up
+/// @return the update; offered unset without one
+ModUpdate update_of(const library::Entry* entry, const library::TextHooks& text) {
+    ModUpdate shown;
+    if (entry == nullptr || entry->update == nullptr || entry->installed == nullptr)
+        return shown;
+    shown.offered = true;
+    shown.text = library::update_line(*entry->installed, *entry->update, text);
+    if (entry->queued != nullptr)
+        shown.progress = library::update_progress(*entry->queued, text);
+    shown.enabled = entry->can_act && shown.progress.empty();
+    shown.blocked = entry->blocked;
+    shown.entry = entry->id.registry + kUpdateEntryJoin + entry->id.key;
+    return shown;
+}
+
+/// Returns what Mods shows of a folder's update now.
+///
+/// @param details what Mods shows of the folder
+/// @return its update
+ModUpdate update_in(const settings::ModDetails& details) {
+    return {
+        details.update_text,
+        details.update_offered,
+        details.update_enabled,
+        details.update_blocked,
+        details.update_progress,
+        details.update_entry,
+    };
+}
+
+/// Gives a folder's details its update.
+///
+/// @param[in,out] details what Mods shows of the folder
+/// @param shown its update
+void give_update(settings::ModDetails& details, ModUpdate shown) {
+    details.update_text = std::move(shown.text);
+    details.update_offered = shown.offered;
+    details.update_enabled = shown.enabled;
+    details.update_blocked = std::move(shown.blocked);
+    details.update_progress = std::move(shown.progress);
+    details.update_entry = std::move(shown.entry);
+}
+
+/// Returns the Library's entry a row's update names (ModDetails::update_entry).
+///
+/// @param named the row's update_entry
+/// @return the entry's id; nothing when it names none
+std::optional<library::EntryId> update_entry_of(std::string_view named) {
+    const std::size_t join = named.find(kUpdateEntryJoin);
+    if (join == std::string_view::npos || join == 0 || join + 1 >= named.size())
+        return std::nullopt;
+    return library::EntryId{
+        std::string(named.substr(0, join)), library::Kind::mod, std::string(named.substr(join + 1))
+    };
+}
+
+/// Returns where the check for updates stands, from the content service's
+/// snapshot: a registry is on that can be checked, a check runs, the last
+/// reached none of them, and how old the newest list is.
+///
+/// @param snapshot the content service's snapshot; null for none
+/// @param now the seconds since 1970
+/// @return where it stands
+library::UpdateCheck update_check_of(const content::Snapshot* snapshot, int64_t now) {
+    library::UpdateCheck check;
+    if (snapshot == nullptr)
+        return check;
+    bool reached = false;
+    std::optional<int64_t> newest;
+    for (const content::RegistryView& view : snapshot->registries) {
+        if (!view.registry.enabled || view.registry.conflicting ||
+            view.status == content::RegistryStatus::needs_developer_mode)
+            continue;
+        check.registries_on = true;
+        check.checking = check.checking || view.refreshing;
+        reached = reached || view.status != content::RegistryStatus::failed;
+        if (view.checked && (!newest || *view.checked > *newest))
+            newest = view.checked;
+    }
+    check.failed = check.registries_on && !reached;
+    if (newest)
+        check.age_seconds = std::max(now - *newest, int64_t{0});
+    return check;
 }
 
 } // namespace
@@ -685,6 +827,60 @@ void Runtime::list_offered_mods() {
         state.mod_names.push_back(std::move(summary.title));
         state.mod_details.push_back(std::move(details));
     }
+    give_mod_updates(state.mod_folders, state.mod_details);
+}
+
+void Runtime::give_mod_updates(
+    const std::vector<std::string>& folders, std::vector<settings::ModDetails>& details
+) {
+    // The Library's model, as its worker last found the updates; the folders
+    // are matched to its installed packages by their paths.
+    std::map<std::string, const library::Entry*> by_folder;
+    const library::TextHooks text{nullptr, library_word};
+    if (library_)
+        for (const library::Entry& entry : library_->model.entries)
+            if (entry.id.kind == library::Kind::mod && entry.installed != nullptr) {
+                const auto [kept, added] =
+                    by_folder.emplace(mods_path_of(entry.installed->folder), &entry);
+                if (!added && kept->second->update == nullptr)
+                    kept->second = &entry;
+            }
+    for (std::size_t index = 0; index < details.size(); ++index) {
+        const library::Entry* entry = nullptr;
+        if (index < folders.size())
+            if (const auto found = by_folder.find(folders[index]); found != by_folder.end())
+                entry = found->second;
+        give_update(details[index], update_of(entry, text));
+    }
+}
+
+bool Runtime::refresh_settings_mods(settings::Dialog& dialog) {
+    if (dialog.kind != settings::DialogKind::engine)
+        return false;
+    // Each row's update, compared with what the page shows.
+    std::vector<ModUpdate> before;
+    before.reserve(dialog.mod_details.size());
+    for (const settings::ModDetails& details : dialog.mod_details)
+        before.push_back(update_in(details));
+    give_mod_updates(dialog.mod_folders, dialog.mod_details);
+    bool changed = false;
+    for (std::size_t index = 0; index < before.size() && !changed; ++index)
+        changed = !(before[index] == update_in(dialog.mod_details[index]));
+    // The line on the check for updates, from the registries in effect.
+    const std::shared_ptr<const content::Snapshot> snapshot = content_service().snapshot();
+    const library::UpdateCheckLine line = library::update_check_line(
+        update_check_of(snapshot.get(), seconds_since_1970()), {nullptr, library_word}
+    );
+    const bool library_offered = screen_ == Screen::main_menu;
+    if (dialog.mods_check_text != line.text || dialog.mods_check_warning != line.warning ||
+        dialog.mods_check_offered != line.check_now ||
+        dialog.mods_library_offered != library_offered)
+        changed = true;
+    dialog.mods_check_text = line.text;
+    dialog.mods_check_warning = line.warning;
+    dialog.mods_check_offered = line.check_now;
+    dialog.mods_library_offered = library_offered;
+    return changed;
 }
 
 void Runtime::request_soft_restart() {
@@ -1244,6 +1440,9 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     // On the main menu Language links to the Library, which opens over the
     // dialog; never in a match.
     dialog.library_link = screen_ == Screen::main_menu;
+    // Mods' rows' updates, the line on the check for updates and GET MORE
+    // MODS…, which the settings screen keeps up to date while it shows.
+    std::ignore = refresh_settings_mods(dialog);
     // Developer Mode opens as it was left: its open areas and hacks and its filter.
     if (state.last_developer_list) {
         dialog.developer.areas_open = state.last_developer_list->areas_open;
@@ -1519,10 +1718,31 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         open_add_mirror(dialog->mirror_request);
         return false;
     case settings::DialogAction::open_library:
-        // MORE IN THE LIBRARY…: the Library opens over the dialog, which
-        // stays open under it; where the Library is under the dialog
-        // already, the dialog closes back to it.
+        // MORE IN THE LIBRARY… or Mods' GET MORE MODS…: the Library opens
+        // over the dialog, which stays open under it; where the Library is
+        // under the dialog already, the dialog closes back to it.
         open_library(library_tab_of(dialog->library_tab));
+        return false;
+    case settings::DialogAction::update_mod: {
+        // UPDATE on a row of Mods starts its update through request_update,
+        // which asks the update question over the dialog first where an
+        // update asks, and otherwise starts it at once. The dialog stays open.
+        for (std::size_t index = 0;
+             index < dialog->mod_folders.size() && index < dialog->mod_details.size();
+             ++index) {
+            if (dialog->mod_folders[index] != dialog->update_folder)
+                continue;
+            if (const std::optional<library::EntryId> entry =
+                    update_entry_of(dialog->mod_details[index].update_entry))
+                std::ignore = request_update(*entry);
+            break;
+        }
+        return false;
+    }
+    case settings::DialogAction::check_for_updates:
+        // CHECK NOW: the registries are asked for their lists again; the
+        // line under the list says so while it runs.
+        content_service().refresh(content::RefreshReason::check_now);
         return false;
     case settings::DialogAction::download_language: {
         // The dialog stays open. The language applies when the pack arrives.

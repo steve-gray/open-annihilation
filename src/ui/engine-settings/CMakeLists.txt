@@ -62,6 +62,17 @@ if(BUILD_TESTING)
   target_include_directories(oa-ui-engine-settings-dialog-test PRIVATE src)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)
 
+  # Mods with its registries' updates: rows with and without one, their
+  # lines whole beside UPDATE and ROLL BACK, a blocked and a queued update,
+  # the line on the check for updates, UPDATE, CHECK NOW and GET MORE MODS…,
+  # what a game hides, the focus, every class, and today's parts kept.
+  add_executable(oa-ui-engine-settings-mods-updates-test tests/mods_updates_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-mods-updates-test PRIVATE oa-ui-engine-settings
+    oa-options)
+  target_include_directories(oa-ui-engine-settings-mods-updates-test PRIVATE src)
+  add_test(NAME ui-engine-settings-mods-updates COMMAND oa-ui-engine-settings-mods-updates-test)
+  set_tests_properties(ui-engine-settings-mods-updates PROPERTIES TIMEOUT 60)
+
   # Downloads: the section list, the check, install IDs and the downloaded files.
   add_executable(oa-ui-engine-settings-downloads-test tests/downloads_page_test.cpp)
   target_link_libraries(oa-ui-engine-settings-downloads-test PRIVATE oa-ui-engine-settings
