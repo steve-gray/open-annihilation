@@ -273,7 +273,7 @@ latched the closing key and drew a backdrop.
   `oa::data::registry::max_descriptor_bytes`; a larger or unreadable file
   is refused) through the platform's `take_opened_file` where it has one,
   and opens the window filled in from it. A run nobody watches leaves the
-  files waiting. CHECK reads
+  files waiting, unless `--check-registries` asks for them. CHECK reads
   the typed address with `parse_http_url` first: an https address, and any
   other the reader refuses, is refused there with its sentence, and the
   content service is never asked. Otherwise the window asks the content
@@ -297,7 +297,11 @@ latched the closing key and drew a backdrop.
   keyboard the player put away shows again. Ctrl+V, or Cmd+V on macOS,
   gives a focused field of any of the layer's screens the clipboard's text
   up to its first line break (`layer_paste`), which the window takes up to
-  its 2,048-byte limit.
+  its 2,048-byte limit. `native-registries` (`--check-registries`) writes
+  its own registry list under `--user-folder` before the content service
+  starts, switches its added registry off at OK and on at Cancel, removes
+  it at OK, refuses an https address without a check, and opens an
+  `.oareg` file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale and lays them out at the size class of the points left
   over (`LayerView`, from `view`, worked out afresh whenever the window's

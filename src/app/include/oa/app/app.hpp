@@ -588,6 +588,11 @@ struct Options {
     // Shows a made-up download check over the main menu, opens its page,
     // retries it and cancels it, and keeps it hidden during a skirmish.
     bool check_challenge = false;
+    // Lists, switches and removes an added registry in Settings › Downloads,
+    // refuses an https address without asking the content service, and opens
+    // an .oareg file the run posts. It writes its own registry list under
+    // --user-folder before the content service starts.
+    bool check_registries = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

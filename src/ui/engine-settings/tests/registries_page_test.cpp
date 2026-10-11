@@ -147,7 +147,8 @@ bool layout_has(const settings::Dialog& dialog, std::string_view text) {
 /// @param text the text
 /// @return true when an item shows it
 bool list_has(const settings::Dialog& dialog, std::string_view text) {
-    for (const kit::Item& item : geometry::dialog_list(dialog, nullptr).items)
+    const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    for (const kit::Item& item : list.items)
         if (item.text == text)
             return true;
     return false;
@@ -177,7 +178,8 @@ const kit::Control* named(const kit::DisplayList& list, std::string_view name) {
 /// @param name the name
 /// @return true when it does
 bool has_control(const settings::Dialog& dialog, std::string_view name) {
-    return named(geometry::dialog_list(dialog, nullptr), name) != nullptr;
+    const kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+    return named(list, name) != nullptr;
 }
 
 /// Returns a rectangle's middle.
@@ -351,7 +353,8 @@ void rows_show_each_state() {
     told.notice = "OA could not change the registries: the list could not be read.";
     const settings::Dialog notice = part(told);
     bool amber = false;
-    for (const kit::Item& item : geometry::dialog_list(notice, nullptr).items)
+    const kit::DisplayList notice_list = geometry::dialog_list(notice, nullptr);
+    for (const kit::Item& item : notice_list.items)
         amber = amber || (item.text.rfind("OA could not change", 0) == 0 &&
                           item.colour == kit::colour::lock);
     OA_CHECK(amber);

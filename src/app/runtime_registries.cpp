@@ -680,7 +680,7 @@ void Runtime::take_registry_files() {
         state_.pending_signal == frontend_state::signal_id::multiplayer || saves_notice_shown() ||
         oa::ui::frontend_dialogs::dialog_count() != 0 || oa_layer().modal_shown(false))
         return;
-    if (UserFolderState::unwatched(options_.unattended))
+    if (UserFolderState::unwatched(options_.unattended) && !options_.check_registries)
         return;
     const std::optional<std::filesystem::path> taken = install::take_registry_file();
     if (!taken)
@@ -731,6 +731,10 @@ void Runtime::take_registry_files() {
     AddRegistryScreen& shown = *screen;
     oa_layer().push(std::move(screen));
     shown.check_file(std::move(bytes), why);
+}
+
+uint64_t Runtime::registry_checks_asked() const noexcept {
+    return hold.checks_asked;
 }
 
 void Runtime::give_settings_registries(settings::Dialog& dialog, bool opening) {

@@ -217,7 +217,11 @@ Runtime::Runtime(
     // The settings the profile's display rules let the player change.
     load_view_settings();
     // The registries and their catalogues, after the player's folder and
-    // Developer mode are known.
+    // Developer mode are known. The registries check writes its own list
+    // first.
+    if constexpr (self_checks_built)
+        if (options_.check_registries)
+            prepare_registries_check();
     start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
     // system's fonts when the profile's text rendering asks for it.
@@ -406,6 +410,11 @@ int Runtime::run() {
         }
         if (options_.check_challenge) {
             check_challenge();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_registries) {
+            check_registries();
             flush_preferences();
             return 0;
         }

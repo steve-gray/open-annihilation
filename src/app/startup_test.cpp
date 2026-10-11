@@ -385,6 +385,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-mod-install", &Options::check_mod_install, {}},
         {"--check-language-install", &Options::check_language_install, {}},
         {"--check-challenge", &Options::check_challenge, {}},
+        {"--check-registries", &Options::check_registries, {}},
         {"--check-renderer-ladder", &Options::check_renderer_ladder, {}},
         {"--check-briefing-narration", &Options::check_briefing_narration, {}},
         {"--check-match-layers", &Options::check_match_layers, {}},
