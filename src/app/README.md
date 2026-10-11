@@ -2976,9 +2976,11 @@ unit file extension, the map units section, the build version unit files are
 checked against (the profile's network version) and the two side names. The
 runtime then:
 
-- shows the profile's display version on the main menu, when it names one,
-  even where its game data holds no `version.tdf` (without one the base
-  game's label is hidden);
+- shows the profile's display version on the main menu, when it names one
+  other than 3.1c's, even where its game data holds no `version.tdf`.
+  Without one the label reads "Open Annihilation" and this build's version
+  where the game data names its revision, and stays hidden where it does
+  not;
 - keeps the game's settings under the profile's registry root, as
   `registry:<root>\<section>|<name>` keys, unless the root is the base
   game's; a first run seeds the profile's registry seeds where no value of
