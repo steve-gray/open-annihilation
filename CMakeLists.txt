@@ -1102,6 +1102,14 @@ if(OA_BUILD_PLATFORM)
   # open-annihilation.app, and the files that travel with it go in the
   # folder its OA_GAME_FILES_DIR property names (cmake/OaGameBundle.cmake).
   set_target_properties(oa-game PROPERTIES OUTPUT_NAME open-annihilation)
+  # Visual Studio cannot write the game's program database in the optimised
+  # Check build (LNK1140, limit exceeded for program database, even with
+  # 8 KiB pages), so that build of the game links with no debug information.
+  # Debug keeps its database. The regression suite's TODO.md tracks finding
+  # the limit.
+  if(MSVC)
+    target_link_options(oa-game PRIVATE "$<$<CONFIG:Check>:/DEBUG:NONE>")
+  endif()
   include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaGameBundle.cmake")
   oa_game_bundle(oa-game)
   if(WIN32)
