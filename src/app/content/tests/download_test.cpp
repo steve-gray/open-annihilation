@@ -722,6 +722,8 @@ void test_tokens_outcome(content::InstallOutcome outcome, std::string_view word,
             std::string::npos
         );
     }
+    // The worker marks the download done, then posts its result: wait for the post.
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
     OA_CHECK(count_results(session.server) == 1);
 }
 
@@ -853,6 +855,8 @@ void test_package_rekey() {
         second ==
         expected_key(session, std::string(kInstallIdNext), content::DownloadReason::update)
     );
+    // The worker marks the download done, then posts its result: wait for the post.
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
     OA_CHECK(count_results(session.server) == 1);
 }
 
