@@ -30,9 +30,13 @@ which its Info.plist names; `open-annihilation.ico`, which
 version information that names it Open Annihilation; and
 `open-annihilation-256.png`, which the build embeds (`window_icon.hpp`) and
 start-up gives the window with `SDL_SetWindowIcon`; a failure there is
-reported, and the game starts without it. The branding is not under the
-project's licence (`COPYRIGHT`). `branding-icons` checks the icons' sizes,
-and `app-window-icon` that the embedded one decodes.
+reported, and the game starts without it. The settings icon,
+`open-annihilation-settings-icon.png`, is embedded the same way at 256
+pixels (`open-annihilation-settings-256.png`, made from it with
+`sips -z 256 256`; `settings_icon_png`) for the buttons that open Settings.
+The branding is not under the project's licence (`COPYRIGHT`).
+`branding-icons` checks the icons' sizes, and `app-window-icon` that the
+embedded ones decode.
 
 Start-up makes the window's renderer by walking SDL's render drivers one
 at a time, in SDL's own order (`render_host.hpp`): the first that starts is
@@ -480,7 +484,8 @@ latched the closing key and drew a backdrop.
 - **Automation** lists what the layer shows (`automation_controls`), as
   [docs/automation.md](../../docs/automation.md#oas-own-screens) describes:
   `oa.button` (on the main menu its text says how many updates wait in the
-  Library), then the screens from the top down to the first modal one,
+  Library) and, on the main menu, `oa.settings-button`, then the screens
+  from the top down to the first modal one,
   each control and part named `oa.` and its kit name, with its exact
   rectangle in the window's pixels and that rectangle mapped back onto the
   canvas.
@@ -496,16 +501,17 @@ the host's (`Runtime::LibraryHost`, made on first use, joined as the
 runtime goes).
 
 - **How it opens.** The main menu's OA button opens it
-  (`Runtime::open_library`) when a press is released over it, on Updates
-  while updates wait and on Mods otherwise, with the button's sound;
+  (`Runtime::open_library`) when a press is released over it, on Active,
+  with the button's sound;
   Settings › Language's MORE IN THE LIBRARY… opens it on Languages over
   Settings (`DialogAction::open_library`). It opens only where the
   settings do: on the main menu, never over a message box, a frame a
   package owns or the saves notice. The layer never holds two Libraries or
   two Settings: opening one already on the stack goes back to it
   (`OaLayer::return_to`), so Library › SETTINGS… › MORE IN THE LIBRARY…
-  returns to the first Library. Cmd+, (Ctrl+, elsewhere), the macOS
-  menu's Settings… and the in-game OA button still open Settings.
+  returns to the first Library. The main menu's Settings button beside
+  the OA button, Cmd+, (Ctrl+, elsewhere), the macOS menu's Settings… and
+  the in-game OA button open Settings.
   `close_library` closes it and what stands over it. Each opening asks the
   content service for a refresh (`RefreshReason::library_opened`), which
   the player's setting and the once-a-minute limit govern; an unattended
@@ -517,7 +523,10 @@ runtime goes).
   off, and each catalogue entry), the installed packages and updates the
   worker last found, the download queue (each item's state as the Library
   names it; a cancelled one left out) and the run (this build's version,
-  the mod played, a match). GET goes to `queue_download`, UPDATE to
+  the mod played, a match), and for the Active tab what the run already
+  holds: the mod played as Settings › Mods lists it, the language shown and
+  the first loaded pack that holds it, and the installed map packs' maps
+  (`MapPacks`). GET goes to `queue_download`, UPDATE to
   `request_update` (below), CANCEL and RETRY to the queue's latest item of
   that package, and `library_registry_built_in` answers from the same
   snapshot as the inputs' `Registry::built_in`. An update queued from the
@@ -576,8 +585,9 @@ runtime goes).
   `runtime_library_check.cpp`) gives the Library a feed of made-up
   packages and no network, with its data and the player's folder in the
   build tree, at 640x480 and 1920x1080: the button drawn as before with no
-  update, the Library opened on Mods and closed, the dot and
-  `oa.button`'s "Library · 2 updates" with two, the Library on Updates,
+  update, the Library opened on Active, its lines read and taking no
+  press, and closed, the dot and `oa.button`'s "Library · 2 updates" with
+  two, the Library on Active and its Updates tab on its two updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
   recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft
   restart, Settings over the Library and the Library over Settings, never
@@ -2023,21 +2033,26 @@ hosts them on the OA layer.
   screen of the OA layer ([The OA layer](#the-oa-layer)),
   `Runtime::SettingsScreen` in `oa_layer.cpp`, on the main menu and in a
   match. `engine_settings_menu_host.hpp` and
-  `runtime_engine_settings_menu.cpp` hold the main menu's OA button, an
-  overlay at the picture's bottom-right corner (its top-right corner while
-  an extension's overlay stands over the main menu) under the extensions'
-  overlays, drawn into the main menu's picture, which opens the Library
+  `runtime_engine_settings_menu.cpp` hold the main menu's OA button and
+  Settings button, an overlay at the picture's bottom-right corner (its
+  top-right corner while an extension's overlay stands over the main menu)
+  under the extensions' overlays, drawn into the main menu's picture: the
+  Settings button in the corner, showing the settings icon
+  (`EngineSettingsMenuHost::settings_icon`), and the OA button a quarter of
+  a button's side left of it, which opens the Library
   ([The Library](#the-library)) and wears a dot while updates wait there.
   The dialog is centred over the darkened menu and takes every input while
-  it shows. Cmd+, on macOS or Ctrl+, elsewhere, the macOS application
-  menu's Settings… item and the Library's SETTINGS… open it; nothing opens
+  it shows. The Settings button, Cmd+, on macOS or Ctrl+, elsewhere, the
+  macOS application menu's Settings… item and the Library's SETTINGS… open
+  it, the Settings button with no Library under it; nothing opens
   over a message box or a frame a package owns. Enter is OK and Escape is Cancel;
   the key that closed the dialog does nothing more until it is released, so
   that a held key never reaches the main menu, where Escape itself does
   nothing. Another screen replacing the main menu closes the dialog as
   Cancel does. `runtime_engine_settings_match.cpp` opens it beside the
-  in-game menu's column, whose OA button, with the shortcut and Ctrl+F2 for
-  the mod options, the layer draws and drives; the column going closes the
+  in-game menu's column, whose OA button, which shows the settings icon,
+  with the shortcut and Ctrl+F2 for the mod options, the layer draws and
+  drives; the column going closes the
   dialog as OK does. `runtime_engine_settings_app_menu.cpp` is the
   application menu's item.
   `acceleration_status.hpp` and `acceleration_status.cpp`
@@ -2070,7 +2085,8 @@ hosts them on the OA layer.
   menu's part and the dialog's in a 640x480 window, where the dialog is
   Compact at 1×:
   `runtime_engine_settings_check.cpp` holds the main menu's part, with each
-  look of the button and the darkened menu under the dialog compared pixel
+  look of the OA button and the Settings button (which opens Settings with
+  no Library under it) and the darkened menu under the dialog compared pixel
   for pixel with what they should draw, the 640x480 window compared with
   that picture, the OA layer passing on what its screens do not take
   (screens of the check's own that are not modal, a text field's text and
@@ -2091,8 +2107,9 @@ hosts them on the OA layer.
   effect at once, Vertical sync read back from the renderer, Font shadow
   read back from the text style, OK, Cancel, Restore defaults and the keys
   they save) and the main menu with the
-  button as 640x480, 1024x768, 1280x720, 1920x1080 and 2560x1080 windows
-  show it, and in each the dialog at the size class and scale the window
+  buttons as 640x480, 1024x768, 1280x720, 1920x1080 and 2560x1080 windows
+  show it, each button opening its screen, and in each the dialog at the
+  size class and scale the window
   gives it (Compact 1×, Regular 1×, Large 1×, Regular 2×, Regular 2×),
   clicked where the window shows it and compared, every window pixel but
   the cursor's square, with the menu's frame darkened and the dialog drawn
@@ -2959,9 +2976,11 @@ unit file extension, the map units section, the build version unit files are
 checked against (the profile's network version) and the two side names. The
 runtime then:
 
-- shows the profile's display version on the main menu, when it names one,
-  even where its game data holds no `version.tdf` (without one the base
-  game's label is hidden);
+- shows the profile's display version on the main menu, when it names one
+  other than 3.1c's, even where its game data holds no `version.tdf`.
+  Without one the label reads "Open Annihilation" and this build's version
+  where the game data names its revision, and stays hidden where it does
+  not;
 - keeps the game's settings under the profile's registry root, as
   `registry:<root>\<section>|<name>` keys, unless the root is the base
   game's; a first run seeds the profile's registry seeds where no value of

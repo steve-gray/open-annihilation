@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// What library.cpp and search.cpp share: folding, the search's cap, and the
-// visible list in its order.
+// What library.cpp and search.cpp share: folding, the search's cap, what
+// each filter keeps, and the visible list in its order.
 #pragma once
 
 #include "oa/ui/library/library.hpp"
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::ui::library {
 
@@ -24,15 +25,22 @@ namespace oa::ui::library {
 /// @return the search, whole when it fits
 [[nodiscard]] std::string_view capped_query(std::string_view query);
 
-/// Tells whether an entry shows on the library's tab, under its filter and tag.
+/// Tells, for each entry, whether a filter keeps it on the tab shown,
+/// before the tag and the search.
+///
+/// @param library the Library
+/// @param filter the filter
+/// @return one flag per entry, in the entries' order
+[[nodiscard]] std::vector<bool> kept_by_filter(const Library& library, Filter filter);
+
+/// Tells whether an entry has the tag shown.
 ///
 /// @param library the Library
 /// @param entry one of its entries
-/// @param use_tag also keep only the entries with the library's tag
-/// @return true when it shows
-[[nodiscard]] bool shown_in_tab(const Library& library, const Entry& entry, bool use_tag);
+/// @return true when its listing has the tag, and for every entry while no tag is shown
+[[nodiscard]] bool has_shown_tag(const Library& library, const Entry& entry);
 
-/// Recomputes the visible entries and their order from the tab, filter, tag and search.
+/// Recomputes the visible entries and their order from the tab, its filter, the tag and search.
 ///
 /// @param[in,out] library the Library; only `visible` changes
 void update_visible(Library& library);

@@ -247,6 +247,9 @@ struct InstalledPackage {
     /// The folder's origin record; nothing when it has none. A missing
     /// record is not an error.
     std::optional<Origin> origin{};
+    /// The manifest's author.name, as written; empty when it has none or the
+    /// kind's manifest names no author.
+    std::string author{};
 };
 
 /// Tells whether two reads of a folder found the same: kind, id, version

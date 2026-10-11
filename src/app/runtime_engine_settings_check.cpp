@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// --check-engine-settings: the OA button and the settings dialog on the main
-// menu and in a match, through the SDL presenter, and each setting taking
-// effect.
+// --check-engine-settings: the OA button, the Settings button and the
+// settings dialog on the main menu, the OA button and the dialog in a match,
+// through the SDL presenter, and each setting taking effect.
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
@@ -479,8 +479,14 @@ void Runtime::check_engine_settings_under_overlay() {
     );
     const auto top = EngineSettingsMenuHost::button_rect(*this);
     require(
-        top.x == 596 && top.y == 12 && top.width == settings::menu_button_side,
-        "under an extension's overlay the OA button is not at 596,12"
+        top.x == 556 && top.y == 12 && top.width == settings::menu_button_side,
+        "under an extension's overlay the OA button is not at 556,12"
+    );
+    const auto settings_top = EngineSettingsMenuHost::settings_button_rect(*this);
+    require(
+        settings_top.x == 596 && settings_top.y == 12 &&
+            settings_top.width == settings::menu_button_side,
+        "under an extension's overlay the Settings button is not at 596,12"
     );
     // A click on the button reaches it through the extensions' overlays, and
     // Escape closes the Library it opens, which stands over them.
@@ -507,7 +513,8 @@ void Runtime::check_engine_settings_under_overlay() {
     send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
     fake_frontend_tick_ = previous_tick;
     std::cout << "engine settings check: under an extension's overlay the OA button at " << top.x
-              << ',' << top.y << " opens the Library\n";
+              << ',' << top.y << " opens the Library, beside the Settings button at "
+              << settings_top.x << ',' << settings_top.y << '\n';
 }
 
 void Runtime::check_engine_settings_in_menu() {
@@ -521,6 +528,8 @@ void Runtime::check_engine_settings_in_menu() {
     require(fonts != nullptr, "the dialog's fonts did not load");
     const auto icon = engine_settings_icon();
     require(artless::picture_drawable(icon), "the OA button and the dialog have no icon to show");
+    const auto gears = EngineSettingsMenuHost::settings_icon(*this);
+    require(artless::picture_drawable(gears), "the Settings button has no icon to show");
     require(!main_menu_overlay_, "an extension's overlay stands over the main menu");
 
     const auto point = [this](SDL_EventType type, oa::ui::display_layout::Point at) {
@@ -564,25 +573,42 @@ void Runtime::check_engine_settings_in_menu() {
             write_ppm(step_snapshot(options_.snapshot, step), frame);
     };
 
-    // The OA button in the picture's bottom-right corner, and in its
+    // The OA button and, a quarter of a button's side to its right, the
+    // Settings button in the picture's bottom-right corner, and in its
     // top-right corner while an extension's overlay stands over the main
     // menu. Each frame is drawn from the same sparks, so that frames differ
-    // only where the button differs; the frame with the button at the top
+    // only where the buttons differ; the frame with the buttons at the top
     // shows the bare menu at the bottom.
     point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
     const auto bottom = EngineSettingsMenuHost::button_rect(*this);
     require(
-        bottom.x == 596 && bottom.y == 436 && bottom.width == settings::menu_button_side &&
+        bottom.x == 556 && bottom.y == 436 && bottom.width == settings::menu_button_side &&
             bottom.height == settings::menu_button_side,
-        "the OA button is not the 32-pixel square at 596,436"
+        "the OA button is not the 32-pixel square at 556,436"
+    );
+    const auto settings_bottom = EngineSettingsMenuHost::settings_button_rect(*this);
+    require(
+        settings_bottom.x == 596 && settings_bottom.y == 436 &&
+            settings_bottom.width == settings::menu_button_side &&
+            settings_bottom.height == settings::menu_button_side,
+        "the Settings button is not the 32-pixel square at 596,436"
     );
     main_menu_overlay_ = true;
     const auto top = EngineSettingsMenuHost::button_rect(*this);
+    const auto settings_top = EngineSettingsMenuHost::settings_button_rect(*this);
     main_menu_overlay_ = false;
     require(
-        top.x == 596 && top.y == 12 && top.width == settings::menu_button_side,
-        "under an extension's overlay the OA button is not at 596,12"
+        top.x == 556 && top.y == 12 && top.width == settings::menu_button_side &&
+            settings_top.x == 596 && settings_top.y == 12 &&
+            settings_top.width == settings::menu_button_side,
+        "under an extension's overlay the buttons are not at 556,12 and 596,12"
     );
+    // The rectangle that holds both buttons.
+    const auto pair = [](const artless::SourceRect& left, const artless::SourceRect& right) {
+        return artless::SourceRect{left.x, left.y, right.x + right.width - left.x, left.height};
+    };
+    const auto bottom_pair = pair(bottom, settings_bottom);
+    const auto top_pair = pair(top, settings_top);
     const auto sparks = menu_sparks_;
     const auto frame = [&] {
         menu_sparks_ = sparks;
@@ -591,14 +617,30 @@ void Runtime::check_engine_settings_in_menu() {
     main_menu_overlay_ = true;
     const auto button_at_top = frame();
     main_menu_overlay_ = false;
+    // The frame shows the two buttons at the bottom, in these looks.
+    const auto expect_buttons =
+        [&](settings::ButtonLook look, settings::ButtonLook settings_look, std::string_view what) {
+            auto expected = button_at_top;
+            settings::draw_oa_button(
+                expected, {bottom.x, bottom.y, 1}, bottom.width, look, *fonts, icon
+            );
+            settings::draw_oa_button(
+                expected,
+                {settings_bottom.x, settings_bottom.y, 1},
+                settings_bottom.width,
+                settings_look,
+                *fonts,
+                gears
+            );
+            require(differing_pixels(frame(), expected, top_pair) == 0, what);
+        };
     const auto expect_button = [&](settings::ButtonLook look, std::string_view what) {
-        auto expected = button_at_top;
-        settings::draw_oa_button(
-            expected, {bottom.x, bottom.y, 1}, bottom.width, look, *fonts, icon
-        );
-        require(differing_pixels(frame(), expected, top) == 0, what);
+        expect_buttons(look, settings::ButtonLook::idle, what);
     };
-    expect_button(settings::ButtonLook::idle, "the OA button is not drawn at rest at 596,436");
+    expect_button(
+        settings::ButtonLook::idle,
+        "the OA button and the Settings button are not drawn at rest at 556,436 and 596,436"
+    );
     const auto idle = frame();
     snapshot("engine-settings-menu", idle);
     {
@@ -606,15 +648,24 @@ void Runtime::check_engine_settings_in_menu() {
         settings::draw_oa_button(
             expected, {top.x, top.y, 1}, top.width, settings::ButtonLook::idle, *fonts, icon
         );
+        settings::draw_oa_button(
+            expected,
+            {settings_top.x, settings_top.y, 1},
+            settings_top.width,
+            settings::ButtonLook::idle,
+            *fonts,
+            gears
+        );
         require(
-            differing_pixels(button_at_top, expected, bottom) == 0,
-            "under an extension's overlay the OA button is not drawn at 596,12"
+            differing_pixels(button_at_top, expected, bottom_pair) == 0,
+            "under an extension's overlay the buttons are not drawn at 556,12 and 596,12"
         );
     }
 
     // Hovered, held, and a press let go off the button.
     point(SDL_EVENT_MOUSE_MOTION, centre(bottom));
     require(host.button_hovered && !host.button_pressed, "the pointer over the OA button");
+    require(!host.settings_hovered, "the pointer over the OA button lights the Settings button");
     expect_button(settings::ButtonLook::hovered, "the OA button does not look hovered");
     point(SDL_EVENT_MOUSE_BUTTON_DOWN, centre(bottom));
     require(host.button_pressed, "a press on the OA button is not held");
@@ -625,6 +676,36 @@ void Runtime::check_engine_settings_in_menu() {
     require(
         engine_settings_dialog() == nullptr && !host.button_pressed,
         "a press let go off the OA button opened the dialog"
+    );
+    // The same for the Settings button.
+    point(SDL_EVENT_MOUSE_MOTION, centre(settings_bottom));
+    require(
+        host.settings_hovered && !host.settings_pressed && !host.button_hovered,
+        "the pointer over the Settings button"
+    );
+    expect_buttons(
+        settings::ButtonLook::idle,
+        settings::ButtonLook::hovered,
+        "the Settings button does not look hovered"
+    );
+    point(SDL_EVENT_MOUSE_BUTTON_DOWN, centre(settings_bottom));
+    require(
+        host.settings_pressed && !host.button_pressed, "a press on the Settings button is not held"
+    );
+    expect_buttons(
+        settings::ButtonLook::idle,
+        settings::ButtonLook::pressed,
+        "the Settings button does not look pressed"
+    );
+    point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+    expect_button(
+        settings::ButtonLook::idle, "the Settings button held off the pointer looks pressed"
+    );
+    point(SDL_EVENT_MOUSE_BUTTON_UP, kRestingPointer);
+    require(
+        engine_settings_dialog() == nullptr && oa_layer().find("library") == nullptr &&
+            !host.settings_pressed,
+        "a press let go off the Settings button opened a screen"
     );
 
     // A click opens the Library over the darkened main menu, not the
@@ -638,6 +719,21 @@ void Runtime::check_engine_settings_in_menu() {
     require(release(SDLK_ESCAPE) && press(SDLK_ESCAPE), "Escape in the Library ended the run");
     require(oa_layer().find("library") == nullptr, "Escape did not close the Library");
     require(release(SDLK_ESCAPE), "Escape's release ended the run");
+
+    // A click on the Settings button opens Settings over the darkened main
+    // menu, with no Library under it.
+    click(centre(settings_bottom));
+    require(
+        engine_settings_dialog() != nullptr && oa_layer().top() != nullptr &&
+            oa_layer().top()->name() == "settings" && oa_layer().find("library") == nullptr &&
+            screen_ == Screen::main_menu,
+        "a click on the Settings button did not open Settings alone"
+    );
+    require(press(SDLK_ESCAPE) && release(SDLK_ESCAPE), "Escape in the dialog ended the run");
+    require(
+        engine_settings_dialog() == nullptr && oa_layer().find("settings") == nullptr,
+        "Escape did not close Settings opened by the Settings button"
+    );
 
     // The darkened menu and the dialog, drawn from the same sparks as the
     // menu without it.
@@ -715,11 +811,12 @@ void Runtime::check_engine_settings_in_menu() {
     }
 
     // The dialog is modal: neither the main menu's buttons nor the OA button
-    // nor a second request reach under it.
+    // nor the Settings button nor a second request reach under it.
     const auto* exit = widget(menu::resource_name(menu::Button::exit));
     require(exit != nullptr, "the main menu has no Exit button");
     click({exit->common.x + exit->common.width / 2, exit->common.y + exit->common.height / 2});
     click(centre(bottom));
+    click(centre(settings_bottom));
     shortcut();
     request_engine_settings();
     require(
@@ -985,8 +1082,10 @@ void Runtime::check_engine_settings_in_menu() {
 
     fake_frontend_tick_ = previous_tick;
     std::cout << "engine settings check: the OA button at " << bottom.x << ',' << bottom.y << " ("
-              << top.x << ',' << top.y << " under an overlay), the dialog at " << placement.x << ','
-              << placement.y << " over the darkened main menu\n";
+              << top.x << ',' << top.y << " under an overlay), the Settings button at "
+              << settings_bottom.x << ',' << settings_bottom.y << " (" << settings_top.x << ','
+              << settings_top.y << "), the dialog at " << placement.x << ',' << placement.y
+              << " over the darkened main menu\n";
 }
 
 } // namespace oa::app

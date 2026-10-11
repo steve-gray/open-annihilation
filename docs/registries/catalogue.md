@@ -81,6 +81,7 @@ hex digest, a dot, and the kind. A registry SHOULD put the file at
 | `homepage` | no | 1 to 256 bytes, `http://` or `https://` in either case, at least one byte after the scheme, and no ASCII control, delete or space. |
 | `tags` | no | At most 16. Each is lower-case kebab-case of 1 to 32 bytes. |
 | `badge` | no | A reference ending `.png`. |
+| `published` | no | The day this release was published, `YYYY-MM-DD`: a real Gregorian day, 29 February included in a leap year, with nothing before or after it. Any kind may name it. |
 | `requires` | no | An object. `engine` is a range, below. `base` is any string and is copied as written. Other members are ignored. |
 | `sim_hash` | no | 64 hex digits, either case. |
 | `hacks` | no | `sim` and `view` are whole numbers from 0 to 2147483647. `ids` is at most 256 hack ids, each 1 to 64 bytes of `a-z`, `0-9`, `.` and `-`. Other members are ignored. |
@@ -91,6 +92,13 @@ commas that spaces may surround. Each comparison is `>=`, `>`, `<=`, `<` or
 with no leading zero; a lone `0` is a part. In YAML a value that starts
 with `>` is a block scalar unless it is quoted. In the catalogue, which is
 JSON, quote it as a string anyway.
+
+`published` is the day the publisher released this entry's package, not
+the day the catalogue was signed, so it stays the same as later catalogues
+list the same release. The Library's New filter lists the ten entries of a
+tab with the latest days, and an entry without `published` is never among
+them. `release` and `revision` count the releases of one package and say
+nothing of when any came out.
 
 A picture reference, `badge` or a map `preview`, MUST be a valid reference
 ending `.png`. OA does not require the file name to be a hash. A registry

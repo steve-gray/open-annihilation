@@ -6,7 +6,8 @@
 // The canvas the kit's components draw on, and the few primitives every one
 // of them draws through: a fill, a blend, an outline, a raised edge, a
 // hairline rule, a line of text in a box and its width, a picture, a one-bit
-// mark, and a clip. Places and sizes are in points. A canvas has two forms.
+// mark, a coverage map at the canvas's own pixels, and a clip. Places and
+// sizes are in points. A canvas has two forms.
 // The crisp form draws with the artless painter at a whole scale in the
 // game's own fonts. The smooth form draws with the painter of
 // oa/ui/paint/painter.hpp at any scale, a fractional one among them, in the
@@ -23,6 +24,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 
 namespace oa::ui::kit {
@@ -201,6 +203,29 @@ void draw_picture(
 /// @param ink the colour
 void draw_mark(
     const Canvas& canvas, const oa::ui::frontend_renderer::Mark& bits, Point at, Colour ink
+);
+
+/// Returns how many of a canvas's own pixels a rectangle covers across and
+/// down: on the crisp form its points times the whole scale, on the smooth
+/// form its edges rounded as a fill's are. A shape worked out at that many
+/// pixels and drawn with blend_coverage is as crisp at every scale as at 1x.
+///
+/// @param canvas the canvas
+/// @param rect the rectangle, in points
+/// @return the columns and rows; 0 for an empty rectangle or a canvas that draws nothing
+[[nodiscard]] Point covered_pixels(const Canvas& canvas, const Rect& rect) noexcept;
+
+/// Blends a colour over a rectangle through a coverage map at the canvas's
+/// own pixels, one byte a pixel of covered_pixels, rows top to bottom: 0
+/// leaves the pixel as it is, 255 paints the colour and the others mix it
+/// in by that share. Clipped as every primitive is.
+///
+/// @param canvas where it is drawn
+/// @param rect the rectangle, in points
+/// @param coverage covered_pixels' columns times its rows; a shorter map draws nothing
+/// @param ink the colour
+void blend_coverage(
+    const Canvas& canvas, const Rect& rect, std::span<const uint8_t> coverage, Colour ink
 );
 
 } // namespace oa::ui::kit

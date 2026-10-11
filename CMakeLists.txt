@@ -346,8 +346,10 @@ target_link_libraries(oa-app-renderer-state PUBLIC oa-app-renderer-records
   PRIVATE oa-platform-preferences oa-options)
 # The game's window icon: the Open Annihilation icon at 256 by 256 pixels
 # (branding/, made by tools/make_icons.py), embedded as a PNG file and
-# decoded when the window opens; the settings dialog's header and the OA
-# buttons draw it too.
+# decoded when the window opens; the settings dialog's header and the main
+# menu's Library button draw it too. Beside it the settings icon, the logo
+# over a row of gears at the same size, which the main menu's Settings
+# button and the in-game menu's OA button draw.
 # A mod profile's display rules as the records and decisions of the modules
 # that carry them out (view_rules.hpp).
 add_library(oa-app-view-rules src/app/view_rules.cpp)
@@ -368,7 +370,17 @@ add_custom_command(OUTPUT "${oa_window_icon_source}"
   DEPENDS "${oa_window_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
   COMMENT "Embedding the window icon"
   VERBATIM)
-add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}")
+set(oa_settings_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-settings-256.png")
+set(oa_settings_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/settings_icon_png.cpp")
+add_custom_command(OUTPUT "${oa_settings_icon_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_settings_icon_png}" "-DOUTPUT=${oa_settings_icon_source}"
+    -DFUNCTION=settings_icon_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_settings_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the settings icon"
+  VERBATIM)
+add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}"
+  "${oa_settings_icon_source}")
 add_library(oa::app::window_icon ALIAS oa-app-window-icon)
 target_link_libraries(oa-app-window-icon PUBLIC oa-app-headers PRIVATE oa-formats-png oa-options)
 # The Full tier's fog of war on the card (full_fog.hpp): the fog grid's

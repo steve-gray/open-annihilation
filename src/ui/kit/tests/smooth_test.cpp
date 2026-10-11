@@ -6,8 +6,9 @@
 // edges and rules of whole pixels; text in the bundled modern fonts at its
 // own size, measured wider than at 1x and narrower than at 2x, and kept in
 // its box; a clip that keeps everything inside it; a picture drawn
-// filtered; a one-bit mark; a moved origin; and a button drawn through the
-// same draw function as on the crisp form. The text checks read the bundled
+// filtered; a one-bit mark; a moved origin; a coverage map and a state icon
+// at the canvas's own pixels; and a button drawn through the same draw
+// function as on the crisp form. The text checks read the bundled
 // fonts beside the test.
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/components.hpp"
@@ -352,6 +353,46 @@ void marks_and_origins_are_in_points() {
     OA_CHECK(inked(moved.pixels) == (paint::Box{3, 3, 2, 2}));
 }
 
+/// Checks a coverage map and a state icon at 1.5x: the map lands on the
+/// pixels a rectangle covers, whole where it is 255, and a short map draws
+/// nothing; a state icon stays inside its square's pixels, worked out at
+/// them, its edges smoothed and its strokes whole somewhere.
+void coverage_lands_on_the_canvass_own_pixels() {
+    Smooth smooth(40, 40, kOneAndAHalf);
+    const kit::Rect square{2, 2, 4, 4};
+    const kit::Point size = kit::covered_pixels(smooth.canvas, square);
+    // 2 * 1.5 = 3 to 6 * 1.5 = 9.
+    OA_CHECK(size.x == 6 && size.y == 6);
+    const std::vector<uint8_t> whole(36, 255);
+    kit::blend_coverage(smooth.canvas, square, whole, kInk);
+    OA_CHECK(inked(smooth.pixels) == (paint::Box{3, 3, 6, 6}));
+    OA_CHECK(is(smooth.pixels, 3, 3, kInk) && is(smooth.pixels, 8, 8, kInk));
+    Smooth short_map(40, 40, kOneAndAHalf);
+    kit::blend_coverage(short_map.canvas, square, std::vector<uint8_t>(35, 255), kInk);
+    OA_CHECK(inked(short_map.pixels).empty());
+
+    for (const kit::StateIcon icon :
+         {kit::StateIcon::circled_check,
+          kit::StateIcon::circled_up_arrow,
+          kit::StateIcon::download_arrow}) {
+        Smooth drawn(40, 40, kOneAndAHalf);
+        kit::draw_state_icon(drawn.canvas, {2, 2, 14, 14}, icon, kInk);
+        // 2 * 1.5 = 3 to 16 * 1.5 = 24: 21 pixels square.
+        const paint::Box box = inked(drawn.pixels);
+        OA_CHECK(!box.empty() && box.x >= 3 && box.y >= 3);
+        OA_CHECK(box.x + box.width <= 24 && box.y + box.height <= 24);
+        int whole_pixels = 0;
+        int smoothed = 0;
+        for (int y = 3; y < 24; ++y)
+            for (int x = 3; x < 24; ++x) {
+                const paint::Rgba pixel = paint::pixel_at(drawn.pixels, x, y);
+                whole_pixels += is(drawn.pixels, x, y, kInk) ? 1 : 0;
+                smoothed += pixel.a > 0 && pixel.a < 255 ? 1 : 0;
+            }
+        OA_CHECK(whole_pixels > 0 && smoothed > 0);
+    }
+}
+
 /// Checks that the components draw on the smooth form through the same draw
 /// functions: a button's face and border fill its pixels at 1.5x and its
 /// caption is drawn inside it.
@@ -397,6 +438,7 @@ int main() {
     a_clip_keeps_what_lies_outside_it();
     pictures_are_drawn_filtered();
     marks_and_origins_are_in_points();
+    coverage_lands_on_the_canvass_own_pixels();
     components_draw_on_the_smooth_form();
     return oa::test::check_exit_status();
 }

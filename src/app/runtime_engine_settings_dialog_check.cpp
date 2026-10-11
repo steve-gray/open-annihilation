@@ -10,10 +10,10 @@
 // their drop-downs, View past the map's edge's 25% in effect at once, OK,
 // Cancel and Restore defaults and the preferences they leave, Developer
 // Mode's overrides in effect and kept), and the main menu
-// with its OA button and the dialog as the window shows them at several
-// sizes, the dialog at the size class and scale each window gives it: the
-// Graphics section at its top and its end, and the Developer section with an
-// area of Developer Mode's list open, off and on.
+// with its OA button and Settings button and the dialog as the window shows
+// them at several sizes, the dialog at the size class and scale each window
+// gives it: the Graphics section at its top and its end, and the Developer
+// section with an area of Developer Mode's list open, off and on.
 
 #include "check_host_input.hpp"
 #include "engine_settings_menu_host.hpp"
@@ -87,8 +87,14 @@ constexpr std::string_view kPickedProfile = "oamod: 1\n"
 /// bottom-right pixel, so that the cursor draws almost wholly outside it.
 constexpr layout::Point kSnapshotPointer{kCanvasWidth - 1, kCanvasHeight - 1};
 
-/// The OA button's top left corner on the main menu's picture, in its bottom-right corner.
-constexpr layout::Point kMenuButtonCorner{596, 436};
+/// The OA button's top left corner on the main menu's picture, near its
+/// bottom-right corner: one button and a quarter of a button's side left of
+/// the Settings button.
+constexpr layout::Point kMenuButtonCorner{556, 436};
+
+/// The Settings button's top left corner on the main menu's picture, in its
+/// bottom-right corner.
+constexpr layout::Point kMenuSettingsCorner{596, 436};
 
 /// How far round the pointer the cursor may draw, in the picture's pixels.
 constexpr int32_t kCursorReach = 40;
@@ -1894,10 +1900,15 @@ void Runtime::check_engine_settings_window_sizes() {
         renderer::Surface picture;
         present(presented, picture);
         const auto button = EngineSettingsMenuHost::button_rect(*this);
+        const auto settings_button = EngineSettingsMenuHost::settings_button_rect(*this);
         require(
             button.x == kMenuButtonCorner.x && button.y == kMenuButtonCorner.y &&
+                settings_button.x == kMenuSettingsCorner.x &&
+                settings_button.y == kMenuSettingsCorner.y &&
                 EngineSettingsMenuHost::button_shown(*this),
-            "the OA button is not in the picture's bottom-right corner" + on
+            "the OA button and the Settings button are not in the picture's bottom-right "
+            "corner" +
+                on
         );
         const auto differing =
             letterbox_differences(presented, picture, area, window_width, kRestingPointer);
@@ -1921,6 +1932,22 @@ void Runtime::check_engine_settings_window_sizes() {
         );
         tap(SDLK_ESCAPE);
         require(oa_layer().find("library") == nullptr, "Escape did not close the Library" + on);
+        // A click on the Settings button opens Settings with no Library
+        // under it, which Escape closes.
+        click(
+            {settings_button.x + settings_button.width / 2,
+             settings_button.y + settings_button.height / 2}
+        );
+        require(
+            engine_settings_dialog() != nullptr && oa_layer().find("settings") != nullptr &&
+                oa_layer().find("library") == nullptr,
+            "a click on the Settings button did not open Settings alone" + on
+        );
+        tap(SDLK_ESCAPE);
+        require(
+            engine_settings_dialog() == nullptr && oa_layer().find("settings") == nullptr,
+            "Escape did not close Settings" + on
+        );
         tap(SDLK_COMMA, kShortcutModifier);
         auto* dialog = engine_settings_dialog();
         require(

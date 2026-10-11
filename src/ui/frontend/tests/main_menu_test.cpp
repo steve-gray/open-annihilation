@@ -64,15 +64,38 @@ OA_GAME_DATA_TEST(main_menu_setup_centres_version) {
     MainMenuChecks checks;
     main_menu_setup(panel, checks, make_host(calls));
     const auto* label = panel_control(panel, "DebugString");
+    const std::string program_line = main_menu_version_text();
     OA_CHECK(label->active == 1);
-    OA_CHECK(text_of(panel, "DebugString") == "v3.1v1117a");
-    OA_CHECK(calls.measured == "v3.1v1117a");
-    // Width 71: the label moves left by 71 / 2 = 35.
-    OA_CHECK(label->x == authored_x - 35);
+    OA_CHECK(program_line.starts_with("Open Annihilation v"));
+    OA_CHECK(text_of(panel, "DebugString") == program_line);
+    OA_CHECK(calls.measured == program_line);
+    // The measure stand-in is one more than seven a character. The label
+    // moves left by half of that, centred on its authored x.
+    const int32_t width = static_cast<int32_t>(program_line.size() * 7 + 1);
+    OA_CHECK(label->x == static_cast<int16_t>(authored_x - width / 2));
     OA_CHECK(calls.music.size() == 1 && calls.music[0] == "BGM");
     OA_CHECK(calls.kinds.size() == 1 && calls.kinds[0] == 4);
     OA_CHECK(calls.sparks == 1);
     OA_CHECK(panel.dirty);
+}
+
+// A mod's own version replaces the program's line and is centred the same way.
+OA_GAME_DATA_TEST(main_menu_setup_shows_a_mods_version) {
+    const auto layout = load_gui("mainmenu.gui");
+    if (!layout)
+        return;
+    Panel panel;
+    panel_load_layout(panel, *layout);
+    const int16_t authored_x = panel_control(panel, "DebugString")->x;
+    MenuCalls calls;
+    MainMenuChecks checks;
+    auto host = make_host(calls);
+    host.version_text = "v9.9";
+    main_menu_setup(panel, checks, host);
+    OA_CHECK(text_of(panel, "DebugString") == "v9.9");
+    OA_CHECK(calls.measured == "v9.9");
+    // Width 29: the label moves left by 29 / 2 = 14.
+    OA_CHECK(panel_control(panel, "DebugString")->x == authored_x - 14);
 }
 
 // Game data that names no revision and has no movies, such as the Total

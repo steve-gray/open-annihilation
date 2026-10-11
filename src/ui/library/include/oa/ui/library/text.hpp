@@ -23,6 +23,7 @@ namespace oa::ui::library {
 namespace words {
 
 // Tabs and filters.
+inline constexpr std::string_view tab_active = "Active";
 inline constexpr std::string_view tab_mods = "Mods";
 inline constexpr std::string_view tab_maps = "Maps";
 inline constexpr std::string_view tab_languages = "Languages";
@@ -30,8 +31,13 @@ inline constexpr std::string_view tab_languages_short = "Lang";
 inline constexpr std::string_view tab_updates = "Updates";
 inline constexpr std::string_view tab_updates_short = "Upd";
 inline constexpr std::string_view filter_all = "All";
+inline constexpr std::string_view filter_new = "New";
 inline constexpr std::string_view filter_installed = "Installed";
 inline constexpr std::string_view filter_updates = "Updates";
+/// A filter and how many entries it keeps on the tab shown, before the tag
+/// and the search: "Installed (4)". The filter column, the chips and
+/// Compact's drop-down all show it.
+inline constexpr std::string_view filter_with_count = "{filter} ({count})";
 
 // A row's state.
 inline constexpr std::string_view state_get = "GET";
@@ -90,6 +96,14 @@ inline constexpr std::string_view version_with_revision = "{version} · rev {rev
 inline constexpr std::string_view version_with_maps = "{version} · {maps}";
 inline constexpr std::string_view revision_long = "revision {revision}";
 inline constexpr std::string_view revision_short = "rev {revision}";
+/// A version and its revision in the details' Installed and Latest facts.
+inline constexpr std::string_view version_revision_fact = "{version} (rev {revision})";
+/// What an update changes from and to where no version or revision above 0
+/// names a side: the copy installed now, and the release it is updated to.
+inline constexpr std::string_view change_old_copy = "the old copy";
+inline constexpr std::string_view change_new_copy = "the new copy";
+inline constexpr std::string_view change_old_copy_short = "old";
+inline constexpr std::string_view change_new_copy_short = "new";
 inline constexpr std::string_view map_count_one = "{count} map";
 inline constexpr std::string_view map_count = "{count} maps";
 
@@ -106,6 +120,9 @@ inline constexpr std::string_view engine_below_short = "before {version}";
 inline constexpr std::string_view engine_exactly_short = "{version} only";
 
 // The facts of an entry's details: labels, then values.
+inline constexpr std::string_view fact_installed = "Installed";
+inline constexpr std::string_view fact_latest = "Latest";
+inline constexpr std::string_view fact_author = "Author";
 inline constexpr std::string_view fact_size = "Size";
 inline constexpr std::string_view fact_base = "Base";
 inline constexpr std::string_view fact_needs = "Needs";
@@ -140,10 +157,13 @@ inline constexpr std::string_view from_not_reviewed = "{registry} · Not reviewe
 inline constexpr std::string_view from_own = "Your own copy";
 
 // The line under an entry's name.
+/// An update to a revision above 0 of the version installed.
 inline constexpr std::string_view status_revision_available =
     "Revision {revision} available · {size} to download";
 inline constexpr std::string_view status_version_available =
     "Version {version} available · {size} to download";
+/// An update that keeps the version and names no revision above 0.
+inline constexpr std::string_view status_update_available = "Update available · {size} to download";
 inline constexpr std::string_view status_installed = "Installed";
 inline constexpr std::string_view status_playing = "Playing";
 inline constexpr std::string_view status_not_installed = "Not installed · {size}";
@@ -220,6 +240,25 @@ inline constexpr std::string_view more_menu = "MORE";
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
 
+// The Active tab: the mod being played, the language in use and the
+// installed maps, under one heading each.
+inline constexpr std::string_view active_heading_mod = "MOD";
+inline constexpr std::string_view active_heading_language = "LANGUAGE";
+inline constexpr std::string_view active_heading_maps = "MAPS";
+/// The mod being played, or the language pack in use: its name, then its version.
+inline constexpr std::string_view active_package = "{name} {version}";
+inline constexpr std::string_view active_no_mod = "No mod is played";
+/// A language no pack holds, which the game shows from its own words.
+inline constexpr std::string_view active_language_built_in = "{language} · built in";
+/// The language the game shows with no language chosen.
+inline constexpr std::string_view language_english = "English";
+/// How many players a map is for: one, and every other count.
+inline constexpr std::string_view active_players_one = "{count} player";
+inline constexpr std::string_view active_players_many = "{count} players";
+/// One map of an installed map pack, as automation reads its line.
+inline constexpr std::string_view active_map = "{map} · {players} · {size}";
+inline constexpr std::string_view active_no_maps = "No map packs are installed.";
+
 // A row: the version and size under the name at Compact.
 inline constexpr std::string_view row_version_size = "{version} · {size}";
 /// The line above, from a registry the player added.
@@ -249,6 +288,9 @@ inline constexpr std::string_view question_heading_revision =
     "{name} {version} · revision {from} → {to}";
 /// The heading of an update to a new version.
 inline constexpr std::string_view question_heading_version = "{name} {from} → {to}";
+/// The heading of an update that keeps the version and names no revision
+/// above 0 on one side.
+inline constexpr std::string_view question_heading_same = "{name} {version}";
 /// `{to}` and `{from}` are change_texts' ("revision 4", or the version
 /// "4.9"); `{To}` and `{From}` are the same with a capital first letter.
 inline constexpr std::string_view question_changes =
@@ -277,7 +319,9 @@ inline constexpr std::string_view question_fact = "{label}: {value}";
 inline constexpr std::string_view action_not_now = "NOT NOW";
 
 // Settings › Mods: a row's line on its update, and the line on the last
-// check for updates (update_question.hpp).
+// check for updates (update_question.hpp). The revision lines are for a
+// revision above 0 of the version installed; the update lines for an
+// update that keeps the version and names no revision above 0.
 inline constexpr std::string_view mods_revision_available =
     "Revision {revision} available · {size}";
 inline constexpr std::string_view mods_version_available = "Version {version} available · {size}";
@@ -289,6 +333,9 @@ inline constexpr std::string_view mods_revision_may_change =
     "Revision {revision} may change the rules · {size}";
 inline constexpr std::string_view mods_version_may_change =
     "Version {version} may change the rules · {size}";
+inline constexpr std::string_view mods_update_available = "Update available · {size}";
+inline constexpr std::string_view mods_update_changes = "Update changes the rules · {size}";
+inline constexpr std::string_view mods_update_may_change = "Update may change the rules · {size}";
 /// An update on its way, how far its download has come.
 inline constexpr std::string_view mods_updating = "Updating · {percent}%";
 inline constexpr std::string_view mods_checked = "Checked for updates {age}";
@@ -386,16 +433,31 @@ filled(const TextHooks& text, std::string_view pattern, std::initializer_list<Pl
 /// @return the text, such as "4.8 · rev 3"
 [[nodiscard]] std::string version_text(const Installed& installed, const TextHooks& text = {});
 
+/// Writes a version and its revision as the details' Installed and Latest
+/// facts give them. A revision of 0, which a catalogue or manifest that
+/// names none leaves, is left out.
+///
+/// @param version the version, as written; empty when it has none
+/// @param revision the packaging revision; 0 when it names none
+/// @param text how texts are looked up
+/// @return "4.8 (rev 3)", "4.8" for revision 0, "rev 3" without a version;
+///         empty with neither
+[[nodiscard]] std::string
+release_text(std::string_view version, int64_t revision, const TextHooks& text = {});
+
 /// What an update changes from and to, as the Rules fact, the queue and the update question name them.
 struct ChangeTexts {
-    std::string from{};       ///< "revision 3", or the version "4.8"
-    std::string to{};         ///< "revision 4", or the version "4.9"
-    std::string from_short{}; ///< "rev 3", or the version "4.8"
-    std::string to_short{};   ///< "rev 4", or the version "4.9"
+    std::string from{};       ///< "revision 3", the version "4.8", or "the old copy"
+    std::string to{};         ///< "revision 4", the version "4.9", or "the new copy"
+    std::string from_short{}; ///< "rev 3", the version "4.8", or "old"
+    std::string to_short{};   ///< "rev 4", the version "4.9", or "new"
 };
 
 /// Names both sides of an update: by revision when it keeps the version
-/// text, else by version.
+/// text, else by version. A side whose revision is 0 where its revision
+/// would name it, or whose version is empty where its version would, is
+/// named by its revision above 0 if it has one, else as the old or the new
+/// copy, so that no side reads "revision 0".
 ///
 /// @param installed the installed package
 /// @param update its update

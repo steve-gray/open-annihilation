@@ -96,12 +96,24 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
 - `looks.hpp`: how a control looks. A look owns its texts. A text field's
   state, `TextField`, is its text and its caret. A picture item draws its
   `PictureLook`'s picture, such as a mod's badge, or else the canvas's icon.
+  `StateIcon` names the three state icons: a circled check, a circled
+  up-arrow and a download arrow.
 - `canvas.hpp`: the canvas the components draw on, `Canvas`, in its two
   forms, and the primitives every draw function draws through: `fill_rect`,
   `blend_rect`, `outline_rect`, `bevel_rect`, `rule_rect`, `box_text`,
-  `measure_text`, `draw_picture`, `draw_mark`, `clipped` and `placed_at`.
+  `measure_text`, `draw_picture`, `draw_mark`, `clipped` and `placed_at`;
+  and, for a shape worked out at the canvas's own pixels, `covered_pixels`
+  (how many pixels a rectangle covers on either form) and `blend_coverage`
+  (a colour blended through a map of one byte a pixel).
 - `components.hpp`: the controls, drawn through the canvas's primitives on
-  either form. One button, five looks. `paint` draws a display list. The
+  either form. One button, five looks. `draw_state_icon` draws a state
+  icon in one colour, filling a square of a rectangle's shorter side: its
+  ring and strokes, from a design of 24 units (the ring 2 units wide, its
+  outer edge a unit in, every stroke 2.5 units wide with round ends), are
+  worked out at the canvas's own pixels, each pixel's share counted from
+  16 samples in integers, and drawn through `blend_coverage`, so the icon
+  keeps its edges at 1x, 2x, 3x and 150% alike and never scales a picture
+  or a one-bit mark. `paint` draws a display list. The
   OA button (`draw_oa_button`, `OaButtonLook`) may wear the kit's attention
   dot, as the main menu's does while updates wait: a disc
   `oa_button_dot_side` (7) points across in the warning token
@@ -119,7 +131,16 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     with "...", an aside, a chip and tags;
   - chips in seven states: get, installed, update, playing, online, a
     problem and a filter, each selectable, hovered and disabled, and
-    `chip_width`;
+    `chip_width`. A chip with a state icon (`ChipLook::icon`) draws only
+    the icon, `state_icon_side` (14) points square, in its state's colour
+    (the hint for get, the accent for installed and playing, the lock
+    colour for update), in `control_hover`'s grey while disabled, on the
+    hover face while hovered, and keeps its text for automation. A row
+    places it as it places a chip (`list_row_chip_rect`); a screen whose
+    row icon takes a press adds a control of its own there, before the
+    row's. A row's aside is as wide as its widest entry by the canvas's
+    measure and by the game's fonts', so a version such as "4.8 · rev 3"
+    is never cut on either form;
   - a text field, and with the magnifier the search field, its text moved
     so its caret shows;
   - tabs with a count, `tab_rects`;
@@ -230,7 +251,11 @@ a rectangle rounded on its own, so a fill covers whole pixels, two fills that
 share an edge in points share it in pixels, and a 10 by 10 point fill at
 1.5x covers 15 by 15 pixels. An outline, a raised edge and a rule are
 `max(1, lround(points * scale))` whole pixels thick, two at 1.5x, from
-their first edge. A one-bit mark is a fill of each set point. Text is drawn
+their first edge. A one-bit mark is a fill of each set point. A coverage
+map is one byte a pixel the form draws at: on the crisp form a rectangle's
+points times the whole scale, on the smooth form the pixels its rounded
+edges cover; so a state icon is worked out at 2x or 1.5x as finely as the
+pixels allow, never scaled up from 1x. Text is drawn
 antialiased at `lround(smooth_text_points * scale)` pixels per em: 12 points
 for the regular font, drawn bold as the game's heavy title, label and value
 font is, and 10 for the small one, so 18 and 15 pixels at 1.5x; tracking is
@@ -443,7 +468,9 @@ wrap, line limit, fit and path break, a line part, a button's span, label and
 look, a row of buttons on one line and wrapped, icons, plain parts and moved
 parts, the three ways a column is placed, and the controls listed from parts
 under and above a backdrop.
-`ui-kit-smooth` checks the smooth form at 1.5x: a 10 by 10 point fill
+`ui-kit-smooth` checks the smooth form at 1.5x: a coverage map landing on
+the pixels a rectangle covers, a state icon inside its square's pixels
+with smoothed edges, a 10 by 10 point fill
 covering exactly 15 by 15 pixels from `lround(x * 1.5)`, at even and odd
 points, fills sharing their edges, outlines, raised edges and rules of whole
 pixels, text measured wider than at 1x and narrower than at 2x, drawn
@@ -471,7 +498,12 @@ one that cannot be chosen.
 `ui-kit-chrome` checks the header, the footer band, the nav list, a row's
 frame and the locked fade, and that `paint` matches those direct draws.
 `ui-kit-controls` checks each new control's pixels in the tokens above with
-a synthetic font: list rows in both forms, every chip state, the field's
+a synthetic font: list rows in both forms, every chip state, the three
+state icons at 1x and 2x (inside their square, worked out at 2x rather
+than doubled, whole and smoothed pixels, the ring and the download
+arrow's shaft where the design puts them), a chip with a state icon in
+each colour and its place in a row, a row's aside keeping a whole
+version, the field's
 placeholder, caret and scrolling, tabs with and without a count, cards and
 their grid at three widths and at 3, 4 and 6 columns, the arrows through a
 grid of cards, the hover card with an arrow on each side, its place in a
@@ -528,6 +560,12 @@ extension table's contract (`OA_EXTENSION_API_VERSION`, in
 first release that carries version 15, keeps 15 and updates the engine's
 own followers and test extensions in the same change; from 0.8.0 on, any
 change to a kit header raises the version.
+
+The gallery shows chips with their words only: a chip with a state icon
+is drawn by the same chip role, and showing it there would move the
+gallery's golden frames, so the icons are reviewed in the Library's
+pictures (`oa-ui-library-draw-test --frames`) until the gallery takes a
+sample of them.
 
 Text is laid out and drawn left to right, one character after another, in
 the order it is stored: the kit has no right-to-left or bidirectional
