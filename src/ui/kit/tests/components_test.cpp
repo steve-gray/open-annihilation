@@ -10,6 +10,7 @@
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <array>
 #include <cstdint>
@@ -793,12 +794,116 @@ void geometry_matches_the_start_commit() {
     OA_CHECK(third.x == 201 && third.y == 129 && third.width == 198 && third.height == 16);
 }
 
+/// Tells whether a rectangle holds a pixel of one colour.
+bool region_has(
+    const renderer::Surface& surface,
+    const kit::Rect& rect,
+    uint8_t red,
+    uint8_t green,
+    uint8_t blue
+) {
+    for (int32_t y = rect.y; y < rect.y + rect.height; ++y) {
+        for (int32_t x = rect.x; x < rect.x + rect.width; ++x) {
+            if (x < 0 || y < 0 || x >= static_cast<int32_t>(surface.width) ||
+                y >= static_cast<int32_t>(surface.height))
+                continue;
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * surface.width + static_cast<std::size_t>(x)) * 3;
+            if (surface.rgb[at] == red && surface.rgb[at + 1] == green &&
+                surface.rgb[at + 2] == blue)
+                return true;
+        }
+    }
+    return false;
+}
+
+/// A divider, an aside and a greyed row are drawn and hit, the focus skips
+/// the divider, and the aside stops short of the label.
+void a_menu_draws_a_divider_an_aside_and_a_greyed_row() {
+    kit::ChoiceMenuLook menu;
+    menu.shown = {"English", "AVAILABLE", "Simplified", "Off"};
+    menu.items = {
+        {},
+        {.divider = true},
+        {.aside = "4.0 MB", .id = "zh-hans"},
+        {.aside = "downloads off", .id = "xx", .choosable = false},
+    };
+    menu.total = 4;
+    menu.chosen = 0;
+    menu.marked = 1;
+    menu.focus_shown = true;
+    const kit::Rect menu_rect{8, 8, 180, 4 * 16 + 2};
+    renderer::Surface surface = black(220, 90);
+    kit::draw_choice_menu(canvas_on(surface), menu_rect, menu);
+
+    const kit::Rect divider = kit::choice_item(menu_rect, 1);
+    OA_CHECK(kit::choice_item_at(menu_rect, divider.x + 20, divider.y + 8) == 1);
+    const kit::Rect offered = kit::choice_item(menu_rect, 2);
+    OA_CHECK(kit::choice_item_at(menu_rect, offered.x + offered.width - 6, offered.y + 8) == 2);
+    const kit::Rect grey = kit::choice_item(menu_rect, 3);
+    OA_CHECK(kit::choice_item_at(menu_rect, grey.x + 16, grey.y + 8) == 3);
+    OA_CHECK(kit::choice_item_at(menu_rect, menu_rect.x - 1, menu_rect.y + 8) == -1);
+    // Down and Up from either side of the divider land on a choice.
+    OA_CHECK(kit::choice_mark_toward(menu, 0, 1) == 2);
+    OA_CHECK(kit::choice_mark_toward(menu, 2, -1) == 0);
+    // The divider is a heading: quiet ink, and no focus ring though it is marked.
+    OA_CHECK(region_has(surface, divider, 0x8a, 0x91, 0x80));
+    OA_CHECK(!region_has(surface, divider, 0x9c, 0xcc, 0x3c));
+    // A greyed row's text is quiet, including the point a press would take.
+    OA_CHECK(region_has(surface, grey, 0x8a, 0x91, 0x80));
+    OA_CHECK(!menu.items[3].choosable);
+
+    kit::ChoiceMenuLook crowded;
+    crowded.shown = {"WWWWWWWWWWWWWWWW"};
+    crowded.items = {{.aside = "MMMMMMMM"}};
+    crowded.total = 1;
+    crowded.chosen = -1;
+    crowded.marked = -1;
+    const kit::Rect narrow{4, 4, 80, 18};
+    renderer::Surface clipped_surface = black(100, 30);
+    kit::draw_choice_menu(canvas_on(clipped_surface), narrow, crowded);
+    const kit::Rect row = kit::choice_item(narrow, 0);
+    const int32_t inner_left = row.x + kit::compact_metrics.choice_item_text_inset;
+    const int32_t inner_right = row.x + row.width - 4;
+    int32_t aside_width = kit::text_width(fonts(), kit::FontRole::regular, "MMMMMMMM");
+    constexpr int32_t gap = 8;
+    constexpr int32_t min_label = 8;
+    int32_t room = inner_right - inner_left - min_label - gap;
+    if (room < 1)
+        room = 1;
+    if (aside_width > room)
+        aside_width = room;
+    const int32_t aside_left = inner_right - aside_width;
+    const int32_t gap_x = aside_left - gap / 2;
+    bool gap_clear = true;
+    for (int32_t y = row.y; y < row.y + row.height; ++y) {
+        const std::size_t at = (static_cast<std::size_t>(y) * clipped_surface.width +
+                                static_cast<std::size_t>(gap_x)) *
+                               3;
+        if (clipped_surface.rgb[at] != 0x17 || clipped_surface.rgb[at + 1] != 0x1a ||
+            clipped_surface.rgb[at + 2] != 0x15)
+            gap_clear = false;
+    }
+    OA_CHECK(gap_clear);
+    OA_CHECK(region_has(
+        clipped_surface,
+        {inner_left, row.y, std::max(gap_x - inner_left, int32_t{1}), row.height},
+        0xa3,
+        0xaa,
+        0x98
+    ));
+    OA_CHECK(
+        region_has(clipped_surface, {aside_left, row.y, aside_width, row.height}, 0xa3, 0xaa, 0x98)
+    );
+}
+
 } // namespace
 
 int main() {
     buttons_match_the_five_looks();
     switch_levels_and_slider_match();
     choice_lock_and_scroll_match();
+    a_menu_draws_a_divider_an_aside_and_a_greyed_row();
     oa_button_and_mark_match();
     clip_hides_what_it_misses();
     paint_matches_the_direct_draw(1);

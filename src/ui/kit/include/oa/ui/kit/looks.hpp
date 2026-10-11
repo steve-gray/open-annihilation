@@ -89,15 +89,29 @@ struct ChoiceLook {
     bool open{};        ///< its menu is open
 };
 
+/// One item of a drop-down's open menu, beside the text it shows.
+///
+/// A menu whose items vector is empty is every item an ordinary choice: no
+/// aside, choosable, and named by the control's parts. items is one entry per
+/// choice, from 0, not only the ones on screen.
+struct ChoiceMenuRow {
+    std::string aside{};  ///< right-aligned text; empty for none
+    std::string id{};     ///< the automation word; empty on a divider, which is not named
+    bool divider{false};  ///< a heading, not a choice: no focus, no press, no name
+    bool choosable{true}; ///< a press on it chooses it; a greyed row is not
+};
+
 /// A drop-down's open menu. shown holds the items on screen, already looked up,
 /// the first of them being item first of total.
 struct ChoiceMenuLook {
     std::vector<std::string> shown{}; ///< the items on screen, top to bottom
-    int32_t first{};                  ///< the index of shown's first item
-    int32_t total{};                  ///< how many choices the menu offers
-    int32_t chosen{};                 ///< the chosen choice's index
-    int32_t marked{};                 ///< the item the pointer or the keys mark
-    bool focus_shown{};               ///< the keyboard focus outlines the marked item
+    /// One entry per choice, from 0. Empty when every item is an ordinary choice.
+    std::vector<ChoiceMenuRow> items{};
+    int32_t first{};    ///< the index of shown's first item
+    int32_t total{};    ///< how many choices the menu offers
+    int32_t chosen{};   ///< the chosen choice's index
+    int32_t marked{};   ///< the item the pointer or the keys mark
+    bool focus_shown{}; ///< the keyboard focus outlines the marked item
 };
 
 /// A lock's text, already looked up. The padlock is drawn with it.

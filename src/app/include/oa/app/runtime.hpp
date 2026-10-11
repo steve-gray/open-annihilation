@@ -609,6 +609,14 @@ class Runtime final : public menu::Host,
     /// @return the count; 0 when the stack is not open
     [[nodiscard]] static std::size_t modern_font_pack_faces();
 
+    /// Tells whether the modern fonts can draw a text with no missing character.
+    ///
+    /// True when their stack is not open: nothing has been found missing.
+    ///
+    /// @param text the bytes
+    /// @return false when an open stack cannot draw a visible character
+    [[nodiscard]] bool modern_fonts_draw(std::string_view text) const;
+
     /// Tells whether the language shown draws its text in the modern fonts,
     /// which are then on whatever the setting (Simplified Chinese).
     ///
@@ -6616,10 +6624,62 @@ class Runtime final : public menu::Host,
     /// When the system's language now finds a pack, System default follows.
     void reload_language_packs();
 
-    /// Reads the three pack lists, registers the player's and the engine's,
-    /// chooses the system's language again and rebuilds the interface
-    /// catalogue. start_language and reload_language_packs both call it.
+    /// Reads the three pack lists, registers the player's and the engine's
+    /// and the catalogues' available languages, chooses the system's
+    /// language again and rebuilds the interface catalogue.
+    /// start_language and reload_language_packs both call it.
     void load_language_packs();
+
+    /// Registers the kept available languages beside the packs installed.
+    void register_available_languages();
+
+    /// One language pack a catalogue offers that is not installed, and the
+    /// registry that lists it. A check may pass these in place of a snapshot.
+    struct CatalogueLanguage {
+        std::string registry;                     ///< the registry id
+        bool reviewed = true;                     ///< true for a built-in registry
+        oa::data::languages::LanguageEntry entry; ///< the tag, names, word and locales
+        std::string publisher;                    ///< who published it; empty when unnamed
+        std::optional<double> coverage;           ///< the fraction translated, when named
+        uint64_t bytes = 0;                       ///< the pack's size
+    };
+
+    /// Rebuilds the available languages from the catalogues and registers them.
+    ///
+    /// A tag the game can already show is left out. The first registry to
+    /// offer a tag wins. A check's list is left in place while it asks.
+    void refresh_available_languages();
+
+    /// Registers the languages a check offers, in place of the catalogues.
+    ///
+    /// Later catalogue refreshes leave them until release_available_languages.
+    /// An open settings dialog is filled from them.
+    ///
+    /// @param offered the packs, in the order the list shows them
+    void refresh_available_languages(std::span<const CatalogueLanguage> offered);
+
+    /// Lets the catalogues replace a check's available languages.
+    void release_available_languages();
+
+    /// Queues a download of the language pack a catalogue offers for a tag.
+    ///
+    /// The registry that offers the tag is the one queued. A check may record
+    /// the tag in place of the queue.
+    ///
+    /// @param tag the pack's tag
+    /// @param[out] failure why it was not queued; empty when it was
+    /// @return true when the pack was queued
+    bool download_language(std::string_view tag, std::string& failure);
+
+    /// Fills an open settings dialog's available languages when the catalogues
+    /// or the download queue have moved on.
+    ///
+    /// @param dialog the open dialog
+    /// @return true when its rows changed
+    bool refresh_settings_languages(oa::ui::engine_settings::Dialog& dialog);
+
+    /// Reads the catalogues into the available languages when they have changed.
+    void note_catalogue_languages();
 
     /// Reads the interface catalogue files of the languages folder beside the
     /// game's other files, in the order of their names; a file that does not
@@ -14825,6 +14885,11 @@ class Runtime final : public menu::Host,
     std::unique_ptr<LanguageState, void (*)(LanguageState*) noexcept> language_{
         nullptr, destroy_language_state
     };
+    /// A check's stand-in for queueing a language pack. Null uses the queue.
+    using LanguageDownloadHook =
+        bool (*)(void* context, std::string_view tag, std::string& failure);
+    LanguageDownloadHook language_download_hook_{}; ///< null while the queue is used
+    void* language_download_hook_context_{};        ///< passed to language_download_hook_
     // The captions drawn over the player's own pictures; null until first used.
     std::unique_ptr<PictureCaptionState, void (*)(PictureCaptionState*) noexcept>
         picture_caption_state_{nullptr, destroy_picture_caption_state};

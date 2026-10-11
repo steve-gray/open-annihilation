@@ -1130,6 +1130,125 @@ void Runtime::check_engine_settings_dialog() {
         "Cancel changed the preferences file"
     );
 
+    // Languages a catalogue offers. A hook records the download in place of
+    // the queue. Cancel puts the opened language back and leaves the download.
+    {
+        std::string recorded;
+        language_download_hook_context_ = &recorded;
+        language_download_hook_ = [](void* context, std::string_view tag, std::string&) {
+            *static_cast<std::string*>(context) = std::string(tag);
+            return true;
+        };
+        const std::string simplified = "\347\256\200\344\275\223\344\270\255\346\226\207";
+        const std::string portuguese = "Portugu\u00EAs (Brasil)";
+        std::array<CatalogueLanguage, 2> offered{};
+        offered[0].registry = "oa";
+        offered[0].reviewed = true;
+        offered[0].entry.tag = "zh-Hans";
+        offered[0].entry.endonym = simplified;
+        offered[0].entry.english_name = "Chinese (Simplified)";
+        offered[0].entry.word = "Chinese";
+        offered[0].entry.locales = {"zh-Hans", "zh-CN", "zh"};
+        offered[0].entry.needs = oa::data::languages::TextNeeds::modern_fonts;
+        offered[0].publisher = "OA team";
+        offered[0].bytes = 4012345;
+        offered[1].registry = "ridge";
+        offered[1].reviewed = true;
+        offered[1].entry.tag = "pt-BR";
+        offered[1].entry.endonym = portuguese;
+        offered[1].entry.english_name = "Portuguese (Brazil)";
+        offered[1].entry.word = "Portuguese";
+        offered[1].entry.locales = {"pt-BR"};
+        offered[1].entry.needs = oa::data::languages::TextNeeds::modern_fonts;
+        offered[1].publisher = "Ridge";
+        offered[1].coverage = 0.92;
+        offered[1].bytes = 1100000;
+        refresh_available_languages(offered);
+        const std::string opened_language = engine_settings().language;
+        open("for languages available to download");
+        click(settings::page_control(settings::Page::language), {}, "Language's entry");
+        click(settings::first_row_control, {}, "Language's field");
+        auto* listing = engine_settings_dialog();
+        require(
+            listing != nullptr && listing->open_list == settings::first_row_control,
+            "Language's list did not open for the packs to download"
+        );
+        int32_t installed = 1;
+        for (const oa::data::languages::Language* language : oa::data::languages::known_languages())
+            if (oa::data::languages::playable(*language))
+                ++installed;
+        const int32_t total =
+            installed + 1 + static_cast<int32_t>(listing->available_languages.size());
+        constexpr int32_t shown_rows = 8;
+        listing->list_first = std::max(total - shown_rows, 0);
+        require(listing->available_languages.size() == 2, "the dialog does not list both packs");
+        const auto shown_name = [](const settings::AvailableLanguage& pack) {
+            if (pack.endonym_drawable && !pack.endonym.empty())
+                return pack.endonym;
+            if (!pack.english_name.empty())
+                return pack.english_name;
+            return pack.tag;
+        };
+        const std::string simplified_shown = shown_name(listing->available_languages[0]);
+        const std::string portuguese_shown = shown_name(listing->available_languages[1]);
+        const auto parts = settings::dialog_layout(*listing);
+        require(shows_text(parts, "AVAILABLE TO DOWNLOAD"), "the language list has no divider");
+        require(shows_text(parts, simplified_shown), "the language list has no Simplified Chinese");
+        require(
+            shows_text(parts, portuguese_shown), "the language list has no Portuguese (Brazil)"
+        );
+        require(shows_text(parts, "4.0 MB \u21E9"), "Simplified Chinese shows no size");
+        require(
+            shows_text(parts, "community \u00B7 92% \u00B7 1.1 MB"),
+            "Portuguese (Brazil) shows no coverage"
+        );
+        for (const settings::LayoutPart& part : parts) {
+            if (part.text.empty())
+                continue;
+            require(modern_fonts_draw(part.text), "a settings part does not draw: " + part.text);
+        }
+        std::cout << "engine settings check: injected row " << simplified << '\n';
+        std::cout << "engine settings check: injected row " << portuguese << '\n';
+        if (!options_.snapshot.empty()) {
+            point(SDL_EVENT_MOUSE_MOTION, kSnapshotPointer);
+            renderer::Surface presented;
+            capture_frame_ = &presented;
+            render();
+            capture_frame_ = nullptr;
+            write_ppm(
+                step_snapshot(options_.snapshot, "menu-dialog-language-available"), presented
+            );
+            point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+        }
+        click(settings::no_control, simplified_shown, "Language's Simplified Chinese");
+        listing = engine_settings_dialog();
+        require(
+            recorded == "zh-Hans" && listing != nullptr &&
+                listing->open_list == settings::no_control,
+            "choosing Simplified Chinese did not record its download"
+        );
+        const settings::AvailableLanguage* waiting = nullptr;
+        for (const settings::AvailableLanguage& pack : listing->available_languages)
+            if (pack.tag == "zh-Hans")
+                waiting = &pack;
+        require(
+            waiting != nullptr && waiting->state == settings::AvailableLanguage::State::waiting &&
+                shows_text(settings::dialog_layout(*listing), simplified_shown + " \u00B7 waiting"),
+            "Simplified Chinese is not waiting after its download was recorded"
+        );
+        std::cout << "engine settings check: recorded download " << recorded << '\n';
+        click(settings::cancel_control, "CANCEL", "Cancel");
+        require(engine_settings_dialog() == nullptr, "Cancel did not close the language dialog");
+        require(
+            engine_settings().language == opened_language && shown_language().tag == "en" &&
+                engine_settings() == chosen,
+            "Cancel did not put the opened language back"
+        );
+        language_download_hook_ = nullptr;
+        language_download_hook_context_ = nullptr;
+        release_available_languages();
+    }
+
     // Restore defaults resets every setting at once, Cancel undoes it, and
     // OK after it erases every key it reset.
     open("for Restore defaults");
