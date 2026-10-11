@@ -396,6 +396,39 @@ find_part(const std::vector<settings::LayoutPart>& parts, std::string_view text,
     return nullptr;
 }
 
+/// A copy of the part found in a list that is freed at the end of the
+/// statement, as dialog_layout's is, or none. It compares with nullptr and
+/// reads through -> like a pointer, but a pointer into the freed list cannot
+/// be taken from it.
+class FoundPart {
+  public:
+
+    FoundPart() = default;
+
+    /// Holds a copy of a part.
+    ///
+    /// @param part the part
+    explicit FoundPart(const settings::LayoutPart& part) : part_(part) {}
+
+    /// The part. Only read it when there is one.
+    const settings::LayoutPart* operator->() const { return &*part_; }
+
+    /// Tells whether no part was found.
+    friend bool operator==(const FoundPart& found, std::nullptr_t) { return !found.part_; }
+
+  private:
+
+    std::optional<settings::LayoutPart> part_;
+};
+
+/// The part with a text, or a control's first part, in a list that is freed
+/// at the end of the statement: a copy of it.
+FoundPart
+find_part(std::vector<settings::LayoutPart>&& parts, std::string_view text, int32_t control) {
+    const settings::LayoutPart* part = find_part(parts, text, control);
+    return part == nullptr ? FoundPart{} : FoundPart{*part};
+}
+
 struct Point {
     int32_t x{};
     int32_t y{};
