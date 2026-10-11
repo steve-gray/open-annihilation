@@ -445,6 +445,9 @@ enum class DialogAction : uint8_t {
     /// Dialog::roll_back_folder names with the version its .backup keeps;
     /// the dialog stays open, and a failure is told with set_folder_notice
     roll_back_mod,
+    /// An available language was chosen: download Dialog::download_request,
+    /// keep the dialog open, and apply the language when its pack arrives
+    download_language,
 };
 
 /// How the OA button looks.
@@ -547,6 +550,64 @@ struct ModRow {
     int32_t offered{};
     bool playing{}; ///< the game plays it now
 };
+
+/// One language pack a registry offers that is not installed. The host fills
+/// it; the Language page reads it and does not ask the content service or
+/// the fonts itself.
+struct AvailableLanguage {
+    std::string tag;          ///< the pack's tag, as the preference stores it
+    std::string endonym;      ///< its name in itself
+    std::string english_name; ///< its name in English, when the endonym cannot be drawn
+    std::string aside;        ///< the size and coverage shown at the row's right
+    /// The endonym is drawn; false shows english_name. True while the font
+    /// stack is not open, which the host decides.
+    bool endonym_drawable{true};
+    /// A press on the row chooses it. False greys the row: downloads are off.
+    bool choosable{true};
+
+    /// Where a download of this pack stands, from the download queue.
+    enum class State : uint8_t {
+        offered,     ///< listed, and not queued yet: the field shows the name only
+        waiting,     ///< queued, or asking, or paused
+        downloading, ///< bytes are arriving, or the pack is being checked
+        installing,  ///< the pack is being installed
+        failed,      ///< the download failed or was refused
+    };
+
+    State state{State::offered}; ///< where the download stands
+    uint8_t percent{};           ///< how much of a download has arrived, 0 to 100
+    std::string failure;         ///< why it failed; empty otherwise
+};
+
+/// Returns a pack's size as the Language page shows it: under 1,000,000
+/// bytes, whole kB; under 100 MB, one decimal of MB; otherwise whole MB.
+///
+/// @param bytes the pack's size
+/// @return the size, such as "312 kB", "4.0 MB" or "188 MB"
+[[nodiscard]] std::string download_size_text(uint64_t bytes);
+
+/// Returns the aside of an available language.
+///
+/// A reviewed pack from "OA team" shows its size and the download mark.
+/// A reviewed pack from anyone else shows "community", its coverage when it
+/// has one, and its size. A pack that is not reviewed shows "not reviewed"
+/// in place of "community", whoever published it. Downloads off shows
+/// "downloads off" and nothing else.
+///
+/// @param reviewed a built-in registry reviewed the pack
+/// @param publisher who published it
+/// @param coverage the fraction of the game's text the pack has, from 0 to
+///     1; none when the pack gives no coverage
+/// @param bytes the pack's size
+/// @param downloads_on the registry can download
+/// @return the aside
+[[nodiscard]] std::string language_download_aside(
+    bool reviewed,
+    std::string_view publisher,
+    std::optional<double> coverage,
+    uint64_t bytes,
+    bool downloads_on
+);
 
 /// ModRow::offered for No Mod.
 inline constexpr int32_t no_mod_row = -1;
@@ -703,6 +764,13 @@ struct Dialog {
     /// Unicode Multiplayer Chat shows On, locked. A host sets it as the
     /// dialog opens.
     std::vector<std::string> unicode_chat_languages{};
+    /// Language packs the enabled registries offer that are not installed,
+    /// in the order the page lists them under AVAILABLE TO DOWNLOAD. Empty
+    /// draws the page as it did with nothing to download. The host fills it
+    /// as the dialog opens and as the catalogue or a download moves.
+    std::vector<AvailableLanguage> available_languages{};
+    /// The tag DialogAction::download_language asks the host to download.
+    std::string download_request;
     /// The row whose drop-down list is open: its control; no_control while
     /// no list is open. An open list takes every pointer event and key.
     int32_t open_list{no_control};

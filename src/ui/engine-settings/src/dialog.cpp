@@ -8,6 +8,7 @@
 
 #include "developer.hpp"
 #include "geometry.hpp"
+#include "language_page.hpp"
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -185,6 +186,8 @@ kit::RowView row_view(
         }
         shown.hints[line] = std::string(shown_text(shown.hints[line]));
     }
+    if (setting == Setting::language)
+        shown.value = language_closed_field(dialog, std::move(shown.value));
     return shown;
 }
 
@@ -816,6 +819,23 @@ void knob_moved(Dialog& dialog, Setting setting) noexcept {
 void step(Dialog& dialog, Setting setting, bool up) {
     const auto& spec = layout::row_spec(setting);
     layout::SettingsModel model = chosen_model(dialog);
+    // Left and Right stay among System default and the installed languages.
+    // An available pack is chosen only from the open list.
+    if (setting == Setting::language) {
+        const int32_t installed = layout::language_installed_count();
+        const int32_t current = kit::row_index(spec, model);
+        if (current >= installed) {
+            if (up || installed <= 0)
+                return;
+            layout::set_language(model, installed - 1);
+            return;
+        }
+        const int32_t next = current + (up ? 1 : -1);
+        if (next < 0 || next >= installed)
+            return;
+        layout::set_language(model, next);
+        return;
+    }
     if (spec.kind != kit::RowKind::slider) {
         static_cast<void>(kit::step(spec, model, up));
         return;
@@ -922,6 +942,20 @@ DialogAction open_choices(Dialog& dialog, const layout::Row& row) {
 /// @return DialogAction::changed when the choice moved, else DialogAction::redraw
 DialogAction choose(Dialog& dialog, const OpenList& list, int32_t item) {
     const Setting setting = list.row->setting;
+    // A divider and a pack whose downloads are off leave the list open.
+    // Choosing an available pack asks for its download even when its tag
+    // was already the choice, so a failed download can be tried again.
+    if (setting == Setting::language) {
+        const layout::LanguagePick pick = layout::language_pick(dialog, item);
+        if (pick.kind == layout::LanguagePickKind::refused)
+            return DialogAction::redraw;
+        if (pick.kind == layout::LanguagePickKind::download) {
+            close_list(dialog);
+            dialog.chosen.language = pick.tag;
+            dialog.download_request = pick.tag;
+            return DialogAction::download_language;
+        }
+    }
     close_list(dialog);
     const EngineSettings before = dialog.chosen;
     layout::SettingsModel model = chosen_model(dialog);
@@ -945,22 +979,41 @@ list_key(Dialog& dialog, layout::ScrolledRows& open, const OpenList& list, Dialo
     int32_t marked = dialog.list_marked;
     switch (key) {
     case DialogKey::up:
-        --marked;
-        break;
     case DialogKey::down:
-        ++marked;
-        break;
     case DialogKey::page_up:
-        marked -= list.shown;
-        break;
     case DialogKey::page_down:
-        marked += list.shown;
-        break;
     case DialogKey::home:
-        marked = 0;
-        break;
     case DialogKey::end:
-        marked = last;
+        // Language's divider is not an item the keys can mark. A step that
+        // lands on it continues one further in the same direction.
+        if (list.row->setting == Setting::language) {
+            int32_t moved = 0;
+            if (key == DialogKey::up)
+                moved = -1;
+            else if (key == DialogKey::down)
+                moved = 1;
+            else if (key == DialogKey::page_up)
+                moved = -list.shown;
+            else if (key == DialogKey::page_down)
+                moved = list.shown;
+            else if (key == DialogKey::home)
+                moved = -(last + 1);
+            else
+                moved = last + 1;
+            marked = layout::language_mark_toward(dialog, marked, moved);
+        } else if (key == DialogKey::up) {
+            --marked;
+        } else if (key == DialogKey::down) {
+            ++marked;
+        } else if (key == DialogKey::page_up) {
+            marked -= list.shown;
+        } else if (key == DialogKey::page_down) {
+            marked += list.shown;
+        } else if (key == DialogKey::home) {
+            marked = 0;
+        } else {
+            marked = last;
+        }
         break;
     case DialogKey::enter:
     case DialogKey::space:
@@ -1584,6 +1637,10 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
         if (item >= 0) {
             dialog.list_pressed = item;
             dialog.list_marked = item;
+        } else if (kit::contains(list->rect, {x, y})) {
+            // The divider and the menu's border are inside the menu and are
+            // not items: the press keeps the list open and chooses nothing.
+            dialog.list_pressed = -1;
         } else {
             close_list(dialog);
         }
@@ -2293,18 +2350,18 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                         }
                     );
             break;
-        case oa::ui::kit::RowKind::choice:
-            // The field shows the choice, in the regular font.
+        case oa::ui::kit::RowKind::choice: {
+            // The field shows the choice, in the regular font. Language's
+            // field names a pack that is still downloading, and its state.
+            std::string caption =
+                oa::ui::kit::row_caption(layout::row_spec(row.setting), model, view.index);
+            if (row.setting == Setting::language)
+                caption = layout::language_closed_field(dialog, std::move(caption));
             row_part(
-                LayoutPart{
-                    row.control_area,
-                    oa::ui::kit::row_caption(layout::row_spec(row.setting), model, view.index),
-                    DialogFont::regular,
-                    0,
-                    control,
-                }
+                LayoutPart{row.control_area, std::move(caption), DialogFont::regular, 0, control}
             );
             break;
+        }
         case oa::ui::kit::RowKind::slider:
             row_part(LayoutPart{row.control_area, {}, DialogFont::regular, 0, control});
             row_part(LayoutPart{row.value, view.value, DialogFont::regular, 0, no_control});
@@ -2371,10 +2428,57 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
             const int32_t item = dialog.list_first + shown;
             if (item >= static_cast<int32_t>(list->choices))
                 break;
+            const Setting setting = list->row->setting;
+            const layout::SourceRect box = layout::choice_item(list->rect, shown);
+            const std::string caption =
+                oa::ui::kit::row_caption(layout::row_spec(setting), model, item);
+            // The divider is a section heading, not a choice.
+            if (layout::language_item_divider(dialog, setting, item)) {
+                parts.push_back(
+                    LayoutPart{
+                        box,
+                        caption,
+                        DialogFont::small,
+                        layout::heading_tracking,
+                        no_control,
+                    }
+                );
+                continue;
+            }
+            const std::string aside = layout::language_item_aside(dialog, setting, item);
+            if (aside.empty()) {
+                parts.push_back(LayoutPart{box, caption, DialogFont::regular, 0, no_control});
+                continue;
+            }
+            // The same gap the menu draws between a label and its aside, so
+            // the two parts do not meet.
+            constexpr int32_t kMargin = 4;
+            constexpr int32_t kGap = 8;
+            constexpr int32_t kMinLabel = 8;
+            const int32_t inset = kit::compact_metrics.choice_item_text_inset;
+            const int32_t inner_left = box.x + inset;
+            const int32_t inner_right = box.x + box.width - kMargin;
+            int32_t aside_width = text_width(aside);
+            int32_t room = inner_right - inner_left - kMinLabel - kGap;
+            if (room < 1)
+                room = 1;
+            if (aside_width > room)
+                aside_width = room;
+            const int32_t aside_left = inner_right - aside_width;
+            const int32_t label_width = std::max(aside_left - kGap - inner_left, int32_t{0});
             parts.push_back(
                 LayoutPart{
-                    layout::choice_item(list->rect, shown),
-                    oa::ui::kit::row_caption(layout::row_spec(list->row->setting), model, item),
+                    {inner_left, box.y, label_width, box.height},
+                    caption,
+                    DialogFont::regular,
+                    0,
+                    no_control,
+                }
+            );
+            parts.push_back(
+                LayoutPart{
+                    {aside_left, box.y, aside_width, box.height},
+                    aside,
                     DialogFont::regular,
                     0,
                     no_control,

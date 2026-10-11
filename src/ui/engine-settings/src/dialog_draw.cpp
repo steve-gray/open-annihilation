@@ -21,6 +21,7 @@
 
 #include "developer.hpp"
 #include "geometry.hpp"
+#include "language_page.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1052,11 +1053,16 @@ void add_open_menu(Building& building, const Dialog& dialog, const layout::Scrol
         look.chosen = kit::row_index(spec, model);
         look.marked = dialog.list_marked;
         look.focus_shown = dialog.focused != no_control;
+        layout::fill_language_menu(dialog, row.setting, look);
         for (int32_t place = 0; place < shown; ++place) {
             const int32_t choice = dialog.list_first + place;
             if (choice >= choices)
                 break;
             look.shown.emplace_back(layout::shown_text(kit::row_caption(spec, model, choice)));
+            // A divider is a heading: it is not a control and has no name.
+            if (static_cast<std::size_t>(choice) < look.items.size() &&
+                look.items[static_cast<std::size_t>(choice)].divider)
+                continue;
             kit::Control added = control_of(
                 layout::menu_item_control(choice),
                 layout::choice_item(menu, place),

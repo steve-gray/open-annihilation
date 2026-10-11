@@ -1269,6 +1269,8 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // The dialog stays open, unless the mod played rolls back as the
         // run ends.
         return roll_back_mod_folder(*dialog);
+    case settings::DialogAction::download_language:
+        return false; // filled in when the host queues the pack
     }
     return false;
 }

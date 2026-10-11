@@ -65,6 +65,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -1098,6 +1099,296 @@ void language_drop_down_locks_by_the_command_line() {
     dialog.chosen.language = "es";
     CHECK(click(dialog, centre(geometry::restore_button)) == DialogAction::changed);
     CHECK(dialog.chosen.language == "es");
+}
+
+/// One pack the test lists under AVAILABLE TO DOWNLOAD.
+settings::AvailableLanguage downloadable(
+    std::string tag,
+    std::string endonym,
+    std::string english_name,
+    std::string aside
+) {
+    settings::AvailableLanguage pack;
+    pack.tag = std::move(tag);
+    pack.endonym = std::move(endonym);
+    pack.english_name = std::move(english_name);
+    pack.aside = std::move(aside);
+    return pack;
+}
+
+/// The parts of an open list, in the order the layout lists them.
+std::vector<const settings::LayoutPart*> listed_in(
+    const std::vector<settings::LayoutPart>& parts, const renderer::SourceRect& list
+) {
+    std::vector<const settings::LayoutPart*> found;
+    for (const settings::LayoutPart& part : parts)
+        if (inside(part.rect, list))
+            found.push_back(&part);
+    return found;
+}
+
+/// Language with two packs available to download, at one size class: the
+/// open list, its names, the divider, stepping, the download and the field.
+void available_languages_at(oa::ui::kit::SizeClass size_class) {
+    const std::string simplified = "\347\256\200\344\275\223\344\270\255\346\226\207";
+    const std::string portuguese = "Portugu\u00EAs (Brasil)";
+    const std::string team_aside = "4.0 MB \u21E9";
+    const std::string ridge_aside = "community \u00B7 92% \u00B7 1.1 MB";
+    const auto offer = [&](settings::Dialog& dialog) {
+        dialog.size_class = size_class;
+        dialog.available_languages = {
+            downloadable("zh-Hans", simplified, "Chinese (Simplified)", team_aside),
+            downloadable("pt-BR", portuguese, "Portuguese (Brazil)", ridge_aside),
+        };
+    };
+
+    auto dialog = language_dialog();
+    offer(dialog);
+    CHECK(geometry::choice_count(dialog, Setting::language) == 9);
+    CHECK(geometry::choice_text(dialog, Setting::language, 0) == "System default (Deutsch)");
+    CHECK(geometry::choice_text(dialog, Setting::language, 5) == "Italiano");
+    CHECK(geometry::choice_text(dialog, Setting::language, 6) == "AVAILABLE TO DOWNLOAD");
+    CHECK(geometry::choice_text(dialog, Setting::language, 7) == simplified);
+    CHECK(geometry::choice_text(dialog, Setting::language, 8) == portuguese);
+    // A stored available tag shows that row. "pt" is not "pt-BR".
+    dialog.chosen.language = "zh-Hans";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 7);
+    dialog.chosen.language = "pt";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 0);
+    dialog.chosen.language = "pt-BR";
+    CHECK(geometry::choice_index(dialog, Setting::language) == 8);
+    dialog.chosen.language = "system";
+
+    // Nothing is downloading: the hint is the page's own two lines.
+    auto closed = settings::dialog_layout(dialog);
+    CHECK(
+        find_part(closed, "The game's own text and unit names, where its", settings::no_control) !=
+        nullptr
+    );
+    CHECK(find_part(closed, "data has them in the language.", settings::no_control) != nullptr);
+    CHECK(find_part(closed, "Downloads, then switches to it.", settings::no_control) == nullptr);
+
+    const auto field = geometry::open_rows(dialog).rows.rows[0].control_area;
+    const auto list = geometry::choice_list(field, 9, size_class);
+    CHECK(click(dialog, centre(field)) == DialogAction::redraw);
+    CHECK(dialog.download_request.empty());
+    CHECK(dialog.focused == settings::no_control);
+    auto parts = settings::dialog_layout(dialog);
+    const auto menu = listed_in(parts, list);
+    const std::array<std::string, 9> window{{
+        "System default (Deutsch)",
+        "English",
+        "Deutsch",
+        "Espa\xC3\xB1ol",
+        "Fran\xC3\xA7"
+        "ais",
+        "Italiano",
+        "AVAILABLE TO DOWNLOAD",
+        simplified,
+        team_aside,
+    }};
+    CHECK(menu.size() == window.size());
+    for (std::size_t index = 0; index < menu.size() && index < window.size(); ++index)
+        CHECK(menu[index]->text == window[index]);
+    CHECK(menu.size() == window.size() && menu[6]->control == settings::no_control);
+    CHECK(menu.size() == window.size() && menu[6]->font == settings::DialogFont::small);
+    CHECK(menu.size() == window.size() && menu[6]->tracking == geometry::heading_tracking);
+    CHECK(find_part(parts, portuguese, settings::no_control) == nullptr);
+    CHECK(find_part(parts, ridge_aside, settings::no_control) == nullptr);
+    for (std::size_t left = 0; left < parts.size(); ++left)
+        for (std::size_t right = left + 1; right < parts.size(); ++right)
+            CHECK(!overlap(parts[left].rect, parts[right].rect));
+
+    dialog.list_first = 1;
+    parts = settings::dialog_layout(dialog);
+    CHECK(find_part(parts, ridge_aside, settings::no_control) != nullptr);
+    CHECK(find_part(parts, team_aside, settings::no_control) != nullptr);
+    const oa::ui::kit::DisplayList display = geometry::dialog_list(dialog, nullptr);
+    const std::string problem = oa::ui::kit::name_problem(display);
+    if (!problem.empty())
+        std::cerr << "available languages: " << problem << '\n';
+    CHECK(problem.empty());
+    bool saw_simplified = false;
+    bool saw_portuguese = false;
+    for (const oa::ui::kit::AutomationEntry& entry :
+         oa::ui::kit::automation_parts(display, {})) {
+        CHECK(entry.text != "AVAILABLE TO DOWNLOAD");
+        CHECK(entry.name != "settings.language.7");
+        if (entry.name == "settings.language.zh-hans")
+            saw_simplified = true;
+        if (entry.name == "settings.language.pt-br")
+            saw_portuguese = true;
+    }
+    CHECK(saw_simplified && saw_portuguese);
+    for (const oa::ui::kit::Control& control : display.controls) {
+        CHECK(control.text != "AVAILABLE TO DOWNLOAD");
+        CHECK(control.name != "settings.language.7");
+    }
+
+    // Down from Italiano skips the divider. Home and End reach the ends.
+    CHECK(dialog.list_marked == 0);
+    for (int32_t step = 0; step < 5; ++step)
+        CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 5);
+    CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 7);
+    CHECK(settings::dialog_key(dialog, DialogKey::up) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 5);
+    CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 8);
+    CHECK(settings::dialog_key(dialog, DialogKey::home) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 0);
+    CHECK(settings::dialog_key(dialog, DialogKey::page_down) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 8);
+    CHECK(settings::dialog_key(dialog, DialogKey::page_up) == DialogAction::redraw);
+    CHECK(dialog.list_marked == 0);
+    // A key that is not a choice, and opening the list, download nothing.
+    CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::none);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::none);
+    CHECK(dialog.download_request.empty() && dialog.open_list == settings::first_row_control);
+    CHECK(settings::dialog_wheel(dialog, list.x + 4, list.y + 4, -1.0F) == DialogAction::redraw);
+    CHECK(dialog.list_first == 1);
+
+    for (int32_t step = 0; step < 6; ++step)
+        static_cast<void>(settings::dialog_key(dialog, DialogKey::down));
+    CHECK(dialog.list_marked == 7);
+    CHECK(settings::dialog_key(dialog, DialogKey::enter) == DialogAction::download_language);
+    CHECK(dialog.chosen.language == "zh-Hans" && dialog.download_request == "zh-Hans");
+    CHECK(dialog.open_list == settings::no_control && dialog.focused == settings::no_control);
+
+    // Left and Right on the closed field stay among the installed languages.
+    auto stepped = language_dialog();
+    offer(stepped);
+    CHECK(settings::dialog_key(stepped, DialogKey::tab) == DialogAction::redraw);
+    for (int32_t step = 0; step < 5; ++step)
+        CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::changed);
+    CHECK(stepped.chosen.language == "it");
+    CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::redraw);
+    CHECK(stepped.chosen.language == "it" && stepped.download_request.empty());
+    geometry::set_choice(stepped, Setting::language, 7);
+    CHECK(stepped.chosen.language == "zh-Hans" && stepped.download_request.empty());
+    CHECK(settings::dialog_key(stepped, DialogKey::right) == DialogAction::redraw);
+    CHECK(stepped.chosen.language == "zh-Hans");
+    CHECK(settings::dialog_key(stepped, DialogKey::left) == DialogAction::changed);
+    CHECK(stepped.chosen.language == "it");
+
+    // Choosing a failed pack again asks for the download once more.
+    auto retry = language_dialog();
+    offer(retry);
+    retry.chosen.language = "zh-Hans";
+    retry.available_languages[0].state = settings::AvailableLanguage::State::failed;
+    retry.available_languages[0].failure = "the pack was refused";
+    const auto retry_field = geometry::open_rows(retry).rows.rows[0].control_area;
+    // The list opens on the language already chosen, so Enter retries it.
+    CHECK(click(retry, centre(retry_field)) == DialogAction::redraw);
+    CHECK(retry.list_marked == 7);
+    CHECK(settings::dialog_key(retry, DialogKey::enter) == DialogAction::download_language);
+    CHECK(retry.download_request == "zh-Hans" && retry.chosen.language == "zh-Hans");
+
+    // The divider is not a press. A pack with downloads off refuses a click.
+    auto pressed = language_dialog();
+    offer(pressed);
+    const auto pressed_field = geometry::open_rows(pressed).rows.rows[0].control_area;
+    const auto pressed_list = geometry::choice_list(pressed_field, 9, size_class);
+    CHECK(click(pressed, centre(pressed_field)) == DialogAction::redraw);
+    CHECK(click(pressed, centre(geometry::choice_item(pressed_list, 6))) == DialogAction::none);
+    CHECK(pressed.open_list == settings::first_row_control && pressed.chosen.language == "system");
+    pressed.available_languages[1].choosable = false;
+    pressed.list_first = 1;
+    const auto refused = centre(geometry::choice_item(pressed_list, 7));
+    CHECK(click(pressed, refused) == DialogAction::redraw);
+    CHECK(pressed.open_list == settings::first_row_control && pressed.chosen.language == "system");
+    CHECK(pressed.download_request.empty());
+
+    // An endonym the fonts cannot draw shows its English name.
+    auto english = language_dialog();
+    offer(english);
+    english.available_languages[0].endonym_drawable = false;
+    CHECK(geometry::choice_text(english, Setting::language, 7) == "Chinese (Simplified)");
+    english.chosen.language = "zh-Hans";
+    english.available_languages[0].state = settings::AvailableLanguage::State::downloading;
+    english.available_languages[0].percent = 40;
+    CHECK(
+        find_part(
+            settings::dialog_layout(english),
+            "Chinese (Simplified) \u00B7 40%",
+            settings::no_control
+        ) != nullptr
+    );
+
+    // Each state in the closed field, and the hint after a failure.
+    struct ShownState {
+        settings::AvailableLanguage::State state;
+        uint8_t percent;
+        std::string field;
+        std::string hint;
+    };
+    const ShownState states[] = {
+        {settings::AvailableLanguage::State::offered, 0, simplified,
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::waiting, 0, simplified + " \u00B7 waiting",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::downloading, 40, simplified + " \u00B7 40%",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::installing, 0, simplified + " \u00B7 installing",
+         "Downloads, then switches to it."},
+        {settings::AvailableLanguage::State::failed, 0, simplified + " \u00B7 failed",
+         "The download failed: the pack was refused. Choose it again to try again."},
+    };
+    for (const auto& state : states) {
+        auto shown = language_dialog();
+        offer(shown);
+        shown.chosen.language = "zh-Hans";
+        shown.available_languages[0].state = state.state;
+        shown.available_languages[0].percent = state.percent;
+        shown.available_languages[0].failure = "the pack was refused";
+        const auto laid = settings::dialog_layout(shown);
+        CHECK(find_part(laid, state.field, settings::no_control) != nullptr);
+        CHECK(find_part(laid, state.hint, settings::no_control) != nullptr);
+        CHECK(find_part(laid, "data has them in the language.", settings::no_control) == nullptr);
+        CHECK(find_part(laid, simplified + " \u00B7 offered", settings::no_control) == nullptr);
+    }
+}
+
+void available_languages_list_download_and_show_their_state() {
+    CHECK(settings::download_size_text(312000) == "312 kB");
+    CHECK(settings::download_size_text(999999) == "999 kB");
+    CHECK(settings::download_size_text(1000000) == "1.0 MB");
+    CHECK(settings::download_size_text(4012345) == "4.0 MB");
+    CHECK(settings::download_size_text(99999999) == "99.9 MB");
+    CHECK(settings::download_size_text(188000000) == "188 MB");
+    CHECK(
+        settings::language_download_aside(true, "OA team", std::nullopt, 4012345, true) ==
+        "4.0 MB \u21E9"
+    );
+    CHECK(
+        settings::language_download_aside(true, "Ridge", 0.92, 1100000, true) ==
+        "community \u00B7 92% \u00B7 1.1 MB"
+    );
+    CHECK(
+        settings::language_download_aside(true, "Ridge", std::nullopt, 1100000, true) ==
+        "community \u00B7 1.1 MB"
+    );
+    CHECK(
+        settings::language_download_aside(false, "OA team", 0.92, 4012345, true) ==
+        "not reviewed \u00B7 92% \u00B7 4.0 MB"
+    );
+    CHECK(
+        settings::language_download_aside(true, "OA team", std::nullopt, 4012345, false) ==
+        "downloads off"
+    );
+    // With nothing to download the page is unchanged: six choices, no divider.
+    auto plain = language_dialog();
+    CHECK(geometry::choice_count(plain, Setting::language) == 6);
+    CHECK(
+        find_part(settings::dialog_layout(plain), "AVAILABLE TO DOWNLOAD", settings::no_control) ==
+        nullptr
+    );
+    for (const oa::ui::kit::SizeClass size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large})
+        available_languages_at(size_class);
 }
 
 void drop_down_lists_scroll_and_open_over_their_field() {
@@ -8970,6 +9261,7 @@ int main(int argc, char** argv) {
         language_drop_down_names_each_language_in_itself();
         language_drop_down_opens_marks_and_chooses();
         language_drop_down_locks_by_the_command_line();
+        available_languages_list_download_and_show_their_state();
         drop_down_lists_scroll_and_open_over_their_field();
         path_tails_keep_the_last_components_that_fit();
         text_size_runs_from_half_to_three_times_in_tenths();
