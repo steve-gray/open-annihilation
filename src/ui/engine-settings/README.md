@@ -1294,7 +1294,8 @@ With touch controls on it finds Touch listed between Graphics and
 Developer with its rows at their defaults, and a finger's press beside
 Haptics' switch taking it where a mouse press there does nothing; in the
 match, it checks that on a phone the dialog and the OA button fit the
-safe area, and on each window of the table above that the dialog takes
+safe area, and on each window of the in-match table under
+[Sizes](#sizes) that the dialog takes
 its class and scale, its class's points at the scale centred right of the
 column, is drawn there pixel for pixel as the dialog drawn offscreen at
 them, and shows a section a click on its entry's middle asks for.
