@@ -41,7 +41,7 @@ using Stepper = kit::Stepper<SettingsModel>;
 using Hint = std::array<std::string_view, 2>;
 
 /// The number of settings: Setting's enumerators.
-constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::interface_size) + 1;
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::more_in_library) + 1;
 
 // ---------------------------------------------------------------------------
 // The sections' rows.
@@ -86,6 +86,19 @@ constexpr std::array<Setting, 13> kGraphicsRows{
 /// under the switch it needs.
 constexpr std::array<Setting, 7> kLanguageRows{
     Setting::language,
+    Setting::modern_fonts,
+    Setting::text_size,
+    Setting::text_outline,
+    Setting::text_shadow,
+    Setting::text_background,
+    Setting::unicode_chat,
+};
+/// Language's rows on the main menu's dialog, where the Library opens over
+/// it (Dialog::library_link): MORE IN THE LIBRARY… right under the
+/// language's row and the packs its list offers to download.
+constexpr std::array<Setting, 8> kLanguageLibraryRows{
+    Setting::language,
+    Setting::more_in_library,
     Setting::modern_fonts,
     Setting::text_size,
     Setting::text_outline,
@@ -2117,6 +2130,8 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = wide(kit::choice("interface-size", "Interface size", kInterfaceSizeStepper,
                               {"How large Open Annihilation's own screens", "are drawn. Auto suits the window's height."}),
                   choice_width)},
+    {.setting = S::more_in_library,
+     .spec = more_in_library_row()},
 }};
 // clang-format on
 
@@ -2191,6 +2206,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "window-frame",
     "hud-scaling",
     "interface-size",
+    "more-in-library",
 };
 
 /// Tells whether every row stands at its setting's place and is named by
@@ -2433,10 +2449,13 @@ std::string_view page_heading(Page page) noexcept {
 
 std::span<const Setting>
 section_settings(Page page, const SectionHooks* section, const RowContext& context) {
-    if (section == nullptr || section->settings == nullptr)
-        return page == Page::controller && context.steam_input
-                   ? std::span<const Setting>(kSteamInputControllerRows)
-                   : page_settings(page);
+    if (section == nullptr || section->settings == nullptr) {
+        if (page == Page::controller && context.steam_input)
+            return std::span<const Setting>(kSteamInputControllerRows);
+        if (page == Page::language && context.library_link)
+            return std::span<const Setting>(kLanguageLibraryRows);
+        return page_settings(page);
+    }
     return section->settings(section->context, page);
 }
 

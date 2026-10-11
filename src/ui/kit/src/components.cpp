@@ -95,7 +95,38 @@ constexpr std::array<uint8_t, 7 * 7> kMagnifierBits{
     0, 0, 0, 0, 0, 0, 1, //
 };
 
+/// The OA button's attention dot, 7 by 7, row by row: the whole disc, which
+/// its ring's colour fills.
+constexpr std::array<uint8_t, 7 * 7> kDotBits{
+    0, 0, 1, 1, 1, 0, 0, //
+    0, 1, 1, 1, 1, 1, 0, //
+    1, 1, 1, 1, 1, 1, 1, //
+    1, 1, 1, 1, 1, 1, 1, //
+    1, 1, 1, 1, 1, 1, 1, //
+    0, 1, 1, 1, 1, 1, 0, //
+    0, 0, 1, 1, 1, 0, 0, //
+};
+/// The dot's face inside its one-point ring, 5 by 5, row by row, drawn one
+/// point in from the disc's top left.
+constexpr std::array<uint8_t, 5 * 5> kDotFaceBits{
+    0, 1, 1, 1, 0, //
+    1, 1, 1, 1, 1, //
+    1, 1, 1, 1, 1, //
+    1, 1, 1, 1, 1, //
+    0, 1, 1, 1, 0, //
+};
+
 constexpr renderer::Mark kSmallMark{9, 7, kSmallMarkBits};
+constexpr renderer::Mark kDot{7, 7, kDotBits};
+constexpr renderer::Mark kDotFace{5, 5, kDotFaceBits};
+/// The dot's ring, in points: its face starts this far in from the disc's edge.
+constexpr int32_t kDotRing = 1;
+static_assert(
+    kDot.width == oa_button_dot_side && kDot.height == oa_button_dot_side &&
+        kDotFace.width == oa_button_dot_side - 2 * kDotRing &&
+        kDotFace.height == oa_button_dot_side - 2 * kDotRing,
+    "the dot is oa_button_dot_side square, its face one ring in"
+);
 constexpr renderer::Mark kLargeMark{12, 9, kLargeMarkBits};
 constexpr renderer::Mark kPadlock{5, 7, kPadlockBits};
 constexpr renderer::Mark kClosedArrow{5, 5, kClosedArrowBits};
@@ -308,7 +339,9 @@ void paint_item(const Canvas& canvas, const Item& item) {
         break;
     case Role::oa_button:
         if (const auto* look = std::get_if<OaButtonLook>(&item.look))
-            draw_oa_button(placed_at(drawn, {item.rect.x, item.rect.y}), look->side, look->state);
+            draw_oa_button(
+                placed_at(drawn, {item.rect.x, item.rect.y}), look->side, look->state, look->dot
+            );
         break;
     case Role::oa_mark:
         draw_oa_mark(placed_at(drawn, {item.rect.x, item.rect.y}), item.rect.width);
@@ -798,9 +831,15 @@ void draw_scroll_bar(const Canvas& canvas, const Rect& well, const Rect& thumb, 
     fill_rect(canvas, thumb, hot ? colour::switch_idle : colour::control_hover);
 }
 
-void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state) {
-    if (!drawable(canvas))
-        return;
+namespace {
+
+/// Draws the OA button's face at the canvas's origin: the bevelled square,
+/// and the icon inset or the OA mark.
+///
+/// @param canvas where it is drawn; its icon is the button's
+/// @param side the square's side, in points
+/// @param state how it looks
+void draw_oa_button_face(const Canvas& canvas, int32_t side, OaButtonState state) {
     const Rect whole{0, 0, side, side};
     Colour face = colour::panel;
     if (state == OaButtonState::hovered)
@@ -831,6 +870,28 @@ void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state) {
     draw_mark_square(
         canvas, side, state == OaButtonState::idle ? colour::accent : colour::accent_light
     );
+}
+
+/// Draws the attention dot over the OA button's top right corner
+/// (oa_button_dot): the disc in the outline token, then its face one ring
+/// in, in the warning token.
+///
+/// @param canvas where the button is drawn
+/// @param side the button's side, in points
+void draw_attention_dot(const Canvas& canvas, int32_t side) {
+    const Rect dot = oa_button_dot(side);
+    draw_mark(canvas, kDot, {dot.x, dot.y}, colour::control_border);
+    draw_mark(canvas, kDotFace, {dot.x + kDotRing, dot.y + kDotRing}, colour::lock);
+}
+
+} // namespace
+
+void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, bool dot) {
+    if (!drawable(canvas))
+        return;
+    draw_oa_button_face(canvas, side, state);
+    if (dot)
+        draw_attention_dot(canvas, side);
 }
 
 void draw_oa_mark(const Canvas& canvas, int32_t side) {

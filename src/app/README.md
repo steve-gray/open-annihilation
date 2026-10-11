@@ -165,9 +165,10 @@ logs it.
 `oa_layer.hpp` and `oa_layer.cpp` are one host for Open Annihilation's own
 screens over every screen of the game: `OaLayer`, which every screen
 reaches through `Runtime::oa_layer()`. It holds the settings dialog on the
-main menu and in a match (`Runtime::SettingsScreen`), the in-game menu's OA
-button, and the notices and questions of the engine's own (`NoticeScreen`,
-`QuestionScreen`). It replaces the main menu's and the match's own hosts of
+main menu and in a match (`Runtime::SettingsScreen`), the Library on the
+main menu (`Runtime::LibraryScreen`, [The Library](#the-library)), the
+in-game menu's OA button, and the notices and questions of the engine's own
+(`NoticeScreen`, `QuestionScreen`). It replaces the main menu's and the match's own hosts of
 the dialog, and the notices' and the installs' prompts' own overlays, which
 each mapped the pointer, told a finger from a mouse, mapped the keys,
 latched the closing key and drew a backdrop.
@@ -184,7 +185,10 @@ latched the closing key and drew a backdrop.
   `close_above(name)`; `close` tells it it leaves, and a screen whose own
   model is still open closes it there as its Cancel would. A host may close
   a screen while that screen takes an input or its tick: it leaves once the
-  call is done, as if it had answered `close`.
+  call is done, as if it had answered `close`. `return_to(name)` brings a
+  screen on the stack back to the top by closing every screen above it in
+  that way, so that a screen asking for one already under it goes back to
+  it rather than stacking a second.
 - **Pushed or queued.** A screen somebody asked for at that moment joins at
   once with `push`: Settings, or a question a screen asks of its own over
   that screen (the Mods page's refused ROLL BACK over Settings). One nobody
@@ -329,8 +333,23 @@ latched the closing key and drew a backdrop.
   point is Compact at 3×; 1920 by 1080 at 150% is Large at 1.5×.
   `screen_scale`, `screen_scale_percent`, `screen_class` and
   `placement_of(name)` report them, for the checks. Without a renderer the canvas is the picture
-  itself, Compact at 1×. In a match the view is Compact at 100%: the
-  in-match Settings keeps its own placement and look until U25.
+  itself, Compact at 1×. In a match the view is Compact at 100%, and
+  Settings takes a scale and class of its own (`OaLayer::match_dialog`).
+  Its scale starts as the layer's on the match's canvas
+  (`kit::layer_viewport` of the canvas's pixels at the Interface size in
+  effect, `LayerView::interface_percent`: its step, 150%, or Auto on the
+  canvas's height). It is capped by the side column's scale
+  (`MatchLayout::scale`, which HUD scaling caps, as before): above it, the
+  largest whole step at or below it, and at least 1. Where Compact's 480 by
+  324 points do not fit the area right of the column at that scale, it is
+  the largest whole step at which they do, and at least 1. The class comes
+  from the points of that area, ((width − column's right edge) / scale) by
+  (height / scale). So with HUD scaling On 640 by 480 is Compact at 1× (512
+  by 480 points), 1280 by 720 Regular at 1× (1088 by 720), 1920 by 1080
+  Compact at 2× (832 by 540) and 2560 by 1080 Regular at 2× (1152 by 540);
+  with it Off, 1920 by 1080 is Large at 1× (1792 by 1080). On a phone with
+  touch controls (`match_fits_safe_area`) Settings is Compact, drawn at 1×
+  and fitted to the safe area, as before.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
   window pixels, and how many points it has. Settings, a notice and a
   question centre themselves in the view's room at its scale
@@ -340,9 +359,12 @@ latched the closing key and drew a backdrop.
   (`kit::to_canvas`); input maps back by the same scale (`layer_point`). A screen anchored to a part of a 3.1c screen places itself by the
   picture's rectangle (`LayerView::picture`, where the 640 by 480 frame is
   drawn) at the same scale. The main menu's OA button stays in the frame.
-  In a match Settings shows where `match_dialog_rect` puts it, Compact and
-  stamped as before. An empty place means the screen does not show: it
-  neither draws nor takes input.
+  In a match Settings shows where `match_dialog` puts it: its class's
+  dialog points at its scale, centred in the area right of the side column
+  (left = column's right edge + (area width − dialog width) / 2, top =
+  (height − dialog height) / 2), and input maps back by that scale. A 640
+  by 480 window shows it at (144, 78), pixel for pixel as before. An empty
+  place means the screen does not show: it neither draws nor takes input.
 - **Input.** One overlay at z 100 on every screen (`register_oa_layer`, over
   the extensions' overlays, under the frontend's message boxes) hands the
   layer every input. The key that closed a screen comes first: its presses
@@ -361,7 +383,9 @@ latched the closing key and drew a backdrop.
   screen's points by its placement (`layer_point`): floor((pixel − left) /
   scale). A finger's press gets the reach of the touch controls in the
   screen's points, the pick distance over the window pixels a point takes;
-  a mouse's none; keys go through `layer_key`. Outside a match F1 is the
+  a mouse's none; keys go first to the screen's own shortcuts (`shortcut`,
+  which every screen but the Library answers `pass`), then through
+  `layer_key`. Outside a match F1 is the
   kit's information key, `Key::info`, which a screen with more to tell
   about what the pointer or the focus is on takes; a screen that answers
   `pass` lets F1 go on to the game as before, and Settings does. In a
@@ -380,7 +404,7 @@ latched the closing key and drew a backdrop.
   the picture or the screens below, src over: (colour × opacity + under ×
   (255 − opacity)) / 255. That happens wherever the layer shows it: in the
   window (`present`, whose texture SDL blends the same way), in the frame
-  (`compose_front_end`) and in a match's layer (`stamp`). Such a screen
+  (`compose_front_end`) and in a match's layer (`refresh_match`). Such a screen
   never darkens what lies under it, whatever `backdrop` says, and only the
   part of it that holds what it drew goes into the window's texture. The
   cursor stays above it.
@@ -419,19 +443,110 @@ latched the closing key and drew a backdrop.
   F1.
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
-  under a modal screen, and the screens stamped at their places (one that
-  is not opaque by its opacity), each under a modal screen with a backdrop
-  darkened as the button is
-  (`refresh_match`), drawn again only when what it shows changes. It goes
-  over the composed frame (`compose_match`) and is presented after the
-  match's other layers and before the frontend dialogs' and the cursor
-  (`present`).
+  under a modal screen, and the screens at their places (one that is not
+  opaque laid over by its opacity), each under a modal screen with a
+  backdrop darkened as the button is. Each screen is drawn at its
+  placement's scale as large as its place, Settings at its own class and
+  scale on the kit canvas's crisp form at a whole scale and its smooth form
+  at 150%, never drawn at 1× and enlarged, and copied into the layer pixel
+  for pixel; the OA button's face, and on a phone the fitted Settings, are
+  drawn at a whole scale and fitted to their places by the nearest pixel
+  (`stamp`). The layer is drawn again only when what it shows changes
+  (`refresh_match`), and the composed frame and the window take the same
+  layer: it goes over the composed frame (`compose_match`) and is presented
+  after the match's other layers and before the frontend dialogs' and the
+  cursor (`present`).
 - **Automation** lists what the layer shows (`automation_controls`), as
   [docs/automation.md](../../docs/automation.md#oas-own-screens) describes:
-  `oa.button`, then the screens from the top down to the first modal one,
+  `oa.button` (on the main menu its text says how many updates wait in the
+  Library), then the screens from the top down to the first modal one,
   each control and part named `oa.` and its kit name, with its exact
   rectangle in the window's pixels and that rectangle mapped back onto the
   canvas.
+
+## The Library
+
+`library_host.hpp` and `runtime_library.cpp` host the Library
+([src/ui/library](../ui/library/README.md)) as a screen of the OA layer on
+the main menu, named `library`: modal over a backdrop, laid out at the
+view's size class (`library::window_size`, `library_layout`) and centred
+in the window at its scale. Its model, its screen's state and its feed are
+the host's (`Runtime::LibraryHost`, made on first use, joined as the
+runtime goes).
+
+- **How it opens.** The main menu's OA button opens it
+  (`Runtime::open_library`) when a press is released over it, on Updates
+  while updates wait and on Mods otherwise, with the button's sound;
+  Settings › Language's MORE IN THE LIBRARY… opens it on Languages over
+  Settings (`DialogAction::open_library`). It opens only where the
+  settings do: on the main menu, never over a message box, a frame a
+  package owns or the saves notice. The layer never holds two Libraries or
+  two Settings: opening one already on the stack goes back to it
+  (`OaLayer::return_to`), so Library › SETTINGS… › MORE IN THE LIBRARY…
+  returns to the first Library. Cmd+, (Ctrl+, elsewhere), the macOS
+  menu's Settings… and the in-game OA button still open Settings.
+  `close_library` closes it and what stands over it. Each opening asks the
+  content service for a refresh (`RefreshReason::library_opened`), which
+  the player's setting and the once-a-minute limit govern; an unattended
+  run asks nothing.
+- **The feed** (`LibraryFeed`) gives the Library its inputs and takes its
+  downloads. The runtime's own builds `Runtime::library_inputs` from the
+  content service's snapshot (each registry, built in when its origin is
+  built-in, its downloads off when it needs an install ID the player turned
+  off, and each catalogue entry), the installed packages and updates the
+  worker last found, the download queue (each item's state as the Library
+  names it; a cancelled one left out) and the run (this build's version,
+  the mod played, a match). GET and UPDATE go to `queue_download`, CANCEL
+  and RETRY to the queue's latest item of that package, and
+  `library_registry_built_in` answers from the same snapshot as the inputs'
+  `Registry::built_in`. An update queued from the Library keeps what it
+  changes (`KeptUpdate`) for its queue line while the queue lists it.
+  `tick_library` rebuilds the model, at most once a frame on the main
+  menu, whenever the feed's generation moves (the service's, the queue's,
+  the worker's searches and its pictures, added).
+- **The worker** (`LibraryWork`) is one thread of the Library's own, made
+  from `oa-base-threads` and started at its first job. After a catalogue
+  refresh (the service's generation moved), a package the queue installed,
+  and a roll back in Settings, it lists the player's packages
+  (`list_installed`), matches each to the catalogues, adopts each file
+  install a catalogue lists (`adopt_match`), finds the updates
+  (`find_updates`) and reads each installed mod's own picture; the main
+  thread reads what it last found under its lock and never does that work
+  itself. It also reads and fetches the badge pictures
+  (`content::PictureCache`, with its own HTTP client and no install ID)
+  for the rows the Library shows, never while a match runs. The host's
+  destructor stops it and joins it within a second, a fetch included.
+- **The dot.** The main menu's OA button wears the kit's attention dot
+  (`kit::draw_oa_button`) while `library_update_count` is above 0: the
+  updates the Library's last model counts as installable, so the dot shows
+  from the first frame the cached catalogue offers one. With none the
+  button is drawn byte for byte as before.
+- **The actions.** OPEN FOLDER shows the package's folder
+  (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
+  both recorded in a run nobody watches. SETTINGS… opens Settings over the
+  Library, CLOSE closes it, UPDATE ALL queues every update that can act in
+  list order. PLAY NOW and ROLL BACK go through
+  `library_entry_action`: PLAY NOW switches the game to the installed
+  mod's folder (`switch_to_mod_folder`, a refusal shown in the status
+  line), and ROLL BACK opens Settings over the Library on Mods with the
+  Roll Back Mod question asked for its folder. The Library's own keys are
+  Cmd+F (Ctrl+F elsewhere) and `/` outside the search for Find, and
+  Ctrl+Tab and Ctrl+Shift+Tab for the tabs; Cmd+, opens Settings over it.
+- **The check.** `native-library` (`--check-library`,
+  `runtime_library_check.cpp`) gives the Library a feed of made-up
+  packages and no network, with its data and the player's folder in the
+  build tree, at 640x480 and 1920x1080: the button drawn as before with no
+  update, the Library opened on Mods and closed, the dot and
+  `oa.button`'s "Library · 2 updates" with two, the Library on Updates,
+  GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
+  recorded openers, ROLL BACK's question, PLAY NOW's soft restart,
+  Settings over the Library and the Library over Settings, never two of
+  either, the shortcut opening Settings, and in a skirmish the in-game OA
+  button opening Settings and the Library opening nowhere.
+- **Limitations.** The controller's Y, X, LB, RB and right stick do not
+  reach the Library's own commands yet: the D-pad, A, B and the shoulder
+  buttons' Tab drive it as the kit's keys. The installer's questions for
+  catalogue installs, the mod being played and download counts come later.
 
 ## Files
 
@@ -1484,7 +1599,14 @@ latched the closing key and drew a backdrop.
   `Down`), both reaching an open dialog or menu first, as the player's do,
   and `settings SECTION` opens the settings dialog beside the
   in-game menu at the section its list names so, such as
-  `settings Language`;
+  `settings Language`, and prints `stage: settings SECTION at X,Y WxH,
+  version at X,Y WxH`: where the dialog shows and the room its header keeps
+  for the version text, in the match canvas's pixels, so that a golden
+  frame can leave the version out. That room is the header's version part
+  as the dialog's class lays it out, from 71 points left of its right edge
+  to 5 points right of it, and the header's rows 6 to 22, at the dialog's
+  scale: at 640x480 `at 144,78 480x324, version at 540,84 76x16`, and at
+  1920x1080 a dialog of 960x648 and a version room of 152x32;
   `native-stage` checks it. A save/load run ends by
   reporting the live units by type, the veterans by veterancy level, the
   stockpiled rounds, the buildings by facing and each player's health.
@@ -1674,11 +1796,12 @@ latched the closing key and drew a backdrop.
   `runtime_engine_settings_menu.cpp` hold the main menu's OA button, an
   overlay at the picture's bottom-right corner (its top-right corner while
   an extension's overlay stands over the main menu) under the extensions'
-  overlays, drawn into the main menu's picture; the dialog it opens is
-  centred over the darkened menu and takes every input while it shows. A
-  press released over the button, Cmd+, on macOS or Ctrl+, elsewhere, and
-  the macOS application menu's Settings… item open it; nothing opens over a
-  message box or a frame a package owns. Enter is OK and Escape is Cancel;
+  overlays, drawn into the main menu's picture, which opens the Library
+  ([The Library](#the-library)) and wears a dot while updates wait there.
+  The dialog is centred over the darkened menu and takes every input while
+  it shows. Cmd+, on macOS or Ctrl+, elsewhere, the macOS application
+  menu's Settings… item and the Library's SETTINGS… open it; nothing opens
+  over a message box or a frame a package owns. Enter is OK and Escape is Cancel;
   the key that closed the dialog does nothing more until it is released, so
   that a held key never reaches the main menu, where Escape itself does
   nothing. Another screen replacing the main menu closes the dialog as
@@ -1747,7 +1870,11 @@ latched the closing key and drew a backdrop.
   Mode's list open, off and on, and Graphics at its top and at its class's
   end;
   `runtime_engine_settings_match_check.cpp` the in-game menu's button and
-  dialog at those sizes, with the locks of a game played alone and of a
+  dialog at 640x480, 1280x720, 1920x1080 and 2560x1080, and 1920x1080
+  with HUD scaling Off, each at the class and scale `match_dialog` gives,
+  its class's points at the scale centred right of the column, drawn
+  there pixel for pixel as the dialog drawn offscreen at them, a click on
+  a section's entry showing it, with the locks of a game played alone and of a
   shared game, Hardware acceleration set to Full and to Basic in a shared
   game, where each waits for the game's end, and the wheel scrolling the dialog, not the
   battlefield; and `runtime_engine_settings_wiring_check.cpp` each setting

@@ -23,8 +23,9 @@ inline constexpr int32_t reset_install_id_action = 4;
 /// What EMPTY asks the host for.
 inline constexpr int32_t empty_downloads_action = 5;
 /// What the Registries row's MANAGE… asks for: the Registries part, which
-/// the page opens itself and asks nothing of the host.
-inline constexpr int32_t manage_registries_action = 6;
+/// the page opens itself and asks nothing of the host. It follows every
+/// other row's button's action, MORE IN THE LIBRARY…'s among them.
+inline constexpr int32_t manage_registries_action = 7;
 
 /// Places Downloads' rows from the dialog's offer.
 ///

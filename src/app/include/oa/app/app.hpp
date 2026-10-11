@@ -593,6 +593,11 @@ struct Options {
     // an .oareg file the run posts. It writes its own registry list under
     // --user-folder before the content service starts.
     bool check_registries = false;
+    // Opens the Library from the main menu's OA button over a feed of
+    // made-up packages, wears the button's dot while updates wait, carries
+    // out the Library's actions, opens Settings over it and it over
+    // Settings, and keeps the in-match OA button on Settings.
+    bool check_library = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;
