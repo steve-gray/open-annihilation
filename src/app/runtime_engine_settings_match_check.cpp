@@ -8,14 +8,19 @@
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 
 #include "oa/app/runtime.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -33,6 +38,7 @@ namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
 namespace layout = oa::ui::display_layout;
 namespace artless = oa::ui::frontend_renderer;
+namespace kit = oa::ui::kit;
 
 /// How far round the pointer the software cursor may draw, in window pixels.
 constexpr int kCursorReach = 64;
@@ -52,6 +58,28 @@ constexpr SDL_Keymod kShortcutModifier = SDL_KMOD_CTRL;
 constexpr int kUltrawideWidth = 2560;
 /// An ultrawide window's height.
 constexpr int kUltrawideHeight = 1080;
+
+/// A window the in-match dialog is checked on, with HUD scaling On or Off,
+/// and the size class and whole scale the dialog takes there: the points of
+/// the area right of the side column at the layer's scale, capped by the
+/// column's.
+struct MatchWindow {
+    int width{};                                        ///< the window's width, in pixels
+    int height{};                                       ///< the window's height, in pixels
+    bool hud_scaling{};                                 ///< HUD scaling is On
+    kit::SizeClass size_class{kit::SizeClass::compact}; ///< the dialog's class
+    int32_t scale{}; ///< the window pixels a point of the dialog takes
+};
+
+/// The windows the in-match dialog is checked on: 640x480, 1280x720,
+/// 1920x1080 and 2560x1080 with HUD scaling On, and 1920x1080 with it Off.
+constexpr std::array<MatchWindow, 5> kMatchWindows{{
+    {640, 480, true, kit::SizeClass::compact, 1},
+    {1280, 720, true, kit::SizeClass::regular, 1},
+    {kDefaultWindowWidth, kDefaultWindowHeight, true, kit::SizeClass::compact, 2},
+    {kUltrawideWidth, kUltrawideHeight, true, kit::SizeClass::regular, 2},
+    {kDefaultWindowWidth, kDefaultWindowHeight, false, kit::SizeClass::large, 1},
+}};
 
 /// The rows of a side-column page taller than the game's own 480, as a
 /// mod's build page may be: it narrows the side column on a window whose
@@ -146,11 +174,13 @@ void Runtime::check_engine_settings_in_match() {
                    rect.x + rect.width <= safe.x + safe.width &&
                    rect.y + rect.height <= safe.y + safe.height;
         };
-        const auto dialog_at = OaLayer::match_dialog_rect(phone, true);
+        const auto fitted = OaLayer::match_dialog(phone, 0, true);
+        const auto dialog_at = fitted.shown;
         // min(2202 / 480, 1116 / 324): the safe area's height decides.
         const double scale = 1116.0 / settings::dialog_height;
         require(
-            inside_safe(dialog_at) && dialog_at.height == 1116 &&
+            fitted.size_class == kit::SizeClass::compact && fitted.scale_percent == 0 &&
+                inside_safe(dialog_at) && dialog_at.height == 1116 &&
                 dialog_at.width == static_cast<int>(std::lround(settings::dialog_width * scale)) &&
                 std::abs(2 * dialog_at.x + dialog_at.width - (2 * safe.x + safe.width)) <= 1,
             "the dialog does not fit the phone's safe area, centred"
@@ -166,10 +196,10 @@ void Runtime::check_engine_settings_in_match() {
         );
         const auto button = OaLayer::match_button_rect(phone, true);
         require(inside_safe(button), "the OA button leaves the phone's safe area");
-        const auto unfitted = OaLayer::match_dialog_rect(phone);
+        // Unfitted, the phone's side column is at 1x, which caps the dialog.
+        const auto unfitted = OaLayer::match_dialog(phone, 0);
         require(
-            unfitted.width == settings::dialog_width &&
-                !inside_safe(OaLayer::match_button_rect(phone)),
+            unfitted.scale_percent == 100 && !inside_safe(OaLayer::match_button_rect(phone)),
             "without fitting, the dialog does not keep the side column's scale"
         );
     }
@@ -229,29 +259,74 @@ void Runtime::check_engine_settings_in_match() {
             }
         require(differing == 0, what + ": " + std::to_string(differing) + " pixels differ");
     };
+    // `rect` shows the source pixel for pixel: as large as it, each window
+    // pixel the source's pixel at the same place.
+    const auto copied_at = [&](const renderer::Surface& frame,
+                               const renderer::Surface& source,
+                               const layout::Rect& rect,
+                               const std::string& what) {
+        require(
+            static_cast<int>(source.width) == rect.width &&
+                static_cast<int>(source.height) == rect.height && rect.x >= 0 && rect.y >= 0 &&
+                rect.x + rect.width <= static_cast<int>(frame.width) &&
+                rect.y + rect.height <= static_cast<int>(frame.height),
+            what + " is not drawn as large as its place"
+        );
+        const auto expected = shown(source);
+        std::size_t differing = 0;
+        for (int row = 0; row < rect.height; ++row)
+            for (int column = 0; column < rect.width; ++column) {
+                const auto source_offset = (static_cast<std::size_t>(row) * source.width +
+                                            static_cast<std::size_t>(column)) *
+                                           3U;
+                const auto frame_offset = (static_cast<std::size_t>(rect.y + row) * frame.width +
+                                           static_cast<std::size_t>(rect.x + column)) *
+                                          3U;
+                for (std::size_t channel = 0; channel < 3; ++channel)
+                    if (frame.rgb[frame_offset + channel] !=
+                        expected.rgb[source_offset + channel]) {
+                        ++differing;
+                        break;
+                    }
+            }
+        require(differing == 0, what + ": " + std::to_string(differing) + " pixels differ");
+    };
     const auto icon = engine_settings_icon();
     require(renderer::picture_drawable(icon), "the in-game OA button has no icon to show");
     const auto button_face = [&](settings::ButtonLook look, bool darkened, const auto& fonts) {
         return OaLayer::match_button_face(match_layout_, look, darkened, fonts, icon);
     };
-    const auto dialog_face = [&icon](const settings::Dialog& dialog, const auto& fonts) {
+    // The dialog drawn offscreen at a size class and a whole scale: the
+    // class's dialog points at the scale, crisp. Compact at 1x is 0.7.3's.
+    const auto dialog_face_at = [&icon](
+                                    const settings::Dialog& dialog,
+                                    const auto& fonts,
+                                    kit::SizeClass size_class,
+                                    int32_t scale
+                                ) {
+        settings::Dialog sized = dialog;
+        sized.size_class = size_class;
+        const kit::Metrics& class_metrics = kit::metrics_of(size_class);
         renderer::Surface face;
-        face.width = static_cast<uint32_t>(settings::dialog_width);
-        face.height = static_cast<uint32_t>(settings::dialog_height);
+        face.width = static_cast<uint32_t>(class_metrics.dialog_width * scale);
+        face.height = static_cast<uint32_t>(class_metrics.dialog_height * scale);
         face.rgb.assign(static_cast<std::size_t>(face.width) * face.height * 3U, 0);
-        settings::draw_dialog(face, {0, 0, 1}, dialog, fonts, icon);
+        settings::draw_dialog(face, {0, 0, scale}, sized, fonts, icon);
         return face;
     };
     const auto centre = [](const layout::Rect& rect) {
         return layout::Point{rect.x + rect.width / 2, rect.y + rect.height / 2};
     };
 
-    // Clicks the middle of a part of the dialog that shows beside the column.
+    // Clicks the middle of a part of the dialog that shows beside the column,
+    // as the dialog draws it at its scale.
     const auto click_dialog = [&](const artless::SourceRect& part) {
-        const auto at = OaLayer::match_dialog_rect(match_layout_);
+        const LayerPlacement placed = oa_layer().placement_of("settings");
+        require(placed.scale_percent > 0, "the dialog does not show at a scale of its own");
+        const kit::Rect drawn =
+            kit::to_canvas({part.x, part.y, part.width, part.height}, placed.scale_percent);
         const layout::Point point{
-            at.x + (part.x + part.width / 2) * at.width / settings::dialog_width,
-            at.y + (part.y + part.height / 2) * at.height / settings::dialog_height
+            placed.shown.x + drawn.x + drawn.width / 2, placed.shown.y + drawn.y + drawn.height / 2
         };
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, point, 0);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
@@ -385,16 +460,23 @@ void Runtime::check_engine_settings_in_match() {
         );
     };
 
-    for (const auto& [width, height] :
-         {std::pair{640, 480},
-          std::pair{1280, 720},
-          std::pair{kDefaultWindowWidth, kDefaultWindowHeight},
-          std::pair{kUltrawideWidth, kUltrawideHeight}}) {
+    // The HUD scaling each window takes, put back after the last.
+    const bool kept_hud_scaling = engine_settings_state().current.hud_scaling;
+    for (const MatchWindow& checked : kMatchWindows) {
+        const int width = checked.width;
+        const int height = checked.height;
         const std::string size = std::to_string(width) + 'x' + std::to_string(height);
-        const std::string on = " on the " + size + " window";
+        const std::string on =
+            " on the " + size + " window" + (checked.hud_scaling ? "" : " with HUD scaling Off");
+        // What the window's reports and snapshots are named by: its size, and
+        // with HUD scaling Off that too.
+        const std::string hud_suffix = checked.hud_scaling ? "" : "-hud-off";
+        const std::string shot = size + hud_suffix;
         if (match_)
             leave_match();
         load(Screen::main_menu);
+        // The game is laid out at the HUD scaling in effect when it starts.
+        engine_settings_state().current.hud_scaling = checked.hud_scaling;
         if (!SDL_SetWindowSize(sdl_.window, width, height) || !SDL_SyncWindow(sdl_.window))
             throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
         start_benchmark_skirmish();
@@ -404,7 +486,28 @@ void Runtime::check_engine_settings_in_match() {
         );
         const auto& fonts = *engine_settings_fonts();
         const auto button = OaLayer::match_button_rect(match_layout_);
-        const auto dialog_at = OaLayer::match_dialog_rect(match_layout_);
+        // The dialog at its class and scale, its class's points at the scale
+        // centred right of the column.
+        const auto in_match =
+            OaLayer::match_dialog(match_layout_, oa_layer().view().interface_percent);
+        const auto& dialog_at = in_match.shown;
+        const kit::Metrics& class_metrics = kit::metrics_of(checked.size_class);
+        const int face_width = class_metrics.dialog_width * checked.scale;
+        const int face_height = class_metrics.dialog_height * checked.scale;
+        require(
+            in_match.size_class == checked.size_class &&
+                in_match.scale_percent == checked.scale * 100,
+            "the dialog is " + std::string(size_class_name(in_match.size_class)) + " at " +
+                std::to_string(in_match.scale_percent) + "%, not " +
+                std::string(size_class_name(checked.size_class)) + " at " +
+                std::to_string(checked.scale) + "x" + on
+        );
+        require(
+            dialog_at.width == face_width && dialog_at.height == face_height &&
+                dialog_at.x == match_layout_.left + (width - match_layout_.left - face_width) / 2 &&
+                dialog_at.y == (height - face_height) / 2,
+            "the dialog is not its class's points at its scale centred right of the column" + on
+        );
         require(
             button.y + button.height <= match_layout_.hud_height && button.x >= 0 &&
                 button.x + button.width <= match_layout_.left,
@@ -474,11 +577,12 @@ void Runtime::check_engine_settings_in_match() {
         render();
         const auto menu = composed();
         write_ppm(
-            report_directory / ("native-engine-settings-menu-" + std::to_string(width) + ".ppm"),
+            report_directory /
+                ("native-engine-settings-menu-" + std::to_string(width) + hud_suffix + ".ppm"),
             menu
         );
         if (!options_.snapshot.empty())
-            write_ppm(step_snapshot(options_.snapshot, "match-menu-" + size), menu);
+            write_ppm(step_snapshot(options_.snapshot, "match-menu-" + shot), menu);
         drawn_at(
             menu,
             button_face(settings::ButtonLook::idle, false, fonts),
@@ -511,6 +615,19 @@ void Runtime::check_engine_settings_in_match() {
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, centre(button), SDL_BUTTON_LEFT);
         auto* dialog = engine_settings_dialog();
         require(dialog != nullptr, "a click on the OA button did not open the dialog" + on);
+        {
+            // Laid out, placed and taking input at its class and scale.
+            const LayerPlacement placed = oa_layer().placement_of("settings");
+            require(
+                dialog->size_class == checked.size_class && placed.shown.x == dialog_at.x &&
+                    placed.shown.y == dialog_at.y && placed.shown.width == dialog_at.width &&
+                    placed.shown.height == dialog_at.height &&
+                    placed.points_width == class_metrics.dialog_width &&
+                    placed.points_height == class_metrics.dialog_height &&
+                    placed.scale_percent == checked.scale * 100,
+                "the open dialog is not laid out and placed at its class and scale" + on
+            );
+        }
         require(
             match_paused_ && ingame_menu_column_shown(),
             "the in-game menu did not stay under the dialog" + on
@@ -532,10 +649,18 @@ void Runtime::check_engine_settings_in_match() {
         render();
         const auto open = composed();
         write_ppm(
-            report_directory / ("native-engine-settings-match-" + std::to_string(width) + ".ppm"),
+            report_directory /
+                ("native-engine-settings-match-" + std::to_string(width) + hud_suffix + ".ppm"),
             open
         );
-        drawn_at(open, dialog_face(*dialog, fonts), dialog_at, "the dialog" + on);
+        // Drawn at its class and scale, copied pixel for pixel: at 640x480
+        // Compact at 1x, 0.7.3's dialog.
+        copied_at(
+            open,
+            dialog_face_at(*dialog, fonts, checked.size_class, checked.scale),
+            dialog_at,
+            "the dialog" + on
+        );
         drawn_at(
             open,
             button_face(settings::ButtonLook::idle, true, fonts),
@@ -601,7 +726,36 @@ void Runtime::check_engine_settings_in_match() {
             differing == 0,
             std::to_string(differing) + " presented pixels differ from the composed frame" + on
         );
-        expect_locks("Locked during a game", "match-dialog-alone", size, on);
+        // A click on a section's entry, at its middle as the dialog draws it,
+        // shows that section.
+        {
+            const settings::Page was = engine_settings_dialog()->page;
+            const settings::Page other = was == settings::Page::graphics
+                                             ? settings::Page::common_tweaks
+                                             : settings::Page::graphics;
+            show_page(other, on);
+            require(
+                engine_settings_dialog()->page != was,
+                "a click on a section's entry did not change the section" + on
+            );
+        }
+        std::cout << "engine settings check: in a match the dialog is "
+                  << size_class_name(checked.size_class) << ", " << checked.scale << "x, on the "
+                  << size << " window\n";
+        if (!checked.hud_scaling) {
+            // With HUD scaling Off the window checks the dialog's class and
+            // scale, its drawing and its clicks. The parts below expect every
+            // setting at its default, which HUD scaling Off is not; the
+            // windows above check them. Escape is Cancel.
+            tap_key(SDLK_ESCAPE, SDL_KMOD_NONE);
+            require(engine_settings_dialog() == nullptr, "Escape did not close the dialog" + on);
+            resume_match_pause();
+            std::cout << "engine settings check: the in-game menu's OA button at " << button.x
+                      << ',' << button.y << " and the dialog at " << dialog_at.x << ','
+                      << dialog_at.y << on << '\n';
+            continue;
+        }
+        expect_locks("Locked during a game", "match-dialog-alone", shot, on);
         expect_mod_locked(on);
         require(
             !shows_text(
@@ -616,11 +770,15 @@ void Runtime::check_engine_settings_in_match() {
         tap_key(SDLK_END, SDL_KMOD_NONE);
         {
             const auto* graphics = engine_settings_dialog();
-            // Its end: 513, and the 79 rows of its last row, Interface size.
+            // Its end: at Compact 513, and the 79 rows of its last row,
+            // Interface size; a larger class's view shows more and scrolls
+            // less.
             require(
                 graphics != nullptr &&
                     graphics->scroll[static_cast<std::size_t>(settings::Page::graphics)] ==
-                        513 + 79,
+                        settings::scroll_limit(*graphics) &&
+                    (graphics->size_class != kit::SizeClass::compact ||
+                     settings::scroll_limit(*graphics) == 513 + 79),
                 "End did not scroll Graphics to its end" + on
             );
             const auto parts = settings::dialog_layout(*graphics);
@@ -771,7 +929,7 @@ void Runtime::check_engine_settings_in_match() {
             shows_text(settings::dialog_layout(*dialog), "Shared game - still running"),
             "the dialog does not say the shared game is still running" + on
         );
-        expect_locks("Set by the host", "match-dialog-shared", size, on);
+        expect_locks("Set by the host", "match-dialog-shared", shot, on);
         show_page(settings::Page::mods, on);
         require(
             engine_settings_dialog()->locks.mod == settings::Lock::in_game &&
@@ -783,13 +941,15 @@ void Runtime::check_engine_settings_in_match() {
                 ),
             "a shared game does not lock Mods with its note" + on
         );
-        // Graphics in a shared game, a page down to show both rows: Vertical
+        // Graphics in a shared game, a page down to show both rows at
+        // Compact, whose view a larger class's holds from its top: Vertical
         // sync is locked during the game, its value set before the game kept
         // in effect; Hardware acceleration can still be set, and Basic or
         // Full waits for the game to end, so the processor keeps drawing.
         // Escape then puts Off back.
         show_page(settings::Page::graphics, on);
-        tap_key(SDLK_PAGEDOWN, SDL_KMOD_NONE);
+        if (engine_settings_dialog()->size_class == kit::SizeClass::compact)
+            tap_key(SDLK_PAGEDOWN, SDL_KMOD_NONE);
         dialog = engine_settings_dialog();
         require(
             dialog->locks.vertical_sync ==
@@ -852,7 +1012,7 @@ void Runtime::check_engine_settings_in_match() {
                 settings::HardwareAcceleration::basic,
                 "Off for this game: in a shared game, Basic"
             );
-            snapshot("match-dialog-shared-graphics", size);
+            snapshot("match-dialog-shared-graphics", shot);
         }
         tap_key(SDLK_ESCAPE, SDL_KMOD_NONE);
         require(
@@ -867,6 +1027,10 @@ void Runtime::check_engine_settings_in_match() {
                   << button.y << " and the dialog at " << dialog_at.x << ',' << dialog_at.y << on
                   << '\n';
     }
+    // HUD scaling as it was, kept and in effect: the game is laid out again.
+    engine_settings_state().current.hud_scaling = kept_hud_scaling;
+    require(!EngineSettingsState::flush(*this), "HUD scaling was not written back");
+    apply_output_mode();
     // A Screen size chosen in a game applies when OK is pressed: the window
     // takes it at once and the match is laid out again at it, the game
     // keeping its tick and its world; the window and the setting then go
