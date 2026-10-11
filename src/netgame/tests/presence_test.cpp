@@ -536,7 +536,7 @@ static_assert(sizeof kContentRecord == 29);
 // byte of flags, read back, bits 1 to 7 ignored, and left out when its value
 // is not one byte.
 void the_content_field() {
-    start_case("the_content_field");
+    start_case("the content field");
     PresenceRecord record;
     record.engine = PresenceEngine{"0.8.0", "Windows", "x64"};
     record.content = PresenceContent{true};
