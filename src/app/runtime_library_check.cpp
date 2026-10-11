@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // --check-library: the Library over a feed of made-up packages, with no
-// network. With no update waiting the main menu's OA button draws as it
-// always has and opens the Library on Active, which reads the mod played,
-// the language in use and the installed maps, and whose CLOSE goes back;
-// with two it wears its dot, says so to automation and opens the Library on
-// Active again, whose Updates tab opens on its Updates filter with UPDATE
-// ALL over the list.
+// network. With no update waiting the main menu's OA button draws its count
+// of the fixture's four mods and opens the Library on Active, which reads
+// the mod played, the language in use and the installed maps, and whose
+// CLOSE goes back; with two it wears its dot, says "Library · 4 mods · 2
+// updates" to automation and opens the Library on Active again, whose
+// Updates tab opens on its Updates filter with UPDATE ALL over the list.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
 // openers, ROLL BACK asks the Roll Back Mod question over the Library and
 // PLAY NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
@@ -770,11 +770,15 @@ void Runtime::check_library() {
         const renderer::Surface shown = frame_without_cursor();
         renderer::Surface plain = shown;
         const auto square = EngineSettingsMenuHost::button_rect(*this);
+        // The same badge the frame drew, without the dot, so a frame with
+        // no update matches and a frame with updates differs only there.
+        kit::OaButtonMark mark = EngineSettingsMenuHost::library_mark(*this);
+        mark.dot = false;
         kit::draw_oa_button(
             {&plain, {square.x, square.y, 1}, fonts, icon},
             square.width,
             kit::OaButtonState::idle,
-            false
+            mark
         );
         return std::array<renderer::Surface, 2>{shown, plain};
     };
@@ -822,7 +826,7 @@ void Runtime::check_library() {
             "library_registry_built_in does not answer as the feed's registries say" + on
         );
 
-        // 1. With no update waiting, the button is drawn as it always was.
+        // 1. With no update waiting, the button wears the mod count and no dot.
         require(library_update_count() == 0, "an update waits in the fixture without one" + on);
         {
             const auto [shown, plain] = button_frames();
@@ -833,6 +837,11 @@ void Runtime::check_library() {
                     shown, plain, {square.x, square.y, square.width, square.height}, outside, {}
                 ) == 0,
                 "with no update the OA button is not the button drawn without a dot" + on
+            );
+            const std::optional<AutomationControl> quiet = named("oa.button");
+            require(
+                quiet.has_value() && quiet->text == "Library · 4 mods",
+                "automation does not list oa.button as \"Library · 4 mods\"" + on
             );
         }
 
@@ -901,10 +910,19 @@ void Runtime::check_library() {
             );
         }
         snapshot("menu-dot-" + size);
+        {
+            const library::Tab shown_tab = host.model.tab;
+            host.model.tab = library::Tab::mods;
+            require(
+                library::filter_count(host.model, library::Filter::all) == 4,
+                "the Mods tab's All is not the fixture's four mods" + on
+            );
+            host.model.tab = shown_tab;
+        }
         const std::optional<AutomationControl> button = named("oa.button");
         require(
-            button.has_value() && button->text == "Library · 2 updates",
-            "automation does not list oa.button as \"Library · 2 updates\"" + on
+            button.has_value() && button->text == "Library · 4 mods · 2 updates",
+            "automation does not list oa.button as \"Library · 4 mods · 2 updates\"" + on
         );
         press_button();
         require(

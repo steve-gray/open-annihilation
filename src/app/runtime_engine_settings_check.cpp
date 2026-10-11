@@ -14,6 +14,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
+#include "oa/ui/kit/components.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -479,14 +480,14 @@ void Runtime::check_engine_settings_under_overlay() {
     );
     const auto top = EngineSettingsMenuHost::button_rect(*this);
     require(
-        top.x == 556 && top.y == 12 && top.width == settings::menu_button_side,
-        "under an extension's overlay the OA button is not at 556,12"
+        top.x == 520 && top.y == 12 && top.width == settings::menu_button_side,
+        "under an extension's overlay the OA button is not at 520,12"
     );
     const auto settings_top = EngineSettingsMenuHost::settings_button_rect(*this);
     require(
-        settings_top.x == 596 && settings_top.y == 12 &&
+        settings_top.x == 580 && settings_top.y == 12 &&
             settings_top.width == settings::menu_button_side,
-        "under an extension's overlay the Settings button is not at 596,12"
+        "under an extension's overlay the Settings button is not at 580,12"
     );
     // A click on the button reaches it through the extensions' overlays, and
     // Escape closes the Library it opens, which stands over them.
@@ -582,26 +583,26 @@ void Runtime::check_engine_settings_in_menu() {
     point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
     const auto bottom = EngineSettingsMenuHost::button_rect(*this);
     require(
-        bottom.x == 556 && bottom.y == 436 && bottom.width == settings::menu_button_side &&
+        bottom.x == 520 && bottom.y == 420 && bottom.width == settings::menu_button_side &&
             bottom.height == settings::menu_button_side,
-        "the OA button is not the 32-pixel square at 556,436"
+        "the OA button is not the 48-pixel square at 520,420"
     );
     const auto settings_bottom = EngineSettingsMenuHost::settings_button_rect(*this);
     require(
-        settings_bottom.x == 596 && settings_bottom.y == 436 &&
+        settings_bottom.x == 580 && settings_bottom.y == 420 &&
             settings_bottom.width == settings::menu_button_side &&
             settings_bottom.height == settings::menu_button_side,
-        "the Settings button is not the 32-pixel square at 596,436"
+        "the Settings button is not the 48-pixel square at 580,420"
     );
     main_menu_overlay_ = true;
     const auto top = EngineSettingsMenuHost::button_rect(*this);
     const auto settings_top = EngineSettingsMenuHost::settings_button_rect(*this);
     main_menu_overlay_ = false;
     require(
-        top.x == 556 && top.y == 12 && top.width == settings::menu_button_side &&
-            settings_top.x == 596 && settings_top.y == 12 &&
+        top.x == 520 && top.y == 12 && top.width == settings::menu_button_side &&
+            settings_top.x == 580 && settings_top.y == 12 &&
             settings_top.width == settings::menu_button_side,
-        "under an extension's overlay the buttons are not at 556,12 and 596,12"
+        "under an extension's overlay the buttons are not at 520,12 and 580,12"
     );
     // The rectangle that holds both buttons.
     const auto pair = [](const artless::SourceRect& left, const artless::SourceRect& right) {
@@ -615,15 +616,25 @@ void Runtime::check_engine_settings_in_menu() {
         return frame_without_cursor();
     };
     main_menu_overlay_ = true;
+    // The badge is settled before either frame, so both draws wear the same
+    // count (or the same spinner place: the clock is pinned above).
+    const kit::OaButtonMark library_badge = EngineSettingsMenuHost::library_mark(*this);
     const auto button_at_top = frame();
     main_menu_overlay_ = false;
+    const auto draw_library =
+        [&](renderer::Surface& target, const artless::SourceRect& at, settings::ButtonLook look) {
+            kit::draw_oa_button(
+                {&target, {at.x, at.y, 1}, fonts, icon},
+                at.width,
+                static_cast<kit::OaButtonState>(look),
+                library_badge
+            );
+        };
     // The frame shows the two buttons at the bottom, in these looks.
     const auto expect_buttons =
         [&](settings::ButtonLook look, settings::ButtonLook settings_look, std::string_view what) {
             auto expected = button_at_top;
-            settings::draw_oa_button(
-                expected, {bottom.x, bottom.y, 1}, bottom.width, look, *fonts, icon
-            );
+            draw_library(expected, bottom, look);
             settings::draw_oa_button(
                 expected,
                 {settings_bottom.x, settings_bottom.y, 1},
@@ -639,15 +650,13 @@ void Runtime::check_engine_settings_in_menu() {
     };
     expect_button(
         settings::ButtonLook::idle,
-        "the OA button and the Settings button are not drawn at rest at 556,436 and 596,436"
+        "the OA button and the Settings button are not drawn at rest at 520,420 and 580,420"
     );
     const auto idle = frame();
     snapshot("engine-settings-menu", idle);
     {
         auto expected = idle;
-        settings::draw_oa_button(
-            expected, {top.x, top.y, 1}, top.width, settings::ButtonLook::idle, *fonts, icon
-        );
+        draw_library(expected, top, settings::ButtonLook::idle);
         settings::draw_oa_button(
             expected,
             {settings_top.x, settings_top.y, 1},
@@ -658,7 +667,7 @@ void Runtime::check_engine_settings_in_menu() {
         );
         require(
             differing_pixels(button_at_top, expected, bottom_pair) == 0,
-            "under an extension's overlay the buttons are not drawn at 556,12 and 596,12"
+            "under an extension's overlay the buttons are not drawn at 520,12 and 580,12"
         );
     }
 

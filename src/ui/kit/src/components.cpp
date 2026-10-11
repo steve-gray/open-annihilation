@@ -342,7 +342,10 @@ void paint_item(const Canvas& canvas, const Item& item) {
     case Role::oa_button:
         if (const auto* look = std::get_if<OaButtonLook>(&item.look))
             draw_oa_button(
-                placed_at(drawn, {item.rect.x, item.rect.y}), look->side, look->state, look->dot
+                placed_at(drawn, {item.rect.x, item.rect.y}),
+                look->side,
+                look->state,
+                OaButtonMark{look->dot, look->corner, look->count, look->turn}
             );
         break;
     case Role::oa_mark:
@@ -1074,14 +1077,134 @@ void draw_attention_dot(const Canvas& canvas, int32_t side) {
     draw_mark(canvas, kDotFace, {dot.x + kDotRing, dot.y + kDotRing}, colour::lock);
 }
 
+/// One spinner place's centre, in 256ths of the badge from its top left.
+struct SpinnerCentre {
+    int32_t x{};
+    int32_t y{};
+};
+
+/// The spinner's orbit and its dots, in 256ths of the badge. The diagonal
+/// places sit at 45 degrees (181/256, the nearest eighth of the cosine).
+constexpr int32_t kSpinnerOrbit = 56;
+constexpr int32_t kSpinnerDot = 40;
+constexpr int32_t kSpinnerDiag = (kSpinnerOrbit * 181 + 128) / 256;
+constexpr std::array<SpinnerCentre, 8> kSpinnerCentres{{
+    {128, 128 - kSpinnerOrbit},
+    {128 + kSpinnerDiag, 128 - kSpinnerDiag},
+    {128 + kSpinnerOrbit, 128},
+    {128 + kSpinnerDiag, 128 + kSpinnerDiag},
+    {128, 128 + kSpinnerOrbit},
+    {128 - kSpinnerDiag, 128 + kSpinnerDiag},
+    {128 - kSpinnerOrbit, 128},
+    {128 - kSpinnerDiag, 128 - kSpinnerDiag},
+}};
+
+/// Draws the badge's spinner: eight dots on a circle, three of them lit,
+/// the brightest the place `turn` names and the two behind it dimmer.
+/// Each pixel's share is counted from 16 samples in integers and drawn
+/// through blend_coverage, so a turn looks the same at every scale and on
+/// every machine.
+///
+/// @param canvas where the button is drawn
+/// @param badge the badge's rectangle
+/// @param turn which place is brightest, wrapped over the eight
+void draw_oa_spinner(const Canvas& canvas, const Rect& badge, uint32_t turn) {
+    const Point pixels = covered_pixels(canvas, badge);
+    if (pixels.x <= 0 || pixels.y <= 0)
+        return;
+    const int32_t places = oa_button_spinner_places;
+    const int32_t head = static_cast<int32_t>(turn % static_cast<uint32_t>(places));
+    std::array<uint8_t, 8> lit{};
+    lit[static_cast<std::size_t>(head)] = 255;
+    lit[static_cast<std::size_t>((head + places - 1) % places)] = 170;
+    lit[static_cast<std::size_t>((head + places - 2) % places)] = 85;
+
+    constexpr int32_t kSamples = 4;
+    constexpr int32_t kRadiusSquared = kSpinnerDot * kSpinnerDot;
+    const std::size_t pixel_count =
+        static_cast<std::size_t>(pixels.x) * static_cast<std::size_t>(pixels.y);
+    std::vector<uint8_t> coverage(pixel_count, 0);
+    const int64_t across = static_cast<int64_t>(pixels.x) * kSamples * 2;
+    const int64_t down = static_cast<int64_t>(pixels.y) * kSamples * 2;
+    for (int32_t row = 0; row < pixels.y; ++row) {
+        for (int32_t column = 0; column < pixels.x; ++column) {
+            int32_t sum = 0;
+            for (int32_t sample_y = 0; sample_y < kSamples; ++sample_y) {
+                for (int32_t sample_x = 0; sample_x < kSamples; ++sample_x) {
+                    const int64_t along_x =
+                        (static_cast<int64_t>(column) * kSamples + sample_x) * 2 + 1;
+                    const int64_t along_y =
+                        (static_cast<int64_t>(row) * kSamples + sample_y) * 2 + 1;
+                    const int32_t px = static_cast<int32_t>(along_x * 256 / across);
+                    const int32_t py = static_cast<int32_t>(along_y * 256 / down);
+                    int32_t best = 0;
+                    for (int32_t place = 0; place < places; ++place) {
+                        const uint8_t level = lit[static_cast<std::size_t>(place)];
+                        if (level == 0)
+                            continue;
+                        const SpinnerCentre centre =
+                            kSpinnerCentres[static_cast<std::size_t>(place)];
+                        const int32_t dx = px - centre.x;
+                        const int32_t dy = py - centre.y;
+                        if (dx * dx + dy * dy <= kRadiusSquared)
+                            best = std::max(best, static_cast<int32_t>(level));
+                    }
+                    sum += best;
+                }
+            }
+            const int32_t samples = kSamples * kSamples;
+            coverage
+                [static_cast<std::size_t>(row) * static_cast<std::size_t>(pixels.x) +
+                 static_cast<std::size_t>(column)] =
+                    static_cast<uint8_t>((sum + samples / 2) / samples);
+        }
+    }
+    blend_coverage(canvas, badge, coverage, colour::text);
+}
+
+/// Draws the OA button's bottom-right badge: a dark pill in the outline
+/// token, then the count or the spinner. A button that cannot hold it
+/// draws nothing.
+///
+/// @param canvas where the button is drawn
+/// @param side the button's side, in points
+/// @param mark the badge
+void draw_oa_button_corner(const Canvas& canvas, int32_t side, const OaButtonMark& mark) {
+    if (mark.corner == OaButtonCorner::none)
+        return;
+    const std::string text =
+        mark.corner == OaButtonCorner::count ? oa_button_count_text(mark.count) : std::string{};
+    const int32_t columns =
+        mark.corner == OaButtonCorner::count ? measure_text(canvas, FontRole::small, text) : 0;
+    const Rect badge = oa_button_badge(side, columns);
+    if (badge.width <= 0 || badge.height <= 0)
+        return;
+    fill_rect(canvas, badge, colour::band);
+    outline_rect(canvas, badge, colour::control_border);
+    if (mark.corner == OaButtonCorner::spinner) {
+        draw_oa_spinner(canvas, badge, mark.turn);
+        return;
+    }
+    box_text(canvas, FontRole::small, text, badge, Align::centre, colour::text);
+}
+
 } // namespace
 
-void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, bool dot) {
+void draw_oa_button(
+    const Canvas& canvas, int32_t side, OaButtonState state, const OaButtonMark& mark
+) {
     if (!drawable(canvas))
         return;
     draw_oa_button_face(canvas, side, state);
-    if (dot)
+    draw_oa_button_corner(canvas, side, mark);
+    if (mark.dot)
         draw_attention_dot(canvas, side);
+}
+
+void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, bool dot) {
+    OaButtonMark mark;
+    mark.dot = dot;
+    draw_oa_button(canvas, side, state, mark);
 }
 
 void draw_oa_mark(const Canvas& canvas, int32_t side) {

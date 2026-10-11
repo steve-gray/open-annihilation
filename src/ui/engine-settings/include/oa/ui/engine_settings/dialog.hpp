@@ -42,8 +42,9 @@ namespace oa::ui::engine_settings {
 inline constexpr int32_t dialog_width = oa::ui::kit::compact_metrics.dialog_width;
 /// The dialog's height at Compact, in source pixels.
 inline constexpr int32_t dialog_height = oa::ui::kit::compact_metrics.dialog_height;
-/// The OA button's side on the main menu, in source pixels.
-inline constexpr int32_t menu_button_side = 32;
+/// The OA button's side on the main menu, in source pixels: one and a half
+/// times the 32 it was.
+inline constexpr int32_t menu_button_side = 48;
 /// The OA button's side in the in-game menu's column, in source pixels.
 inline constexpr int32_t ingame_button_side = 24;
 

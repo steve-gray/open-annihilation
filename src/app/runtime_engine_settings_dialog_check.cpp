@@ -94,11 +94,11 @@ constexpr layout::Point kSnapshotPointer{kCanvasWidth - 1, kCanvasHeight - 1};
 /// The OA button's top left corner on the main menu's picture, near its
 /// bottom-right corner: one button and a quarter of a button's side left of
 /// the Settings button.
-constexpr layout::Point kMenuButtonCorner{556, 436};
+constexpr layout::Point kMenuButtonCorner{520, 420};
 
 /// The Settings button's top left corner on the main menu's picture, in its
 /// bottom-right corner.
-constexpr layout::Point kMenuSettingsCorner{596, 436};
+constexpr layout::Point kMenuSettingsCorner{580, 420};
 
 /// How far round the pointer the cursor may draw, in the picture's pixels.
 constexpr int32_t kCursorReach = 40;

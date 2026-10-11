@@ -138,11 +138,32 @@ enum class OaButtonState : uint8_t {
     pressed, ///< a press on it is held
 };
 
+/// What the OA button draws in its bottom-right corner.
+enum class OaButtonCorner : uint8_t {
+    none,    ///< nothing there
+    count,   ///< a number, "999+" above 999 (oa_button_count_text)
+    spinner, ///< the number is not final yet; turn names which place is lit
+};
+
+/// What the OA button wears besides its face: the attention dot, and the
+/// bottom-right corner. A default mark draws the face alone.
+struct OaButtonMark {
+    bool dot{};                                  ///< the attention dot in the top right
+    OaButtonCorner corner{OaButtonCorner::none}; ///< the bottom-right corner
+    std::size_t count{};                         ///< the number, when the corner is a count
+    uint32_t turn{};                             ///< which spinner place is lit, from 0
+};
+
 /// The OA button's side and how it looks. It is drawn at the item's top left.
+/// The corner, count and turn are the bottom-right mark (OaButtonMark); left
+/// at their defaults, the button is drawn as it was with only the dot.
 struct OaButtonLook {
-    int32_t side{};                           ///< the square's side, in points
-    OaButtonState state{OaButtonState::idle}; ///< how it looks
-    bool dot{};                               ///< it wears the attention dot (draw_oa_button)
+    int32_t side{};                              ///< the square's side, in points
+    OaButtonState state{OaButtonState::idle};    ///< how it looks
+    bool dot{};                                  ///< it wears the attention dot (draw_oa_button)
+    OaButtonCorner corner{OaButtonCorner::none}; ///< the bottom-right corner
+    std::size_t count{};                         ///< the number, when the corner is a count
+    uint32_t turn{};                             ///< which spinner place is lit, from 0
 };
 
 /// Where the keyboard focus outline is drawn.
