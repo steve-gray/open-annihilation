@@ -457,6 +457,8 @@ std::string_view interface_size_text(InterfaceSize size) noexcept {
         return "automatic";
     case InterfaceSize::size_100:
         return "100";
+    case InterfaceSize::size_150:
+        return "150";
     case InterfaceSize::size_200:
         return "200";
     case InterfaceSize::size_300:
@@ -564,6 +566,9 @@ EngineSettings read_settings(
     for (const TextSwitch& entry : text_switches)
         if (const auto number = stored_number(values, entry.key))
             settings.*entry.member = *number > 0;
+    // 150% is drawn in the modern fonts: read with them off, it is 100%.
+    settings.interface_size =
+        interface_size_with_fonts(settings.interface_size, settings.modern_fonts);
     if (const auto number = stored_number(values, key::text_size))
         settings.text_size = clamped(*number, lowest_text_size, highest_text_size);
     settings.language = stored_language(values, inputs.players_own_profile);

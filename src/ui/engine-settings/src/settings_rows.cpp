@@ -296,8 +296,8 @@ static_assert(
     "every way of Window frame has its caption"
 );
 /// Interface size's choices' texts, in interface_size_choices' order.
-constexpr std::array<std::string_view, 5> kInterfaceSizeCaptions{
-    "Auto", "100%", "200%", "300%", "400%"
+constexpr std::array<std::string_view, 6> kInterfaceSizeCaptions{
+    "Auto", "100%", "150%", "200%", "300%", "400%"
 };
 static_assert(
     kInterfaceSizeCaptions.size() == interface_size_choices.size(),
@@ -1005,6 +1005,112 @@ std::string language_caption(const SettingsModel& model, int32_t index) {
                std::string(system_language(model).endonym) + ")";
     return std::string(offered_languages()[static_cast<std::size_t>(index - 1)]->endonym);
 }
+
+// Use modern fonts for game text, and the Interface sizes it offers.
+
+/// Tells whether the dialog shows Use modern fonts for game text On: the
+/// switch is On, or the language shown needs the modern fonts, which locks
+/// it On (Lock::set_by_language).
+///
+/// @param model the model
+/// @return true while it shows On
+bool shows_modern_fonts(const SettingsModel& model) {
+    if (model.settings->modern_fonts)
+        return true;
+    return model.dialog != nullptr &&
+           geometry::shown_locks(*model.dialog).modern_fonts == Lock::set_by_language;
+}
+
+/// Sets Use modern fonts for game text. Turned Off, it takes 150% out of
+/// Interface size, which the game's own fonts cannot draw, leaving 100%.
+///
+/// @param[in,out] model the model
+/// @param on the switch's new state
+void set_modern_fonts(SettingsModel& model, bool on) {
+    EngineSettings& settings = *model.settings;
+    settings.modern_fonts = on;
+    settings.interface_size = interface_size_with_fonts(settings.interface_size, on);
+}
+
+/// Returns the Interface sizes the dialog offers now.
+///
+/// @param model the model
+/// @return how many: every size while it shows the modern fonts On, all
+///     but 150% while it shows them Off
+int32_t interface_size_count(const SettingsModel& model) {
+    const auto every = static_cast<int32_t>(interface_size_choices.size());
+    return shows_modern_fonts(model) ? every : every - 1;
+}
+
+/// Returns the place among interface_size_choices of an item the dialog
+/// offers.
+///
+/// @param model the model
+/// @param item the item, held to the items offered
+/// @return its place in interface_size_choices and kInterfaceSizeCaptions
+std::size_t interface_size_place(const SettingsModel& model, int32_t item) {
+    const auto offered = static_cast<std::size_t>(on_stops(item, interface_size_count(model)));
+    const auto fractional =
+        static_cast<std::size_t>(choice_place(interface_size_choices, InterfaceSize::size_150));
+    // Without the modern fonts the items from 150% on are one place on.
+    return shows_modern_fonts(model) || offered < fractional ? offered : offered + 1;
+}
+
+/// Returns the item the dialog shows chosen: the size as the modern fonts
+/// it shows leave it (interface_size_with_fonts).
+///
+/// @param model the model
+/// @return the item, from 0
+int32_t interface_size_item(const SettingsModel& model) {
+    const bool modern = shows_modern_fonts(model);
+    const InterfaceSize shown = interface_size_with_fonts(model.settings->interface_size, modern);
+    const int32_t place = choice_place(interface_size_choices, shown);
+    const int32_t fractional = choice_place(interface_size_choices, InterfaceSize::size_150);
+    return modern || place < fractional ? place : place - 1;
+}
+
+/// Sets Interface size to an item the dialog offers.
+///
+/// @param[in,out] model the model
+/// @param item the item, held to the items offered
+void set_interface_size(SettingsModel& model, int32_t item) {
+    model.settings->interface_size = interface_size_choices[interface_size_place(model, item)];
+}
+
+/// Returns an offered item's text, as the dialog shows it.
+///
+/// @param model the model
+/// @param item the item
+/// @return its caption; empty for an item past the ones offered
+std::string interface_size_caption(const SettingsModel& model, int32_t item) {
+    if (item < 0 || item >= interface_size_count(model))
+        return {};
+    return std::string(shown_text(kInterfaceSizeCaptions[interface_size_place(model, item)]));
+}
+
+/// Returns an offered item's id: the word the preferences keep its size as.
+///
+/// @param model the model
+/// @param item the item
+/// @return the id; empty for an item past the ones offered
+std::string interface_size_id(const SettingsModel& model, int32_t item) {
+    if (item < 0 || item >= interface_size_count(model))
+        return {};
+    return word_form(
+        interface_size_text(interface_size_choices[interface_size_place(model, item)]), false
+    );
+}
+
+/// Interface size's drop-down: its items depend on the Use modern fonts for
+/// game text the dialog shows.
+constexpr Stepper kInterfaceSizeStepper{
+    &interface_size_count,
+    &interface_size_item,
+    &set_interface_size,
+    &interface_size_caption,
+    nullptr,
+    &interface_size_id,
+};
 
 // Hardware acceleration's status.
 
@@ -1876,8 +1982,8 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .lock = &Locks::language,
      .copy = &copy_field<&E::language>},
     {.setting = S::modern_fonts,
-     .spec = engine_switch<&E::modern_fonts>("modern-fonts", "Use modern fonts for game text",
-                                             {"Modern fonts for in-game text,", "including internationalization."}),
+     .spec = kit::toggle("modern-fonts", "Use modern fonts for game text", &engine_flag<&E::modern_fonts>, &set_modern_fonts,
+                         {"Modern fonts for in-game text,", "including internationalization."}),
      .lock = &Locks::modern_fonts},
     {.setting = S::text_outline,
      .spec = engine_switch<&E::text_outline>("text-outline", "Font outline",
@@ -2078,8 +2184,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(engine_switch<&E::hud_scaling>("hud-scaling", "HUD scaling", {}),
                       &hud_scaling_hint, &lines<2>)},
     {.setting = S::interface_size,
-     .spec = wide(kit::choice("interface-size", "Interface size",
-                              DropDown<InterfaceSize, 5, interface_size_choices, &E::interface_size, kInterfaceSizeCaptions, &text_word<&interface_size_text, InterfaceSize>>::stepper(),
+     .spec = wide(kit::choice("interface-size", "Interface size", kInterfaceSizeStepper,
                               {"How large Open Annihilation's own screens", "are drawn. Auto suits the window's height."}),
                   choice_width)},
 }};

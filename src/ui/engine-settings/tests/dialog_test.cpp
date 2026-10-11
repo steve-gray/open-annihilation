@@ -41,6 +41,9 @@
 // inside the dialog with its parts apart, hints kept to their lines,
 // Graphics showing more whole rows, the footer's buttons at their Compact
 // sizes, and each control pressed where it is drawn.
+// Interface size offering 150% only while Use modern fonts for game text
+// shows On, and turning that switch Off taking 150% back to 100%. Graphics
+// drawn on the canvas's smooth form at 1.5x, every pixel painted whole.
 // With --data, its fonts from the installed game and every text fitting its
 // place.
 
@@ -54,7 +57,9 @@
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/present/game_text.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/input.hpp"
+#include "oa/ui/paint/painter.hpp"
 #include "oa/test/game_assets.hpp"
 #include "oa/test/game_data.hpp"
 
@@ -2890,6 +2895,114 @@ void the_graphics_page_scrolls_its_twelve_rows() {
     }
 }
 
+/// Returns Interface size's field at the end of Graphics, scrolling there.
+///
+/// @param[in,out] dialog the dialog, on Graphics
+/// @return the field's part; null when it does not show
+const settings::LayoutPart* interface_size_field(settings::Dialog& dialog) {
+    dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 900;
+    static thread_local std::vector<settings::LayoutPart> parts;
+    parts = settings::dialog_layout(dialog);
+    return find_part(parts, {}, settings::first_row_control + 12);
+}
+
+/// Returns the automation words of Interface size's open drop-down's items.
+///
+/// @param dialog the dialog, its drop-down open
+/// @return the words, top to bottom
+std::vector<std::string> interface_size_words(const settings::Dialog& dialog) {
+    const auto list = geometry::dialog_list(dialog, nullptr);
+    for (const auto& control : list.controls)
+        if (control.id == settings::first_row_control + 12)
+            return control.parts;
+    return {};
+}
+
+/// Interface size offers 150% only while the dialog shows Use modern fonts
+/// for game text On: its open drop-down lists Auto, 100%, 200%, 300% and
+/// 400% with them Off, and 150% between 100% and 200% with them On, its
+/// items named by their stored words; a 150% the dialog does not offer
+/// shows as 100%; and turning the switch Off while 150% is chosen sets
+/// Interface size to 100%, which turning it On again keeps.
+void interface_size_offers_150_with_the_modern_fonts() {
+    using settings::InterfaceSize;
+    // Off: five sizes, no 150%.
+    settings::Dialog off = graphics_page();
+    CHECK(!off.chosen.modern_fonts);
+    const auto* field = interface_size_field(off);
+    CHECK(field != nullptr);
+    if (field == nullptr)
+        return;
+    CHECK(click(off, centre(field->rect)) == DialogAction::redraw);
+    CHECK(off.open_list == settings::first_row_control + 12);
+    auto parts = settings::dialog_layout(off);
+    for (const std::string_view caption : {"Auto", "100%", "200%", "300%", "400%"})
+        CHECK(find_part(parts, caption, settings::no_control) != nullptr);
+    CHECK(find_part(parts, "150%", settings::no_control) == nullptr);
+    CHECK(
+        interface_size_words(off) ==
+        (std::vector<std::string>{"automatic", "100", "200", "300", "400"})
+    );
+
+    // On: six sizes, 150% between 100% and 200%.
+    settings::EngineSettings modern{};
+    modern.modern_fonts = true;
+    settings::Dialog on = graphics_page(modern);
+    field = interface_size_field(on);
+    CHECK(field != nullptr && click(on, centre(field->rect)) == DialogAction::redraw);
+    parts = settings::dialog_layout(on);
+    const auto* hundred = find_part(parts, "100%", settings::no_control);
+    const auto* fraction = find_part(parts, "150%", settings::no_control);
+    const auto* two_hundred = find_part(parts, "200%", settings::no_control);
+    CHECK(hundred != nullptr && fraction != nullptr && two_hundred != nullptr);
+    if (hundred == nullptr || fraction == nullptr || two_hundred == nullptr)
+        return;
+    CHECK(hundred->rect.y < fraction->rect.y && fraction->rect.y < two_hundred->rect.y);
+    CHECK(
+        interface_size_words(on) ==
+        (std::vector<std::string>{"automatic", "100", "150", "200", "300", "400"})
+    );
+    // A click on 150% chooses it, and the field shows it.
+    CHECK(click(on, centre(fraction->rect)) == DialogAction::changed);
+    CHECK(on.chosen.interface_size == InterfaceSize::size_150);
+    CHECK(on.open_list == settings::no_control);
+    field = interface_size_field(on);
+    CHECK(field != nullptr && field->text == "150%");
+
+    // A 150% the dialog does not offer, as when the modern fonts are Off,
+    // shows as 100%.
+    settings::EngineSettings stale{};
+    stale.interface_size = InterfaceSize::size_150;
+    settings::Dialog unoffered = graphics_page(stale);
+    field = interface_size_field(unoffered);
+    CHECK(field != nullptr && field->text == "100%");
+
+    // Turning Use modern fonts for game text Off sets 150% to 100% in the
+    // dialog; On again keeps 100%.
+    const auto language_entry =
+        find_part(settings::dialog_layout(on), {}, settings::page_control(Page::language));
+    CHECK(language_entry != nullptr);
+    if (language_entry == nullptr)
+        return;
+    static_cast<void>(click(on, centre(language_entry->rect)));
+    CHECK(on.page == Page::language);
+    const auto switch_area = geometry::open_rows(on).rows.rows[1].control_area;
+    CHECK(geometry::open_rows(on).rows.rows[1].setting == Setting::modern_fonts);
+    CHECK(click(on, {switch_area.x + 4, switch_area.y + 4}) == DialogAction::changed);
+    CHECK(!on.chosen.modern_fonts);
+    CHECK(on.chosen.interface_size == InterfaceSize::size_100);
+    CHECK(
+        click(on, {switch_area.x + switch_area.width - 4, switch_area.y + 4}) ==
+        DialogAction::changed
+    );
+    CHECK(on.chosen.modern_fonts);
+    CHECK(on.chosen.interface_size == InterfaceSize::size_100);
+    // Any other size stays as it is when the switch turns Off.
+    on.chosen.interface_size = InterfaceSize::size_200;
+    CHECK(click(on, {switch_area.x + 4, switch_area.y + 4}) == DialogAction::changed);
+    CHECK(on.chosen.interface_size == InterfaceSize::size_200);
+}
+
 void every_switch_reads_and_sets_through_one_table() {
     int32_t switches = 0;
     for (int32_t value = 0; value <= static_cast<int32_t>(Setting::text_background); ++value) {
@@ -3805,6 +3918,39 @@ void the_graphics_page_draws_its_locked_rows() {
     CHECK(unlocked.at(400, 186) == kWell);
     CHECK(unlocked.at(366, 186) == kWell);
     CHECK(unlocked.at(444, 245) == kAccent);
+}
+
+/// Draws Graphics at Large on the smooth form at 1.5x, with no modern
+/// fonts so that only its shapes draw: the dialog's 960 by 600 points fill
+/// exactly 1440 by 900 pixels, every one of them painted whole, so that no
+/// rectangle's edge is blended across two pixels.
+void the_dialog_draws_on_the_smooth_form_on_whole_pixels() {
+    const auto fonts = block_fonts();
+    settings::Dialog dialog = graphics_page();
+    dialog.size_class = oa::ui::kit::SizeClass::large;
+    auto pixels = oa::ui::paint::make_canvas(1440 + 6, 900 + 6);
+    oa::ui::paint::Painter painter(pixels);
+    oa::ui::kit::Canvas canvas{};
+    canvas.fonts = &fonts;
+    canvas.smooth.painter = &painter;
+    canvas.smooth.scale_percent = 150;
+    settings::draw_dialog(canvas, dialog);
+    int64_t whole = 0;
+    int64_t partial = 0;
+    for (int32_t y = 0; y < pixels.height; ++y)
+        for (int32_t x = 0; x < pixels.width; ++x) {
+            const auto alpha = oa::ui::paint::pixel_at(pixels, x, y).a;
+            whole += alpha == 255 ? 1 : 0;
+            partial += alpha != 0 && alpha != 255 ? 1 : 0;
+            if (x >= 1440 || y >= 900)
+                CHECK(alpha == 0);
+        }
+    CHECK(whole == int64_t{1440} * 900);
+    CHECK(partial == 0);
+    // The window's raised edge is two pixels of the light colour at the top
+    // left, the panel inside it.
+    CHECK(oa::ui::paint::pixel_at(pixels, 1, 1).r == oa::ui::kit::colour::edge_light.r);
+    CHECK(oa::ui::paint::pixel_at(pixels, 1439, 899).r == oa::ui::kit::colour::edge_dark.r);
 }
 
 // ---- Developer, and Developer Mode's list
@@ -9067,6 +9213,7 @@ int main(int argc, char** argv) {
         the_hover_follows_the_rows_under_a_still_pointer();
         locked_switch_rows_keep_their_value_in_sight();
         the_graphics_page_scrolls_its_twelve_rows();
+        interface_size_offers_150_with_the_modern_fonts();
         menu_scaling_and_native_density_show_and_change();
         explosion_flash_shows_and_changes();
         zoomed_out_units_show_and_change();
@@ -9080,6 +9227,7 @@ int main(int argc, char** argv) {
         a_mod_set_snap_radius_is_locked();
         the_dialog_draws_the_scroll_bar_and_clips_the_rows();
         the_graphics_page_draws_its_locked_rows();
+        the_dialog_draws_on_the_smooth_form_on_whole_pixels();
         developer_mode_lists_every_hack_by_area_closed_at_first();
         areas_and_hacks_open_and_close();
         hacks_show_their_titles_alphabetically();

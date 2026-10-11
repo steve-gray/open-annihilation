@@ -2137,9 +2137,10 @@ void the_hud_scaling_default_read_and_round_trip() {
 
 /// Interface size: Auto everywhere by default, with the player's own file
 /// and with a named one, a file written before it included; each of its
-/// five words reads its size and round-trips alone; any other text, 150%
-/// and 0 among them, reads Auto; writing it leaves every other key as it
-/// is, and Restore defaults then OK erases its key.
+/// six words reads its size and round-trips alone, 150 while Use modern
+/// fonts for game text reads On; any other text, 0 among them, reads Auto;
+/// writing it leaves every other key as it is, and Restore defaults then OK
+/// erases its key.
 void the_interface_size_default_read_and_round_trip() {
     using settings::InterfaceSize;
     CHECK(settings::key::interface_size == "open-annihilation.interface-size");
@@ -2156,36 +2157,70 @@ void the_interface_size_default_read_and_round_trip() {
     }
     CHECK(settings::EngineSettings{}.interface_size == InterfaceSize::automatic);
 
-    // The dialog's order, each size's word and percent, and back.
+    // The dialog's order, each size's word and percent, and back; 150 with
+    // the modern fonts On.
     CHECK(
-        settings::interface_size_choices == (std::array<InterfaceSize, 5>{
+        settings::interface_size_choices == (std::array<InterfaceSize, 6>{
                                                 InterfaceSize::automatic,
                                                 InterfaceSize::size_100,
+                                                InterfaceSize::size_150,
                                                 InterfaceSize::size_200,
                                                 InterfaceSize::size_300,
                                                 InterfaceSize::size_400,
                                             })
     );
-    constexpr std::array<std::string_view, 5> words{"automatic", "100", "200", "300", "400"};
-    constexpr std::array<int32_t, 5> percents{0, 100, 200, 300, 400};
+    constexpr std::array<std::string_view, 6> words{"automatic", "100", "150", "200", "300", "400"};
+    constexpr std::array<int32_t, 6> percents{0, 100, 150, 200, 300, 400};
     for (std::size_t index = 0; index < words.size(); ++index) {
         const InterfaceSize size = settings::interface_size_choices[index];
         CHECK(settings::interface_size_text(size) == words[index]);
         CHECK(settings::interface_size_from_text(words[index]) == size);
         CHECK(settings::interface_size_percent(size) == percents[index]);
-        CHECK(
-            read_one(settings::key::interface_size, std::string{words[index]}).interface_size ==
-            size
-        );
+        Values stored = one_key(settings::key::interface_size, std::string{words[index]});
+        stored[std::string{settings::key::modern_fonts}] = "1";
+        CHECK(settings::read_settings(stored, {}, false).interface_size == size);
     }
 
-    // Any other text reads Auto: 150% is not offered, and 0 is no size.
+    // 150% is drawn in the modern fonts: a stored 150 read while they read
+    // Off, from the key or from a named file's default, is 100%; every
+    // other size reads as itself with them Off.
+    CHECK(
+        settings::interface_size_with_fonts(InterfaceSize::size_150, false) ==
+        InterfaceSize::size_100
+    );
+    CHECK(
+        settings::interface_size_with_fonts(InterfaceSize::size_150, true) ==
+        InterfaceSize::size_150
+    );
+    for (const InterfaceSize size : settings::interface_size_choices)
+        if (size != InterfaceSize::size_150)
+            CHECK(settings::interface_size_with_fonts(size, false) == size);
+    CHECK(read_one(settings::key::interface_size, "150").interface_size == InterfaceSize::size_100);
+    {
+        Values off = one_key(settings::key::interface_size, "150");
+        off[std::string{settings::key::modern_fonts}] = "0";
+        CHECK(
+            settings::read_settings(off, players_own_on_linux, false).interface_size ==
+            InterfaceSize::size_100
+        );
+        // The player's own file has the modern fonts On by default.
+        CHECK(
+            settings::read_settings(
+                one_key(settings::key::interface_size, "150"), players_own_on_linux, false
+            )
+                .interface_size == InterfaceSize::size_150
+        );
+        Values on = off;
+        on[std::string{settings::key::modern_fonts}] = "1";
+        CHECK(settings::read_settings(on, {}, false).interface_size == InterfaceSize::size_150);
+    }
+
+    // Any other text reads Auto: 0 is no size.
     const auto size_of = [](const char* text) {
         return read_one(settings::key::interface_size, text).interface_size;
     };
     for (const char* text :
-         {"150",
-          "0",
+         {"0",
           "",
           "Auto",
           "auto",
