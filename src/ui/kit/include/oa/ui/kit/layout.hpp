@@ -197,6 +197,26 @@ struct Frame {
 /// @return the frame
 [[nodiscard]] Frame frame_of(const Viewport& viewport) noexcept;
 
+/// Returns the viewport OA's own screens are laid out on, at the scale an
+/// Interface size chooses for a canvas.
+///
+/// The chosen step is the chosen percent's whole steps, or for Auto (0 or
+/// less) the canvas's Auto scale (auto_scale of the canvas height and
+/// density). A chosen step replaces Auto's rule, the density floor
+/// included, on a touch canvas as on a desktop one. The scale is the
+/// largest whole step, no larger than the chosen one, at which Compact's
+/// dialog (compact_metrics' dialog_width by dialog_height points) fits the
+/// room, the canvas less its safe insets, and at least 1. frame_of of the
+/// result gives the size class of the room's points at that scale.
+///
+/// @param canvas the canvas: its pixels, density and safe insets; its
+///     scale_percent is not read
+/// @param chosen_percent the Interface size in percent, 100 a step: 100,
+///     200, 300 or 400; 0 for Auto. A percent between two steps takes the
+///     step below it.
+/// @return the canvas with scale_percent set to that scale times 100
+[[nodiscard]] Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept;
+
 /// Returns a rectangle of points as canvas pixels.
 ///
 /// Each edge is that edge in points times the percentage, divided by 100 and
