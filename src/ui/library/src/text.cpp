@@ -6,7 +6,11 @@
 #include "oa/ui/library/text.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
 
 namespace oa::ui::library {
 
@@ -273,22 +277,43 @@ std::string version_text(const Installed& installed, const TextHooks& text) {
     return version_and_revision(installed.version, installed.revision, text);
 }
 
+std::string release_text(std::string_view version, int64_t revision, const TextHooks& text) {
+    if (revision <= 0)
+        return std::string(version);
+    const std::string number = std::to_string(revision);
+    if (version.empty())
+        return filled(text, words::revision_short, {{"revision", number}});
+    return filled(text, words::version_revision_fact, {{"version", version}, {"revision", number}});
+}
+
 ChangeTexts
 change_texts(const Installed& installed, const UpdateNote& update, const TextHooks& text) {
+    const bool same_version = installed.version == update.to_version;
+    // One side's long and short names: its version where the versions
+    // differ, else its revision, and the old or new copy where neither is
+    // there to name it.
+    const auto side = [&](std::string_view version,
+                          int64_t revision,
+                          std::string_view copy,
+                          std::string_view copy_short) -> std::pair<std::string, std::string> {
+        if (!same_version && !version.empty())
+            return {std::string(version), std::string(version)};
+        if (revision > 0) {
+            const std::string number = std::to_string(revision);
+            return {
+                filled(text, words::revision_long, {{"revision", number}}),
+                filled(text, words::revision_short, {{"revision", number}}),
+            };
+        }
+        return {std::string(shown(text, copy)), std::string(shown(text, copy_short))};
+    };
     ChangeTexts names;
-    if (installed.version == update.to_version) {
-        const std::string from = std::to_string(installed.revision);
-        const std::string to = std::to_string(update.to_revision);
-        names.from = filled(text, words::revision_long, {{"revision", from}});
-        names.to = filled(text, words::revision_long, {{"revision", to}});
-        names.from_short = filled(text, words::revision_short, {{"revision", from}});
-        names.to_short = filled(text, words::revision_short, {{"revision", to}});
-        return names;
-    }
-    names.from = installed.version;
-    names.to = update.to_version;
-    names.from_short = installed.version;
-    names.to_short = update.to_version;
+    std::tie(names.from, names.from_short) = side(
+        installed.version, installed.revision, words::change_old_copy, words::change_old_copy_short
+    );
+    std::tie(names.to, names.to_short) = side(
+        update.to_version, update.to_revision, words::change_new_copy, words::change_new_copy_short
+    );
     return names;
 }
 

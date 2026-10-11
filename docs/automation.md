@@ -260,6 +260,26 @@ map zoom out to the whole map, from the main menu:
    `open-annihilation.wheel-zoom` `0` and `open-annihilation.max-zoom-out`
    `whole-map`; click `oa.library.close` to go back to the main menu.
 
+### The Library
+
+The Library (`dialog` `oa.library`) names every control as its module
+lists them ([src/ui/library](../src/ui/library/README.md#the-screens)).
+Its rows and their state icons are listed so:
+
+| Control | Name | Kind, and what it reports |
+|---|---|---|
+| A row of the list | `oa.library.row.<registry>.<key>`, or `oa.library.row.<key>` for a package of the player's own | check box, checked while chosen; its text the package's name |
+| A row's download arrow, its GET | `oa.library.row.<registry>.<key>.get` | button, its text "GET", listed just before its row; disabled while the details offer no GET that can act: blocked, in the download queue, or failed |
+| A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
+| The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.roll-back`, `.play-now`, `.open-folder`, `.homepage` | button, its text the button's words |
+| The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
+
+A row's circled check, installed and up to date, is no control. A click
+at a row's centre chooses it; a click at its icon's centre presses GET or
+UPDATE for that row, as the details' button does, asking the same
+questions. `<registry>` and `<key>` are the registry's id and the package's
+key, lower-cased, every other run of characters one `-`.
+
 ## Input
 
 `input` carries `events`: `key_down` and `key_up` with the key's SDL

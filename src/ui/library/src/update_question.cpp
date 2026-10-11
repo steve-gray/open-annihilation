@@ -131,7 +131,7 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
     const ChangeTexts names = change_texts(installed, update, text);
     UpdateQuestion asked;
     asked.title = filled(text, words::question_title, {{"name", name}});
-    if (same_version(installed, update))
+    if (same_version(installed, update) && installed.revision > 0 && update.to_revision > 0)
         asked.heading = filled(
             text,
             words::question_heading_revision,
@@ -140,12 +140,18 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
              {"from", std::to_string(installed.revision)},
              {"to", std::to_string(update.to_revision)}}
         );
-    else
+    else if (!same_version(installed, update))
         asked.heading = filled(
             text,
             words::question_heading_version,
-            {{"name", name}, {"from", installed.version}, {"to", update.to_version}}
+            {{"name", name}, {"from", names.from}, {"to", names.to}}
         );
+    else if (!installed.version.empty())
+        asked.heading = filled(
+            text, words::question_heading_same, {{"name", name}, {"version", installed.version}}
+        );
+    else
+        asked.heading = name;
     const std::string from_capital = capitalised(names.from);
     const std::string to_capital = capitalised(names.to);
     asked.body = filled(
@@ -212,17 +218,27 @@ oa::ui::kit::Question update_prompt(const UpdateQuestion& asked, const TextHooks
 
 std::string
 update_line(const Installed& installed, const UpdateNote& update, const TextHooks& text) {
-    const bool revision = same_version(installed, update);
+    // By revision only for a revision above 0 of the same version, by
+    // version only for another version that names one, else as an update.
+    const bool same = same_version(installed, update);
+    const bool revision = same && update.to_revision > 0;
+    const bool version = !same && !update.to_version.empty();
     std::string_view pattern;
     switch (update.rules) {
     case UpdateNote::Rules::same:
-        pattern = revision ? words::mods_revision_available : words::mods_version_available;
+        pattern = revision  ? words::mods_revision_available
+                  : version ? words::mods_version_available
+                            : words::mods_update_available;
         break;
     case UpdateNote::Rules::changes:
-        pattern = revision ? words::mods_revision_changes : words::mods_version_changes;
+        pattern = revision  ? words::mods_revision_changes
+                  : version ? words::mods_version_changes
+                            : words::mods_update_changes;
         break;
     case UpdateNote::Rules::unknown:
-        pattern = revision ? words::mods_revision_may_change : words::mods_version_may_change;
+        pattern = revision  ? words::mods_revision_may_change
+                  : version ? words::mods_version_may_change
+                            : words::mods_update_may_change;
         break;
     }
     const std::string number = std::to_string(update.to_revision);

@@ -73,18 +73,28 @@ revision on, and a map pack's number of maps), its size and its state. The
 Regular and Large rows add who made it and its summary, with its download
 count where the registry keeps one ("by the Ridge team · 12,400
 downloads"), and Large adds its tags. A Compact row names the registry
-after the size when the package comes from one you added.
+after the size when the package comes from one you added. The version
+always shows whole, revision and all, at every layout.
 
-The state is one of four words:
+The state is an icon at the row's right, and again beside the package's
+name in the details:
 
-| State | Means |
+| Icon | Means |
 |---|---|
-| **GET** | not installed |
-| **INSTALLED** | installed, and no newer release is offered |
-| **UPDATE** | installed, and the registry it came from offers a newer release |
-| **PLAYING** | the mod being played, up to date |
+| a circled check, green | installed, and no newer release is offered; the mod being played shows it too |
+| a circled up-arrow, amber | installed, and the registry it came from offers a newer release |
+| a download arrow, grey | not installed |
 
-A GET or UPDATE that cannot act is greyed, and the details say why:
+The icons are drawn as shapes at the screen's own pixels, so they stay
+sharp at every Interface size. The download arrow is the row's **GET** and
+the circled up-arrow its **UPDATE**: pressing either does exactly what the
+details' GET or UPDATE does, with the same questions, without opening the
+details. Anywhere else on the row, a press only chooses it. To automation
+they are `oa.library.row.<registry>.<key>.get` and `.update`
+([automation](automation.md#the-library)).
+
+A GET or UPDATE that cannot act has its icon dimmed and takes no press,
+and the details say why:
 
 - "Downloads from Core Prime are off (Settings › Downloads)": the
   registry's install ID is off ([the install ID](downloads.md#the-install-id));
@@ -125,11 +135,20 @@ name) back to the list.
 
 - **A status line**: "Not installed · 41.0 MB", "Installed", "Playing",
   "Revision 4 available · 3.2 MB to download" or "Version 4.9 available ·
-  …", where the download stands ("Waiting to download", "Downloading ·
+  …", or "Update available · 3.4 MB to download" when the registry names
+  no revision for an update of the same version, where the download stands ("Waiting to download", "Downloading ·
   18.2 of 64.0 MB", "Verifying", "Installing"), or why it cannot be got
   ([above](#tabs-and-states)).
 - **The summary.**
 - **The facts**:
+  - **Installed**, the version you have and its packaging revision, "4.8
+    (rev 3)", for a package you have installed;
+  - **Latest**, the same for the release the registry lists, "4.8 (rev
+    4)". A revision the registry or the package does not name is left
+    out ("1.0"), and a package with no version shows its revision alone
+    ("rev 3");
+  - **Author**: the registry's author for it, else its publisher, else the
+    author its own manifest names;
   - **Size**, and with an update how much there is to download;
   - **Base**: "Total Annihilation 3.1c";
   - **Needs**: the Open Annihilation it needs, "Open Annihilation 0.8.0 or
@@ -147,6 +166,9 @@ name) back to the list.
     a file that no registry lists, or, in amber, "*registry* · Not reviewed
     by the OA team" for one from a registry you added
     ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)).
+
+  A fact with nothing to say is left out. These hold alike for mods, map
+  packs and language packs.
 - **The buttons**: **GET** or **UPDATE**, **CANCEL** while it is in the
   download queue, **RETRY** after a download that can be tried again;
   **PLAY NOW** for an installed mod you are not playing, which switches to
@@ -177,13 +199,15 @@ With a controller, Y focuses the search, X presses the chosen entry's GET,
 UPDATE, CANCEL or RETRY, L1 and R1 change tab, B goes back as Escape does,
 and the right stick scrolls ([gamepad controls](controllers.md#menus)).
 A finger or the mouse presses any control. A press, double click or tap on
-a row only chooses it: nothing installs until you press GET or UPDATE.
+a row chooses it: nothing installs until you press GET or UPDATE, in the
+details or as the row's download arrow or up-arrow.
 
 ## Installing
 
-**GET** installs a package. It is the only way anything gets onto your
-machine from the Library: OA never installs a package, or an update, that
-you did not press a button for.
+**GET** installs a package, in the details or as the download arrow on its
+row. It is the only way anything gets onto your machine from the Library:
+OA never installs a package, or an update, that you did not press a button
+for.
 
 The download goes into the queue, and the package is checked before
 anything is written: its SHA-256 against the signed catalogue's, then the
@@ -252,7 +276,8 @@ registry is not an update.
 
 An update shows:
 
-- as **UPDATE** on the package's row, and in its details with what changes;
+- as the circled up-arrow on the package's row, which is its **UPDATE**,
+  and in its details with what changes;
 - on the **Updates** tab, every kind together, with **UPDATE ALL**, which
   starts every update that can be installed;
 - as the dot on the main menu's **OA** button;

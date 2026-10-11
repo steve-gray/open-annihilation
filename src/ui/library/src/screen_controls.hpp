@@ -57,8 +57,11 @@ inline constexpr kit::ControlId first_action = 100;
 inline constexpr kit::ControlId first_tag = 1000;
 /// An open drop-down's item: this and the item's place among its items.
 inline constexpr kit::ControlId first_menu_item = 3000;
-/// A row: this and the entry's place in the model's visible entries.
+/// A row: this and the entry's place in the model's visible entries, below first_row_icon.
 inline constexpr kit::ControlId first_row = 10000;
+/// A row's state icon that is pressed as GET or UPDATE: this and the
+/// entry's place in the model's visible entries.
+inline constexpr kit::ControlId first_row_icon = 1000000;
 
 /// The list's scroll area, the group of its rows.
 inline constexpr int32_t list_group = 0;
@@ -71,6 +74,22 @@ inline constexpr int32_t details_group = 1;
 /// @return its number
 [[nodiscard]] constexpr kit::ControlId action_control(Action action) noexcept {
     return first_action + static_cast<kit::ControlId>(action);
+}
+
+/// Tells whether a control is a row's.
+///
+/// @param id the control
+/// @return true from first_row up to first_row_icon
+[[nodiscard]] constexpr bool row_control(kit::ControlId id) noexcept {
+    return id >= first_row && id < first_row_icon;
+}
+
+/// Tells whether a control is a row's state icon.
+///
+/// @param id the control
+/// @return true from first_row_icon on
+[[nodiscard]] constexpr bool row_icon_control(kit::ControlId id) noexcept {
+    return id >= first_row_icon;
 }
 
 /// Returns a filter's chip's or nav entry's control.
@@ -111,6 +130,17 @@ struct MenuItem {
 /// @return the items, top to bottom
 [[nodiscard]] std::vector<MenuItem>
 menu_items(const Library& library, MenuKind menu, const std::vector<bool>& tag_shown);
+
+/// Returns what a row's state icon is pressed as: GET or UPDATE, as the
+/// entry's first button asks for it, and only while that button is
+/// enabled, so the icon keeps that button's rules and blocked state. A row
+/// that is queued (CANCEL), that failed (RETRY), or that is installed and
+/// up to date has none.
+///
+/// @param library the model
+/// @param entry one of its entries
+/// @return the action; none while the icon takes no press
+[[nodiscard]] std::optional<Action> row_icon_action(const Library& library, const Entry& entry);
 
 /// Returns the item a drop-down shows as chosen.
 ///
