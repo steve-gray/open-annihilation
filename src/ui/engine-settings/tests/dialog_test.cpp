@@ -9415,7 +9415,15 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     const auto developer = std::find(texts.begin(), texts.end(), "Developer");
     CHECK(developer != texts.end());
     const std::vector<std::string> tail(developer + 1, texts.end());
-    CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta", "Three"}));
+    // Downloads takes the row Three used to fill, so Three starts just under
+    // the list. The owners and the pages that fit stay in order under Developer.
+    CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta"}));
+    listed.nav_scroll = 100000;
+    const auto scrolled = nav_texts(listed);
+    const auto scrolled_developer = std::find(scrolled.begin(), scrolled.end(), "Developer");
+    CHECK(scrolled_developer != scrolled.end());
+    const std::vector<std::string> scrolled_tail(scrolled_developer + 1, scrolled.end());
+    CHECK((scrolled_tail == std::vector<std::string>{"Alpha", "One", "Two", "Beta", "Three"}));
 
     settings::Dialog options = opened_mod_options(Page::mod_keys);
     settings::set_registered_pages(options, owners, {});
