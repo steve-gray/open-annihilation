@@ -3654,6 +3654,54 @@ int32_t multiplayer_presence_badges(PresenceBadgeSpot* out, int32_t capacity) no
     return presence_badge_spots(state.base, state.lobby, out, capacity);
 }
 
+bool multiplayer_map_list_rect(int32_t* x, int32_t* y, int32_t* width, int32_t* height) noexcept {
+    auto& state = ui();
+    if (!state.showing || state.screen != kScreenBattleroom ||
+        state.modal_kind != ModalKind::selmap || !state.modal.loaded ||
+        (local_info(state.lobby).role & kRoleHost) == 0)
+        return false;
+    const auto* list = panel_control(state.modal.panel, "MAPNAMES");
+    if (list == nullptr || list->width <= 0 || list->height <= 0)
+        return false;
+    if (x != nullptr)
+        *x = list->x + state.modal.offset_x;
+    if (y != nullptr)
+        *y = list->y + state.modal.offset_y;
+    if (width != nullptr)
+        *width = list->width;
+    if (height != nullptr)
+        *height = list->height;
+    return true;
+}
+
+bool multiplayer_offer_map(const char* name) noexcept {
+    auto& state = ui();
+    if (name == nullptr || !multiplayer_map_list_rect(nullptr, nullptr, nullptr, nullptr))
+        return false;
+    const std::string_view wanted(name);
+    const auto listed = [&state, wanted] {
+        return std::any_of(state.maps.begin(), state.maps.end(), [wanted](const MapInfo& map) {
+            return map.name == wanted;
+        });
+    };
+    if (!listed()) {
+        // The list is built once a visit: build it again, so that a pack
+        // installed since joins it, keeping the map selected now.
+        const std::string current =
+            state.map >= 0 && static_cast<std::size_t>(state.map) < state.maps.size()
+                ? state.maps[static_cast<std::size_t>(state.map)].name
+                : std::string();
+        state.maps_loaded = false;
+        load_maps();
+        for (std::size_t index = 0; index < state.maps.size(); ++index)
+            if (state.maps[index].name == current)
+                state.map = static_cast<int32_t>(index);
+        if (!listed())
+            return false;
+    }
+    return mapselect_offer(state.lobby, state.mapselect, state.modal.panel, wanted);
+}
+
 int32_t multiplayer_focused_player_slot() noexcept {
     auto& state = ui();
     // As the badges: the battle room shows, with no dialog over it.

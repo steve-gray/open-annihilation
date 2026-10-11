@@ -957,6 +957,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_engine_settings_match.cpp
   src/app/oa_layer.cpp
   src/app/runtime_library.cpp src/app/runtime_library_actions.cpp
+  src/app/runtime_map_browser.cpp
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
@@ -1035,7 +1036,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
-  oa-ui-frontend-multiplayer oa-ui-library)
+  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).

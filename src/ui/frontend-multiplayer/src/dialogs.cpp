@@ -3,6 +3,7 @@
 
 // Panels stacked over the battleroom or the match.
 #include "oa/ui/frontend_multiplayer/dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include "oa/base/game_loop.hpp"
 #include "oa/formats/tnt.hpp"
@@ -16,6 +17,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace oa::ui::frontend_multiplayer {
@@ -535,6 +537,37 @@ void mapselect_preview(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
     panel_set_active(panel, "MAPPIC", chosen);
     if (chosen)
         map_summary_update(lobby, panel);
+}
+
+bool mapselect_offer(
+    Lobby& lobby, MapSelect& select, Panel& panel, std::string_view name
+) noexcept {
+    const char* before = highlighted_map(select, panel);
+    const std::string highlighted = before != nullptr ? before : "";
+    const int32_t count = lobby.maps.count != nullptr ? lobby.maps.count(lobby.maps.context) : 0;
+    select.names.clear();
+    for (int32_t index = 0; index < count; ++index)
+        if (const char* listed = lobby.maps.at(lobby.maps.context, index))
+            select.names.emplace_back(listed);
+    std::sort(select.names.begin(), select.names.end());
+    panel_fill_list(panel, "MAPNAMES", select.names);
+    int32_t offered = -1;
+    int32_t earlier = -1;
+    for (std::size_t row = 0; row < select.names.size(); ++row) {
+        if (select.names[row] == name)
+            offered = static_cast<int32_t>(row);
+        if (select.names[row] == highlighted)
+            earlier = static_cast<int32_t>(row);
+    }
+    // A name the list lacks leaves the row highlighted before.
+    if (offered < 0) {
+        if (earlier >= 0)
+            panel_select_list_row(panel, "MAPNAMES", earlier);
+        return false;
+    }
+    panel_select_list_row(panel, "MAPNAMES", offered);
+    mapselect_preview(lobby, select, panel);
+    return true;
 }
 
 bool mapselect_handle_event(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
