@@ -13,9 +13,11 @@
 // at the scale kit::layer_viewport gives (the Interface size setting, or the
 // Auto scale) and lays them out at the size class of the points left over:
 // at a whole scale on the kit canvas's crisp form, and at 150% on its smooth
-// form in the modern fonts. oa_layer.cpp holds it, the settings' screen
-// (Runtime::SettingsScreen) and the screens of a notice (NoticeScreen) and a
-// question (QuestionScreen).
+// form in the modern fonts. In a match the settings dialog takes a scale and
+// size class of its own, capped by the side column's scale, and is drawn at
+// them beside the column (OaLayer::match_dialog). oa_layer.cpp holds it, the
+// settings' screen (Runtime::SettingsScreen) and the screens of a notice
+// (NoticeScreen) and a question (QuestionScreen).
 #pragma once
 
 #include "oa/app/automation_host.hpp"
@@ -62,8 +64,9 @@ struct LayerView {
     /// The room the screens have, in points, with its size class and scale.
     /// On the front end: the window's canvas less its safe insets while the
     /// game has touch controls, divided by the scale (kit::frame_of). In a
-    /// match: the safe area, Compact at 100%, as the in-match Settings keeps
-    /// its own placement.
+    /// match: the safe area, Compact at 100%, as the in-match Settings takes
+    /// its class and scale from the area beside the side column
+    /// (OaLayer::match_dialog).
     oa::ui::kit::Frame frame{};
     /// The whole number of window pixels a point takes: the step the
     /// Interface size setting in effect chooses, or for Auto the window
@@ -77,6 +80,12 @@ struct LayerView {
     /// drawn on the kit canvas's crisp form at a whole scale and on its
     /// smooth form at 150%. 100 in a match.
     int32_t scale_percent{100};
+    /// The Interface size in effect, in percent, as kit::layer_viewport
+    /// takes it: 0 for Auto, else 100 to 400, and 150 only while the modern
+    /// fonts in effect are on and open. On the front end and in a match
+    /// alike; in a match the settings dialog takes its scale from it
+    /// (OaLayer::match_dialog).
+    int32_t interface_percent{};
     /// The room in window pixels: the canvas less its safe insets on the
     /// front end, the safe area in a match. A centred screen centres in it.
     oa::ui::display_layout::Rect room{};
@@ -92,16 +101,18 @@ struct LayerView {
 /// Where a screen of the OA layer shows.
 struct LayerPlacement {
     /// Where the screen shows, in window pixels: points_width at the scale
-    /// wide on the front end (kit::to_canvas), and wherever the in-match
-    /// Settings is stamped in a match. Empty while the screen does not
+    /// wide (kit::to_canvas), on the front end and for the in-match
+    /// Settings beside the side column; on a phone, wherever the in-match
+    /// Settings is fitted to the safe area. Empty while the screen does not
     /// show: it then neither draws nor takes input.
     oa::ui::display_layout::Rect shown{};
     int32_t points_width{};  ///< the screen's width in its own points, as draw draws it
     int32_t points_height{}; ///< the screen's height in its own points
     /// The scale the screen is drawn at as large as its place, in percent,
-    /// which layer_point divides by: the view's on the front end. 0 for a
-    /// screen stamped onto a place of its own size, as the in-match
-    /// Settings is, whose points map by the place's size.
+    /// which layer_point divides by: the view's on the front end, the
+    /// in-match Settings' own in a match (OaLayer::match_dialog). 0 for a
+    /// screen drawn at 1× and fitted onto a place of its own size, as the
+    /// in-match Settings is on a phone, whose points map by the place's size.
     int32_t scale_percent{};
 };
 
@@ -276,9 +287,10 @@ class LayerScreen {
     virtual void close(bool by_key) = 0;
 };
 
-/// Maps a point to a screen's own points by its placement: on the front end
-/// floor((x - left) × 100 / scale_percent), the drawing's own scale, 150%
-/// included; for a screen stamped onto a place of its own size
+/// Maps a point to a screen's own points by its placement: for a screen
+/// drawn at a scale as large as its place, on the front end and the in-match
+/// Settings, floor((x - left) × 100 / scale_percent), the drawing's own
+/// scale, 150% included; for a screen fitted onto a place of its own size
 /// floor((x - shown.x) × points_width / shown.width). The same down.
 ///
 /// @param placement where the screen shows
@@ -374,6 +386,22 @@ layer_key(uint32_t sdl_key, uint16_t modifiers, bool in_match = false) noexcept;
 [[nodiscard]] AutomationControlKind
 automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 
+/// Where the settings dialog shows in a match, and the size class and scale
+/// it is laid out and drawn at there (OaLayer::match_dialog).
+struct MatchDialogPlace {
+    /// The dialog's rectangle on the match's canvas, in its pixels: the
+    /// class's dialog points at the scale (kit::to_canvas), or on a phone
+    /// Compact fitted to the safe area.
+    oa::ui::display_layout::Rect shown{};
+    /// The class the dialog is laid out at: from the points of the area
+    /// right of the side column at the scale; Compact on a phone.
+    oa::ui::kit::SizeClass size_class{oa::ui::kit::SizeClass::compact};
+    /// The scale the dialog is drawn at, in percent: a whole step times 100,
+    /// or 150. 0 on a phone, where Compact is drawn at 1× and fitted to its
+    /// place.
+    int32_t scale_percent{100};
+};
+
 /// The host of Open Annihilation's own screens over every screen of the
 /// game (Runtime::oa_layer).
 ///
@@ -404,7 +432,8 @@ automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 /// laid over what lies under it by its pixels' opacity wherever it goes. In
 /// a match the layer is one picture of the window's size: the in-game OA
 /// button, the backdrop and the screens, drawn again when what it shows
-/// changes (refresh_match).
+/// changes (refresh_match); Settings is laid out and drawn there at the
+/// class and scale match_dialog gives, beside the side column.
 class OaLayer {
   public:
 
@@ -625,6 +654,11 @@ class OaLayer {
     /// in-game OA button while the in-game menu's column shows, the backdrop
     /// under a modal screen, and the screens that show, each darkened as
     /// the button is once for each modal screen with a backdrop above it.
+    /// Each screen is drawn at its placement's scale (Settings at
+    /// match_dialog's, on the kit canvas's crisp form at a whole scale and
+    /// its smooth form at 150%) as large as its place and copied into the
+    /// layer pixel for pixel; one with no scale of its own (the phone's
+    /// fitted Settings) is drawn at 1× and fitted to its place (stamp).
     ///
     /// @return true when the layer shows anything
     bool refresh_match();
@@ -751,17 +785,40 @@ class OaLayer {
         bool fit = false
     );
 
-    /// Returns where the settings dialog shows on the match's canvas: at the
-    /// side column's scale, centred in the area right of the column; fitted
-    /// to the safe area, at the largest scale that shows it whole there
-    /// (min(safe width / dialog_width, safe height / dialog_height)), centred
-    /// in it.
+    /// Returns where the settings dialog shows on the match's canvas, and the
+    /// size class and scale it is laid out and drawn at there.
+    ///
+    /// The scale starts as the layer's on the match's canvas
+    /// (kit::layer_viewport of its pixels, density and safe insets at the
+    /// Interface size: its step, 150%, or for Auto the canvas height's).
+    /// Above the side column's scale (MatchLayout::scale, which HUD scaling
+    /// caps) it takes the largest whole step at or below that scale, and at
+    /// least 1. Where Compact's dialog points do not fit the area right of
+    /// the column (the canvas from the column's right edge, its whole
+    /// height) at that scale, it takes the largest whole step at which they
+    /// do, and at least 1. The class comes from that area's points at the
+    /// scale (kit::frame_of), and the dialog is the class's dialog points at
+    /// the scale (kit::to_canvas), centred in the area: left = column's
+    /// right edge + (area width - dialog width) / 2, top = (canvas height -
+    /// dialog height) / 2. A 640 by 480 window is Compact at 1× at (144,
+    /// 78), as before; 1280 by 720 is Regular at 1×, 1920 by 1080 Compact
+    /// at 2× and 2560 by 1080 Regular at 2× with HUD scaling On, and 1920 by
+    /// 1080 with it Off Large at 1×.
+    ///
+    /// Fitted to a phone's safe area, Compact is drawn at 1× and fitted to
+    /// the largest scale that shows it whole there (min(safe width /
+    /// dialog_width, safe height / dialog_height)), centred in it, with a
+    /// scale of 0.
     ///
     /// @param match_layout the match's layout
+    /// @param interface_percent the Interface size in effect, in percent
+    ///     (LayerView::interface_percent): 0 for Auto
     /// @param fit the dialog fits the safe area (match_fits_safe_area)
-    /// @return the dialog's rectangle, in window pixels
-    [[nodiscard]] static oa::ui::display_layout::Rect match_dialog_rect(
-        const oa::ui::display_layout::MatchLayout& match_layout, bool fit = false
+    /// @return the dialog's rectangle, class and scale
+    [[nodiscard]] static MatchDialogPlace match_dialog(
+        const oa::ui::display_layout::MatchLayout& match_layout,
+        int32_t interface_percent,
+        bool fit = false
     ) noexcept;
 
     /// Returns the settings pages registered for this runtime.
@@ -804,7 +861,10 @@ class OaLayer {
     /// Copies a surface into a rectangle of a layer of straight colours and
     /// opacity, each layer pixel taking the surface pixel it lands on
     /// (nearest): fully opaque, or, with the surface's opacity, laid over
-    /// the layer's pixel (src over, LayerDrawing).
+    /// the layer's pixel (src over, LayerDrawing). The match's layer fits the
+    /// OA button's face to its place so, and a screen drawn at 1× for a
+    /// place of another size, as the phone's fitted Settings is; a screen
+    /// drawn as large as its place is copied pixel for pixel instead.
     ///
     /// @param[in,out] rgba the layer, 4 bytes a pixel: red, green, blue and opacity
     /// @param width the layer's width

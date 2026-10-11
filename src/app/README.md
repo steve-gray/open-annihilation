@@ -289,8 +289,23 @@ latched the closing key and drew a backdrop.
   point is Compact at 3×; 1920 by 1080 at 150% is Large at 1.5×.
   `screen_scale`, `screen_scale_percent`, `screen_class` and
   `placement_of(name)` report them, for the checks. Without a renderer the canvas is the picture
-  itself, Compact at 1×. In a match the view is Compact at 100%: the
-  in-match Settings keeps its own placement and look until U25.
+  itself, Compact at 1×. In a match the view is Compact at 100%, and
+  Settings takes a scale and class of its own (`OaLayer::match_dialog`).
+  Its scale starts as the layer's on the match's canvas
+  (`kit::layer_viewport` of the canvas's pixels at the Interface size in
+  effect, `LayerView::interface_percent`: its step, 150%, or Auto on the
+  canvas's height). It is capped by the side column's scale
+  (`MatchLayout::scale`, which HUD scaling caps, as before): above it, the
+  largest whole step at or below it, and at least 1. Where Compact's 480 by
+  324 points do not fit the area right of the column at that scale, it is
+  the largest whole step at which they do, and at least 1. The class comes
+  from the points of that area, ((width − column's right edge) / scale) by
+  (height / scale). So with HUD scaling On 640 by 480 is Compact at 1× (512
+  by 480 points), 1280 by 720 Regular at 1× (1088 by 720), 1920 by 1080
+  Compact at 2× (832 by 540) and 2560 by 1080 Regular at 2× (1152 by 540);
+  with it Off, 1920 by 1080 is Large at 1× (1792 by 1080). On a phone with
+  touch controls (`match_fits_safe_area`) Settings is Compact, drawn at 1×
+  and fitted to the safe area, as before.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in
   window pixels, and how many points it has. Settings, a notice and a
   question centre themselves in the view's room at its scale
@@ -300,9 +315,12 @@ latched the closing key and drew a backdrop.
   (`kit::to_canvas`); input maps back by the same scale (`layer_point`). A screen anchored to a part of a 3.1c screen places itself by the
   picture's rectangle (`LayerView::picture`, where the 640 by 480 frame is
   drawn) at the same scale. The main menu's OA button stays in the frame.
-  In a match Settings shows where `match_dialog_rect` puts it, Compact and
-  stamped as before. An empty place means the screen does not show: it
-  neither draws nor takes input.
+  In a match Settings shows where `match_dialog` puts it: its class's
+  dialog points at its scale, centred in the area right of the side column
+  (left = column's right edge + (area width − dialog width) / 2, top =
+  (height − dialog height) / 2), and input maps back by that scale. A 640
+  by 480 window shows it at (144, 78), pixel for pixel as before. An empty
+  place means the screen does not show: it neither draws nor takes input.
 - **Input.** One overlay at z 100 on every screen (`register_oa_layer`, over
   the extensions' overlays, under the frontend's message boxes) hands the
   layer every input. The key that closed a screen comes first: its presses
@@ -342,7 +360,7 @@ latched the closing key and drew a backdrop.
   the picture or the screens below, src over: (colour × opacity + under ×
   (255 − opacity)) / 255. That happens wherever the layer shows it: in the
   window (`present`, whose texture SDL blends the same way), in the frame
-  (`compose_front_end`) and in a match's layer (`stamp`). Such a screen
+  (`compose_front_end`) and in a match's layer (`refresh_match`). Such a screen
   never darkens what lies under it, whatever `backdrop` says, and only the
   part of it that holds what it drew goes into the window's texture. The
   cursor stays above it.
@@ -381,13 +399,19 @@ latched the closing key and drew a backdrop.
   F1.
 - **In a match** the layer is one picture of the window's size while the
   in-game menu's column shows: the OA button under Resume, the backdrop
-  under a modal screen, and the screens stamped at their places (one that
-  is not opaque by its opacity), each under a modal screen with a backdrop
-  darkened as the button is
-  (`refresh_match`), drawn again only when what it shows changes. It goes
-  over the composed frame (`compose_match`) and is presented after the
-  match's other layers and before the frontend dialogs' and the cursor
-  (`present`).
+  under a modal screen, and the screens at their places (one that is not
+  opaque laid over by its opacity), each under a modal screen with a
+  backdrop darkened as the button is. Each screen is drawn at its
+  placement's scale as large as its place, Settings at its own class and
+  scale on the kit canvas's crisp form at a whole scale and its smooth form
+  at 150%, never drawn at 1× and enlarged, and copied into the layer pixel
+  for pixel; the OA button's face, and on a phone the fitted Settings, are
+  drawn at a whole scale and fitted to their places by the nearest pixel
+  (`stamp`). The layer is drawn again only when what it shows changes
+  (`refresh_match`), and the composed frame and the window take the same
+  layer: it goes over the composed frame (`compose_match`) and is presented
+  after the match's other layers and before the frontend dialogs' and the
+  cursor (`present`).
 - **Automation** lists what the layer shows (`automation_controls`), as
   [docs/automation.md](../../docs/automation.md#oas-own-screens) describes:
   `oa.button` (on the main menu its text says how many updates wait in the
@@ -1531,7 +1555,14 @@ runtime goes).
   `Down`), both reaching an open dialog or menu first, as the player's do,
   and `settings SECTION` opens the settings dialog beside the
   in-game menu at the section its list names so, such as
-  `settings Language`;
+  `settings Language`, and prints `stage: settings SECTION at X,Y WxH,
+  version at X,Y WxH`: where the dialog shows and the room its header keeps
+  for the version text, in the match canvas's pixels, so that a golden
+  frame can leave the version out. That room is the header's version part
+  as the dialog's class lays it out, from 71 points left of its right edge
+  to 5 points right of it, and the header's rows 6 to 22, at the dialog's
+  scale: at 640x480 `at 144,78 480x324, version at 540,84 76x16`, and at
+  1920x1080 a dialog of 960x648 and a version room of 152x32;
   `native-stage` checks it. A save/load run ends by
   reporting the live units by type, the veterans by veterancy level, the
   stockpiled rounds, the buildings by facing and each player's health.
@@ -1795,7 +1826,11 @@ runtime goes).
   Mode's list open, off and on, and Graphics at its top and at its class's
   end;
   `runtime_engine_settings_match_check.cpp` the in-game menu's button and
-  dialog at those sizes, with the locks of a game played alone and of a
+  dialog at 640x480, 1280x720, 1920x1080 and 2560x1080, and 1920x1080
+  with HUD scaling Off, each at the class and scale `match_dialog` gives,
+  its class's points at the scale centred right of the column, drawn
+  there pixel for pixel as the dialog drawn offscreen at them, a click on
+  a section's entry showing it, with the locks of a game played alone and of a
   shared game, Hardware acceleration set to Full and to Basic in a shared
   game, where each waits for the game's end, and the wheel scrolling the dialog, not the
   battlefield; and `runtime_engine_settings_wiring_check.cpp` each setting
