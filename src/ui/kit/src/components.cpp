@@ -18,9 +18,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 namespace oa::ui::kit {
 
@@ -424,6 +426,184 @@ void paint_item(const Canvas& canvas, const Item& item) {
     }
 }
 
+// ---- State icons ----
+//
+// A state icon is drawn from rings and strokes worked out at the canvas's own
+// pixels, so that it keeps its edges at every scale. Its design is a square
+// of 24 units, each written here in quarters; the icon fills the shorter
+// side of the rectangle it is drawn in, centred along the longer.
+
+/// A state icon's square, in quarter units: 24 units.
+constexpr int64_t kIconGrid = 96;
+/// The samples across, and the samples down, each pixel a state icon's
+/// coverage is counted from: 16 a pixel, so its edges take 17 shades.
+constexpr int64_t kIconSamples = 4;
+/// The most pixels across or down a state icon is drawn at; a larger
+/// rectangle draws nothing.
+constexpr int32_t kMostIconPixels = 1024;
+
+/// A point of a state icon's design, in quarter units from its top left.
+struct IconPoint {
+    int64_t x{}; ///< across
+    int64_t y{}; ///< down
+};
+
+/// A stroke of a state icon's design: a straight line with round ends.
+struct IconStroke {
+    IconPoint from{}; ///< one end
+    IconPoint to{};   ///< the other end
+};
+
+/// The ring of the circled icons: its centre, and the radii of its outer and
+/// inner edges, in quarter units: 2 units wide, its outer edge a unit in.
+constexpr IconPoint kRingCentre{48, 48};
+constexpr int64_t kRingOuter = 44;
+constexpr int64_t kRingInner = 36;
+/// Half a stroke's width, in quarter units: every stroke is 2.5 units wide.
+constexpr int64_t kStrokeHalf = 5;
+
+/// The check: down to the right, then up to the right.
+constexpr std::array<IconStroke, 2> kCheckStrokes{{
+    {{26, 50}, {42, 66}},
+    {{42, 66}, {70, 34}},
+}};
+/// The up-arrow: its shaft, then its head's two sides.
+constexpr std::array<IconStroke, 3> kUpArrowStrokes{{
+    {{48, 70}, {48, 28}},
+    {{30, 46}, {48, 28}},
+    {{48, 28}, {66, 46}},
+}};
+/// The download arrow: its shaft and its head's two sides, then the tray
+/// under it, its two sides and its bottom.
+constexpr std::array<IconStroke, 6> kDownloadStrokes{{
+    {{48, 12}, {48, 62}},
+    {{26, 40}, {48, 62}},
+    {{48, 62}, {70, 40}},
+    {{14, 62}, {14, 82}},
+    {{14, 82}, {82, 82}},
+    {{82, 82}, {82, 62}},
+}};
+
+/// Returns a state icon's strokes.
+///
+/// @param icon the icon
+/// @return its strokes, in quarter units
+std::span<const IconStroke> strokes_of(StateIcon icon) noexcept {
+    switch (icon) {
+    case StateIcon::circled_check:
+        return kCheckStrokes;
+    case StateIcon::circled_up_arrow:
+        return kUpArrowStrokes;
+    case StateIcon::download_arrow:
+        return kDownloadStrokes;
+    }
+    return {};
+}
+
+/// Tells whether a state icon has the ring round its strokes.
+///
+/// @param icon the icon
+/// @return true for the circled icons
+bool ringed(StateIcon icon) noexcept {
+    return icon == StateIcon::circled_check || icon == StateIcon::circled_up_arrow;
+}
+
+/// Tells whether a point lies within a distance of a stroke.
+///
+/// @param point the point
+/// @param stroke the stroke
+/// @param half_width the distance, in the same units
+/// @return true when the point is that near the stroke or its round ends
+bool near_stroke(IconPoint point, const IconStroke& stroke, int64_t half_width) noexcept {
+    const int64_t along_x = stroke.to.x - stroke.from.x;
+    const int64_t along_y = stroke.to.y - stroke.from.y;
+    const int64_t from_x = point.x - stroke.from.x;
+    const int64_t from_y = point.y - stroke.from.y;
+    const int64_t reach_squared = half_width * half_width;
+    const int64_t length_squared = along_x * along_x + along_y * along_y;
+    const int64_t projected = from_x * along_x + from_y * along_y;
+    if (length_squared == 0 || projected <= 0)
+        return from_x * from_x + from_y * from_y <= reach_squared;
+    if (projected >= length_squared) {
+        const int64_t to_x = point.x - stroke.to.x;
+        const int64_t to_y = point.y - stroke.to.y;
+        return to_x * to_x + to_y * to_y <= reach_squared;
+    }
+    const int64_t across = from_x * along_y - from_y * along_x;
+    return across * across <= reach_squared * length_squared;
+}
+
+/// Returns how much of each pixel of a rectangle a state icon covers.
+///
+/// The icon fills a square of the rectangle's shorter side, centred along
+/// the longer. Its design is scaled to that square, each place rounded to
+/// an eighth of a pixel, and each pixel counts which of its 16 samples, at
+/// the middles of a 4 by 4 grid, lie in the ring or within half a stroke's
+/// width of a stroke. The arithmetic is in integers, so every machine draws
+/// the same pixels.
+///
+/// @param icon the icon
+/// @param columns the rectangle's pixels across, at most kMostIconPixels
+/// @param rows the rectangle's pixels down, at most kMostIconPixels
+/// @return columns times rows bytes, rows top to bottom: 0 uncovered to 255 covered
+std::vector<uint8_t> state_icon_coverage(StateIcon icon, int32_t columns, int32_t rows) {
+    std::vector<uint8_t> coverage(
+        static_cast<std::size_t>(std::max(columns, 0)) * static_cast<std::size_t>(std::max(rows, 0))
+    );
+    const int32_t side = std::min(columns, rows);
+    if (side <= 0)
+        return coverage;
+    const int32_t left = (columns - side) / 2;
+    const int32_t top = (rows - side) / 2;
+    // Places in eighths of a pixel of the square: a sample lies at an odd
+    // eighth, the middle of its sixteenth of the pixel.
+    const int64_t square = 2 * kIconSamples * side;
+    const auto scaled = [square](int64_t quarters) {
+        return (quarters * square + kIconGrid / 2) / kIconGrid;
+    };
+    const IconPoint centre{scaled(kRingCentre.x), scaled(kRingCentre.y)};
+    const int64_t outer = scaled(kRingOuter);
+    const int64_t inner = scaled(kRingInner);
+    const int64_t half_width = scaled(kStrokeHalf);
+    std::vector<IconStroke> strokes;
+    for (const IconStroke& stroke : strokes_of(icon))
+        strokes.push_back(
+            {{scaled(stroke.from.x), scaled(stroke.from.y)},
+             {scaled(stroke.to.x), scaled(stroke.to.y)}}
+        );
+    const bool ring = ringed(icon);
+    const auto covers = [&](IconPoint point) {
+        if (ring) {
+            const int64_t across = point.x - centre.x;
+            const int64_t down = point.y - centre.y;
+            const int64_t distance_squared = across * across + down * down;
+            if (distance_squared <= outer * outer && distance_squared >= inner * inner)
+                return true;
+        }
+        for (const IconStroke& stroke : strokes)
+            if (near_stroke(point, stroke, half_width))
+                return true;
+        return false;
+    };
+    constexpr int64_t samples = kIconSamples * kIconSamples;
+    for (int32_t row = 0; row < side; ++row)
+        for (int32_t column = 0; column < side; ++column) {
+            int64_t inside = 0;
+            for (int64_t down = 0; down < kIconSamples; ++down)
+                for (int64_t across = 0; across < kIconSamples; ++across)
+                    if (covers(
+                            {2 * kIconSamples * column + 2 * across + 1,
+                             2 * kIconSamples * row + 2 * down + 1}
+                        ))
+                        ++inside;
+            const std::size_t at =
+                static_cast<std::size_t>(top + row) * static_cast<std::size_t>(columns) +
+                static_cast<std::size_t>(left + column);
+            coverage[at] = static_cast<uint8_t>((inside * 255 + samples / 2) / samples);
+        }
+    return coverage;
+}
+
 } // namespace
 
 Point mark_size(Mark mark) noexcept {
@@ -435,6 +615,16 @@ void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink) {
     if (!drawable(canvas))
         return;
     draw_mark(canvas, bits_of(mark), at, ink);
+}
+
+void draw_state_icon(const Canvas& canvas, const Rect& rect, StateIcon icon, Colour ink) {
+    if (!drawable(canvas))
+        return;
+    const Point pixels = covered_pixels(canvas, rect);
+    if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
+        return;
+    const std::vector<uint8_t> coverage = state_icon_coverage(icon, pixels.x, pixels.y);
+    blend_coverage(canvas, rect, coverage, ink);
 }
 
 void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around) {

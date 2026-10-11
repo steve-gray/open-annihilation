@@ -711,7 +711,7 @@ Identity keys are written directly under `identity`.
 
 | Key | Meaning | 3.1c | Type | Scope |
 | --- | --- | --- | --- | --- |
-| `display-version` | The version text on the main menu | `v3.1` | string, at most 16 | view |
+| `display-version` | The version text on the main menu, in place of the program's own. Left as 3.1c's `v3.1`, the menu shows "Open Annihilation" and this build's version (`v0.8.0`, with `-` and the version label on a development build) when the game data names its revision, and hides the label when it does not, as the demo does | `v3.1` | string, at most 16 | view |
 | `network-version` | The two network version bytes, major then minor. Also the build version unit files are checked against: a unit whose `Version` is later is unavailable. | `[3, 1]` | two integers, 0 to 255 | sim |
 | `replay-network-version` | The version bytes a replay presents | `[3, 1]` | two integers, 0 to 255 | sim |
 | `settings-file` | The name of the INI file the game reads its settings from | `totala.ini` | string, at most 64 | view |
@@ -1159,7 +1159,10 @@ limits) and [src/app](../../src/app/README.md#mod-profile-and-mod-folders)
 7. **Display rules.** The visual hacks change only what this machine draws
    and plays and how its input works, never what another machine is told.
 8. **The front end** shows the profile's display version on the main menu
-   and its name, version, description and badge on the Mods page of the
+   when it names one other than 3.1c's `v3.1`. Otherwise the label reads
+   "Open Annihilation" and this build's version when the game data names
+   its revision, and stays hidden when it does not. It shows the profile's
+   name, version, description and badge on the Mods page of the
    settings, keeps the game's settings under its registry root, seeds its registry
    values on a first run, and keeps its saves in `Saves/<id>`
    ([4.4](#44-saves-and-settings)).

@@ -26,6 +26,23 @@ namespace oa::ui::kit {
 /// @param ink the colour of its set pixels
 void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink);
 
+/// Draws a state icon in one colour: a circled check, a circled up-arrow or
+/// a download arrow, filling a square of the rectangle's shorter side
+/// centred in it.
+///
+/// The icon is worked out from its rings and strokes at the canvas's own
+/// pixels (covered_pixels), its edges smoothed by how much of each pixel
+/// they cover, and drawn through blend_coverage, so it is as crisp at 2x,
+/// 3x and 150% as at 1x. Its design is a square of 24 units: the ring is 2
+/// units wide with its outer edge a unit in, and every stroke is 2.5 units
+/// wide with round ends. Pixels it does not cover are left as they are.
+///
+/// @param canvas where it is drawn
+/// @param rect the rectangle, in points; state_icon_side square in a chip
+/// @param icon which icon
+/// @param ink its colour
+void draw_state_icon(const Canvas& canvas, const Rect& rect, StateIcon icon, Colour ink);
+
 /// Draws the keyboard focus outline: the accent, grown by the focus inset
 /// when around is set, and on the control's own edge otherwise.
 ///

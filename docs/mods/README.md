@@ -299,8 +299,9 @@ Its blocks are:
 - `author` and `packaging`: who made the mod (`unknown` when nobody is
   known, with an optional e-mail address), and who packaged it, on which
   day and in which revision; both are required;
-- `identity`: the display version, the network version its games
-  announce, its settings file, its registry root and its side names;
+- `identity`: the display version shown on the main menu in place of
+  "Open Annihilation" and this build's version, the network version its
+  games announce, its settings file, its registry root and its side names;
 - `layout`: the archives the engine mounts, and the directories and file
   names it reads;
 - `limits`: engine limits such as the number of units per player;

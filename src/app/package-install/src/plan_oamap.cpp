@@ -175,6 +175,7 @@ InstalledPackage installed_of(const pack::Manifest& manifest) {
     installed.name = manifest.name;
     installed.version = manifest.version;
     installed.revision = manifest.packaging.revision;
+    installed.author = manifest.author.name;
     return installed;
 }
 
