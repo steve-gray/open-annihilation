@@ -482,9 +482,11 @@ applies when you press OK.
   versions did. In a match the settings sit beside the side column, at no
   more than its scale, and take their layout from the room beside it: a
   1920x1080 match shows Compact at 2x where the menus show Regular. It
-  takes effect when you press OK, and is never locked. Choose a larger
-  size if OA's screens are small to read on a large display, or a smaller
-  one to see more of a list at once.
+  takes effect as you choose it, so the open dialog and every OA screen
+  redraw at the new size at once, and is never locked. Cancel puts back
+  the size the dialog opened with; OK keeps the size you chose. Choose a
+  larger size if OA's screens are small to read on a large display, or a
+  smaller one to see more of a list at once.
 - **Escape opens the game menu**, On by default on macOS and Off
   elsewhere. The first Escape cancels an order or clears the selection, as
   in 3.1c; the next opens the in-game menu. Turn it on if F2 is awkward to

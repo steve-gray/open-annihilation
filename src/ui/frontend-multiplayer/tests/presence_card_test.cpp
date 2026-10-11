@@ -281,14 +281,14 @@ void the_sample_card_says_what_the_record_says() {
     if (!card)
         return;
     OA_CHECK(card->title == "KIRBY");
-    OA_CHECK(card->aside == "Windows · x64");
-    OA_CHECK(card->lines.size() == 6);
+    OA_CHECK(card->lines.size() == 7);
     OA_CHECK(line_is(*card, 0, "Engine", "Open Annihilation 0.8.0"));
-    OA_CHECK(line_is(*card, 1, "Mod", "Ridge 4.8 · rev 3"));
-    OA_CHECK(line_is(*card, 2, "Rules", "Differ from the host's (rev 4)", mp::CardTone::amber));
-    OA_CHECK(line_is(*card, 3, "Game", "8 hacks change the game"));
-    OA_CHECK(line_is(*card, 4, "View", "4 view-only hacks"));
-    OA_CHECK(line_is(*card, 5, "Dev mode", "Off"));
+    OA_CHECK(line_is(*card, 1, "Platform", "Windows · x64"));
+    OA_CHECK(line_is(*card, 2, "Mod", "Ridge 4.8 · rev 3"));
+    OA_CHECK(line_is(*card, 3, "Rules", "Differ from the host's (rev 4)", mp::CardTone::amber));
+    OA_CHECK(line_is(*card, 4, "Game", "8 hacks change the game"));
+    OA_CHECK(line_is(*card, 5, "View", "4 view-only hacks"));
+    OA_CHECK(line_is(*card, 6, "Dev mode", "Off"));
     OA_CHECK(
         card->hacks ==
         std::vector<std::string>(sample_game_hacks.begin(), sample_game_hacks.begin() + 3)
@@ -300,11 +300,11 @@ void the_sample_card_says_what_the_record_says() {
     OA_CHECK(host.has_value());
     if (host) {
         OA_CHECK(host->title == "STEVE");
-        OA_CHECK(host->aside == "macOS · arm64");
-        OA_CHECK(line_is(*host, 1, "Mod", "Ridge 4.8 · rev 4"));
-        OA_CHECK(line_is(*host, 2, "Rules", "The host's"));
-        OA_CHECK(line_is(*host, 3, "Game", "No hacks change the game"));
-        OA_CHECK(line_is(*host, 4, "View", "No view-only hacks"));
+        OA_CHECK(line_is(*host, 1, "Platform", "macOS · arm64"));
+        OA_CHECK(line_is(*host, 2, "Mod", "Ridge 4.8 · rev 4"));
+        OA_CHECK(line_is(*host, 3, "Rules", "The host's"));
+        OA_CHECK(line_is(*host, 4, "Game", "No hacks change the game"));
+        OA_CHECK(line_is(*host, 5, "View", "No view-only hacks"));
         OA_CHECK(host->hacks.empty() && host->hacks_more.empty());
     }
 }
@@ -317,19 +317,19 @@ void the_rules_line_compares_with_the_host() {
     record.sim_hash = host_record().sim_hash;
     sample.room.receive(kGuestId, encoded(record));
     auto card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
-    OA_CHECK(card && line_is(*card, 2, "Rules", "Same as the host's"));
+    OA_CHECK(card && line_is(*card, 3, "Rules", "Same as the host's"));
 
     record.sim_hash.reset();
     sample.room.receive(kGuestId, encoded(record));
     card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
-    OA_CHECK(card && line_is(*card, 2, "Rules", "Unknown"));
+    OA_CHECK(card && line_is(*card, 3, "Rules", "Unknown"));
 
     record = sample_record();
     record.mod = ng::PresenceMod{"stone", "Stone", "", 3};
     sample.room.receive(kGuestId, encoded(record));
     card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
-    OA_CHECK(card && line_is(*card, 1, "Mod", "Stone · rev 3"));
-    OA_CHECK(card && line_is(*card, 2, "Rules", "Differ from the host's", mp::CardTone::amber));
+    OA_CHECK(card && line_is(*card, 2, "Mod", "Stone · rev 3"));
+    OA_CHECK(card && line_is(*card, 3, "Rules", "Differ from the host's", mp::CardTone::amber));
 
     record.mod.reset();
     record.developer = ng::PresenceDeveloper{true, 2, {{"ai.attack-wave-size", true}}};
@@ -337,10 +337,10 @@ void the_rules_line_compares_with_the_host() {
     record.view_hacks = ng::PresenceHacks{1, {"ui.megamap"}};
     sample.room.receive(kGuestId, encoded(record));
     card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
-    OA_CHECK(card && line_is(*card, 1, "Mod", "Total Annihilation 3.1c"));
-    OA_CHECK(card && line_is(*card, 3, "Game", "1 hack changes the game"));
-    OA_CHECK(card && line_is(*card, 4, "View", "1 view-only hack"));
-    OA_CHECK(card && line_is(*card, 5, "Dev mode", "On · 2 overrides"));
+    OA_CHECK(card && line_is(*card, 2, "Mod", "Total Annihilation 3.1c"));
+    OA_CHECK(card && line_is(*card, 4, "Game", "1 hack changes the game"));
+    OA_CHECK(card && line_is(*card, 5, "View", "1 view-only hack"));
+    OA_CHECK(card && line_is(*card, 6, "Dev mode", "On · 2 overrides"));
     OA_CHECK(card && card->hacks.size() == 1 && card->hacks_more.empty());
 
     // Under a 3.1c host, which sends no record, the plain baseline's rules.
@@ -354,11 +354,11 @@ void the_rules_line_compares_with_the_host() {
         record.sim_hash = *plain;
         joined.own(encoded(record));
         card = mp::presence_card(*joined.lobby, 0, {});
-        OA_CHECK(card && line_is(*card, 2, "Rules", "Same as the host's"));
+        OA_CHECK(card && line_is(*card, 3, "Rules", "Same as the host's"));
         record.sim_hash = filled_hash(0x13);
         joined.own(encoded(record));
         card = mp::presence_card(*joined.lobby, 0, {});
-        OA_CHECK(card && line_is(*card, 2, "Rules", "Differ from the host's", mp::CardTone::amber));
+        OA_CHECK(card && line_is(*card, 3, "Rules", "Differ from the host's", mp::CardTone::amber));
     }
 }
 
@@ -389,14 +389,34 @@ void a_player_without_a_record_gets_one_line() {
     OA_CHECK(card.has_value());
     if (card) {
         OA_CHECK(card->title == "MIRA");
-        OA_CHECK(card->aside.empty());
         OA_CHECK(card->lines.size() == 1);
         OA_CHECK(line_is(*card, 0, "Engine", "Open Annihilation (before 0.8)"));
         OA_CHECK(card->hacks.empty() && card->hacks_more.empty());
     }
     room.receive(kThirdId, encoded(sample_record()));
     card = mp::presence_card(*room.lobby, slot, {});
+    OA_CHECK(card && card->lines.size() == 7);
+}
+
+// Platform sits under Engine. One empty field is left out of the line, and
+// both empty leaves the line out, so the next line is Mod.
+void the_platform_line_leaves_out_an_empty_field() {
+    SampleRoom sample;
+    auto record = sample_record();
+    record.engine->architecture.clear();
+    sample.room.receive(kGuestId, encoded(record));
+    auto card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
+    OA_CHECK(card && line_is(*card, 1, "Platform", "Windows"));
+    record.engine->platform.clear();
+    record.engine->architecture = "x64";
+    sample.room.receive(kGuestId, encoded(record));
+    card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
+    OA_CHECK(card && line_is(*card, 1, "Platform", "x64"));
+    record.engine->architecture.clear();
+    sample.room.receive(kGuestId, encoded(record));
+    card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
     OA_CHECK(card && card->lines.size() == 6);
+    OA_CHECK(card && line_is(*card, 1, "Mod", "Ridge 4.8 · rev 3"));
 }
 
 // The host's own card names its map pack, and says what this machine has
@@ -426,20 +446,20 @@ void the_hosts_card_names_its_map_pack() {
 
     for (const auto& expected : states) {
         const auto card = mp::presence_card(*room.lobby, host, answering(expected.state));
-        OA_CHECK(card && line_is(*card, 2, "Rules", "The host's"));
-        OA_CHECK(card && line_is(*card, 6, "Map", expected.value, expected.tone));
+        OA_CHECK(card && line_is(*card, 3, "Rules", "The host's"));
+        OA_CHECK(card && line_is(*card, 7, "Map", expected.value, expected.tone));
     }
     const auto unbound = mp::presence_card(*room.lobby, host, {});
-    OA_CHECK(unbound && line_is(*unbound, 6, "Map", "Archipelago 1.2"));
+    OA_CHECK(unbound && line_is(*unbound, 7, "Map", "Archipelago 1.2"));
     // A pack whose name did not fit is named by its key.
     record.map_pack->name.clear();
     record.map_pack->version.clear();
     room.receive(kHostId, encoded(record));
     const auto keyed = mp::presence_card(*room.lobby, host, answering(mp::PackState::missing));
-    OA_CHECK(keyed && line_is(*keyed, 6, "Map", "archipelago · not installed"));
+    OA_CHECK(keyed && line_is(*keyed, 7, "Map", "archipelago · not installed"));
     // The local joiner's own record names the same pack, but it is not the host's.
     const auto own = mp::presence_card(*room.lobby, 0, answering(mp::PackState::installed));
-    OA_CHECK(own && own->lines.size() == 6);
+    OA_CHECK(own && own->lines.size() == 7);
 }
 
 // No card for a player on 3.1c, an open slot or a slot out of range.
@@ -460,6 +480,7 @@ void the_words_go_through_the_translation() {
     SampleRoom sample;
     translations = {
         {"Engine", "Moteur"},
+        {"Platform", "Plateforme"},
         {"Open Annihilation {version}", "Open Annihilation version {version}"},
         {"{mod} · rev {revision}", "{mod} (révision {revision})"},
         {"Differ from the host's (rev {revision})", "Diffèrent de l'hôte ({revision})"},
@@ -472,10 +493,11 @@ void the_words_go_through_the_translation() {
     sample.room.lobby->services.translate = nullptr;
     translations.clear();
     OA_CHECK(card && line_is(*card, 0, "Moteur", "Open Annihilation version 0.8.0"));
-    OA_CHECK(card && line_is(*card, 1, "Mod", "Ridge 4.8 (révision 3)"));
-    OA_CHECK(card && line_is(*card, 2, "Rules", "Diffèrent de l'hôte (4)", mp::CardTone::amber));
-    OA_CHECK(card && line_is(*card, 3, "Game", "8 modifications du jeu"));
-    OA_CHECK(card && line_is(*card, 5, "Dev mode", "Arrêt"));
+    OA_CHECK(card && line_is(*card, 1, "Plateforme", "Windows · x64"));
+    OA_CHECK(card && line_is(*card, 2, "Mod", "Ridge 4.8 (révision 3)"));
+    OA_CHECK(card && line_is(*card, 3, "Rules", "Diffèrent de l'hôte (4)", mp::CardTone::amber));
+    OA_CHECK(card && line_is(*card, 4, "Game", "8 modifications du jeu"));
+    OA_CHECK(card && line_is(*card, 6, "Dev mode", "Arrêt"));
     OA_CHECK(card && card->hacks_more == "· 5 de plus");
 }
 
@@ -502,9 +524,9 @@ const kit::Fonts& fonts() {
     return loaded;
 }
 
-// The kit's hover card for the sample: the mark, the title and aside, one
-// row a line with the Rules value in the lock colour, and the hack ids and
-// "· 5 more" as the block.
+// The kit's hover card for the sample: the mark and the title, nothing at
+// the header's right, one row a line with the Rules value in the lock
+// colour, and the hack ids and "· 5 more" as the block.
 void the_look_shows_the_sample() {
     SampleRoom sample;
     const auto card = mp::presence_card(*sample.room.lobby, sample.kirby, {});
@@ -514,14 +536,14 @@ void the_look_shows_the_sample() {
     const kit::HoverCardLook look =
         mp::presence_card_look(*card, kit::SizeClass::compact, 640, fonts());
     OA_CHECK(look.mark);
-    OA_CHECK(look.title == "KIRBY" && look.aside == "Windows · x64");
+    OA_CHECK(look.title == "KIRBY" && look.aside.empty());
     OA_CHECK(look.width == mp::presence_card_compact_width);
     OA_CHECK(look.rows.size() == card->lines.size());
     for (std::size_t index = 0; index < look.rows.size() && index < card->lines.size(); ++index) {
         OA_CHECK(look.rows[index].label == card->lines[index].label);
         OA_CHECK(look.rows[index].value == card->lines[index].value);
         OA_CHECK(
-            look.rows[index].value_colour == (index == 2 ? kit::colour::lock : kit::colour::text)
+            look.rows[index].value_colour == (index == 3 ? kit::colour::lock : kit::colour::text)
         );
     }
     OA_CHECK(
@@ -535,7 +557,7 @@ void the_look_shows_the_sample() {
     const kit::Point size = kit::hover_card_size(fonts(), look);
     OA_CHECK(size.x == look.width);
     OA_CHECK(
-        size.y == 11 * kit::compact_metrics.small_line + 2 * kit::compact_metrics.hover_card_padding
+        size.y == 12 * kit::compact_metrics.small_line + 2 * kit::compact_metrics.hover_card_padding
     );
 
     // Lime for an installed pack.
@@ -547,7 +569,7 @@ void the_look_shows_the_sample() {
 
 // The width by class, never wider than the window less 16 points.
 void the_width_follows_the_class() {
-    const mp::PresenceCard card{"KIRBY", "", {{"Engine", "Open Annihilation 0.8.0", {}}}, {}, {}};
+    const mp::PresenceCard card{"KIRBY", {{"Engine", "Open Annihilation 0.8.0", {}}}, {}, {}};
     OA_CHECK(mp::presence_card_look(card, kit::SizeClass::compact, 640, fonts()).width == 240);
     OA_CHECK(mp::presence_card_look(card, kit::SizeClass::regular, 960, fonts()).width == 280);
     OA_CHECK(mp::presence_card_look(card, kit::SizeClass::large, 1280, fonts()).width == 320);
@@ -783,6 +805,7 @@ int main() {
     the_rules_line_compares_with_the_host();
     a_development_build_says_so();
     a_player_without_a_record_gets_one_line();
+    the_platform_line_leaves_out_an_empty_field();
     the_hosts_card_names_its_map_pack();
     a_31c_player_has_no_card();
     the_words_go_through_the_translation();

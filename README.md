@@ -142,20 +142,25 @@ Network play goes through the Multiplayer screens, as in 3.1c, but asks
 for no game disc: START never counts discs. Every OA player still tells the
 other machines it has one, since a 3.1c host counts them. In the battle
 room a player on 3.1c shows the CD icon, and an OA player the OA badge in
-its place. OA tells its own players from those on 3.1c by the setup block
-each sends (record 0x20): OA writes `O` and `A` at +0xAD and +0xAE, bytes
-3.1c carries unchanged and never reads. OA builds before 0.7.4 write no
-mark, so their players show a CD icon too.
+its place. The badge is the Open Annihilation logo, drawn at the window's
+own pixels and scaled to that rectangle, so it stays sharp at any window
+size. A dot on it means that player's rules differ from the host's. Where
+the window cannot draw the logo, the frame keeps the small badge it draws
+in the rectangle. OA tells its own players from those on 3.1c by the setup
+block each sends (record 0x20): OA writes `O` and `A` at +0xAD and +0xAE,
+bytes 3.1c carries unchanged and never reads. OA builds before 0.7.4 write
+no mark, so their players show a CD icon too.
 
 Rest the pointer on an OA badge for a moment and that player's card opens:
-their Open Annihilation version and platform, their mod and its revision,
-whether their rules are the host's, how many hacks change the game or only
-the view, Developer Mode, and on the host's card the map pack its map comes
-from. F1 or Return on a player's row, reached with Tab or the arrow keys,
-opens it too, as do View and A on a controller and a tap on the badge;
-Escape closes it. A dot on a badge means that player's rules differ from
-the host's. The card shows what that player's machine sent in its
-presence record, which OA sends only to the players whose setup blocks
+their Open Annihilation version, then the platform and architecture on the
+next line (a field left empty is left out, and the line with it when both
+are), their mod and its revision, whether their rules are the host's, how
+many hacks change the game or only the view, Developer Mode, and on the
+host's card the map pack its map comes from. The mark beside the name is
+the same logo. F1 or Return on a player's row, reached with Tab or the
+arrow keys, opens it too, as do View and A on a controller and a tap on
+the badge; Escape closes it. The card shows what that player's machine sent
+in its presence record, which OA sends only to the players whose setup blocks
 carry the mark, each alone in its frame. OA 0.7.4 players carry the mark
 too: they receive the record and ignore it, and their cards say only "Open
 Annihilation (before 0.8)". No 3.1c machine receives one, and a 3.1c

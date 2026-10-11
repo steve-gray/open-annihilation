@@ -27,8 +27,8 @@ inline constexpr std::string_view interface_words[] = {
     "finished.",
     "CANCEL",
     "Checking {file}...",
-    "Choose PLAY NOW to play it, or choose it later on Mods in the Open Annihilation settings.",
-    "Choose it on Mods in the Open Annihilation settings to play it.",
+    "Choose PLAY NOW to play it, or choose it later with PLAY NOW in the Library.",
+    "Choose it with PLAY NOW in the Library to play it.",
     "FOLDER IN USE",
     "Files added to its folder, or changed, since it was installed are replaced or removed.",
     "INSTALL",
@@ -100,11 +100,9 @@ inline constexpr std::string_view interface_words[] = {
     "REPLACE LANGUAGE",
     "REPLACE MAP PACK",
     "Replace {name} from {old} with the one from {new}?",
-    "Replacing keeps {installed}, and ROLL BACK on Mods in the Open Annihilation settings brings "
-    "it back.",
+    "Replacing keeps {installed}, and ROLL BACK in the Library brings it back.",
     "Revision {incoming} is older than the one installed.",
-    "Revision {installed} is kept, and ROLL BACK on Mods in the Open Annihilation settings brings "
-    "it back.",
+    "Revision {installed} is kept, and ROLL BACK in the Library brings it back.",
     "The files of {title} {version} were installed again.",
     "The folder kept for ROLL BACK ({backup}) is removed.",
     "The folder kept for ROLL BACK stays.",
@@ -118,8 +116,7 @@ inline constexpr std::string_view interface_words[] = {
     "The pack lists {name}, which it does not hold.",
     "The preview {name} is larger than 2 MiB.",
     "The preview {name} is not a PNG.",
-    "The version installed is kept, and ROLL BACK on Mods in the Open Annihilation settings brings "
-    "it back.",
+    "The version installed is kept, and ROLL BACK in the Library brings it back.",
     "The version installed is kept, and can be brought back.",
     "The version kept ({backup}) is removed.",
     "The version kept stays.",
@@ -148,8 +145,7 @@ inline constexpr std::string_view interface_words[] = {
     "{title} is back to {new}. {old} is kept, and ROLL BACK brings it back.",
     "{title} is back to {new}. {old} is kept, and can be brought back.",
     "{title} is now {new}.",
-    "{title} is now {new}. {old} is kept, and ROLL BACK on Mods in the Open Annihilation settings "
-    "brings it back.",
+    "{title} is now {new}. {old} is kept, and ROLL BACK in the Library brings it back.",
     "{title} is now {new}. {old} is kept, and can be brought back.",
     "{title} {installed} is installed. Replace it with {incoming} from {file}?",
     "{title} {installed} is installed. Replace it with {incoming}, or install {incoming} alongside "
