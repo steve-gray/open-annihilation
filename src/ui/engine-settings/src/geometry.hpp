@@ -32,6 +32,10 @@ namespace oa::ui::engine_settings::geometry {
 using oa::data::mod_profile::Value;
 using oa::ui::frontend_renderer::SourceRect;
 
+// The parts that keep their places and sizes in every size class come first;
+// then the parts that move with the class (Sizes, sizes_of), and their
+// Compact values under the names 0.7.3's code and tests know them by.
+
 /// The width of the dialog's raised edge.
 inline constexpr int32_t edge = oa::ui::kit::compact_metrics.edge;
 /// The header's height, under the top edge.
@@ -42,29 +46,14 @@ inline constexpr int32_t footer_height = oa::ui::kit::compact_metrics.footer_hei
 inline constexpr int32_t header_top = edge;
 /// The row of the line between the header and the body.
 inline constexpr int32_t header_rule_row = header_top + header_height;
-/// The row of the line between the body and the footer.
-inline constexpr int32_t footer_rule_row = dialog_height - edge - footer_height - 1;
-/// The footer's first row.
-inline constexpr int32_t footer_top = footer_rule_row + 1;
 /// The body's first row, under the header's line.
 inline constexpr int32_t body_top = header_rule_row + 1;
-/// The section list's width, from the left edge.
-inline constexpr int32_t list_width = 144;
-/// The column of the line between the section list and the open section.
-inline constexpr int32_t list_rule_column = edge + list_width;
-/// The space between a panel's edge and what it holds.
-inline constexpr int32_t padding = oa::ui::kit::compact_metrics.padding;
-/// The open section's first column.
-inline constexpr int32_t content_left = list_rule_column + 1 + padding;
-/// The column just right of the open section and the header's version.
-inline constexpr int32_t content_right = dialog_width - edge - padding;
-/// The open section's width.
-inline constexpr int32_t content_width = content_right - content_left;
 
 /// The header's Open Annihilation icon, in the header's middle rows; or,
-/// without the icon, the OA mark's outlined square in its middle.
+/// without the icon, the OA mark's outlined square in its middle. It keeps
+/// Compact's place from the dialog's left edge in every size class.
 inline constexpr SourceRect header_mark{
-    padding,
+    oa::ui::kit::compact_metrics.padding,
     oa::ui::kit::compact_metrics.mark_top,
     oa::ui::kit::compact_metrics.mark_side,
     oa::ui::kit::compact_metrics.mark_side
@@ -79,8 +68,6 @@ inline constexpr int32_t heading_tracking = oa::ui::kit::compact_metrics.heading
 
 /// A section's entry in the list: its left column and width.
 inline constexpr int32_t list_item_left = edge + 6;
-/// A section's entry's width.
-inline constexpr int32_t list_item_width = list_width - 12;
 /// A section's entry's height.
 inline constexpr int32_t list_item_height = 20;
 /// The first entry's top row.
@@ -102,10 +89,12 @@ inline constexpr int32_t list_text_offset = 12;
 /// The columns an entry keeps clear right of its text.
 inline constexpr int32_t list_text_margin = 4;
 
-/// The open section's heading.
-inline constexpr SourceRect heading{content_left, body_top + 10, content_width, 12};
+/// The open section's heading's top row.
+inline constexpr int32_t heading_top = body_top + 10;
+/// The open section's heading's height.
+inline constexpr int32_t heading_height = 12;
 /// The first row's top, where its line is drawn.
-inline constexpr int32_t first_row_top = heading.y + heading.height + 4;
+inline constexpr int32_t first_row_top = heading_top + heading_height + 4;
 /// The rows between a row's line and its label, and under its last part.
 inline constexpr int32_t row_padding = 8;
 /// A row's label line: the label, and a switch, a level strip or a lock.
@@ -198,9 +187,6 @@ inline constexpr int32_t window_frame_level_width = 85;
 /// MANAGE…'s width, Game files' button on its summary row's label line:
 /// room for its caption in the small font with clear columns each side.
 inline constexpr int32_t manage_button_width = 76;
-/// The most characters a line of a host's text under a row holds, broken
-/// between words: what fits the section's width in the small font.
-inline constexpr std::size_t hint_line_characters = 50;
 /// A lock's width: the padlock and its text, right-aligned on the label line.
 inline constexpr int32_t lock_width = 148;
 /// The padlock's width.
@@ -229,98 +215,28 @@ inline constexpr int32_t least_stop_spacing = oa::ui::kit::compact_metrics.least
 
 /// The footer's buttons' height and top row.
 inline constexpr int32_t button_height = oa::ui::kit::compact_metrics.button_height;
-/// The footer's buttons' top row.
-inline constexpr int32_t button_top = footer_top + (footer_height - button_height) / 2;
-/// Restore defaults, at the footer's left.
-inline constexpr SourceRect restore_button{padding, button_top, 110, button_height};
-/// OK, at the footer's right.
-inline constexpr SourceRect ok_button{
-    content_right - oa::ui::kit::compact_metrics.button_width,
-    button_top,
-    oa::ui::kit::compact_metrics.button_width,
-    button_height
-};
-/// Cancel, left of OK.
-inline constexpr SourceRect cancel_button{
-    ok_button.x - oa::ui::kit::compact_metrics.button_gap -
-        oa::ui::kit::compact_metrics.button_width,
-    button_top,
-    oa::ui::kit::compact_metrics.button_width,
-    button_height
-};
+/// Restore defaults' width.
+inline constexpr int32_t restore_button_width = 110;
 
-/// The Switch Mod question (Dialog::switch_question): a box over the middle
-/// of the dialog's body.
-inline constexpr SourceRect question_box{
-    (dialog_width - 300) / 2, body_top + (footer_rule_row - body_top - 150) / 2, 300, 150
-};
-/// The question's heading, along its top.
-inline constexpr SourceRect question_heading{
-    question_box.x + padding, question_box.y + 8, question_box.width - 2 * padding, 12
-};
-/// The badge of the mod the question offers, under the heading.
-inline constexpr SourceRect question_badge{question_heading.x, question_heading.y + 16, 20, 20};
-/// The mod's title, right of its badge.
-inline constexpr SourceRect question_title{
-    question_badge.x + question_badge.width + 6,
-    question_badge.y - 2,
-    question_heading.width - question_badge.width - 6,
-    16
-};
-/// The mod's version, under its title.
-inline constexpr SourceRect question_version{
-    question_title.x, question_title.y + 14, question_title.width, 12
-};
-/// The question's first text line, under the badge; the others follow it.
-inline constexpr SourceRect question_first_line{
-    question_heading.x, question_badge.y + question_badge.height + 6, question_heading.width, 12
-};
+/// The Switch Mod question's box's width: it keeps Compact's size, and its
+/// parts their places in it, in every size class.
+inline constexpr int32_t question_box_width = 300;
+/// The Switch Mod question's box's height.
+inline constexpr int32_t question_box_height = 150;
 /// The most lines the question's text takes, its note's among them.
 inline constexpr std::size_t question_lines = 5;
-/// SWITCH, at the question's bottom right.
-inline constexpr SourceRect question_yes_button{
-    question_box.x + question_box.width - padding - 52,
-    question_box.y + question_box.height - 8 - button_height,
-    52,
-    button_height
-};
-/// CANCEL, left of SWITCH.
-inline constexpr SourceRect question_no_button{
-    question_yes_button.x - 5 - 52, question_yes_button.y, 52, button_height
-};
 
 using oa::ui::engine_settings::page_count;
 
-/// The view the open section's rows scroll in, under its heading: from the
-/// first row's line to the row above the footer's line.
-inline constexpr SourceRect view{
-    content_left, first_row_top, content_width, footer_rule_row - first_row_top
-};
-/// What the rows are drawn clipped to: the view, wider on each side by a
-/// focus outline.
-inline constexpr SourceRect view_clip{
-    view.x - focus_inset, view.y, view.width + 2 * focus_inset, view.height
-};
 /// The clear rows under the last row's line at the end of a section, so
 /// that at its end the line never meets the footer's.
 inline constexpr int32_t end_gap = row_padding;
 /// The scroll bar's thumb's width.
 inline constexpr int32_t scroll_thumb_width = oa::ui::kit::compact_metrics.scroll_thumb_width;
-/// The scroll bar's well: in the margin right of the rows, one clear column
-/// right of a focus outline, as high as the view; the thumb runs inside its
-/// one-pixel border.
-inline constexpr SourceRect scroll_well{
-    content_right + focus_inset + 1, view.y, scroll_thumb_width + 2, view.height
-};
-/// Where a press holds the scroll bar: the whole margin right of the rows.
-inline constexpr SourceRect scroll_hit{content_right, view.y, padding, view.height};
 /// The scroll bar's thumb's least height.
 inline constexpr int32_t least_thumb_height = oa::ui::kit::compact_metrics.least_thumb_height;
 /// The rows a notch of the mouse wheel scrolls: two hint lines.
 inline constexpr int32_t wheel_step = 2 * hint_line_height;
-/// The rows Page Up and Page Down scroll: the view less three hint lines,
-/// so that what showed at one edge still shows at the other.
-inline constexpr int32_t page_step = view.height - 3 * hint_line_height;
 
 /// Where a section's rows scroll: the view, the scroll bar's well, the
 /// margin a press holds the bar in, and the rows Page Up and Page Down move.
@@ -330,10 +246,6 @@ struct ScrollArea {
     SourceRect hit{};    ///< where a press holds the scroll bar
     int32_t page_step{}; ///< the rows Page Up and Page Down scroll
 };
-
-/// Where a section's rows scroll; Developer's list scrolls in
-/// developer_scroll.
-inline constexpr ScrollArea section_scroll{view, scroll_well, scroll_hit, page_step};
 
 // Developer: its rows under the heading, Enable Developer Mode and Show
 // performance statistics, placed closer than a section's so that the list
@@ -353,81 +265,373 @@ inline constexpr int32_t developer_list_rule =
     first_row_top + developer_row_count * developer_row_height;
 /// The rows between the footer's line, its two rows and the dialog's footer.
 inline constexpr int32_t developer_footer_gap = 4;
-/// The row of the line over the footer under Developer's list.
-inline constexpr int32_t developer_footer_rule = footer_rule_row - 2 - button_height -
-                                                 developer_footer_gap - label_line_height -
-                                                 developer_footer_gap;
-/// The view the list scrolls in, between the two lines.
-inline constexpr SourceRect developer_view{
-    content_left,
-    developer_list_rule + 1,
-    content_width,
-    developer_footer_rule - developer_list_rule - 1
+/// Restore profile values' width.
+inline constexpr int32_t restore_profile_width = 142;
+
+/// OPEN MODS FOLDER's width.
+inline constexpr int32_t mods_folder_button_width = 104;
+
+/// The parts of the dialog that move with its size class, in points from its
+/// top left corner: its size, its padding and its section list's width
+/// (kit::metrics_of), and the content column, the body, the footer, the
+/// views and the boxes that follow from them. The content column starts
+/// right of the section list and ends the padding short of the right edge;
+/// the body is the height between the header's line and the footer's. Rows,
+/// texts and controls keep their sizes, so a larger class shows more rows.
+struct Sizes {
+    oa::ui::kit::SizeClass size_class{}; ///< the class these are the sizes of
+    int32_t dialog_width{};              ///< the dialog's width
+    int32_t dialog_height{};             ///< the dialog's height
+    int32_t padding{};                   ///< the space between a panel's edge and what it holds
+    int32_t list_width{};                ///< the section list's width, from the left edge
+    std::size_t hint_line_characters{};  ///< the most characters a host's line under a row holds
+    int32_t footer_rule_row{};           ///< the row of the line between the body and the footer
+    int32_t footer_top{};                ///< the footer's first row
+    int32_t list_rule_column{};          ///< the column of the line right of the section list
+    int32_t content_left{};              ///< the open section's first column
+    int32_t content_right{};             ///< the column just right of the open section
+    int32_t content_width{};             ///< the open section's width
+    int32_t list_item_width{};           ///< a section's entry's width
+    /// The column just right of the header's version: Compact's distance from
+    /// the dialog's right edge in every class.
+    int32_t version_right{};
+    SourceRect heading{};        ///< the open section's heading
+    int32_t button_top{};        ///< the footer's buttons' top row
+    SourceRect restore_button{}; ///< Restore defaults, at the footer's left
+    SourceRect ok_button{};      ///< OK, at the footer's right
+    SourceRect cancel_button{};  ///< Cancel, left of OK
+    /// The Switch Mod question (Dialog::switch_question): a box over the
+    /// middle of the dialog's body.
+    SourceRect question_box{};
+    SourceRect question_heading{};    ///< the question's heading, along its top
+    SourceRect question_badge{};      ///< the badge of the mod the question offers
+    SourceRect question_title{};      ///< the mod's title, right of its badge
+    SourceRect question_version{};    ///< the mod's version, under its title
+    SourceRect question_first_line{}; ///< the question's first text line, under the badge
+    SourceRect question_yes_button{}; ///< SWITCH, at the question's bottom right
+    SourceRect question_no_button{};  ///< CANCEL, left of SWITCH
+    /// The view the open section's rows scroll in, under its heading: from
+    /// the first row's line to the row above the footer's line.
+    SourceRect view{};
+    /// What the rows are drawn clipped to: the view, wider on each side by a
+    /// focus outline.
+    SourceRect view_clip{};
+    /// The scroll bar's well: in the margin right of the rows, one clear
+    /// column right of a focus outline, as high as the view.
+    SourceRect scroll_well{};
+    SourceRect scroll_hit{}; ///< where a press holds the scroll bar: the margin right of the rows
+    /// The rows Page Up and Page Down scroll: the view less three hint
+    /// lines, so that what showed at one edge still shows at the other.
+    int32_t page_step{};
+    ScrollArea section_scroll{};     ///< where a section's rows scroll
+    int32_t developer_footer_rule{}; ///< the row of the line over the footer under Developer's list
+    SourceRect developer_view{}; ///< the view Developer's list scrolls in, between its two lines
+    SourceRect developer_view_clip{};    ///< what Developer's list is drawn clipped to
+    SourceRect active_only_label{};      ///< Show Active Only's label, in Developer's footer
+    SourceRect active_only_switch{};     ///< Show Active Only's switch, at the footer's right
+    SourceRect restore_profile_button{}; ///< Restore profile values, under Show Active Only
+    ScrollArea developer_scroll{};       ///< where Developer's list scrolls
+    SourceRect mods_note_first{};        ///< the first line under Mods' list naming its folders
+    SourceRect mods_note_second{};       ///< the second of those lines
+    SourceRect mods_folder_button{};     ///< OPEN MODS FOLDER, over those lines
+    /// The two lines over Mods' list that say why the page is locked, the
+    /// padlock at the first's left.
+    SourceRect mods_lock_line{};
+    /// The first of those lines' text, right of the padlock; the second lies
+    /// under it.
+    SourceRect mods_lock_text{};
 };
-/// What the list is drawn clipped to: the view, wider on each side by a
-/// focus outline.
-inline constexpr SourceRect developer_view_clip{
-    developer_view.x - focus_inset,
-    developer_view.y,
-    developer_view.width + 2 * focus_inset,
-    developer_view.height
+
+/// Works out the dialog's sizes at a size class from the class's metrics.
+///
+/// @param size_class the class
+/// @return its sizes; Compact's are 0.7.3's
+[[nodiscard]] constexpr Sizes make_sizes(oa::ui::kit::SizeClass size_class) noexcept {
+    const oa::ui::kit::Metrics& metrics = oa::ui::kit::metrics_of(size_class);
+    // The Switch Mod question's box keeps Compact's padding in every class.
+    const int32_t box_padding = oa::ui::kit::compact_metrics.padding;
+    Sizes sized{};
+    sized.size_class = size_class;
+    sized.dialog_width = metrics.dialog_width;
+    sized.dialog_height = metrics.dialog_height;
+    sized.padding = metrics.padding;
+    sized.list_width = metrics.nav_width;
+    sized.hint_line_characters = static_cast<std::size_t>(metrics.hint_line_characters);
+    sized.footer_rule_row = sized.dialog_height - edge - footer_height - 1;
+    sized.footer_top = sized.footer_rule_row + 1;
+    sized.list_rule_column = edge + sized.list_width;
+    sized.content_left = sized.list_rule_column + 1 + sized.padding;
+    sized.content_right = sized.dialog_width - edge - sized.padding;
+    sized.content_width = sized.content_right - sized.content_left;
+    sized.list_item_width = sized.list_width - 12;
+    sized.version_right = sized.dialog_width - edge - oa::ui::kit::compact_metrics.padding;
+    sized.heading = {sized.content_left, heading_top, sized.content_width, heading_height};
+    sized.button_top = sized.footer_top + (footer_height - button_height) / 2;
+    sized.restore_button = {sized.padding, sized.button_top, restore_button_width, button_height};
+    sized.ok_button = {
+        sized.content_right - oa::ui::kit::compact_metrics.button_width,
+        sized.button_top,
+        oa::ui::kit::compact_metrics.button_width,
+        button_height
+    };
+    sized.cancel_button = {
+        sized.ok_button.x - oa::ui::kit::compact_metrics.button_gap -
+            oa::ui::kit::compact_metrics.button_width,
+        sized.button_top,
+        oa::ui::kit::compact_metrics.button_width,
+        button_height
+    };
+    sized.question_box = {
+        (sized.dialog_width - question_box_width) / 2,
+        body_top + (sized.footer_rule_row - body_top - question_box_height) / 2,
+        question_box_width,
+        question_box_height
+    };
+    const SourceRect& box = sized.question_box;
+    sized.question_heading = {box.x + box_padding, box.y + 8, box.width - 2 * box_padding, 12};
+    sized.question_badge = {sized.question_heading.x, sized.question_heading.y + 16, 20, 20};
+    sized.question_title = {
+        sized.question_badge.x + sized.question_badge.width + 6,
+        sized.question_badge.y - 2,
+        sized.question_heading.width - sized.question_badge.width - 6,
+        16
+    };
+    sized.question_version = {
+        sized.question_title.x, sized.question_title.y + 14, sized.question_title.width, 12
+    };
+    sized.question_first_line = {
+        sized.question_heading.x,
+        sized.question_badge.y + sized.question_badge.height + 6,
+        sized.question_heading.width,
+        12
+    };
+    sized.question_yes_button = {
+        box.x + box.width - box_padding - 52,
+        box.y + box.height - 8 - button_height,
+        52,
+        button_height
+    };
+    sized.question_no_button = {
+        sized.question_yes_button.x - 5 - 52, sized.question_yes_button.y, 52, button_height
+    };
+    sized.view = {
+        sized.content_left,
+        first_row_top,
+        sized.content_width,
+        sized.footer_rule_row - first_row_top
+    };
+    sized.view_clip = {
+        sized.view.x - focus_inset,
+        sized.view.y,
+        sized.view.width + 2 * focus_inset,
+        sized.view.height
+    };
+    sized.scroll_well = {
+        sized.content_right + focus_inset + 1,
+        sized.view.y,
+        scroll_thumb_width + 2,
+        sized.view.height
+    };
+    sized.scroll_hit = {sized.content_right, sized.view.y, sized.padding, sized.view.height};
+    sized.page_step = sized.view.height - 3 * hint_line_height;
+    sized.section_scroll = {sized.view, sized.scroll_well, sized.scroll_hit, sized.page_step};
+    sized.developer_footer_rule = sized.footer_rule_row - 2 - button_height - developer_footer_gap -
+                                  label_line_height - developer_footer_gap;
+    sized.developer_view = {
+        sized.content_left,
+        developer_list_rule + 1,
+        sized.content_width,
+        sized.developer_footer_rule - developer_list_rule - 1
+    };
+    sized.developer_view_clip = {
+        sized.developer_view.x - focus_inset,
+        sized.developer_view.y,
+        sized.developer_view.width + 2 * focus_inset,
+        sized.developer_view.height
+    };
+    sized.active_only_label = {
+        sized.content_left,
+        sized.developer_footer_rule + developer_footer_gap,
+        sized.content_width - switch_width - label_gap,
+        label_line_height
+    };
+    sized.active_only_switch = {
+        sized.content_right - switch_width,
+        sized.developer_footer_rule + developer_footer_gap,
+        switch_width,
+        label_line_height
+    };
+    sized.restore_profile_button = {
+        sized.content_left,
+        sized.active_only_label.y + label_line_height + developer_footer_gap,
+        restore_profile_width,
+        button_height
+    };
+    sized.developer_scroll = {
+        sized.developer_view,
+        {sized.scroll_well.x,
+         sized.developer_view.y,
+         sized.scroll_well.width,
+         sized.developer_view.height},
+        {sized.scroll_hit.x,
+         sized.developer_view.y,
+         sized.scroll_hit.width,
+         sized.developer_view.height},
+        sized.developer_view.height - 3 * hint_line_height,
+    };
+    sized.mods_note_first = {
+        sized.content_left,
+        sized.footer_rule_row - 4 - 2 * hint_line_height,
+        sized.content_width,
+        hint_line_height
+    };
+    sized.mods_note_second = {
+        sized.content_left,
+        sized.mods_note_first.y + hint_line_height,
+        sized.content_width,
+        hint_line_height
+    };
+    sized.mods_folder_button = {
+        sized.content_left,
+        sized.mods_note_first.y - 4 - button_height,
+        mods_folder_button_width,
+        button_height
+    };
+    sized.mods_lock_line = {
+        sized.content_left, first_row_top, sized.content_width, 2 * hint_line_height
+    };
+    sized.mods_lock_text = {
+        sized.mods_lock_line.x + padlock_width + padlock_gap,
+        sized.mods_lock_line.y,
+        sized.mods_lock_line.width - padlock_width - padlock_gap,
+        hint_line_height
+    };
+    return sized;
+}
+
+/// The dialog's sizes at each size class, Compact, Regular and Large, in
+/// the order of kit::SizeClass.
+inline constexpr std::array<Sizes, 3> class_sizes{
+    make_sizes(oa::ui::kit::SizeClass::compact),
+    make_sizes(oa::ui::kit::SizeClass::regular),
+    make_sizes(oa::ui::kit::SizeClass::large),
 };
-/// Show Active Only's label, in the footer.
-inline constexpr SourceRect active_only_label{
-    content_left,
-    developer_footer_rule + developer_footer_gap,
-    content_width - switch_width - label_gap,
-    label_line_height
-};
-/// Show Active Only's switch, at the footer's right.
-inline constexpr SourceRect active_only_switch{
-    content_right - switch_width,
-    developer_footer_rule + developer_footer_gap,
-    switch_width,
-    label_line_height
-};
-/// Restore profile values, under Show Active Only.
-inline constexpr SourceRect restore_profile_button{
-    content_left, active_only_label.y + label_line_height + developer_footer_gap, 142, button_height
-};
-/// Where Developer's list scrolls.
-inline constexpr ScrollArea developer_scroll{
-    developer_view,
-    {scroll_well.x, developer_view.y, scroll_well.width, developer_view.height},
-    {scroll_hit.x, developer_view.y, scroll_hit.width, developer_view.height},
-    developer_view.height - 3 * hint_line_height,
-};
+
+/// Returns the dialog's sizes at a size class.
+///
+/// @param size_class the class
+/// @return its sizes
+[[nodiscard]] constexpr const Sizes& sizes_of(oa::ui::kit::SizeClass size_class) noexcept {
+    const auto index = static_cast<std::size_t>(size_class);
+    return class_sizes[index < class_sizes.size() ? index : 0];
+}
+
+/// Returns the dialog's sizes at the size class it is laid out at
+/// (Dialog::size_class).
+///
+/// @param dialog the dialog
+/// @return its sizes
+[[nodiscard]] inline const Sizes& sizes_of(const Dialog& dialog) noexcept {
+    return sizes_of(dialog.size_class);
+}
+
+/// The dialog's sizes at Compact: 0.7.3's. The names below are its parts at
+/// Compact, as 0.7.3's code and the tests know them.
+inline constexpr const Sizes& compact_sizes = class_sizes[0];
+
+/// The row of the line between the body and the footer, at Compact.
+inline constexpr int32_t footer_rule_row = compact_sizes.footer_rule_row;
+/// The footer's first row, at Compact.
+inline constexpr int32_t footer_top = compact_sizes.footer_top;
+/// The section list's width, from the left edge, at Compact.
+inline constexpr int32_t list_width = compact_sizes.list_width;
+/// The column of the line between the section list and the open section, at Compact.
+inline constexpr int32_t list_rule_column = compact_sizes.list_rule_column;
+/// The space between a panel's edge and what it holds, at Compact.
+inline constexpr int32_t padding = compact_sizes.padding;
+/// The open section's first column, at Compact.
+inline constexpr int32_t content_left = compact_sizes.content_left;
+/// The column just right of the open section and the header's version, at Compact.
+inline constexpr int32_t content_right = compact_sizes.content_right;
+/// The open section's width, at Compact.
+inline constexpr int32_t content_width = compact_sizes.content_width;
+/// A section's entry's width, at Compact.
+inline constexpr int32_t list_item_width = compact_sizes.list_item_width;
+/// The open section's heading, at Compact.
+inline constexpr SourceRect heading = compact_sizes.heading;
+/// The most characters a line of a host's text under a row holds, broken
+/// between words, at Compact: what fits the section's width in the small font.
+inline constexpr std::size_t hint_line_characters = compact_sizes.hint_line_characters;
+/// The footer's buttons' top row, at Compact.
+inline constexpr int32_t button_top = compact_sizes.button_top;
+/// Restore defaults, at the footer's left, at Compact.
+inline constexpr SourceRect restore_button = compact_sizes.restore_button;
+/// OK, at the footer's right, at Compact.
+inline constexpr SourceRect ok_button = compact_sizes.ok_button;
+/// Cancel, left of OK, at Compact.
+inline constexpr SourceRect cancel_button = compact_sizes.cancel_button;
+/// The Switch Mod question (Dialog::switch_question): a box over the middle
+/// of the dialog's body, at Compact.
+inline constexpr SourceRect question_box = compact_sizes.question_box;
+/// The question's heading, along its top, at Compact.
+inline constexpr SourceRect question_heading = compact_sizes.question_heading;
+/// The badge of the mod the question offers, under the heading, at Compact.
+inline constexpr SourceRect question_badge = compact_sizes.question_badge;
+/// The mod's title, right of its badge, at Compact.
+inline constexpr SourceRect question_title = compact_sizes.question_title;
+/// The mod's version, under its title, at Compact.
+inline constexpr SourceRect question_version = compact_sizes.question_version;
+/// The question's first text line, under the badge, at Compact; the others follow it.
+inline constexpr SourceRect question_first_line = compact_sizes.question_first_line;
+/// SWITCH, at the question's bottom right, at Compact.
+inline constexpr SourceRect question_yes_button = compact_sizes.question_yes_button;
+/// CANCEL, left of SWITCH, at Compact.
+inline constexpr SourceRect question_no_button = compact_sizes.question_no_button;
+/// The view the open section's rows scroll in, under its heading, at Compact.
+inline constexpr SourceRect view = compact_sizes.view;
+/// What the rows are drawn clipped to, at Compact.
+inline constexpr SourceRect view_clip = compact_sizes.view_clip;
+/// The scroll bar's well, at Compact; the thumb runs inside its one-pixel border.
+inline constexpr SourceRect scroll_well = compact_sizes.scroll_well;
+/// Where a press holds the scroll bar, at Compact: the whole margin right of the rows.
+inline constexpr SourceRect scroll_hit = compact_sizes.scroll_hit;
+/// The rows Page Up and Page Down scroll, at Compact.
+inline constexpr int32_t page_step = compact_sizes.page_step;
+/// Where a section's rows scroll at Compact; Developer's list scrolls in
+/// developer_scroll.
+inline constexpr ScrollArea section_scroll = compact_sizes.section_scroll;
+/// The row of the line over the footer under Developer's list, at Compact.
+inline constexpr int32_t developer_footer_rule = compact_sizes.developer_footer_rule;
+/// The view Developer's list scrolls in, between the two lines, at Compact.
+inline constexpr SourceRect developer_view = compact_sizes.developer_view;
+/// What Developer's list is drawn clipped to, at Compact.
+inline constexpr SourceRect developer_view_clip = compact_sizes.developer_view_clip;
+/// Show Active Only's label, in the footer, at Compact.
+inline constexpr SourceRect active_only_label = compact_sizes.active_only_label;
+/// Show Active Only's switch, at the footer's right, at Compact.
+inline constexpr SourceRect active_only_switch = compact_sizes.active_only_switch;
+/// Restore profile values, under Show Active Only, at Compact.
+inline constexpr SourceRect restore_profile_button = compact_sizes.restore_profile_button;
+/// Where Developer's list scrolls, at Compact.
+inline constexpr ScrollArea developer_scroll = compact_sizes.developer_scroll;
 
 // Mods: the list of the mods, one row each, in a view of its own under the
 // heading, under a lock line while the page is locked; under the list, OPEN
 // MODS FOLDER and two lines naming the folders listed, which stay put. Only
 // the list scrolls.
 
-/// The lines under the list naming the folders it lists: the first.
-inline constexpr SourceRect mods_note_first{
-    content_left, footer_rule_row - 4 - 2 * hint_line_height, content_width, hint_line_height
-};
-/// The second of those lines.
-inline constexpr SourceRect mods_note_second{
-    content_left, mods_note_first.y + hint_line_height, content_width, hint_line_height
-};
-/// OPEN MODS FOLDER, over those lines.
-inline constexpr SourceRect mods_folder_button{
-    content_left, mods_note_first.y - 4 - button_height, 104, button_height
-};
+/// The lines under the list naming the folders it lists: the first, at Compact.
+inline constexpr SourceRect mods_note_first = compact_sizes.mods_note_first;
+/// The second of those lines, at Compact.
+inline constexpr SourceRect mods_note_second = compact_sizes.mods_note_second;
+/// OPEN MODS FOLDER, over those lines, at Compact.
+inline constexpr SourceRect mods_folder_button = compact_sizes.mods_folder_button;
 /// The two lines over the list that say why the page is locked, the
-/// padlock at the first's left.
-inline constexpr SourceRect mods_lock_line{
-    content_left, first_row_top, content_width, 2 * hint_line_height
-};
-/// The first of those lines' text, right of the padlock; the second lies
-/// under it.
-inline constexpr SourceRect mods_lock_text{
-    mods_lock_line.x + padlock_width + padlock_gap,
-    mods_lock_line.y,
-    mods_lock_line.width - padlock_width - padlock_gap,
-    hint_line_height
-};
+/// padlock at the first's left, at Compact.
+inline constexpr SourceRect mods_lock_line = compact_sizes.mods_lock_line;
+/// The first of those lines' text, right of the padlock, at Compact; the
+/// second lies under it.
+inline constexpr SourceRect mods_lock_text = compact_sizes.mods_lock_text;
 /// A mod row's height, its border included.
 inline constexpr int32_t mod_row_height = 28;
 /// The rows from a mod row's top to its description line's.
@@ -459,14 +663,21 @@ inline constexpr int32_t question_roll_back_width = 64;
 /// line while the page is locked, down to OPEN MODS FOLDER.
 ///
 /// @param locked the page is locked
+/// @param size_class the size class the dialog is laid out at
 /// @return the view, the scroll bar's well and hit area, and Page Up's step
-[[nodiscard]] constexpr ScrollArea mods_scroll(bool locked) noexcept {
-    const int32_t top = locked ? mods_lock_line.y + mods_lock_line.height + 2 : first_row_top;
-    const SourceRect list_view{content_left, top, content_width, mods_folder_button.y - 6 - top};
+[[nodiscard]] constexpr ScrollArea mods_scroll(
+    bool locked, oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
+) noexcept {
+    const Sizes& sized = sizes_of(size_class);
+    const int32_t top =
+        locked ? sized.mods_lock_line.y + sized.mods_lock_line.height + 2 : first_row_top;
+    const SourceRect list_view{
+        sized.content_left, top, sized.content_width, sized.mods_folder_button.y - 6 - top
+    };
     return {
         list_view,
-        {scroll_well.x, list_view.y, scroll_well.width, list_view.height},
-        {scroll_hit.x, list_view.y, scroll_hit.width, list_view.height},
+        {sized.scroll_well.x, list_view.y, sized.scroll_well.width, list_view.height},
+        {sized.scroll_hit.x, list_view.y, sized.scroll_hit.width, list_view.height},
         list_view.height - (mod_row_height + mod_row_gap),
     };
 }
@@ -913,9 +1124,14 @@ void set_choice(Dialog& dialog, Setting setting, std::size_t index);
 ///
 /// @param field the drop-down's field
 /// @param choices the choices it offers
+/// @param size_class the size class the dialog is laid out at, whose footer's line it keeps above
 /// @return the list's rectangle
-[[nodiscard]] inline SourceRect choice_list(const SourceRect& field, std::size_t choices) noexcept {
-    return oa::ui::kit::choice_menu(field, choices);
+[[nodiscard]] inline SourceRect choice_list(
+    const SourceRect& field,
+    std::size_t choices,
+    oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
+) noexcept {
+    return oa::ui::kit::choice_menu(field, choices, sizes_of(size_class).footer_rule_row);
 }
 
 /// Returns how many items an open list shows at once.
@@ -1091,8 +1307,11 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 /// Returns the most a section scrolls.
 ///
 /// @param content_height its content height (content_height)
+/// @param size_class the size class the dialog is laid out at, whose view it scrolls in
 /// @return the rows its content is taller than the view; 0 when it fits
-[[nodiscard]] int32_t scroll_limit(int32_t content_height) noexcept;
+[[nodiscard]] int32_t scroll_limit(
+    int32_t content_height, oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
+) noexcept;
 
 /// Returns the locks the open section's rows show: the dialog's, and Text
 /// size locked Lock::needs_modern_fonts while the dialog shows Use modern
@@ -1262,14 +1481,23 @@ scroll_thumb(int32_t scroll, int32_t limit, int32_t content_height) noexcept;
 /// @param touch the dialog lists Touch (Dialog::touch)
 /// @param game_files the dialog lists Game files (Dialog::game_files)
 /// @param controller the dialog lists Controller (Dialog::controller)
+/// @param size_class the size class the dialog is laid out at
 /// @return its rectangle
-[[nodiscard]] SourceRect
-list_item(Page page, bool touch = false, bool game_files = false, bool controller = false) noexcept;
+[[nodiscard]] SourceRect list_item(
+    Page page,
+    bool touch = false,
+    bool game_files = false,
+    bool controller = false,
+    oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
+) noexcept;
 
-/// Returns the line before the Developer section in the list.
+/// Returns the line before the Developer section in the list: as far over
+/// the footer's line as the first entry stands under the list's top.
 ///
+/// @param size_class the size class the dialog is laid out at
 /// @return its rectangle, one row high
-[[nodiscard]] SourceRect list_divider() noexcept;
+[[nodiscard]] SourceRect
+list_divider(oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact) noexcept;
 
 /// MANAGE…'s caption.
 inline constexpr std::string_view manage_text = "MANAGE…";
@@ -1294,8 +1522,11 @@ inline constexpr std::string_view items_text = "Items";
 /// Returns a footer button's rectangle.
 ///
 /// @param control restore_control, cancel_control or ok_control
+/// @param size_class the size class the dialog is laid out at
 /// @return its rectangle
-[[nodiscard]] SourceRect footer_button(int32_t control) noexcept;
+[[nodiscard]] SourceRect footer_button(
+    int32_t control, oa::ui::kit::SizeClass size_class = oa::ui::kit::SizeClass::compact
+) noexcept;
 
 /// Returns the column a slider's knob is centred on.
 ///

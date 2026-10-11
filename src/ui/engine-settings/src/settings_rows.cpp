@@ -1538,11 +1538,22 @@ std::string pad_right_stick_hint(const SettingsModel& model, std::size_t line) {
     return {};
 }
 
+/// Returns the most characters a line of a host's text under a row holds in
+/// a model's dialog: its size class's, or Compact's without a dialog.
+///
+/// @param model the model
+/// @return the characters
+std::size_t line_characters(const SettingsModel& model) noexcept {
+    return model.dialog == nullptr ? hint_line_characters
+                                   : sizes_of(*model.dialog).hint_line_characters;
+}
+
 /// Returns a line of Controller's Steam Input notice, broken between words.
-std::string steam_input_notice_lines(const SettingsModel&, std::size_t line) {
-    // The notice, in the language shown, between words.
+std::string steam_input_notice_lines(const SettingsModel& model, std::size_t line) {
+    // The notice, in the language shown, between words, as wide as the
+    // dialog's class lets a line be.
     const auto lines =
-        break_lines(shown_text(steam_input_notice_text), hint_line_characters, most_notice_lines);
+        break_lines(shown_text(steam_input_notice_text), line_characters(model), most_notice_lines);
     return line < lines.size() ? lines[line] : std::string{};
 }
 
@@ -1584,7 +1595,7 @@ std::string backups_hint(const SettingsModel& model, std::size_t line) {
 std::string game_files_location_hint(const SettingsModel& model, std::size_t line) {
     if (model.dialog == nullptr)
         return {};
-    const auto lines = break_lines(model.dialog->game_files_location, hint_line_characters, 2);
+    const auto lines = break_lines(model.dialog->game_files_location, line_characters(model), 2);
     return line < lines.size() ? lines[line] : std::string{};
 }
 

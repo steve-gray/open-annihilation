@@ -281,6 +281,15 @@ void Runtime::check_engine_settings() {
         ~PutBack() { runtime.set_extension_overlays_aside(false); }
     } put_back{*this};
 
+    // The main menu's checks hold the dialog and the OA button to 0.7.3's
+    // picture, which the OA layer draws pixel for pixel in a 640x480 window:
+    // Compact at 1x. The window-size check then takes each size, the larger
+    // classes and scales among them, and leaves the window at its default.
+    require(
+        SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) && SDL_SyncWindow(sdl_.window),
+        "the window did not take 640x480"
+    );
+    apply_output_mode();
     check_engine_settings_in_menu();
     check_engine_settings_dialog();
     check_engine_settings_window_sizes();

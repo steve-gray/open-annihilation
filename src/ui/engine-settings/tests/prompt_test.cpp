@@ -5,11 +5,16 @@
 // buttons laid out right-aligned at their captions' widths, the keys that
 // answer and mark them, a pointer's press and release, a finger's press
 // taking the nearest button within reach, the progress bar's part, and a
-// text too long for the prompt found cut.
+// text too long for the prompt found cut. At each size class, a notice and a
+// three-button prompt within the class's width and heights.
 
+#include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
 #include "oa/test/check.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -165,11 +170,101 @@ void test_pointer() {
     );
 }
 
+/// Tells whether a rectangle lies wholly in a box of a width and a height
+/// from its top left corner.
+///
+/// @param rect the rectangle
+/// @param width the box's width
+/// @param height the box's height
+/// @return true when no part of it lies outside
+bool inside_box(const oa::ui::frontend_renderer::SourceRect& rect, int32_t width, int32_t height) {
+    return rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width &&
+           rect.y + rect.height <= height;
+}
+
+void test_size_classes() {
+    namespace kit = oa::ui::kit;
+    std::size_t compact_lines = 0;
+    for (const auto size_class :
+         {kit::SizeClass::compact, kit::SizeClass::regular, kit::SizeClass::large}) {
+        const kit::Metrics& sized = kit::metrics_of(size_class);
+        // A prompt of three buttons, right-aligned at the class's width with
+        // its buttons at Compact's sizes, and its text as wide as the class
+        // lets it be.
+        Prompt prompt = prompt_of({"CANCEL", "INSTALL ALONGSIDE", "REPLACE"});
+        prompt.size_class = size_class;
+        prompt.progress = 250;
+        const int32_t height = settings::prompt_height(prompt);
+        OA_CHECK(height >= sized.least_notice_height);
+        OA_CHECK(height <= sized.greatest_notice_height);
+        OA_CHECK(settings::prompt_fits(prompt));
+        Prompt compact = prompt;
+        compact.size_class = kit::SizeClass::compact;
+        const auto compact_buttons = buttons_of(compact);
+        const auto buttons = buttons_of(prompt);
+        OA_CHECK(buttons.size() == 3 && compact_buttons.size() == 3);
+        OA_CHECK(buttons.back().rect.x + buttons.back().rect.width == sized.notice_width - 12);
+        for (std::size_t index = 0; index < buttons.size() && index < compact_buttons.size();
+             ++index) {
+            OA_CHECK(buttons[index].rect.width == compact_buttons[index].rect.width);
+            OA_CHECK(buttons[index].rect.height == compact_buttons[index].rect.height);
+        }
+        for (const auto& part : settings::prompt_layout(prompt)) {
+            OA_CHECK(inside_box(part.rect, sized.notice_width, height));
+            if (part.control == settings::no_control && !part.text.empty() &&
+                part.text != prompt.title)
+                OA_CHECK(part.rect.width == sized.notice_width - 24);
+        }
+        // A text longer than the class's greatest height is cut there.
+        Prompt long_text = prompt;
+        for (int paragraph = 0; paragraph < 60; ++paragraph)
+            long_text.paragraphs.push_back(
+                {"A line of the prompt's text that takes a row.", false}
+            );
+        OA_CHECK(!settings::prompt_fits(long_text));
+        OA_CHECK(settings::prompt_height(long_text) == sized.greatest_notice_height);
+        for (const auto& part : settings::prompt_layout(long_text))
+            OA_CHECK(inside_box(part.rect, sized.notice_width, sized.greatest_notice_height));
+        // A notice: its text wraps at the class's width, its buttons keep
+        // their sizes at its footer's right, and every part lies inside it.
+        settings::Notice notice{};
+        notice.title = "SAVED GAMES";
+        notice.paragraphs.push_back(
+            {"Saved games, screenshots and films now go to your own folder, which this game "
+             "keeps for you whatever folder the game itself is in, so that nothing you make is "
+             "lost when the game is moved or put back.",
+             false}
+        );
+        notice.paragraphs.push_back({"/Users/someone/Documents/Open Annihilation", true});
+        notice.open_caption = "OPEN FOLDER";
+        notice.size_class = size_class;
+        const int32_t notice_height = settings::notice_height(notice);
+        OA_CHECK(notice_height >= sized.least_notice_height);
+        OA_CHECK(notice_height <= sized.greatest_notice_height);
+        std::size_t lines = 0;
+        for (const auto& part : settings::notice_layout(notice)) {
+            OA_CHECK(inside_box(part.rect, sized.notice_width, notice_height));
+            if (part.control == settings::notice_ok_control) {
+                OA_CHECK(part.rect.x + part.rect.width == sized.notice_width - 12);
+                OA_CHECK(part.rect.width == 52 && part.rect.height == 17);
+            }
+            if (part.control == settings::no_control && part.rect.y > 26 && !part.text.empty())
+                ++lines;
+        }
+        // A wider class breaks the text into fewer lines.
+        if (size_class == kit::SizeClass::compact)
+            compact_lines = lines;
+        else
+            OA_CHECK(lines < compact_lines);
+    }
+}
+
 } // namespace
 
 int main() {
     test_layout();
     test_keys();
     test_pointer();
+    test_size_classes();
     return oa::test::check_exit_status();
 }

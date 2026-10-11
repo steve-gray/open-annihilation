@@ -779,6 +779,12 @@ void geometry_matches_the_start_commit() {
     OA_CHECK(low.x == 200 && low.y == 120 && low.width == 200 && low.height == 130);
     const kit::Rect clamped = kit::choice_menu({200, 150, 200, 16}, 12);
     OA_CHECK(clamped.x == 200 && clamped.y == 28 && clamped.width == 200 && clamped.height == 130);
+    // A larger dialog's lower footer line leaves room under the field.
+    OA_CHECK(kit::compact_footer_line == 290);
+    const kit::Rect roomy = kit::choice_menu({200, 250, 200, 16}, 12, 452);
+    OA_CHECK(roomy.x == 200 && roomy.y == 266 && roomy.width == 200 && roomy.height == 130);
+    const kit::Rect deep = kit::choice_menu({200, 400, 200, 16}, 12, 452);
+    OA_CHECK(deep.y == 270 && deep.height == 130);
 
     const kit::Rect opened{200, 96, 200, 98};
     const kit::Rect first = kit::choice_item(opened, 0);

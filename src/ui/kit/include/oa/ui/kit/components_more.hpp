@@ -27,13 +27,15 @@
 
 namespace oa::ui::kit {
 
-/// A notice's or a question's width, in points.
-inline constexpr int32_t notice_width = 400;
+/// A notice's or a question's width at Compact, in points. Each size class
+/// has its own (Metrics::notice_width).
+inline constexpr int32_t notice_width = compact_metrics.notice_width;
 /// A notice's or a question's least height, in points; it grows with its text.
-inline constexpr int32_t least_notice_height = 150;
-/// A notice's or a question's greatest height, in points: what the 640 by 480
-/// picture holds with a margin. Text below it is cut.
-inline constexpr int32_t greatest_notice_height = 440;
+inline constexpr int32_t least_notice_height = compact_metrics.least_notice_height;
+/// A notice's or a question's greatest height at Compact, in points: what the
+/// 640 by 480 picture holds with a margin. Text below it is cut. Each size
+/// class has its own (Metrics::greatest_notice_height).
+inline constexpr int32_t greatest_notice_height = compact_metrics.greatest_notice_height;
 
 /// A notice's OK, which closes it.
 inline constexpr ControlId notice_ok = 0;
@@ -90,6 +92,10 @@ struct Notice {
     int32_t finger_shift_x{};
     int32_t finger_shift_y{}; ///< the rows a finger's held press was moved by, as finger_shift_x
     std::string ok_caption{"OK"}; ///< OK's caption
+    /// The size class it is laid out at: its width and greatest height are
+    /// the class's (metrics_of). Its text wraps at that width; its buttons
+    /// and lines keep their sizes.
+    SizeClass size_class{SizeClass::compact};
     /// Its name to automation, which its controls' names start with: a word
     /// of a-z, 0-9 and hyphens; any other is notice_word. Nothing draws it.
     std::string word{notice_word};
@@ -135,6 +141,8 @@ struct Question {
     /// took (question_finger_down); its moves and its release are moved as far.
     int32_t finger_shift_x{};
     int32_t finger_shift_y{}; ///< the rows, as finger_shift_x
+    /// The size class it is laid out at, as a notice's (Notice::size_class).
+    SizeClass size_class{SizeClass::compact};
     /// Its name to automation, which its controls' names start with: a word
     /// of a-z, 0-9 and hyphens; any other is question_word. Nothing draws it.
     std::string word{question_word};
@@ -182,12 +190,13 @@ struct PlacedQuestion {
     std::vector<Rect> buttons{};     ///< its buttons, left to right
 };
 
-/// Places a notice: its text wrapped under the header, paths in the regular
-/// font broken at their separators and the rest in the small font broken
-/// between words, paragraph_gap rows between paragraphs and the failure
-/// last; its height from its text, from least_notice_height to
-/// greatest_notice_height, a line that height cuts left out; and OK at the
-/// footer's right with the open button before it.
+/// Places a notice at its size class (Notice::size_class): its text wrapped
+/// under the header at the class's width, paths in the regular font broken
+/// at their separators and the rest in the small font broken between words,
+/// paragraph_gap rows between paragraphs and the failure last; its height
+/// from its text, from the class's least to its greatest height, a line that
+/// height cuts left out; and OK at the footer's right with the open button
+/// before it.
 ///
 /// @param notice the notice
 /// @param regular a text's width in the regular font
@@ -204,7 +213,8 @@ place_notice(const Notice& notice, const Measure& regular, const Measure& small)
 [[nodiscard]] PlacedNotice place_notice(const Notice& notice, const Fonts* fonts);
 
 /// Returns a question's buttons' places, right-aligned in the footer of a box
-/// of a height, button_gap columns apart, each as wide as its caption at
+/// of a height and of its size class's width, button_gap columns apart, each
+/// as wide as its caption at
 /// estimated_width and prompt_button_padding more, at least button_width.
 /// They depend on no font, so a press lands where a button is drawn whatever
 /// the fonts. Buttons past most_question_buttons are not placed.

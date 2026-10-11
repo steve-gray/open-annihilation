@@ -143,6 +143,23 @@ inline constexpr Point regular_from{960, 540};
 /// The points at which a layout becomes Large. Both sides must reach them.
 inline constexpr Point large_from{1280, 720};
 
+/// Returns a size class's metrics: compact_metrics, regular_metrics or
+/// large_metrics. A screen takes its window's sizes from them.
+///
+/// @param size_class the size class
+/// @return its metrics
+[[nodiscard]] constexpr const Metrics& metrics_of(SizeClass size_class) noexcept {
+    switch (size_class) {
+    case SizeClass::regular:
+        return regular_metrics;
+    case SizeClass::large:
+        return large_metrics;
+    case SizeClass::compact:
+        break;
+    }
+    return compact_metrics;
+}
+
 /// Returns the size class of a layout's room.
 ///
 /// Large from large_from, Regular from regular_from, and Compact below that.

@@ -49,6 +49,24 @@ constexpr Window windows[] = {
     {3840, 2160, 3, 1280, 720, kit::SizeClass::large},
 };
 
+/// Checks that each size class gives its own metrics.
+void each_class_gives_its_metrics() {
+    OA_CHECK(&kit::metrics_of(kit::SizeClass::compact) == &kit::compact_metrics);
+    OA_CHECK(&kit::metrics_of(kit::SizeClass::regular) == &kit::regular_metrics);
+    OA_CHECK(&kit::metrics_of(kit::SizeClass::large) == &kit::large_metrics);
+    static_assert(kit::metrics_of(kit::SizeClass::regular).dialog_width == 720);
+    static_assert(kit::metrics_of(kit::SizeClass::large).dialog_height == 600);
+    // Each window of the design's table lays its dialog out at its class.
+    for (const Window& window : windows) {
+        const kit::Metrics& metrics = kit::metrics_of(window.size_class);
+        OA_CHECK(metrics.dialog_width <= window.points_width);
+        OA_CHECK(metrics.dialog_height <= window.points_height);
+    }
+    OA_CHECK(kit::metrics_of(kit::size_class_of(960, 540)).dialog_width == 720);
+    OA_CHECK(kit::metrics_of(kit::size_class_of(1280, 720)).dialog_width == 960);
+    OA_CHECK(kit::metrics_of(kit::size_class_of(640, 480)).dialog_width == 480);
+}
+
 /// Checks a point against a rectangle's inside and its edges.
 void a_point_lies_inside_and_not_on_the_far_edges() {
     const kit::Rect rect{0, 0, 10, 10};
@@ -329,6 +347,7 @@ int main() {
     a_point_lies_inside_and_not_on_the_far_edges();
     the_scale_follows_the_canvas_and_the_density();
     the_frame_matches_the_window_table();
+    each_class_gives_its_metrics();
     canvas_pixels_tile_and_whole_scales_round_trip();
     arrangements_place_the_rectangles();
     the_scroll_matches_the_settings_dialog();

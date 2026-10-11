@@ -4,9 +4,12 @@
 // Every colour token equals the value it was copied from, or the value the
 // design gives a new one, written here as hex, and Compact metrics equal the
 // settings dialog's, its notices' and its prompts' sizes and the sizes the
-// design gives the new controls.
+// design gives the new controls. Regular and Large metrics hold the design's
+// table of sizes, differ from Compact's only there, and each class's dialog
+// and notices fit the least window of their class.
 
 #include "oa/test/check.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
 
 #include <array>
@@ -200,6 +203,79 @@ void compact_metrics_of_the_rows() {
     OA_CHECK(kit::compact_metrics.folder_button_gap == 4);
 }
 
+/// One size class's row of the design's table of sizes, in points.
+struct ClassSizes {
+    const kit::Metrics* metrics{};    ///< the class's metrics
+    int32_t dialog_width{};           ///< the settings dialog's width
+    int32_t dialog_height{};          ///< the settings dialog's height
+    int32_t padding{};                ///< the padding
+    int32_t nav_width{};              ///< the nav list's width
+    int32_t hint_line_characters{};   ///< a host's line's characters under a row
+    int32_t notice_width{};           ///< a notice's and a prompt's width
+    int32_t greatest_notice_height{}; ///< their greatest height
+    int32_t least_notice_height{};    ///< their least height
+    kit::Point least_window{};        ///< the least window of the class, in points
+};
+
+/// The design's table of sizes: Compact, Regular and Large. Compact's least
+/// window is the 640 by 480 picture.
+const ClassSizes kClassSizes[] = {
+    {&kit::compact_metrics, 480, 324, 12, 144, 50, 400, 440, 150, {640, 480}},
+    {&kit::regular_metrics, 720, 486, 16, 176, 82, 520, 500, 150, {960, 540}},
+    {&kit::large_metrics, 960, 600, 20, 208, 114, 600, 640, 150, {1280, 720}},
+};
+
+/// Checks each class's metrics against the design's table of sizes, and
+/// that each class's dialog and notices fit its least window.
+void each_class_has_the_tables_sizes() {
+    for (const ClassSizes& sizes : kClassSizes) {
+        const kit::Metrics& metrics = *sizes.metrics;
+        OA_CHECK(metrics.dialog_width == sizes.dialog_width);
+        OA_CHECK(metrics.dialog_height == sizes.dialog_height);
+        OA_CHECK(metrics.padding == sizes.padding);
+        OA_CHECK(metrics.nav_width == sizes.nav_width);
+        OA_CHECK(metrics.hint_line_characters == sizes.hint_line_characters);
+        OA_CHECK(metrics.notice_width == sizes.notice_width);
+        OA_CHECK(metrics.greatest_notice_height == sizes.greatest_notice_height);
+        OA_CHECK(metrics.least_notice_height == sizes.least_notice_height);
+        OA_CHECK(metrics.dialog_width <= sizes.least_window.x);
+        OA_CHECK(metrics.dialog_height <= sizes.least_window.y);
+        OA_CHECK(metrics.notice_width <= sizes.least_window.x);
+        OA_CHECK(metrics.greatest_notice_height <= sizes.least_window.y);
+    }
+    // The least windows are the classes' own.
+    OA_CHECK(kClassSizes[1].least_window.x == kit::regular_from.x);
+    OA_CHECK(kClassSizes[1].least_window.y == kit::regular_from.y);
+    OA_CHECK(kClassSizes[2].least_window.x == kit::large_from.x);
+    OA_CHECK(kClassSizes[2].least_window.y == kit::large_from.y);
+    OA_CHECK(kit::regular_from.x == 960 && kit::regular_from.y == 540);
+    OA_CHECK(kit::large_from.x == 1280 && kit::large_from.y == 720);
+}
+
+/// Checks that Regular and Large keep every other size Compact's: rows,
+/// text and controls do not grow.
+void the_classes_differ_only_in_the_tables_sizes() {
+    for (const kit::Metrics* metrics : {&kit::regular_metrics, &kit::large_metrics}) {
+        kit::Metrics same = *metrics;
+        same.dialog_width = kit::compact_metrics.dialog_width;
+        same.dialog_height = kit::compact_metrics.dialog_height;
+        same.padding = kit::compact_metrics.padding;
+        same.nav_width = kit::compact_metrics.nav_width;
+        same.hint_line_characters = kit::compact_metrics.hint_line_characters;
+        same.notice_width = kit::compact_metrics.notice_width;
+        same.greatest_notice_height = kit::compact_metrics.greatest_notice_height;
+        same.least_notice_height = kit::compact_metrics.least_notice_height;
+        OA_CHECK(same == kit::compact_metrics);
+        // Among them the sizes the design names as the same in every class.
+        OA_CHECK(metrics->row_padding == 8);
+        OA_CHECK(metrics->regular_line == 16);
+        OA_CHECK(metrics->small_line == 12);
+        OA_CHECK(metrics->slider_line_height == 14);
+        OA_CHECK(metrics->switch_width == 52);
+        OA_CHECK(metrics->button_height == 17);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -207,5 +283,7 @@ int main() {
     compact_metrics_match_the_dialog();
     compact_metrics_of_the_new_controls();
     compact_metrics_of_the_rows();
+    each_class_has_the_tables_sizes();
+    the_classes_differ_only_in_the_tables_sizes();
     return oa::test::check_exit_status();
 }

@@ -24,6 +24,7 @@
 
 #include "engine_settings_state.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 #include "touch_state.hpp"
 #include "user_folder_state.hpp"
 
@@ -34,6 +35,7 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
+#include "oa/ui/kit/layout.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -298,44 +300,30 @@ void Runtime::check_mod_warning() {
     // A finger's tap through the touch dispatcher just under the warning's
     // OK, within a finger's reach of it, which closes the warning.
     const auto tap_under_ok = [&](Screen screen, std::string_view where) {
-        const auto& shown = shown_warning().notice();
         const auto* fonts = engine_settings_fonts();
         const auto placed = warning_place();
-        // A finger's reach, in the warning's points as the layer shows it.
+        const auto& shown = shown_warning().notice();
+        // A finger's reach, in the warning's points as the layer shows it:
+        // the pick distance in the picture's pixels, over the picture's
+        // pixels a point takes.
+        const LayerView seen = oa_layer().view();
         const int32_t reach = EngineSettingsState::finger_reach(
             *this,
-            static_cast<double>(placed.shown.width) / static_cast<double>(placed.points_width)
+            static_cast<double>(placed.shown.width) / static_cast<double>(placed.points_width) *
+                static_cast<double>(seen.picture_size.x) / static_cast<double>(seen.picture.width)
         );
-        float x = 0.0F;
-        float y = 0.0F;
+        oa::ui::display_layout::Point pixel{};
         for (const auto& part : settings::notice_layout(shown, fonts))
-            if (part.control == settings::notice_ok_control) {
-                x = static_cast<float>(placed.shown.x + part.rect.x + part.rect.width / 2);
-                y = static_cast<float>(
-                    placed.shown.y + part.rect.y + part.rect.height - 1 + std::max(1, reach * 2 / 3)
+            if (part.control == settings::notice_ok_control)
+                pixel = layer_window_pixel(
+                    placed,
+                    {part.rect.x + part.rect.width / 2,
+                     part.rect.y + part.rect.height - 1 + std::max(1, reach * 2 / 3)}
                 );
-            }
-        require(
-            frame_to_window(sdl_.renderer, x, y, &x, &y),
-            "a finger could not be placed on the window"
-        );
-        int width = 0;
-        int window_height = 0;
-        require(
-            SDL_GetWindowSize(sdl_.window, &width, &window_height) && width > 0 &&
-                window_height > 0,
-            "the window has no size"
-        );
         touch_state().dispatch.accept_unregistered_touch = true;
         for (const SDL_EventType type : {SDL_EVENT_FINGER_DOWN, SDL_EVENT_FINGER_UP}) {
-            SDL_Event event{};
-            event.type = type;
-            event.tfinger.touchID = kCheckTouchDevice;
-            event.tfinger.fingerID = 1;
-            event.tfinger.x = x / static_cast<float>(width);
-            event.tfinger.y = y / static_cast<float>(window_height);
-            event.tfinger.pressure = type == SDL_EVENT_FINGER_UP ? 0.0F : 1.0F;
-            event.tfinger.windowID = SDL_GetWindowID(sdl_.window);
+            SDL_Event event =
+                window_finger_event(sdl_.window, sdl_.renderer, type, pixel, kCheckTouchDevice, 1);
             bool running = true;
             dispatch_event(event, running);
             require(running, "a finger on the warning ended the run");
@@ -586,6 +574,36 @@ void Runtime::check_mod_warning() {
         require(screen_ == Screen::main_menu, "the main menu did not open");
         require(engine_settings_fonts() != nullptr, "the dialog's fonts did not load");
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
+        // The main menu at each larger window, read back whole and drawn
+        // from the same sparks, with no OA screen open: what the warning's
+        // backdrop darkens there.
+        int run_width = 0;
+        int run_height = 0;
+        SDL_GetWindowSize(sdl_.window, &run_width, &run_height);
+        const auto window_of = [this](int width, int height) {
+            require(
+                SDL_SetWindowSize(sdl_.window, width, height) && SDL_SyncWindow(sdl_.window),
+                "the window did not take " + std::to_string(width) + 'x' + std::to_string(height)
+            );
+            apply_output_mode();
+        };
+        const auto sparks = menu_sparks_;
+        const auto window_frame = [&] {
+            renderer::Surface presented;
+            menu_sparks_ = sparks;
+            capture_frame_ = &presented;
+            render();
+            capture_frame_ = nullptr;
+            return presented;
+        };
+        std::vector<renderer::Surface> closed_windows;
+        oa_layer().read_whole_window(true);
+        for (const LayerWindow& larger : larger_layer_windows) {
+            window_of(larger.width, larger.height);
+            closed_windows.push_back(window_frame());
+        }
+        oa_layer().read_whole_window(false);
+        window_of(run_width, run_height);
         for (int pass = 0; pass < 4; ++pass)
             tell_incomplete_mod();
         require(
@@ -601,22 +619,87 @@ void Runtime::check_mod_warning() {
                 notice.paragraphs.back().text == hollow,
             "the warning does not name the mod, its first side's commander and its folder"
         );
+        // At 1280x720 and 1920x1080 the warning is laid out at the window's
+        // class and drawn at its scale, centred over the main menu darkened
+        // over the whole window.
+        oa_layer().read_whole_window(true);
+        for (std::size_t index = 0; index < larger_layer_windows.size(); ++index) {
+            const LayerWindow& larger = larger_layer_windows[index];
+            const std::string size =
+                std::to_string(larger.width) + 'x' + std::to_string(larger.height);
+            window_of(larger.width, larger.height);
+            const auto presented = window_frame();
+            require(
+                oa_layer().screen_class() == larger.size_class &&
+                    oa_layer().screen_scale() == larger.scale,
+                "the warning is not laid out at " +
+                    std::string(size_class_name(larger.size_class)) + ", " +
+                    std::to_string(larger.scale) + "x on the " + size + " window"
+            );
+            settings::Notice sized = shown_warning().notice();
+            sized.size_class = larger.size_class;
+            const auto* fonts = engine_settings_fonts();
+            const int32_t sized_height = settings::notice_height(sized, fonts);
+            const auto at = warning_place();
+            const int32_t shown_width =
+                oa::ui::kit::metrics_of(larger.size_class).notice_width * larger.scale;
+            require(
+                at.shown.width == shown_width && at.shown.height == sized_height * larger.scale &&
+                    at.shown.x == (larger.width - shown_width) / 2 &&
+                    at.shown.y == (larger.height - at.shown.height) / 2,
+                "the warning is not centred in the " + size + " window at its class's size"
+            );
+            renderer::Surface drawing;
+            drawing.width = static_cast<uint32_t>(at.shown.width);
+            drawing.height = static_cast<uint32_t>(at.shown.height);
+            drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
+            settings::draw_notice(
+                drawing, {0, 0, larger.scale}, sized, *fonts, engine_settings_icon()
+            );
+            apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
+            const auto differing = layer_differences(
+                presented,
+                expected_layer_frame(closed_windows[index], drawing, at),
+                window_pointer(oa_layer().view(), kRestingPointer)
+            );
+            require(
+                differing == 0,
+                "the " + size + " window does not show the warning over the darkened main menu: " +
+                    std::to_string(differing) + " pixels differ"
+            );
+            std::cout << "mod warning check: the warning at " << size_class_name(larger.size_class)
+                      << ", " << larger.scale << "x, on the " << size << " window\n";
+        }
+        oa_layer().read_whole_window(false);
+        window_of(run_width, run_height);
+        // A frame lays the warning out for the window again.
+        menu_sparks_ = sparks;
+        static_cast<void>(frame_without_cursor());
         snapshot("main-menu");
         // OPEN MOD FOLDER, where the OA layer shows it, shows the mod's
         // folder and the warning stays.
         const auto* fonts = engine_settings_fonts();
         const auto placed = warning_place();
-        oa::ui::display_layout::Point open_point{};
+        oa::ui::display_layout::Point open_pixel{};
         for (const auto& part : settings::notice_layout(notice, fonts))
             if (part.control == settings::notice_open_control)
-                open_point = {
-                    placed.shown.x + part.rect.x + part.rect.width / 2,
-                    placed.shown.y + part.rect.y + part.rect.height / 2
-                };
+                open_pixel = layer_window_pixel(
+                    placed, {part.rect.x + part.rect.width / 2, part.rect.y + part.rect.height / 2}
+                );
         state.opened.clear();
-        send_check_pointer(SDL_EVENT_MOUSE_MOTION, open_point, 0);
-        send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, open_point, SDL_BUTTON_LEFT);
-        send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, open_point, SDL_BUTTON_LEFT);
+        for (const SDL_EventType type :
+             {SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
+            SDL_Event event = window_pointer_event(
+                sdl_.window,
+                sdl_.renderer,
+                type,
+                open_pixel,
+                type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+            );
+            bool running = true;
+            dispatch_event(event, running);
+            require(running, "a click on the warning ended the run");
+        }
         require(
             saves_notice_shown() && state.opened == std::vector<fs::path>{path_from_utf8(hollow)},
             "OPEN MOD FOLDER did not show the mod's folder, or closed the warning"

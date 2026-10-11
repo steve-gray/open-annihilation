@@ -621,6 +621,47 @@ never show or move it. A key that moves the focus onto a row, or acts on a
 focused row, first scrolls the least that shows the row whole; a key that
 moves it to a button or a section's entry does not scroll.
 
+## Sizes
+
+The dialog, its notices and its prompts are laid out in points, one point a
+pixel of the game's 640 by 480 picture, at one of three size classes
+(`Dialog::size_class`, `kit::Notice::size_class`, `kit::Question::size_class`).
+A host chooses the class from the room it has and draws the dialog at a
+whole scale (`draw_dialog`'s placement); the OA layer chooses both from the
+window ([src/app](../../app/README.md#the-oa-layer)). The classes' sizes are
+the UI kit's metrics (`kit::compact_metrics`, `kit::regular_metrics`,
+`kit::large_metrics`, picked by `kit::metrics_of`):
+
+| | Compact | Regular | Large |
+|---|---|---|---|
+| Used for room of | below 960 by 540 points | from 960 by 540 | from 1280 by 720 |
+| Settings dialog | 480 by 324 | 720 by 486 | 960 by 600 |
+| Padding | 12 | 16 | 20 |
+| Section list's width | 144 | 176 | 208 |
+| Characters a line of a host's text under a row | 50 | 82 | 114 |
+| Notice's and prompt's width | 400 | 520 | 600 |
+| Notice's and prompt's greatest height | 440 | 500 | 640 |
+| Notice's and prompt's least height | 150 | 150 | 150 |
+
+Compact is 0.7.3's dialog exactly: `src/geometry.hpp`'s constants are its
+values, and the pixel pins (`ui-engine-settings-pixels`) hold it. Every other
+size is the same in all three classes: rows keep their height, and text,
+switches, strips, drop-down fields, buttons and the slider's line keep
+theirs, so a larger dialog shows more rows and scrolls less
+(`scroll_limit`). The content column starts right of the section list and
+ends the padding short of the right edge; a section's rows, Mods' list and
+Developer's list take its width, a slider's track running across it, and
+the body between the header's and the footer's rules. The header's mark,
+title and version keep their Compact distances from the dialog's edges,
+the footer's buttons keep their sizes and order, Restore defaults at the
+padding from the left, and the Switch Mod question keeps its 300 by 150
+box, centred over the body. A hint keeps its lines; the host's own texts
+under a row (Controller's Steam Input notice, where the game files are)
+break at the class's characters. A drop-down's open list opens over its
+field when it would pass the class's footer line. A notice's or a prompt's
+text wraps at the class's width, through the kit's one wrap, and its
+buttons keep their sizes.
+
 ## The rows' table
 
 Every setting has one row, declared once in `src/settings_rows.cpp`, in
@@ -952,7 +993,10 @@ The dialog's tests cover ROLL BACK: shown only on a row whose folder keeps
 a version, its control and focus, its question by pointer and keys, and
 inert while locked. `ui-engine-settings-prompt` lays out prompts of one, two and three buttons,
 their keys, a pointer's press and release and a finger's within reach, the
-progress bar's part and a text found cut. `ui-engine-settings` covers the defaults, a Raspberry Pi's and a light
+progress bar's part and a text found cut, and at each size class a notice
+and a three-button prompt within the class's width and heights, their
+buttons at Compact's sizes and the notice's text in fewer lines at the
+wider classes. `ui-engine-settings` covers the defaults, a Raspberry Pi's and a light
 machine's included, the keys read and written, Hardware acceleration's
 words and the numbers its switch once wrote, words that are no number, and
 the locks of a game, the flags and the renderer, and the Language
@@ -981,7 +1025,12 @@ Controller section: their keys, defaults on every machine, words read and
 others dropped, the speeds held to their ranges and steps, and the round
 trip and Restore defaults;
 `ui-engine-settings-dialog` the dialog's layout (every part inside the
-panel and none overlapping), its sections, switches and their one table,
+panel and none overlapping), and at Regular and Large every section with
+Touch, Controller and Game files listed inside the dialog under every lock,
+its parts apart, each section's entry fitting its words, each control
+pressed where it is drawn, hints kept to their lines, Graphics showing more
+whole rows than at Compact and scrolling less, and the footer's buttons at
+their Compact sizes and in their order; its sections, switches and their one table,
 slider stops, both level strips, keys, footer buttons, locks and the faces
 it draws; the arrows by geometry (`the_arrows_move_by_geometry`: down a
 section's rows to the footer and back, from a section's entry to the row

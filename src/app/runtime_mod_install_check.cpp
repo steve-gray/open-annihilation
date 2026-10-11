@@ -25,6 +25,7 @@
 #include "engine_settings_state.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -40,6 +41,7 @@
 #include "oa/formats/zip.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
+#include "oa/ui/kit/layout.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -465,20 +467,38 @@ void Runtime::check_mod_install() {
         const auto button = static_cast<int32_t>(found - answers.begin());
         const auto* fonts = engine_settings_fonts();
         const auto placed = state.prompt->placement(oa_layer().view());
+        // At the layer's class, drawn at its scale.
+        const int32_t scale = oa_layer().screen_scale();
+        settings::Prompt sized = prompt;
+        sized.size_class = oa_layer().screen_class();
         require(
-            oa_layer().holds(state.prompt) && placed.shown.width == settings::notice_width &&
-                placed.shown.height == settings::prompt_height(prompt, fonts),
-            "the prompt does not show on the OA layer at 1x"
+            oa_layer().holds(state.prompt) &&
+                placed.points_width == oa::ui::kit::metrics_of(sized.size_class).notice_width &&
+                placed.points_height == settings::prompt_height(sized, fonts) &&
+                placed.shown.width == placed.points_width * scale &&
+                placed.shown.height == placed.points_height * scale,
+            "the prompt does not show on the OA layer at its class and scale"
         );
-        for (const auto& part : settings::prompt_layout(prompt, fonts))
+        for (const auto& part : settings::prompt_layout(sized, fonts))
             if (part.control == button) {
-                const oa::ui::display_layout::Point point{
-                    placed.shown.x + part.rect.x + part.rect.width / 2,
-                    placed.shown.y + part.rect.y + part.rect.height / 2
-                };
-                send_check_pointer(SDL_EVENT_MOUSE_MOTION, point, 0);
-                send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
-                send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, point, SDL_BUTTON_LEFT);
+                const auto pixel = layer_window_pixel(
+                    placed, {part.rect.x + part.rect.width / 2, part.rect.y + part.rect.height / 2}
+                );
+                for (const SDL_EventType type :
+                     {SDL_EVENT_MOUSE_MOTION,
+                      SDL_EVENT_MOUSE_BUTTON_DOWN,
+                      SDL_EVENT_MOUSE_BUTTON_UP}) {
+                    SDL_Event event = window_pointer_event(
+                        sdl_.window,
+                        sdl_.renderer,
+                        type,
+                        pixel,
+                        type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+                    );
+                    bool running = true;
+                    dispatch_event(event, running);
+                    require(running, "a click on a prompt ended the run");
+                }
                 send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
                 return;
             }
@@ -682,13 +702,99 @@ void Runtime::check_mod_install() {
         key(SDLK_ESCAPE);
         require(state.prompt == nullptr, "Escape did not close the notice");
 
-        // An update asked, cancelled, then replaced.
+        // An update asked, cancelled, then replaced. The main menu first at
+        // each larger window, read back whole and drawn from the same sparks
+        // with no OA screen open: what the question's backdrop darkens there.
+        int run_width = 0;
+        int run_height = 0;
+        SDL_GetWindowSize(sdl_.window, &run_width, &run_height);
+        const auto window_of = [this](int width, int height) {
+            require(
+                SDL_SetWindowSize(sdl_.window, width, height) && SDL_SyncWindow(sdl_.window),
+                "the window did not take " + std::to_string(width) + 'x' + std::to_string(height)
+            );
+            apply_output_mode();
+        };
+        send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
+        const auto sparks = menu_sparks_;
+        const auto window_frame = [&] {
+            renderer::Surface presented;
+            menu_sparks_ = sparks;
+            capture_frame_ = &presented;
+            render();
+            capture_frame_ = nullptr;
+            return presented;
+        };
+        std::vector<renderer::Surface> closed_windows;
+        oa_layer().read_whole_window(true);
+        for (const LayerWindow& larger : larger_layer_windows) {
+            window_of(larger.width, larger.height);
+            closed_windows.push_back(window_frame());
+        }
+        oa_layer().read_whole_window(false);
+        window_of(run_width, run_height);
         install::post_package_file(mod_package(packages, "1.0", 2));
         until_prompt("the second revision");
         require(
             titled("UPDATE MOD") && says("revision 1, is installed. Replace it with revision 2"),
             "an update was not asked"
         );
+        // At 1280x720 and 1920x1080 the question is laid out at the window's
+        // class and drawn at its scale, centred over the main menu darkened
+        // over the whole window.
+        oa_layer().read_whole_window(true);
+        for (std::size_t index = 0; index < larger_layer_windows.size(); ++index) {
+            const LayerWindow& larger = larger_layer_windows[index];
+            const std::string size =
+                std::to_string(larger.width) + 'x' + std::to_string(larger.height);
+            window_of(larger.width, larger.height);
+            const auto presented = window_frame();
+            require(
+                state.prompt != nullptr && oa_layer().screen_class() == larger.size_class &&
+                    oa_layer().screen_scale() == larger.scale,
+                "the question is not laid out at " +
+                    std::string(size_class_name(larger.size_class)) + ", " +
+                    std::to_string(larger.scale) + "x on the " + size + " window"
+            );
+            settings::Prompt sized = state.prompt->question();
+            sized.size_class = larger.size_class;
+            const auto* fonts = engine_settings_fonts();
+            const int32_t sized_height = settings::prompt_height(sized, fonts);
+            const auto at = state.prompt->placement(oa_layer().view());
+            const int32_t shown_width =
+                oa::ui::kit::metrics_of(larger.size_class).notice_width * larger.scale;
+            require(
+                at.shown.width == shown_width && at.shown.height == sized_height * larger.scale &&
+                    at.shown.x == (larger.width - shown_width) / 2 &&
+                    at.shown.y == (larger.height - at.shown.height) / 2,
+                "the question is not centred in the " + size + " window at its class's size"
+            );
+            renderer::Surface drawing;
+            drawing.width = static_cast<uint32_t>(at.shown.width);
+            drawing.height = static_cast<uint32_t>(at.shown.height);
+            drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
+            settings::draw_prompt(
+                drawing, {0, 0, larger.scale}, sized, *fonts, engine_settings_icon()
+            );
+            apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
+            const auto differing = layer_differences(
+                presented,
+                expected_layer_frame(closed_windows[index], drawing, at),
+                window_pointer(oa_layer().view(), kRestingPointer)
+            );
+            require(
+                differing == 0,
+                "the " + size + " window does not show the question over the darkened main menu: " +
+                    std::to_string(differing) + " pixels differ"
+            );
+            std::cout << "mod install check: the question at " << size_class_name(larger.size_class)
+                      << ", " << larger.scale << "x, on the " << size << " window\n";
+        }
+        oa_layer().read_whole_window(false);
+        window_of(run_width, run_height);
+        // A frame lays the question out for the window again.
+        menu_sparks_ = sparks;
+        static_cast<void>(frame_without_cursor());
         key(SDLK_ESCAPE);
         require(state.prompt == nullptr && revision_in(folder) == 1, "CANCEL changed the folder");
         install::post_package_file(mod_package(packages, "1.0", 2));

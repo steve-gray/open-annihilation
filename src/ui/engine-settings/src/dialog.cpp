@@ -177,9 +177,10 @@ kit::RowView row_view(
     for (std::size_t line = 0; line < shown.hints.size(); ++line) {
         if (line == 0 && hint_is_path(setting)) {
             const std::string path = row_hint(dialog, setting, 0).text;
-            shown.hints[line] =
-                path.empty() ? std::string()
-                             : std::string(shown_text(path_tail(path, content_width, small_width)));
+            const int32_t room = sizes_of(dialog).content_width;
+            shown.hints[line] = path.empty()
+                                    ? std::string()
+                                    : std::string(shown_text(path_tail(path, room, small_width)));
             continue;
         }
         shown.hints[line] = std::string(shown_text(shown.hints[line]));
@@ -208,9 +209,10 @@ Rows place_section(
     // Developer's own rows lie closer, over its list; while the dialog's
     // words are drawn in the modern fonts, a hint's lines lie further apart.
     const bool own_section = section != nullptr && section->settings != nullptr;
+    const Sizes& sized = sizes_of(dialog);
     kit::RowPlacement placement;
-    placement.left = content_left;
-    placement.right = content_right;
+    placement.left = sized.content_left;
+    placement.right = sized.content_right;
     placement.first_top = first_row_top;
     placement.row_padding =
         page == Page::developer && !own_section ? developer_row_padding : row_padding;
@@ -283,8 +285,8 @@ int32_t content_height(const Rows& rows, int32_t scroll) noexcept {
     return rows.bottom + scroll + 1 + end_gap - first_row_top;
 }
 
-int32_t scroll_limit(int32_t content_height) noexcept {
-    return std::max(content_height - view.height, int32_t{0});
+int32_t scroll_limit(int32_t content_height, kit::SizeClass size_class) noexcept {
+    return std::max(content_height - sizes_of(size_class).view.height, int32_t{0});
 }
 
 Locks shown_locks(const Dialog& dialog) noexcept {
@@ -314,10 +316,12 @@ Locks shown_locks(const Dialog& dialog) noexcept {
 }
 
 ScrolledRows open_rows(const Dialog& dialog) {
+    const Sizes& sized = sizes_of(dialog);
     ScrolledRows open{};
+    open.area = sized.section_scroll;
     if (mods_page(dialog)) {
         // Mods' list scrolls in a view of its own, over OPEN MODS FOLDER.
-        open.area = mods_scroll(dialog.locks.mod != Lock::none);
+        open.area = mods_scroll(dialog.locks.mod != Lock::none, dialog.size_class);
         open.rows = place_mod_rows(dialog, 0);
         open.content_height = open.rows.bottom - open.area.view.y;
         open.limit = std::max(open.content_height - open.area.view.height, int32_t{0});
@@ -331,16 +335,16 @@ ScrolledRows open_rows(const Dialog& dialog) {
     if (developer_page(dialog)) {
         // Developer's rows stay at its top; its list scrolls under them in a
         // view of its own, with the end gap under its last row.
-        open.area = developer_scroll;
+        open.area = sized.developer_scroll;
         open.list = place_list(dialog, 0);
-        open.content_height = open.list.bottom + end_gap - developer_view.y;
-        open.limit = std::max(open.content_height - developer_view.height, int32_t{0});
+        open.content_height = open.list.bottom + end_gap - sized.developer_view.y;
+        open.limit = std::max(open.content_height - sized.developer_view.height, int32_t{0});
         open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
         scroll_list(open.list, open.scroll);
         return open;
     }
     open.content_height = content_height(open.rows, 0);
-    open.limit = scroll_limit(open.content_height);
+    open.limit = scroll_limit(open.content_height, dialog.size_class);
     // While the dialog's words are drawn in the modern fonts, whose
     // ideographs fill a hint line from its top row, the view's top edge
     // cuts no hint line at the end of the scroll, of which a sliver would
@@ -362,7 +366,7 @@ ScrolledRows open_rows(const Dialog& dialog) {
                     }
                 }
         }
-        open.content_height = open.limit + view.height;
+        open.content_height = open.limit + sized.view.height;
     }
     open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
     scroll_rows(open.rows, open.scroll);
@@ -421,7 +425,9 @@ int32_t scroll_at(
     return (limit * along + travel / 2) / travel;
 }
 
-SourceRect list_item(Page page, bool touch, bool game_files, bool controller) noexcept {
+SourceRect list_item(
+    Page page, bool touch, bool game_files, bool controller, kit::SizeClass size_class
+) noexcept {
     // Each entry at its place in the list its dialog shows; Touch and
     // Controller, which only a dialog that lists them asks for, keep their
     // own places.
@@ -434,29 +440,31 @@ SourceRect list_item(Page page, bool touch, bool game_files, bool controller) no
                                              : page_control(page) - first_page_control;
     int32_t top = list_first_top + index * (list_item_height + list_item_gap);
     if (page == Page::developer)
-        top = list_divider().y + 1 + list_divider_margin;
-    return {list_item_left, top, list_item_width, list_item_height};
+        top = list_divider(size_class).y + 1 + list_divider_margin;
+    return {list_item_left, top, sizes_of(size_class).list_item_width, list_item_height};
 }
 
-SourceRect list_divider() noexcept {
+SourceRect list_divider(kit::SizeClass size_class) noexcept {
     // Developer stands at the foot of the list, as far under the divider as
     // the first section stands under the list's top.
-    const int32_t row =
-        footer_rule_row - (list_first_top - body_top) - list_item_height - list_divider_margin - 1;
+    const Sizes& sized = sizes_of(size_class);
+    const int32_t row = sized.footer_rule_row - (list_first_top - body_top) - list_item_height -
+                        list_divider_margin - 1;
     return {
         list_item_left + list_divider_inset,
         row,
-        list_item_width - 2 * list_divider_inset,
+        sized.list_item_width - 2 * list_divider_inset,
         1,
     };
 }
 
-SourceRect footer_button(int32_t control) noexcept {
+SourceRect footer_button(int32_t control, kit::SizeClass size_class) noexcept {
+    const Sizes& sized = sizes_of(size_class);
     if (control == restore_control)
-        return restore_button;
+        return sized.restore_button;
     if (control == cancel_control)
-        return cancel_button;
-    return ok_button;
+        return sized.cancel_button;
+    return sized.ok_button;
 }
 
 EngineSettings slider_settings(const Dialog& dialog) {
@@ -529,9 +537,11 @@ break_lines(std::string_view text, std::size_t characters, std::size_t most_line
 
 SourceRect dialog_list_item(const Dialog& dialog, Page page) noexcept {
     if (dialog.kind != DialogKind::language_text)
-        return list_item(page, dialog.touch, dialog.game_files, dialog.controller);
+        return list_item(
+            page, dialog.touch, dialog.game_files, dialog.controller, dialog.size_class
+        );
     // A Language dialog lists its one section at the top.
-    return {list_item_left, list_first_top, list_item_width, list_item_height};
+    return {list_item_left, list_first_top, sizes_of(dialog).list_item_width, list_item_height};
 }
 
 std::string_view lock_text(Lock lock) noexcept {
@@ -839,7 +849,7 @@ std::optional<OpenList> open_list(const Dialog& dialog, const layout::ScrolledRo
     );
     return OpenList{
         row,
-        layout::choice_list(row->control_area, choices),
+        layout::choice_list(row->control_area, choices, dialog.size_class),
         choices,
         layout::shown_choices(choices)
     };
@@ -892,7 +902,7 @@ DialogAction open_choices(Dialog& dialog, const layout::Row& row) {
     const auto choices = static_cast<std::size_t>(kit::row_count(spec, model));
     const OpenList list{
         &row,
-        layout::choice_list(row.control_area, choices),
+        layout::choice_list(row.control_area, choices, dialog.size_class),
         choices,
         layout::shown_choices(choices)
     };
@@ -1679,10 +1689,10 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     if (dragged || control != pressed)
         return DialogAction::redraw;
     if (layout::developer_page(dialog)) {
-        if (control == active_only_control)
-            return developer::set_active_only(
-                dialog, x >= layout::active_only_switch.x + layout::active_only_switch.width / 2
-            );
+        if (control == active_only_control) {
+            const layout::SourceRect& active = layout::sizes_of(dialog).active_only_switch;
+            return developer::set_active_only(dialog, x >= active.x + active.width / 2);
+        }
         if (const layout::ListRow* row = layout::list_row(open.list, control))
             return developer::release_on(dialog, *row, x);
     }
@@ -1797,7 +1807,7 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
 }
 
 DialogAction dialog_wheel(Dialog& dialog, int32_t x, int32_t y, float notches) {
-    if (!dialog_contains(x, y) || dialog.pressed != no_control || !std::isfinite(notches) ||
+    if (!dialog_contains(dialog, x, y) || dialog.pressed != no_control || !std::isfinite(notches) ||
         dialog.switch_question != no_question)
         return DialogAction::none;
     note_pointer(dialog, x, y);
@@ -1883,6 +1893,15 @@ bool dialog_contains(int32_t x, int32_t y) noexcept {
     return x >= 0 && y >= 0 && x < dialog_width && y < dialog_height;
 }
 
+int32_t scroll_limit(const Dialog& dialog) {
+    return layout::open_rows(dialog).limit;
+}
+
+bool dialog_contains(const Dialog& dialog, int32_t x, int32_t y) noexcept {
+    const layout::Sizes& sized = layout::sizes_of(dialog);
+    return x >= 0 && y >= 0 && x < sized.dialog_width && y < sized.dialog_height;
+}
+
 namespace {
 
 /// Adds a switch's two halves to the parts, its control on each.
@@ -1921,6 +1940,7 @@ void switch_parts(std::vector<LayoutPart>& parts, const layout::SourceRect& area
 void developer_layout(
     const Dialog& dialog, const layout::ScrolledRows& open, std::vector<LayoutPart>& parts
 ) {
+    const layout::Sizes& sized = layout::sizes_of(dialog);
     const auto text_part =
         [&parts](layout::SourceRect rect, std::string text, DialogFont font, int32_t control) {
             parts.push_back(LayoutPart{rect, std::move(text), font, 0, control});
@@ -1964,20 +1984,20 @@ void developer_layout(
         }
     }
     for (LayoutPart& part : rows)
-        if (wholly_in(part.rect, layout::developer_view))
+        if (wholly_in(part.rect, sized.developer_view))
             parts.push_back(std::move(part));
     // The list's footer, which never scrolls.
     text_part(
-        layout::active_only_label,
+        sized.active_only_label,
         layout::active_only_text(
             active_hack_count(dialog), oa::data::mod_profile::standard_hacks().size()
         ),
         DialogFont::regular,
         no_control
     );
-    switch_parts(parts, layout::active_only_switch, active_only_control);
+    switch_parts(parts, sized.active_only_switch, active_only_control);
     text_part(
-        layout::restore_profile_button,
+        sized.restore_profile_button,
         std::string(layout::restore_profile_text),
         DialogFont::small,
         developer::restore_profile_enabled(dialog) ? restore_profile_control : no_control
@@ -2005,6 +2025,7 @@ void mods_layout(
     const std::function<int32_t(std::string_view)>& text_width,
     const std::function<int32_t(std::string_view)>& small_text_width
 ) {
+    const layout::Sizes& sized = layout::sizes_of(dialog);
     const auto text = [&parts](layout::SourceRect rect, std::string shown, DialogFont font) {
         parts.push_back(LayoutPart{rect, std::move(shown), font, 0, no_control});
     };
@@ -2013,19 +2034,19 @@ void mods_layout(
         // it needs.
         oa::ui::kit::WrapRules rules;
         rules.shorten_word = [&](std::string_view word) {
-            return layout::cut_text(word, layout::mods_lock_text.width, small_text_width);
+            return layout::cut_text(word, sized.mods_lock_text.width, small_text_width);
         };
         const auto lines = oa::ui::kit::wrap(
             layout::shown_text(
                 dialog.locks.mod == Lock::command_line ? layout::mod_from_command_line_text
                                                        : layout::mod_in_game_text
             ),
-            layout::mods_lock_text.width,
+            sized.mods_lock_text.width,
             small_text_width,
             rules
         );
         for (std::size_t line = 0; line < lines.size() && line < 2; ++line) {
-            layout::SourceRect rect = layout::mods_lock_text;
+            layout::SourceRect rect = sized.mods_lock_text;
             rect.y += static_cast<int32_t>(line) * rect.height;
             text(rect, lines[line], DialogFont::small);
         }
@@ -2064,7 +2085,7 @@ void mods_layout(
     }
     parts.push_back(
         LayoutPart{
-            layout::mods_folder_button,
+            sized.mods_folder_button,
             std::string(layout::shown_text(layout::open_mods_folder_text)),
             DialogFont::small,
             0,
@@ -2074,16 +2095,17 @@ void mods_layout(
     const std::string_view second =
         dialog.folder_notice.empty() ? layout::mods_folders_text[1] : dialog.folder_notice;
     text(
-        layout::mods_note_first,
+        sized.mods_note_first,
         std::string(layout::shown_text(layout::mods_folders_text[0])),
         DialogFont::small
     );
-    text(layout::mods_note_second, std::string(layout::shown_text(second)), DialogFont::small);
+    text(sized.mods_note_second, std::string(layout::shown_text(second)), DialogFont::small);
 }
 
 } // namespace
 
 std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* fonts) {
+    const layout::Sizes& sized = layout::sizes_of(dialog);
     std::vector<LayoutPart> parts;
     // The player's own folder's path is shortened to its place in the fonts, or at
     // an estimated width a character without them.
@@ -2131,7 +2153,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         layout::heading_tracking
     );
     const layout::SourceRect version{
-        layout::content_right - layout::version_width,
+        sized.version_right - layout::version_width,
         layout::header_top,
         layout::version_width,
         layout::header_height,
@@ -2167,11 +2189,11 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         );
     }
     if (dialog.kind == DialogKind::engine)
-        control_part(layout::list_divider(), no_control);
+        control_part(layout::list_divider(dialog.size_class), no_control);
 
     // The open section.
     text_part(
-        layout::heading,
+        sized.heading,
         layout::page_heading(dialog.page),
         DialogFont::small,
         layout::heading_tracking
@@ -2179,8 +2201,8 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
     // The rows: only the parts wholly in the view are listed, so that each
     // listed control is pressed where it is drawn and each text is whole.
     const layout::ScrolledRows open = layout::open_rows(dialog);
-    const auto row_part = [&parts](LayoutPart part) {
-        if (wholly_in(part.rect, layout::view))
+    const auto row_part = [&parts, &sized](LayoutPart part) {
+        if (wholly_in(part.rect, sized.view))
             parts.push_back(std::move(part));
     };
     const auto row_text =
@@ -2327,7 +2349,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
     for (const auto& [control, caption] : buttons) {
         parts.push_back(
             LayoutPart{
-                layout::footer_button(control),
+                layout::footer_button(control, dialog.size_class),
                 std::string(layout::shown_text(caption)),
                 DialogFont::small,
                 0,
@@ -2362,26 +2384,26 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
     }
     // The question lies over everything else, which is not listed under it.
     if (dialog.switch_question != no_question) {
-        const auto under_question = [](const LayoutPart& part) {
+        const auto under_question = [&sized](const LayoutPart& part) {
             const auto& a = part.rect;
-            const auto& b = layout::question_box;
+            const auto& b = sized.question_box;
             return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height &&
                    b.y < a.y + a.height;
         };
         parts.erase(std::remove_if(parts.begin(), parts.end(), under_question), parts.end());
         text_part(
-            layout::question_heading,
+            sized.question_heading,
             dialog.mod_question == ModQuestion::roll_back ? layout::roll_back_heading_text
                                                           : layout::switch_heading_text,
             DialogFont::small
         );
-        control_part(layout::question_badge, no_control);
+        control_part(sized.question_badge, no_control);
         const layout::ModRowText offered =
             layout::mod_row_text(dialog, ModRow{dialog.switch_question, false});
         parts.push_back(
             LayoutPart{
-                layout::question_title,
-                layout::cut_text(offered.title, layout::question_title.width, text_width),
+                sized.question_title,
+                layout::cut_text(offered.title, sized.question_title.width, text_width),
                 DialogFont::regular,
                 0,
                 no_control,
@@ -2389,10 +2411,10 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         );
         parts.push_back(
             LayoutPart{
-                layout::question_version,
+                sized.question_version,
                 layout::cut_text(
                     layout::question_version_text(dialog, offered),
-                    layout::question_version.width,
+                    sized.question_version.width,
                     small_text_width
                 ),
                 DialogFont::small,
@@ -2402,7 +2424,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         );
         const auto lines = layout::question_text_lines(dialog, small_text_width);
         for (std::size_t line = 0; line < lines.size(); ++line) {
-            layout::SourceRect rect = layout::question_first_line;
+            layout::SourceRect rect = sized.question_first_line;
             rect.y += static_cast<int32_t>(line) * rect.height;
             parts.push_back(LayoutPart{rect, lines[line], DialogFont::small, 0, no_control});
         }

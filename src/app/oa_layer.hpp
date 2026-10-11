@@ -8,9 +8,11 @@
 // tells a finger from a mouse, maps the keys to the kit's, latches the key
 // that closed a screen, lets the top modal screen take every input, darkens
 // what lies under each modal screen, and draws the screens in the window's
-// own pixels before the software cursor. oa_layer.cpp holds it, the
-// settings' screen (Runtime::SettingsScreen) and the screens of a notice
-// (NoticeScreen) and a question (QuestionScreen).
+// own pixels before the software cursor. On the front end it draws them at a
+// whole scale (kit::auto_scale) and lays them out at the size class of the
+// points left over. oa_layer.cpp holds it, the settings' screen
+// (Runtime::SettingsScreen) and the screens of a notice (NoticeScreen) and a
+// question (QuestionScreen).
 #pragma once
 
 #include "oa/app/automation_host.hpp"
@@ -40,8 +42,8 @@ class OaLayer;
 
 /// What a screen of the OA layer needs to place itself.
 struct LayerView {
-    /// The layer shows over a match, its screens in the window's pixels;
-    /// otherwise over the front end's picture, in the picture's pixels.
+    /// The layer shows over a match; otherwise over the front end's picture.
+    /// Either way its screens are placed in the window's own pixels.
     bool match{};
     /// The screen of the game the layer shows over now.
     Screen game_screen{};
@@ -51,17 +53,34 @@ struct LayerView {
     /// side column's scale: the touch controls are on and the window is
     /// phone class.
     bool fit_safe_area{};
-    /// The room the screens have, in points, with its size class and scale:
-    /// the picture on the front end, the safe area in a match; Compact at
-    /// 100% while every screen is drawn at 1×.
+    /// The room the screens have, in points, with its size class and scale.
+    /// On the front end: the window's canvas less its safe insets while the
+    /// game has touch controls, divided by the scale (kit::frame_of). In a
+    /// match: the safe area, Compact at 100%, as the in-match Settings keeps
+    /// its own placement.
     oa::ui::kit::Frame frame{};
+    /// The whole number of window pixels a point takes: the Auto scale of the
+    /// window's canvas (kit::auto_scale), no larger than lets Compact's
+    /// settings dialog fit the room, and at least 1. 1 in a match.
+    int32_t scale{1};
+    /// The room in window pixels: the canvas less its safe insets on the
+    /// front end, the safe area in a match. A centred screen centres in it.
+    oa::ui::display_layout::Rect room{};
+    /// Where the front end's picture, the 640 by 480 frame, is drawn in the
+    /// window, in window pixels: what a screen anchored to a part of a 3.1c
+    /// screen places itself by. The match's canvas in a match.
+    oa::ui::display_layout::Rect picture{};
+    /// The picture's own size, in its pixels: what input on the front end
+    /// arrives in, and the picture's rectangle holds.
+    oa::ui::display_layout::Point picture_size{};
 };
 
 /// Where a screen of the OA layer shows.
 struct LayerPlacement {
-    /// Where the screen shows, in the coordinates input arrives in: the
-    /// picture's pixels on the front end, the window's in a match. Empty
-    /// while the screen does not show: it then neither draws nor takes input.
+    /// Where the screen shows, in window pixels: points_width times the
+    /// scale wide on the front end, and wherever the in-match Settings is
+    /// stamped in a match. Empty while the screen does not show: it then
+    /// neither draws nor takes input.
     oa::ui::display_layout::Rect shown{};
     int32_t points_width{};  ///< the screen's width in its own points, as draw draws it
     int32_t points_height{}; ///< the screen's height in its own points
@@ -114,12 +133,21 @@ class LayerScreen {
     /// @return true for a backdrop
     [[nodiscard]] virtual bool backdrop() const = 0;
 
-    /// Draws the screen at 1× from its own top left corner, every pixel of
-    /// its points_width × points_height opaque.
+    /// Draws the screen from its own top left corner at the canvas's whole
+    /// scale, every pixel of its points_width × points_height points opaque.
     ///
-    /// @param canvas where it draws: a picture of the screen's size, the
-    ///     dialog's fonts and the Open Annihilation icon
+    /// @param canvas where it draws: a picture of the screen's size times
+    ///     the scale, the scale, the dialog's fonts and the Open Annihilation
+    ///     icon
     virtual void draw(const oa::ui::kit::Canvas& canvas) const = 0;
+
+    /// Lays the screen out for a view: Settings, a notice and a question take
+    /// the view's size class on the front end. The layer calls it before it
+    /// places, draws or hands input to the screen, and whenever the view's
+    /// class may have changed. A screen of one layout ignores it.
+    ///
+    /// @param view what the screen is placed on
+    virtual void lay_out(const LayerView& /*view*/) {}
 
     /// Takes a pointer's move, press or release.
     ///
@@ -190,14 +218,43 @@ class LayerScreen {
 };
 
 /// Maps a point to a screen's own points by its placement:
-/// floor((x - shown.x) × points_width / shown.width), and the same down.
+/// floor((x - shown.x) × points_width / shown.width), and the same down. On
+/// the front end that is floor((x - left) / scale).
 ///
 /// @param placement where the screen shows
-/// @param x the point's column, in the coordinates input arrives in
+/// @param x the point's column, in window pixels
 /// @param y the point's row
 /// @return the point in the screen's points; it may lie outside the screen
 [[nodiscard]] oa::ui::kit::Point
 layer_point(const LayerPlacement& placement, float x, float y) noexcept;
+
+/// Returns where a screen of a size shows centred in a view's room at the
+/// view's scale: left = room's left + (room's width - width × scale) / 2,
+/// rounded down, and the same down.
+///
+/// @param view what the screen is placed on
+/// @param width_points the screen's width, in points
+/// @param height_points the screen's height, in points
+/// @return its place, in window pixels
+[[nodiscard]] LayerPlacement
+centred_placement(const LayerView& view, int32_t width_points, int32_t height_points) noexcept;
+
+/// A place in the window, in window pixels and their fractions.
+struct WindowPosition {
+    double x{}; ///< column
+    double y{}; ///< row
+};
+
+/// Returns where an input's position lies in the window: on the front end,
+/// where input arrives in the picture's pixels, through the picture's
+/// rectangle (to the nearest 64th of a pixel, as the mapping back from the
+/// picture leaves it); in a match as it is.
+///
+/// @param view what the screens are placed on
+/// @param x the input's column, in the coordinates input arrives in
+/// @param y the input's row
+/// @return the position, in window pixels
+[[nodiscard]] WindowPosition window_position(const LayerView& view, float x, float y) noexcept;
 
 /// Returns the key a press means to a screen of the OA layer: Enter, Escape,
 /// the arrows, Space, Tab and Shift+Tab, Page Up and Page Down, Home and End,
@@ -238,10 +295,12 @@ automation_kind(const oa::ui::kit::AutomationEntry& entry) noexcept;
 /// queue, first in, first out, until no modal screen shows
 /// (show_when_free), so that two never show at once.
 ///
-/// On the front end, each modal screen with a backdrop darkens the frame
-/// itself and every screen under it (darken_front_end), and the screens are
-/// drawn at 1× and stamped into the window over the picture's rectangle
-/// (present), before the software cursor; without a renderer, and for
+/// On the front end the screens are laid out at the size class of the
+/// window's canvas and drawn at its whole scale (view), centred in the
+/// window; each modal screen with a backdrop darkens the frame itself, the
+/// window round it and every screen under it (darken_front_end, present),
+/// and the screens are copied into the window in its own pixels (present),
+/// before the software cursor; without a renderer, and for
 /// frame_without_cursor, they are composed into the frame instead
 /// (compose_front_end). In a match the layer is one picture of the window's
 /// size: the in-game OA button, the backdrop and the screens, drawn again
@@ -329,11 +388,30 @@ class OaLayer {
     /// @return the fonts; null when they cannot be loaded
     [[nodiscard]] const oa::ui::kit::Fonts* screen_fonts() const;
 
-    /// Returns what the screens are placed on now: the front end's picture
-    /// or the match's canvas.
+    /// Returns what the screens are placed on now: the window over the front
+    /// end's picture, with the scale and size class of the window's canvas
+    /// (its size in pixels, the window points it holds and, while the game
+    /// has touch controls, its safe insets), or the match's canvas. Without a
+    /// renderer the canvas is the picture itself.
     ///
     /// @return the view
     [[nodiscard]] LayerView view() const;
+
+    /// Returns the whole scale the front end's screens are drawn at now.
+    ///
+    /// @return window pixels a point; 1 in a match
+    [[nodiscard]] int32_t screen_scale() const { return view().scale; }
+
+    /// Returns the size class the front end's screens are laid out at now.
+    ///
+    /// @return the class; Compact in a match
+    [[nodiscard]] oa::ui::kit::SizeClass screen_class() const { return view().frame.size_class; }
+
+    /// Returns where the topmost screen of a name shows now.
+    ///
+    /// @param name the screen's name
+    /// @return its place, in window pixels; empty when no such screen shows
+    [[nodiscard]] LayerPlacement placement_of(std::string_view name) const;
 
     /// Tells whether a screen shows on the front end or in a match.
     ///
@@ -387,6 +465,21 @@ class OaLayer {
     /// to a screen's model from outside its events.
     void redraw() noexcept { ++revision_; }
 
+    /// Asks for the window's read-back (the frame a check captures as it is
+    /// presented) to hold the whole window on the front end, the letterbox
+    /// round the picture with it, rather than the picture's area alone: what
+    /// a check compares the screens and their backdrop with, as they are
+    /// drawn in the window's own pixels. Off, the read-back is the picture's.
+    ///
+    /// @param whole true for the whole window
+    void read_whole_window(bool whole) noexcept { whole_window_ = whole; }
+
+    /// Tells whether the window's read-back holds the whole window on the
+    /// front end (read_whole_window).
+    ///
+    /// @return true for the whole window
+    [[nodiscard]] bool reads_whole_window() const noexcept { return whole_window_; }
+
     /// Darkens the front end's frame under the modal screens with a
     /// backdrop: the frame blended with the backdrop's colour at the menu's
     /// opacity once for each that shows.
@@ -394,10 +487,13 @@ class OaLayer {
     /// @param[in,out] frame the composed frame
     void darken_front_end(renderer::Surface& frame) const;
 
-    /// Draws each screen that shows on the front end into the frame at 1×,
-    /// at its place, darkened once for each modal screen with a backdrop
-    /// that shows above it: the picture the player sees, for checks and runs
-    /// without a renderer.
+    /// Draws each screen that shows on the front end into the frame, at its
+    /// place mapped through the picture's rectangle, darkened once for each
+    /// modal screen with a backdrop that shows above it: the picture the
+    /// player sees, for checks and runs without a renderer. Each pixel of the
+    /// frame takes the screen's pixel at its centre in the window; where the
+    /// picture fills the window, as without a renderer and in a 640 by 480
+    /// window, that is the screen drawn at 1× at its place.
     ///
     /// @param[in,out] frame the composed frame
     void compose_front_end(renderer::Surface& frame) const;
@@ -417,10 +513,10 @@ class OaLayer {
 
     /// Draws the layer into the window, in the window's own pixels
     /// (RenderState::use_window_pixels), before the software cursor: on the
-    /// front end each screen stamped from its 1× drawing to its place
-    /// mapped through the picture's rectangle, each window pixel taking the
-    /// screen's pixel under its centre; in a match the match's layer, as the
-    /// match's other layers are drawn.
+    /// front end each screen drawn at the view's scale and copied to its
+    /// place pixel for pixel, and, under a modal screen with a backdrop, the
+    /// window outside the picture darkened as the picture is; in a match the
+    /// match's layer, as the match's other layers are drawn.
     ///
     /// Throws PresentError when SDL cannot make the layer's texture.
     ///
@@ -586,9 +682,10 @@ class OaLayer {
 
     /// One screen of the front end as the window shows it.
     struct FrontPiece {
-        oa::ui::display_layout::Rect window{}; ///< where it lands, in window pixels
-        oa::ui::display_layout::Rect shown{};  ///< where it shows, in the picture's pixels
-        renderer::Surface drawn{};             ///< its 1× drawing
+        oa::ui::display_layout::Rect
+            window{};                         ///< the part of it the window shows, in window pixels
+        oa::ui::display_layout::Rect shown{}; ///< where it shows, in window pixels
+        renderer::Surface drawn{};            ///< its drawing at the view's scale
     };
 
     /// What the front end's part of the layer shows in the window.
@@ -664,13 +761,18 @@ class OaLayer {
     /// and stops it once no screen has one.
     void sync_text_input();
 
-    /// Draws a screen at 1× from its own top left corner.
+    /// Lays every screen out for the view now, and every one waiting
+    /// (LayerScreen::lay_out).
+    void lay_out_screens();
+
+    /// Draws a screen from its own top left corner at a whole scale.
     ///
     /// @param screen the screen
     /// @param placed where it shows
-    /// @return its picture, points_width × points_height
+    /// @param scale window pixels a point
+    /// @return its picture, points_width × points_height times the scale
     [[nodiscard]] renderer::Surface
-    draw_screen(const LayerScreen& screen, const LayerPlacement& placed) const;
+    draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const;
 
     /// Draws the front end's screens into the window.
     ///
@@ -698,6 +800,7 @@ class OaLayer {
     /// The field the system's text input was started over, in the
     /// coordinates input arrives in; none while the layer has not started it.
     std::optional<oa::ui::display_layout::Rect> text_field_{};
+    bool whole_window_{}; ///< the front end's read-back holds the whole window (read_whole_window)
     bool button_hovered_{}; ///< the pointer is over the in-game OA button
     bool button_pressed_{}; ///< a press on the in-game OA button is held
     /// Counts the changes to what the match's layer shows that MatchLook
@@ -721,9 +824,9 @@ class OaLayer {
 };
 
 /// A notice of Open Annihilation's own (kit::Notice) as a screen of the OA
-/// layer: modal over a backdrop, centred on the front end's picture at 1×
-/// over one screen of the game, its open button and OK answered as its
-/// host says. A host that tells the player something nobody asked for at
+/// layer: modal over a backdrop, laid out at the view's size class and
+/// centred in the window at its scale over one screen of the game, its open
+/// button and OK answered as its host says. A host that tells the player something nobody asked for at
 /// that moment shows it with OaLayer::show_when_free.
 class NoticeScreen final : public LayerScreen {
   public:
@@ -772,13 +875,18 @@ class NoticeScreen final : public LayerScreen {
         return oa::ui::kit::notice_word_of(notice_);
     }
 
-    /// Returns where the notice shows: centred on the front end's picture at
-    /// 1×, kit::notice_width wide and as tall as its text makes it, over its
-    /// own screen of the game.
+    /// Returns where the notice shows: centred in the view's room at its
+    /// scale, its size class's notice width wide and as tall as its text
+    /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
     /// @return its place; empty in a match, over another screen, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Lays the notice out at the view's size class (kit::Notice::size_class).
+    ///
+    /// @param view what the screen is placed on
+    void lay_out(const LayerView& view) override;
 
     /// Tells that the notice takes every input.
     ///
@@ -868,8 +976,9 @@ class NoticeScreen final : public LayerScreen {
 };
 
 /// A question of Open Annihilation's own (kit::Question) as a screen of the
-/// OA layer: modal over a backdrop, centred on the front end's picture at 1×
-/// over one screen of the game, its answers handed to its host. A question
+/// OA layer: modal over a backdrop, laid out at the view's size class and
+/// centred in the window at its scale over one screen of the game, its
+/// answers handed to its host. A question
 /// nobody asked for at that moment, such as an install's, is shown with
 /// OaLayer::show_when_free; one a screen asks of its own is pushed over it at
 /// once (OaLayer::push). Its host may change the question while it shows
@@ -917,8 +1026,12 @@ class QuestionScreen final : public LayerScreen {
     /// @return the question
     [[nodiscard]] const oa::ui::kit::Question& question() const noexcept { return question_; }
 
-    /// Tells the screen its host changed the question.
-    void changed() noexcept { ++revision_; }
+    /// Tells the screen its host changed the question: it keeps the size
+    /// class the layer lays it out at, whatever the host put in its place.
+    void changed() noexcept {
+        question_.size_class = size_class_;
+        ++revision_;
+    }
 
     /// Returns the screen of the game the question shows over.
     ///
@@ -933,13 +1046,19 @@ class QuestionScreen final : public LayerScreen {
         return oa::ui::kit::question_word_of(question_);
     }
 
-    /// Returns where the question shows: centred on the front end's picture
-    /// at 1×, kit::notice_width wide and as tall as its text makes it, over
-    /// its own screen of the game.
+    /// Returns where the question shows: centred in the view's room at its
+    /// scale, its size class's notice width wide and as tall as its text
+    /// makes it at that width, over its own screen of the game.
     ///
     /// @param view what the screen is placed on
     /// @return its place; empty in a match, over another screen, or without fonts
     [[nodiscard]] LayerPlacement placement(const LayerView& view) const override;
+
+    /// Lays the question out at the view's size class
+    /// (kit::Question::size_class).
+    ///
+    /// @param view what the screen is placed on
+    void lay_out(const LayerView& view) override;
 
     /// Tells that the question takes every input.
     ///
@@ -1029,6 +1148,8 @@ class QuestionScreen final : public LayerScreen {
     oa::ui::kit::Question question_; ///< the question
     Host host_;                      ///< what its host does
     uint64_t revision_{};            ///< counts the changes to its look
+    /// The size class the layer lays the question out at (lay_out).
+    oa::ui::kit::SizeClass size_class_{oa::ui::kit::SizeClass::compact};
 };
 
 } // namespace oa::app

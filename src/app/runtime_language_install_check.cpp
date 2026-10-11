@@ -8,6 +8,7 @@
 
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install.hpp"
@@ -224,13 +225,25 @@ void Runtime::check_language_install() {
         const auto placed = state.prompt->placement(oa_layer().view());
         for (const auto& part : settings::prompt_layout(prompt, fonts))
             if (part.control == button) {
-                const oa::ui::display_layout::Point point{
-                    placed.shown.x + part.rect.x + part.rect.width / 2,
-                    placed.shown.y + part.rect.y + part.rect.height / 2
-                };
-                send_check_pointer(SDL_EVENT_MOUSE_MOTION, point, 0);
-                send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
-                send_check_pointer(SDL_EVENT_MOUSE_BUTTON_UP, point, SDL_BUTTON_LEFT);
+                // At the window pixel the layer shows the button's middle at.
+                const auto pixel = layer_window_pixel(
+                    placed, {part.rect.x + part.rect.width / 2, part.rect.y + part.rect.height / 2}
+                );
+                for (const SDL_EventType type :
+                     {SDL_EVENT_MOUSE_MOTION,
+                      SDL_EVENT_MOUSE_BUTTON_DOWN,
+                      SDL_EVENT_MOUSE_BUTTON_UP}) {
+                    SDL_Event event = window_pointer_event(
+                        sdl_.window,
+                        sdl_.renderer,
+                        type,
+                        pixel,
+                        type == SDL_EVENT_MOUSE_MOTION ? 0 : SDL_BUTTON_LEFT
+                    );
+                    bool running = true;
+                    dispatch_event(event, running);
+                    require(running, "a click on a prompt ended the run");
+                }
                 send_check_pointer(SDL_EVENT_MOUSE_MOTION, kRestingPointer, 0);
                 return;
             }

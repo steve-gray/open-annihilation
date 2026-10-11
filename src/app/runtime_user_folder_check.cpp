@@ -12,6 +12,7 @@
 
 #include "engine_settings_state.hpp"
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 #include "user_folder_state.hpp"
 
 #include "oa/app/game_directory.hpp"
@@ -25,6 +26,7 @@
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/layout.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -45,6 +47,7 @@
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
+namespace kit = oa::ui::kit;
 namespace artless = oa::ui::frontend_renderer;
 
 namespace {
@@ -365,9 +368,22 @@ void Runtime::check_user_folder() {
                  "into Recordings/default and Recordings/check-mod, once; screenshots and "
                  "films go in Screenshots/default and Films/default\n";
 
-    // The notice, over the main menu.
+    // The notice, over the main menu, in a 640x480 window, where the OA
+    // layer draws it at Compact, 1x, pixel for pixel as 0.7.3; then at the
+    // larger windows' classes and scales.
     const auto previous_tick = fake_frontend_tick_;
     fake_frontend_tick_ = 1000U;
+    int run_width = 0;
+    int run_height = 0;
+    SDL_GetWindowSize(sdl_.window, &run_width, &run_height);
+    const auto window_of = [this](int width, int height) {
+        require(
+            SDL_SetWindowSize(sdl_.window, width, height) && SDL_SyncWindow(sdl_.window),
+            "the window did not take " + std::to_string(width) + 'x' + std::to_string(height)
+        );
+        apply_output_mode();
+    };
+    window_of(kCanvasWidth, kCanvasHeight);
     load(Screen::main_menu);
     require(screen_ == Screen::main_menu, "the main menu did not open");
     const auto* fonts = engine_settings_fonts();
@@ -379,6 +395,25 @@ void Runtime::check_user_folder() {
         return frame_without_cursor();
     };
     const auto menu = frame();
+    // The window's frame, read back whole, drawn from the same sparks.
+    const auto window_frame = [&] {
+        renderer::Surface presented;
+        menu_sparks_ = sparks;
+        capture_frame_ = &presented;
+        render();
+        capture_frame_ = nullptr;
+        return presented;
+    };
+    // The main menu at each larger window, with no OA screen open, which
+    // the notice's backdrop darkens there.
+    std::vector<renderer::Surface> closed_windows;
+    oa_layer().read_whole_window(true);
+    for (const LayerWindow& larger : larger_layer_windows) {
+        window_of(larger.width, larger.height);
+        closed_windows.push_back(window_frame());
+    }
+    oa_layer().read_whole_window(false);
+    window_of(kCanvasWidth, kCanvasHeight);
     // A run nobody watches leaves it due.
     for (int pass = 0; pass < 4; ++pass)
         tell_saves_moved();
@@ -484,6 +519,64 @@ void Runtime::check_user_folder() {
                 std::to_string(differing_shown) + " pixels differ"
         );
     }
+    // At 1280x720 and 1920x1080 the notice is laid out at the window's
+    // class and drawn at its scale, centred over the main menu darkened
+    // over the whole window.
+    oa_layer().read_whole_window(true);
+    for (std::size_t index = 0; index < larger_layer_windows.size(); ++index) {
+        const LayerWindow& larger = larger_layer_windows[index];
+        const std::string on = " on the " + std::to_string(larger.width) + 'x' +
+                               std::to_string(larger.height) + " window";
+        window_of(larger.width, larger.height);
+        const auto presented = window_frame();
+        require(
+            oa_layer().screen_class() == larger.size_class &&
+                oa_layer().screen_scale() == larger.scale,
+            "the notice is not laid out at " + std::string(size_class_name(larger.size_class)) +
+                ", " + std::to_string(larger.scale) + "x" + on
+        );
+        kit::Notice sized = notice_screen->notice();
+        sized.size_class = larger.size_class;
+        const auto& metrics = kit::metrics_of(larger.size_class);
+        const int32_t sized_height = settings::notice_height(sized, fonts);
+        const auto at = notice_screen->placement(oa_layer().view());
+        require(
+            at.points_width == metrics.notice_width && at.points_height == sized_height &&
+                at.shown.width == metrics.notice_width * larger.scale &&
+                at.shown.height == sized_height * larger.scale &&
+                at.shown.x == (larger.width - at.shown.width) / 2 &&
+                at.shown.y == (larger.height - at.shown.height) / 2,
+            "the notice is not centred in the window at its class's size" + on
+        );
+        renderer::Surface drawing;
+        drawing.width = static_cast<uint32_t>(at.shown.width);
+        drawing.height = static_cast<uint32_t>(at.shown.height);
+        drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
+        settings::draw_notice(drawing, {0, 0, larger.scale}, sized, *fonts, engine_settings_icon());
+        apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
+        const auto expected = expected_layer_frame(closed_windows[index], drawing, at);
+        const auto differing = layer_differences(
+            presented, expected, window_pointer(oa_layer().view(), kRestingPointer)
+        );
+        if (differing != 0) {
+            const std::string size =
+                std::to_string(larger.width) + 'x' + std::to_string(larger.height);
+            step_snapshot(options_.snapshot, "notice-presented-" + size, presented);
+            step_snapshot(options_.snapshot, "notice-expected-" + size, expected);
+        }
+        require(
+            differing == 0,
+            "the window does not show the notice over the darkened main menu" + on + ": " +
+                std::to_string(differing) + " pixels differ"
+        );
+        std::cout << "user folder check: the notice at " << size_class_name(larger.size_class)
+                  << ", " << larger.scale << "x, on the " << larger.width << 'x' << larger.height
+                  << " window\n";
+    }
+    oa_layer().read_whole_window(false);
+    window_of(kCanvasWidth, kCanvasHeight);
+    // A frame lays the notice out at Compact again, for the clicks below.
+    static_cast<void>(frame());
     // Its buttons, where the OA layer shows it: Open folder shows Saves and
     // the notice stays; one that fails says why in it.
     const auto parts = settings::notice_layout(notice, fonts);
@@ -701,6 +794,7 @@ void Runtime::check_user_folder() {
         std::cout << "user folder check: two notices and a question waited for Settings and "
                      "showed one at a time, first in first; a question over Settings darkened it\n";
     }
+    window_of(run_width, run_height);
 
     // A save, a screenshot and a film land in the folders of the mod
     // played: default without a mod, and the mod's id with a made-up one,

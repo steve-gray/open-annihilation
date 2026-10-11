@@ -143,24 +143,27 @@ bool offers_roll_back(const Dialog& dialog, const ModRow& row) noexcept {
 }
 
 SourceRect question_yes_rect(const Dialog& dialog) noexcept {
+    const Sizes& sized = sizes_of(dialog);
     if (dialog.mod_question != ModQuestion::roll_back)
-        return question_yes_button;
+        return sized.question_yes_button;
+    // The question's box keeps Compact's padding in every class.
     return {
-        question_box.x + question_box.width - padding - question_roll_back_width,
-        question_yes_button.y,
+        sized.question_box.x + sized.question_box.width - padding - question_roll_back_width,
+        sized.question_yes_button.y,
         question_roll_back_width,
-        question_yes_button.height
+        sized.question_yes_button.height
     };
 }
 
 SourceRect question_no_rect(const Dialog& dialog) noexcept {
+    const Sizes& sized = sizes_of(dialog);
     const SourceRect yes = question_yes_rect(dialog);
+    const SourceRect& no = sized.question_no_button;
     return {
-        yes.x - (question_yes_button.x - question_no_button.x - question_no_button.width) -
-            question_no_button.width,
+        yes.x - (sized.question_yes_button.x - no.x - no.width) - no.width,
         yes.y,
-        question_no_button.width,
-        question_no_button.height
+        no.width,
+        no.height
     };
 }
 
@@ -175,7 +178,8 @@ std::string question_version_text(const Dialog& dialog, const ModRowText& offere
 
 Rows place_mod_rows(const Dialog& dialog, int32_t scroll) {
     Rows placed{};
-    const ScrollArea area = mods_scroll(dialog.locks.mod != Lock::none);
+    const Sizes& sized = sizes_of(dialog);
+    const ScrollArea area = mods_scroll(dialog.locks.mod != Lock::none, dialog.size_class);
     const auto rows = mod_rows(dialog);
     const Lock lock = dialog.locks.mod;
     int32_t top = area.view.y;
@@ -194,9 +198,10 @@ Rows place_mod_rows(const Dialog& dialog, int32_t scroll) {
         row.lock = lock;
         row.top = top;
         row.height = height + mod_row_gap;
-        row.control_area = {content_left, top, content_width, height};
-        const int32_t text_left = content_left + mod_row_inset + mod_badge_side + mod_row_inset;
-        const int32_t text_width = content_right - mod_row_inset - text_left;
+        row.control_area = {sized.content_left, top, sized.content_width, height};
+        const int32_t text_left =
+            sized.content_left + mod_row_inset + mod_badge_side + mod_row_inset;
+        const int32_t text_width = sized.content_right - mod_row_inset - text_left;
         row.label = {text_left, top + 1, text_width, label_line_height};
         row.value = {text_left, top + 3, text_width, hint_line_height};
         row.hints[0] = {text_left, top + description_top, text_width, hint_line_height};

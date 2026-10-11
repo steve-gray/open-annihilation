@@ -114,9 +114,6 @@ constexpr int32_t kChosenMarkerWidth = 2;
 constexpr int32_t kChosenMarkerHeight = 8;
 /// The columns a menu item keeps clear at its right.
 constexpr int32_t kChoiceTextMargin = 4;
-/// The settings dialog's height. A menu that would pass the line over its
-/// footer opens above its field, and never above the body's first row.
-constexpr int32_t kSettingsDialogHeight = 324;
 
 const renderer::Mark& bits_of(Mark mark) noexcept {
     switch (mark) {
@@ -696,11 +693,9 @@ int32_t shown_choices(std::size_t choices) noexcept {
     return static_cast<int32_t>(std::min(choices, most));
 }
 
-Rect choice_menu(const Rect& field, std::size_t choices) noexcept {
+Rect choice_menu(const Rect& field, std::size_t choices, int32_t footer_line) noexcept {
     const int32_t height = shown_choices(choices) * compact_metrics.choice_item_height + 2;
     int32_t top = field.y + field.height;
-    const int32_t footer_line =
-        kSettingsDialogHeight - compact_metrics.edge - compact_metrics.footer_height - 1;
     const int32_t body_top = compact_metrics.edge + compact_metrics.header_height + 1;
     if (top + height > footer_line)
         top = std::max(field.y - height, body_top);

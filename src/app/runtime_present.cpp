@@ -9,6 +9,7 @@
 #include "oa_layer.hpp"
 #include "pad_state.hpp"
 #include "render_host.hpp"
+#include "render_state.hpp"
 #include "render_run.hpp"
 #include "oa/app/input_hints.hpp"
 #include "phone_hud.hpp"
@@ -29,6 +30,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -795,6 +797,14 @@ void Runtime::capture_render_target() {
         video_capture_->add_frame(sdl_.renderer);
     if (capture_frame_ == nullptr)
         return;
+    // A check of the OA layer, whose screens and backdrop are drawn in the
+    // window's own pixels, reads back the whole window on the front end, the
+    // letterbox round the picture with it (OaLayer::read_whole_window).
+    std::optional<RenderState> window_pixels;
+    if (screen_ != Screen::match && oa_layer().reads_whole_window()) {
+        window_pixels.emplace(sdl_.renderer);
+        window_pixels->use_window_pixels();
+    }
     SDL_Surface* target = SDL_RenderReadPixels(sdl_.renderer, nullptr);
     SDL_Surface* rgb =
         target != nullptr ? SDL_ConvertSurface(target, SDL_PIXELFORMAT_RGB24) : nullptr;

@@ -4,7 +4,7 @@
 // A notice and a question: their text wrapped and placed, their display
 // lists, what pointer, finger and key events do to them, and their drawing.
 // The arithmetic is the settings dialog's notices' and prompts', moved here
-// unchanged.
+// unchanged; a box's width and greatest height are its size class's.
 
 #include "oa/ui/kit/components_more.hpp"
 
@@ -26,15 +26,36 @@ namespace renderer = oa::ui::frontend_renderer;
 
 namespace {
 
-/// The Compact metrics every notice and question is placed by.
+/// The Compact metrics every notice and question is placed by, but for its
+/// width and its greatest height, which are its size class's.
 constexpr const Metrics& metrics = compact_metrics;
 
 /// The text's first column.
 constexpr int32_t text_left = compact_metrics.padding;
-/// The text's width.
-constexpr int32_t line_width = notice_width - 2 * compact_metrics.padding;
-/// The width inside the edge.
-constexpr int32_t inner_width = notice_width - 2 * compact_metrics.edge;
+
+/// Returns a box's width at its size class.
+///
+/// @param size_class the class
+/// @return the width, in points
+int32_t box_width(SizeClass size_class) noexcept {
+    return metrics_of(size_class).notice_width;
+}
+
+/// Returns the text's width in a box.
+///
+/// @param width the box's width
+/// @return the text's width, in points
+int32_t line_width_in(int32_t width) noexcept {
+    return width - 2 * metrics.padding;
+}
+
+/// Returns the width inside a box's edge.
+///
+/// @param width the box's width
+/// @return the width, in points
+int32_t inner_width_in(int32_t width) noexcept {
+    return width - 2 * metrics.edge;
+}
 
 /// The text's lines and the row under the last of them.
 struct PlacedText {
@@ -50,13 +71,16 @@ struct PlacedText {
 /// @param failure the failure line's text; empty for none
 /// @param regular a text's width in the regular font
 /// @param small a text's width in the small font
+/// @param width the box's width
 /// @return the lines and the row under them
 PlacedText place_text(
     const std::vector<Paragraph>& paragraphs,
     std::string_view failure,
     const Measure& regular,
-    const Measure& small
+    const Measure& small,
+    int32_t width
 ) {
+    const int32_t line_width = line_width_in(width);
     PlacedText placed{};
     int32_t row = metrics.text_top;
     bool first = true;
@@ -84,15 +108,17 @@ PlacedText place_text(
 }
 
 /// Returns the height of a box whose text ends at a row: its text, the gap
-/// under it and the footer, from least_notice_height to greatest_notice_height.
+/// under it and the footer, from its class's least to its greatest height.
 ///
 /// @param text_bottom the row under the text
+/// @param size_class the box's size class
 /// @return the height
-int32_t height_for(int32_t text_bottom) noexcept {
+int32_t height_for(int32_t text_bottom, SizeClass size_class) noexcept {
+    const Metrics& sized = metrics_of(size_class);
     return std::clamp(
         text_bottom + metrics.text_bottom_gap + 1 + metrics.footer_height + metrics.edge,
-        least_notice_height,
-        greatest_notice_height
+        sized.least_notice_height,
+        sized.greatest_notice_height
     );
 }
 
@@ -137,12 +163,11 @@ std::vector<PlacedLine> lines_that_fit(std::vector<PlacedLine> lines, int32_t fo
 
 /// Returns the title's place in the header.
 ///
+/// @param width the box's width
 /// @return the rectangle, in points
-Rect title_rect() noexcept {
+Rect title_rect(int32_t width) noexcept {
     const int32_t title_left = notice_mark.x + notice_mark.width + metrics.header_gap;
-    return {
-        title_left, metrics.edge, notice_width - metrics.padding - title_left, metrics.header_height
-    };
+    return {title_left, metrics.edge, width - metrics.padding - title_left, metrics.header_height};
 }
 
 /// OK and the open button, placed.
@@ -151,14 +176,15 @@ struct NoticeButtons {
     Rect open{}; ///< the open button, before OK
 };
 
-/// Returns a notice's buttons, which depend on its height alone.
+/// Returns a notice's buttons, which depend on its height and its width alone.
 ///
 /// @param height the notice's height
+/// @param width the notice's width
 /// @return the buttons' rectangles
-NoticeButtons notice_buttons(int32_t height) noexcept {
+NoticeButtons notice_buttons(int32_t height, int32_t width) noexcept {
     const int32_t top = button_top_of(height);
     const Rect ok{
-        notice_width - metrics.padding - metrics.button_width,
+        width - metrics.padding - metrics.button_width,
         top,
         metrics.button_width,
         metrics.button_height
@@ -235,14 +261,19 @@ std::string named(std::string_view word, std::string_view own) {
 /// press tests them.
 ///
 /// @param height the notice's height
+/// @param width the notice's width
 /// @param word the notice's word, which starts their names
 /// @param ok OK's caption, for automation
 /// @param open the open button's caption, for automation
 /// @return the list, without items
 DisplayList notice_controls(
-    int32_t height, std::string_view word = notice_word, std::string ok = {}, std::string open = {}
+    int32_t height,
+    int32_t width,
+    std::string_view word = notice_word,
+    std::string ok = {},
+    std::string open = {}
 ) {
-    const NoticeButtons buttons = notice_buttons(height);
+    const NoticeButtons buttons = notice_buttons(height, width);
     DisplayList list;
     add_button_control(list, notice_ok, buttons.ok, named(word, "ok"), std::move(ok));
     add_button_control(list, notice_open, buttons.open, named(word, "open"), std::move(open));
@@ -341,12 +372,13 @@ body_text(std::string title, const std::vector<std::string>& paragraphs, std::st
 /// Returns the header a notice or a question shows.
 ///
 /// @param title the title, as shown
+/// @param width the box's width
 /// @return the header's look
-HeaderLook header_of(std::string title) {
+HeaderLook header_of(std::string title, int32_t width) {
     HeaderLook header;
-    header.width = notice_width;
+    header.width = width;
     header.title = std::move(title);
-    header.title_width = title_rect().width;
+    header.title_width = title_rect(width).width;
     header.tracking = metrics.heading_tracking;
     return header;
 }
@@ -410,18 +442,19 @@ void draw_marked_button(
 ///
 /// @param[in,out] list the display list
 /// @param height the box's height
+/// @param width the box's width
 /// @param title the title, as shown
-void add_face_and_header(DisplayList& list, int32_t height, std::string title) {
+void add_face_and_header(DisplayList& list, int32_t height, int32_t width, std::string title) {
     Item face;
     face.role = Role::fill;
-    face.rect = {0, 0, notice_width, height};
+    face.rect = {0, 0, width, height};
     face.colour = colour::panel;
     list.items.push_back(std::move(face));
     Item header;
     header.role = Role::header;
-    header.rect = {metrics.edge, metrics.edge, inner_width, metrics.header_height};
+    header.rect = {metrics.edge, metrics.edge, inner_width_in(width), metrics.header_height};
     header.text = title;
-    header.look = header_of(std::move(title));
+    header.look = header_of(std::move(title), width);
     list.items.push_back(std::move(header));
 }
 
@@ -445,11 +478,12 @@ void add_text_line(DisplayList& list, const PlacedLine& line, std::string text) 
 ///
 /// @param[in,out] list the display list
 /// @param footer_rule the row of the line over the footer
-void add_footer(DisplayList& list, int32_t footer_rule) {
+/// @param width the box's width
+void add_footer(DisplayList& list, int32_t footer_rule, int32_t width) {
     Item item;
     item.role = Role::footer_band;
-    item.rect = {metrics.edge, footer_rule, inner_width, 1 + metrics.footer_height};
-    item.look = FooterBandLook{notice_width, footer_rule};
+    item.rect = {metrics.edge, footer_rule, inner_width_in(width), 1 + metrics.footer_height};
+    item.look = FooterBandLook{width, footer_rule};
     list.items.push_back(std::move(item));
 }
 
@@ -482,10 +516,11 @@ void add_button_item(
 ///
 /// @param[in,out] list the display list
 /// @param height the box's height
-void add_edge(DisplayList& list, int32_t height) {
+/// @param width the box's width
+void add_edge(DisplayList& list, int32_t height, int32_t width) {
     Item item;
     item.role = Role::bevel;
-    item.rect = {0, 0, notice_width, height};
+    item.rect = {0, 0, width, height};
     item.colour = colour::edge_light;
     list.items.push_back(std::move(item));
 }
@@ -520,14 +555,15 @@ QuestionAnswer look_changed(bool redraw) {
 } // namespace
 
 PlacedNotice place_notice(const Notice& notice, const Measure& regular, const Measure& small) {
+    const int32_t width = box_width(notice.size_class);
     PlacedNotice placed{};
-    placed.title = title_rect();
-    PlacedText text = place_text(notice.paragraphs, notice.failure, regular, small);
-    placed.height = height_for(text.bottom);
+    placed.title = title_rect(width);
+    PlacedText text = place_text(notice.paragraphs, notice.failure, regular, small, width);
+    placed.height = height_for(text.bottom, notice.size_class);
     placed.footer_rule = footer_rule_of(placed.height);
     // A line the height cuts is left out.
     placed.lines = lines_that_fit(std::move(text.lines), placed.footer_rule);
-    const NoticeButtons buttons = notice_buttons(placed.height);
+    const NoticeButtons buttons = notice_buttons(placed.height, width);
     placed.ok_button = buttons.ok;
     placed.open_button = buttons.open;
     return placed;
@@ -543,7 +579,7 @@ std::vector<Rect> question_button_rects(const Question& question, int32_t height
     const int32_t top = button_top_of(height);
     const std::size_t count = std::min(question.buttons.size(), most_question_buttons);
     std::vector<Rect> rects(count);
-    int32_t right = notice_width - metrics.padding;
+    int32_t right = box_width(question.size_class) - metrics.padding;
     for (std::size_t index = count; index-- > 0;) {
         const int32_t width = std::max(
             metrics.button_width,
@@ -557,16 +593,17 @@ std::vector<Rect> question_button_rects(const Question& question, int32_t height
 
 PlacedQuestion
 place_question(const Question& question, const Measure& regular, const Measure& small) {
+    const int32_t width = box_width(question.size_class);
     PlacedQuestion placed{};
-    placed.title = title_rect();
-    PlacedText text = place_text(question.paragraphs, question.failure, regular, small);
+    placed.title = title_rect(width);
+    PlacedText text = place_text(question.paragraphs, question.failure, regular, small, width);
     int32_t bottom = text.bottom;
     if (question.progress >= 0) {
         bottom += metrics.paragraph_gap;
-        placed.bar = {text_left, bottom, line_width, metrics.progress_bar_height};
+        placed.bar = {text_left, bottom, line_width_in(width), metrics.progress_bar_height};
         bottom += metrics.progress_bar_height;
     }
-    placed.height = height_for(bottom);
+    placed.height = height_for(bottom, question.size_class);
     placed.footer_rule = footer_rule_of(placed.height);
     const std::size_t all_lines = text.lines.size();
     placed.lines = lines_that_fit(std::move(text.lines), placed.footer_rule);
@@ -595,10 +632,11 @@ std::string_view question_word_of(const Question& question) noexcept {
 
 DisplayList notice_list(const Notice& notice, const Fonts* fonts, const LookUp& look_up) {
     const PlacedNotice placed = place_notice(notice, fonts);
+    const int32_t width = box_width(notice.size_class);
     const std::string ok = shown(look_up, notice.ok_caption);
     const std::string open = shown(look_up, notice.open_caption);
     const std::string_view word = notice_word_of(notice);
-    DisplayList list = notice_controls(placed.height, word, ok, open);
+    DisplayList list = notice_controls(placed.height, width, word, ok, open);
     std::vector<std::string> paragraphs;
     for (const Paragraph& paragraph : notice.paragraphs)
         paragraphs.push_back(shown(look_up, paragraph.text));
@@ -613,10 +651,10 @@ DisplayList notice_list(const Notice& notice, const Fonts* fonts, const LookUp& 
             notice.failure.empty() ? std::string() : shown(look_up, notice.failure)
         )
     );
-    add_face_and_header(list, placed.height, shown(look_up, notice.title));
+    add_face_and_header(list, placed.height, width, shown(look_up, notice.title));
     for (const PlacedLine& line : placed.lines)
         add_text_line(list, line, shown(look_up, line.text));
-    add_footer(list, placed.footer_rule);
+    add_footer(list, placed.footer_rule, width);
     add_button_item(
         list,
         placed.open_button,
@@ -631,12 +669,13 @@ DisplayList notice_list(const Notice& notice, const Fonts* fonts, const LookUp& 
         notice_ok,
         notice.marked == notice_ok
     );
-    add_edge(list, placed.height);
+    add_edge(list, placed.height, width);
     return list;
 }
 
 DisplayList question_list(const Question& question, const Fonts* fonts) {
     const PlacedQuestion placed = place_question(question, fonts);
+    const int32_t width = box_width(question.size_class);
     DisplayList list = question_controls(question, placed.height);
     std::vector<std::string> paragraphs;
     for (const Paragraph& paragraph : question.paragraphs)
@@ -648,10 +687,10 @@ DisplayList question_list(const Question& question, const Fonts* fonts) {
         placed.lines,
         body_text(question.title, paragraphs, question.failure)
     );
-    add_face_and_header(list, placed.height, question.title);
+    add_face_and_header(list, placed.height, width, question.title);
     for (const PlacedLine& line : placed.lines)
         add_text_line(list, line, line.text);
-    add_footer(list, placed.footer_rule);
+    add_footer(list, placed.footer_rule, width);
     if (placed.bar.width > 0)
         add_progress(list, placed.bar, question.progress, question_progress_whole);
     for (std::size_t index = 0; index < placed.buttons.size(); ++index) {
@@ -665,7 +704,7 @@ DisplayList question_list(const Question& question, const Fonts* fonts) {
             question.marked == control
         );
     }
-    add_edge(list, placed.height);
+    add_edge(list, placed.height, width);
     return list;
 }
 
@@ -675,7 +714,7 @@ NoticeAction notice_pointer_move(Notice& notice, Point at, int32_t height) {
         at.x += notice.finger_shift_x;
         at.y += notice.finger_shift_y;
     }
-    const ControlId hovered = hit(notice_controls(height), at);
+    const ControlId hovered = hit(notice_controls(height, box_width(notice.size_class)), at);
     if (hovered == notice.hovered)
         return NoticeAction::none;
     notice.hovered = hovered;
@@ -685,7 +724,7 @@ NoticeAction notice_pointer_move(Notice& notice, Point at, int32_t height) {
 NoticeAction notice_pointer_down(Notice& notice, Point at, int32_t height) {
     notice.finger_shift_x = 0;
     notice.finger_shift_y = 0;
-    notice.hovered = hit(notice_controls(height), at);
+    notice.hovered = hit(notice_controls(height, box_width(notice.size_class)), at);
     if (notice.hovered == no_control)
         return NoticeAction::none;
     notice.pressed = notice.hovered;
@@ -695,7 +734,8 @@ NoticeAction notice_pointer_down(Notice& notice, Point at, int32_t height) {
 NoticeAction notice_finger_down(Notice& notice, Point finger, int32_t height, int32_t reach_px) {
     // OK, then the open button: the nearer within reach, at its point nearest
     // the finger.
-    const Reached landed = reach(notice_controls(height), finger, reach_px);
+    const Reached landed =
+        reach(notice_controls(height, box_width(notice.size_class)), finger, reach_px);
     const NoticeAction action = notice_pointer_down(notice, landed.at, height);
     if (action == NoticeAction::redraw) {
         notice.finger_shift_x = landed.at.x - finger.x;
@@ -713,7 +753,7 @@ NoticeAction notice_pointer_up(Notice& notice, Point at, int32_t height) {
     }
     notice.finger_shift_x = 0;
     notice.finger_shift_y = 0;
-    notice.hovered = hit(notice_controls(height), at);
+    notice.hovered = hit(notice_controls(height, box_width(notice.size_class)), at);
     const ControlId held = notice.pressed;
     notice.pressed = no_control;
     if (held == no_control)
@@ -826,14 +866,15 @@ QuestionAnswer question_key(Question& question, Key key) {
 
 void draw_notice(const Canvas& canvas, const Notice& notice, const LookUp& look_up) {
     const PlacedNotice placed = place_notice(notice, canvas.fonts);
-    const Rect whole{0, 0, notice_width, placed.height};
+    const int32_t width = box_width(notice.size_class);
+    const Rect whole{0, 0, width, placed.height};
     draw_window_face(canvas, whole);
-    draw_header(canvas, header_of(shown(look_up, notice.title)));
+    draw_header(canvas, header_of(shown(look_up, notice.title), width));
     // The text: paths in the regular font, the rest in the small one, the
     // failure in amber.
     for (const PlacedLine& line : placed.lines)
         draw_text_line(canvas, line, shown(look_up, line.text));
-    draw_footer_band(canvas, notice_width, placed.footer_rule);
+    draw_footer_band(canvas, width, placed.footer_rule);
     // The footer: the open button plain and OK in the accent, the marked one
     // ringed.
     draw_marked_button(
@@ -857,12 +898,13 @@ void draw_notice(const Canvas& canvas, const Notice& notice, const LookUp& look_
 
 void draw_question(const Canvas& canvas, const Question& question) {
     const PlacedQuestion placed = place_question(question, canvas.fonts);
-    const Rect whole{0, 0, notice_width, placed.height};
+    const int32_t width = box_width(question.size_class);
+    const Rect whole{0, 0, width, placed.height};
     draw_window_face(canvas, whole);
-    draw_header(canvas, header_of(question.title));
+    draw_header(canvas, header_of(question.title, width));
     for (const PlacedLine& line : placed.lines)
         draw_text_line(canvas, line, line.text);
-    draw_footer_band(canvas, notice_width, placed.footer_rule);
+    draw_footer_band(canvas, width, placed.footer_rule);
     if (placed.bar.width > 0)
         draw_progress(canvas, placed.bar, question.progress, question_progress_whole);
     for (std::size_t index = 0; index < placed.buttons.size(); ++index) {

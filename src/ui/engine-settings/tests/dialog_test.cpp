@@ -37,6 +37,10 @@
 // whose folder keeps an earlier version and its question, the locks during
 // a game and by the command line, and OPEN MODS FOLDER. The names the
 // automation endpoint lists every control and part by, on every section.
+// Those names at each size class, and at Regular and Large: every section
+// inside the dialog with its parts apart, hints kept to their lines,
+// Graphics showing more whole rows, the footer's buttons at their Compact
+// sizes, and each control pressed where it is drawn.
 // With --data, its fonts from the installed game and every text fitting its
 // place.
 
@@ -8233,13 +8237,16 @@ void check_every_section_endpoint_names(
     }
 }
 
-void the_endpoint_names_every_control_and_part_once() {
-    // The dialog has one layout, Compact's, at every size the window has;
-    // its names do not depend on the size.
+/// Checks the names the automation endpoint lists every control and part
+/// by, laid out at one size class: the names do not depend on the class.
+///
+/// @param size_class the class the dialogs are laid out at
+void endpoint_names_at(oa::ui::kit::SizeClass size_class) {
     std::set<std::string> seen;
     // The engine's settings with Touch, Controller and Game files listed,
     // Your files' folder known and Developer's every area and hack open.
     settings::Dialog engine = opened_with_controller(Page::controls, true, true, true);
+    engine.size_class = size_class;
     engine.user_folder = std::string(kUserFolder);
     engine.chosen.developer_mode = true;
     for (uint8_t& open : engine.developer.areas_open)
@@ -8256,6 +8263,7 @@ void the_endpoint_names_every_control_and_part_once() {
     check_endpoint_names(dropped, "Controls, a drop-down open", seen);
     // Mods with three mods, and its Switch Mod question.
     settings::Dialog mods = mods_dialog(kModFolders[0]);
+    mods.size_class = size_class;
     check_endpoint_names(mods, "mods", seen);
     static_cast<void>(click(mods, mod_point(mods, 1)));
     CHECK(mods.switch_question == 1);
@@ -8263,6 +8271,7 @@ void the_endpoint_names_every_control_and_part_once() {
     // A mod's options.
     settings::Dialog options;
     settings::open_mod_options_dialog(options, {}, {}, {}, "v0.2.0", Page::mod_keys);
+    options.size_class = size_class;
     check_every_section_endpoint_names(options, "mod options", seen);
 
     for (const std::string_view name : {
@@ -8300,6 +8309,14 @@ void the_endpoint_names_every_control_and_part_once() {
     // keep them as, never by their places.
     for (const std::string& name : seen)
         CHECK(name.find(".item-") == std::string::npos);
+}
+
+void the_endpoint_names_every_control_and_part_once() {
+    for (const auto size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large})
+        endpoint_names_at(size_class);
 }
 
 } // namespace
@@ -8582,6 +8599,361 @@ void the_oa_mark_alone_shows_the_icon_or_the_button_mark() {
     CHECK(none.at(1, 1) == (renderer::Rgb{0, 0, 0}));
 }
 
+// Regular and Large: the dialog at the larger size classes. Compact's
+// expectations above are 0.7.3's and stay as they are; these hold the larger
+// layouts to the same rules, with rows, text and controls at Compact's sizes.
+
+/// The size classes larger than Compact.
+constexpr std::array<oa::ui::kit::SizeClass, 2> kLargerClasses{
+    oa::ui::kit::SizeClass::regular,
+    oa::ui::kit::SizeClass::large,
+};
+
+/// Returns a class's name, for what a failed check prints.
+///
+/// @param size_class the class
+/// @return "Regular" or "Large"; "Compact" for Compact
+const char* class_name(oa::ui::kit::SizeClass size_class) {
+    switch (size_class) {
+    case oa::ui::kit::SizeClass::regular:
+        return "Regular";
+    case oa::ui::kit::SizeClass::large:
+        return "Large";
+    case oa::ui::kit::SizeClass::compact:
+        break;
+    }
+    return "Compact";
+}
+
+/// Returns a dialog of the engine's settings laid out at a size class, with
+/// Touch, Controller and Game files listed and Game files' rows filled as a
+/// host fills them.
+///
+/// @param size_class the class
+/// @param page the section shown
+/// @param locks what cannot be changed
+/// @return the dialog
+settings::Dialog
+opened_at(oa::ui::kit::SizeClass size_class, Page page, const settings::Locks& locks = {}) {
+    settings::Dialog dialog;
+    settings::open_dialog(
+        dialog,
+        settings::EngineSettings{},
+        settings::EngineSettings{},
+        locks,
+        "v0.2.0",
+        page,
+        {},
+        settings::highest_unit_limit,
+        {},
+        {},
+        nullptr,
+        true,
+        true,
+        true
+    );
+    dialog.game_files_summary = "3.1c · Core Contingency · Battle Tactics · music";
+    dialog.game_files_sizes = "1.1 GB · 37 GB free on this tablet";
+    dialog.game_files_location = "In the file manager: Open Annihilation › Total Annihilation";
+    dialog.game_files_device = "tablet";
+    dialog.size_class = size_class;
+    return dialog;
+}
+
+/// Checks that every part a dialog lists lies inside its face at its class,
+/// that no two overlap, and that each section's entry lies in the section
+/// list with its name fitting it.
+///
+/// @param dialog the dialog
+void check_parts_inside_and_apart(const settings::Dialog& dialog) {
+    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    const renderer::SourceRect face{
+        geometry::edge,
+        geometry::edge,
+        sized.dialog_width - 2 * geometry::edge,
+        sized.dialog_height - 2 * geometry::edge,
+    };
+    const renderer::SourceRect nav{
+        geometry::edge,
+        geometry::body_top,
+        sized.list_width,
+        sized.footer_rule_row - geometry::body_top,
+    };
+    const auto parts = settings::dialog_layout(dialog);
+    CHECK(!parts.empty());
+    for (std::size_t a = 0; a < parts.size(); ++a) {
+        CHECK(parts[a].rect.width > 0 && parts[a].rect.height > 0);
+        CHECK(inside(parts[a].rect, face));
+        for (std::size_t b = a + 1; b < parts.size(); ++b)
+            if (overlap(parts[a].rect, parts[b].rect)) {
+                std::cerr << class_name(dialog.size_class) << " overlap: '" << parts[a].text
+                          << "' and '" << parts[b].text << "'\n";
+                CHECK(!overlap(parts[a].rect, parts[b].rect));
+            }
+        // A section's entry: in the list, its name within its words' room.
+        if (parts[a].control >= settings::first_page_control &&
+            parts[a].control < settings::restore_control) {
+            CHECK(inside(parts[a].rect, nav));
+            CHECK(
+                one_a_character(parts[a].text) * settings::estimated_character_width <=
+                parts[a].rect.width
+            );
+        }
+    }
+}
+
+/// Checks that a section's rows lie in the content column at the dialog's
+/// class, each control's focus outline clear of its label and hints, and
+/// that the section's end comes above the footer.
+///
+/// @param dialog the dialog
+void check_rows_in_their_column(const settings::Dialog& dialog) {
+    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    const auto in_columns = [&sized](const renderer::SourceRect& rect) {
+        return rect.x >= sized.content_left &&
+               rect.x + rect.width <= sized.content_left + sized.content_width;
+    };
+    const auto open = geometry::open_rows(dialog);
+    for (const auto& row : open.rows.rows) {
+        if (row.setting == Setting::mod) {
+            CHECK(in_columns(row.control_area));
+            continue;
+        }
+        CHECK(in_columns(row.label));
+        if (row.control_area.width == 0)
+            continue;
+        CHECK(in_columns(row.control_area));
+        const renderer::SourceRect focus{
+            row.control_area.x - 2,
+            row.control_area.y - 2,
+            row.control_area.width + 4,
+            row.control_area.height + 4,
+        };
+        CHECK(!overlap(focus, row.label));
+        for (std::size_t line = 0; line < row.hint_lines; ++line)
+            CHECK(!overlap(focus, row.hints[line]));
+    }
+    for (const auto& row : open.list.rows) {
+        CHECK(row.label.x >= sized.content_left);
+        CHECK(row.label.x + row.label.width <= sized.content_right);
+    }
+    if (!geometry::mods_page(dialog) && !geometry::developer_page(dialog))
+        CHECK(open.rows.bottom + open.scroll - open.limit < sized.footer_rule_row);
+}
+
+void the_larger_classes_lay_out_every_section_inside_the_dialog() {
+    for (const auto size_class : kLargerClasses) {
+        for (const Page page : kAllPages) {
+            for (const auto& locks : lock_states()) {
+                const settings::Dialog dialog = opened_at(size_class, page, locks);
+                check_parts_inside_and_apart(dialog);
+                check_rows_in_their_column(dialog);
+            }
+            for (const auto& state : level_states()) {
+                settings::Dialog dialog = opened_at(size_class, page);
+                dialog.chosen = state;
+                check_parts_inside_and_apart(dialog);
+                check_rows_in_their_column(dialog);
+            }
+            // Each section at its end too.
+            settings::Dialog ended = opened_at(size_class, page);
+            ended.scroll[static_cast<std::size_t>(page)] = 100000;
+            check_parts_inside_and_apart(ended);
+        }
+        // Controller with the Steam Input notice over its rows.
+        settings::Dialog notice = opened_at(size_class, Page::controller);
+        static_cast<void>(settings::set_controller_section(notice, true, true));
+        check_parts_inside_and_apart(notice);
+        check_rows_in_their_column(notice);
+        // Developer with every area and hack open, at offsets through its list.
+        settings::Dialog developer = everything_open();
+        developer.size_class = size_class;
+        const auto open = geometry::open_rows(developer);
+        const geometry::Sizes& sized = geometry::sizes_of(size_class);
+        CHECK(open.area.view.y == sized.developer_view.y);
+        CHECK(open.area.view.height == sized.developer_view.height);
+        for (int32_t scroll = 0; scroll <= open.limit + 300; scroll += 300) {
+            developer.scroll[kDeveloperScroll] = std::min(scroll, open.limit);
+            check_parts_inside_and_apart(developer);
+            check_rows_in_their_column(developer);
+        }
+        // Mods with a long list, at its top and its end.
+        settings::Dialog mods = many_mods_dialog(30);
+        mods.size_class = size_class;
+        check_parts_inside_and_apart(mods);
+        check_rows_in_their_column(mods);
+        mods.scroll[static_cast<std::size_t>(Page::mods)] = 100000;
+        check_parts_inside_and_apart(mods);
+    }
+}
+
+void the_larger_classes_keep_hints_to_their_lines() {
+    for (const auto size_class : kLargerClasses) {
+        for (const Page page : kAllPages) {
+            for (const bool steam_input : {false, true}) {
+                settings::Dialog dialog = opened_at(size_class, page);
+                static_cast<void>(settings::set_controller_section(dialog, true, steam_input));
+                for (const auto& row : geometry::open_rows(dialog).rows.rows)
+                    CHECK(
+                        row.hint_lines <= (row.setting == Setting::pad_steam_input_notice
+                                               ? geometry::most_notice_lines
+                                               : geometry::most_hint_lines)
+                    );
+            }
+        }
+        // The host's lines break at the class's width: the Steam Input
+        // notice and where the files are take no more lines than at Compact,
+        // and keep every word.
+        const auto lines_of = [](const settings::Dialog& dialog, Setting setting) {
+            std::vector<std::string> lines;
+            for (std::size_t line = 0; line < geometry::most_row_lines; ++line) {
+                const auto hint = geometry::row_hint(dialog, setting, line);
+                if (!hint.text.empty())
+                    lines.push_back(hint.text);
+            }
+            return lines;
+        };
+        const auto joined = [](const std::vector<std::string>& lines) {
+            std::string text;
+            for (const auto& line : lines)
+                text += (text.empty() ? "" : " ") + line;
+            return text;
+        };
+        settings::Dialog compact = opened_at(oa::ui::kit::SizeClass::compact, Page::controller);
+        static_cast<void>(settings::set_controller_section(compact, true, true));
+        settings::Dialog larger = opened_at(size_class, Page::controller);
+        static_cast<void>(settings::set_controller_section(larger, true, true));
+        const auto compact_notice = lines_of(compact, Setting::pad_steam_input_notice);
+        const auto larger_notice = lines_of(larger, Setting::pad_steam_input_notice);
+        CHECK(larger_notice.size() < compact_notice.size());
+        CHECK(joined(larger_notice) == geometry::steam_input_notice_text);
+        for (const auto& line : larger_notice)
+            CHECK(
+                one_a_character(line) <=
+                static_cast<int32_t>(geometry::sizes_of(size_class).hint_line_characters)
+            );
+        const auto compact_place = lines_of(compact, Setting::game_files_location);
+        const auto larger_place = lines_of(larger, Setting::game_files_location);
+        CHECK(larger_place.size() <= compact_place.size());
+        CHECK(joined(larger_place) == larger.game_files_location);
+    }
+}
+
+/// Counts the rows a section shows whole at its top: from its line to the
+/// next row's, inside the view.
+///
+/// @param dialog the dialog, at its section's top
+/// @return the rows
+int32_t whole_rows_at_the_top(const settings::Dialog& dialog) {
+    const auto open = geometry::open_rows(dialog);
+    const auto& seen = open.area.view;
+    int32_t whole = 0;
+    for (const auto& row : open.rows.rows)
+        if (row.top >= seen.y && row.top + row.height <= seen.y + seen.height)
+            ++whole;
+    return whole;
+}
+
+void the_larger_classes_show_more_graphics_rows() {
+    const settings::Dialog compact = graphics_page();
+    const auto compact_rows = geometry::open_rows(compact);
+    int32_t shown = whole_rows_at_the_top(compact);
+    int32_t limit = compact_rows.limit;
+    for (const auto size_class : kLargerClasses) {
+        settings::Dialog dialog = graphics_page();
+        dialog.size_class = size_class;
+        const auto open = geometry::open_rows(dialog);
+        // The same twelve rows, each at its Compact height: more of them show.
+        CHECK(open.rows.rows.size() == compact_rows.rows.rows.size());
+        for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
+            CHECK(open.rows.rows[index].top == compact_rows.rows.rows[index].top);
+            CHECK(open.rows.rows[index].height == compact_rows.rows.rows[index].height);
+            CHECK(open.rows.rows[index].label.height == compact_rows.rows.rows[index].label.height);
+            CHECK(
+                open.rows.rows[index].control_area.height ==
+                compact_rows.rows.rows[index].control_area.height
+            );
+        }
+        const int32_t whole = whole_rows_at_the_top(dialog);
+        if (whole <= shown)
+            std::cerr << class_name(size_class) << " shows " << whole << " of Graphics' rows\n";
+        CHECK(whole > shown);
+        // It scrolls less, to an end of its own, which End reaches.
+        CHECK(open.limit < limit);
+        CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
+        CHECK(graphics_scroll(dialog) == open.limit);
+        shown = whole;
+        limit = open.limit;
+    }
+}
+
+void the_larger_classes_keep_the_footer_buttons() {
+    constexpr std::array<int32_t, 3> controls{
+        settings::restore_control, settings::cancel_control, settings::ok_control
+    };
+    for (const auto size_class : kLargerClasses) {
+        const geometry::Sizes& sized = geometry::sizes_of(size_class);
+        settings::Dialog dialog = opened_at(size_class, Page::controls);
+        const auto parts = settings::dialog_layout(dialog);
+        std::array<renderer::SourceRect, 3> rects{};
+        for (std::size_t index = 0; index < controls.size(); ++index) {
+            const auto rect = geometry::footer_button(controls[index], size_class);
+            const auto compact = geometry::footer_button(controls[index]);
+            rects[index] = rect;
+            // Compact's size, in the footer's band.
+            CHECK(rect.width == compact.width && rect.height == compact.height);
+            CHECK(rect.y > sized.footer_rule_row);
+            CHECK(rect.y + rect.height < sized.dialog_height - geometry::edge);
+            const auto* part = find_part(parts, {}, controls[index]);
+            CHECK(part != nullptr && same_entry(part->rect, rect));
+        }
+        // Restore defaults at the left, then Cancel and OK at the right, in
+        // their order.
+        CHECK(rects[0].x == sized.padding);
+        CHECK(rects[0].x + rects[0].width < rects[1].x);
+        CHECK(rects[1].x + rects[1].width < rects[2].x);
+        CHECK(rects[2].x + rects[2].width == sized.content_right);
+        // Each is pressed where it lies: Cancel closes the dialog.
+        settings::Dialog cancelled = opened_at(size_class, Page::controls);
+        CHECK(click(cancelled, centre(rects[1])) == DialogAction::cancelled);
+        settings::Dialog accepted = opened_at(size_class, Page::controls);
+        CHECK(click(accepted, centre(rects[2])) == DialogAction::accepted);
+    }
+}
+
+void the_larger_classes_press_each_control_where_it_is_drawn() {
+    for (const auto size_class : kLargerClasses) {
+        const geometry::Sizes& sized = geometry::sizes_of(size_class);
+        for (const Page page : kAllPages) {
+            settings::Dialog dialog = opened_at(size_class, page);
+            for (const auto& part : settings::dialog_layout(dialog)) {
+                if (part.control == settings::no_control)
+                    continue;
+                const Point point = centre(part.rect);
+                static_cast<void>(settings::dialog_pointer_move(dialog, point.x, point.y));
+                CHECK(dialog.hovered == part.control);
+            }
+            // Each entry shows its section.
+            for (const Page other : kAllPages) {
+                settings::Dialog shown = opened_at(size_class, page);
+                static_cast<void>(click(shown, centre(geometry::dialog_list_item(shown, other))));
+                CHECK(shown.page == other);
+            }
+        }
+        // The wheel scrolls Graphics from anywhere on the dialog, beyond
+        // Compact's width too.
+        settings::Dialog dialog = graphics_page();
+        dialog.size_class = size_class;
+        CHECK(settings::dialog_contains(dialog, sized.dialog_width - 2, sized.dialog_height - 2));
+        CHECK(!settings::dialog_contains(dialog, sized.dialog_width, 0));
+        CHECK(
+            settings::dialog_wheel(dialog, sized.content_right - 1, sized.view.y + 1, -1.0F) ==
+            DialogAction::redraw
+        );
+        CHECK(graphics_scroll(dialog) == geometry::wheel_step);
+    }
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -8683,6 +9055,11 @@ int main(int argc, char** argv) {
         the_notice_answers_its_buttons_and_keys();
         the_notice_draws_in_the_dialogs_colours(settings::DialogFonts{});
         the_endpoint_names_every_control_and_part_once();
+        the_larger_classes_lay_out_every_section_inside_the_dialog();
+        the_larger_classes_keep_hints_to_their_lines();
+        the_larger_classes_show_more_graphics_rows();
+        the_larger_classes_keep_the_footer_buttons();
+        the_larger_classes_press_each_control_where_it_is_drawn();
     }
     if (failures != 0)
         return 1;
