@@ -1927,7 +1927,10 @@ runtime goes).
   it. On 640x480, 1280x720 and 1920x1080 windows it loads the main menu,
   opens Settings with its shortcut, clicks Developer's entry and then SHOW
   where the window shows them, and requires the UI kit gallery on top at
-  Compact 1×, Large 1× and Regular 2×, covering the window; the window,
+  Compact 1×, Large 1× and Regular 2×, covering the window, its controls
+  listed to the automation endpoint in dialog `oa.gallery`
+  (`oa.gallery.close`, `oa.gallery.toggle.1.on`, `oa.gallery.drop-down.1`);
+  the window,
   every pixel but the cursor's square, as the gallery drawn offscreen at
   that class and scale (`layer_drawing`) over the main menu darkened by
   Settings' backdrop and the gallery's (`expected_layer_frame`); Tab taking

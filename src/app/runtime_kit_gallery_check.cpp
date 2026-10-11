@@ -11,6 +11,7 @@
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
 
+#include "oa/app/automation_host.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -256,6 +257,19 @@ void Runtime::check_kit_gallery() {
                 placed.points_height * window.scale == window.height,
             "the gallery does not cover the window" + on
         );
+        // Its controls reach the automation endpoint by the kit's names, in
+        // its own dialog.
+        {
+            std::vector<AutomationControl> listed;
+            oa_layer().automation_controls(listed);
+            for (const std::string_view name :
+                 {"oa.gallery.close", "oa.gallery.toggle.1.on", "oa.gallery.drop-down.1"}) {
+                bool found = false;
+                for (const AutomationControl& control : listed)
+                    found = found || (control.name == name && control.dialog == "oa.gallery");
+                require(found, "the endpoint does not list " + std::string(name) + on);
+            }
+        }
 
         // The window shows the gallery as drawn offscreen at its class and
         // scale, over the main menu darkened by Settings' backdrop and its own.
