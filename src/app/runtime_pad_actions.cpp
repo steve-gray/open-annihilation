@@ -4,8 +4,12 @@
 // What the gamepad's buttons do in each layer: the grips' latches and FORCE,
 // the order and build rings, the groups, the game and standing orders
 // layers, SELECT ▾ and the menus (docs/controllers.md). Every action ends in
-// a function the mouse, the keyboard or the touch controls already call.
+// a function the mouse, the keyboard, the touch controls or, for the
+// Library's own buttons, the Library already call. The top screen of the OA
+// layer sees an action, and the right stick's motion, before either becomes
+// a key or a turn of the wheel.
 #include "oa/app/runtime.hpp"
+#include "oa_layer.hpp"
 #include "pad_state.hpp"
 #include "touch_state.hpp"
 #include "oa/app/platform_hooks.hpp"
@@ -55,6 +59,27 @@ constexpr std::string_view kOnOffWord = "ONOFF";
 constexpr std::string_view kCloakWord = "CLOAK";
 /// The pages a builder's type has when it has more than one to turn (pages run 1..count-1).
 constexpr int kSeveralBuildPages = 3;
+
+/// Returns whether an action reaches the menus through a repeated step, so the
+/// top screen sees it there rather than at the press.
+///
+/// @param action the action
+/// @return whether menu_step sends it
+bool menu_repeats(pc::Action action) noexcept {
+    switch (action) {
+    case pc::Action::focus_up:
+    case pc::Action::focus_down:
+    case pc::Action::focus_left:
+    case pc::Action::focus_right:
+    case pc::Action::sheet_up:
+    case pc::Action::sheet_down:
+    case pc::Action::wheel_up:
+    case pc::Action::wheel_down:
+        return true;
+    default:
+        return false;
+    }
+}
 
 /// Returns whether an action is a layer key's, which a press with it held uses.
 ///
@@ -188,6 +213,11 @@ void PadAccess::act_press(
         state.dpad.action = action;
         menu_step(runtime, action);
     };
+    // A repeated step is offered when it is sent. Everything else is offered
+    // once, here, before it becomes a key or a click.
+    if (!menu_repeats(binding.action) && runtime.oa_layer_ != nullptr &&
+        runtime.oa_layer_->take_pad_action(binding.action))
+        return;
     switch (binding.action) {
     case pc::Action::none:
     case pc::Action::force:
@@ -412,6 +442,11 @@ void PadAccess::act_press(
         return;
     case pc::Action::info:
         send_key(runtime, SDLK_F1);
+        return;
+    case pc::Action::library_search:
+    case pc::Action::library_action:
+        // The Library takes these while it is the top screen. On every other
+        // screen Y and X do nothing, as they did before they had an action.
         return;
     case pc::Action::wheel_up:
     case pc::Action::wheel_down:
@@ -1066,6 +1101,14 @@ void PadAccess::sheet_action(Runtime& runtime, pc::Action action) {
 }
 
 void PadAccess::menu_step(Runtime& runtime, pc::Action action) {
+    if (action == pc::Action::wheel_up || action == pc::Action::wheel_down) {
+        // One notch of the wheel, towards the top when the stick is pushed up.
+        const float notches = action == pc::Action::wheel_up ? 1.0F : -1.0F;
+        if (runtime.oa_layer_ != nullptr && runtime.oa_layer_->take_pad_stick(notches))
+            return;
+    } else if (runtime.oa_layer_ != nullptr && runtime.oa_layer_->take_pad_action(action)) {
+        return;
+    }
     switch (action) {
     case pc::Action::focus_up:
         send_key(runtime, SDLK_UP);

@@ -29,6 +29,7 @@
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/pad_controls.hpp"
 #include "oa/ui/screen_registry.hpp"
 #include "oa/ui/screen_registry/kit.hpp"
 
@@ -236,6 +237,23 @@ class LayerScreen {
     virtual LayerAnswer shortcut(uint32_t /*sdl_key*/, uint16_t /*modifiers*/) {
         return LayerAnswer::pass;
     }
+
+    /// Takes a gamepad action before it becomes a key, a click or anything
+    /// else. The layer offers each action to the top screen, and a screen
+    /// that answers other than pass took it, so it becomes no key. The
+    /// argument is the action, as the gamepad controls name it.
+    ///
+    /// @return what the screen did; pass, as every screen without the hook answers
+    virtual LayerAnswer pad_action(oa::ui::pad_controls::Action /*action*/) {
+        return LayerAnswer::pass;
+    }
+
+    /// Takes the right stick's motion in a menu, in notches of the wheel,
+    /// before it becomes a turn of the wheel. The argument is that turn;
+    /// positive is towards the top.
+    ///
+    /// @return what the screen did; pass, as every screen without the hook answers
+    virtual LayerAnswer pad_stick(float /*notches*/) { return LayerAnswer::pass; }
 
     /// Takes a turn of the wheel.
     ///
@@ -592,6 +610,20 @@ class OaLayer {
     ///     the window's in a match
     /// @return true when the layer took it
     bool take_input(const ScreenInput& input);
+
+    /// Offers a gamepad action to the top screen before it becomes a key or a
+    /// click. A screen that answers other than pass took it.
+    ///
+    /// @param action the action
+    /// @return true when the top screen took it
+    bool take_pad_action(oa::ui::pad_controls::Action action);
+
+    /// Offers the right stick's motion in a menu to the top screen, in notches
+    /// of the wheel, before it becomes a turn of the wheel.
+    ///
+    /// @param notches the turn; positive towards the top
+    /// @return true when the top screen took it
+    bool take_pad_stick(float notches);
 
     /// Carries out a screen's answer: close takes it off, latching the key
     /// whose press closed it. take_input does this for its own events; a
@@ -989,6 +1021,13 @@ class OaLayer {
     /// @param input the input
     /// @return what the screen answered
     LayerAnswer hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInput& input);
+
+    /// Carries out a screen's answer to a gamepad action or the right stick.
+    ///
+    /// @param screen the top screen
+    /// @param answer what it answered
+    /// @return true when it took the input
+    bool finish_pad(LayerScreen& screen, LayerAnswer answer);
 
     /// Takes a screen off, telling it it closes.
     ///
