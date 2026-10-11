@@ -225,6 +225,9 @@ enum class Setting : uint8_t {
     /// Window frame: a strip of Hidden in play and Always shown
     window_frame,
     hud_scaling, ///< HUD scaling: a switch
+    /// Interface size: a drop-down of Auto, 100%, 200%, 300% and 400%, the
+    /// last of Graphics' rows
+    interface_size,
 };
 
 /// Returns the settings a section shows, top to bottom.

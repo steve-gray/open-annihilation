@@ -21,6 +21,7 @@
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/engine_settings/notice.hpp"
 #include "oa/ui/engine_settings/prompt.hpp"
@@ -1264,14 +1265,13 @@ LayerView OaLayer::view() const {
         viewport.width - viewport.safe.left - viewport.safe.right,
         viewport.height - viewport.safe.top - viewport.safe.bottom
     };
-    // The Auto scale, no larger than lets Compact's dialog fit the room, and
-    // at least 1; the class from the points left over.
-    const kit::Metrics& compact = kit::compact_metrics;
-    const int32_t fits =
-        std::min(seen.room.width / compact.dialog_width, seen.room.height / compact.dialog_height);
-    seen.scale =
-        std::max(int32_t{1}, std::min(kit::auto_scale(viewport.height, viewport.density), fits));
-    viewport.scale_percent = seen.scale * 100;
+    // The Interface size the settings in effect choose, or the Auto scale,
+    // no larger than lets Compact's dialog fit the room, and at least 1; the
+    // class from the points left over.
+    viewport = kit::layer_viewport(
+        viewport, settings::interface_size_percent(runtime_.engine_settings().interface_size)
+    );
+    seen.scale = viewport.scale_percent / 100;
     seen.frame = kit::frame_of(viewport);
     return seen;
 }

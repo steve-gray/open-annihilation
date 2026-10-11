@@ -1160,10 +1160,12 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         }
         take_renderer_retry(*dialog);
         {
-            // A Screen size moved to applies when OK is pressed; until then
-            // the setting stays as it was.
+            // A Screen size moved to and an Interface size chosen apply when
+            // OK is pressed; until then each stays as it was, so the dialog
+            // keeps its size while it is open.
             settings::EngineSettings live = dialog->chosen;
             live.screen_size = dialog->opened.screen_size;
+            live.interface_size = dialog->opened.interface_size;
             apply_engine_settings(live);
         }
         return false;
