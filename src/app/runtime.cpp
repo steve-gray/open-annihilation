@@ -499,6 +499,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_language_notice) {
+            check_language_notice();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_kill_board) {
             check_kill_board();
             flush_preferences();
@@ -774,6 +779,8 @@ void Runtime::idle_tick() {
     tick_library();
     // A catalogue that moved on adds its language packs to the registry.
     note_catalogue_languages();
+    // After the catalogue, so a size that arrived this frame is on the notice.
+    tell_missing_language();
     tell_mod_installs();
     tell_challenges();
     render();

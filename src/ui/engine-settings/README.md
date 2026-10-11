@@ -1340,3 +1340,15 @@ dialog's own; listing them to automation, with
 `oa.` before each and the parts of a switch, a strip, an open drop-down and
 Your files' buttons, is U11's, which also gives a drop-down's items ids of
 their own in place of their numbers.
+
+## The missing-language notice
+
+`include/oa/ui/engine_settings/language_notice.hpp` and
+`src/language_notice.cpp` lay out the notice shown at the start when a
+language is only available as a download. The screen is named
+`language-notice`. Its buttons are `language-notice.use-english` and
+`language-notice.download`. Automation lists them as
+`oa.language-notice.use-english` and `oa.language-notice.download`, and the
+dialog as `oa.language-notice`. Use English, when the operating system
+asked for the language, writes that language's tag into
+`open-annihilation.language-notice-dismissed`.
