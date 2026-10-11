@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -161,23 +162,106 @@ layout::Rect intersection(const layout::Rect& first, const layout::Rect& second)
     return {left, top, right - left, bottom - top};
 }
 
+/// Tells whether a screen darkens what lies under it while it shows: an
+/// opaque modal screen with a backdrop. One that is not opaque never does.
+///
+/// @param screen the screen
+/// @return true when it darkens what lies under it
+bool darkens(const LayerScreen& screen) {
+    return screen.modal() && screen.backdrop() && screen.opaque();
+}
+
+/// Lays one pixel of straight colour over a pixel of a picture with no
+/// opacity of its own (src over): (colour × opacity + under × (255 −
+/// opacity) + 127) / 255, rounded down, each channel.
+///
+/// @param[in,out] under the picture's pixel, red, green and blue
+/// @param colour the pixel laid over it, red, green and blue
+/// @param opacity the laid pixel's opacity, 0 clear to 255 opaque
+void lay_over_picture(uint8_t* under, const uint8_t* colour, uint32_t opacity) noexcept {
+    if (opacity == 0)
+        return;
+    for (std::size_t channel = 0; channel < 3U; ++channel)
+        under[channel] = static_cast<uint8_t>(
+            (colour[channel] * opacity + under[channel] * (255U - opacity) + 127U) / 255U
+        );
+}
+
+/// Lays one pixel of straight colour over a pixel of a layer of straight
+/// colours and opacity (src over): the opacity becomes opacity + under's
+/// opacity × (255 − opacity) / 255, and each colour the two colours
+/// weighted by their shares of it. A clear pixel changes nothing, and an
+/// opaque one replaces the layer's.
+///
+/// @param[in,out] under the layer's pixel, red, green, blue and opacity
+/// @param colour the pixel laid over it, red, green and blue
+/// @param opacity the laid pixel's opacity, 0 clear to 255 opaque
+void lay_over_layer(uint8_t* under, const uint8_t* colour, uint32_t opacity) noexcept {
+    if (opacity == 0)
+        return;
+    // The share of the layer's own pixel that still shows, in 255ths of 255ths.
+    const uint32_t through = under[3] * (255U - opacity);
+    // The opacity of the two together, in 255ths of 255ths.
+    const uint32_t together = opacity * 255U + through;
+    for (std::size_t channel = 0; channel < 3U; ++channel)
+        under[channel] = static_cast<uint8_t>(
+            (colour[channel] * opacity * 255U + under[channel] * through + together / 2U) / together
+        );
+    under[3] = static_cast<uint8_t>((together + 127U) / 255U);
+}
+
+/// Returns the part of a drawing that holds what was drawn: the whole of an
+/// opaque one, and the smallest rectangle holding every pixel of one that is
+/// not opaque that is not clear.
+///
+/// @param drawing the drawing
+/// @return the rectangle, in the drawing's pixels; empty when nothing shows
+layout::Rect drawn_bounds(const LayerDrawing& drawing) {
+    const auto width = static_cast<int32_t>(drawing.picture.width);
+    const auto height = static_cast<int32_t>(drawing.picture.height);
+    if (drawing.opacity.empty())
+        return {0, 0, width, height};
+    int32_t left = width;
+    int32_t first_row = height;
+    int32_t right = 0;
+    int32_t bottom = 0;
+    for (int32_t row = 0; row < height; ++row) {
+        const uint8_t* line = drawing.opacity.data() +
+                              static_cast<std::size_t>(row) * static_cast<std::size_t>(width);
+        for (int32_t column = 0; column < width; ++column) {
+            if (line[column] == 0)
+                continue;
+            left = std::min(left, column);
+            right = std::max(right, column + 1);
+            first_row = std::min(first_row, row);
+            bottom = row + 1;
+        }
+    }
+    if (right <= left || bottom <= first_row)
+        return {};
+    return {left, first_row, right - left, bottom - first_row};
+}
+
 /// Copies a screen drawn in window pixels onto the front end's picture: each
 /// picture pixel the screen covers takes the screen's pixel at the picture
-/// pixel's centre in the window. Where the picture fills the window, pixel
-/// for pixel, that is the drawing copied at its place.
+/// pixel's centre in the window, or, for a screen that is not opaque, has it
+/// laid over it by its opacity. Where the picture fills the window, pixel
+/// for pixel, that is the drawing copied, or laid, at its place.
 ///
 /// @param[in,out] frame the picture
-/// @param drawn the screen's drawing, as large as its place
+/// @param drawing the screen's drawing, as large as its place
 /// @param shown where the screen shows, in window pixels
 /// @param view where the picture lies in the window
 void stamp_onto_picture(
     renderer::Surface& frame,
-    const renderer::Surface& drawn,
+    const LayerDrawing& drawing,
     const layout::Rect& shown,
     const LayerView& view
 ) {
+    const renderer::Surface& drawn = drawing.picture;
     if (drawn.width == 0 || drawn.height == 0 || empty_rect(shown))
         return;
+    const bool laid = !drawing.opacity.empty();
     const auto width = static_cast<int32_t>(frame.width);
     const auto height = static_cast<int32_t>(frame.height);
     // The window pixel under a picture pixel's centre, along one axis.
@@ -197,13 +281,16 @@ void stamp_onto_picture(
                 shown.x;
             if (source_column < 0 || source_column >= static_cast<int32_t>(drawn.width))
                 continue;
-            const auto* from =
-                drawn.rgb.data() + (static_cast<std::size_t>(source_row) * drawn.width +
-                                    static_cast<std::size_t>(source_column)) *
-                                       3U;
+            const std::size_t source = static_cast<std::size_t>(source_row) * drawn.width +
+                                       static_cast<std::size_t>(source_column);
+            const auto* from = drawn.rgb.data() + source * 3U;
             auto* to = frame.rgb.data() + (static_cast<std::size_t>(row) * frame.width +
                                            static_cast<std::size_t>(column)) *
                                               3U;
+            if (laid) {
+                lay_over_picture(to, from, drawing.opacity[source]);
+                continue;
+            }
             to[0] = from[0];
             to[1] = from[1];
             to[2] = from[2];
@@ -218,6 +305,15 @@ void stamp_onto_picture(
 /// @return true when their sizes and pixels are the same
 bool same_picture(const renderer::Surface& first, const renderer::Surface& second) {
     return first.width == second.width && first.height == second.height && first.rgb == second.rgb;
+}
+
+/// Tells whether two drawings hold the same pixels and opacity.
+///
+/// @param first a drawing
+/// @param second another
+/// @return true when their pictures and opacity are the same
+bool same_drawing(const LayerDrawing& first, const LayerDrawing& second) {
+    return same_picture(first.picture, second.picture) && first.opacity == second.opacity;
 }
 
 /// Darkens a picture once for each modal screen with a backdrop over it:
@@ -615,14 +711,18 @@ struct Runtime::SettingsScreen final : LayerScreen {
         return take_action(action);
     }
 
-    /// Takes a key's press.
+    /// Takes a key's press. The dialog has nothing more to tell of its
+    /// controls, so the information key goes on, which under the modal
+    /// dialog does nothing.
     ///
     /// @param pressed the key
-    /// @return what the dialog did
+    /// @return what the dialog did; pass for the information key
     LayerAnswer key(kit::Key pressed, uint32_t /*sdl_key*/) override {
         auto* dialog = runtime_.engine_settings_dialog();
         if (dialog == nullptr)
             return LayerAnswer::close;
+        if (pressed == kit::Key::info)
+            return LayerAnswer::pass;
         return take_action(settings::dialog_key(*dialog, pressed));
     }
 
@@ -1014,7 +1114,7 @@ WindowPosition window_position(const LayerView& view, float x, float y) noexcept
     };
 }
 
-std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept {
+std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers, bool in_match) noexcept {
     switch (sdl_key) {
     case SDLK_RETURN:
         return kit::Key::enter;
@@ -1048,6 +1148,11 @@ std::optional<kit::Key> layer_key(uint32_t sdl_key, uint16_t modifiers) noexcept
         return kit::Key::backspace;
     case SDLK_DELETE:
         return kit::Key::delete_forward;
+    case SDLK_F1:
+        // In a match F1 is the game's unit information.
+        if (in_match)
+            return std::nullopt;
+        return kit::Key::info;
     default:
         return std::nullopt;
     }
@@ -1330,7 +1435,7 @@ std::vector<uint32_t> OaLayer::backdrops_above(const LayerView& seen) const {
     for (std::size_t index = screens_.size(); index > 0; --index) {
         above[index - 1] = darkening;
         const auto& screen = *screens_[index - 1];
-        if (screen.modal() && screen.backdrop() && !empty_rect(screen.placement(seen).shown))
+        if (darkens(screen) && !empty_rect(screen.placement(seen).shown))
             ++darkening;
     }
     return above;
@@ -1421,7 +1526,7 @@ OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInpu
     case ScreenInputKind::wheel:
         return screen.wheel(point, input.wheel_y);
     case ScreenInputKind::key_down:
-        if (const auto pressed = layer_key(input.key, input.modifiers))
+        if (const auto pressed = layer_key(input.key, input.modifiers, seen.match))
             return screen.key(*pressed, input.key);
         return LayerAnswer::pass;
     case ScreenInputKind::text:
@@ -1619,23 +1724,53 @@ void OaLayer::sync_text_input() {
     }
 }
 
-renderer::Surface
+LayerDrawing
 OaLayer::draw_screen(const LayerScreen& screen, const LayerPlacement& placed, int32_t scale) const {
     // At the scale itself: never drawn at 1× and enlarged.
     const int32_t whole = std::max(scale, int32_t{1});
-    renderer::Surface drawn;
+    LayerDrawing drawing;
+    renderer::Surface& drawn = drawing.picture;
     drawn.width = static_cast<uint32_t>(std::max(placed.points_width, 0) * whole);
     drawn.height = static_cast<uint32_t>(std::max(placed.points_height, 0) * whole);
     drawn.rgb.assign(static_cast<std::size_t>(drawn.width) * drawn.height * 3U, 0);
     if (drawn.rgb.empty())
-        return drawn;
+        return drawing;
     kit::Canvas canvas{};
     canvas.surface = &drawn;
     canvas.placement = {0, 0, whole};
     canvas.fonts = runtime_.engine_settings_fonts();
     canvas.icon = runtime_.engine_settings_icon();
     screen.draw(canvas);
-    return drawn;
+    if (screen.opaque())
+        return drawing;
+    // A surface cleared to clear: what the screen draws over white tells
+    // how much of what lies under each pixel it leaves showing.
+    renderer::Surface over_white;
+    over_white.width = drawn.width;
+    over_white.height = drawn.height;
+    over_white.rgb.assign(drawn.rgb.size(), 255U);
+    canvas.surface = &over_white;
+    screen.draw(canvas);
+    const std::size_t pixels = static_cast<std::size_t>(drawn.width) * drawn.height;
+    drawing.opacity.assign(pixels, 0);
+    for (std::size_t pixel = 0; pixel < pixels; ++pixel) {
+        uint8_t* colour = drawn.rgb.data() + pixel * 3U;
+        const uint8_t* white = over_white.rgb.data() + pixel * 3U;
+        int32_t through = 0;
+        for (std::size_t channel = 0; channel < 3U; ++channel)
+            through = std::max(through, int32_t{white[channel]} - int32_t{colour[channel]});
+        const auto opacity = static_cast<uint32_t>(255 - std::clamp(through, 0, 255));
+        drawing.opacity[pixel] = static_cast<uint8_t>(opacity);
+        // Straight colours: the colour over black is the colour times its
+        // opacity; a clear pixel keeps none.
+        for (std::size_t channel = 0; channel < 3U; ++channel)
+            colour[channel] =
+                opacity == 0 ? uint8_t{0}
+                             : static_cast<uint8_t>(
+                                   std::min(255U, (colour[channel] * 255U + opacity / 2U) / opacity)
+                               );
+    }
+    return drawing;
 }
 
 void OaLayer::darken_front_end(renderer::Surface& frame) const {
@@ -1644,8 +1779,7 @@ void OaLayer::darken_front_end(renderer::Surface& frame) const {
         return;
     const auto darkenings =
         std::count_if(screens_.begin(), screens_.end(), [&seen](const auto& screen) {
-            return screen->modal() && screen->backdrop() &&
-                   !empty_rect(screen->placement(seen).shown);
+            return darkens(*screen) && !empty_rect(screen->placement(seen).shown);
         });
     // A blend of the frame itself, in 256ths, for each: the same picture the
     // window shows at every size.
@@ -1665,8 +1799,8 @@ void OaLayer::compose_front_end(renderer::Surface& frame) const {
             continue;
         // A screen under a modal screen with a backdrop darkens with what
         // lies under it.
-        renderer::Surface drawn = draw_screen(screen, placed, seen.scale);
-        darken(drawn, above[index], kit::menu_backdrop_opacity);
+        LayerDrawing drawn = draw_screen(screen, placed, seen.scale);
+        darken(drawn.picture, above[index], kit::menu_backdrop_opacity);
         stamp_onto_picture(frame, drawn, placed.shown, seen);
     }
 }
@@ -1709,18 +1843,29 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
             continue;
-        if (screen.modal() && screen.backdrop())
+        if (darkens(screen))
             ++darkenings;
         // The part of its place the window shows.
         const layout::Rect window = intersection(placed.shown, output);
         if (empty_rect(window))
             continue;
         FrontPiece piece{};
-        piece.window = window;
         piece.shown = placed.shown;
         // Drawn at the view's scale, as large as its place.
         piece.drawn = draw_screen(screen, placed, seen.scale);
-        darken(piece.drawn, above[index], kit::menu_backdrop_opacity);
+        // Of a screen that is not opaque, only the part that holds what it
+        // drew: the rest is clear.
+        const layout::Rect drawn_part = drawn_bounds(piece.drawn);
+        piece.window = intersection(
+            window,
+            {placed.shown.x + drawn_part.x,
+             placed.shown.y + drawn_part.y,
+             drawn_part.width,
+             drawn_part.height}
+        );
+        if (empty_rect(piece.window))
+            continue;
+        darken(piece.drawn.picture, above[index], kit::menu_backdrop_opacity);
         bounds = union_rect(bounds, piece.window);
         look.pieces.push_back(std::move(piece));
     }
@@ -1787,7 +1932,7 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
             const auto& was = held.pieces[index];
             const auto& now = look.pieces[index];
             if (!same_rect(was.window, now.window) || !same_rect(was.shown, now.shown) ||
-                !same_picture(was.drawn, now.drawn))
+                !same_drawing(was.drawn, now.drawn))
                 return false;
         }
         return true;
@@ -1797,20 +1942,33 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
         std::vector<uint8_t> rgba(
             static_cast<std::size_t>(bounds.width) * static_cast<std::size_t>(bounds.height) * 4U, 0
         );
-        // Each piece's pixels as drawn, one window pixel each.
+        // Each piece's pixels as drawn, one window pixel each, bottom first:
+        // an opaque screen's copied, fully opaque; one that is not opaque
+        // laid over what is already there (src over, straight colours).
         for (const auto& piece : look.pieces) {
+            const renderer::Surface& drawn = piece.drawn.picture;
+            const bool laid = !piece.drawn.opacity.empty();
             const int32_t first_column = piece.window.x - piece.shown.x;
             for (int32_t row = 0; row < piece.window.height; ++row) {
                 const auto source_row =
                     static_cast<std::size_t>(piece.window.y + row - piece.shown.y);
-                const auto* from =
-                    piece.drawn.rgb.data() +
-                    (source_row * piece.drawn.width + static_cast<std::size_t>(first_column)) * 3U;
+                const std::size_t first =
+                    source_row * drawn.width + static_cast<std::size_t>(first_column);
+                const auto* from = drawn.rgb.data() + first * 3U;
                 auto* to =
                     rgba.data() + (static_cast<std::size_t>(piece.window.y + row - bounds.y) *
                                        static_cast<std::size_t>(bounds.width) +
                                    static_cast<std::size_t>(piece.window.x - bounds.x)) *
                                       4U;
+                if (laid) {
+                    const uint8_t* opacity = piece.drawn.opacity.data() + first;
+                    for (int32_t column = 0; column < piece.window.width; ++column) {
+                        lay_over_layer(to, from, opacity[column]);
+                        from += 3;
+                        to += 4;
+                    }
+                    continue;
+                }
                 for (int32_t column = 0; column < piece.window.width; ++column) {
                     to[0] = from[0];
                     to[1] = from[1];
@@ -1961,9 +2119,14 @@ void OaLayer::stamp(
     int32_t width,
     int32_t height,
     const renderer::Surface& source,
-    const layout::Rect& rect
+    const layout::Rect& rect,
+    std::span<const uint8_t> opacity
 ) {
     if (source.width == 0 || source.height == 0 || rect.width <= 0 || rect.height <= 0)
+        return;
+    const std::size_t source_pixels = static_cast<std::size_t>(source.width) * source.height;
+    const bool laid = !opacity.empty();
+    if (laid && opacity.size() < source_pixels)
         return;
     const int32_t first_row = std::max(rect.y, 0);
     const int32_t bottom = std::min(rect.y + rect.height, height);
@@ -1977,11 +2140,16 @@ void OaLayer::stamp(
             const auto source_column = static_cast<std::size_t>(
                 static_cast<int64_t>(column - rect.x) * source.width / rect.width
             );
-            const auto* from = source.rgb.data() + (source_row * source.width + source_column) * 3U;
+            const std::size_t at = source_row * source.width + source_column;
+            const auto* from = source.rgb.data() + at * 3U;
             auto* to =
                 rgba.data() + (static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
                                static_cast<std::size_t>(column)) *
                                   4U;
+            if (laid) {
+                lay_over_layer(to, from, opacity[at]);
+                continue;
+            }
             to[0] = from[0];
             to[1] = from[1];
             to[2] = from[2];
@@ -2034,7 +2202,7 @@ bool OaLayer::refresh_match() {
             {placed.shown.x, placed.shown.y, placed.shown.width, placed.shown.height}
         );
         look.revisions.push_back(screen.revision());
-        look.darkened = look.darkened || (screen.modal() && screen.backdrop());
+        look.darkened = look.darkened || darkens(screen);
     }
     if (drawn_ == look)
         return true;
@@ -2064,10 +2232,11 @@ bool OaLayer::refresh_match() {
     stamp(rgba_, look.width, look.height, button, button_at);
     for (const auto& shown : shown_screens) {
         // A screen under a modal screen with a backdrop darkens as the
-        // button does.
-        renderer::Surface drawn = draw_screen(*shown.screen, shown.placed, 1);
-        darken(drawn, shown.darkenings, settings::ingame_backdrop_opacity);
-        stamp(rgba_, look.width, look.height, drawn, shown.placed.shown);
+        // button does; one that is not opaque is laid over what is already
+        // there by its opacity.
+        LayerDrawing drawn = draw_screen(*shown.screen, shown.placed, 1);
+        darken(drawn.picture, shown.darkenings, settings::ingame_backdrop_opacity);
+        stamp(rgba_, look.width, look.height, drawn.picture, shown.placed.shown, drawn.opacity);
         bounds_ = union_rect(bounds_, shown.placed.shown);
     }
     drawn_ = look;
