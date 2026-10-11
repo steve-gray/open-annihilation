@@ -10,7 +10,7 @@
 # check (engine_settings/challenge.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
   src/developer.cpp src/mods.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
-  src/settings_rows.cpp)
+  src/registered.cpp src/settings_rows.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)

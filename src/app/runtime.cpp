@@ -369,6 +369,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_registered_kit) {
+            check_registered_kit();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_user_folder) {
             check_user_folder();
             flush_preferences();
