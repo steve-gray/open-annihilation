@@ -667,6 +667,13 @@ class OaLayer {
     /// to a screen's model from outside its events.
     void redraw() noexcept { ++revision_; }
 
+    /// Lays every screen out again for the size in effect.
+    ///
+    /// A size chosen in Settings applies before the next input, so the open
+    /// dialog and every OA screen are drawn at it on this frame. The layer
+    /// also lays them out as it takes input and as it ticks.
+    void lay_out_for_size();
+
     /// Asks for the window's read-back (the frame a check captures as it is
     /// presented) to hold the whole window on the front end, the letterbox
     /// round the picture with it, rather than the picture's area alone: what

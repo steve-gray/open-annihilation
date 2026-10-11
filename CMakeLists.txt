@@ -978,6 +978,13 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/folder_chooser_screen.cpp src/app/window_pixels.cpp src/app/runtime_found_install.cpp
   src/app/simulation_hash.cpp
   src/app/presence_facts.cpp)
+# The macOS window's live content size. A resize a full-screen change skipped
+# is still the size the player sees; other systems take the size SDL reports.
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  enable_language(OBJCXX)
+  list(APPEND oa_game_sources src/app/window_live_size.mm)
+  set_source_files_properties(src/app/window_live_size.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()
 # The self-checks: the --check-* options with which the game drives itself
 # through its screens and orders and reports a verdict, for the native
 # checks. OA_SELF_CHECKS=OFF leaves them out, as the release packages do.
@@ -1143,6 +1150,11 @@ if(OA_BUILD_PLATFORM)
   if(WIN32)
     # The shell's open verb shows the player's folders (user_folder_open.cpp).
     target_link_libraries(oa-game PRIVATE shell32 ole32)
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # window_live_size.mm reads the window the player sees.
+    set_target_properties(oa-game PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
+    target_link_libraries(oa-game PRIVATE "-framework AppKit")
   endif()
   if(BUILD_TESTING)
     # The native checks run oa-game over the installation OA_GAME_DIR names;

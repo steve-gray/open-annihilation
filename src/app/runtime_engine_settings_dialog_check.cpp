@@ -2088,12 +2088,11 @@ void Runtime::check_engine_settings_window_sizes() {
                 click_part(find_part(parts_now, control, text), what);
             };
         // Interface size, chosen through its drop-down at Graphics' end: it
-        // holds until OK, then the dialog opens again at the class and scale
-        // it gives, drawn as the dialog drawn at that class and scale.
+        // takes effect as it is chosen, the dialog staying open at the class
+        // and scale it gives. OK stores it, and the dialog opens again drawn
+        // as the dialog drawn at that class and scale.
         for (const InterfaceSizeStep& size_step : kInterfaceSizeSteps) {
             const std::string chosen_size = "Interface size " + std::string(size_step.caption) + on;
-            const auto opened_class = oa_layer().screen_class();
-            const int32_t opened_scale = oa_layer().screen_scale();
             // The shortcut opens the dialog; the OA button opens the Library.
             tap(SDLK_COMMA, kShortcutModifier);
             auto* sized = engine_settings_dialog();
@@ -2122,11 +2121,14 @@ void Runtime::check_engine_settings_window_sizes() {
                     sized->open_list == settings::no_control,
                 "a click on " + chosen_size + " did not choose it"
             );
-            // Not before OK: the dialog keeps the class and scale it opened at.
+            // As it is chosen, before OK: the dialog redraws at the class and
+            // scale the size gives, and stays open.
             require(
-                oa_layer().screen_class() == opened_class &&
-                    oa_layer().screen_scale() == opened_scale && sized->size_class == opened_class,
-                chosen_size + " took effect before OK"
+                engine_settings_dialog() == sized &&
+                    oa_layer().screen_class() == size_step.size_class &&
+                    oa_layer().screen_scale() == size_step.scale &&
+                    sized->size_class == size_step.size_class,
+                chosen_size + " did not take effect as it was chosen"
             );
             click_control(settings::ok_control, "OK", "OK");
             require(
@@ -2180,6 +2182,67 @@ void Runtime::check_engine_settings_window_sizes() {
                           << " on the " << size << " window is "
                           << size_class_name(size_step.size_class) << ", " << size_step.scale
                           << "x\n";
+        }
+
+        // Choosing a size redraws at once and leaves the dialog on Graphics,
+        // its scroll as near as the new size allows, and the focus on
+        // Interface size. Escape puts back the size the dialog opened with.
+        // The preference stays as it was until OK.
+        {
+            const std::string chosen_now = "Interface size 100%" + on;
+            tap(SDLK_COMMA, kShortcutModifier);
+            auto* sized = engine_settings_dialog();
+            require(sized != nullptr, "the shortcut did not open the dialog" + on);
+            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+            tap(SDLK_END);
+            const int32_t size_row =
+                settings::first_row_control +
+                static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+            for (int press = 0; press < 64 && sized->focused != size_row; ++press)
+                tap(SDLK_DOWN);
+            require(sized->focused == size_row, "Interface size's row did not take the focus" + on);
+            const auto scroll_index = static_cast<std::size_t>(settings::Page::graphics);
+            const int32_t scroll_before = sized->scroll[scroll_index];
+            const auto stored_before =
+                preference_values_.find(std::string(settings::key::interface_size));
+            const std::string preference_before =
+                stored_before == preference_values_.end() ? std::string{} : stored_before->second;
+            tap(SDLK_RIGHT);
+            const int32_t limit_now = settings::scroll_limit(*sized);
+            const int32_t shown_scroll =
+                std::clamp(sized->scroll[scroll_index], int32_t{0}, limit_now);
+            const auto stored_now =
+                preference_values_.find(std::string(settings::key::interface_size));
+            const std::string preference_now =
+                stored_now == preference_values_.end() ? std::string{} : stored_now->second;
+            require(
+                engine_settings_dialog() == sized && sized->page == settings::Page::graphics &&
+                    sized->focused == size_row &&
+                    sized->chosen.interface_size == settings::InterfaceSize::size_100 &&
+                    engine_settings().interface_size == settings::InterfaceSize::size_100 &&
+                    oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&
+                    oa_layer().screen_scale() == 1 &&
+                    sized->size_class == oa::ui::kit::SizeClass::large &&
+                    (sized->scroll[scroll_index] == scroll_before ||
+                     shown_scroll == std::min(scroll_before, limit_now)) &&
+                    preference_now == preference_before,
+                chosen_now + " did not take effect at once on its row"
+            );
+            tap(SDLK_ESCAPE);
+            const auto stored_after =
+                preference_values_.find(std::string(settings::key::interface_size));
+            const std::string preference_after =
+                stored_after == preference_values_.end() ? std::string{} : stored_after->second;
+            require(
+                engine_settings_dialog() == nullptr &&
+                    engine_settings().interface_size == settings::InterfaceSize::automatic &&
+                    oa_layer().screen_class() == expected_layout.size_class &&
+                    oa_layer().screen_scale() == expected_layout.scale &&
+                    preference_after == preference_before,
+                "Escape did not put Interface size back" + on
+            );
+            std::cout << "engine settings check: Interface size 100% on the " << size
+                      << " window takes effect as it is chosen, and Escape puts Auto back\n";
         }
 
         // 150%, which the drop-down offers only with Use modern fonts for
@@ -2241,8 +2304,11 @@ void Runtime::check_engine_settings_window_sizes() {
             "a click on " + fractional + " did not choose it"
         );
         require(
-            oa_layer().screen_scale_percent() == expected_layout.scale * 100,
-            fractional + " took effect before OK"
+            engine_settings_dialog() == fraction_dialog &&
+                oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&
+                oa_layer().screen_scale_percent() == oa::ui::kit::fractional_scale_percent &&
+                fraction_dialog->size_class == oa::ui::kit::SizeClass::large,
+            fractional + " did not take effect as it was chosen"
         );
         click_control(settings::ok_control, "OK", "OK");
         require(

@@ -658,6 +658,12 @@ void Runtime::take_video_capture(std::unique_ptr<VideoCapture> capture) {
 }
 
 void Runtime::run_frame(bool& running) {
+    // A size the window reached without a resize is delivered before this
+    // frame's events, so the events and the frame use the window on screen.
+    // A headless check and a director lay the match out at a size of their
+    // own; the window must not replace it.
+    if (!options_.headless_check && director_ == nullptr)
+        sync_live_window_size();
     begin_loop_frame();
     SDL_Event event{};
     while (SDL_PollEvent(&event))

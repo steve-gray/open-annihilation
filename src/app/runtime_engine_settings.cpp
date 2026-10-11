@@ -1526,16 +1526,16 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         }
         take_renderer_retry(*dialog);
         {
-            // A Screen size moved to and an Interface size chosen apply when
-            // OK is pressed; until then each stays as it was, so the dialog
-            // keeps its size while it is open.
+            // A Screen size moved to applies when OK is pressed; until then
+            // it stays as it was. The check for content updates does too.
+            // An Interface size applies as it is chosen, and the open dialog
+            // and every OA screen are laid out at it. Cancel puts back the
+            // size the dialog opened with.
             settings::EngineSettings live = dialog->chosen;
             live.screen_size = dialog->opened.screen_size;
-            // The check for content updates and an Interface size take effect
-            // at OK, as Screen size does.
             live.content_check = dialog->opened.content_check;
-            live.interface_size = dialog->opened.interface_size;
             apply_engine_settings(live);
+            oa_layer().lay_out_for_size();
         }
         return false;
     case settings::DialogAction::accepted:
