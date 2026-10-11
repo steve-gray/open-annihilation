@@ -2339,6 +2339,84 @@ void check_player_row_focus(Driver& d) {
         pixel_at(d, kirby_box.x - 1, kirby_box.y) == ring_before,
         "with the focus back on the chat line the row's focus marker is gone"
     );
+
+    // Return and the pad's A are the information key on a focused row.
+    mp::PresenceCardTrigger row_key;
+
+    struct RowKeyGuard {
+        ~RowKeyGuard() { mp::multiplayer_bind_row_key(nullptr); }
+    } row_key_guard;
+
+    mp::multiplayer_bind_row_key(&row_key);
+    const auto kirby_status = mp::slot_player(lobby, kirby).status;
+    const auto kirby_used = mp::slot_player(lobby, kirby).in_use;
+    const auto kirby_id = mp::slot_player(lobby, kirby).player_id;
+    const auto mira_status = mp::slot_player(lobby, mira).status;
+    const auto classic_status = mp::slot_player(lobby, classic).status;
+    const auto sent_at_keys = mp::multiplayer_loopback().sent_count;
+    expect(tab_until_slot(d, classic), "the row with no badge is focused for Return");
+    d.key(kKeyReturn);
+    expect(
+        row_key.open_slot() == mp::presence_card_no_slot &&
+            mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, classic).status == classic_status &&
+            mp::multiplayer_loopback().sent_count == sent_at_keys,
+        "Return on a focused row with no OA badge does nothing and sends nothing"
+    );
+    expect(tab_until_slot(d, kirby), "the first OA row is focused for Return");
+    d.key(kKeyReturn);
+    expect(
+        row_key.open_slot() == kirby && mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, kirby).status == kirby_status &&
+            mp::slot_player(lobby, kirby).in_use == kirby_used &&
+            mp::slot_player(lobby, kirby).player_id == kirby_id &&
+            mp::slot_player(lobby, mira).status == mira_status &&
+            mp::multiplayer_loopback().sent_count == sent_at_keys,
+        "Return on a focused OA row opens its card and does not reject the player"
+    );
+
+    int32_t computer = -1;
+    for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
+        if (mp::slot_player(lobby, slot).status == mp::kSlotOpen) {
+            computer = slot;
+            break;
+        }
+    }
+    expect(computer >= 0, "an open slot can hold an AI");
+    if (computer >= 0) {
+        mp::lobby_add_computer(lobby, computer);
+        d.frame();
+        const auto sent_at_ai = mp::multiplayer_loopback().sent_count;
+        const auto ai_status = mp::slot_player(lobby, computer).status;
+        expect(
+            tab_until_slot(d, computer) && ai_status == mp::kSlotComputer,
+            "the AI's row can take the focus"
+        );
+        d.key(kKeyReturn);
+        expect(
+            row_key.open_slot() == kirby &&
+                mp::slot_player(lobby, computer).status == mp::kSlotComputer &&
+                mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+                mp::multiplayer_loopback().sent_count == sent_at_ai,
+            "Return on a focused AI row does not cycle it, close the card or send anything"
+        );
+    }
+
+    const auto rejects_before = rejects_sent();
+    expect(tab_until_slot(d, kirby), "the OA row is focused again before the click");
+    expect(d.click(("PLAYER" + std::to_string(kirby)).c_str()), "the host clicks that row");
+    expect(
+        mp::multiplayer_modal_kind() == mp::ModalKind::confirm &&
+            mp::slot_for_player_id(lobby, kirby_id) == kirby && rejects_sent() == rejects_before,
+        "a click on the row still asks before rejecting, and sends no reject"
+    );
+    expect(d.click("CHOICE2"), "the question is declined");
+    expect(
+        mp::multiplayer_modal_kind() == mp::ModalKind::none &&
+            mp::slot_player(lobby, kirby).player_id == kirby_id &&
+            mp::slot_player(lobby, kirby).status == kirby_status,
+        "declining the question leaves the player in the room"
+    );
 }
 
 } // namespace

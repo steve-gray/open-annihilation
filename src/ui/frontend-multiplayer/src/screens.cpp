@@ -3,6 +3,7 @@
 
 // Multiplayer screens: resources, input routing, dialogs and drawing.
 #include "oa/ui/frontend_multiplayer/screens.hpp"
+#include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/decoded.hpp"
 
 #include "oa/base/game_loop.hpp"
@@ -3262,6 +3263,10 @@ bool battle_room_keys() noexcept {
     return state.screen == kScreenBattleroom && state.base.loaded && &front() == &state.base;
 }
 
+/// The card trigger Return and the pad's A use while a remote row is focused.
+/// The presence card screen binds its own; null opens no card.
+PresenceCardTrigger* row_key_trigger = nullptr;
+
 } // namespace
 
 int screen_event(ScreenContext* ctx, void*) {
@@ -3360,7 +3365,27 @@ int screen_event(ScreenContext* ctx, void*) {
             }
             return 1;
         }
-        if (input->key == kSdlKeyReturn && panel.focus > 0 && panel.focus < panel.count) {
+        if (input->key == kSdlKeyReturn && focus_valid) {
+            // A focused remote row takes Return and the pad's A as the
+            // information key. The card opens when that row shows an OA
+            // badge, and nothing happens otherwise. The row is not pressed,
+            // so a player is not rejected and an AI is not cycled. A click
+            // on the row still presses it.
+            const auto& focused = panel.controls[static_cast<std::size_t>(panel.focus)];
+            if (battle_room_keys() && focusable_player_row(state.lobby, focused)) {
+                if (row_key_trigger != nullptr) {
+                    const int32_t slot = player_row_slot(control_name(focused));
+                    PresenceBadgeSpot spots[kSlotCount]{};
+                    const auto count = multiplayer_presence_badges(spots, kSlotCount);
+                    for (int32_t index = 0; index < count; ++index) {
+                        if (spots[static_cast<std::size_t>(index)].slot == slot) {
+                            row_key_trigger->key_info(slot);
+                            break;
+                        }
+                    }
+                }
+                return 1;
+            }
             if (panel_press(panel, panel.focus))
                 dispatch(ctx);
             return 1;
@@ -3777,6 +3802,10 @@ void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
     state.map = -1;
     clear_pack_refusal();
     state.pack_prepared = false;
+}
+
+void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept {
+    row_key_trigger = trigger;
 }
 
 void multiplayer_reset() noexcept {
