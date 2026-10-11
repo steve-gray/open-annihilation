@@ -666,13 +666,15 @@ std::string sides_text(const MapCard& card) {
     return card.size;
 }
 
-/// Returns the line under a card's title: "<players> · <W>×<H>".
+/// Returns the line under a card's title: the most players it is for, then
+/// "<W>×<H>".
 ///
 /// @param card the card
 /// @return the line
 std::string card_line(const MapCard& card) {
     return ids::filled(
-        word_card_line, {{"players", std::to_string(card.players)}, {"size", sides_text(card)}}
+        word_card_line,
+        {{"players", std::to_string(shown_players(card))}, {"size", sides_text(card)}}
     );
 }
 
@@ -822,7 +824,7 @@ std::string download_text(uint64_t bytes) {
 }
 
 /// Returns the selected map's details line: its pack and version, its
-/// registry, its players, its size and, online, its download.
+/// registry, the most players it is for, its size and, online, its download.
 ///
 /// @param card the card
 /// @return the line
@@ -839,10 +841,10 @@ std::string details_line(const MapCard& card) {
         if (!card.registry_name.empty())
             parts.push_back(card.registry_name);
     }
+    const int32_t players = shown_players(card);
     parts.push_back(
-        card.players == 1
-            ? ids::word(word_players_one)
-            : ids::filled(word_players_many, {{"count", std::to_string(card.players)}})
+        players == 1 ? ids::word(word_players_one)
+                     : ids::filled(word_players_many, {{"count", std::to_string(players)}})
     );
     parts.push_back(sides_text(card));
     if (card.origin == MapCard::Origin::online && card.download_bytes != 0)

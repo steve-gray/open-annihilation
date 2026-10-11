@@ -35,7 +35,12 @@ struct MapCard {
     /// base map, the preview file for an installed pack, the picture's
     /// address for an online one. Empty when the map has no picture.
     std::string preview_key{};
-    int32_t players{};         ///< the most players the map takes
+    /// The counts the map is for, sorted, without repeats. A base map keeps
+    /// each count its numplayers lists, from 2 to most_players. A pack map
+    /// keeps its manifest's players as its one count. Empty when only
+    /// players is set, which is then that one count.
+    std::vector<int32_t> player_counts{};
+    int32_t players{};         ///< the most players the map takes: the largest count
     uint64_t download_bytes{}; ///< the pack's size, in bytes, for a map online; 0 otherwise
     /// Where the map is.
     enum class Origin : uint8_t {
@@ -63,7 +68,8 @@ struct Filters {
         online,    ///< those online, not installed
     } source{};
     /// The player chips that are on: 2, 3 and 4, and many_players_chip for
-    /// 5–10. A map shows when any of them matches it; none on shows every map.
+    /// 5–10. A map shows when any of them is among its counts; none on shows
+    /// every map.
     std::set<int32_t> players{};
     /// The size chips that are on: 'S', 'M' and 'L'. A map shows when any of
     /// them matches it; none on shows every map.
@@ -133,13 +139,47 @@ merge_cards(std::vector<MapCard> base, std::vector<MapCard> installed, std::vect
 /// @return the chip's letter; none when the size cannot be read
 [[nodiscard]] std::optional<char> size_letter(std::string_view size) noexcept;
 
-/// Tells whether a players chip matches a map: 2, 3 and 4 a map whose most
-/// players is that number, many_players_chip one for 5 to most_players.
+/// The player counts a base map keeps, and the most of them.
+struct BaseMapPlayers {
+    /// Each count the map is for. Those its numplayers lists, each from 2 to
+    /// most_players, sorted and without repeats; or, when that lists none,
+    /// the start-position count alone, which may lie outside that range.
+    std::vector<int32_t> counts{};
+    int32_t players{}; ///< the most players: the largest count
+    /// True when counts came from numplayers. False when they are the
+    /// start-position count alone.
+    bool from_numplayers{};
+};
+
+/// Returns the player counts a base map keeps.
+///
+/// `numplayers` is the map's list, as "2, 4". Each whole number from 2 to
+/// most_players is kept, sorted, without repeats, and players is the
+/// largest. A number outside that range is left out. When the list is
+/// missing or holds no such number, the map keeps `start_positions` alone:
+/// the most start positions of a network schema, which is not read here.
+///
+/// @param numplayers the map's list; empty when it states none
+/// @param start_positions the most start positions of a network schema
+/// @return the counts, the most players, and whether numplayers named them
+[[nodiscard]] BaseMapPlayers base_map_players(std::string_view numplayers, int32_t start_positions);
+
+/// Returns the most players a card shows: the largest of its counts, or
+/// players when it lists none.
+///
+/// @param card the card
+/// @return the count the card and its details read
+[[nodiscard]] int32_t shown_players(const MapCard& card) noexcept;
+
+/// Tells whether a players chip matches a map. 2, 3 and 4 match when that
+/// count is among the map's; many_players_chip matches when any count is
+/// from 5 to most_players. A map that lists no counts is matched on
+/// players alone.
 ///
 /// @param chip the chip
-/// @param players the map's most players
+/// @param card the map
 /// @return true when it matches
-[[nodiscard]] bool players_match(int32_t chip, int32_t players) noexcept;
+[[nodiscard]] bool players_match(int32_t chip, const MapCard& card) noexcept;
 
 /// Tells whether a search matches a card: its title, name or pack name
 /// holds the query, ignoring ASCII case. An empty query matches.
@@ -150,9 +190,10 @@ merge_cards(std::vector<MapCard> base, std::vector<MapCard> installed, std::vect
 [[nodiscard]] bool query_matches(const MapCard& card, std::string_view query);
 
 /// Fills what shows from the cards and the filters: the cards that match
-/// the source, any player chip on, any size chip on and the search; the base
-/// maps first, then the installed, then those online, each by title ignoring
-/// ASCII case, then by name. A selection that no longer shows is cleared.
+/// the source, any player chip on (a count the map is for), any size chip
+/// on and the search; the base maps first, then the installed, then those
+/// online, each by title ignoring ASCII case, then by name. A selection
+/// that no longer shows is cleared.
 ///
 /// @param[in,out] browser the browser; its shown and selected change
 void apply_filters(Browser& browser);

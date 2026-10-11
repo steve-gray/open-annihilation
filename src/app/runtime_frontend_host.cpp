@@ -8,6 +8,7 @@
 #include "oa/app/mod_profile_loader.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/ui/decoded.hpp"
+#include "oa/ui/map_browser/model.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/campaign/campaign_assets.hpp"
@@ -458,14 +459,27 @@ void Runtime::remember_base_map(const char* name, const oa::formats::tdf::Docume
         summary.description = description;
     if (const char* size = oa::formats::tdf::find_value(header, "size"))
         summary.size = size;
-    int32_t players = 0;
-    for (uint32_t index = 0; index < oa::formats::tdf::child_count(header); ++index) {
-        const auto* schema = oa::formats::tdf::child_at(header, index);
-        if (!network_schema(oa::formats::tdf::find_value(schema, "type")))
-            continue;
-        players = std::max(players, start_positions(schema));
+    // A map that names its counts is not measured by its start positions.
+    const char* listed = oa::formats::tdf::find_value(header, "numplayers");
+    const oa::ui::map_browser::BaseMapPlayers named = oa::ui::map_browser::base_map_players(
+        listed != nullptr ? std::string_view{listed} : std::string_view{}, 0
+    );
+    if (named.from_numplayers) {
+        summary.player_counts = named.counts;
+        summary.players = named.players;
+    } else {
+        int32_t starts = 0;
+        for (uint32_t index = 0; index < oa::formats::tdf::child_count(header); ++index) {
+            const auto* schema = oa::formats::tdf::child_at(header, index);
+            if (!network_schema(oa::formats::tdf::find_value(schema, "type")))
+                continue;
+            starts = std::max(starts, start_positions(schema));
+        }
+        const oa::ui::map_browser::BaseMapPlayers kept =
+            oa::ui::map_browser::base_map_players({}, starts);
+        summary.player_counts = kept.counts;
+        summary.players = kept.players;
     }
-    summary.players = players;
     summary.memory_mb = oa::ui::frontend_multiplayer::map_memory_mb(
         static_cast<int32_t>(assets_.file_size("maps/" + summary.name + ".tnt"))
     );

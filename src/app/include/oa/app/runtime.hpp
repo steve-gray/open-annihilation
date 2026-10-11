@@ -13220,7 +13220,9 @@ class Runtime final : public menu::Host,
     init::MapListHandle construct(init::MapListHandle handle, int32_t selector_value) override;
 
     /// Records one base map the start scan listed: its title, description, size,
-    /// the most start positions of a network schema, and the memory its terrain needs.
+    /// the player counts its numplayers lists (or, when that lists none, the
+    /// most start positions of a network schema, alone), and the memory its
+    /// terrain needs.
     ///
     /// @param name the map's name
     /// @param ota the map's parsed document; null records the name alone
@@ -14045,8 +14047,12 @@ class Runtime final : public menu::Host,
         std::string title;       ///< the map's mission name
         std::string description; ///< the map's mission description
         std::string size;        ///< the map's width and height, as its file states it
-        int32_t players{};       ///< the most start positions of a network schema
-        int32_t memory_mb{};     ///< memory the map's terrain needs, in MB
+        /// The player counts the map is for, sorted and without repeats: each
+        /// count its numplayers lists, from 2 to 10. When that lists none, the
+        /// most start positions of a network schema, alone.
+        std::vector<int32_t> player_counts{};
+        int32_t players{};   ///< the most players: the largest of player_counts
+        int32_t memory_mb{}; ///< memory the map's terrain needs, in MB
     };
 
     std::vector<BaseMapSummary> base_map_summaries_;

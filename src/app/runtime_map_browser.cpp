@@ -476,6 +476,7 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
             card.title = summary.title.empty() ? summary.name : summary.title;
             card.size = summary.size;
             card.players = summary.players;
+            card.player_counts = summary.player_counts;
             card.preview_key = summary.name;
             cards.push_back(std::move(card));
         }
@@ -502,6 +503,7 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
                 card.registry_name = map.registry;
             card.size = map.size;
             card.players = map.players;
+            card.player_counts = {map.players};
             card.base_fit = mb::MapCard::Fit::unknown;
             card.mod_fit = mb::MapCard::Fit::unknown;
             if (!map.preview.empty()) {
@@ -558,6 +560,7 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
                     registry != nullptr ? registry->registry.descriptor.name : listed.registry;
                 card.size = std::to_string(map.width) + "x" + std::to_string(map.height);
                 card.players = map.players;
+                card.player_counts = {map.players};
                 card.download_bytes = package.size;
                 card.base_fit = catalogue_fit(map.compatible, std::string(base_game_key));
                 card.mod_fit = model_.mod_name.empty() ? mb::MapCard::Fit::fits
