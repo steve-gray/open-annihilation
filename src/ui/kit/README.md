@@ -2,19 +2,19 @@
 
 The OA UI kit (`oa/ui/kit`, `oa::ui::kit`, the library `oa-ui-kit`): one
 look, one scale and one input model for Open Annihilation's own screens.
-Settings and its notices and prompts, the Library, the download check, the
-Add registry window, the battle room's card, the Game files screen and the
-folder chooser are built from it, and from version 15 of the extension
-table an extension builds its Settings pages, kit screens, notices, prompts
-and match-overlay components from it too
+Settings and its notices and prompts, the Library, the map browser, the
+download check, the Add registry window, the battle room's card, the Game
+files screen and the folder chooser are built from it, and from version 15
+of the extension table an extension builds its Settings pages, kit
+screens, notices, prompts and match-overlay components from it too
 ([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md)). It lays
 a screen out in points at a size class, as one display list of what is
 drawn and which controls a press reaches; draws that list on a canvas at a
 whole scale or at 150%; and turns a pointer, a finger, the keys and the
 wheel into what a screen does, with every control named for automation.
 Nothing in it reads or writes the preferences file, and it never looks a
-word up: a caller passes the text to show. It is provisional until it is declared
-stable (D31): its headers change whenever a screen needs them to
+word up: a caller passes the text to show. It is provisional until it is
+declared stable (D31): its headers change whenever a screen needs them to
 ([Limitations](#limitations)).
 
 ## Entry points
