@@ -11,6 +11,7 @@
 #include "oa/base/sha256.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -85,6 +86,9 @@ struct Listing {
     std::vector<MapLine> maps{};         ///< a map pack's maps
     std::optional<uint64_t> downloads{}; ///< how many times it was downloaded, when known
     std::optional<Badge> badge{};        ///< the badge, when the app has it
+    /// The day this release was published, `YYYY-MM-DD` as the catalogue
+    /// writes it; empty when the catalogue names none.
+    std::string published{};
 };
 
 /// The version a package keeps from before its last update.
@@ -105,8 +109,18 @@ struct Installed {
     int64_t release{};                           ///< the release it matched; 0 for the player's own
     std::optional<base::sha256::Digest> rules{}; ///< a mod's rules hash, when it resolves
     bool playing{};                              ///< the mod being played
-    std::optional<Kept> kept{};                  ///< the copy ROLL BACK restores
-    std::optional<Badge> badge{};                ///< the badge, when the app has it
+    /// A language pack the game shows its words from now: the language
+    /// chosen's, or one of its fallbacks'. False for every other kind.
+    bool in_use{};
+    std::optional<Kept> kept{};   ///< the copy ROLL BACK restores
+    std::optional<Badge> badge{}; ///< the badge, when the app has it
+    std::string author{};         ///< the manifest's author's name; empty when it names none
+    /// The manifest's description; empty when it gives none. The details
+    /// show it where the listing has no summary (entry_summary).
+    std::string description{};
+    /// A mod folder with no oamod.yaml, which layers over the game folder
+    /// and plays by the game's own rules: its status line says so.
+    bool without_manifest{};
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -174,6 +188,31 @@ struct QueueItem {
     std::string update_to{};
 };
 
+/// The mod being played, as the Active tab shows it when no installed
+/// package is marked playing: a folder outside the player's Mods folder,
+/// such as the game's own mods folder or a folder the player picked.
+struct PlayingMod {
+    std::string name{};           ///< the name a player sees
+    std::string version{};        ///< as written; empty when it names none
+    std::optional<Badge> badge{}; ///< the badge, when the app has it
+};
+
+/// The language the game shows its words in, as the Active tab names it.
+struct LanguageInUse {
+    /// The language's name in itself, such as "Deutsch"; empty for English.
+    std::string name{};
+    /// The name of the language pack that holds it; empty when no pack does
+    /// and the game shows it from its own words.
+    std::string pack{};
+    std::string version{}; ///< the pack's version, as written; empty for none
+};
+
+/// One installed map pack, as the Active tab lists it.
+struct InstalledMaps {
+    std::string name{};          ///< the pack's name
+    std::vector<MapLine> maps{}; ///< its maps, as its manifest lists them
+};
+
 /// Everything the Library is built from.
 struct Inputs {
     std::vector<Registry> registries{};
@@ -186,22 +225,43 @@ struct Inputs {
     int64_t list_age_seconds{-1};           ///< how old the newest list is; -1 for none
     bool offline{};                         ///< the last fetch could not reach a registry
     bool in_match{};                        ///< a game is being played
+    /// The command line chose this run's mod (--mod-dir or --base-game):
+    /// PLAY NOW and SWITCH OFF are off, and a mod's details say why.
+    bool mod_from_command_line{};
+    bool can_check{}; ///< a registry is on that CHECK NOW can ask for its list
+    bool checking{};  ///< the registries are being asked for their lists now
+    /// The mod being played; none when the game plays no mod. An installed
+    /// mod marked playing is shown in its place.
+    std::optional<PlayingMod> playing_mod{};
+    LanguageInUse language{};               ///< the language the game shows its words in
+    std::vector<InstalledMaps> map_packs{}; ///< every installed map pack, with its maps
 };
 
-/// One of the Library's tabs.
+/// One of the Library's tabs, in the order they are shown.
 enum class Tab : uint8_t {
+    active, ///< the mod being played, the language in use and the installed maps; no list
     mods,
     maps,
     languages,
-    updates, ///< every entry with an update, of every kind
+    updates, ///< every kind, opening on the entries with an update
 };
 
-/// Which entries a tab shows, apart from its kind.
+/// How many tabs there are.
+inline constexpr std::size_t tab_total = 5;
+
+/// Which entries a tab shows, apart from its kind, in the order the filters are shown.
 enum class Filter : uint8_t {
     all,
+    newest,    ///< New: the tab's newest_count listings with the latest published day
     installed, ///< installed, playing and with an update
     updates,   ///< with an update
 };
+
+/// How many filters there are.
+inline constexpr std::size_t filter_total = 4;
+
+/// How many listings New keeps on a tab.
+inline constexpr std::size_t newest_count = 10;
 
 /// What an entry's row says about it.
 enum class State : uint8_t {
@@ -262,8 +322,12 @@ struct TextHooks {
 struct Library {
     Inputs inputs{};
     std::vector<Entry> entries{};
-    Tab tab{Tab::mods};
-    Filter filter{Filter::all};
+    Tab tab{Tab::active}; ///< the tab shown; Active until another is asked for
+    /// Each tab's own filter, by Tab's order: Updates starts on Updates and
+    /// the others on All. The Active tab has no filters and ignores its own.
+    std::array<Filter, tab_total> filters{
+        Filter::all, Filter::all, Filter::all, Filter::all, Filter::updates
+    };
     std::string tag{};                  ///< the tag shown; empty for every tag
     std::string query{};                ///< the search, at most max_query_bytes
     std::vector<std::size_t> visible{}; ///< indexes into `entries`, in the order shown
@@ -285,25 +349,31 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 ///
 /// Makes one entry per listing, joined with the package installed from the
 /// same registry, kind and key, and one per installed package no listing
-/// names. Keeps the tab, filter, tag, query and selection. When the selected
-/// entry no longer shows, the first visible entry is selected and the
-/// details close.
+/// names. Keeps the tab, each tab's filter, the tag, query and selection.
+/// When the selected entry no longer shows, the first visible entry is
+/// selected and the details close.
 ///
 /// @param[in,out] library the Library
 /// @param inputs the new inputs, which the Library keeps
 void refresh(Library& library, Inputs inputs);
 
-/// Shows a tab, keeping the filter, tag and query.
+/// Shows a tab with its own filter, keeping the tag and query.
 ///
 /// @param[in,out] library the Library
 /// @param tab the tab
 void set_tab(Library& library, Tab tab);
 
-/// Shows the entries a filter keeps.
+/// Shows the entries a filter keeps on the tab shown, which keeps it as its own.
 ///
 /// @param[in,out] library the Library
 /// @param filter the filter
 void set_filter(Library& library, Filter filter);
+
+/// Returns the filter of the tab shown.
+///
+/// @param library the Library
+/// @return the filter
+[[nodiscard]] Filter shown_filter(const Library& library);
 
 /// Shows the entries whose listing has a tag.
 ///
@@ -360,19 +430,93 @@ void close_details(Library& library);
 /// @return the name
 [[nodiscard]] std::string_view entry_name(const Entry& entry);
 
+/// Returns the words the details show under an entry's name: its listing's
+/// summary, else, as for a mod of the player's own, its installed
+/// manifest's description.
+///
+/// @param entry the entry
+/// @return the words; empty when neither gives any
+[[nodiscard]] std::string_view entry_summary(const Entry& entry);
+
 /// Lists the tags of the entries a tab shows under its filter, with how many have each.
 ///
-/// The tag and the search are not applied. The Updates tab ignores the filter.
+/// The tag and the search are not applied.
 ///
 /// @param library the Library
 /// @return each tag and its count, sorted by tag
 [[nodiscard]] std::vector<std::pair<std::string, std::size_t>> tags_in_tab(const Library& library);
+
+/// Counts the entries a filter keeps on the tab shown, before the tag and the search.
+///
+/// Mods, Maps and Languages hold their kind and Updates every kind; All
+/// keeps them all, New the newest_count listings with the latest published
+/// day, Installed those installed, playing or with an update, and Updates
+/// those with an update. The Active tab holds none.
+///
+/// @param library the Library
+/// @param filter the filter
+/// @return how many entries it keeps
+[[nodiscard]] std::size_t filter_count(const Library& library, Filter filter);
+
+/// Names a filter with its count, as the filter column shows it.
+///
+/// @param library the Library
+/// @param filter the filter
+/// @return such as "Installed (4)", through the pattern filter_with_count
+[[nodiscard]] std::string filter_caption(const Library& library, Filter filter);
 
 /// Counts the updates that can be installed: the number on the Updates tab and the OA button.
 ///
 /// @param library the Library
 /// @return how many UPDATE entries can act
 [[nodiscard]] std::size_t update_count(const Library& library);
+
+/// Counts the UPDATE entries the list shows, as the line over the Updates tab's list says.
+///
+/// @param library the Library
+/// @return how many visible entries have an update
+[[nodiscard]] std::size_t updates_shown(const Library& library);
+
+/// One map of an installed map pack, as the Active tab lists it.
+struct ActiveMap {
+    std::string name{};    ///< its title
+    std::string players{}; ///< how many players it is for, in words, such as "4 players"
+    std::string size{};    ///< its size as written, such as "16x16"
+    /// The three as one line, as automation reads it: "Ridgeline · 4 players · 16x16".
+    std::string line{};
+};
+
+/// One installed map pack, as the Active tab lists it.
+struct ActivePack {
+    std::string name{};            ///< its name
+    std::vector<ActiveMap> maps{}; ///< its maps, in the order the inputs give them
+};
+
+/// What the Active tab shows of the player's setup.
+struct ActiveSetup {
+    std::string mod_name{};    ///< the mod being played; empty when no mod is
+    std::string mod_version{}; ///< its version, with a revision above 1; empty for none
+    /// Its badge, which points into the Library's inputs until the next
+    /// refresh; null without one.
+    const Badge* mod_badge{};
+    /// The mod's line as automation reads it: "Ridge 4.8 · rev 3", or "No mod is played".
+    std::string mod_line{};
+    /// The language's line: the pack and its version, "Deutsch 1.2", or "English · built in".
+    std::string language_line{};
+    std::vector<ActivePack> packs{}; ///< the installed map packs, by name
+};
+
+/// Describes the Active tab.
+///
+/// The mod is the installed mod marked playing, with its listing's name
+/// and badge when a registry lists it, else Inputs::playing_mod, else none.
+/// The language is the pack that holds the language shown, else the
+/// language the game holds itself. The map packs are ordered by name,
+/// folded to lower case, each with its maps in the order given.
+///
+/// @param library the Library
+/// @return the setup
+[[nodiscard]] ActiveSetup active_setup(const Library& library);
 
 /// How well one search word was found: the best field it is in.
 enum class MatchClass : uint8_t {
@@ -409,12 +553,19 @@ enum class Action : uint8_t {
     retry,
     roll_back,
     play_now,
+    /// The mod being played's own in place of PLAY NOW: the game plays no
+    /// mod from then on, once the player answers the Switch Mod question.
+    switch_off,
     open_folder,
     homepage,
     details,
     back,
+    check_now, ///< the footer's: the registries are asked for their lists again
     settings,
     close,
+    /// An installed package's: asks first, then removes its folder and the
+    /// copy ROLL BACK keeps (uninstall.hpp).
+    uninstall,
 };
 
 /// One button of an entry's details.
@@ -428,13 +579,23 @@ struct ActionButton {
 ///
 /// GET or UPDATE first, or CANCEL while it is queued, or RETRY when its
 /// download failed and can be tried again; then PLAY NOW for an installed mod
-/// that is not being played, ROLL BACK when a copy is kept, OPEN FOLDER when
-/// installed, and HOMEPAGE when the listing has one.
+/// that is not being played, or SWITCH OFF for the one that is, ROLL BACK
+/// when a copy is kept, UNINSTALL and OPEN FOLDER when installed, and
+/// HOMEPAGE when the listing has one. PLAY NOW, SWITCH OFF and ROLL BACK are
+/// off during a game, and PLAY NOW and SWITCH OFF while the command line
+/// chose the mod; UNINSTALL is off while uninstall_off_reason gives a reason.
 ///
 /// @param library the Library
 /// @param entry one of its entries
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
+
+/// Tells whether the footer's CHECK NOW can be pressed: a registry is on
+/// that it can ask, none is being asked now, and no game is being played.
+///
+/// @param library the Library
+/// @return true when it can
+[[nodiscard]] bool can_check_now(const Library& library) noexcept;
 
 /// How a fact's value is marked.
 enum class Mark : uint8_t {
@@ -452,10 +613,16 @@ struct Fact {
     Mark mark{Mark::none};
 };
 
-/// Lists an entry's facts: Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, those it has.
+/// Lists an entry's facts: Installed, Latest, Author, Size, Base, Needs,
+/// Hacks, Rules, Maps, Coverage and From, those it has.
 ///
-/// An update's Rules fact says whether it changes the game's rules and
-/// which saved games stop loading.
+/// Installed is the installed copy's version and revision, and Latest the
+/// listing's, each as release_text writes them ("4.8 (rev 3)", "1.0" for a
+/// revision of 0, "rev 3" without a version); a side with neither is left
+/// out. Author is the listing's author, else its publisher, else the
+/// installed manifest's author; left out when none names one. An update's
+/// Rules fact says whether it changes the game's rules and which saved
+/// games stop loading.
 ///
 /// @param library the Library
 /// @param entry one of its entries
@@ -465,7 +632,10 @@ struct Fact {
 /// Describes an entry in one line under its name.
 ///
 /// Its queue item's phase while queued, else why it is blocked, else the
-/// update offered, Installed, Playing, or Not installed with its size.
+/// update offered, Installed, Playing, or Not installed with its size. An
+/// update is "Revision 4 available" only for a revision above 0 of the
+/// version installed, "Version 4.9 available" for another version, and
+/// "Update available" when it keeps the version and names no revision.
 ///
 /// @param library the Library
 /// @param entry one of its entries
@@ -482,7 +652,9 @@ struct Fact {
 ///         listing names neither a person nor a count
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
-/// Says how an update of the selected mod meets the mod being played.
+/// Says how an update of the selected mod meets the mod being played, and,
+/// on an installed mod while the command line chose this run's mod, that it
+/// did, before anything else.
 ///
 /// @param library the Library
 /// @return the note; empty when it has none

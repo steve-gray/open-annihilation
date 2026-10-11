@@ -260,6 +260,11 @@ void test_installs(const Scratch& scratch) {
     auto done = install_package(write_package(packages, 1), mods, Change::install);
     OA_CHECK(done.plan.kind == install::PlanKind::install && done.result.changed);
     OA_CHECK(revision_in(folder) == 1 && !fs::exists(folder / ".backup"));
+    // The folder's read gives its manifest's description, which the
+    // Library's details show for a mod of the player's own.
+    OA_CHECK(
+        install::oamod::read_installed_mod(folder).description == "A made-up mod the tests install."
+    );
     OA_CHECK(
         read(folder / "gamedata" / "big.tdf").find("line 3999 of revision 1") != std::string::npos
     );

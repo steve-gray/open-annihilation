@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The embedded window icon decodes to 256 by 256 RGBA pixels, transparent
-// in the corners and opaque in the middle, and files that are not such an
-// image are refused with a reason. Its visible part, which the settings
-// dialog and the OA buttons draw, leaves out the clear margin and nothing
-// else.
+// The embedded window icon and settings icon each decode to 256 by 256 RGBA
+// pixels, transparent in the corners and opaque in the middle, and files
+// that are not such an image are refused with a reason. The window icon's
+// visible part, which the settings dialog and the OA button draw, leaves out
+// the clear margin and nothing else, and the settings icon's, which the
+// Settings button draws beside it, is as large.
 #include "oa/app/window_icon.hpp"
 #include "oa/formats/png.hpp"
 
 #include <cstdint>
 #include <cstdio>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -49,10 +51,10 @@ std::vector<uint8_t> encoded(oa::formats::png::ColorType color_type, uint32_t si
     return file;
 }
 
-void test_embedded_icon() {
+void test_embedded_icon(std::span<const uint8_t> png) {
     WindowIcon icon;
     std::string error;
-    CHECK(decode_window_icon(window_icon_png(), icon, error));
+    CHECK(decode_window_icon(png, icon, error));
     CHECK(error.empty());
     CHECK(icon.width == window_icon_size && icon.height == window_icon_size);
     CHECK(
@@ -163,14 +165,34 @@ void test_visible_part() {
     CHECK(visible_part(short_of_pixels).pixels.empty());
 }
 
+/// Checks that the settings icon's visible part is as large as the window
+/// icon's, so that the two buttons beside each other show their pictures at
+/// one size.
+void test_settings_icon_part() {
+    WindowIcon logo;
+    WindowIcon gears;
+    std::string error;
+    CHECK(decode_window_icon(window_icon_png(), logo, error));
+    CHECK(decode_window_icon(settings_icon_png(), gears, error));
+    const WindowIcon logo_part = visible_part(logo);
+    const WindowIcon gears_part = visible_part(gears);
+    CHECK(gears_part.width != 0 && gears_part.height != 0);
+    CHECK(gears_part.width == logo_part.width && gears_part.height == logo_part.height);
+}
+
 int main() {
-    test_embedded_icon();
+    test_embedded_icon(window_icon_png());
+    test_embedded_icon(settings_icon_png());
     test_refused_files();
     test_visible_part();
+    test_settings_icon_part();
     if (failures != 0) {
         std::fprintf(stderr, "window icon: %d check(s) failed\n", failures);
         return 1;
     }
-    std::printf("window icon: the embedded icon decodes, and other files are refused\n");
+    std::printf(
+        "window icon: the embedded window icon and settings icon decode, and other files are "
+        "refused\n"
+    );
     return 0;
 }

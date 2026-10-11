@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The update question and Settings › Mods' lines on updates, written from
-// the patterns in text.hpp.
+// The update question, written from the patterns in text.hpp.
 #include "oa/ui/library/update_question.hpp"
 
 #include "oa/ui/library/text.hpp"
@@ -21,9 +20,6 @@
 namespace oa::ui::library {
 
 namespace {
-
-/// A whole download, in percent.
-constexpr uint64_t percent_whole = 100;
 
 /// Returns a text with its first letter, when it is one of a to z, in capitals.
 ///
@@ -103,15 +99,6 @@ std::string names_text(const std::vector<std::string>& names, const TextHooks& t
     return filled(text, words::question_names_more, {{"names", joined}, {"count", more}});
 }
 
-/// Tells whether a queue item has not ended: it waits, downloads, is checked
-/// or installed, or waits for the player to leave the mod being played.
-///
-/// @param phase the item's phase
-/// @return true until it has failed or is installed
-bool unfinished(QueueItem::Phase phase) {
-    return phase != QueueItem::Phase::failed && phase != QueueItem::Phase::installed;
-}
-
 } // namespace
 
 bool asks_before_update(const Entry& entry, const UpdateNote& update) noexcept {
@@ -131,7 +118,7 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
     const ChangeTexts names = change_texts(installed, update, text);
     UpdateQuestion asked;
     asked.title = filled(text, words::question_title, {{"name", name}});
-    if (same_version(installed, update))
+    if (same_version(installed, update) && installed.revision > 0 && update.to_revision > 0)
         asked.heading = filled(
             text,
             words::question_heading_revision,
@@ -140,12 +127,18 @@ update_question(const Entry& entry, const UpdateNote& update, bool playing, cons
              {"from", std::to_string(installed.revision)},
              {"to", std::to_string(update.to_revision)}}
         );
-    else
+    else if (!same_version(installed, update))
         asked.heading = filled(
             text,
             words::question_heading_version,
-            {{"name", name}, {"from", installed.version}, {"to", update.to_version}}
+            {{"name", name}, {"from", names.from}, {"to", names.to}}
         );
+    else if (!installed.version.empty())
+        asked.heading = filled(
+            text, words::question_heading_same, {{"name", name}, {"version", installed.version}}
+        );
+    else
+        asked.heading = name;
     const std::string from_capital = capitalised(names.from);
     const std::string to_capital = capitalised(names.to);
     asked.body = filled(
@@ -208,75 +201,6 @@ oa::ui::kit::Question update_prompt(const UpdateQuestion& asked, const TextHooks
     question.primary_button = 1;
     question.marked = 0;
     return question;
-}
-
-std::string
-update_line(const Installed& installed, const UpdateNote& update, const TextHooks& text) {
-    const bool revision = same_version(installed, update);
-    std::string_view pattern;
-    switch (update.rules) {
-    case UpdateNote::Rules::same:
-        pattern = revision ? words::mods_revision_available : words::mods_version_available;
-        break;
-    case UpdateNote::Rules::changes:
-        pattern = revision ? words::mods_revision_changes : words::mods_version_changes;
-        break;
-    case UpdateNote::Rules::unknown:
-        pattern = revision ? words::mods_revision_may_change : words::mods_version_may_change;
-        break;
-    }
-    const std::string number = std::to_string(update.to_revision);
-    return filled(
-        text,
-        pattern,
-        {{"revision", number},
-         {"version", update.to_version},
-         {"size", size_text(update.size, text)}}
-    );
-}
-
-std::string update_progress(const QueueItem& item, const TextHooks& text) {
-    if (!unfinished(item.phase))
-        return {};
-    if (item.phase == QueueItem::Phase::held)
-        return filled(text, words::queue_held, {{"name", item.name}});
-    uint64_t percent = 0;
-    if (item.phase == QueueItem::Phase::verifying || item.phase == QueueItem::Phase::checking ||
-        item.phase == QueueItem::Phase::installing ||
-        (item.total_bytes != 0 && item.done_bytes >= item.total_bytes))
-        percent = percent_whole;
-    else if (
-        item.total_bytes != 0 &&
-        item.done_bytes <= std::numeric_limits<uint64_t>::max() / percent_whole
-    )
-        percent = item.done_bytes * percent_whole / item.total_bytes;
-    else if (item.total_bytes >= percent_whole)
-        percent = item.done_bytes / (item.total_bytes / percent_whole);
-    return filled(text, words::mods_updating, {{"percent", std::to_string(percent)}});
-}
-
-UpdateCheckLine update_check_line(const UpdateCheck& check, const TextHooks& text) {
-    UpdateCheckLine line;
-    if (!check.registries_on) {
-        line.text = shown(text, words::mods_no_registries);
-        return line;
-    }
-    if (check.checking) {
-        line.text = shown(text, words::mods_checking);
-        return line;
-    }
-    line.check_now = true;
-    if (check.failed) {
-        line.text = shown(text, words::mods_check_failed);
-        line.warning = true;
-        return line;
-    }
-    if (!check.age_seconds) {
-        line.text = shown(text, words::mods_never_checked);
-        return line;
-    }
-    line.text = filled(text, words::mods_checked, {{"age", age_text(*check.age_seconds, text)}});
-    return line;
 }
 
 } // namespace oa::ui::library

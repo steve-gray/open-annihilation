@@ -65,6 +65,15 @@ lib::Inputs inputs_with(std::vector<lib::Listing> listings) {
     return inputs;
 }
 
+/// Returns an empty Library on its Mods tab, where every test here searches.
+///
+/// @return the Library
+lib::Library on_mods() {
+    lib::Library library;
+    library.tab = lib::Tab::mods;
+    return library;
+}
+
 /// The keys of the visible entries, in order, after a search.
 ///
 /// @param library the Library
@@ -93,7 +102,7 @@ void test_field_order() {
     lib::Listing summary = mod(core, "summary-hit", "Summary Holder");
     summary.summary = "An alpha build.";
     lib::Listing nothing = mod(core, "nothing", "Nothing Here");
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, inputs_with({summary, publisher, author, tag, name, nothing}));
 
     const Keys by_field = {
@@ -134,7 +143,7 @@ void test_several_words() {
     tag_and_publisher.publisher = "Team Fixture";
     lib::Listing name_words = mod(core, "w", "Alpha Team Kit");
     lib::Listing one_word = mod(core, "v", "Alpha Only");
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(
         library, inputs_with({summary_word, author_words, tag_and_publisher, name_words, one_word})
     );
@@ -164,7 +173,7 @@ void test_several_words() {
 void test_folding() {
     lib::Listing kit = mod(core, "kit", "Alpha Kit");
     lib::Listing accented = mod(core, "accented", "\xc3\x89mile Mod"); // capital E with acute
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, inputs_with({kit, accented}));
     OA_CHECK(found(library, "ALPHA kIt") == Keys({"kit@fixture-core"}));
     // Only A to Z fold: a capital E with acute matches itself, not its small letter.
@@ -177,7 +186,7 @@ void test_tag_prefix() {
     balance.tags = {"balance"};
     lib::Listing other = mod(core, "other", "Second Mod");
     other.tags = {"rebalance"};
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, inputs_with({balance, other}));
     OA_CHECK(found(library, "bal") == Keys({"balance@fixture-core"}));
     OA_CHECK(found(library, "balance") == Keys({"balance@fixture-core"}));
@@ -187,7 +196,7 @@ void test_tag_prefix() {
 }
 
 void test_query_cap() {
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, inputs_with({mod(core, "kit", "Alpha Kit")}));
     const std::string ascii(65, 'a');
     lib::set_query(library, ascii);
@@ -217,7 +226,7 @@ void test_ties() {
         mod(core, "aaa", "Aaa Same"),
         mod(core, "beta", "Beta Same"),
     });
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, std::move(inputs));
     // Names that start with the word first; then by name, built-in registries first, then registry.
     const Keys word_first = {
@@ -245,7 +254,7 @@ void test_installed_names() {
     own.key = "own-mod";
     own.name = "Own Alpha";
     inputs.installed.push_back(own);
-    lib::Library library;
+    lib::Library library = on_mods();
     lib::refresh(library, std::move(inputs));
     OA_CHECK(found(library, "alpha") == Keys({"own-mod@"}));
 }

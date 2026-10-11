@@ -32,9 +32,9 @@ namespace oa::ui::library {
 namespace {
 
 /// How many tabs there are, in Tab's order.
-constexpr int32_t tab_count = 4;
+constexpr auto tab_controls = static_cast<int32_t>(tab_total);
 /// How many filters there are, in Filter's order.
-constexpr int32_t filter_count = 3;
+constexpr auto filter_controls = static_cast<int32_t>(filter_total);
 /// How far a notch of the wheel scrolls the details, in points: a full list row.
 constexpr int32_t details_step = kit::compact_metrics.list_row_height;
 
@@ -61,7 +61,7 @@ ScreenResult redrawn() {
 /// @return the height, in points; none while no row shows
 std::optional<int32_t> row_height_of(const kit::DisplayList& list) {
     for (const kit::Control& control : list.controls)
-        if (control.id >= controls::first_row && control.rect.height > 0)
+        if (controls::row_control(control.id) && control.rect.height > 0)
             return control.rect.height;
     return std::nullopt;
 }
@@ -198,6 +198,15 @@ bool compact_list_shows(const kit::DisplayList& list) {
     return kit::control_of(list, controls::details) != nullptr;
 }
 
+/// Tells whether the Active tab shows: its mod's line is in the list. Its
+/// lines scroll as the details do.
+///
+/// @param list the display list
+/// @return true while it shows
+bool active_shows(const kit::DisplayList& list) {
+    return kit::control_of(list, controls::active_mod) != nullptr;
+}
+
 /// Returns the drop-down field a menu opens from.
 ///
 /// @param menu the menu
@@ -221,7 +230,7 @@ kit::ControlId field_of(MenuKind menu) {
 /// @param id the control
 /// @return true for an item
 bool menu_item_control(kit::ControlId id) {
-    return id >= controls::first_menu_item && id < controls::first_row;
+    return id >= controls::first_menu_item && id < controls::first_active_map;
 }
 
 /// Returns the open drop-down's items.
@@ -450,7 +459,7 @@ ScreenResult toggle_menu(
 /// @return what the host is to do
 ScreenResult show_tab(Library& library, ScreenState& state, const kit::DisplayList& list, Tab tab) {
     const bool tab_focused = state.interaction.focused >= controls::first_tab &&
-                             state.interaction.focused < controls::first_tab + tab_count;
+                             state.interaction.focused < controls::first_tab + tab_controls;
     if (state.details_page) {
         close_details(library);
         state.details_page = false;
@@ -465,7 +474,9 @@ ScreenResult show_tab(Library& library, ScreenState& state, const kit::DisplayLi
 /// Does what a control does when it is pressed, or takes Space or Enter.
 ///
 /// No press on a row gets, updates or installs anything: it selects the
-/// row, and at Compact opens its details page.
+/// row, and at Compact opens its details page. A row's state icon that
+/// takes a press selects its row and asks for its GET or UPDATE, as that
+/// button would, while the button allows it.
 ///
 /// @param[in,out] library the model
 /// @param[in,out] state the screen's state
@@ -480,9 +491,9 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
     if (menu_item_control(id))
         return choose_item(library, state, list, id - controls::first_menu_item);
     state.menu = id == field_of(state.menu) ? state.menu : MenuKind::none;
-    if (id >= controls::first_tab && id < controls::first_tab + tab_count)
+    if (id >= controls::first_tab && id < controls::first_tab + tab_controls)
         return show_tab(library, state, list, static_cast<Tab>(id - controls::first_tab));
-    if (id >= controls::first_filter && id < controls::first_filter + filter_count) {
+    if (id >= controls::first_filter && id < controls::first_filter + filter_controls) {
         set_filter(library, static_cast<Filter>(id - controls::first_filter));
         after_browsing(library, state, list);
         return redrawn();
@@ -502,7 +513,25 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         after_browsing(library, state, list);
         return redrawn();
     }
-    if (id >= controls::first_row) {
+    if (controls::row_icon_control(id)) {
+        const auto place = static_cast<std::size_t>(id - controls::first_row_icon);
+        if (place >= library.visible.size())
+            return {};
+        const EntryId entry_id = library.entries[library.visible[place]].id;
+        const Entry* entry = find_entry(library, entry_id);
+        const std::optional<Action> asked =
+            entry != nullptr ? controls::row_icon_action(library, *entry) : std::nullopt;
+        if (!asked)
+            return {};
+        if (library.selected != entry_id)
+            state.details_scroll = 0;
+        select(library, entry_id);
+        ScreenResult result = redrawn();
+        result.action = *asked;
+        result.entry = entry_id;
+        return result;
+    }
+    if (controls::row_control(id)) {
         const auto place = static_cast<std::size_t>(id - controls::first_row);
         if (place >= library.visible.size())
             return {};
@@ -530,6 +559,9 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         return open_page(library, state);
     case controls::back:
         return close_page(library, state);
+    case controls::check_now:
+        result.action = Action::check_now;
+        return result;
     case controls::settings:
         result.action = Action::settings;
         return result;
@@ -665,7 +697,7 @@ ScreenResult turn_pane(
 }
 
 /// Returns the pane that holds the focus: the details while a control of
-/// theirs has it, else the list.
+/// theirs has it, on the details page and on the Active tab, else the list.
 ///
 /// @param state the screen's state
 /// @param list the display list
@@ -675,7 +707,7 @@ Pane focused_pane(const ScreenState& state, const kit::DisplayList& list) {
     if (state.interaction.focus_shown && control != nullptr &&
         control->group == controls::details_group)
         return Pane::details;
-    return page_shows(list) ? Pane::details : Pane::list;
+    return page_shows(list) || active_shows(list) ? Pane::details : Pane::list;
 }
 
 } // namespace
@@ -805,9 +837,11 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
     const bool on_list = focus == controls::list;
     const bool on_drop_down = focus == controls::filter_menu || focus == controls::tags_menu ||
                               focus == controls::more_menu;
-    // On the details page the page keys scroll its body, never the list it hides.
-    const bool in_details = page_shows(list) || (focus != kit::no_control && !on_list &&
-                                                 focused_pane(state, list) == Pane::details);
+    // On the details page the page keys scroll its body, never the list it
+    // hides; on the Active tab they scroll its lines.
+    const bool in_details =
+        page_shows(list) || active_shows(list) ||
+        (focus != kit::no_control && !on_list && focused_pane(state, list) == Pane::details);
 
     switch (pressed) {
     case kit::Key::escape:
@@ -997,8 +1031,9 @@ ScreenResult library_command(
         return redrawn();
     case ScreenCommand::next_tab:
     case ScreenCommand::previous_tab: {
-        const int32_t step = command == ScreenCommand::next_tab ? 1 : tab_count - 1;
-        const auto tab = static_cast<Tab>((static_cast<int32_t>(library.tab) + step) % tab_count);
+        const int32_t step = command == ScreenCommand::next_tab ? 1 : tab_controls - 1;
+        const auto tab =
+            static_cast<Tab>((static_cast<int32_t>(library.tab) + step) % tab_controls);
         return show_tab(library, state, list, tab);
     }
     case ScreenCommand::back:

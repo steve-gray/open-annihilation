@@ -195,7 +195,7 @@ updates wait. **Check for content updates** says when:
 | **Only when I open the Library** | when the Library opens, at most once a minute, and when you ask |
 | **Never** | only when you ask |
 
-You ask with **CHECK NOW** in Settings › Mods. Whatever the choice, OA also
+You ask with **CHECK NOW** at the foot of the Library. Whatever the choice, OA also
 fetches a registry's list when you turn that registry on or add it, when a
 download finds that its release is no longer offered, and when GET MAP
 needs the host's registry's list.

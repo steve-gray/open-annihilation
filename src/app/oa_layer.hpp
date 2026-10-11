@@ -727,16 +727,28 @@ class OaLayer {
 
     /// Draws the layer into the window, in the window's own pixels
     /// (RenderState::use_window_pixels), before the software cursor: on the
-    /// front end each screen drawn at the view's scale and copied to its
-    /// place pixel for pixel, and, under a modal screen with a backdrop, the
-    /// window outside the picture darkened as the picture is; in a match the
-    /// match's layer, as the match's other layers are drawn.
+    /// front end each OA badge in the battle room (the logo scaled into its
+    /// CD rectangle, the rules dot crisp on it) and each screen drawn at the
+    /// view's scale and copied to its place pixel for pixel, and, under a
+    /// modal screen with a backdrop, the window outside the picture darkened
+    /// as the picture is; in a match the match's layer, as the match's other
+    /// layers are drawn.
     ///
     /// Throws PresentError when SDL cannot make the layer's texture.
     ///
     /// @param picture_area where the front end's picture lies in the window
     ///     (SDL_GetRenderLogicalPresentationRect); null in a match
     void present(const SDL_FRect* picture_area);
+
+    /// Tells whether this frame's OA badges are drawn here, at the window's
+    /// own pixels, rather than into the 640 by 480 frame.
+    ///
+    /// True when a renderer will present the front end and the logo can be
+    /// drawn. False in a match, without a renderer, and when the logo cannot
+    /// be read: the frame then keeps the badge it draws itself.
+    ///
+    /// @return true when present draws the badges
+    [[nodiscard]] bool draws_presence_badges() noexcept;
 
     /// Returns the layer's texture, in tiles beyond the renderer's limit.
     ///
@@ -748,10 +760,11 @@ class OaLayer {
 
     /// Appends what the layer shows to the automation endpoint's controls
     /// (docs/automation.md, "OA's own screens"): the OA button while it
-    /// shows, named oa.button with no dialog and enabled while no modal
-    /// screen shows; then each screen that shows, from the top down to the
-    /// first modal one, each control and part of its display list
-    /// (kit::automation_parts) named oa. and its name, of the kind
+    /// shows, named oa.button, and on the main menu the Settings button
+    /// beside it, named oa.settings-button, each with no dialog and enabled
+    /// while no modal screen shows; then each screen that shows, from the
+    /// top down to the first modal one, each control and part of its display
+    /// list (kit::automation_parts) named oa. and its name, of the kind
     /// automation_kind gives, its dialog oa. and the screen's name.
     ///
     /// Each carries its exact rectangle in the window's pixels, as present
@@ -829,7 +842,7 @@ class OaLayer {
     /// @param look how the button looks
     /// @param darkened a modal screen shows over the screen
     /// @param fonts the dialog's fonts
-    /// @param icon the Open Annihilation icon; empty draws the OA mark
+    /// @param icon the icon it shows, the settings icon; empty draws the OA mark
     /// @param fit the button fits the safe area (match_fits_safe_area): the
     ///     face takes the whole-number scale at or above the button's own
     /// @return the face, ingame_button_side source pixels a side at that scale
@@ -1124,6 +1137,18 @@ class OaLayer {
     /// @param area where the picture lies in the window, in window pixels
     void present_front_end(const SDL_FRect& area);
 
+    /// Draws the battle room's OA badges into the window, under the screens:
+    /// the logo filtered into each CD rectangle's window pixels, and the
+    /// rules dot as solid window pixels on top. Nothing while the battle
+    /// room shows no badge, or the logo cannot be drawn.
+    ///
+    /// Throws PresentError when SDL cannot make the badges' texture.
+    ///
+    /// @param seen the front end's view
+    /// @param output_width the window's width, in pixels
+    /// @param output_height the window's height, in pixels
+    void present_presence_badges(const LayerView& seen, int output_width, int output_height);
+
     /// Draws the match's layer into the window, as the match's other layers
     /// laid out 1:1 are drawn (one_to_one_scale_mode).
     void present_match();
@@ -1166,6 +1191,29 @@ class OaLayer {
     /// The layer's texture, in tiles beyond the renderer's limit; none
     /// before the first present.
     TiledTexture texture_;
+    /// The battle room's OA badges, one window pixel each; none before the
+    /// first frame that draws one.
+    TiledTexture badge_texture_;
+    /// The window pixels badge_texture_ covers.
+    oa::ui::display_layout::Rect badge_bounds_{};
+
+    /// One badge the texture was drawn for, in canvas pixels.
+    struct PresenceBadgeDrawn {
+        int32_t slot{};            ///< the row's slot
+        int32_t x{}, y{};          ///< the badge's left and top, canvas pixels
+        int32_t width{}, height{}; ///< the badge's size, canvas pixels
+        bool rules_differ{};       ///< the badge carries the dot
+        bool operator==(const PresenceBadgeDrawn&) const = default;
+    };
+
+    /// The badges, picture and logo the texture holds; empty before the first.
+    std::vector<PresenceBadgeDrawn> badges_drawn_{};
+    oa::ui::display_layout::Rect badges_picture_{}; ///< the picture the badges were mapped through
+    oa::ui::display_layout::Point badges_picture_size_{}; ///< that picture's own size
+    uint32_t badges_icon_width_{};            ///< the logo's width when the texture was drawn
+    uint32_t badges_icon_height_{};           ///< the logo's height when the texture was drawn
+    std::array<uint8_t, 256> badges_gamma_{}; ///< the gamma table the badges were uploaded at
+    bool badges_uploaded_{};                  ///< badge_texture_ holds badges_drawn_
     /// The modern fonts the smooth form draws in (smooth_fonts); null before
     /// they are opened, or when they cannot be.
     mutable std::unique_ptr<oa::platform::text_font::FontStack> smooth_fonts_{};

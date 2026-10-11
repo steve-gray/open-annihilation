@@ -1,13 +1,18 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-# Writes the C++ source that holds the window icon's PNG file, run as a
-# script: cmake -DINPUT=<png> -DOUTPUT=<source> -P OaEmbedWindowIcon.cmake.
-# The source defines oa::app::window_icon_png(), which window_icon.hpp
-# declares, over the file's bytes. OUTPUT is rewritten only when its text
-# changes.
+# Writes the C++ source that holds the PNG file of one of the icons
+# window_icon.hpp declares, run as a script:
+#   cmake -DINPUT=<png> -DOUTPUT=<source> [-DFUNCTION=<name>]
+#     -P OaEmbedWindowIcon.cmake
+# The source defines oa::app::<FUNCTION>() over the file's bytes:
+# window_icon_png() when FUNCTION is not given, settings_icon_png() for the
+# settings icon. OUTPUT is rewritten only when its text changes.
 if(NOT INPUT OR NOT OUTPUT)
   message(FATAL_ERROR "OaEmbedWindowIcon.cmake needs -DINPUT=<png> -DOUTPUT=<source>")
+endif()
+if(NOT FUNCTION)
+  set(FUNCTION window_icon_png)
 endif()
 file(READ "${INPUT}" hex HEX)
 string(LENGTH "${hex}" hex_digits)
@@ -29,14 +34,14 @@ namespace oa::app {
 namespace {
 
 // The bytes of @name@.
-constexpr uint8_t window_icon_file[] = {
+constexpr uint8_t icon_file[] = {
     @bytes@
 };
 
 } // namespace
 
-std::span<const uint8_t> window_icon_png() {
-    return window_icon_file;
+std::span<const uint8_t> @FUNCTION@() {
+    return icon_file;
 }
 
 } // namespace oa::app

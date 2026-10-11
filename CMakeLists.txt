@@ -303,8 +303,8 @@ target_link_libraries(oa-app-game-directory PUBLIC oa-app-headers oa-base-sha256
 # oa-game's mod profile: a folder's oamod.yaml found and resolved with the
 # settings it binds, the mod folders a game folder offers, the layout and
 # discovery a profile sets, the --mod and --print-profile options, and the
-# Mods page's row for a folder: its title, version and description, and its
-# badge decoded.
+# Library's summary of a mod folder: its title, version and description, and
+# its badge decoded.
 add_library(oa-app-mod-profile src/app/mod_profile_loader.cpp src/app/mod_folder.cpp
   src/app/mod_summary.cpp)
 add_library(oa::app::mod_profile ALIAS oa-app-mod-profile)
@@ -346,8 +346,10 @@ target_link_libraries(oa-app-renderer-state PUBLIC oa-app-renderer-records
   PRIVATE oa-platform-preferences oa-options)
 # The game's window icon: the Open Annihilation icon at 256 by 256 pixels
 # (branding/, made by tools/make_icons.py), embedded as a PNG file and
-# decoded when the window opens; the settings dialog's header and the OA
-# buttons draw it too.
+# decoded when the window opens; the settings dialog's header and the main
+# menu's Library button draw it too. Beside it the settings icon, the logo
+# over a row of gears at the same size, which the main menu's Settings
+# button and the in-game menu's OA button draw.
 # A mod profile's display rules as the records and decisions of the modules
 # that carry them out (view_rules.hpp).
 add_library(oa-app-view-rules src/app/view_rules.cpp)
@@ -368,7 +370,17 @@ add_custom_command(OUTPUT "${oa_window_icon_source}"
   DEPENDS "${oa_window_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
   COMMENT "Embedding the window icon"
   VERBATIM)
-add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}")
+set(oa_settings_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-settings-256.png")
+set(oa_settings_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/settings_icon_png.cpp")
+add_custom_command(OUTPUT "${oa_settings_icon_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_settings_icon_png}" "-DOUTPUT=${oa_settings_icon_source}"
+    -DFUNCTION=settings_icon_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_settings_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the settings icon"
+  VERBATIM)
+add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}"
+  "${oa_settings_icon_source}")
 add_library(oa::app::window_icon ALIAS oa-app-window-icon)
 target_link_libraries(oa-app-window-icon PUBLIC oa-app-headers PRIVATE oa-formats-png oa-options)
 # The Full tier's fog of war on the card (full_fog.hpp): the fog grid's
@@ -653,7 +665,7 @@ if(BUILD_TESTING)
   add_executable(oa-app-mod-profile-test src/app/mod_profile_loader_test.cpp)
   target_link_libraries(oa-app-mod-profile-test PRIVATE oa-app-mod-profile oa-test-support oa-options)
   add_test(NAME app-mod-profile COMMAND oa-app-mod-profile-test)
-  # The Mods page's rows over scratch folders: a profile's name, version and
+  # Mod folders' summaries over scratch folders: a profile's name, version and
   # description, a folder without a profile or with a damaged one, and
   # badges of each colour type, scaled down, damaged or too large.
   add_executable(oa-app-mod-summary-test src/app/mod_summary_test.cpp)
@@ -1574,10 +1586,10 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-user-folder PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_user_folder_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
-      # The settings' Mods page switches the mod ten times, between No Mod
-      # and two test profiles it writes into the player's own Mods folder:
-      # each switch stores the mod and builds the game afresh on the same
-      # window, which plays the mod chosen, listed first; what the heap holds
+      # The Library switches the mod ten times, between no mod and two test
+      # profiles it writes into the player's own Mods folder: each switch
+      # stores the mod and builds the game afresh on the same window, which
+      # plays the mod chosen, shown as played; what the heap holds
       # as the last round's runs reach the main menu stays level with the
       # first round's after the first start.
       set(oa_mod_switch_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/mod-switch")
@@ -1635,8 +1647,8 @@ if(OA_BUILD_PLATFORM)
       # revisions keeping one .backup, a reinstall, an older revision
       # declined, another version installed alongside, a folder that holds
       # another mod left as it is, a profile that does not resolve refused,
-      # and a kept version that cannot be played refused; ROLL BACK twice on
-      # the Mods page; then, over soft restarts, PLAY NOW, a replace of the
+      # and a kept version that cannot be played refused; ROLL BACK twice in
+      # the Library; then, over soft restarts, PLAY NOW, a replace of the
       # mod played and its roll back, each put in place between runs, and a
       # stop mid-replace settled before the mod folder is resolved.
       set(oa_mod_install_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/mod-install")

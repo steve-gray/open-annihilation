@@ -127,8 +127,6 @@ std::string digest_of(const renderer::Surface& surface) {
 
 std::string_view page_slug(Page page) {
     switch (page) {
-    case Page::mods:
-        return "mods";
     case Page::controls:
         return "controls";
     case Page::common_tweaks:
@@ -183,7 +181,6 @@ Dialog engine_dialog(Page page, const settings::Locks& locks = {}) {
         {},
         settings::highest_unit_limit,
         {},
-        {},
         nullptr,
         true,
         true,
@@ -227,56 +224,6 @@ void show_scroll_end(Dialog& dialog) {
         }
     }
     problem("graphics did not leave its rows");
-}
-
-settings::ModOffer mod_offer(
-    const std::vector<std::string>& names,
-    const std::vector<std::string>& folders,
-    const std::vector<settings::ModDetails>& details
-) {
-    return {names, folders, details, folders.front()};
-}
-
-Dialog mods_dialog() {
-    const std::vector<std::string> names{"Alpha", "Beta"};
-    const std::vector<std::string> folders{"/mods/alpha", "/mods/beta"};
-    settings::ModDetails alpha;
-    alpha.version = "2.0";
-    alpha.description = "The mod in play";
-    settings::ModDetails beta;
-    beta.version = "1.2";
-    beta.description = "A second mod";
-    beta.badge_width = 4;
-    beta.badge_height = 4;
-    beta.badge_pixels.assign(4U * 4U * 4U, 0);
-    for (std::size_t pixel = 0; pixel < 16; ++pixel) {
-        beta.badge_pixels[pixel * 4] = 0xd4;
-        beta.badge_pixels[pixel * 4 + 1] = 0xa0;
-        beta.badge_pixels[pixel * 4 + 2] = 0x30;
-        beta.badge_pixels[pixel * 4 + 3] = 0xff;
-    }
-    beta.roll_back_from = "1.0";
-    beta.roll_back_to = "0.9";
-    const std::vector<settings::ModDetails> details{alpha, beta};
-    Dialog dialog;
-    settings::open_dialog(
-        dialog,
-        {},
-        {},
-        {},
-        "v0.7.3",
-        Page::mods,
-        {},
-        settings::highest_unit_limit,
-        mod_offer(names, folders, details),
-        {},
-        nullptr,
-        true,
-        true,
-        true
-    );
-    fill_game_files(dialog);
-    return dialog;
 }
 
 settings::Notice short_notice() {
@@ -439,23 +386,6 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
         if (!developer.chosen.developer_mode || !area_open)
             problem("developer mode is not on with its first area open");
         add(pictures, "dialog/developer-open", drawn_dialog(developer, fonts, no_icon, 1));
-
-        Dialog switching = mods_dialog();
-        press_keys(switching, {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space});
-        if (switching.switch_question == settings::no_question ||
-            switching.mod_question != settings::ModQuestion::switch_mod)
-            problem("the Switch Mod question is not showing");
-        add(pictures, "dialog/mods-switch", drawn_dialog(switching, fonts, no_icon, 1));
-
-        Dialog rolling = mods_dialog();
-        press_keys(
-            rolling,
-            {DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::tab, DialogKey::space}
-        );
-        if (rolling.switch_question == settings::no_question ||
-            rolling.mod_question != settings::ModQuestion::roll_back)
-            problem("the Roll Back Mod question is not showing");
-        add(pictures, "dialog/mods-rollback", drawn_dialog(rolling, fonts, no_icon, 1));
 
         Dialog files = engine_dialog(Page::common_tweaks);
         files.user_folder = "/Users/player/My Games/Total Annihilation";

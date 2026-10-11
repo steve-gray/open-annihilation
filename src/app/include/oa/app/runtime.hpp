@@ -3745,38 +3745,15 @@ class Runtime final : public menu::Host,
     /// saved with the next change (settings::remembered_picked_folder).
     void load_engine_settings();
 
-    /// Lists the mod folders the settings' Mods page offers, each with what
-    /// its oamod.yaml and oamod.png give (read_mod_summary): the game
-    /// folder's mods folder's, the player's own Mods folder's, the folder an
-    /// earlier version's Pick Folder... stored while it is the mod stored and
-    /// still a folder, and the one played, each once. Each folder the
-    /// Library's model lists with an update has its update's fields too
-    /// (give_mod_updates).
+    /// Lists the mod folders the game can play, which the Library lists
+    /// beside the packages the installer knows, each with what its
+    /// oamod.yaml and oamod.png give (read_mod_summary): the game folder's
+    /// mods folder's, the player's own Mods folder's, the folder an earlier
+    /// version's Pick Folder... stored while it is the mod stored and still
+    /// a folder, and the one played, each once; and for a folder of the
+    /// player's own Mods folder, whether its .backup keeps a version the
+    /// game can play, for ROLL BACK.
     void list_offered_mods();
-
-    /// Gives each offered mod folder what Mods shows of its update, from the
-    /// Library's model as its worker last found the updates and the download
-    /// queue last stood (ModDetails::update_offered and the fields after
-    /// it): the folder matched by its path to an installed package, and that
-    /// package's update. Nothing is read from a file or the network; with no
-    /// Library host yet every folder shows no update.
-    ///
-    /// @param folders the offered folders, as Dialog::mod_folders holds them
-    /// @param[in,out] details what Mods shows of each, in the same order
-    void give_mod_updates(
-        const std::vector<std::string>& folders,
-        std::vector<oa::ui::engine_settings::ModDetails>& details
-    );
-
-    /// Brings an open engine dialog's Mods page up to date with the Library's
-    /// model and the content service: each row's update (give_mod_updates),
-    /// the line on the check for updates with whether CHECK NOW follows it,
-    /// and whether GET MORE MODS… shows (on the main menu). The settings
-    /// screen calls it every frame; it reads only what is in memory.
-    ///
-    /// @param dialog the open dialog
-    /// @return true when what Mods shows changed
-    bool refresh_settings_mods(oa::ui::engine_settings::Dialog& dialog);
 
     /// Ends the run after this frame for main() to start the game afresh
     /// with the mod the settings stored (soft_restart_requested).
@@ -3859,8 +3836,8 @@ class Runtime final : public menu::Host,
     [[nodiscard]] const oa::ui::engine_settings::DialogFonts* engine_settings_fonts();
 
     /// Returns the Open Annihilation icon the settings dialog's header and
-    /// the OA buttons draw: the window icon's visible part, decoded on first
-    /// use.
+    /// the main menu's OA button draw: the window icon's visible part,
+    /// decoded on first use.
     ///
     /// @return the icon's pixels, which last as long as the runtime; an
     ///         empty picture, which draws the OA mark, when it cannot be decoded
@@ -4029,11 +4006,12 @@ class Runtime final : public menu::Host,
     void check_user_folder();
 
     /// Takes one turn of --check-mod-switch: checks that the run plays the
-    /// mod its turn expects, the Mods page listing it first, then, until
-    /// ten switches are made, chooses the next mod there and answers SWITCH,
-    /// which ends the run for a soft restart. The first run writes the two
-    /// test profiles into the player's own Mods folder. Throws
-    /// std::runtime_error on a failure.
+    /// mod its turn expects, the Library showing it played, then, until ten
+    /// switches are made, chooses the next mod there, with PLAY NOW, or
+    /// SWITCH OFF and the Switch Mod question's SWITCH for no mod, which ends
+    /// the run for a soft restart. The first run writes the two test
+    /// profiles into the player's own Mods folder. Throws std::runtime_error
+    /// on a failure.
     void check_mod_switch();
 
     /// Checks pack maps in the skirmish list (--check-map-packs): writes two
@@ -4317,11 +4295,12 @@ class Runtime final : public menu::Host,
     /// @param button the button pressed, from 0
     void answer_mod_install_prompt(int32_t button);
 
-    /// Switches the game to a mod folder as the Mods page's SWITCH does:
-    /// checks it can be played, stores it as the Mod setting and ends the run
-    /// for main() to start it (PLAY NOW).
+    /// Switches the game to a mod folder, or to no mod: checks a folder can
+    /// be played, stores it as the Mod setting, or no mod with the folder an
+    /// earlier version picked forgotten, and ends the run for main() to
+    /// start it (PLAY NOW, and SWITCH OFF's SWITCH).
     ///
-    /// @param folder the mod folder
+    /// @param folder the mod folder; empty for no mod
     /// @param[out] refusal why it cannot be played, in a few words
     /// @return true when the run ends to play it
     bool switch_to_mod_folder(const fs::path& folder, std::string& refusal);
@@ -4329,9 +4308,9 @@ class Runtime final : public menu::Host,
     /// Rolls a folder of the player's own Mods folder back to the version
     /// its .backup keeps, which must be playable: at once, or, for the mod
     /// played, as the run ends, Settings where it is open keeping its
-    /// choices, saving them and closing as SWITCH does (ROLL BACK on the
-    /// Mods page and in the Library). A refusal changes nothing; its prompt
-    /// is kept for the Mods page (ModInstallState::roll_back_refusal).
+    /// choices, saving them and closing as OK does (ROLL BACK in the
+    /// Library). A refusal changes nothing; its prompt is kept for the
+    /// Library to show (ModInstallState::roll_back_refusal).
     ///
     /// @param folder the mod folder
     /// @param[out] refusal why it was not rolled back, in the player's words
@@ -4340,7 +4319,7 @@ class Runtime final : public menu::Host,
 
     /// Installs made-up mod packages through each of the main menu's
     /// questions, by a dropped file and from the command line, rolls a mod
-    /// back on the Mods page, and replaces and rolls back the mod played
+    /// back in the Library, and replaces and rolls back the mod played
     /// across soft restarts, checking the player's Mods folder after each
     /// (--check-mod-install). Each run is one turn.
     void check_mod_install();
@@ -4483,33 +4462,37 @@ class Runtime final : public menu::Host,
     LibraryHost& library_host();
 
     /// Builds the Library's inputs from the runtime's own sources: the
-    /// registries and catalogues of the content service's snapshot, the
-    /// installed packages and their updates as the Library's worker last
-    /// found them, the download queue, the badge pictures the worker has
-    /// read, and the run (this build's version, the mod played, a match).
-    /// Reads no file and waits on nothing.
+    /// registries and catalogues of the content service's snapshot, and
+    /// whether CHECK NOW can ask them or one is being asked; the installed
+    /// packages and their updates as the Library's worker last found them,
+    /// and every other mod folder the game can play (list_offered_mods) as
+    /// the player's own, ROLL BACK kept only for a version the game can
+    /// play; the download queue, the badge pictures the worker has read,
+    /// and the run (this build's version, the mod played, a match, whether
+    /// the command line chose the mod). Reads no file and waits on nothing.
     ///
     /// @return the inputs
     [[nodiscard]] oa::ui::library::Inputs library_inputs();
 
     /// Returns a count that moves on whenever library_inputs would give
     /// something else: the content service's generation, the download
-    /// queue's, the searches the Library's worker has done and the pictures
-    /// it has read, added. A match coming or going is not counted.
+    /// queue's, the searches the Library's worker has done, the pictures it
+    /// has read and the times the mod folders were listed
+    /// (list_offered_mods), added. A match coming or going is not counted.
     ///
     /// @return the count
     [[nodiscard]] uint64_t library_feed_generation();
 
     /// Opens the Library on the OA layer over the main menu: on a tab, else
-    /// on Updates while updates are waiting, else on Mods. When the Library
-    /// is on the layer already, the screens above it close and it is on top
-    /// again; it is never on the layer twice. Asks the content service to
-    /// refresh, as the player's setting allows, outside unattended runs.
+    /// on Active. When the Library is on the layer already, the screens
+    /// above it close and it is on top again; it is never on the layer
+    /// twice. Asks the content service to refresh, as the player's setting
+    /// allows, outside unattended runs.
     /// Refused, as the settings are, off the main menu, while a package owns
     /// the frame, over a message box, while the saves notice shows, or
     /// without the dialog's fonts.
     ///
-    /// @param tab the tab; nothing chooses Updates or Mods
+    /// @param tab the tab; nothing opens it on Active
     void open_library(std::optional<oa::ui::library::Tab> tab);
 
     /// Closes the Library and every screen above it on the OA layer; the
@@ -4531,29 +4514,62 @@ class Runtime final : public menu::Host,
     /// @return true for a registry that ships with the game
     [[nodiscard]] bool library_registry_built_in(std::string_view registry);
 
-    /// Carries out an entry's ROLL BACK, PLAY NOW or UPDATE, or UPDATE ALL.
-    /// ROLL BACK asks the Mods page's Roll Back Mod question over the
-    /// Library, and ROLL BACK on it rolls the folder back
-    /// (roll_back_mod_folder); PLAY NOW switches the game to the installed
-    /// mod's folder (switch_to_mod_folder); a refusal of either shows in the
-    /// status line. UPDATE asks request_update. UPDATE ALL asks it at once for
+    /// Carries out an entry's ROLL BACK, PLAY NOW, SWITCH OFF, UPDATE or
+    /// UNINSTALL, UPDATE ALL, or CHECK NOW. ROLL BACK asks the Roll Back Mod question
+    /// over the Library (oa::ui::library::roll_back_question), and ROLL BACK
+    /// on it rolls the folder back (roll_back_mod_folder), a refusal told in
+    /// a prompt over the Library (MOD NOT ROLLED BACK). PLAY NOW switches the
+    /// game to the installed mod's folder (switch_to_mod_folder), a refusal
+    /// told in a note over the Library
+    /// (oa::ui::library::switch_refused_note). SWITCH OFF asks the Switch
+    /// Mod question for no mod (oa::ui::library::switch_off_question), whose
+    /// SWITCH plays the game with no mod and whose CANCEL leaves it. PLAY
+    /// NOW and SWITCH OFF do nothing during a game, or while the command
+    /// line chose the mod. A refusal also shows in the status line. CHECK
+    /// NOW asks the registries for their lists again. UPDATE asks
+    /// request_update, and UNINSTALL library_uninstall. UPDATE ALL asks it at once for
     /// each update that can be installed and asks nothing first
     /// (oa::ui::library::asks_before_update), in the order the list shows
     /// them, and asks the update question once about the others
     /// (update_all_question), whose UPDATE asks request_update for each of
     /// them in that order and whose NOT NOW leaves them.
     ///
-    /// @param action Action::roll_back, play_now, update or update_all; any
-    ///     other does nothing
-    /// @param entry the entry; none for UPDATE ALL
+    /// @param action Action::roll_back, play_now, switch_off, update,
+    ///     update_all, uninstall (library_uninstall) or check_now; any other
+    ///     does nothing
+    /// @param entry the entry; none for UPDATE ALL and CHECK NOW
     void
     library_entry_action(oa::ui::library::Action action, const oa::ui::library::EntryId& entry);
 
+    /// Carries out an installed entry's UNINSTALL, which library_entry_action
+    /// hands here. For the mod being played, or the language pack the game
+    /// shows its words from, as the Library's model or this run says
+    /// (package_target_in_use, language_pack_in_use), it shows the notice of
+    /// what comes first over the Library and removes nothing. Otherwise it
+    /// asks the Uninstall question (oa::ui::library::uninstall_question),
+    /// whose UNINSTALL looks again and removes the package's folder in the
+    /// player's Mods, Maps or Languages folder, with the copy ROLL BACK
+    /// keeps (package_install::uninstall_package), the folders it drops
+    /// deleted a step a frame. A folder outside those folders is never
+    /// touched, and a refusal shows its notice. Nothing happens while the
+    /// button is off.
+    ///
+    /// @param entry the entry
+    void library_uninstall(const oa::ui::library::EntryId& entry);
+
+    /// Tells whether a language pack's folder is one the game shows its words
+    /// from now: the language shown's, or one of its fallbacks'
+    /// (language_pack_folders).
+    ///
+    /// @param folder the pack's folder
+    /// @return true when it is
+    [[nodiscard]] bool language_pack_in_use(const std::filesystem::path& folder) const;
+
     /// Starts an entry's update: the one place an update reaches the download
-    /// queue, from the Library's UPDATE and UPDATE ALL and Settings › Mods'
-    /// UPDATE. An update that asks first (oa::ui::library::update_question:
-    /// an added registry's mod whose rules hash changes or cannot be known)
-    /// pushes the update question at once over the screen that asked, NOT NOW
+    /// queue, from the Library's UPDATE and UPDATE ALL. An update that asks
+    /// first (oa::ui::library::update_question: an added registry's mod
+    /// whose rules hash changes or cannot be known) pushes the update
+    /// question at once over the screen that asked, NOT NOW
     /// marked; its UPDATE queues the update, and NOT NOW, Escape or B leaves
     /// it. Any other update, every built-in registry's among them, is queued
     /// at once. A refusal shows in the status line.

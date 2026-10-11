@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <map>
 #include <string>
@@ -33,6 +35,12 @@ constexpr uint32_t longest_wait_factor = 10;
 constexpr int entries_a_step = 64;
 /// The most time a Discarder step works.
 constexpr std::chrono::milliseconds time_a_step{4};
+/// The longest folder name an uninstall takes, in bytes.
+constexpr std::size_t most_name_bytes = 255;
+/// The first byte that is not a control character.
+constexpr unsigned char first_printable = 0x20;
+/// The control character DEL.
+constexpr unsigned char delete_character = 0x7f;
 
 /// Tells whether anything, a link included, is at a path.
 ///
@@ -358,6 +366,90 @@ ChangeResult commit_change(
         return result;
     } catch (const std::exception& failure) {
         return failed(Refusal::not_placed, failure.what());
+    }
+}
+
+bool plain_folder_name(std::string_view target) noexcept {
+    if (target.empty() || target.size() > most_name_bytes || target.front() == '.')
+        return false;
+    for (const char letter : target) {
+        const auto byte = static_cast<unsigned char>(letter);
+        if (byte < first_printable || byte == delete_character || letter == '/' || letter == '\\' ||
+            letter == ':')
+            return false;
+    }
+    return true;
+}
+
+UninstallResult uninstall_package(
+    const PackageKind& kind,
+    const fs::path& root,
+    std::string_view target,
+    const ChangeOptions& options
+) {
+    UninstallResult result{};
+    const auto refuse = [&](Refusal refusal, std::string why) {
+        result.refusal = refusal;
+        result.detail = std::move(why);
+        detail::log_line(
+            detail::utf8_of(root) + ": " + std::string(target) +
+            " not uninstalled: " + result.detail
+        );
+        return result;
+    };
+    try {
+        detail::note_kind(kind);
+        // One plain folder of the root, so that the path below can only
+        // name a folder the root holds.
+        if (!plain_folder_name(target))
+            return refuse(Refusal::unsafe_name, "the name is not one plain folder of the root");
+        const fs::path folder = root / detail::path_of(target);
+        const FolderNames names = folder_names(kind);
+        std::error_code root_error;
+        if (!fs::is_directory(root, root_error))
+            return refuse(Refusal::changed, "the root folder is missing");
+        const RootHold hold = hold_root(kind, root);
+        if (!hold)
+            return refuse(Refusal::busy, "another copy of the game holds the root folder");
+        // A link or junction is never followed: what it names stays whole.
+        if (is_link_or_junction(folder))
+            return refuse(Refusal::link, "the folder is a link");
+        std::error_code status_error;
+        const fs::file_status status = fs::symlink_status(folder, status_error);
+        if (status_error || !fs::is_directory(status))
+            return refuse(Refusal::changed, "the folder is missing or is not a folder");
+        const InstalledPackage held =
+            kind.read_installed != nullptr ? kind.read_installed(folder) : InstalledPackage{};
+        if (held.kind != FolderKind::package)
+            return refuse(Refusal::changed, "the folder holds no package");
+        if (options.expected && !same_package(held, *options.expected))
+            return refuse(Refusal::changed, "the folder changed since it was listed");
+        // An unfinished change's folder would bring the package back at the
+        // next recovery, so nothing is removed while one lies in the root.
+        for (const std::string& prefix : {names.staging, names.old, names.replaced, names.restore})
+            if (const fs::path role = role_folder(root, prefix, target); present(role))
+                return refuse(
+                    Refusal::busy,
+                    "an unfinished change's folder is in the way: " + detail::utf8_of(role)
+                );
+        // One rename moves the folder, its .backup inside it, aside whole;
+        // a refused rename leaves it where it was.
+        const fs::path aside = free_discard(root, names.discard, target);
+        if (const std::error_code error = move(options, folder, aside); error)
+            return refuse(Refusal::not_placed, "cannot move the folder aside: " + error.message());
+        result.removed = true;
+        result.discards.push_back(aside);
+        // The rename reaches storage before the player is told of it.
+        detail::flush_to_storage(root);
+        detail::log_line(
+            detail::utf8_of(folder) + ": uninstalled; " + detail::utf8_of(aside) +
+            " is deleted a step at a time"
+        );
+        return result;
+    } catch (const std::exception& failure) {
+        if (result.removed)
+            return result;
+        return refuse(Refusal::not_placed, failure.what());
     }
 }
 

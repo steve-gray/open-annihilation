@@ -341,6 +341,12 @@ settings dialog, the Game files screen and the folder chooser.
 
 Left-handed play swaps L1 and R1 in the Library as it does in every menu. Y, X and B stay where they are.
 
+The two buttons at the main menu's bottom right, the **OA** button, which
+opens the Library, and the **Settings** button with the gears, take the
+pointer: move it onto one with the right trackpad or the stick cursor and
+press R2. The D-pad and the left stick move the focus among the menu's own
+buttons only.
+
 **Text.** A chat line, a save's name, the player's name or a marker's text
 opens Steam's on-screen keyboard in Game Mode, placed clear of the field
 being typed in; Enter on it sends, and B cancels the line. STEAM and X open

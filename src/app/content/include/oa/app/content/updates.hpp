@@ -37,6 +37,10 @@ struct InstalledPackage {
     std::string name{};                                 ///< the name a player sees
     std::string version{};                              ///< the manifest's version, as written
     int64_t revision{}; ///< packaging.revision; 0 when the manifest names none
+    /// The manifest's author.name, as written; empty when it names none.
+    std::string author{};
+    /// The manifest's description, as written; empty when it gives none.
+    std::string description{};
     /// Where the folder was installed from. Empty when the folder has no record.
     std::optional<package_install::Origin> origin{};
     /// The mod's rules hash, resolved with default options. Empty for a kind

@@ -112,6 +112,9 @@ struct Resources {
     oa::ui::gui_input::ScrollHold hold;
     /// The game palette's gray table, built the first time a grayed control is drawn.
     std::vector<uint8_t> gray_table;
+    /// The dialog names no picture, so its face is the common panel tiles and
+    /// its text fields and lists take the common list-box frame.
+    bool plain_panel = false;
 };
 
 struct MapInfo {
@@ -266,6 +269,12 @@ DirectGameState g_direct{};
 // The pack maps the battle room lists beside the base maps. A null member
 // does nothing. The binding survives multiplayer_reset.
 LobbyMapSource g_map_source{};
+
+// The OA layer's answer for whether it draws the badges at the window's own
+// pixels this frame. A null answer keeps the frame's pixel badge. The
+// binding survives multiplayer_reset.
+void* g_layer_badge_context = nullptr;
+bool (*g_layer_draws_badges)(void*) = nullptr;
 
 /// Tells whether the bound source lists a map by this exact name.
 ///
@@ -1021,8 +1030,16 @@ bool load(
     return true;
 }
 
-// Places a stacked panel: its own background image when given, otherwise a
-// darkened copy of the screen below, with the panel rectangle filled.
+// A dialog that names no picture. paint_plain_panel lays the common panel
+// tiles in its rectangle. paint_plain_list_frames lays the common list-box
+// tiles around each list, under the rows the screen draws later.
+bool paint_plain_panel(const Resources& modal, Image& image);
+void paint_plain_list_frames(const Resources& modal, Image& image);
+
+// Places a stacked panel. One with its own picture is centred over the screen
+// below. One that names no picture lays the common panel tiles in its
+// rectangle over that screen, and darkens the rectangle when those tiles
+// cannot be drawn.
 bool load_modal(
     ScreenContext* ctx,
     ModalKind kind,
@@ -1046,21 +1063,26 @@ bool load_modal(
     if (full_screen || !state.base.loaded)
         return true;
     if (background == nullptr) {
-        // Dialog without its own art: dim the rectangle it covers.
+        // No picture of its own. The face is the common panel tiles. The
+        // rectangle is darkened only when those tiles cannot be drawn.
         image = state.base.screen.background;
-        for (int32_t y = std::max(0, static_cast<int32_t>(root.y));
-             y < root.y + height && y < static_cast<int32_t>(image.height);
-             ++y)
-            for (int32_t x = std::max(0, static_cast<int32_t>(root.x));
-                 x < root.x + width && x < static_cast<int32_t>(image.width);
-                 ++x) {
-                auto* pixel = &image.rgb
-                                   [(static_cast<std::size_t>(y) * image.width +
-                                     static_cast<std::size_t>(x)) *
-                                    3U];
-                for (int channel = 0; channel < 3; ++channel)
-                    pixel[channel] = static_cast<uint8_t>(pixel[channel] / 4);
-            }
+        state.modal.plain_panel = true;
+        if (!paint_plain_panel(state.modal, image)) {
+            for (int32_t y = std::max(0, static_cast<int32_t>(root.y));
+                 y < root.y + height && y < static_cast<int32_t>(image.height);
+                 ++y)
+                for (int32_t x = std::max(0, static_cast<int32_t>(root.x));
+                     x < root.x + width && x < static_cast<int32_t>(image.width);
+                     ++x) {
+                    auto* pixel = &image.rgb
+                                       [(static_cast<std::size_t>(y) * image.width +
+                                         static_cast<std::size_t>(x)) *
+                                        3U];
+                    for (int channel = 0; channel < 3; ++channel)
+                        pixel[channel] = static_cast<uint8_t>(pixel[channel] / 4);
+                }
+        }
+        paint_plain_list_frames(state.modal, image);
         return true;
     }
     // Own art: the panel occupies the top-left root-sized corner of the
@@ -1176,6 +1198,263 @@ std::string_view template_name(const Resources& res, const Control& control) {
     if (control.source < 0 || static_cast<std::size_t>(control.source) >= res.source.gadgets.size())
         return {};
     return res.source.gadgets[static_cast<std::size_t>(control.source)].common.name;
+}
+
+// The common panel tiles, used when a dialog names no picture and no panel
+// sequence of its own. The common list-box tiles frame a text field that is
+// not drawn as a solid field, and a list, grown this far past each edge.
+constexpr const char* kPanelTiles = "BackTile";
+constexpr const char* kTextBoxTiles = "Listbox";
+constexpr int32_t kTextBoxFrameMargin = 3;
+
+const formats::gaf::Sequence*
+find_sequence(const formats::gaf::Archive& archive, std::string_view name);
+
+const PaletteBytes& screen_palette(const renderer::ScreenResources& screen) {
+    return screen.background.palette.has_value() ? *screen.background.palette : screen.gui_palette;
+}
+
+/// Copies a frame's covered pixels into an RGB image through a palette.
+///
+/// A pixel the frame does not cover keeps what is already there. The frame's
+/// origin is not applied: the common panel tiles are drawn with theirs
+/// cleared, and these screens draw every other frame at the position given.
+///
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param frame the rendered frame
+/// @param x the frame's left column
+/// @param y the frame's top row
+/// @param palette the palette the frame's indices select from
+void blit_covered(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const formats::gaf::RenderedFrame& frame,
+    int32_t x,
+    int32_t y,
+    const PaletteBytes& palette
+) {
+    const auto pixel_count = static_cast<std::size_t>(frame.width) * frame.height;
+    const auto image_bytes = static_cast<uint64_t>(image_width) * image_height * 3U;
+    if (frame.pixels.size() != pixel_count || frame.coverage.size() != pixel_count ||
+        image_width == 0 || image_height == 0 || image_bytes > rgb.size())
+        return;
+    const auto frame_w = static_cast<int64_t>(frame.width);
+    const auto frame_h = static_cast<int64_t>(frame.height);
+    const auto first_column = std::max<int64_t>(0, -static_cast<int64_t>(x));
+    const auto first_row = std::max<int64_t>(0, -static_cast<int64_t>(y));
+    const auto end_column = std::min<int64_t>(frame_w, static_cast<int64_t>(image_width) - x);
+    const auto end_row = std::min<int64_t>(frame_h, static_cast<int64_t>(image_height) - y);
+    if (first_column >= end_column || first_row >= end_row)
+        return;
+    constexpr std::size_t entry_bytes = 4;
+    for (auto row = first_row; row < end_row; ++row) {
+        const auto source = static_cast<std::size_t>(row * frame_w);
+        auto* out = rgb.data() + (static_cast<std::size_t>(y + row) * image_width +
+                                  static_cast<std::size_t>(x + first_column)) *
+                                     3U;
+        for (auto column = first_column; column < end_column; ++column, out += 3) {
+            const auto offset = source + static_cast<std::size_t>(column);
+            if (frame.coverage[offset] == 0)
+                continue;
+            const auto* color =
+                palette.data() + static_cast<std::size_t>(frame.pixels[offset]) * entry_bytes;
+            std::memcpy(out, color, 3);
+        }
+    }
+}
+
+/// Lays a skin's tiles over a rectangle, in the order the tiles are drawn.
+///
+/// Fewer than two frames draws the first at the rectangle's top-left. Two or
+/// more are tiled from the skin's first frame, the far column and row ending
+/// flush with the rectangle.
+///
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param skin the skin, with its frames
+/// @param origin_x the rectangle's left column
+/// @param origin_y the rectangle's top row
+/// @param width the rectangle's width
+/// @param height the rectangle's height
+/// @param palette the palette the frames' indices select from
+/// @return false when a frame the skin needs cannot be drawn
+bool paint_skin(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const formats::gaf::Sequence& skin,
+    int32_t origin_x,
+    int32_t origin_y,
+    int32_t width,
+    int32_t height,
+    const PaletteBytes& palette
+) {
+    if (skin.frames.empty() || width < 1 || height < 1)
+        return false;
+    std::vector<std::optional<formats::gaf::RenderedFrame>> rendered(skin.frames.size());
+    std::vector<char> tried(skin.frames.size(), 0);
+    const auto frame_at = [&](std::size_t index) -> const formats::gaf::RenderedFrame* {
+        if (index >= skin.frames.size())
+            return nullptr;
+        if (tried[index] == 0) {
+            tried[index] = 1;
+            auto result = formats::gaf::render_normal(skin.frames[index]);
+            if (result.ok())
+                rendered[index] = std::move(result.frame);
+        }
+        return rendered[index] ? &*rendered[index] : nullptr;
+    };
+
+    struct Spot {
+        const formats::gaf::RenderedFrame* frame = nullptr;
+        int32_t x = 0;
+        int32_t y = 0;
+    };
+
+    std::vector<Spot> spots;
+    if (skin.frames.size() < 2) {
+        const auto* frame = frame_at(0);
+        if (frame == nullptr)
+            return false;
+        spots.push_back({frame, origin_x, origin_y});
+    } else {
+        const auto tiles = oa::ui::gui_layout::skin_tiles(
+            width, height, skin.frames[0].width, skin.frames[0].height
+        );
+        if (tiles.empty())
+            return false;
+        spots.reserve(tiles.size());
+        for (const auto& tile : tiles) {
+            const auto* frame = frame_at(tile.frame);
+            if (frame == nullptr)
+                return false;
+            spots.push_back({frame, origin_x + tile.x, origin_y + tile.y});
+        }
+    }
+    for (const auto& spot : spots)
+        blit_covered(rgb, image_width, image_height, *spot.frame, spot.x, spot.y, palette);
+    return true;
+}
+
+/// The sequence a dialog that names no picture is drawn with.
+///
+/// A sequence the layout names is taken from the shared GUI art. With none
+/// named, or none there, the common panel tiles are used.
+///
+/// @param modal the dialog's resources
+/// @return the sequence, or null when the shared art has neither
+const formats::gaf::Sequence* plain_panel_skin(const Resources& modal) {
+    const auto& shared = modal.screen.shared_sprites;
+    if (!modal.source.gadgets.empty()) {
+        const auto* fields =
+            std::get_if<ui::gui_layout::PanelFields>(&modal.source.gadgets.front().fields);
+        if (fields != nullptr && !fields->panel.empty()) {
+            if (const auto* named = find_sequence(shared, fields->panel))
+                return named;
+        }
+    }
+    return find_sequence(shared, kPanelTiles);
+}
+
+bool paint_plain_panel(const Resources& modal, Image& image) {
+    if (modal.panel.count < 1)
+        return false;
+    const auto* skin = plain_panel_skin(modal);
+    if (skin == nullptr)
+        return false;
+    const auto& root = modal.panel.controls[0];
+    return paint_skin(
+        image.rgb,
+        image.width,
+        image.height,
+        *skin,
+        root.x,
+        root.y,
+        root.width,
+        root.height,
+        image.palette.has_value() ? *image.palette : modal.screen.gui_palette
+    );
+}
+
+/// Draws the list-box frame around one control.
+///
+/// The frame is the common list-box tiles, grown past the control on every
+/// side. A text field marked as a solid field is not framed.
+///
+/// @param rgb the image, three bytes a pixel
+/// @param image_width the image width
+/// @param image_height the image height
+/// @param res the dialog's resources
+/// @param control the text field or list
+/// @param palette the palette the tiles' indices select from
+/// @param solid_field_unframed true to skip a text field marked as a solid field
+void paint_list_box_frame(
+    std::span<uint8_t> rgb,
+    uint32_t image_width,
+    uint32_t image_height,
+    const Resources& res,
+    const Control& control,
+    const PaletteBytes& palette,
+    bool solid_field_unframed
+) {
+    if (solid_field_unframed && (control.attributes & ui::gui_layout::attribute::horizontal) != 0)
+        return;
+    const auto* skin = find_sequence(res.screen.shared_sprites, kTextBoxTiles);
+    if (skin == nullptr)
+        return;
+    (void)paint_skin(
+        rgb,
+        image_width,
+        image_height,
+        *skin,
+        control.x + res.offset_x - kTextBoxFrameMargin,
+        control.y + res.offset_y - kTextBoxFrameMargin,
+        control.width + kTextBoxFrameMargin * 2,
+        control.height + kTextBoxFrameMargin * 2,
+        palette
+    );
+}
+
+void paint_plain_list_frames(const Resources& modal, Image& image) {
+    if (!modal.plain_panel)
+        return;
+    const auto& palette = image.palette.has_value() ? *image.palette : modal.screen.gui_palette;
+    for (int32_t index = 1; index < modal.panel.count; ++index) {
+        const auto& control = modal.panel.controls[static_cast<std::size_t>(index)];
+        if (control.type != ControlType::list_box || control.active == 0)
+            continue;
+        paint_list_box_frame(
+            image.rgb, image.width, image.height, modal, control, palette, false
+        );
+    }
+}
+
+/// Draws the list-box frame around a plain dialog's text field.
+///
+/// The frame sits under the letters and the cursor. A field marked as a
+/// solid field is left unframed.
+///
+/// @param[in,out] surface the drawn screen
+/// @param res the dialog's resources
+/// @param control the text field
+void paint_plain_text_box(
+    renderer::Surface& surface, const Resources& res, const Control& control
+) {
+    if (!res.plain_panel)
+        return;
+    paint_list_box_frame(
+        surface.rgb,
+        surface.width,
+        surface.height,
+        res,
+        control,
+        screen_palette(res.screen),
+        true
+    );
 }
 
 const formats::gaf::Sequence*
@@ -2053,11 +2332,9 @@ constexpr ScreenColor kBadgeBottomColor{0x15, 0x19, 0x15};
 constexpr ScreenColor kAmberColor{0xe2, 0xb2, 0x3d};
 /// Background, #0d100e: the ring around the dot.
 constexpr ScreenColor kBackgroundColor{0x0d, 0x10, 0x0e};
-/// The dot's ring is a square this many pixels across, its four corner
-/// pixels left out, reaching kBadgeDotOverhang pixels past the badge's right
-/// edge and above its top; the dot is the square one pixel inside it.
-constexpr int32_t kBadgeDotRingSize = 6;
-constexpr int32_t kBadgeDotOverhang = 2;
+/// The dot's ring is presence_badge_dot_ring pixels across, its four corner
+/// pixels left out, reaching presence_badge_dot_overhang pixels past the
+/// badge's right edge and above its top; the dot is the square one pixel inside it.
 
 /// Fills a square without its four corner pixels, skipping pixels outside the surface.
 ///
@@ -2135,11 +2412,13 @@ void draw_presence_badge(
     );
     if (!spot.rules_differ)
         return;
-    const int32_t ring_left = x + width + kBadgeDotOverhang - kBadgeDotRingSize;
-    const int32_t ring_top = y - kBadgeDotOverhang;
-    fill_square_without_corners(surface, ring_left, ring_top, kBadgeDotRingSize, kBackgroundColor);
+    const int32_t ring_left = x + width + presence_badge_dot_overhang - presence_badge_dot_ring;
+    const int32_t ring_top = y - presence_badge_dot_overhang;
     fill_square_without_corners(
-        surface, ring_left + 1, ring_top + 1, kBadgeDotRingSize - 2, kAmberColor
+        surface, ring_left, ring_top, presence_badge_dot_ring, kBackgroundColor
+    );
+    fill_square_without_corners(
+        surface, ring_left + 1, ring_top + 1, presence_badge_dot_ring - 2, kAmberColor
     );
 }
 
@@ -2179,10 +2458,16 @@ int32_t presence_badge_spots(
 
 /// Draws the OA badge, and its dot, in each OA player's CD<slot> rectangle (draw_presence_badge).
 ///
+/// Left out when the OA layer draws the badges at the window's own pixels
+/// (multiplayer_bind_layer_presence_badges), so the frame's small badge is
+/// not magnified under the sharp one. A renderer without the layer keeps it.
+///
 /// @param[in,out] surface image drawn on
 /// @param res the battle room's resources
 /// @param lobby lobby whose slots are shown
 void draw_presence_badges(renderer::Surface& surface, const Resources& res, Lobby& lobby) {
+    if (g_layer_draws_badges != nullptr && g_layer_draws_badges(g_layer_badge_context))
+        return;
     PresenceBadgeSpot spots[kSlotCount]{};
     const auto count = presence_badge_spots(res, lobby, spots, kSlotCount);
     for (int32_t index = 0; index < count; ++index)
@@ -2338,6 +2623,7 @@ void draw_text_boxes(renderer::Surface& surface, Resources& res) {
         const auto& control = panel.controls[static_cast<std::size_t>(index)];
         if (control.type != ControlType::text_box || control.active == 0)
             continue;
+        paint_plain_text_box(surface, res, control);
         std::string text(control_text(control));
         const bool focused = index == panel.focus;
         const bool cursor = focused && ((elapsed_ms() / 500U) & 1U) == 0;
@@ -3917,6 +4203,11 @@ void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {
 
 void multiplayer_bind_row_key(PresenceCardTrigger* trigger) noexcept {
     row_key_trigger = trigger;
+}
+
+void multiplayer_bind_layer_presence_badges(void* context, bool (*draws)(void*)) noexcept {
+    g_layer_badge_context = context;
+    g_layer_draws_badges = draws;
 }
 
 void multiplayer_reset() noexcept {

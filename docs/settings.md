@@ -1,24 +1,28 @@
 # Settings
 
-Open Annihilation adds settings of its own to the game: which mod to play,
-a few controls, the unit limit, the language and fonts of the game's text,
-graphics and the size of Open Annihilation's own screens, touch and gamepad
-controls, downloads and the registries they come from, and Developer Mode.
-They live in one dialog, apart from the game's own options, which stay in
-3.1c's Options menu. This page shows each section of the dialog and says
-what every setting does, its default, when it takes effect and when you
-might change it.
+Open Annihilation adds settings of its own to the game: a few controls, the
+unit limit, the language and fonts of the game's text, graphics and the
+size of Open Annihilation's own screens, touch and gamepad controls,
+downloads and the registries they come from, and Developer Mode. They live
+in one dialog, apart from the game's own options, which stay in 3.1c's
+Options menu. This page shows each section of the dialog and says what
+every setting does, its default, when it takes effect and when you might
+change it.
+
+The mod you play is not a setting here: you choose it in
+[the Library](library.md#choosing-a-mod), where **PLAY NOW** plays a mod
+and **SWITCH OFF** goes back to the game as 3.1c plays it.
 
 The pictures show each section at its defaults on a Mac, opened from the
 main menu, with Core Prime's list of content checked a few minutes before.
-The top and middle of Graphics, and Controller, are pictures from 0.7, from
-before Downloads joined the column on the left.
+They are from before Mods left the column on the left for the Library, and
+the top and middle of Graphics, and Controller, are pictures from 0.7, from
+before Downloads joined it.
 
 ## Contents
 
 - [Opening the settings](#opening-the-settings)
 - [OK, Cancel and Restore defaults](#ok-cancel-and-restore-defaults)
-- [Mods](#mods)
 - [Controls](#controls)
 - [Common Tweaks](#common-tweaks)
 - [Language](#language)
@@ -35,9 +39,11 @@ before Downloads joined the column on the left.
 
 The settings open from:
 
-- **SETTINGS…** at the foot of the Library, which the **OA** button at the
-  bottom right of the main menu opens ([the Library](library.md));
-- the **OA** button under **Resume** in the in-game menu (F2);
+- the **Settings** button, the gears at the bottom right of the main menu,
+  right of the **OA** button, which opens [the Library](library.md);
+- **SETTINGS…** at the foot of the Library;
+- the button under **Resume** in the in-game menu (F2), which shows the
+  gears too;
 - **Cmd+,** on macOS, or **Settings…** in the application menu;
 - **Ctrl+,** on Windows and Linux.
 
@@ -45,7 +51,7 @@ A game played alone stays paused while the settings are open. A
 multiplayer game keeps running, and the dialog's header says so in amber:
 "Shared game - still running".
 
-The column on the left lists the sections: Mods, Controls, Common Tweaks,
+The column on the left lists the sections: Controls, Common Tweaks,
 Language and Graphics, then Touch while the game has touch controls,
 Controller once a gamepad has been used, and Game files in the main menu
 on an iPhone or an iPad, then Downloads, and Developer at its foot under a
@@ -67,8 +73,8 @@ keep it. A row's hint says when a setting takes effect later instead:
 - **Cancel** (Escape) closes it and puts back every setting as it was when
   the dialog opened.
 - **Restore defaults** sets every setting back to its default. It leaves
-  alone the mod you play, which changes only through the Mods section's
-  question, the changes Developer Mode keeps for the standard hacks, and
+  alone the mod you play, which changes only in the Library, the changes
+  Developer Mode keeps for the standard hacks, and
   any setting that is locked. It also has the graphics card tried afresh (see
   [Hardware acceleration](#graphics)), turns every install ID in Downloads
   back on and sets Check for content updates to Automatically; the
@@ -100,73 +106,6 @@ A setting that cannot change now is faded, with a padlock and the reason:
 - **Not available here**: this computer or its graphics cannot offer it.
 - **Needs modern fonts**: Text size, while the modern fonts are off.
 - **Always on here**: Native pixel density on an iPhone or an iPad.
-
-## Mods
-
-![The Mods section: No Mod, marked PLAYING, with the version 3.1c and the line "The game's own rules, as 3.1c plays them."; under the list the line "Checked for updates 4 min ago · CHECK NOW", the OPEN MODS FOLDER and GET MORE MODS… buttons, and a line naming the folders listed.](images/settings/mods.png)
-
-Mods chooses the mod the game plays, or **No Mod** for 3.1c's own rules,
-which is the default. It is a list rather than a column of settings: a row
-for each mod, with its badge, its title, its version at the right and a
-line that describes it. A mod without a badge shows an empty dashed square.
-
-- **The list** starts with the mod being played, marked PLAYING, then No
-  Mod when a mod is playing, then every other mod by title. It holds the
-  mods in the game folder's `mods` folder and in your own Mods folder,
-  `Documents/Open Annihilation/Mods`. A folder without an `oamod.yaml`
-  shows its folder's name, "N/A" and "No oamod.yaml present" in amber; it
-  plays with the game's own rules.
-- **Choosing a mod.** A click on another row, or Space on it, asks
-  **Switch Mod**: "Switch to *title* now? The game reloads its data for
-  the new mod and returns to the main menu. Your other settings are kept."
-  **Switch** (Enter) keeps the dialog's other changes as OK does, then
-  reloads the game for that mod and returns to the main menu, without
-  closing the window. **Cancel** (Escape) leaves everything as it was. The
-  mod chosen is played at every later start too.
-- **An update.** When a registry lists a newer release of a mod you
-  installed from it, the mod's row says so in amber in place of its
-  description, with the download's size: "Revision 4 available · 3.2 MB" or
-  "Version 4.9 available · 41.0 MB", or "Revision 4 changes the rules ·
-  3.2 MB" when the update changes the game's rules, which saved games are
-  tied to, and "… may change the rules · …" when OA cannot tell. **UPDATE**,
-  beside ROLL BACK, starts it. An update from Core Prime's registry starts
-  at once; one from a registry you added asks first when it changes the
-  rules or may change them ([which downloads ask first](library.md#which-downloads-ask-first)).
-  While it downloads the line says how far it has come ("Updating · 28%"),
-  and an update to the mod being played waits until you leave that mod
-  ("Waiting · finishes when you leave *title*"). Nothing updates until you
-  press UPDATE, here or in the [Library](library.md).
-- **ROLL BACK** shows on a mod's row when its folder keeps the version an
-  update replaced. It asks first (**ROLL BACK MOD**: "Roll back *title* to
-  *the kept version*? *The installed version* is kept in its place, and
-  ROLL BACK again brings it back.", with **CANCEL** and **ROLL BACK**); it
-  swaps the two versions, and a second ROLL BACK undoes the first. For the
-  mod being played it adds "The game reloads its data for the mod and
-  returns to the main menu.". Rolling back an update makes that update show
-  again.
-- **Checked for updates 4 min ago · CHECK NOW**, under the list, says when
-  the registries' lists were last checked: "Not checked for updates yet",
-  "Checking for updates…", "Couldn't check for updates" in amber, or "No
-  registries are on.". **CHECK NOW** checks every registry that is on, at
-  once, whatever Check for content updates in [Downloads](#downloads)
-  says.
-- **Open Mods Folder** opens your Mods folder in the system's file manager,
-  where a mod's folder goes to be listed.
-- **Get More Mods…**, beside it on the main menu, opens the Library on its
-  Mods tab, over the settings.
-
-During a game the section is locked ("Locked during a game. Choose the mod
-from the main menu."): a game keeps the mod it started with, and UPDATE,
-CHECK NOW and GET MORE MODS… are not shown. It is locked too while
-`--mod-dir` or `--base-game` chose the run's mod ("The command line chose
-this run's mod.").
-
-Change it to play a mod, or to go back to the game as 3.1c plays it.
-[The Library](library.md) finds, installs and updates mods from Core
-Prime's registry and those you add. [Mod support](mods/README.md) covers
-[installing a mod](mods/README.md#installing-a-mod),
-[installing a .oamod file](mods/README.md#installing-a-oamod-file) and
-[choosing one](mods/README.md#choosing-a-mod) in full.
 
 ## Controls
 
@@ -736,8 +675,9 @@ a page for each in [standard-hacks](mods/standard-hacks/).
 ## For one run: the command line
 
 These options set a setting for one run without changing what is kept.
-The row then shows "Set on the command line", and the Mods section "The
-command line chose this run's mod."
+The row then shows "Set on the command line". The mod options choose the
+mod for the run: the Library then says "The command line chose this run's
+mod." and turns PLAY NOW and SWITCH OFF off.
 
 | Option | Setting | For the run |
 |---|---|---|
@@ -745,8 +685,8 @@ command line chose this run's mod."
 | `--hardware-acceleration=off`, `=basic` or `=full` | Hardware acceleration | that level; `--hardware-acceleration` alone is Full |
 | `--no-hardware-acceleration` | Hardware acceleration | Off |
 | `--native-density` | Native pixel density | On |
-| `--mod-dir PATH` | Mods | plays the mod folder at `PATH` |
-| `--base-game` | Mods | plays 3.1c without the mod you chose |
+| `--mod-dir PATH` | the mod (the Library) | plays the mod folder at `PATH` |
+| `--base-game` | the mod (the Library) | plays 3.1c without the mod you chose |
 | a language's name, as `german` | Language | that language, as 3.1c's command line names it |
 
 Two more change what the settings show: `--touch-controls` turns the touch

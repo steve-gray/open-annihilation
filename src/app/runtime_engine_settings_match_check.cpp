@@ -5,14 +5,17 @@
 // dialog beside the darkened column, the pause and the locks.
 
 #include "check_host_input.hpp"
+#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
 
 #include "oa/app/runtime.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -24,6 +27,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -36,6 +40,7 @@ namespace {
 
 namespace fs = std::filesystem;
 namespace settings = oa::ui::engine_settings;
+namespace library = oa::ui::library;
 namespace layout = oa::ui::display_layout;
 namespace artless = oa::ui::frontend_renderer;
 namespace kit = oa::ui::kit;
@@ -105,8 +110,11 @@ constexpr std::array<int32_t, 2> kLockedRows{
     settings::first_row_control + 1, settings::first_row_control + 2
 };
 
-/// How Mods' note during a game starts; the note may take two lines.
-constexpr std::string_view kModInGameNote = "Locked during a game.";
+/// The keys of the made-up mods that stand in the Library for the mods
+/// during a game, since no mod plays in the check: the one played and
+/// another.
+constexpr std::string_view kPlayedStandIn = "match-check-played";
+constexpr std::string_view kOtherStandIn = "match-check-other";
 
 /// The keys that move the focus, each pressed in turn round every control
 /// and back: Tab, Shift+Tab, Down and Up.
@@ -291,10 +299,14 @@ void Runtime::check_engine_settings_in_match() {
             }
         require(differing == 0, what + ": " + std::to_string(differing) + " pixels differ");
     };
+    // The dialog's header shows the Open Annihilation icon, and the in-game
+    // OA button, which opens Settings, the settings icon.
     const auto icon = engine_settings_icon();
-    require(renderer::picture_drawable(icon), "the in-game OA button has no icon to show");
+    require(renderer::picture_drawable(icon), "the dialog has no icon to show");
+    const auto gears = EngineSettingsMenuHost::settings_icon(*this);
+    require(renderer::picture_drawable(gears), "the in-game OA button has no icon to show");
     const auto button_face = [&](settings::ButtonLook look, bool darkened, const auto& fonts) {
-        return OaLayer::match_button_face(match_layout_, look, darkened, fonts, icon);
+        return OaLayer::match_button_face(match_layout_, look, darkened, fonts, gears);
     };
     // The dialog drawn offscreen at a size class and a whole scale: the
     // class's dialog points at the scale, crisp. Compact at 1x is 0.7.3's.
@@ -396,67 +408,75 @@ void Runtime::check_engine_settings_in_match() {
         }
     };
 
-    // Mods during a game keeps the mod played and says that the main menu
-    // chooses the mod: no press on a row and no key asks the Switch Mod
-    // question, and OPEN MODS FOLDER is inert.
+    // During a game the mod played stays as it is: the in-game dialog lists
+    // no Mods section, the Library does not open, and in its model, as the
+    // run's feed gives it in a game, PLAY NOW and SWITCH OFF are off and ask
+    // nothing, with nothing changed. Two made-up mods stand in for the mods,
+    // one played, since no mod plays in the check.
     const auto expect_mod_locked = [&](const std::string& on) {
-        show_page(settings::Page::mods, on);
         const auto kept = engine_settings();
         auto* dialog = engine_settings_dialog();
+        require(dialog != nullptr, "the dialog closed" + on);
         const auto parts = settings::dialog_layout(*dialog);
         require(
-            dialog->locks.mod == settings::Lock::in_game &&
-                std::any_of(
-                    parts.begin(),
-                    parts.end(),
-                    [](const settings::LayoutPart& part) {
-                        return part.text.starts_with(kModInGameNote);
-                    }
-                ),
-            "Mods is not locked during a game with its note" + on
+            !shows_text(parts, "Mods") && !shows_text(parts, "OPEN MODS FOLDER"),
+            "the in-game dialog lists a Mods section" + on
         );
-        // No mod plays in the check, whatever the setting holds.
-        const auto rows = settings::mod_rows(*dialog);
+        open_library(std::nullopt);
         require(
-            !rows.empty() && rows.front().playing && rows.front().offered == settings::no_mod_row,
-            "Mods does not show the mod played first" + on
+            oa_layer().find(library_screen_name) == nullptr, "the Library opened in a game" + on
         );
-        // A press on every row and on OPEN MODS FOLDER, where they are
-        // unlocked.
-        auto unlocked = *dialog;
-        unlocked.locks = {};
-        for (const auto& part : settings::dialog_layout(unlocked))
-            if (part.control >= settings::first_row_control)
-                click_dialog(part.rect);
-        // The keys move the focus round every control and back, never onto
-        // a row; on Mods' entry, where the focus comes back to, the arrows
-        // and Space change nothing.
-        const auto entry = settings::page_control(settings::Page::mods);
+        library::Inputs inputs = library_inputs();
+        require(inputs.in_match, "the Library's feed does not know a game is played" + on);
+        for (const std::string_view key : {kPlayedStandIn, kOtherStandIn}) {
+            library::Installed stand_in;
+            stand_in.kind = library::Kind::mod;
+            stand_in.key = std::string(key);
+            stand_in.name = std::string(key);
+            stand_in.folder = user_folder_ / std::string(key);
+            stand_in.playing = key == kPlayedStandIn;
+            inputs.installed.push_back(std::move(stand_in));
+        }
+        LibraryHost& host = library_host();
+        library::refresh(host.model, std::move(inputs));
+        for (const std::string_view key : {kPlayedStandIn, kOtherStandIn}) {
+            const library::EntryId id{{}, library::Kind::mod, std::string(key)};
+            const library::Entry* entry = library::find_entry(host.model, id);
+            require(entry != nullptr, "the Library does not list a made-up mod" + on);
+            const library::Action wanted =
+                key == kPlayedStandIn ? library::Action::switch_off : library::Action::play_now;
+            bool off = false;
+            for (const library::ActionButton& button : library::entry_actions(host.model, *entry))
+                off = off || (button.action == wanted && !button.enabled);
+            require(off, "PLAY NOW or SWITCH OFF can be pressed during a game" + on);
+            library_entry_action(wanted, id);
+        }
+        // The feed builds the model afresh once the main menu shows again.
+        host.refreshed = false;
         require(
-            engine_settings_dialog()->focused == entry,
-            "a click on Mods' entry did not focus it" + on
+            engine_settings_dialog() != nullptr &&
+                dynamic_cast<const QuestionScreen*>(oa_layer().top()) == nullptr &&
+                !soft_restart_requested() && engine_settings() == kept,
+            "PLAY NOW or SWITCH OFF asked to switch the mod or changed a setting during a game" + on
         );
+        // The keys move the focus round the in-game dialog, never onto a row
+        // the game locks, and change nothing.
+        show_page(settings::Page::common_tweaks, on);
         for (const auto& [key, modifiers] : kFocusKeys) {
             for (int press = 0; press < 12; ++press) {
                 tap_key(key, modifiers);
+                const auto* now = engine_settings_dialog();
                 require(
-                    engine_settings_dialog() != nullptr &&
-                        engine_settings_dialog()->focused < settings::first_row_control,
-                    "a key moved the focus onto a locked row of Mods" + on
+                    now != nullptr &&
+                        std::find(kLockedRows.begin(), kLockedRows.end(), now->focused) ==
+                            kLockedRows.end(),
+                    "a key moved the focus onto a row a game locks" + on
                 );
             }
         }
         require(
-            engine_settings_dialog()->focused == entry,
-            "the keys did not bring the focus back to Mods' entry" + on
-        );
-        for (const auto key : {SDLK_RIGHT, SDLK_LEFT, SDLK_SPACE, SDLK_Y})
-            tap_key(key, SDL_KMOD_NONE);
-        dialog = engine_settings_dialog();
-        require(
-            dialog != nullptr && dialog->switch_question == settings::no_question &&
-                !soft_restart_requested() && engine_settings() == kept,
-            "a press or a key asked to switch the mod or changed a setting during a game" + on
+            !soft_restart_requested() && engine_settings() == kept,
+            "a key switched the mod or changed a setting during a game" + on
         );
     };
 
@@ -930,17 +950,7 @@ void Runtime::check_engine_settings_in_match() {
             "the dialog does not say the shared game is still running" + on
         );
         expect_locks("Set by the host", "match-dialog-shared", shot, on);
-        show_page(settings::Page::mods, on);
-        require(
-            engine_settings_dialog()->locks.mod == settings::Lock::in_game &&
-                std::ranges::any_of(
-                    settings::dialog_layout(*engine_settings_dialog()),
-                    [](const settings::LayoutPart& part) {
-                        return part.text.starts_with(kModInGameNote);
-                    }
-                ),
-            "a shared game does not lock Mods with its note" + on
-        );
+        expect_mod_locked(on);
         // Graphics in a shared game, a page down to show both rows at
         // Compact, whose view a larger class's holds from its top: Vertical
         // sync is locked during the game, its value set before the game kept
@@ -1252,16 +1262,43 @@ void Runtime::check_engine_settings_in_match() {
     }
     leave_match();
     load(Screen::main_menu);
-    // Back on the main menu Mods is unlocked.
+    // Back on the main menu the Library's PLAY NOW and SWITCH OFF can be
+    // pressed again, and the dialog still lists no Mods section.
     send_key(SDLK_COMMA, kShortcutModifier, true, false);
     send_key(SDLK_COMMA, kShortcutModifier, false, false);
     {
         const auto* dialog = engine_settings_dialog();
         require(
-            dialog != nullptr && dialog->locks.mod == settings::Lock::none &&
-                engine_settings_locks().mod == settings::Lock::none,
-            "Mods is locked on the main menu after a game"
+            dialog != nullptr && !shows_text(settings::dialog_layout(*dialog), "Mods"),
+            "the main menu's dialog lists a Mods section after a game"
         );
+        library::Inputs inputs = library_inputs();
+        for (const std::string_view key : {kPlayedStandIn, kOtherStandIn}) {
+            library::Installed stand_in;
+            stand_in.kind = library::Kind::mod;
+            stand_in.key = std::string(key);
+            stand_in.name = std::string(key);
+            stand_in.folder = user_folder_ / std::string(key);
+            stand_in.playing = key == kPlayedStandIn;
+            inputs.installed.push_back(std::move(stand_in));
+        }
+        LibraryHost& host = library_host();
+        library::refresh(host.model, std::move(inputs));
+        bool on = !host.model.inputs.in_match;
+        for (const std::string_view key : {kPlayedStandIn, kOtherStandIn}) {
+            const library::Entry* entry =
+                library::find_entry(host.model, {{}, library::Kind::mod, std::string(key)});
+            const library::Action wanted =
+                key == kPlayedStandIn ? library::Action::switch_off : library::Action::play_now;
+            bool enabled = false;
+            if (entry != nullptr)
+                for (const library::ActionButton& button :
+                     library::entry_actions(host.model, *entry))
+                    enabled = enabled || (button.action == wanted && button.enabled);
+            on = on && enabled;
+        }
+        host.refreshed = false;
+        require(on, "PLAY NOW or SWITCH OFF cannot be pressed on the main menu after a game");
     }
     tap_key(SDLK_ESCAPE, SDL_KMOD_NONE);
     require(engine_settings_dialog() == nullptr, "Escape did not close the main menu's dialog");

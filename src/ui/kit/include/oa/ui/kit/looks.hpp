@@ -171,14 +171,28 @@ enum class ChipState : uint8_t {
     filter,    ///< a filter the player turns on and off: the list's selected face while on
 };
 
+/// A state icon: a shape the kit draws from rings and strokes at the
+/// canvas's own pixels, never from a picture or a one-bit mark, so that it
+/// is as crisp at 2x, 3x and 150% as at 1x (draw_state_icon).
+enum class StateIcon : uint8_t {
+    circled_check,    ///< a check in a ring: installed and up to date
+    circled_up_arrow, ///< an arrow pointing up in a ring: installed, with an update
+    download_arrow,   ///< an arrow pointing down into a tray: not installed, to get
+};
+
 /// A chip: a short text in a box, in the colours of its state. The text is
-/// drawn as given, already looked up and in the case the caller wants.
+/// drawn as given, already looked up and in the case the caller wants. A
+/// chip with an icon draws the icon in place of its outline and text, and
+/// keeps its text for automation.
 struct ChipLook {
     std::string text{};              ///< the words
     ChipState state{ChipState::get}; ///< which colours
     bool selected{};                 ///< a filter that is on
     bool hovered{};                  ///< the pointer is over it, or holds it
     bool disabled{};                 ///< it cannot act: drawn in the idle colour whatever its state
+    /// The state icon drawn in place of the outline and the text,
+    /// state_icon_side points square; none draws the text.
+    std::optional<StateIcon> icon{};
 };
 
 /// A row of a list, in its full or its short form, which its rectangle's
@@ -253,8 +267,10 @@ struct HoverCardRow {
 /// A hover card: a header, label and value rows, a block of lines and an
 /// arrow pointing at what it describes. Every text is already looked up.
 struct HoverCardLook {
-    int32_t width{};                  ///< the card's width, in points; 0 fits its widest line
-    bool mark{};                      ///< the small OA mark starts the header
+    int32_t width{}; ///< the card's width, in points; 0 fits its widest line
+    /// The header starts with the OA mark: the logo when the canvas carries
+    /// the icon, otherwise the small one-bit mark.
+    bool mark{};
     std::string title{};              ///< the header's title
     std::string aside{};              ///< the header's words at the right
     std::vector<HoverCardRow> rows{}; ///< the rows under the header

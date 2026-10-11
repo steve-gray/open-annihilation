@@ -209,6 +209,10 @@ InstalledPackage read_installed_mod(const fs::path& folder) {
             return installed;
         installed.name = scalar_text(root, "name");
         installed.version = scalar_text(root, "version");
+        installed.description = scalar_text(root, "description");
+        if (const oamod_format::Node* author = oamod_format::find_entry(root, "author");
+            author != nullptr && author->kind == oamod_format::NodeKind::mapping)
+            installed.author = scalar_text(*author, "name");
         if (const oamod_format::Node* packaging = oamod_format::find_entry(root, "packaging"))
             if (const oamod_format::Node* revision =
                     oamod_format::find_entry(*packaging, "revision");

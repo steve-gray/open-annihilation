@@ -329,6 +329,157 @@ void chips_take_every_state() {
     }
 }
 
+// ---- State icons ----
+
+/// Tells whether a surface holds black everywhere outside a rectangle.
+///
+/// @param surface the surface
+/// @param inside the rectangle, in pixels
+/// @return true when nothing outside it was drawn
+bool black_outside(const renderer::Surface& surface, const kit::Rect& inside) {
+    for (int32_t y = 0; y < static_cast<int32_t>(surface.height); ++y)
+        for (int32_t x = 0; x < static_cast<int32_t>(surface.width); ++x) {
+            const bool in = x >= inside.x && x < inside.x + inside.width && y >= inside.y &&
+                            y < inside.y + inside.height;
+            if (!in && pixel(surface, x, y) != kBlack)
+                return false;
+        }
+    return true;
+}
+
+/// Each state icon is worked out at the canvas's own pixels: at 1x and at 2x
+/// it stays inside its square; at 2x it is no 1x drawing with each pixel
+/// doubled, some of its pixels are wholly its ink and some, its smoothed
+/// edges, are mixed with what is under them. The circled icons draw their
+/// ring and the download arrow its shaft where the design puts them.
+void state_icons_are_drawn_at_their_own_pixels() {
+    using Icon = kit::StateIcon;
+    const kit::Colour ink = kit::colour::accent;
+    for (const Icon icon : {Icon::circled_check, Icon::circled_up_arrow, Icon::download_arrow}) {
+        renderer::Surface one = black(30, 30);
+        kit::draw_state_icon(canvas_on(one), {3, 3, 14, 14}, icon, ink);
+        OA_CHECK(black_outside(one, {3, 3, 14, 14}));
+        OA_CHECK(!black_outside(one, {0, 0, 0, 0}));
+
+        renderer::Surface two = black(40, 40);
+        kit::draw_state_icon(canvas_on(two, 2), {3, 3, 14, 14}, icon, ink);
+        OA_CHECK(black_outside(two, {6, 6, 28, 28}));
+        bool whole = false;
+        bool mixed = false;
+        bool finer = false;
+        for (int32_t y = 6; y < 34; ++y)
+            for (int32_t x = 6; x < 34; ++x) {
+                const kit::Colour got = pixel(two, x, y);
+                whole = whole || got == ink;
+                mixed = mixed || (got != ink && got != kBlack);
+                const int32_t left = x - (x - 6) % 2;
+                const int32_t top = y - (y - 6) % 2;
+                finer = finer || got != pixel(two, left, top);
+            }
+        OA_CHECK(whole && mixed && finer);
+        // The ring's left side, a unit and a half in, middle row; the shaft
+        // of the download arrow, in the middle column above the middle.
+        if (icon == Icon::download_arrow) {
+            expect(two, 6 + 2, 6 + 13, kBlack);
+            expect(two, 6 + 13, 6 + 10, ink);
+        } else {
+            expect(two, 6 + 2, 6 + 13, ink);
+        }
+    }
+    // A wider rectangle centres the icon's square along its length.
+    renderer::Surface wide = black(40, 30);
+    kit::draw_state_icon(canvas_on(wide), {3, 3, 30, 14}, Icon::circled_check, ink);
+    OA_CHECK(black_outside(wide, {11, 3, 14, 14}));
+}
+
+/// A chip with a state icon is the icon's side square, wide and high, and
+/// draws only the icon, in its state's colour: the hint for get, the accent
+/// for installed and playing, the lock colour for update, the hovered
+/// border's grey while disabled, on the hover face while hovered. A row
+/// places it at its right inset, centred down the row.
+void chips_show_state_icons() {
+    using State = kit::ChipState;
+    using Icon = kit::StateIcon;
+    namespace colour = kit::colour;
+    const int32_t side = kit::compact_metrics.state_icon_side;
+    const kit::ChipLook update{
+        "UPDATE", State::update, false, false, false, Icon::circled_up_arrow
+    };
+    OA_CHECK(kit::chip_width(fonts(), update) == side);
+    const kit::Rect row{10, 10, 300, kit::compact_metrics.short_list_row_height};
+    const kit::Rect at = kit::list_row_chip_rect(fonts(), row, update);
+    OA_CHECK(at.x == 10 + 300 - kit::compact_metrics.list_row_inset - side);
+    OA_CHECK(at.y == 10 + (row.height - side) / 2 && at.width == side && at.height == side);
+
+    const auto pin = [&](const kit::ChipLook& look, Icon icon, kit::Colour ink, kit::Colour face) {
+        renderer::Surface chip = black(30, 30);
+        kit::draw_chip(canvas_on(chip, 2), {1, 1, side, side}, look);
+        renderer::Surface direct = black(30, 30);
+        if (face != kBlack)
+            kit::fill_rect(canvas_on(direct, 2), {1, 1, side, side}, face);
+        kit::draw_state_icon(canvas_on(direct, 2), {1, 1, side, side}, icon, ink);
+        same(chip, direct);
+        // No outline: the square's corner keeps what is under the chip.
+        expect(chip, 2, 2, face);
+    };
+    pin(update, Icon::circled_up_arrow, colour::lock, kBlack);
+    pin({"GET", State::get, false, false, false, Icon::download_arrow},
+        Icon::download_arrow,
+        colour::hint,
+        kBlack);
+    pin({"INSTALLED", State::installed, false, false, false, Icon::circled_check},
+        Icon::circled_check,
+        colour::accent,
+        kBlack);
+    pin({"PLAYING", State::playing, false, false, false, Icon::circled_check},
+        Icon::circled_check,
+        colour::accent,
+        kBlack);
+    pin({"GET", State::get, false, false, true, Icon::download_arrow},
+        Icon::download_arrow,
+        colour::control_hover,
+        kBlack);
+    pin({"GET", State::get, false, true, false, Icon::download_arrow},
+        Icon::download_arrow,
+        colour::hint,
+        colour::hover);
+    // A row draws its chip's icon where list_row_chip_rect puts it.
+    kit::ListRowLook look;
+    look.title = "Ridge";
+    look.chip = update;
+    renderer::Surface drawn = black(320, 50);
+    kit::draw_list_row(canvas_on(drawn), row, look);
+    renderer::Surface icon_only = black(320, 50);
+    kit::draw_state_icon(canvas_on(icon_only), at, Icon::circled_up_arrow, colour::lock);
+    for (int32_t y = at.y; y < at.y + at.height; ++y)
+        for (int32_t x = at.x; x < at.x + at.width; ++x)
+            OA_CHECK(pixel(drawn, x, y) == pixel(icon_only, x, y));
+}
+
+/// The aside's column is as wide as its widest entry: a version with its
+/// revision is drawn whole, never cut.
+void the_aside_keeps_a_whole_version() {
+    kit::ListRowLook look;
+    look.title = "Ridge";
+    look.aside = {"1 rev 3", "3.4 MB"};
+    look.chip = kit::ChipLook{
+        "UPDATE", kit::ChipState::update, false, false, false, kit::StateIcon::circled_up_arrow
+    };
+    const kit::Rect rect{0, 0, 300, kit::compact_metrics.list_row_height};
+    kit::DisplayList list;
+    kit::add_list_row(list, rect, look, 1, "row");
+    renderer::Surface drawn = black(300, 40);
+    kit::paint(canvas_on(drawn), list);
+    const int32_t version = kit::text_width(fonts(), kit::FontRole::small, look.aside[0]);
+    const int32_t right = 300 - kit::compact_metrics.list_row_inset -
+                          kit::compact_metrics.state_icon_side - kit::compact_metrics.list_row_gap;
+    // The version's first glyph starts where the whole text, right-aligned, starts.
+    bool first_column = false;
+    for (int32_t y = 0; y < 40; ++y)
+        first_column = first_column || pixel(drawn, right - version, y) == kit::colour::hint;
+    OA_CHECK(first_column);
+}
+
 // ---- Text and search fields ----
 
 void a_search_field_shows_its_placeholder_and_magnifier() {
@@ -1002,6 +1153,9 @@ int main() {
     a_full_row_cuts_its_summary_before_the_aside();
     a_blank_badge_and_tags();
     chips_take_every_state();
+    state_icons_are_drawn_at_their_own_pixels();
+    chips_show_state_icons();
+    the_aside_keeps_a_whole_version();
     a_search_field_shows_its_placeholder_and_magnifier();
     a_focused_field_shows_its_text_and_caret();
     a_long_text_scrolls_so_its_caret_shows();
