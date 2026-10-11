@@ -37,6 +37,10 @@
 //   0x23 developer: u8 flags (bit 0 Developer Mode on, other bits 0), u16
 //        the number of overrides, then as many as were sent, each u8 on
 //        (0 or 1) and an id string 1 to 64.
+//   0x30 content: u8 flags, bit 0 the machine can fetch content (it has a
+//        downloads folder and at least one enabled registry whose downloads
+//        are on); bits 1 to 7 sent as 0 and ignored when read. Absent: the
+//        sender does not say.
 //   0x40 map pack: kebab string 1 to 64 the package key, u32 the catalogue
 //        release, 32 bytes the package's SHA-256, kebab string 1 to 32 the
 //        registry's id, ascii string 0 to 255 its descriptor URL (empty as
@@ -87,6 +91,7 @@ enum class PresenceTag : uint8_t {
     game_hacks = 0x21, ///< game hacks that are on
     view_hacks = 0x22, ///< view hacks that are on
     developer = 0x23,  ///< Developer Mode and its overrides
+    content = 0x30,    ///< whether the machine can fetch content
     map_pack = 0x40,   ///< the map pack the host is playing
 };
 
@@ -167,6 +172,16 @@ struct PresenceMapPack {
     friend bool operator==(const PresenceMapPack&, const PresenceMapPack&) = default;
 };
 
+/// Whether a machine can fetch content: the content field, tag 0x30.
+struct PresenceContent {
+    /// The machine has a downloads folder and at least one enabled registry
+    /// whose downloads are on.
+    bool fetches{};
+
+    /// Compares two content fields.
+    friend bool operator==(const PresenceContent&, const PresenceContent&) = default;
+};
+
 /// One presence record. A field that was not sent, or whose value broke its rule, is absent.
 struct PresenceRecord {
     uint8_t version{presence_record_version}; ///< format version, 1 or more
@@ -178,6 +193,8 @@ struct PresenceRecord {
     std::optional<PresenceHacks> view_hacks;
     std::optional<PresenceDeveloper> developer;
     std::optional<PresenceMapPack> map_pack;
+    /// Whether the machine can fetch content; absent when the sender does not say.
+    std::optional<PresenceContent> content;
 
     /// Compares two records.
     friend bool operator==(const PresenceRecord&, const PresenceRecord&) = default;
@@ -199,11 +216,11 @@ presence_record_length(const uint8_t* bytes, std::size_t available, uint16_t* le
 
 /// Writes a presence record.
 ///
-/// Fields that are present go out in the order engine, mod, mod origin, sim
-/// hash, map pack, developer, game hacks, view hacks. A list field carries
-/// its full count and as many ids, in order, as keep the record within
-/// min(capacity, 1024). A string that does not fit its rule is refused; it
-/// is never cut. The record is never longer than 1024 bytes.
+/// Fields that are present go out in the order engine, content, mod, mod
+/// origin, sim hash, map pack, developer, game hacks, view hacks. A list
+/// field carries its full count and as many ids, in order, as keep the
+/// record within min(capacity, 1024). A string that does not fit its rule
+/// is refused; it is never cut. The record is never longer than 1024 bytes.
 ///
 /// @param record the fields to write
 /// @param[out] out storage for the record
@@ -219,8 +236,9 @@ presence_record_length(const uint8_t* bytes, std::size_t available, uint16_t* le
 ///
 /// A wrong frame, a version of 0, or a field that runs past the end refuses
 /// the whole record and leaves `out` unchanged. An unknown tag is skipped.
-/// A known field whose value breaks its rule is left out. A repeated tag
-/// keeps the first occurrence. It may allocate.
+/// A known field whose value breaks its rule is left out: a content field
+/// whose value is not one byte among them; bits 1 to 7 of its byte are
+/// ignored. A repeated tag keeps the first occurrence. It may allocate.
 ///
 /// @param record the record, type byte first
 /// @param size its length in bytes; nothing past size is read

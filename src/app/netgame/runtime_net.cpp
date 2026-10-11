@@ -599,6 +599,9 @@ std::vector<uint8_t> write_presence_record(const PresenceFacts& facts, uint32_t&
         record.engine = std::move(engine);
     else
         report(presence_problem::engine, "the engine's version");
+    // Whether this machine can fetch content, so that the host's card and
+    // a joiner's GET MAP can tell.
+    record.content = ng::PresenceContent{facts.fetches_content};
 
     if (facts.mod) {
         const auto& mod = *facts.mod;
@@ -1909,7 +1912,11 @@ void NetworkPlay::net_bind_multiplayer() {
     bind_profile_rules();
     if (net_->connected)
         mp::multiplayer_bind_net(nm::session_lobby_net(&net_->connection));
-    mp::multiplayer_bind_map_source(oa::app::pack_map_source(runtime_));
+    // The pack maps, and the pack of the host's selected map, which the
+    // battle room names in the host's presence record (LobbyMaps::pack).
+    const mp::LobbyMapSource maps_source = oa::app::pack_map_source(runtime_);
+    mp::multiplayer_bind_map_source(maps_source);
+    mp::multiplayer_bind_map_pack(maps_source.context, maps_source.pack);
     if (net_options().check_host_not_found)
         mp::multiplayer_bind_clock({nullptr, [](void*) { return host_not_found_clock_ms(); }});
     mp::multiplayer_bind_player_timeout(net_launch_switches().net_timeout_seconds);

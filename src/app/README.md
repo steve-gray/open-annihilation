@@ -3709,7 +3709,8 @@ this build's version (`0.8.0`, with `-` and the version label after it in a
 development build), the platform and architecture, the mod (its id, name,
 version and packaging revision) and where it was published, the sim hash,
 the game and view hacks that are on with their counts, Developer Mode with
-its overrides, and on the host the map pack of its selected map.
+its overrides, whether the machine can fetch content, and on the host the
+map pack of its selected map.
 `follow_presence`, run every frame, reads the facts from `presence_facts`
 (`oa/app/presence_facts.hpp`, which `--check-simulation-hash` checks) while
 the multiplayer screens show, writes the record within 1024 bytes less the
@@ -3727,6 +3728,18 @@ none. The record is read again only when the mod or its folder changes. The
 host's map pack comes from `LobbyMaps::pack`, which the map packs bind
 through `multiplayer_bind_map_pack`; the battle room asks it once each time
 the selected map changes, and until it is bound no record names a pack.
+Network play binds it from the map packs' source (`pack_map_source`, whose
+`pack` answers for the pack map whose files are mounted, on the host the
+selected map's): the pack's id as the key, the release and SHA-256 of its
+folder's origin record, the registry, the address the registry's descriptor
+was read from (empty for a built-in registry, one added from a file and one
+no longer in effect) and the pack's name and version. A pack installed from
+a file has no catalogue origin and is named by no record. Whether the
+machine can fetch content is the record's content field (tag 0x30, one byte
+of flags, bit 0): `PresenceFacts::fetches_content`, true when the content
+service has a downloads folder and at least one registry that is on,
+allowed by Developer Mode and whose downloads are on (its install ID not
+off where it needs one). A setup block carries none of it.
 The battle room sends the record to every human player whose own setup
 block carries the signature (`presence_peer`), on joining, when the record
 changes and once to each such player who arrives later, from the local
@@ -3742,6 +3755,77 @@ version, and prints how many of the setup blocks each machine holds of the
 other's players carry no presence bytes.
 [docs/development/testing.md](../../docs/development/testing.md#network-play)
 lists its tests.
+
+### GET MAP in the battle room
+
+A joiner whose host is an OA machine playing a pack map gets the host's
+release of the pack in one press (`runtime_get_map.cpp`). The screen
+`get-map` of the OA layer, which is not modal, has no backdrop and is not
+opaque, is kept on the layer while the multiplayer screens show
+(`keep_get_map_screen`, from `OaLayer::tick`). Each frame it reads the
+battle room (`multiplayer_battle_room_map`): the host's map name, read
+within its field, the map pack of the presence record the host's player
+last sent, and the MAPNAME label's rectangle. It shows only on a joiner,
+only when the map's name is a pack map's, the host's record names that
+pack, and this machine does not have the record's SHA-256: never for a base
+map, a host that sends no record (a 3.1c host or OA 0.7), or a pack
+installed at the host's release. A 3.1c player sees the missing-map line as
+before. What it shows (`get_map_state` and `get_map_text`,
+`oa/ui/frontend_multiplayer/get_map.hpp`) comes from the packs installed
+(`local_map_pack`, from each pack folder's origin record), the registries in
+effect and their merged catalogue, and the download queue:
+
+| State | Line | Button |
+|---|---|---|
+| get | "{pack} {version} · {size} from {registry}" | GET MAP |
+| add_registry_first | "Add {registry} to get {pack}" | GET MAP |
+| other_release_get | "You have release {mine} of {pack}; the host plays release {theirs}." | GET MAP |
+| other_release_gone | the same line | none |
+| gone | "The host's release of {pack} is no longer offered by {registry}." | none |
+| downloads_off | "Downloads from {registry} are off (Settings › Downloads)." | none |
+| downloading | "Downloading {pack} · {done} of {size}" | the download's bar |
+| failed | "Couldn't get {pack}: {reason}" | GET MAP, to try again |
+
+The words come from the interface's catalogue. The line stands under the
+map name's box and the button, or the bar in its place, above it at its
+right, drawn with the kit at the layer's scale; the 3.1c gadgets are left as
+they are. The button is pressed with the pointer or a finger, and so with a
+gamepad's pointer, as the main menu's OA button is. Automation lists the
+button as `oa.get-map`, the line as `oa.get-map-text` and the bar as
+`oa.get-map-progress`, with no dialog, as it lists the OA button, and only
+while they show; on the multiplayer screens the endpoint lists the OA
+layer's controls before the panel's.
+
+Pressing GET MAP for a registry the player has not added opens the Add
+registry window with the address the record names, which checks it at once
+and adds the registry only on the player's ADD; GET MAP goes on by itself
+once the registry is added and its catalogue lists the pack at the record's
+SHA-256, asking for that catalogue once if it has not been read. Otherwise
+it requires the catalogue's SHA-256 for the pack to be the record's, queues
+that release (`queue_download`, reason `offered-in-lobby`), and, when the
+mounted pack layer is another release of this pack, unmounts it. The queue
+checks the file against that SHA-256 and the installer puts the pack in
+place, replacing another release (kept as `.backup`). Until the queue item
+ends the pack's maps are held (`hold_pack_maps`): `prepare_pack_map`
+refuses them, so no folder is replaced while its layer is mounted. Once
+the installed packs list the map, the battle room's own selection of the
+host's map finds it (`maps_select` lists a pack map the source has gained
+since the list was read, and a pack map mounted again is read again, its
+hashes among it) and the map name stops flashing. Nothing readies the
+player. A download that fails says why on the line; one cancelled leaves
+GET MAP as it was. The log says what happened:
+
+```
+open-annihilation: GET MAP: offering to add the registry <registry> for <pack>
+open-annihilation: GET MAP: downloading <pack> release <release> from <registry>
+open-annihilation: GET MAP: installed <pack>
+open-annihilation: GET MAP: couldn't get <pack>: <why>
+open-annihilation: map pack <pack>: its maps may be mounted again
+```
+
+The host's presence card says whether this machine has the host's pack
+(`PackState`): installed when a pack of its key has the record's SHA-256,
+another release when one has another, missing when none has its key.
 
 ## The automation endpoint
 

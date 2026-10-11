@@ -297,7 +297,7 @@ text in a code page that is not UTF-8 comes out so: the four bytes of
 | `token.cpp` | the token and its comparison |
 | `endpoint.cpp` | the listener, the connections, the handshake, the order of requests, the answers waiting to be written |
 | `requests.cpp` | the table of operations and their handlers, and the work done each time the endpoint is served |
-| `controls.cpp` | `controls`, and the dialogs and focus `screen` gives: the automation host's controls, the multiplayer screens' from their panel, and the windows extensions show |
+| `controls.cpp` | `controls`, and the dialogs and focus `screen` gives: the automation host's controls, the multiplayer screens' from their panel with Open Annihilation's own screens over them, and the windows extensions show |
 | `input.cpp` | `input`: the SDL events pushed, the keys and buttons held, the answer once they are taken |
 | `input_events.cpp` | the device events of an input request, read and checked |
 | `frames.cpp` | the frame request |
