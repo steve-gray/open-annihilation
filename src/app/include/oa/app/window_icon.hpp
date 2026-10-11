@@ -4,7 +4,10 @@
 // The game's window icon: the Open Annihilation icon at 256 by 256 pixels,
 // made by tools/make_icons.py and embedded in the game as a PNG file, which
 // start-up decodes and gives the window. The settings dialog's header and
-// the OA buttons draw the same icon, cut to its visible part.
+// the main menu's Library button draw the same icon, cut to its visible
+// part. The settings icon, the logo over a row of gears, is embedded beside
+// it at the same size; the main menu's Settings button and the in-game
+// menu's OA button draw it, cut the same way.
 #pragma once
 
 #include <cstdint>
@@ -33,7 +36,15 @@ struct WindowIcon {
 ///         pixels, which lasts as long as the program
 std::span<const uint8_t> window_icon_png();
 
-/// Decodes an 8-bit RGBA PNG file for a window icon.
+/// Returns the settings icon the game embeds, which the buttons that open
+/// Settings draw.
+///
+/// @return a PNG file of window_icon_size by window_icon_size 8-bit RGBA
+///         pixels, which lasts as long as the program
+std::span<const uint8_t> settings_icon_png();
+
+/// Decodes an 8-bit RGBA PNG file for a window icon, or for the settings
+/// icon, which has the same form.
 ///
 /// @param png the file
 /// @param[out] icon the pixels; left empty on failure

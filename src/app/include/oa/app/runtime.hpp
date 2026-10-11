@@ -3859,8 +3859,8 @@ class Runtime final : public menu::Host,
     [[nodiscard]] const oa::ui::engine_settings::DialogFonts* engine_settings_fonts();
 
     /// Returns the Open Annihilation icon the settings dialog's header and
-    /// the OA buttons draw: the window icon's visible part, decoded on first
-    /// use.
+    /// the main menu's OA button draw: the window icon's visible part,
+    /// decoded on first use.
     ///
     /// @return the icon's pixels, which last as long as the runtime; an
     ///         empty picture, which draws the OA mark, when it cannot be decoded

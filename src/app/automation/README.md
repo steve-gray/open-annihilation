@@ -107,14 +107,15 @@ notice, a prompt, and later the Library, the map browser, the gallery)
 shows, the automation host lists its controls (`OaLayer::automation_controls`):
 
 - **Which and in what order.** The OA button, `oa.button`, while it shows
-  on the main menu or in the in-game menu, with no `dialog`; then each
-  screen that shows, from the top down to the first that takes every
-  input, each of its controls followed by its parts
+  on the main menu or in the in-game menu, and on the main menu the
+  Settings button beside it, `oa.settings-button`, each with no `dialog`;
+  then each screen that shows, from the top down to the first that takes
+  every input, each of its controls followed by its parts
   (`kit::automation_parts`). They come right after a message box's and
   ahead of everything else but an extension's windows (`collect_controls`
   keeps them with the dialogs, which come before the screen's own). While
   an OA screen takes every input, the controls listed after it are listed
-  disabled, and so is the OA button under it.
+  disabled, and so are the buttons under it.
 - **The names.** `oa.` and the kit's name: `oa.settings.nav.<page>`,
   `oa.settings.<row>`, `oa.settings.<row>.<value>`, `oa.settings.ok`,
   `oa.<word>.ok`, `oa.<word>.<id>` and the rest, as
@@ -351,16 +352,18 @@ system's sockets elsewhere.
 - `native-automation-settings` (`tools/check_native_automation_settings.py`)
   starts the game in the same way in a 640x480 window and in a 1920x1080
   one, where the menus are drawn larger. In each it lists `oa.button`, with
-  no dialog and enabled, and clicks it at its rectangle's centre; with
-  Settings open, `screen`'s dialogs holds `oa.settings`, SINGLE is listed
-  disabled and after every `oa.` control, and no two names are equal
-  ignoring case; it clicks `oa.settings.nav.controls`,
+  no dialog and enabled, clicks it at its rectangle's centre and then the
+  Library's `oa.library.settings`; with Settings open, `screen`'s dialogs
+  holds `oa.settings`, SINGLE is listed disabled and after every `oa.`
+  control, and no two names are equal ignoring case; it clicks
+  `oa.settings.nav.controls`,
   `oa.settings.wheel-zoom.off` (checked then),
   `oa.settings.max-zoom-out`, its `oa.settings.max-zoom-out.whole-map` and
   `oa.settings.ok`, and `prefs` holds wheel zoom `0` and `whole-map`;
-  opened again, wheel zoom shows Off, and its On half and Cancel leave the
-  value stored; every `oa.` control's window rectangle lies in the window
-  hello reports.
+  opened again by `oa.settings-button` (a button with no dialog, its text
+  "Settings"), wheel zoom shows Off, and its On half and Cancel leave the
+  value stored and go back to the main menu with no Library; every `oa.`
+  control's window rectangle lies in the window hello reports.
 - `native-automation-input` (`tools/check_native_automation_input.py`)
   drives the game by input alone: input requests sent far faster than the
   game takes them, of which it reads no more than about a frame's worth

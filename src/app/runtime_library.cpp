@@ -269,6 +269,11 @@ void search_updates(
                   << '\n';
     }
     base::threads::LockGuard guard(work.mutex);
+    // The log says what a search found when it differs from the last one.
+    if (work.searches == 0 || installed.size() != work.installed.size() ||
+        updates.size() != work.updates.size())
+        std::cerr << "open-annihilation: library: " << installed.size() << " installed, "
+                  << updates.size() << (updates.size() == 1 ? " update\n" : " updates\n");
     work.installed = std::move(installed);
     work.matches = std::move(matches);
     work.updates = std::move(updates);
@@ -525,7 +530,10 @@ void Runtime::LibraryHost::rebuild(Runtime& runtime) {
     }
     kept_updates = std::move(still);
     library::refresh(model, std::move(inputs));
-    update_count = library::update_count(model);
+    const std::size_t offered = library::update_count(model);
+    if (offered != update_count)
+        std::cerr << "open-annihilation: library: updates offered: " << offered << '\n';
+    update_count = offered;
     refreshed = true;
     ++model_revision;
 }
