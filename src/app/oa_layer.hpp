@@ -753,7 +753,8 @@ class OaLayer {
     /// the window, nor of the frame without the cursor, but those it draws,
     /// alone, over an opaque screen and under one, and darkens nothing; the
     /// cursor shows above it; opaque screens draw as before; automation
-    /// lists its controls; F1
+    /// lists its controls; the cursor's square matches the one drawn in the
+    /// picture with no screen open; F1
     /// reaches a screen that takes the information key, goes on past one
     /// that does not, and changes nothing in Settings. In a match F1 goes on
     /// to the game, and such a screen changes no pixel of the match's
