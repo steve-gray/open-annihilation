@@ -101,21 +101,21 @@ PointerEvent read_pointer(
     const SDL_Event& event, const oa::ui::game_files::Viewport& viewport, const WindowPress& press
 ) noexcept {
     const auto finger_at = [&viewport, &event](PointerStep step) {
-        PointerEvent read;
-        read.step = step;
-        read.x = event.tfinger.x * static_cast<float>(viewport.width);
-        read.y = event.tfinger.y * static_cast<float>(viewport.height);
-        read.finger = true;
-        read.touch = event.tfinger.touchID;
-        read.id = event.tfinger.fingerID;
-        return read;
+        PointerEvent taken;
+        taken.step = step;
+        taken.x = event.tfinger.x * static_cast<float>(viewport.width);
+        taken.y = event.tfinger.y * static_cast<float>(viewport.height);
+        taken.finger = true;
+        taken.touch = event.tfinger.touchID;
+        taken.id = event.tfinger.fingerID;
+        return taken;
     };
     const auto pointer_at = [&viewport](PointerStep step, float x, float y) {
-        PointerEvent read;
-        read.step = step;
-        read.x = x * viewport.px_per_point;
-        read.y = y * viewport.px_per_point;
-        return read;
+        PointerEvent taken;
+        taken.step = step;
+        taken.x = x * viewport.px_per_point;
+        taken.y = y * viewport.px_per_point;
+        return taken;
     };
     // Read only for a finger's event: the finger of the press under way.
     const auto pressing_finger = [&press, &event]() {
@@ -152,10 +152,10 @@ PointerEvent read_pointer(
         float notches = event.wheel.y;
         if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
             notches = -notches;
-        PointerEvent read;
-        read.step = PointerStep::wheel;
-        read.wheel_points = -notches * wheel_notch_points;
-        return read;
+        PointerEvent taken;
+        taken.step = PointerStep::wheel;
+        taken.wheel_points = -notches * wheel_notch_points;
+        return taken;
     }
     default:
         return {};
