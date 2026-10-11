@@ -868,8 +868,17 @@ library::Inputs Runtime::library_inputs() {
                 continue;
             const std::string path = kept_path(shown.folder);
             listed.push_back(path);
-            if (shown.registry.empty())
+            // Two of the player's own copies of one mod, such as one installed
+            // alongside the other, are two entries: the second's key has -2
+            // after it, as below.
+            if (shown.registry.empty()) {
+                const std::string word = shown.key;
+                for (int second = 2;
+                     std::find(own_keys.begin(), own_keys.end(), shown.key) != own_keys.end();
+                     ++second)
+                    shown.key = word + "-" + std::to_string(second);
                 own_keys.push_back(shown.key);
+            }
             for (std::size_t index = 0; index < count; ++index)
                 if (same_folder(offered.mod_folders[index], path) &&
                     !offered.mod_details[index].roll_back)

@@ -78,6 +78,11 @@ constexpr std::string_view kOtherId = "other-mod";
 constexpr std::string_view kBrokenId = "broken-mod";
 /// The most frames a step of the check runs before it gives up.
 constexpr int kMostFrames = 400;
+/// How many times the check looks for the Library's search to have run
+/// again, kSearchWaitMs apart: two seconds in all.
+constexpr int kSearchWaits = 200;
+/// The milliseconds between two looks for the Library's search.
+constexpr uint32_t kSearchWaitMs = 10;
 /// The window's size for the snapshots.
 constexpr int kSnapshotWidth = 1280;
 /// The window's height for the snapshots.
@@ -513,6 +518,17 @@ void Runtime::check_mod_install() {
     const auto library_entry = [&](const fs::path& listed) -> const library::Entry* {
         list_offered_mods();
         LibraryHost& host = library_host();
+        // The installed packages are the worker's: it searches again, and the
+        // check waits for that search, so a folder just installed or rolled
+        // back is listed.
+        const auto searches = [&host] {
+            base::threads::LockGuard guard(host.work.mutex);
+            return host.work.searches;
+        };
+        const uint64_t before = searches();
+        host.look_again(*this);
+        for (int waited = 0; waited < kSearchWaits && searches() == before; ++waited)
+            SDL_Delay(kSearchWaitMs);
         host.rebuild(*this);
         const std::string path = kept_path(listed);
         for (const library::Entry& each : host.model.entries)
@@ -534,7 +550,7 @@ void Runtime::check_mod_install() {
     // for it, as for the mod played.
     const auto roll_back = [&](const fs::path& rolled, const auto& before_answer) {
         const library::Entry* entry = library_entry(rolled);
-        require(entry != nullptr, "the Library does not list the folder");
+        require(entry != nullptr, "the Library does not list the folder " + kept_path(rolled));
         require(offers_roll_back(*entry), "the folder's entry offers no ROLL BACK");
         const library::EntryId id = entry->id;
         library_entry_action(library::Action::roll_back, id);
