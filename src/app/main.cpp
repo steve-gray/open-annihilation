@@ -1151,12 +1151,16 @@ int main(int argc, char** argv) {
             const int status = run_once(
                 std::move(options), extension, display, game_files, lookup_log.get(), switch_memory
             );
-            if (status != kSoftRestartStatus)
-                return status;
             // A change to the mod played is made now, with the runtime and
-            // its archives gone, before the next run reads the folder.
+            // its archives gone: before the next run reads the folder, or,
+            // when the player quits, before the game ends, so that an update
+            // held until they left the mod is not lost.
             package_install::ChangeOptions change{};
             change.hooks.wait = wait_pumping;
+            if (status != kSoftRestartStatus) {
+                package_install::finish_pending_change(change);
+                return status;
+            }
             package_install::finish_pending_change(change);
         }
     } catch (const fs::filesystem_error& error) {

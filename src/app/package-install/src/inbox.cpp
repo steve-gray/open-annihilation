@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <deque>
 #include <exception>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -265,6 +266,14 @@ bool pending_change_waiting() {
     return state.pending.has_value();
 }
 
+std::optional<std::string> pending_change_target() {
+    Kept& state = kept();
+    const base::threads::LockGuard guard(state.lock);
+    if (!state.pending)
+        return std::nullopt;
+    return state.pending->target;
+}
+
 void finish_pending_change(const ChangeOptions& options) {
     std::optional<PendingChange> pending;
     {
@@ -285,7 +294,8 @@ void finish_pending_change(const ChangeOptions& options) {
     outcome.result =
         commit_change(*pending->kind, pending->root, pending->target, pending->change, checked);
     detail::log_line(
-        pending->target + (outcome.result.changed ? ": changed before the run" : ": not changed")
+        pending->target +
+        (outcome.result.changed ? ": changed with the run's archives closed" : ": not changed")
     );
     // The hold goes once the change is in place; then the folder is settled.
     pending->hold.reset();
