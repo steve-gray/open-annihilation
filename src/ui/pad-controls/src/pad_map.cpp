@@ -307,6 +307,8 @@ Binding sheet_binding(PadButton role) noexcept {
 }
 
 /// Returns a button's meaning in menus and screens other than the match, by role.
+/// Y focuses the Library's search and X does its selected entry's first action;
+/// on any other screen those two do nothing.
 ///
 /// @param role the button by role
 /// @return its binding
@@ -328,6 +330,10 @@ Binding menus_binding(PadButton role) noexcept {
         return bind(Action::press);
     case PadButton::b:
         return bind(Action::back);
+    case PadButton::x:
+        return bind(Action::library_action);
+    case PadButton::y:
+        return bind(Action::library_search);
     case PadButton::menu:
         return bind(Action::default_button);
     case PadButton::view:

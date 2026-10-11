@@ -1958,6 +1958,38 @@ OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInpu
     return LayerAnswer::pass;
 }
 
+bool OaLayer::finish_pad(LayerScreen& screen, LayerAnswer answer) {
+    calling_ = nullptr;
+    if (std::exchange(close_asked_, false))
+        answer = LayerAnswer::close;
+    if (answer == LayerAnswer::pass)
+        return false;
+    take_answer(screen, answer, 0);
+    show_waiting();
+    sync_text_input();
+    return true;
+}
+
+bool OaLayer::take_pad_action(oa::ui::pad_controls::Action action) {
+    LayerScreen* screen = top();
+    if (screen == nullptr)
+        return false;
+    lay_out_screens();
+    calling_ = screen;
+    close_asked_ = false;
+    return finish_pad(*screen, screen->pad_action(action));
+}
+
+bool OaLayer::take_pad_stick(float notches) {
+    LayerScreen* screen = top();
+    if (screen == nullptr)
+        return false;
+    lay_out_screens();
+    calling_ = screen;
+    close_asked_ = false;
+    return finish_pad(*screen, screen->pad_stick(notches));
+}
+
 void OaLayer::take_answer(LayerScreen& screen, LayerAnswer answer, uint32_t key_down) {
     if (answer != LayerAnswer::close || !holds(&screen))
         return;
