@@ -27,7 +27,8 @@ until then.
   measures with the bundled fonts) with `measured_width` and
   `measured_line`, which estimate what a null hook leaves out.
 - `layout.hpp`: points, the Auto scale and the three size classes,
-  `metrics_of` (a class's metrics, which a screen takes its window's sizes
+  `layer_viewport` (the scale an Interface size gives a canvas, held to
+  what fits Compact's dialog), `metrics_of` (a class's metrics, which a screen takes its window's sizes
   from), rows, columns, grids, splits and scroll areas, and the display
   list. A screen drawn in the modern fonts (the Game files screen and the
   folder chooser) lays its parts out in canvas pixels at a scale that may
@@ -249,13 +250,14 @@ helpers, the estimated width, the stand-ins, the wrap against copies of
 the six wraps it replaces, `fit` and `fitting_start` against the Game files
 screen's copies, and the modern fonts' measure through its hooks and
 without them. `ui-kit-layout` checks the Auto scale, the design's
-window sizes, that `metrics_of` gives each class its metrics, arrangements,
-the scroll arithmetic and hit testing, and each helper of a screen drawn in
-the modern fonts with a made-up measure: points to canvas pixels, a text
-part's wrap, line limit and fit, a line part, a button's span, label and
-look, a row of buttons on one line and wrapped, icons, plain parts and moved
-parts, the three ways a column is placed, and the controls listed from parts
-under and above a backdrop.
+window sizes, the Interface size's examples and Auto at each window, that
+`metrics_of` gives each class its metrics, arrangements, the scroll
+arithmetic and hit testing, and each helper of a screen drawn in the modern
+fonts with a made-up measure: points to canvas pixels, a text part's wrap,
+line limit and fit, a line part, a button's span, label and look, a row of
+buttons on one line and wrapped, icons, plain parts and moved parts, the
+three ways a column is placed, and the controls listed from parts under and
+above a backdrop.
 `ui-kit-input` checks reach (with a reach of a fraction of a point too),
 `mark_states`, the pointer, Tab, the arrows, the keys and
 their values, the wheel's fractions, the names, the parts automation lists

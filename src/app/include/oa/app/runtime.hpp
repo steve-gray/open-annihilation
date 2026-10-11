@@ -4255,6 +4255,35 @@ class Runtime final : public menu::Host,
     /// Settings stay open and no prompt shows (--check-language-install).
     void check_language_install();
 
+    /// Replaces the download queue the check window reads. A null generation
+    /// or a null list of items puts the real queue back. --check-challenge
+    /// sets this before the window is told of.
+    ///
+    /// @param generation reads the queue's generation
+    /// @param items reads the queue
+    /// @param cancel_item cancels one item; null does nothing
+    /// @param retry_item starts one item again; null does nothing
+    /// @param context passed to each of those
+    void set_challenge_probe(
+        uint64_t (*generation)(void* context),
+        std::vector<oa::app::content::DownloadView> (*items)(void* context),
+        void (*cancel_item)(void* context, uint64_t item),
+        void (*retry_item)(void* context, uint64_t item),
+        void* context
+    );
+
+    /// Shows the download check over the main menu when a download is waiting
+    /// on one, refreshes that window when the download changes, and closes it
+    /// when the check passes, the download is cancelled, or the main menu is
+    /// left. Called once a frame beside tell_mod_installs. A check that
+    /// arrives during a game waits until the main menu.
+    void tell_challenges();
+
+    /// Shows a made-up download check over the main menu, opens its page,
+    /// retries it and cancels it, and keeps it hidden during a skirmish
+    /// (--check-challenge).
+    void check_challenge();
+
     /// The main menu's OA button (engine_settings_menu_host.hpp).
     struct EngineSettingsMenuHost;
 

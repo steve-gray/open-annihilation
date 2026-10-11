@@ -44,6 +44,7 @@ the locks a running game puts on them (`settings_locks`).
 | | After zoom, a drop-down, locked "Needs Dots" while Zoomed out units is Rendered | 1/2, 1/3, 1/4, 1/6, 1/8, 1/12, 1/16 of normal size | 1/6 | `open-annihilation.zoomed-out-after` (`1/2`, `1/3`, `1/4`, `1/6`, `1/8`, `1/12` or `1/16`) |
 | | Window frame: whether a window shows its title bar and borders while a game is played; the game menu, a panel it opens and every other screen show them | Hidden in play, Always shown | Hidden in play | `open-annihilation.window-frame` (`hidden-in-play` or `always-shown`) |
 | | HUD scaling: whether a game's side column and bars grow with the window, up to twice the original game's size, or keep its size | Off, On | On | `open-annihilation.hud-scaling` |
+| | Interface size, a drop-down, the last row, when OK is pressed: how large Open Annihilation's own screens (Settings, its notices and its prompts) are drawn outside a match, held to the largest whole step at which Compact's dialog fits the window ([Sizes](#sizes)) | Auto (the window's own scale), 100%, 200%, 300%, 400% | Auto | `open-annihilation.interface-size` (`automatic`, `100`, `200`, `300` or `400`; any other text, `150` and `0` among them, reads as Auto) |
 | Touch, listed only while the game has touch controls | One-finger drag | Automatic (a selection box on a tablet, scrolling on a phone), Box, Scroll | Automatic | `open-annihilation.touch-drag` (`automatic`, `box` or `scroll`) |
 | | Hold delay | 250 to 700 ms, steps of 50; a stored delay is held to the range and put on its nearest step | 350 ms | `open-annihilation.touch-hold-delay` |
 | | QUEUE and ADD | Stay on, One action | Stay on | `open-annihilation.touch-latches` (`stay-on` or `one-action`) |
@@ -262,6 +263,14 @@ are drawn at the window's scale, up to `kMaxChromeScale`; Off, at the
 original game's size on every window (`Runtime::match_chrome_most_scale`).
 The touch controls' layouts keep their own sizes either way.
 
+Interface size is never locked: it changes nothing a match or a replay
+shares. A size chosen in its drop-down waits for OK, as Screen size does,
+so the dialog keeps the size it opened at while it is open; on OK the
+OA layer lays its screens out again at the new size from the next frame
+(`Runtime::apply_engine_settings`). It changes no game text (Text size),
+no part of a game's interface (HUD scaling) and no 3.1c menu (Menu
+scaling). In a match the in-game Settings keeps its own size.
+
 A language drawn only in the modern fonts (`TextNeeds::modern_fonts`,
 Simplified Chinese) turns Use modern fonts for game text On when it is
 chosen, and while it is chosen the switch shows On with a padlock and "Set
@@ -420,8 +429,8 @@ and the footer never move. A section whose rows, with 8 clear pixels under
 the last row's line, are taller than the view scrolls by whole source
 pixels, and shows a scroll bar in the margin right of its rows: a well like
 a switch's, its thumb as tall as the view's share of the section and never
-under 16 pixels. Graphics, with twelve rows, is taller than its view by 513
-pixels, Language, with the Language drop-down, four switches and the
+under 16 pixels. Graphics, with thirteen rows, is taller than its view by
+592 pixels, Language, with the Language drop-down, four switches and the
 Text size slider, by 129, Touch, with its three strips, the Hold delay
 slider and two switches, by 121, and Controls, with its three switches and
 the zoom's two drop-downs, by 84; Common Tweaks fits, its Your files and
@@ -661,6 +670,16 @@ break at the class's characters. A drop-down's open list opens over its
 field when it would pass the class's footer line. A notice's or a prompt's
 text wraps at the class's width, through the kit's one wrap, and its
 buttons keep their sizes.
+
+The OA layer takes the class and the scale from the window
+(`kit::layer_viewport`): the Interface size's whole step, or with Auto the
+window's height over 720, rounded, never below the display's density. The
+step is capped at the largest at which Compact's 480 by 324 dialog fits the
+window, less its safe insets on a touch screen, and is at least 1×, so a
+size never draws a dialog cut off by the window's edge; the class then
+comes from the window's points at that step. On a 1920 by 1080 window
+100% is Large at 1× and 400% is Compact at 3×, as 4× does not fit Compact
+in 1080 rows.
 
 ## The rows' table
 
@@ -944,6 +963,26 @@ its primary one; Left, Up and Shift+Tab mark the one before, Right, Down
 and Tab the one after; a finger's press takes the nearest button within
 reach (`prompt_pointer_*`, `prompt_finger_down`, `prompt_key`).
 
+`challenge.hpp` is the download check in the same look. At Compact, Regular
+and Large it is that class's notice wide, 400, 520 or 600 points, and as
+tall as its text from that class's least notice height to its greatest.
+The title is Downloads and the heading is "Check that you're a person".
+The text names the registry and the page, without the page's scheme or
+query. The code sits centred in a framed field in the accent colour, in
+the largest font, with two extra columns after each glyph but the last.
+Under it the window says the check updates by itself, or, once the check
+has run out, that it ran out. CANCEL is always there. OPEN THE CHECK is
+there while the check waits and this computer can open a page; TRY AGAIN
+is there once the check has run out. Focus starts on OPEN THE CHECK, or
+TRY AGAIN, or CANCEL. Enter presses the marked button and Escape is
+CANCEL; a pad's A and B arrive as those keys. A finger within the kit's
+reach holds the nearest button (`challenge_text`, `challenge_height`,
+`challenge_list`, `challenge_settle`, `challenge_key`,
+`challenge_pointer_move`, `challenge_pointer_down`, `challenge_pointer_up`,
+`challenge_finger_down`, `draw_challenge`). The parts automation lists are
+`challenge.code`, `challenge.status`, `challenge.open`,
+`challenge.try-again` and `challenge.cancel`.
+
 ## Dependencies
 
 The dialog, its notices and its prompts draw through the OA UI kit
@@ -952,6 +991,13 @@ dialog's rows are the kit's declared rows (`oa/ui/kit/rows.hpp`), drawn
 from its display list.
 
 ## Tests
+
+`ui-engine-settings-challenge` checks the words for a check that waits, one
+that has passed and one that has run out, with and without a page that can
+be opened here, the buttons and the starting focus, Enter, Escape, Left
+then Enter, a pointer release and a finger within reach, and that every
+part, including the focus ring, lies inside the window at Compact, Regular
+and Large, with each control named once.
 
 `ui-engine-settings-rows` holds every setting's row, written out as
 literals, to the table: its kind, label, hint lines without and with the
@@ -1023,7 +1069,10 @@ screen's rate held to the range and put on a step, a stored value winning
 and Restore defaults bringing them back; and Control size and the
 Controller section: their keys, defaults on every machine, words read and
 others dropped, the speeds held to their ranges and steps, and the round
-trip and Restore defaults;
+trip and Restore defaults; and Interface size: its key, Auto by default
+with and without the player's own file, its five words each read and
+written alone, the words it refuses (`150` and `0` among them) read as
+Auto, other keys left as they were, and Restore defaults;
 `ui-engine-settings-dialog` the dialog's layout (every part inside the
 panel and none overlapping), and at Regular and Large every section with
 Touch, Controller and Game files listed inside the dialog under every lock,
@@ -1061,7 +1110,7 @@ Escape, Left, Right, Tab and Shift+Tab on it, the rest of the dialog taking
 nothing meanwhile, the locks during a game and by the command line with
 their notes, inert rows and disabled button, and OPEN MODS FOLDER asking
 for the Mods folder;
-the Graphics section's twelve rows, their places at every offset
+the Graphics section's thirteen rows, Interface size last, their places at every offset
 and under every lock, the focus scrolling them into view, both forms of a
 locked row, Zoomed out units' faded Icons and After zoom's lock, Window frame's two ways, HUD scaling's two hints, every status of Hardware acceleration, Full's included, and
 the requests to try the graphics card afresh; on sections of the test's own taller than the
@@ -1146,6 +1195,9 @@ nor a key asking to switch. `native-mod-switch` switches the mod ten times
 through the question, each a soft restart.
 
 ## Limitations
+
+The kit's painter does not draw a text item's tracking, so the code is
+drawn after the rest of the window, with the tracking the item names.
 
 The arrows' scoring rule is the kit's (`kit::focus_toward`), to be
 revisited after controller playtests (D30). Because a row's control lies

@@ -120,6 +120,31 @@ constexpr std::array<WindowLayout, 5> kWindowLayouts{{
 }};
 static_assert(kWindowLayouts.size() == kWindowSizes.size(), "one layout for each window size");
 
+/// The rows Graphics' last row, Interface size, adds to its scroll limit at
+/// Compact: a drop-down's row with two hint lines and its field under them.
+constexpr int32_t kInterfaceSizeRow = 79;
+
+/// The window the Interface size is chosen on, through its drop-down.
+constexpr std::pair<int, int> kInterfaceSizeWindow{1920, 1080};
+
+/// An Interface size the check chooses, and the class and scale the OA
+/// layer lays the dialog out and draws it at then on kInterfaceSizeWindow.
+struct InterfaceSizeStep {
+    settings::InterfaceSize size{};      ///< the size chosen
+    std::string_view caption;            ///< its item in the drop-down
+    oa::ui::kit::SizeClass size_class{}; ///< the class of the points left over
+    int32_t scale{};                     ///< window pixels a point
+};
+
+/// The Interface sizes chosen in turn: 100% is Large at 1x; 400% is
+/// Compact at 3x, as 4x does not fit Compact's 480 by 324 points in 1080
+/// rows and 3x (1440 by 972) does; Auto is the window's own Regular at 2x.
+constexpr std::array<InterfaceSizeStep, 3> kInterfaceSizeSteps{{
+    {settings::InterfaceSize::size_100, "100%", oa::ui::kit::SizeClass::large, 1},
+    {settings::InterfaceSize::size_400, "400%", oa::ui::kit::SizeClass::compact, 3},
+    {settings::InterfaceSize::automatic, "Auto", oa::ui::kit::SizeClass::regular, 2},
+}};
+
 /// The preferences keys' common start: the keys of the Open Annihilation settings.
 constexpr std::string_view kEngineKeyPrefix = "open-annihilation.";
 
@@ -282,6 +307,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Window frame";
     case settings::Setting::hud_scaling:
         return "HUD scaling";
+    case settings::Setting::interface_size:
+        return "Interface size";
     case settings::Setting::modern_fonts:
         return "Use modern fonts for game text";
     case settings::Setting::text_outline:
@@ -1786,8 +1813,8 @@ void Runtime::check_engine_settings_window_sizes() {
             );
         }
         // The window as it shows the dialog now: the closed frame darkened,
-        // the dialog drawn at its class and scale at its place.
-        const auto shows_dialog = [&](std::string_view what) {
+        // the dialog drawn at its class and a scale at its place.
+        const auto shows_dialog_at = [&](std::string_view what, int32_t drawn_scale) {
             point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
             const LayerPlacement at = placed();
             renderer::Surface drawing;
@@ -1796,7 +1823,7 @@ void Runtime::check_engine_settings_window_sizes() {
             drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
             settings::draw_dialog(
                 drawing,
-                {0, 0, expected_layout.scale},
+                {0, 0, drawn_scale},
                 *engine_settings_dialog(),
                 *engine_settings_fonts(),
                 engine_settings_icon()
@@ -1815,6 +1842,10 @@ void Runtime::check_engine_settings_window_sizes() {
                 "the window does not show " + std::string(what) + on + ": " +
                     std::to_string(differing_pixels) + " pixels differ"
             );
+        };
+        // The window as it shows the dialog at this window's own scale.
+        const auto shows_dialog = [&](std::string_view what) {
+            shows_dialog_at(what, expected_layout.scale);
         };
         // Each section, through its entry where the window shows it.
         for (const auto page : kPages) {
@@ -1871,7 +1902,7 @@ void Runtime::check_engine_settings_window_sizes() {
             require(
                 end_limit > 0 && dialog->scroll[static_cast<std::size_t>(page)] == end_limit &&
                     (expected_layout.size_class != oa::ui::kit::SizeClass::compact ||
-                     end_limit == 513),
+                     end_limit == 513 + kInterfaceSizeRow),
                 "End did not scroll Graphics to its end" + on
             );
             shows_dialog("Graphics at its end");
@@ -1883,6 +1914,108 @@ void Runtime::check_engine_settings_window_sizes() {
         std::cout << "engine settings check: the dialog's sections at "
                   << size_class_name(expected_layout.size_class) << ", " << expected_layout.scale
                   << "x, on the " << size << " window\n";
+        if (std::pair<int, int>{width, height} != kInterfaceSizeWindow)
+            continue;
+
+        // Clicks the part of the open dialog that a control with a text draws.
+        const auto click_control =
+            [&](int32_t control, std::string_view text, std::string_view what) {
+                const auto parts_now = settings::dialog_layout(*engine_settings_dialog());
+                click_part(find_part(parts_now, control, text), what);
+            };
+        // Interface size, chosen through its drop-down at Graphics' end: it
+        // holds until OK, then the dialog opens again at the class and scale
+        // it gives, drawn as the dialog drawn at that class and scale.
+        for (const InterfaceSizeStep& size_step : kInterfaceSizeSteps) {
+            const std::string chosen_size = "Interface size " + std::string(size_step.caption) + on;
+            const auto opened_class = oa_layer().screen_class();
+            const int32_t opened_scale = oa_layer().screen_scale();
+            click({button.x + button.width / 2, button.y + button.height / 2});
+            auto* sized = engine_settings_dialog();
+            require(sized != nullptr, "a click on the OA button did not open the dialog" + on);
+            click_control(settings::page_control(settings::Page::graphics), {}, "Graphics' entry");
+            require(
+                sized->page == settings::Page::graphics,
+                "a click on Graphics' entry did not show it" + on
+            );
+            tap(SDLK_END);
+            const int32_t row_control =
+                settings::first_row_control +
+                static_cast<int32_t>(settings::page_settings(settings::Page::graphics).size()) - 1;
+            click_control(row_control, {}, "Interface size's field");
+            require(
+                sized->open_list == row_control,
+                "a click on Interface size's field did not open its list" + on
+            );
+            click_control(
+                settings::no_control,
+                size_step.caption,
+                "Interface size's " + std::string(size_step.caption)
+            );
+            require(
+                sized->chosen.interface_size == size_step.size &&
+                    sized->open_list == settings::no_control,
+                "a click on " + chosen_size + " did not choose it"
+            );
+            // Not before OK: the dialog keeps the class and scale it opened at.
+            require(
+                oa_layer().screen_class() == opened_class &&
+                    oa_layer().screen_scale() == opened_scale && sized->size_class == opened_class,
+                chosen_size + " took effect before OK"
+            );
+            click_control(settings::ok_control, "OK", "OK");
+            require(
+                engine_settings_dialog() == nullptr &&
+                    engine_settings().interface_size == size_step.size,
+                "OK did not keep " + chosen_size
+            );
+            {
+                const auto stored =
+                    preference_values_.find(std::string(settings::key::interface_size));
+                require(
+                    stored != preference_values_.end() &&
+                        stored->second == settings::interface_size_text(size_step.size),
+                    "OK did not store " + chosen_size
+                );
+            }
+            // At once after OK: the dialog opens again at the size's class
+            // and scale, centred, and the window shows it so.
+            click({button.x + button.width / 2, button.y + button.height / 2});
+            const auto* reopened = engine_settings_dialog();
+            require(reopened != nullptr, "the dialog did not open again" + on);
+            point(SDL_EVENT_MOUSE_MOTION, kRestingPointer);
+            require(
+                oa_layer().screen_class() == size_step.size_class &&
+                    oa_layer().screen_scale() == size_step.scale &&
+                    reopened->size_class == size_step.size_class,
+                chosen_size + " is not " + std::string(size_class_name(size_step.size_class)) +
+                    ", " + std::to_string(size_step.scale) + "x"
+            );
+            {
+                const auto& step_metrics = oa::ui::kit::metrics_of(size_step.size_class);
+                const LayerPlacement at = placed();
+                const int32_t shown_width = step_metrics.dialog_width * size_step.scale;
+                const int32_t shown_height = step_metrics.dialog_height * size_step.scale;
+                require(
+                    at.shown.width == shown_width && at.shown.height == shown_height &&
+                        at.shown.x == (width - shown_width) / 2 &&
+                        at.shown.y == (height - shown_height) / 2,
+                    chosen_size + " does not centre the dialog at its class's size"
+                );
+            }
+            shows_dialog_at("the dialog at " + chosen_size, size_step.scale);
+            snapshot(
+                "menu-dialog-interface-size-" +
+                std::string(settings::interface_size_text(size_step.size)) + '-' + size
+            );
+            tap(SDLK_ESCAPE);
+            require(engine_settings_dialog() == nullptr, "Escape did not close the dialog" + on);
+            if (size_step.size != settings::InterfaceSize::automatic)
+                std::cout << "engine settings check: Interface size " << size_step.caption
+                          << " on the " << size << " window is "
+                          << size_class_name(size_step.size_class) << ", " << size_step.scale
+                          << "x\n";
+        }
     }
     if (!SDL_SetWindowSize(sdl_.window, kDefaultWindowWidth, kDefaultWindowHeight) ||
         !SDL_SyncWindow(sdl_.window))

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The kit's points, Auto scale, size classes, arrangements, scroll areas and
-// display list. The scroll numbers were computed with geometry::scroll_thumb,
+// The kit's points, Auto scale, the Interface size's scale rule, size
+// classes, arrangements, scroll areas and display list. The scroll numbers were computed with geometry::scroll_thumb,
 // geometry::scroll_at and geometry::scroll_showing at c5e005df, the start of
 // this branch, by a throwaway program that was not committed. The parts of a
 // screen drawn in the modern fonts are measured with a made-up measure: 6
@@ -153,6 +153,108 @@ void the_frame_matches_the_window_table() {
     OA_CHECK(frame.scale_percent == 200);
     OA_CHECK(frame.size_class == kit::SizeClass::compact);
     OA_CHECK(rect_is(frame.area, 59, 0, 734, 372));
+}
+
+/// One example of an Interface size on a window, at one canvas pixel a window
+/// point: the scale the OA layer draws at and the class it lays out at.
+struct Chosen {
+    int32_t width{};          ///< canvas pixels
+    int32_t height{};         ///< canvas pixels
+    int32_t chosen_percent{}; ///< the Interface size, 0 for Auto
+    int32_t scale{};          ///< the whole scale drawn at
+    kit::SizeClass size_class{kit::SizeClass::compact};
+};
+
+/// The design's examples of Interface sizes.
+constexpr Chosen chosen_sizes[] = {
+    // 3x would need 1440 columns for Compact's 480.
+    {1280, 720, 400, 2, kit::SizeClass::compact},
+    {1920, 1080, 100, 1, kit::SizeClass::large},
+    {1920, 1080, 300, 3, kit::SizeClass::compact},
+    {640, 480, 200, 1, kit::SizeClass::compact},
+    {3840, 2160, 400, 4, kit::SizeClass::regular},
+    {3840, 2160, 0, 3, kit::SizeClass::large},
+};
+
+/// Returns a canvas at one canvas pixel a window point, with no insets.
+///
+/// @param width canvas pixels
+/// @param height canvas pixels
+/// @return the canvas
+kit::Viewport desktop_canvas(int32_t width, int32_t height) {
+    kit::Viewport canvas;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.density = 1.0F;
+    return canvas;
+}
+
+/// Checks the Interface size's scale rule: the design's examples, Auto at
+/// each window the OA layer's checks use, the step held to what fits
+/// Compact, and the density floor and insets on a touch canvas.
+void an_interface_size_takes_the_largest_step_that_fits_compact() {
+    for (const Chosen& example : chosen_sizes) {
+        const kit::Viewport canvas = desktop_canvas(example.width, example.height);
+        const kit::Viewport laid = kit::layer_viewport(canvas, example.chosen_percent);
+        OA_CHECK(laid.scale_percent == example.scale * 100);
+        OA_CHECK(kit::frame_of(laid).size_class == example.size_class);
+        // Nothing but the scale changes.
+        OA_CHECK(laid.width == canvas.width && laid.height == canvas.height);
+        OA_CHECK(laid.density == canvas.density);
+    }
+    // Auto at each window of the design's table, and at the 2560 by 1080
+    // ultrawide window the window-size check takes: the Auto scale, which
+    // Compact fits at each.
+    for (const Window& window : windows) {
+        const kit::Viewport laid =
+            kit::layer_viewport(desktop_canvas(window.width, window.height), 0);
+        OA_CHECK(laid.scale_percent == window.scale * 100);
+        OA_CHECK(kit::frame_of(laid).size_class == window.size_class);
+    }
+    const kit::Viewport ultrawide = kit::layer_viewport(desktop_canvas(2560, 1080), 0);
+    OA_CHECK(ultrawide.scale_percent == 200);
+    OA_CHECK(kit::frame_of(ultrawide).size_class == kit::SizeClass::regular);
+    // The canvas's own scale is not read, and a negative choice is Auto.
+    kit::Viewport scaled = desktop_canvas(1920, 1080);
+    scaled.scale_percent = 400;
+    OA_CHECK(kit::layer_viewport(scaled, 0).scale_percent == 200);
+    OA_CHECK(kit::layer_viewport(scaled, -100).scale_percent == 200);
+    // Each step up to the most that fits, and no further; never below 1x.
+    const kit::Viewport full_hd = desktop_canvas(1920, 1080);
+    OA_CHECK(kit::layer_viewport(full_hd, 200).scale_percent == 200);
+    OA_CHECK(kit::layer_viewport(full_hd, 400).scale_percent == 300);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(1439, 1080), 300).scale_percent == 200);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(1440, 972), 300).scale_percent == 300);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(1440, 971), 300).scale_percent == 200);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(400, 300), 400).scale_percent == 100);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(400, 300), 0).scale_percent == 100);
+    // A percent between steps takes the step below it.
+    OA_CHECK(kit::layer_viewport(full_hd, 250).scale_percent == 200);
+    OA_CHECK(kit::layer_viewport(full_hd, 50).scale_percent == 100);
+
+    // The 1704 by 786 phone canvas at density 2 with its insets: Auto keeps
+    // the density's 2x, Compact; a chosen 100% replaces the density floor
+    // and lays out the room's 1468 by 744 points at Large; 400% is held to
+    // the 2x at which Compact fits 744 rows.
+    kit::Viewport phone;
+    phone.width = 1704;
+    phone.height = 786;
+    phone.density = 2.0F;
+    phone.safe = {118, 0, 118, 42};
+    const kit::Viewport automatic = kit::layer_viewport(phone, 0);
+    OA_CHECK(automatic.scale_percent == 200);
+    OA_CHECK(kit::frame_of(automatic).size_class == kit::SizeClass::compact);
+    OA_CHECK(automatic.safe.left == 118 && automatic.safe.bottom == 42);
+    const kit::Viewport one = kit::layer_viewport(phone, 100);
+    OA_CHECK(one.scale_percent == 100);
+    OA_CHECK(kit::frame_of(one).size_class == kit::SizeClass::large);
+    OA_CHECK(rect_is(kit::frame_of(one).area, 118, 0, 1468, 744));
+    OA_CHECK(kit::layer_viewport(phone, 400).scale_percent == 200);
+    // The insets count: 1440 by 972 fits 3x, and not with a row inset.
+    kit::Viewport inset_canvas = desktop_canvas(1440, 972);
+    OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 300);
+    inset_canvas.safe = {0, 1, 0, 0};
+    OA_CHECK(kit::layer_viewport(inset_canvas, 300).scale_percent == 200);
 }
 
 /// Checks that neighbouring rectangles share an edge at each scale, and that a
@@ -684,6 +786,7 @@ int main() {
     a_point_lies_inside_and_not_on_the_far_edges();
     the_scale_follows_the_canvas_and_the_density();
     the_frame_matches_the_window_table();
+    an_interface_size_takes_the_largest_step_that_fits_compact();
     each_class_gives_its_metrics();
     canvas_pixels_tile_and_whole_scales_round_trip();
     arrangements_place_the_rectangles();
