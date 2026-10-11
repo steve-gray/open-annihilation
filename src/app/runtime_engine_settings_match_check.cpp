@@ -5,6 +5,7 @@
 // dialog beside the darkened column, the pause and the locks.
 
 #include "check_host_input.hpp"
+#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
 #include "oa_layer.hpp"
@@ -291,10 +292,14 @@ void Runtime::check_engine_settings_in_match() {
             }
         require(differing == 0, what + ": " + std::to_string(differing) + " pixels differ");
     };
+    // The dialog's header shows the Open Annihilation icon, and the in-game
+    // OA button, which opens Settings, the settings icon.
     const auto icon = engine_settings_icon();
-    require(renderer::picture_drawable(icon), "the in-game OA button has no icon to show");
+    require(renderer::picture_drawable(icon), "the dialog has no icon to show");
+    const auto gears = EngineSettingsMenuHost::settings_icon(*this);
+    require(renderer::picture_drawable(gears), "the in-game OA button has no icon to show");
     const auto button_face = [&](settings::ButtonLook look, bool darkened, const auto& fonts) {
-        return OaLayer::match_button_face(match_layout_, look, darkened, fonts, icon);
+        return OaLayer::match_button_face(match_layout_, look, darkened, fonts, gears);
     };
     // The dialog drawn offscreen at a size class and a whole scale: the
     // class's dialog points at the scale, crisp. Compact at 1x is 0.7.3's.
