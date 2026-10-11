@@ -94,7 +94,6 @@ settings::Dialog opened(
         {},
         settings::highest_unit_limit,
         {},
-        {},
         nullptr,
         touch,
         game_files,

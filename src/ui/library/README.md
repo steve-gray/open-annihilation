@@ -73,8 +73,11 @@ translator finds them together. Every word passes through `Library::text`
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
-    that can be retried), PLAY NOW, ROLL BACK, OPEN FOLDER and HOMEPAGE,
-    each with whether it is enabled;
+    that can be retried), PLAY NOW, or SWITCH OFF on the mod being played,
+    ROLL BACK, OPEN FOLDER and HOMEPAGE, each with whether it is enabled:
+    PLAY NOW, SWITCH OFF and ROLL BACK are off during a game, and PLAY NOW
+    and SWITCH OFF while `Inputs::mod_from_command_line` says `--mod-dir` or
+    `--base-game` chose the mod;
   - the facts Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, in
     a long and a short form. An update's Rules fact says in words whether
     it changes the game's rules and which saved games stop loading
@@ -88,7 +91,11 @@ translator finds them together. Every word passes through `Library::text`
     the whole line ("1 download"). A listing with no count shows nothing
     more. The count does not change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
-    Ridge.").
+    Ridge."), after "The command line chose this run's mod." on every
+    installed mod while the command line chose it.
+- `can_check_now` says whether the footer's CHECK NOW can be pressed: a
+  registry is on that it can ask (`Inputs::can_check`), none is being asked
+  (`Inputs::checking`), and no game is being played.
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
@@ -104,9 +111,8 @@ translator finds them together. Every word passes through `Library::text`
 
 `update_question.hpp` holds the question asked before an update that may
 stop saved games loading, and the one place its rule lives. The Library's
-UPDATE and UPDATE ALL and Settings › Mods' UPDATE all go through it (the
-app's `Runtime::request_update`), so both screens and the tests share its
-words.
+UPDATE and UPDATE ALL go through it (the app's `Runtime::request_update`),
+so the screens and the tests share its words.
 
 - `asks_before_update(entry, update)` is true only for a mod
   (`Kind::mod`) from a registry the player added (`!Entry::built_in`, which
@@ -137,14 +143,25 @@ words.
   answering Escape, B and N, UPDATE with the primary look. Its word is the
   kit's default, so automation lists `oa.prompt.not-now`,
   `oa.prompt.update` and `oa.prompt.body`.
-- Settings › Mods' lines, which the app gives the page: `update_line` on a
-  row's update ("Revision 4 available · 3.2 MB", "Version 4.9 changes the
-  rules · 3.2 MB", "Revision 4 may change the rules · 3.2 MB"),
-  `update_progress` on one the queue holds ("Updating · 28%", "Waiting ·
-  finishes when you leave {name}") and `update_check_line` on the check for
-  updates ("Checked for updates 4 min ago" with `age_text`, "Not checked
-  for updates yet", "Checking for updates…", "Couldn't check for updates"
-  marked as a warning, or "No registries are on." without CHECK NOW).
+
+### The questions about the mod played
+
+`mod_questions.hpp` holds what the app asks and tells over the Library
+about the mod the game plays, as kit questions whose word is the kit's
+default (`oa.prompt.<id>` to automation):
+
+- `switch_off_question()`: SWITCH OFF's **SWITCH MOD**, "Switch to No Mod
+  now? The game reloads its data for the new mod and returns to the main
+  menu. Your other settings are kept.", with CANCEL (`cancel`), marked
+  and answering Escape, B and N, and SWITCH (`switch`), primary, which Y
+  answers;
+- `switch_refused_note(reason)`: why PLAY NOW could not switch, under the
+  same title, with OK (`ok`);
+- `roll_back_question(title, from, to, playing)`: ROLL BACK's **ROLL BACK
+  MOD**, "Roll back {title} to {to}? {from} is kept in its place, and ROLL
+  BACK again brings it back.", with "The game reloads its data for the mod
+  and returns to the main menu." for the mod the game plays, CANCEL
+  (`cancel`) marked and ROLL BACK (`roll-back`) primary.
 
 ### The screens
 
@@ -159,7 +176,8 @@ words.
     the list of 28-point rows (the name, then the version, size and an
     added registry's name, and the state's chip, disabled when GET or
     UPDATE cannot act), and the footer (the queue's short line with a
-    progress bar while downloading, SETTINGS…, DETAILS and CLOSE). While
+    progress bar while downloading, CHECK NOW, SETTINGS…, DETAILS and
+    CLOSE). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
     (`details_page_layout`): its name and version in the header, the way
@@ -175,7 +193,7 @@ words.
     size, the chip), the details (a 40-point badge beside the name, chip
     and status line, the summary in at most six lines, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
-    lines, SETTINGS… and CLOSE);
+    lines, CHECK NOW, SETTINGS… and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
     pane (a nav list of All, Installed and Updates, the heading TAGS and the
     tab's tags with their counts, or UPDATE ALL on Updates) in place of the
@@ -240,10 +258,12 @@ words.
     the player's own, each word lower-cased with other characters as
     hyphens;
   - `library.action.get`, `.update`, `.update-all`, `.cancel`, `.retry`,
-    `.roll-back`, `.play-now`, `.open-folder` and `.homepage`; on Compact's
+    `.roll-back`, `.play-now`, `.switch-off`, `.open-folder` and
+    `.homepage`; on Compact's
     details page MORE ▾ is `library.action`, whose open items are the
     actions after the first three under those same names;
-  - `library.details`, `library.back`, `library.settings`, `library.close`;
+  - `library.details`, `library.back`, `library.check-now`,
+    `library.settings`, `library.close`;
   - the labels `library.status`, `library.queue`, `library.note`,
     `library.from` and `library.rules`: controls of kind `area` that are
     neither enabled nor focusable, whose text is the words shown (the From
@@ -302,9 +322,9 @@ the sample numbers; a new version and an unknown rules hash; the mod being
 played; UPDATE ALL over a built-in and an added registry's rules-changing
 mods naming only the added one, none to ask, and five named as three and
 "2 more"; the kit question's paragraphs, NOT NOW marked and UPDATE primary,
-its automation names and its text fitting at every class; Settings › Mods'
-lines for each kind of update, each queue phase and each state of the
-check; and a lookup that translates.
+its automation names and its text fitting at every class; the questions
+about the mod played, their words, buttons and marks; and a lookup that
+translates.
 
 `ui-library` builds Libraries over made-up registries and packages: the
 state of a listing alone, a package installed alone, matched with and
@@ -314,7 +334,9 @@ off and their order; installed entries never blocked; built-in and added
 registries, two registries with one key, and a key installed from another
 registry; tabs, filters and tags with their counts; the order with no
 search; the update count; the selection across refreshes and browsing; the
-buttons of every state; the facts with the sample numbers, the Rules fact
+buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
+SWITCH OFF off while the command line chose the mod, its note, and when
+CHECK NOW can be pressed; the facts with the sample numbers, the Rules fact
 for an unchanged, changed and unknown rules hash in both lengths; status
 lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
 changed the rules and one that kept them; `change_texts` for a new
@@ -344,7 +366,8 @@ whole values. Regular shows more rows than Compact, and Large has the
 filter pane. It then drives the screens: Enter at Compact and at Regular,
 Escape's three cases, the tab commands both ways, the controller's X, Y
 and B, the list's keys, Tab's walk, presses, double presses and taps on
-rows (which never get anything), an action's button, the labels taking no
+rows (which never get anything), an action's button, CHECK NOW greyed
+until a registry can be asked and then asking, the labels taking no
 press, the wheel and a finger's drag, typing and Backspace, the filter
 drop-down and a press outside it, the tag chips, and MORE ▾.
 

@@ -47,10 +47,12 @@ inline constexpr std::string_view action_cancel = "CANCEL";
 inline constexpr std::string_view action_retry = "RETRY";
 inline constexpr std::string_view action_roll_back = "ROLL BACK";
 inline constexpr std::string_view action_play_now = "PLAY NOW";
+inline constexpr std::string_view action_switch_off = "SWITCH OFF";
 inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
 inline constexpr std::string_view action_back = "BACK";
+inline constexpr std::string_view action_check_now = "CHECK NOW";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
 
@@ -165,6 +167,8 @@ inline constexpr std::string_view download_count_many = "{count} downloads";
 inline constexpr std::string_view note_finishes = "Finishes when you leave {name}.";
 inline constexpr std::string_view note_playing_other =
     "You are playing {playing}. Updating {name} doesn't restart the game.";
+/// Why PLAY NOW and SWITCH OFF are off: --mod-dir or --base-game.
+inline constexpr std::string_view note_command_line = "The command line chose this run's mod.";
 
 // The download queue in the footer.
 inline constexpr std::string_view queue_package = "{name} {version}";
@@ -276,26 +280,25 @@ inline constexpr std::string_view fact_download = "Download";
 inline constexpr std::string_view question_fact = "{label}: {value}";
 inline constexpr std::string_view action_not_now = "NOT NOW";
 
-// Settings › Mods: a row's line on its update, and the line on the last
-// check for updates (update_question.hpp).
-inline constexpr std::string_view mods_revision_available =
-    "Revision {revision} available · {size}";
-inline constexpr std::string_view mods_version_available = "Version {version} available · {size}";
-inline constexpr std::string_view mods_revision_changes =
-    "Revision {revision} changes the rules · {size}";
-inline constexpr std::string_view mods_version_changes =
-    "Version {version} changes the rules · {size}";
-inline constexpr std::string_view mods_revision_may_change =
-    "Revision {revision} may change the rules · {size}";
-inline constexpr std::string_view mods_version_may_change =
-    "Version {version} may change the rules · {size}";
-/// An update on its way, how far its download has come.
-inline constexpr std::string_view mods_updating = "Updating · {percent}%";
-inline constexpr std::string_view mods_checked = "Checked for updates {age}";
-inline constexpr std::string_view mods_never_checked = "Not checked for updates yet";
-inline constexpr std::string_view mods_checking = "Checking for updates…";
-inline constexpr std::string_view mods_check_failed = "Couldn't check for updates";
-inline constexpr std::string_view mods_no_registries = "No registries are on.";
+// The questions about the mod played (mod_questions.hpp): SWITCH OFF's
+// Switch Mod question, the note that PLAY NOW could not switch, and ROLL
+// BACK's Roll Back Mod question.
+inline constexpr std::string_view switch_title = "SWITCH MOD";
+/// What the Switch Mod question asks, with the mod's title in its place.
+inline constexpr std::string_view switch_ask =
+    "Switch to {title} now? The game reloads its data for the new mod and returns to the main "
+    "menu. Your other settings are kept.";
+/// The title the Switch Mod question gives the game played with no mod.
+inline constexpr std::string_view no_mod = "No Mod";
+inline constexpr std::string_view action_switch = "SWITCH";
+inline constexpr std::string_view action_ok = "OK";
+inline constexpr std::string_view roll_back_title = "ROLL BACK MOD";
+/// What the Roll Back Mod question asks, with the mod's title and the versions.
+inline constexpr std::string_view roll_back_ask =
+    "Roll back {title} to {to}? {from} is kept in its place, and ROLL BACK again brings it back.";
+/// What the Roll Back Mod question adds for the mod the game plays.
+inline constexpr std::string_view roll_back_reload =
+    "The game reloads its data for the mod and returns to the main menu.";
 
 } // namespace words
 

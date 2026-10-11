@@ -195,7 +195,8 @@ int declared_place(std::string_view name) {
         return 3;
     if (name == "library.action" || starts(name, "library.action.") || name == "library.back")
         return 4;
-    if (name == "library.settings" || name == "library.details" || name == "library.close")
+    if (name == "library.check-now" || name == "library.settings" || name == "library.details" ||
+        name == "library.close")
         return 5;
     return -1;
 }
@@ -270,8 +271,8 @@ bool designed_name(const std::string& name) {
         "library\\.(tab\\.(mods|maps|languages|updates)|search|filter|"
         "filter\\.(all|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?|action|"
-        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
-        "details|back|settings|close|status|queue|note|from|rules)"
+        "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|open-folder|"
+        "homepage)|details|back|check-now|settings|close|status|queue|note|from|rules)"
     );
     return std::regex_match(name, pattern);
 }
@@ -900,6 +901,17 @@ void pressing_rows_selects_and_never_gets() {
     OA_CHECK(result.action == lib::Action::settings);
     result = click(small, small_state, small_list, "library.close");
     OA_CHECK(result.action == lib::Action::close);
+    // CHECK NOW asks for nothing until a registry is on to ask, then for the check.
+    const kit::Control* check_off = fixture::named(small_list, "library.check-now");
+    OA_CHECK(check_off != nullptr && !check_off->enabled);
+    result = click(small, small_state, small_list, "library.check-now");
+    OA_CHECK(!result.action);
+    small.inputs.can_check = true;
+    small_list = laid_out(small, small_state, all[0].frame);
+    const kit::Control* check_on = fixture::named(small_list, "library.check-now");
+    OA_CHECK(check_on != nullptr && check_on->enabled);
+    result = click(small, small_state, small_list, "library.check-now");
+    OA_CHECK(result.action == lib::Action::check_now);
 }
 
 /// The wheel scrolls the pane under the pointer; a finger's drag in the

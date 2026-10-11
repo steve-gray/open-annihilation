@@ -509,6 +509,7 @@ void test_installed_never_blocked() {
     if (second != nullptr) {
         OA_CHECK_TEXT(lib::status_line(library, *second), "Playing");
         const std::vector<std::pair<Action, bool>> expected = {
+            {Action::switch_off, false},
             {Action::roll_back, false},
             {Action::open_folder, true},
         };
@@ -799,8 +800,91 @@ void test_entry_actions() {
             Buttons({{Action::cancel, true}, {Action::play_now, true}, {Action::open_folder, true}})
         );
     OA_CHECK_TEXT(lib::action_text(Action::update_all), "UPDATE ALL");
+    OA_CHECK_TEXT(lib::action_text(Action::play_now), "PLAY NOW");
+    OA_CHECK_TEXT(lib::action_text(Action::switch_off), "SWITCH OFF");
+    OA_CHECK_TEXT(lib::action_text(Action::check_now), "CHECK NOW");
     OA_CHECK_TEXT(lib::action_text(Action::settings), "SETTINGS…");
     OA_CHECK_TEXT(lib::action_text(Action::close), "CLOSE");
+}
+
+void test_switch_off() {
+    // The mod being played offers SWITCH OFF where the others offer PLAY
+    // NOW, whatever its registry, and a map pack offers neither.
+    lib::Inputs inputs = base_inputs();
+    inputs.listings.push_back(listing(core, Kind::mod, "fixture-mod", "Fixture Mod"));
+    inputs.installed.push_back(installed(core, Kind::mod, "fixture-mod", "Fixture Mod"));
+    inputs.installed.back().playing = true;
+    inputs.installed.back().kept = lib::Kept{"4.8", 2};
+    inputs.installed.push_back(installed("", Kind::mod, "own-mod", "Own Mod"));
+    inputs.installed.push_back(installed(core, Kind::map_pack, "example-pack", "Example Pack"));
+    lib::Library library = built(inputs);
+    using Buttons = std::vector<std::pair<Action, bool>>;
+    const lib::EntryId played{std::string(core), Kind::mod, "fixture-mod"};
+    const lib::EntryId own{"", Kind::mod, "own-mod"};
+    const auto buttons_of = [&library](const lib::EntryId& id) {
+        const lib::Entry* entry = lib::find_entry(library, id);
+        OA_CHECK(entry != nullptr);
+        return entry != nullptr ? actions_of(library, *entry) : Buttons{};
+    };
+    OA_CHECK(
+        buttons_of(played) ==
+        Buttons(
+            {{Action::switch_off, true}, {Action::roll_back, true}, {Action::open_folder, true}}
+        )
+    );
+    if (const lib::Entry* entry = lib::find_entry(library, played); entry != nullptr)
+        OA_CHECK_TEXT(lib::entry_actions(library, *entry)[0].text, "SWITCH OFF");
+    OA_CHECK(buttons_of(own) == Buttons({{Action::play_now, true}, {Action::open_folder, true}}));
+    OA_CHECK(
+        buttons_of({std::string(core), Kind::map_pack, "example-pack"}) ==
+        Buttons({{Action::open_folder, true}})
+    );
+    lib::select(library, played);
+    OA_CHECK_TEXT(lib::playing_note(library), "");
+
+    // While the command line chose the mod, neither can be pressed, and an
+    // installed mod's note says why; a map pack's says nothing.
+    inputs.mod_from_command_line = true;
+    lib::refresh(library, inputs);
+    OA_CHECK(
+        buttons_of(played) ==
+        Buttons(
+            {{Action::switch_off, false}, {Action::roll_back, true}, {Action::open_folder, true}}
+        )
+    );
+    OA_CHECK(buttons_of(own) == Buttons({{Action::play_now, false}, {Action::open_folder, true}}));
+    OA_CHECK_TEXT(lib::playing_note(library), "The command line chose this run's mod.");
+    lib::select(library, own);
+    OA_CHECK_TEXT(lib::playing_note(library), "The command line chose this run's mod.");
+    lib::set_tab(library, lib::Tab::maps);
+    lib::select(library, {std::string(core), Kind::map_pack, "example-pack"});
+    OA_CHECK(library.selected && library.selected->kind == Kind::map_pack);
+    OA_CHECK_TEXT(lib::playing_note(library), "");
+
+    // The note on an update of the mod being played follows it.
+    inputs.updates.push_back(update(core, Kind::mod, "fixture-mod"));
+    lib::set_tab(library, lib::Tab::mods);
+    lib::refresh(library, inputs);
+    lib::select(library, played);
+    OA_CHECK(library.selected == played);
+    OA_CHECK_TEXT(
+        lib::playing_note(library),
+        "The command line chose this run's mod. Finishes when you leave Fixture Mod."
+    );
+}
+
+void test_check_now() {
+    // CHECK NOW can be pressed while a registry is on to ask, none is being
+    // asked, and no game is being played.
+    lib::Inputs inputs = base_inputs();
+    OA_CHECK(!lib::can_check_now(built(inputs)));
+    inputs.can_check = true;
+    OA_CHECK(lib::can_check_now(built(inputs)));
+    inputs.checking = true;
+    OA_CHECK(!lib::can_check_now(built(inputs)));
+    inputs.checking = false;
+    inputs.in_match = true;
+    OA_CHECK(!lib::can_check_now(built(inputs)));
 }
 
 /// Inputs holding the sample mod: 4.8 revision 3 installed, 41.0 MB, revision 4 offered.
@@ -1320,6 +1404,8 @@ int main() {
     test_order_without_search();
     test_selection();
     test_entry_actions();
+    test_switch_off();
+    test_check_now();
     test_facts();
     test_status_lines_and_bylines();
     test_playing_note();

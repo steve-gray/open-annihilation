@@ -1,20 +1,30 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// --check-mod-switch: the settings' Mods page switches the mod with a soft
-// restart. Each run of the check is one turn: it checks that the run plays
-// the mod the last turn chose, listed first on the Mods page, then chooses
-// the next of No Mod and two test profiles there and answers SWITCH, which
-// ends the run; main() builds the next run on the same window and measures
-// the working set as each starts.
+// --check-mod-switch: the Library switches the mod with a soft restart. Each
+// run of the check is one turn: it checks that the run plays the mod the
+// last turn chose, the Library showing it played, then chooses the next of
+// no mod and two test profiles there, with PLAY NOW for a profile, or SWITCH
+// OFF and the Switch Mod question's SWITCH for no mod, which ends the run;
+// main() builds the next run on the same window and measures the working set
+// as each starts.
 
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
+#include "oa_layer.hpp"
+#include "package_paths.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/platform/preferences.hpp"
-#include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/engine_settings.hpp"
+#include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/input.hpp"
+#include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
+
+#include <SDL3/SDL.h>
 
 #include <array>
 #include <cstddef>
@@ -22,21 +32,27 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <tuple>
 #include <vector>
 
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
+namespace library = oa::ui::library;
 
 namespace {
 
 /// The switches the check makes before its last run.
 constexpr uint32_t kSwitches = 10;
+
+/// The run whose turn is the first SWITCH OFF: the third, from the second
+/// test profile to no mod. Its question is put away with CANCEL once before
+/// it is answered.
+constexpr uint32_t kFirstSwitchOff = 2;
 
 /// One test profile of the check: its folder's name in the player's Mods
 /// folder, and its oamod.yaml.
@@ -79,16 +95,6 @@ void require(bool ok, std::string_view what) {
         throw std::runtime_error("mod switch check: " + std::string(what));
 }
 
-/// Returns a folder's path as the settings keep it: absolute, normal, in UTF-8.
-///
-/// @param folder the folder
-/// @return its path
-std::string kept_path(const fs::path& folder) {
-    std::error_code error;
-    const fs::path absolute = fs::absolute(folder, error);
-    return path_to_utf8((error ? folder : absolute).lexically_normal());
-}
-
 } // namespace
 
 void Runtime::check_mod_switch() {
@@ -105,7 +111,7 @@ void Runtime::check_mod_switch() {
         }
         list_offered_mods();
     }
-    // The mods take turns in this order: No Mod, then the test profiles.
+    // The mods take turns in this order: no mod, then the test profiles.
     std::vector<std::string> turns{std::string()};
     for (const auto& mod : kTestMods)
         turns.push_back(kept_path(mods / std::string(mod.folder)));
@@ -131,84 +137,109 @@ void Runtime::check_mod_switch() {
     std::cout << "mod switch check: run " << options_.restarts << " plays "
               << (playing_turn == 0 ? std::string("No Mod") : std::string(profile->id)) << '\n';
 
-    auto& dialog = open_engine_settings_dialog(settings::DialogKind::engine);
-    dialog.page = settings::Page::mods;
-    const auto rows = settings::mod_rows(dialog);
-    require(!rows.empty() && rows.front().playing, "Mods does not list the mod played first");
-    const auto offered_of = [&dialog](const std::string& folder) {
-        if (folder.empty())
-            return settings::no_mod_row;
-        for (std::size_t index = 0; index < dialog.mod_folders.size(); ++index)
-            if (dialog.mod_folders[index] == folder)
-                return static_cast<int32_t>(index);
-        return settings::no_question;
+    // The Library, built from the run's own feed, lists both test profiles:
+    // the one played as PLAYING with SWITCH OFF, the other with PLAY NOW;
+    // with no mod played, neither plays.
+    LibraryHost& host = library_host();
+    host.rebuild(*this);
+    const auto entry_of = [&host](const std::string& folder) -> const library::Entry* {
+        for (const library::Entry& each : host.model.entries)
+            if (each.id.kind == library::Kind::mod && each.installed != nullptr &&
+                same_folder(kept_path(each.installed->folder), folder))
+                return &each;
+        return nullptr;
     };
-    require(
-        rows.front().offered == offered_of(turns[playing_turn]),
-        "Mods lists another mod first than the one played"
-    );
+    const auto offers = [&host](const library::Entry& each, library::Action wanted) {
+        for (const library::ActionButton& button : library::entry_actions(host.model, each))
+            if (button.action == wanted)
+                return button.enabled;
+        return false;
+    };
+    for (std::size_t turn = 1; turn < turns.size(); ++turn) {
+        const library::Entry* listed = entry_of(turns[turn]);
+        require(listed != nullptr, "the Library does not list a test profile");
+        const bool played = turn == playing_turn;
+        require(
+            listed->installed->playing == played &&
+                (listed->state == library::State::playing) == played,
+            played ? "the Library does not show the mod played as playing"
+                   : "the Library shows a mod playing that the run does not play"
+        );
+        require(
+            offers(*listed, played ? library::Action::switch_off : library::Action::play_now),
+            played ? "the mod played offers no SWITCH OFF" : "a mod not played offers no PLAY NOW"
+        );
+    }
+    const library::Entry* played_entry =
+        playing_turn != 0 ? entry_of(turns[playing_turn]) : nullptr;
+    for (const library::Entry& each : host.model.entries)
+        require(
+            each.id.kind != library::Kind::mod || each.installed == nullptr ||
+                each.installed->playing == (&each == played_entry),
+            "the Library shows another mod playing than the one played"
+        );
 
     if (options_.restarts >= kSwitches) {
         // The last run: the next start of the check plays No Mod again.
-        std::ignore = take_engine_settings_action(settings::DialogAction::cancelled);
         preference_values_.erase(std::string(settings::key::mod_directory));
         preferences_dirty_ = true;
         std::cout << "mod switch check: " << kSwitches << " switches made\n";
         return;
     }
 
-    // A click on the next mod's row asks the Switch Mod question; on the
-    // first run CANCEL leaves everything as it was, and a second click asks
-    // again. SWITCH stores the mod and ends the run.
+    // A test profile is chosen with PLAY NOW, which stores it and ends the
+    // run; no mod with SWITCH OFF on the mod played, which asks the Switch
+    // Mod question. On the first SWITCH OFF, CANCEL leaves everything as it
+    // was, and SWITCH OFF asks again; SWITCH stores no mod and ends the run.
     const std::string& next = turns[(playing_turn + 1) % turns.size()];
-    const int32_t wanted = offered_of(next);
-    require(wanted != settings::no_question, "Mods does not list the next mod");
-    std::size_t row_index = rows.size();
-    for (std::size_t index = 0; index < rows.size(); ++index)
-        if (rows[index].offered == wanted)
-            row_index = index;
-    require(row_index < rows.size(), "the next mod has no row");
-    const int32_t control = settings::first_row_control + static_cast<int32_t>(row_index);
-    const auto click_row = [&] {
-        for (const auto& part : settings::dialog_layout(dialog)) {
-            if (part.control != control)
-                continue;
-            const int32_t x = part.rect.x + part.rect.width / 2;
-            const int32_t y = part.rect.y + part.rect.height / 2;
-            std::ignore = settings::dialog_pointer_move(dialog, x, y);
-            std::ignore = settings::dialog_pointer_down(dialog, x, y);
-            std::ignore = settings::dialog_pointer_up(dialog, x, y);
-            return;
-        }
-        require(false, "the next mod's row is not shown");
+    const auto question_shows = [this] {
+        const auto* asked = dynamic_cast<const QuestionScreen*>(oa_layer().top());
+        if (asked == nullptr)
+            return false;
+        const oa::ui::kit::Question& question = asked->question();
+        return question.title == "SWITCH MOD" && question.buttons.size() == 2 &&
+               question.buttons[0].id == library::cancel_button_id &&
+               question.buttons[1].id == library::switch_button_id && question.marked == 0;
     };
-    click_row();
-    require(dialog.switch_question == wanted, "a click on a row did not ask to switch to it");
-    if (options_.restarts == 0) {
-        const std::string before = dialog.chosen.mod_folder;
-        require(
-            settings::dialog_key(dialog, settings::DialogKey::escape) ==
-                    settings::DialogAction::redraw &&
-                dialog.switch_question == settings::no_question &&
-                dialog.chosen.mod_folder == before,
-            "CANCEL changed the Mod setting or left the question"
-        );
-        click_row();
-        require(dialog.switch_question == wanted, "a second click did not ask again");
+    // Answers the question on top of the OA layer with a key, as the layer does.
+    const auto answer = [this](oa::ui::kit::Key key, uint32_t sdl_key) {
+        LayerScreen* top = oa_layer().top();
+        require(top != nullptr, "no question shows to answer");
+        oa_layer().take_answer(*top, top->key(key, sdl_key), sdl_key);
+        oa_layer().forget_latched_key();
+    };
+    if (next.empty()) {
+        const library::Entry* played = entry_of(turns[playing_turn]);
+        require(played != nullptr, "the Library does not list the mod played");
+        const library::EntryId id = played->id;
+        library_entry_action(library::Action::switch_off, id);
+        require(question_shows(), "SWITCH OFF did not ask the Switch Mod question");
+        if (options_.restarts == kFirstSwitchOff) {
+            const std::string before = engine_settings().mod_folder;
+            answer(oa::ui::kit::Key::escape, SDLK_ESCAPE);
+            require(
+                !question_shows() && !soft_restart_requested() &&
+                    engine_settings().mod_folder == before,
+                "CANCEL changed the Mod setting or left the question"
+            );
+            library_entry_action(library::Action::switch_off, id);
+            require(question_shows(), "a second SWITCH OFF did not ask again");
+        }
+        answer(oa::ui::kit::Key::yes, SDLK_Y);
+        require(!question_shows(), "SWITCH did not put the question away");
+    } else {
+        const library::Entry* chosen = entry_of(next);
+        require(chosen != nullptr, "the Library does not list the next mod");
+        const library::EntryId id = chosen->id;
+        library_entry_action(library::Action::play_now, id);
     }
-    const auto action = settings::dialog_key(dialog, settings::DialogKey::enter);
-    require(action == settings::DialogAction::switch_mod, "SWITCH did not ask for the switch");
-    require(dialog.chosen.mod_folder == next, "SWITCH did not choose the mod");
-    std::ignore = take_engine_settings_action(action);
-    require(
-        soft_restart_requested() && engine_settings_dialog() == nullptr,
-        "SWITCH did not close the dialog and end the run"
-    );
+    require(engine_settings().mod_folder == next, "the switch did not choose the mod");
+    require(soft_restart_requested(), "the switch did not end the run");
     const auto stored = preference_values_.find(std::string(settings::key::mod_directory));
     require(
         next.empty() ? stored == preference_values_.end() || stored->second.empty()
                      : stored != preference_values_.end() && stored->second == next,
-        "SWITCH did not store the mod"
+        "the switch did not store the mod"
     );
 }
 

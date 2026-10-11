@@ -186,6 +186,11 @@ struct Inputs {
     int64_t list_age_seconds{-1};           ///< how old the newest list is; -1 for none
     bool offline{};                         ///< the last fetch could not reach a registry
     bool in_match{};                        ///< a game is being played
+    /// The command line chose this run's mod (--mod-dir or --base-game):
+    /// PLAY NOW and SWITCH OFF are off, and a mod's details say why.
+    bool mod_from_command_line{};
+    bool can_check{}; ///< a registry is on that CHECK NOW can ask for its list
+    bool checking{};  ///< the registries are being asked for their lists now
 };
 
 /// One of the Library's tabs.
@@ -409,10 +414,14 @@ enum class Action : uint8_t {
     retry,
     roll_back,
     play_now,
+    /// The mod being played's own in place of PLAY NOW: the game plays no
+    /// mod from then on, once the player answers the Switch Mod question.
+    switch_off,
     open_folder,
     homepage,
     details,
     back,
+    check_now, ///< the footer's: the registries are asked for their lists again
     settings,
     close,
 };
@@ -428,13 +437,22 @@ struct ActionButton {
 ///
 /// GET or UPDATE first, or CANCEL while it is queued, or RETRY when its
 /// download failed and can be tried again; then PLAY NOW for an installed mod
-/// that is not being played, ROLL BACK when a copy is kept, OPEN FOLDER when
-/// installed, and HOMEPAGE when the listing has one.
+/// that is not being played, or SWITCH OFF for the one that is, ROLL BACK
+/// when a copy is kept, OPEN FOLDER when installed, and HOMEPAGE when the
+/// listing has one. PLAY NOW, SWITCH OFF and ROLL BACK are off during a
+/// game, and PLAY NOW and SWITCH OFF while the command line chose the mod.
 ///
 /// @param library the Library
 /// @param entry one of its entries
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
+
+/// Tells whether the footer's CHECK NOW can be pressed: a registry is on
+/// that it can ask, none is being asked now, and no game is being played.
+///
+/// @param library the Library
+/// @return true when it can
+[[nodiscard]] bool can_check_now(const Library& library) noexcept;
 
 /// How a fact's value is marked.
 enum class Mark : uint8_t {
@@ -482,7 +500,9 @@ struct Fact {
 ///         listing names neither a person nor a count
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
-/// Says how an update of the selected mod meets the mod being played.
+/// Says how an update of the selected mod meets the mod being played, and,
+/// on an installed mod while the command line chose this run's mod, that it
+/// did, before anything else.
 ///
 /// @param library the Library
 /// @return the note; empty when it has none

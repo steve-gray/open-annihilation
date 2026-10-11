@@ -356,6 +356,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::action_roll_back);
     case Action::play_now:
         return shown(text, words::action_play_now);
+    case Action::switch_off:
+        return shown(text, words::action_switch_off);
     case Action::open_folder:
         return shown(text, words::action_open_folder);
     case Action::homepage:
@@ -364,6 +366,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::action_details);
     case Action::back:
         return shown(text, words::action_back);
+    case Action::check_now:
+        return shown(text, words::action_check_now);
     case Action::settings:
         return shown(text, words::action_settings);
     case Action::close:

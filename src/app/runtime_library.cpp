@@ -2,15 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The Library on the OA layer: its feed from the content service, the
-// installed packages and their updates its worker finds, and the download
-// queue; the worker itself; the Library as a screen of the layer (named
-// library), its input and the actions it asks for; and its opening, from the
-// main menu's OA button, from Settings › Language and by the runtime.
+// installed packages and their updates its worker finds, every other mod
+// folder the game can play, and the download queue; the worker itself; the
+// Library as a screen of the layer (named library), its input and the
+// actions it asks for; and its opening, from the main menu's OA button, from
+// Settings › Language and by the runtime.
 
 #include "engine_settings_menu_host.hpp"
+#include "engine_settings_state.hpp"
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
 #include "oa_layer.hpp"
+#include "package_paths.hpp"
 
 #include "oa/app/content/counts.hpp"
 #include "oa/app/content/downloads.hpp"
@@ -74,6 +77,8 @@ constexpr std::string_view kCloseSound = "Previous";
 constexpr std::string_view kSettingsScreen = "settings";
 /// The words the Library's rows' automation names start with.
 constexpr std::string_view kRowNamePrefix = "library.row.";
+/// The key of a mod folder whose name gives no word: a folder at a root.
+constexpr std::string_view kOwnModWord = "mod";
 /// The modifier that holds the Library's Find: Cmd on macOS, Ctrl elsewhere.
 #ifdef SDL_PLATFORM_MACOS
 constexpr uint16_t kCommandModifier = SDL_KMOD_GUI;
@@ -663,7 +668,7 @@ uint64_t Runtime::library_feed_generation() {
     }
     const uint64_t pictures = host.work.pictures ? host.work.pictures->generation() : 0;
     return content_service().generation() + content_downloads().generation() + searches + pictures +
-           counts_seen;
+           counts_seen + engine_settings_state().offered_generation;
 }
 
 library::Inputs Runtime::library_inputs() {
@@ -692,6 +697,12 @@ library::Inputs Runtime::library_inputs() {
                 newest = view.checked;
             if (!view.last_error.empty() && !view.refreshing)
                 inputs.offline = true;
+            // CHECK NOW asks the registries that are on and can be fetched,
+            // and waits while one of them is being asked.
+            if (view.status != content::RegistryStatus::needs_developer_mode) {
+                inputs.can_check = true;
+                inputs.checking = inputs.checking || view.refreshing;
+            }
         }
         std::map<std::string, content::CountsTable> download_counts;
         {
@@ -809,6 +820,65 @@ library::Inputs Runtime::library_inputs() {
             shown.badge = badge_of(pictures[index]);
         inputs.installed.push_back(std::move(shown));
     }
+    // The mod folders the game offers, as the Library lists them beside
+    // the packages above.
+    {
+        const EngineSettingsState& offered = engine_settings_state();
+        const std::size_t count = std::min(
+            {offered.mod_folders.size(), offered.mod_names.size(), offered.mod_details.size()}
+        );
+        // A package the installer knows keeps ROLL BACK only while the version
+        // it keeps can be played, as a pick is checked.
+        std::vector<std::string> listed;
+        std::vector<std::string> own_keys;
+        for (library::Installed& shown : inputs.installed) {
+            if (shown.kind != library::Kind::mod)
+                continue;
+            const std::string path = kept_path(shown.folder);
+            listed.push_back(path);
+            if (shown.registry.empty())
+                own_keys.push_back(shown.key);
+            for (std::size_t index = 0; index < count; ++index)
+                if (same_folder(offered.mod_folders[index], path) &&
+                    !offered.mod_details[index].roll_back)
+                    shown.kept.reset();
+        }
+        // Every other mod folder the game can play is the player's own: the game
+        // folder's mods folder's, a folder without an oamod.yaml, a folder an
+        // earlier version's Pick Folder... stored, and the one played. It is
+        // keyed by its profile's id, else its folder's name, a second of the
+        // same key with -2 after it.
+        for (std::size_t index = 0; index < count; ++index) {
+            const std::string& folder = offered.mod_folders[index];
+            bool known = false;
+            for (const std::string& each : listed)
+                known = known || same_folder(each, folder);
+            if (known)
+                continue;
+            const EngineSettingsState::OfferedMod& details = offered.mod_details[index];
+            const fs::path path = path_from_utf8(folder);
+            std::string word =
+                details.profile_id.empty() ? path_to_utf8(path.filename()) : details.profile_id;
+            if (word.empty())
+                word = std::string(kOwnModWord);
+            std::string key = word;
+            for (int second = 2; std::find(own_keys.begin(), own_keys.end(), key) != own_keys.end();
+                 ++second)
+                key = word + "-" + std::to_string(second);
+            own_keys.push_back(key);
+            library::Installed shown;
+            shown.kind = library::Kind::mod;
+            shown.key = std::move(key);
+            shown.folder = path;
+            shown.name = offered.mod_names[index];
+            shown.version = details.version;
+            shown.playing = package_target_in_use(package_install::mod_kind(), path);
+            if (details.roll_back)
+                shown.kept = library::Kept{details.kept_version, details.kept_revision};
+            shown.badge = badge_of(details.badge);
+            inputs.installed.push_back(std::move(shown));
+        }
+    }
     for (const content::Update& update : updates) {
         if (update.installed >= installed.size())
             continue;
@@ -866,6 +936,7 @@ library::Inputs Runtime::library_inputs() {
     inputs.engine = content::this_engine_rules().engine;
     inputs.version_text = "v" + formats::oamod::engine_version_text(inputs.engine);
     inputs.in_match = screen_ == Screen::match || match_ != nullptr;
+    inputs.mod_from_command_line = !options_.mod_dir.empty() || options_.base_game;
     return inputs;
 }
 
@@ -1239,6 +1310,8 @@ struct Runtime::LibraryScreen final : LayerScreen {
         case library::Action::update_all:
         case library::Action::roll_back:
         case library::Action::play_now:
+        case library::Action::switch_off:
+        case library::Action::check_now:
             runtime_.library_entry_action(action, id);
             return false;
         case library::Action::open_folder:

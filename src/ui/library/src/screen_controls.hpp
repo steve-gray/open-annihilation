@@ -41,6 +41,8 @@ inline constexpr kit::ControlId back = 51;
 inline constexpr kit::ControlId settings = 52;
 /// CLOSE.
 inline constexpr kit::ControlId close = 53;
+/// CHECK NOW.
+inline constexpr kit::ControlId check_now = 54;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
 /// The first queue line's label.

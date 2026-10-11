@@ -6,8 +6,8 @@
 // always has and opens the Library on Mods, whose CLOSE goes back; with two
 // it wears its dot, says so to automation and opens the Library on Updates.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
-// openers, ROLL BACK asks the Mods page's question over the Library and PLAY
-// NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
+// openers, ROLL BACK asks the Roll Back Mod question over the Library and
+// PLAY NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
 // Language's MORE IN THE LIBRARY… the Library over Settings, and never two
 // of either; the shortcut and the in-match OA button open Settings. At
 // 640x480 and 1920x1080. Then, at 640x480, a stand-in controller: Y focuses
@@ -933,7 +933,7 @@ void Runtime::check_library() {
                     question.buttons[0].id == "cancel" && question.buttons[1].id == "roll-back" &&
                     question.marked == 0 && question.paragraphs.size() == 1 &&
                     question.paragraphs[0].text.starts_with("Roll back Ridge to 4.8 revision 2?"),
-                "ROLL BACK did not ask the Mods page's Roll Back Mod question for Ridge" + on
+                "ROLL BACK did not ask the Roll Back Mod question for Ridge" + on
             );
         }
         tap(SDLK_ESCAPE);

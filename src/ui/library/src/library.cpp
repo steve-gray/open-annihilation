@@ -609,8 +609,11 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
             add(entry.state == State::get ? Action::get : Action::update, entry.can_act);
     }
     const Installed* installed = entry.installed;
-    if (installed != nullptr && entry.id.kind == Kind::mod && !installed->playing)
-        add(Action::play_now, !in_match);
+    // The mod being played switches off where another mod plays now: the
+    // game then plays none.
+    const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
+    if (installed != nullptr && entry.id.kind == Kind::mod)
+        add(installed->playing ? Action::switch_off : Action::play_now, can_switch);
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
     if (installed != nullptr)
@@ -618,6 +621,11 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     if (entry.listing != nullptr && !entry.listing->homepage.empty())
         add(Action::homepage, true);
     return buttons;
+}
+
+bool can_check_now(const Library& library) noexcept {
+    const Inputs& inputs = library.inputs;
+    return inputs.can_check && !inputs.checking && !inputs.in_match;
 }
 
 std::vector<Fact> facts(const Library& library, const Entry& entry) {
@@ -807,22 +815,32 @@ std::string playing_note(const Library& library) {
     const Entry* entry = selected_entry(library);
     if (entry == nullptr || entry->id.kind != Kind::mod || entry->installed == nullptr)
         return {};
+    // While the command line chose the mod, PLAY NOW and SWITCH OFF are off,
+    // and the note says why first.
+    const std::string chosen = library.inputs.mod_from_command_line
+                                   ? std::string(shown(text, words::note_command_line))
+                                   : std::string();
+    const auto after_chosen = [&chosen](std::string note) {
+        if (chosen.empty() || note.empty())
+            return chosen.empty() ? note : chosen;
+        return chosen + " " + note;
+    };
     const std::string name(entry_name(*entry));
     if (entry->installed->playing) {
         const bool held = entry->queued != nullptr && entry->queued->phase == Phase::held;
         if (entry->update != nullptr || held)
-            return filled(text, words::note_finishes, {{"name", name}});
-        return {};
+            return after_chosen(filled(text, words::note_finishes, {{"name", name}}));
+        return after_chosen({});
     }
     if (entry->update == nullptr)
-        return {};
+        return after_chosen({});
     for (const Installed& installed : library.inputs.installed) {
         if (installed.kind == Kind::mod && installed.playing)
-            return filled(
+            return after_chosen(filled(
                 text, words::note_playing_other, {{"playing", installed.name}, {"name", name}}
-            );
+            ));
     }
-    return {};
+    return after_chosen({});
 }
 
 QueueLines queue_lines(const Library& library) {

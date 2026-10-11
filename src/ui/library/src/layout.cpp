@@ -105,6 +105,8 @@ std::string_view action_word(Action action) {
         return "roll-back";
     case Action::play_now:
         return "play-now";
+    case Action::switch_off:
+        return "switch-off";
     case Action::open_folder:
         return "open-folder";
     case Action::homepage:
@@ -113,6 +115,8 @@ std::string_view action_word(Action action) {
         return "details";
     case Action::back:
         return "back";
+    case Action::check_now:
+        return "check-now";
     case Action::settings:
         return "settings";
     case Action::close:
@@ -1646,7 +1650,7 @@ void add_details_pane(Building& building, const kit::Rect& pane) {
 }
 
 /// Appends the footer's band, the queue's words at its left and its buttons
-/// at its right: SETTINGS…, DETAILS at Compact, and CLOSE.
+/// at its right: CHECK NOW, SETTINGS…, DETAILS at Compact, and CLOSE.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -1668,7 +1672,10 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
         bool enabled{};
     };
 
-    std::vector<FooterButton> buttons{{Action::settings, controls::settings, true}};
+    std::vector<FooterButton> buttons{
+        {Action::check_now, controls::check_now, can_check_now(library)},
+        {Action::settings, controls::settings, true},
+    };
     if (compact)
         buttons.push_back({Action::details, controls::details, library.selected.has_value()});
     buttons.push_back({Action::close, controls::close, true});

@@ -112,8 +112,8 @@ struct Runtime::ModInstallState {
 
     /// The notes, one for each registry and key at most.
     std::vector<LibraryNote> library_notes{};
-    /// Why the last ROLL BACK was refused, as the prompt the Mods page shows
-    /// over Settings; nothing once it was taken, or when it was not refused.
+    /// Why the last ROLL BACK was refused, as the prompt the Library shows
+    /// over itself; nothing once it was taken, or when it was not refused.
     std::optional<package_install::PackagePrompt> roll_back_refusal{};
 
     /// Tells whether the package being installed is told in the Library's
