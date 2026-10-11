@@ -324,6 +324,15 @@ std::string kept_path(const fs::path& folder) {
     return path_to_utf8((error ? folder : absolute).lexically_normal());
 }
 
+/// Returns the path of one step's snapshot: <stem>-<step>.ppm beside --snapshot.
+///
+/// @param snapshot the --snapshot path
+/// @param step the step's name
+/// @return the step's snapshot path
+fs::path step_snapshot(const fs::path& snapshot, std::string_view step) {
+    return snapshot.parent_path() / (snapshot.stem().string() + '-' + std::string(step) + ".ppm");
+}
+
 /// Writes a text file, making its folder.
 ///
 /// @param file the file
@@ -475,6 +484,18 @@ void Runtime::check_library() {
             require(going, "a click ended the run");
         }
     };
+    // With --snapshot, the whole window as presented, beside the snapshot.
+    const auto snapshot = [this](const std::string& step) {
+        if (options_.snapshot.empty())
+            return;
+        oa_layer().read_whole_window(true);
+        renderer::Surface presented;
+        capture_frame_ = &presented;
+        render();
+        capture_frame_ = nullptr;
+        oa_layer().read_whole_window(false);
+        write_ppm(step_snapshot(options_.snapshot, step), presented);
+    };
     const auto top_is = [this](std::string_view name) {
         const LayerScreen* top = oa_layer().top();
         return top != nullptr && top->name() == name;
@@ -543,8 +564,8 @@ void Runtime::check_library() {
     require(screen_ == Screen::main_menu, "the main menu did not open");
     const std::array<std::array<int, 2>, 2> windows{{{kCanvasWidth, kCanvasHeight}, {1920, 1080}}};
     for (const auto& [width, height] : windows) {
-        const std::string on =
-            " on the " + std::to_string(width) + 'x' + std::to_string(height) + " window";
+        const std::string size = std::to_string(width) + 'x' + std::to_string(height);
+        const std::string on = " on the " + size + " window";
         window_of(width, height);
         settle();
         feed_changes(false);
@@ -603,6 +624,7 @@ void Runtime::check_library() {
                 "with two updates the OA button does not differ only in its dot" + on
             );
         }
+        snapshot("menu-dot-" + size);
         const std::optional<AutomationControl> button = named("oa.button");
         require(
             button.has_value() && button->text == "Library · 2 updates",
@@ -617,6 +639,7 @@ void Runtime::check_library() {
             named("oa.library.tab.updates").has_value(),
             "automation does not list oa.library.tab.updates" + on
         );
+        snapshot("updates-" + size);
 
         // 5. GET and CANCEL reach the feed.
         click_named("oa.library.tab.mods");
@@ -733,6 +756,7 @@ void Runtime::check_library() {
         // 8. Settings › Language's MORE IN THE LIBRARY… opens the Library on
         // Languages over Settings, and closing it goes back to Settings.
         click_named("oa.settings.nav.language");
+        snapshot("settings-language-" + size);
         click_named("oa.settings.more-in-library");
         require(
             top_is(library_screen_name) && oa_layer().find("settings") != nullptr &&
