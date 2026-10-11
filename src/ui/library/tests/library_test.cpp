@@ -1089,8 +1089,23 @@ void test_facts() {
     for (const lib::Fact& item : list)
         labels.push_back(item.long_label);
     OA_CHECK(
-        labels == std::vector<std::string>({"Size", "Base", "Needs", "Hacks", "Rules", "From"})
+        labels ==
+        std::vector<std::string>(
+            {"Installed", "Latest", "Author", "Size", "Base", "Needs", "Hacks", "Rules", "From"}
+        )
     );
+    if (const lib::Fact* installed_fact = fact(list, "Installed")) {
+        OA_CHECK_TEXT(installed_fact->long_value, "4.8 (rev 3)");
+        OA_CHECK_TEXT(installed_fact->short_value, "4.8 (rev 3)");
+        OA_CHECK(installed_fact->mark == Mark::none);
+    }
+    if (const lib::Fact* latest = fact(list, "Latest")) {
+        OA_CHECK_TEXT(latest->long_value, "4.8 (rev 4)");
+        OA_CHECK_TEXT(latest->short_value, "4.8 (rev 4)");
+    }
+    // The listing names no author: its publisher stands in.
+    if (const lib::Fact* author = fact(list, "Author"))
+        OA_CHECK_TEXT(author->long_value, "Fixture Publisher");
     if (const lib::Fact* size = fact(list, "Size")) {
         OA_CHECK_TEXT(size->long_value, "41.0 MB · 3.2 MB to download");
         OA_CHECK_TEXT(size->short_value, "3.2 MB to download");
@@ -1222,11 +1237,51 @@ void test_facts() {
     }
     if (const lib::Entry* entry = at(library, "", Kind::mod, "own-mod")) {
         list = lib::facts(library, *entry);
-        OA_CHECK(list.size() == 2);
+        OA_CHECK(list.size() == 3);
+        if (const lib::Fact* installed_fact = fact(list, "Installed"))
+            OA_CHECK_TEXT(installed_fact->long_value, "1.0 (rev 1)");
+        OA_CHECK(fact(list, "Latest") == nullptr && fact(list, "Author") == nullptr);
         if (const lib::Fact* rules = fact(list, "Rules"))
             OA_CHECK_TEXT(rules->long_value, "9c1f 4e0b");
         if (const lib::Fact* from = fact(list, "From"))
             OA_CHECK_TEXT(from->long_value, "Your own copy");
+    }
+
+    // A revision of 0 is left out of its fact, an empty version leaves the
+    // revision alone, a side with neither is left out, and the installed
+    // manifest's author stands in for a listing that names none.
+    inputs = base_inputs();
+    lib::Listing pack_r0 = listing(core, Kind::map_pack, "pack-r0", "Pack R0");
+    pack_r0.revision = 0;
+    pack_r0.author.clear();
+    inputs.listings.push_back(pack_r0);
+    lib::Installed pack_installed = installed(core, Kind::map_pack, "pack-r0", "Pack R0");
+    pack_installed.version.clear();
+    pack_installed.revision = 3;
+    pack_installed.author = "The Pack Author";
+    inputs.installed.push_back(pack_installed);
+    lib::Listing language_none = listing(core, Kind::language, "xx", "No Version");
+    language_none.version.clear();
+    language_none.revision = 0;
+    language_none.author.clear();
+    inputs.listings.push_back(language_none);
+    lib::refresh(library, inputs);
+    if (const lib::Entry* entry = at(library, core, Kind::map_pack, "pack-r0")) {
+        list = lib::facts(library, *entry);
+        if (const lib::Fact* installed_fact = fact(list, "Installed"))
+            OA_CHECK_TEXT(installed_fact->long_value, "rev 3");
+        if (const lib::Fact* latest = fact(list, "Latest"))
+            OA_CHECK_TEXT(latest->long_value, "1.0");
+        if (const lib::Fact* author = fact(list, "Author"))
+            OA_CHECK_TEXT(author->long_value, "The Pack Author");
+        OA_CHECK(fact(list, "Installed") != nullptr && fact(list, "Latest") != nullptr);
+        OA_CHECK(fact(list, "Author") != nullptr);
+    }
+    if (const lib::Entry* entry = at(library, core, Kind::language, "xx")) {
+        list = lib::facts(library, *entry);
+        OA_CHECK(fact(list, "Installed") == nullptr && fact(list, "Latest") == nullptr);
+        OA_CHECK(fact(list, "Author") == nullptr);
+        OA_CHECK(!list.empty() && list.front().long_label == "Size");
     }
 }
 
@@ -1271,6 +1326,19 @@ void test_status_lines_and_bylines() {
         OA_CHECK_TEXT(
             lib::status_line(library, *entry), "Version 4.9 available · 3.2 MB to download"
         );
+
+    // No revision named, the version the same or none: an update, never "Revision 0".
+    inputs.updates[0].to_version = "4.8";
+    inputs.updates[0].to_revision = 0;
+    lib::refresh(library, inputs);
+    entry = at(library, core, Kind::mod, "fixture-mod");
+    if (entry != nullptr)
+        OA_CHECK_TEXT(lib::status_line(library, *entry), "Update available · 3.2 MB to download");
+    inputs.updates[0].to_version.clear();
+    lib::refresh(library, inputs);
+    entry = at(library, core, Kind::mod, "fixture-mod");
+    if (entry != nullptr)
+        OA_CHECK_TEXT(lib::status_line(library, *entry), "Update available · 3.2 MB to download");
 }
 
 void test_playing_note() {
@@ -1425,6 +1493,27 @@ void test_change_texts() {
     OA_CHECK_TEXT(names.to, "4.9");
     OA_CHECK_TEXT(names.from_short, "4.8");
     OA_CHECK_TEXT(names.to_short, "4.9");
+
+    // A side whose revision is 0 where its revision would name it is the
+    // old or the new copy, never "revision 0"; so is a side with no version
+    // where its version would, unless a revision names it.
+    note.to_version = "4.8";
+    note.to_revision = 0;
+    names = lib::change_texts(mod, note);
+    OA_CHECK_TEXT(names.from, "revision 3");
+    OA_CHECK_TEXT(names.to, "the new copy");
+    OA_CHECK_TEXT(names.from_short, "rev 3");
+    OA_CHECK_TEXT(names.to_short, "new");
+    mod.revision = 0;
+    names = lib::change_texts(mod, note);
+    OA_CHECK_TEXT(names.from, "the old copy");
+    OA_CHECK_TEXT(names.from_short, "old");
+    mod.version.clear();
+    mod.revision = 2;
+    note.to_version = "5.0";
+    names = lib::change_texts(mod, note);
+    OA_CHECK_TEXT(names.from, "revision 2");
+    OA_CHECK_TEXT(names.to, "5.0");
 }
 
 void test_texts() {
@@ -1490,6 +1579,12 @@ void test_texts() {
     pack.version = "1.2";
     pack.maps = {{"Only Map", 2, "8x8"}};
     OA_CHECK_TEXT(lib::version_text(pack), "1.2 · 1 map");
+
+    OA_CHECK_TEXT(lib::release_text("4.8", 3), "4.8 (rev 3)");
+    OA_CHECK_TEXT(lib::release_text("4.8", 1), "4.8 (rev 1)");
+    OA_CHECK_TEXT(lib::release_text("1.0", 0), "1.0");
+    OA_CHECK_TEXT(lib::release_text("", 3), "rev 3");
+    OA_CHECK_TEXT(lib::release_text("", 0), "");
 
     const auto range = [](std::string_view written) {
         return oa::formats::oamod::parse_engine_range(written).value_or(

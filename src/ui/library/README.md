@@ -96,8 +96,13 @@ translator finds them together. Every word passes through `Library::text`
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
     that can be retried), PLAY NOW, ROLL BACK, OPEN FOLDER and HOMEPAGE,
     each with whether it is enabled;
-  - the facts Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, in
-    a long and a short form. An update's Rules fact says in words whether
+  - the facts Installed, Latest, Author, Size, Base, Needs, Hacks, Rules,
+    Maps, Coverage and From, in a long and a short form. Installed and
+    Latest are the installed copy's and the listing's version and revision
+    (`release_text`: "4.8 (rev 3)", "1.0" for a revision of 0, "rev 3"
+    without a version), and Author is the listing's author, else its
+    publisher, else the installed manifest's (`Installed::author`); each is
+    left out when it has nothing to say. An update's Rules fact says in words whether
     it changes the game's rules and which saved games stop loading
     ("9c1f 4e0b → 51d2 07aa · changes the game's rules; saved games from
     revision 3 won't load under revision 4"), since a built-in registry's
@@ -116,10 +121,20 @@ translator finds them together. Every word passes through `Library::text`
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
   "188 MB"), download counts (`downloads_text`: "1 download",
   "12,400 downloads"), download progress, ages, the header's list age, rules hashes
-  ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), engine
+  ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), a release as
+  the facts give it (`release_text`: "4.8 (rev 3)"), engine
   requirements, what an update changes from and to (`change_texts`:
-  "revision 3" and "revision 4", or the versions), and the names of tabs,
-  filters, states and buttons.
+  "revision 3" and "revision 4", or the versions, and "the old copy" or
+  "the new copy" for a side no version or revision above 0 names), and the
+  names of tabs, filters, states and buttons.
+- No text says "Revision 0" or "rev 0". A catalogue that names no
+  revision, as Core Prime's does for language packs, leaves it 0: the
+  status line then says "Update available · 3.4 MB to download" for an
+  update of the same version (`status_update_available`), and Settings ›
+  Mods' line "Update available · 3.4 MB"; "Revision {revision}" is written
+  only for a revision above 0 of the version installed (`status_line`,
+  `update_line`), and the update question's revision heading only when
+  both revisions are above 0.
 
 ### The update question
 
@@ -186,8 +201,9 @@ words.
     (11)", then "Tag: balance (3)" for each tag of the tab), on the
     Updates tab "{n} updates" and UPDATE ALL on a line over the list, the
     list of 28-point rows (the name, then the version, size and an
-    added registry's name, and the state's chip, disabled when GET or
-    UPDATE cannot act), and the footer (the queue's short line with a
+    added registry's name, and the state's icon: a download arrow for GET,
+    a circled up-arrow for UPDATE, a circled check for INSTALLED and
+    PLAYING, dimmed when GET or UPDATE cannot act), and the footer (the queue's short line with a
     progress bar while downloading, SETTINGS…, DETAILS and CLOSE). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
@@ -202,8 +218,8 @@ words.
     TAGS ▾ holding the rest; on Updates, "{n} updates" and UPDATE ALL on a
     line over the list), a 420-point list of
     36-point rows (the name and byline, the summary, the version over the
-    size, the chip), the details (a 40-point badge beside the name, chip
-    and status line, the summary in at most six lines, the long facts, the
+    size, the state's icon), the details (a 40-point badge beside the
+    name, its state's icon and the status line, the summary in at most six lines, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
     lines, SETTINGS… and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
@@ -251,7 +267,12 @@ words.
     holds the focus.
   - **Pointer and finger**: a press on a row selects it, and at Compact
     opens its details page; no press, double press or tap on a row gets,
-    updates or installs anything. A finger reaches the nearest control
+    updates or installs anything, but for its icon: a row's download arrow
+    is its GET and its circled up-arrow its UPDATE, a control of their own
+    tried before the row, which select the row and ask for that action
+    while the details' first button is that action and enabled, and take
+    no press otherwise (blocked, queued or failed), the press reaching the
+    row. A finger reaches the nearest control
     within its reach (`kit::finger_down`); a finger that moves farther than
     its reach in the list or the details scrolls that pane and presses
     nothing. A press outside an open drop-down only closes it. The wheel
@@ -273,7 +294,10 @@ words.
     each row that shows, kind `list_item`, its text the entry's name:
     `library.row.<registry>.<key>`, or `library.row.<key>` for a package of
     the player's own, each word lower-cased with other characters as
-    hyphens;
+    hyphens; a GET or UPDATE row's icon, after it, is
+    `library.row.<registry>.<key>.get` or `.update`, kind `button`, its
+    text "GET" or "UPDATE", listed disabled while it takes no press, and
+    never in Tab's order;
   - `library.action.get`, `.update`, `.update-all`, `.cancel`, `.retry`,
     `.roll-back`, `.play-now`, `.open-folder` and `.homepage`; on Compact's
     details page MORE ▾ is `library.action`, whose open items are the
@@ -328,11 +352,13 @@ stay valid until the model's next refresh.
 - Nothing on the Active tab takes a press, a key or Tab.
 - Every action Regular offers is reachable at Compact: on the list page, or
   on the details page, its first three as buttons and the rest in MORE ▾.
-- No two controls meet, but the list and the rows it holds; a row that does
-  not show has no control. Every control that takes the focus is in Tab's
+- No two controls meet, but the list and the rows it holds and each row
+  and its icon; a row that does not show has no control. Every control that takes the focus is in Tab's
   declared order and reached by the arrows from the first tab.
 - An update's Rules fact is shown whole at every class, never cut.
-- A press on a row only selects it, and at Compact opens its details.
+- A press on a row only selects it, and at Compact opens its details; only
+  its download arrow or up-arrow asks for GET or UPDATE, by the same rule
+  as the details' button.
 
 ## Tests
 
@@ -347,7 +373,8 @@ mods naming only the added one, none to ask, and five named as three and
 "2 more"; the kit question's paragraphs, NOT NOW marked and UPDATE primary,
 its automation names and its text fitting at every class; Settings › Mods'
 lines for each kind of update, each queue phase and each state of the
-check; and a lookup that translates.
+check; an update that names no revision, whose line, status line and
+question never say "Revision 0"; and a lookup that translates.
 
 `ui-library` builds Libraries over made-up registries and packages: the
 state of a listing alone, a package installed alone, matched with and
@@ -360,13 +387,17 @@ Updates tab's filters across every kind, and tags with their counts; the
 filters' counts unmoved by the tag and the search; New's ten newest by
 day, ties by name, never an undated listing, on Mods, Maps and Updates;
 the Active tab's mod, language and map packs in each case; the order with
-no search; the update count; the selection across refreshes and browsing; the
-buttons of every state; the facts with the sample numbers, the Rules fact
-for an unchanged, changed and unknown rules hash in both lengths; status
-lines, bylines with and without a download count, and the playing note; the queue lines, after an update that
-changed the rules and one that kept them; `change_texts` for a new
-revision and a new version; every text function; and a lookup that
-translates.
+no search; the update count; the selection across refreshes and browsing;
+the buttons of every state; the facts with the sample numbers, Installed,
+Latest and Author among them, a revision of 0 left out, a version left
+out, a fact with nothing to say left out and the manifest's author
+standing in; the Rules fact for an unchanged, changed and unknown rules
+hash in both lengths; status lines, "Update available" for an update
+that names no revision, bylines with and without a download count, and
+the playing note; the queue lines, after an update that changed the
+rules and one that kept them; `change_texts` for a new revision, a new
+version and a side that names no revision; every text function,
+`release_text` among them; and a lookup that translates.
 
 `ui-library-search` checks that a name beats a tag, a tag an author or
 publisher and those a summary; several words; a word in no field hiding
@@ -394,12 +425,15 @@ whole values. Regular shows more rows than Compact, and Large has the
 filter pane. It then drives the screens: Enter at Compact and at Regular,
 Escape's three cases, the tab commands both ways, the controller's X, Y
 and B, the list's keys, Tab's walk, presses, double presses and taps on
-rows (which never get anything), an action's button, the labels taking no
-press, the wheel and a finger's drag, typing and Backspace, the filter
-drop-down with its counts, each tab keeping its filter, New's chip, and a
-press outside the drop-down, the tag chips, MORE ▾, and the Active tab
-with forty more maps: its lines taking no press and scrolling by the
-wheel, the page keys, Home, End and the right stick.
+rows (which never get anything), a row's up-arrow and download arrow at
+every frame (named after the row, a button whose text is the word,
+pressed as UPDATE and GET, and listed disabled and passing the press to
+the row while blocked or queued), an action's button, the labels taking
+no press, the wheel and a finger's drag, typing and Backspace, the
+filter drop-down with its counts, each tab keeping its filter, New's
+chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
+Active tab with forty more maps: its lines taking no press and scrolling
+by the wheel, the page keys, Home, End and the right stick.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,

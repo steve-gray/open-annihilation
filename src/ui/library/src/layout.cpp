@@ -516,8 +516,27 @@ kit::ChipState chip_state_of(State state) {
     return kit::ChipState::get;
 }
 
-/// Returns an entry's chip: its state's word, drawn disabled when GET or
-/// UPDATE cannot act.
+/// Returns the state icon a state is shown with: a download arrow for GET,
+/// a circled up-arrow for UPDATE, and a circled check for INSTALLED and
+/// PLAYING.
+///
+/// @param state the entry's state
+/// @return the icon
+kit::StateIcon icon_of(State state) {
+    switch (state) {
+    case State::get:
+        return kit::StateIcon::download_arrow;
+    case State::update:
+        return kit::StateIcon::circled_up_arrow;
+    case State::installed:
+    case State::playing:
+        return kit::StateIcon::circled_check;
+    }
+    return kit::StateIcon::circled_check;
+}
+
+/// Returns an entry's chip: its state's icon, dimmed when GET or UPDATE
+/// cannot act, its state's word kept as its text for automation.
 ///
 /// @param library the model
 /// @param entry the entry
@@ -527,6 +546,7 @@ kit::ChipLook entry_chip(const Library& library, const Entry& entry) {
     chip.text = std::string(state_text(entry.state, library.text));
     chip.state = chip_state_of(entry.state);
     chip.disabled = !entry.can_act;
+    chip.icon = icon_of(entry.state);
     return chip;
 }
 
@@ -1204,6 +1224,26 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         look.selected = library.selected.has_value() && *library.selected == entry.id;
         look.hovered = hovered(building, id);
         const kit::Rect rect{view.x, top, rows_width, height};
+        if (look.chip && (entry.state == State::get || entry.state == State::update)) {
+            // The download arrow and the up-arrow are GET and UPDATE: a
+            // control of their own, tried before the row, named after it.
+            const kit::ControlId icon_id =
+                controls::first_row_icon + static_cast<kit::ControlId>(place);
+            const Action action = entry.state == State::get ? Action::get : Action::update;
+            kit::Control icon;
+            icon.id = icon_id;
+            icon.rect = kit::list_row_chip_rect(*building.fonts, rect, *look.chip);
+            icon.clip = view;
+            icon.enabled = controls::row_icon_action(library, entry).has_value();
+            icon.focusable = false;
+            icon.name =
+                unique_name(building, row_name(entry) + "." + std::string(action_word(action)));
+            icon.kind = kit::ControlKind::button;
+            icon.group = controls::list_group;
+            icon.text = look.chip->text;
+            look.chip->hovered = icon.enabled && hovered(building, icon_id);
+            building.rows.push_back(std::move(icon));
+        }
         const std::size_t before = building.list.controls.size();
         kit::add_list_row(building.list, rect, look, id, unique_name(building, row_name(entry)));
         building.list.items.back().clip = view;
@@ -1507,6 +1547,7 @@ int32_t add_details_content(
     const int32_t text_width = std::max(left + width - text_left, int32_t{0});
     kit::ChipLook chip = entry_chip(library, entry);
     const int32_t chip_width = kit::chip_width(*building.fonts, chip);
+    const int32_t chip_height = chip.icon ? metrics.state_icon_side : metrics.chip_height;
     const std::string name =
         cut(building,
             kit::FontRole::regular,
@@ -1524,9 +1565,9 @@ int32_t add_details_content(
     );
     const kit::Rect chip_rect{
         text_left + name_width + metrics.list_row_gap,
-        first + (metrics.regular_line - metrics.chip_height) / 2,
+        first + (metrics.regular_line - chip_height) / 2,
         chip_width,
-        metrics.chip_height,
+        chip_height,
     };
     kit::add_chip(building.list, chip_rect, chip, kit::no_control, {});
     building.list.items.back().clip = view;
@@ -2166,6 +2207,18 @@ kit::DisplayList finish(Building& building, const Window& window) {
 } // namespace
 
 namespace controls {
+
+std::optional<Action> row_icon_action(const Library& library, const Entry& entry) {
+    if (entry.state != State::get && entry.state != State::update)
+        return std::nullopt;
+    const std::vector<ActionButton> actions = entry_actions(library, entry);
+    if (actions.empty() || !actions.front().enabled)
+        return std::nullopt;
+    const Action first = actions.front().action;
+    if (first != Action::get && first != Action::update)
+        return std::nullopt;
+    return first;
+}
 
 std::vector<MenuItem>
 menu_items(const Library& library, MenuKind menu, const std::vector<bool>& tag_shown) {

@@ -78,6 +78,9 @@ constexpr std::string_view kCloseSound = "Previous";
 constexpr std::string_view kSettingsScreen = "settings";
 /// The words the Library's rows' automation names start with.
 constexpr std::string_view kRowNamePrefix = "library.row.";
+/// The author's name a mod's or a map pack's manifest gives when nobody is
+/// known (docs/mods/oamod-standard.md): the details name no author for it.
+constexpr std::string_view kUnknownAuthor = "unknown";
 /// The modifier that holds the Library's Find: Cmd on macOS, Ctrl elsewhere.
 #ifdef SDL_PLATFORM_MACOS
 constexpr uint16_t kCommandModifier = SDL_KMOD_GUI;
@@ -811,6 +814,9 @@ library::Inputs Runtime::library_inputs() {
         shown.name = package.name;
         shown.version = package.version;
         shown.revision = package.revision;
+        // The manifest's author, unless it says nobody is known.
+        if (package.author != kUnknownAuthor)
+            shown.author = package.author;
         shown.registry = listed ? match.registry : std::string{};
         shown.release = listed ? match.release : 0;
         shown.rules = package.rules;

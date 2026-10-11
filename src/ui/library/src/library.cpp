@@ -732,7 +732,30 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
 std::vector<Fact> facts(const Library& library, const Entry& entry) {
     const TextHooks& text = library.text;
     const Listing* listing = entry.listing;
+    const Installed* installed = entry.installed;
     std::vector<Fact> list;
+
+    // Which version is installed and which is newest, and who made it: each
+    // left out when it has nothing to say.
+    if (installed != nullptr) {
+        const std::string release = release_text(installed->version, installed->revision, text);
+        if (!release.empty())
+            list.push_back(
+                fact_of(shown(text, words::fact_installed), release, release, Mark::none)
+            );
+    }
+    if (listing != nullptr) {
+        const std::string release = release_text(listing->version, listing->revision, text);
+        if (!release.empty())
+            list.push_back(fact_of(shown(text, words::fact_latest), release, release, Mark::none));
+    }
+    std::string author;
+    if (listing != nullptr)
+        author = listing->author.empty() ? listing->publisher : listing->author;
+    if (author.empty() && installed != nullptr)
+        author = installed->author;
+    if (!author.empty())
+        list.push_back(fact_of(shown(text, words::fact_author), author, author, Mark::none));
 
     if (listing != nullptr) {
         const std::string size = size_text(listing->size, text);
@@ -874,15 +897,22 @@ std::string status_line(const Library& library, const Entry& entry) {
     case State::update: {
         const UpdateNote& update = *entry.update;
         const std::string size = size_text(update.size, text);
-        if (entry.installed->version == update.to_version)
+        const bool same_version = entry.installed->version == update.to_version;
+        // A catalogue that names no revision leaves it 0: such an update
+        // of the same version is no revision of it, and says so plainly.
+        if (same_version && update.to_revision > 0)
             return filled(
                 text,
                 words::status_revision_available,
                 {{"revision", std::to_string(update.to_revision)}, {"size", size}}
             );
-        return filled(
-            text, words::status_version_available, {{"version", update.to_version}, {"size", size}}
-        );
+        if (!same_version && !update.to_version.empty())
+            return filled(
+                text,
+                words::status_version_available,
+                {{"version", update.to_version}, {"size", size}}
+            );
+        return filled(text, words::status_update_available, {{"size", size}});
     }
     case State::installed:
         return std::string(shown(text, words::status_installed));

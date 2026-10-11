@@ -61,7 +61,7 @@ ScreenResult redrawn() {
 /// @return the height, in points; none while no row shows
 std::optional<int32_t> row_height_of(const kit::DisplayList& list) {
     for (const kit::Control& control : list.controls)
-        if (control.id >= controls::first_row && control.rect.height > 0)
+        if (controls::row_control(control.id) && control.rect.height > 0)
             return control.rect.height;
     return std::nullopt;
 }
@@ -474,7 +474,9 @@ ScreenResult show_tab(Library& library, ScreenState& state, const kit::DisplayLi
 /// Does what a control does when it is pressed, or takes Space or Enter.
 ///
 /// No press on a row gets, updates or installs anything: it selects the
-/// row, and at Compact opens its details page.
+/// row, and at Compact opens its details page. A row's state icon that
+/// takes a press selects its row and asks for its GET or UPDATE, as that
+/// button would, while the button allows it.
 ///
 /// @param[in,out] library the model
 /// @param[in,out] state the screen's state
@@ -511,7 +513,25 @@ activate(Library& library, ScreenState& state, const kit::DisplayList& list, kit
         after_browsing(library, state, list);
         return redrawn();
     }
-    if (id >= controls::first_row) {
+    if (controls::row_icon_control(id)) {
+        const auto place = static_cast<std::size_t>(id - controls::first_row_icon);
+        if (place >= library.visible.size())
+            return {};
+        const EntryId entry_id = library.entries[library.visible[place]].id;
+        const Entry* entry = find_entry(library, entry_id);
+        const std::optional<Action> asked =
+            entry != nullptr ? controls::row_icon_action(library, *entry) : std::nullopt;
+        if (!asked)
+            return {};
+        if (library.selected != entry_id)
+            state.details_scroll = 0;
+        select(library, entry_id);
+        ScreenResult result = redrawn();
+        result.action = *asked;
+        result.entry = entry_id;
+        return result;
+    }
+    if (controls::row_control(id)) {
         const auto place = static_cast<std::size_t>(id - controls::first_row);
         if (place >= library.visible.size())
             return {};

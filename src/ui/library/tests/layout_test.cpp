@@ -13,7 +13,8 @@
 // Rules fact is shown whole. The Active tab is first, has no search and no
 // filters, and its lines take nothing. Then the keys, the controller's
 // buttons, the pointer, a finger, the wheel and typing, each changing the
-// model as the screen promises, and no press on a row getting anything.
+// model as the screen promises, no press on a row getting anything, and a
+// row's download arrow and up-arrow pressed as GET and UPDATE.
 //
 // The synthetic font's glyph for byte b is 2 + b % 4 columns by 8 rows.
 
@@ -141,15 +142,19 @@ bool starts(std::string_view name, std::string_view prefix) {
     return name.substr(0, prefix.size()) == prefix;
 }
 
-/// Tells whether a control is the list's or one of its rows: the rows lie
-/// in the list that holds them, the one pair of controls that meet.
+/// Tells whether two controls are the list and one of its rows or a row's
+/// state icon, or a row and its own state icon: the rows lie in the list
+/// that holds them and each icon in its row, the only controls that meet.
 ///
 /// @param a a control
 /// @param b another
-/// @return true for the list and a row
+/// @return true for the list and a row or an icon, and a row and its icon
 bool list_and_row(const kit::Control& a, const kit::Control& b) {
-    const auto pair = [](const kit::Control& list, const kit::Control& row) {
-        return list.name == "library.list" && starts(row.name, "library.row.");
+    const auto pair = [](const kit::Control& outer, const kit::Control& inner) {
+        if (outer.name == "library.list" && starts(inner.name, "library.row."))
+            return true;
+        return starts(outer.name, "library.row.") &&
+               (inner.name == outer.name + ".get" || inner.name == outer.name + ".update");
     };
     return pair(a, b) || pair(b, a);
 }
@@ -270,7 +275,7 @@ bool designed_name(const std::string& name) {
         "library\\.(tab\\.(active|mods|maps|languages|updates)|search|filter|"
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
         "+|"
-        "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?|action|"
+        "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|open-folder|homepage)|"
         "details|back|settings|close|status|queue|note|from|rules|"
         "active\\.(mod|language|map\\.[1-9][0-9]*))"
@@ -388,14 +393,15 @@ whole_fact_problems(const lib::Library& library, const kit::DisplayList& list, b
     return problems;
 }
 
-/// Counts the rows a list shows.
+/// Counts the rows a list shows, leaving their state icons out.
 ///
 /// @param list the display list
 /// @return how many
 std::size_t row_count(const kit::DisplayList& list) {
     return static_cast<std::size_t>(
         std::count_if(list.controls.begin(), list.controls.end(), [](const kit::Control& control) {
-            return starts(control.name, "library.row.");
+            return starts(control.name, "library.row.") &&
+                   control.kind == kit::ControlKind::list_item;
         })
     );
 }
@@ -981,6 +987,73 @@ void pressing_rows_selects_and_never_gets() {
     OA_CHECK(result.action == lib::Action::close);
 }
 
+/// A row's state icon: a circled up-arrow pressed as UPDATE and a download
+/// arrow pressed as GET, each a button named after its row with the word it
+/// replaces as its text, enabled only while that button is, at every size
+/// class. A press on one asks for its action for its row's entry and
+/// selects it; a blocked or queued one takes no press, which reaches the
+/// row instead. An installed row's circled check is no control.
+void row_icons_are_get_and_update() {
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        lib::Library library = with_ridge();
+        lib::ScreenState state;
+        kit::DisplayList list = laid_out(library, state, named.frame);
+        const kit::Control* row = fixture::named(list, "library.row.fixture-core.ridge");
+        const kit::Control* update = fixture::named(list, "library.row.fixture-core.ridge.update");
+        OA_CHECK(row != nullptr && update != nullptr);
+        if (row == nullptr || update == nullptr)
+            continue;
+        OA_CHECK(update->kind == kit::ControlKind::button && update->enabled);
+        OA_CHECK(update->text == "UPDATE" && !update->focusable);
+        OA_CHECK(kit::wholly_in(update->rect, row->rect));
+        OA_CHECK(update->rect.width == kit::compact_metrics.state_icon_side);
+        OA_CHECK(kit::hit(list, centre_of(*update)) == update->id);
+        OA_CHECK(fixture::named(list, "library.row.fixture-core.bastion.get") == nullptr);
+        OA_CHECK(fixture::named(list, "library.row.fixture-core.bastion.update") == nullptr);
+    }
+
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Library library = fixture::fixture_library();
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(library, state, regular);
+    lib::ScreenResult result = click(library, state, list, "library.row.fixture-core.ridge.update");
+    OA_CHECK(result.action == lib::Action::update && result.entry == fixture::ridge_id());
+    OA_CHECK(library.selected == fixture::ridge_id() && !library.details_open);
+
+    // A blocked update: dimmed, listed, and no press; a press there selects the row.
+    const lib::EntryId ironclad{std::string(fixture::core), lib::Kind::mod, "ironclad"};
+    list = laid_out(library, state, regular);
+    const kit::Control* blocked = fixture::named(list, "library.row.fixture-core.ironclad.update");
+    OA_CHECK(blocked != nullptr && !blocked->enabled && blocked->text == "UPDATE");
+    if (blocked != nullptr) {
+        const kit::Point at = centre_of(*blocked);
+        static_cast<void>(
+            lib::library_pointer(library, state, list, lib::PointerKind::down, 1, at, 0)
+        );
+        result = lib::library_pointer(library, state, list, lib::PointerKind::up, 1, at, 0);
+        OA_CHECK(!result.action && library.selected == ironclad);
+    }
+
+    // GET: one that can act asks for it; one blocked by missing hacks, and
+    // one already queued, take no press.
+    lib::set_query(library, "quarry");
+    list = laid_out(library, state, regular);
+    const kit::Control* get = fixture::named(list, "library.row.fixture-core.quarry.get");
+    OA_CHECK(get != nullptr && get->enabled && get->text == "GET");
+    const lib::EntryId quarry{std::string(fixture::core), lib::Kind::mod, "quarry"};
+    result = click(library, state, list, "library.row.fixture-core.quarry.get");
+    OA_CHECK(result.action == lib::Action::get && result.entry == quarry);
+    for (const std::string_view key : {"hollow", "frontier"}) {
+        lib::set_query(library, key);
+        list = laid_out(library, state, regular);
+        const std::string name = "library.row.example-mods." + std::string(key) + ".get";
+        const kit::Control* off = fixture::named(list, name);
+        OA_CHECK(off != nullptr && !off->enabled);
+        if (off != nullptr)
+            OA_CHECK(kit::hit(list, centre_of(*off)) != off->id);
+    }
+}
+
 /// The wheel scrolls the pane under the pointer; a finger's drag in the
 /// list scrolls it and selects nothing.
 void wheel_and_drag_scroll() {
@@ -1208,6 +1281,7 @@ int main() {
     list_keys_move_the_selection();
     tab_follows_the_declared_order();
     pressing_rows_selects_and_never_gets();
+    row_icons_are_get_and_update();
     wheel_and_drag_scroll();
     typing_searches();
     filters_and_tags();

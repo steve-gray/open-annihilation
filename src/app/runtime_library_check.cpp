@@ -28,6 +28,7 @@
 #include "user_folder_state.hpp"
 #include "web_link_state.hpp"
 
+#include "oa/app/automation_host.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/updates.hpp"
 #include "oa/app/game_directory.hpp"
@@ -1150,7 +1151,10 @@ void Runtime::check_library() {
         std::vector<AutomationControl> controls;
         oa_layer().automation_controls(controls);
         for (const AutomationControl& control : controls) {
+            // A row is a check box; its GET or UPDATE icon, listed under the
+            // row's name, is a button.
             if (control.visible && control.window_width > 0 && control.window_height > 0 &&
+                control.kind == AutomationControlKind::check_box &&
                 control.name.compare(0, std::string("oa.library.row.").size(), "oa.library.row.") ==
                     0)
                 return control.name;

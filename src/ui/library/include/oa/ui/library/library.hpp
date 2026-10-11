@@ -111,6 +111,7 @@ struct Installed {
     bool playing{};                              ///< the mod being played
     std::optional<Kept> kept{};                  ///< the copy ROLL BACK restores
     std::optional<Badge> badge{};                ///< the badge, when the app has it
+    std::string author{}; ///< the manifest's author's name; empty when it names none
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -573,10 +574,16 @@ struct Fact {
     Mark mark{Mark::none};
 };
 
-/// Lists an entry's facts: Size, Base, Needs, Hacks, Rules, Maps, Coverage and From, those it has.
+/// Lists an entry's facts: Installed, Latest, Author, Size, Base, Needs,
+/// Hacks, Rules, Maps, Coverage and From, those it has.
 ///
-/// An update's Rules fact says whether it changes the game's rules and
-/// which saved games stop loading.
+/// Installed is the installed copy's version and revision, and Latest the
+/// listing's, each as release_text writes them ("4.8 (rev 3)", "1.0" for a
+/// revision of 0, "rev 3" without a version); a side with neither is left
+/// out. Author is the listing's author, else its publisher, else the
+/// installed manifest's author; left out when none names one. An update's
+/// Rules fact says whether it changes the game's rules and which saved
+/// games stop loading.
 ///
 /// @param library the Library
 /// @param entry one of its entries
@@ -586,7 +593,10 @@ struct Fact {
 /// Describes an entry in one line under its name.
 ///
 /// Its queue item's phase while queued, else why it is blocked, else the
-/// update offered, Installed, Playing, or Not installed with its size.
+/// update offered, Installed, Playing, or Not installed with its size. An
+/// update is "Revision 4 available" only for a revision above 0 of the
+/// version installed, "Version 4.9 available" for another version, and
+/// "Update available" when it keeps the version and names no revision.
 ///
 /// @param library the Library
 /// @param entry one of its entries

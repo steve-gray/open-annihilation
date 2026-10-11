@@ -9,6 +9,7 @@
 
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/chrome.hpp"
+#include "oa/ui/kit/components.hpp"
 
 #include "oa/ui/frontend_renderer/artless.hpp"
 
@@ -209,28 +210,82 @@ ChipColours chip_colours(const ChipLook& look) noexcept {
     return colours;
 }
 
-/// Returns a chip's width on a canvas: its text, measured when the canvas
-/// has fonts, and chip_padding either side.
+/// Returns the colour a chip's state icon is drawn in: while disabled the
+/// hovered border's grey, dimmer than every state's, so that a dimmed GET
+/// stands apart from the hint of one that can act; else the hint for get,
+/// the accent for installed and playing, the lock colour for update, the
+/// online colour, the danger colour, and for a filter the accent while it
+/// is on and the hint while it is off.
+///
+/// @param look the chip
+/// @return the colour
+Colour icon_ink(const ChipLook& look) noexcept {
+    if (look.disabled)
+        return colour::control_hover;
+    switch (look.state) {
+    case ChipState::get:
+        return colour::hint;
+    case ChipState::installed:
+    case ChipState::playing:
+        return colour::accent;
+    case ChipState::update:
+        return colour::lock;
+    case ChipState::online:
+        return colour::online;
+    case ChipState::problem:
+        return colour::danger;
+    case ChipState::filter:
+        return look.selected ? colour::accent : colour::hint;
+    }
+    return colour::hint;
+}
+
+/// Returns a chip's width on a canvas: its state icon's side, or its text,
+/// measured when the canvas has fonts, and chip_padding either side.
 ///
 /// @param canvas the canvas
 /// @param look the chip
 /// @return the width, in points
 int32_t chip_width_on(const Canvas& canvas, const ChipLook& look) {
+    if (look.icon.has_value())
+        return kMetrics.state_icon_side;
     return measured(canvas, FontRole::small, look.text) + 2 * kMetrics.chip_padding;
 }
 
-/// Returns where a row's chip of a width lies: at the right inset, centred down the row.
+/// Returns a chip's height: its state icon's side, or chip_height.
+///
+/// @param look the chip
+/// @return the height, in points
+int32_t chip_height_of(const ChipLook& look) noexcept {
+    return look.icon.has_value() ? kMetrics.state_icon_side : kMetrics.chip_height;
+}
+
+/// Returns where a row's chip lies: at the right inset, centred down the row.
 ///
 /// @param row the row
 /// @param width the chip's width
+/// @param height the chip's height
 /// @return the chip's rectangle
-Rect chip_in_row(const Rect& row, int32_t width) noexcept {
+Rect chip_in_row(const Rect& row, int32_t width, int32_t height) noexcept {
     return {
         row.x + row.width - kMetrics.list_row_inset - width,
-        row.y + (row.height - kMetrics.chip_height) / 2,
+        row.y + (row.height - height) / 2,
         width,
-        kMetrics.chip_height,
+        height,
     };
+}
+
+/// Returns the width a line of text takes in a box both forms of a canvas
+/// draw it whole in: the wider of the canvas's measure and the game's
+/// fonts', which lay the screens out and cut what does not fit.
+///
+/// @param canvas the canvas
+/// @param role the font
+/// @param text the text, in UTF-8
+/// @return the width, in points
+int32_t whole_width(const Canvas& canvas, FontRole role, std::string_view text) {
+    const int32_t game = canvas.fonts != nullptr ? text_width(*canvas.fonts, role, text) : 0;
+    return std::max(measured(canvas, role, text), game);
 }
 
 /// Draws chips left to right from a point, chip_gap apart, as many as end
@@ -248,7 +303,7 @@ void draw_chip_line(
         const int32_t width = chip_width_on(canvas, chip);
         if (left + width > right)
             break;
-        draw_chip(canvas, {left, at.y, width, kMetrics.chip_height}, chip);
+        draw_chip(canvas, {left, at.y, width, chip_height_of(chip)}, chip);
         left += width + kMetrics.chip_gap;
     }
 }
@@ -450,7 +505,7 @@ std::string cut_to_width(const Fonts& fonts, FontRole role, std::string_view tex
 // ---- List rows ----
 
 Rect list_row_chip_rect(const Fonts& fonts, const Rect& row, const ChipLook& chip) {
-    return chip_in_row(row, chip_width(fonts, chip));
+    return chip_in_row(row, chip_width(fonts, chip), chip_height_of(chip));
 }
 
 void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& look) {
@@ -471,7 +526,8 @@ void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& lo
 
     int32_t right = rect.x + rect.width - inset;
     if (look.chip.has_value()) {
-        const Rect chip = chip_in_row(rect, chip_width_on(canvas, *look.chip));
+        const Rect chip =
+            chip_in_row(rect, chip_width_on(canvas, *look.chip), chip_height_of(*look.chip));
         draw_chip(canvas, chip, *look.chip);
         right = chip.x - kMetrics.list_row_gap;
     }
@@ -492,9 +548,11 @@ void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& lo
 
     int32_t text_right = right;
     if (!look.aside.empty()) {
+        // As wide as its widest entry in either measure, so that no entry,
+        // a version such as "1 · rev 3" among them, is cut on either form.
         int32_t aside_width = 0;
         for (const std::string& entry : look.aside)
-            aside_width = std::max(aside_width, measured(canvas, FontRole::small, entry));
+            aside_width = std::max(aside_width, whole_width(canvas, FontRole::small, entry));
         aside_width = std::min(aside_width, std::max(right - text_left, int32_t{0}));
         const int32_t aside_left = right - aside_width;
         for (std::size_t index = 0; index < look.aside.size(); ++index) {
@@ -567,12 +625,20 @@ void add_list_row(
 // ---- Chips ----
 
 int32_t chip_width(const Fonts& fonts, const ChipLook& look) {
+    if (look.icon.has_value())
+        return kMetrics.state_icon_side;
     return text_width(fonts, FontRole::small, look.text) + 2 * kMetrics.chip_padding;
 }
 
 void draw_chip(const Canvas& canvas, const Rect& rect, const ChipLook& look) {
     if (!drawable(canvas))
         return;
+    if (look.icon.has_value()) {
+        if (look.hovered && !look.disabled)
+            fill(canvas, rect, colour::hover);
+        draw_state_icon(clipped(canvas, rect), rect, *look.icon, icon_ink(look));
+        return;
+    }
     const ChipColours colours = chip_colours(look);
     if (colours.face.has_value())
         fill(canvas, rect, *colours.face);
