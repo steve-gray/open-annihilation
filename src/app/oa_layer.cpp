@@ -637,6 +637,12 @@ void place_control(
 /// The prefix of every name and dialog the layer lists to automation.
 constexpr std::string_view kAutomationPrefix = "oa.";
 
+/// GET MAP's screen over the battle room (runtime_get_map.cpp). Its button,
+/// its line and its bar ("get-map", "get-map-text" and "get-map-progress")
+/// stand on the battle room as the OA button stands on the main menu, so
+/// automation lists them as it lists that button, with no dialog.
+constexpr std::string_view kGetMapScreen = "get-map";
+
 /// Returns a quotient rounded down, for a numerator below 0 too.
 ///
 /// @param numerator the numerator
@@ -3113,7 +3119,9 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         const LayerPlacement placed = screen.placement(seen);
         if (empty_rect(placed.shown) || placed.points_width <= 0 || placed.points_height <= 0)
             continue;
-        const std::string dialog = std::string(kAutomationPrefix) + std::string(screen.name());
+        const std::string dialog = screen.name() == kGetMapScreen ? std::string()
+                                                                  : std::string(kAutomationPrefix) +
+                                                                        std::string(screen.name());
         const kit::DisplayList list = screen.display_list();
         for (const kit::AutomationEntry& entry :
              kit::automation_parts(list, screen.interaction())) {

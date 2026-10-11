@@ -3681,7 +3681,9 @@ right, drawn with the kit at the layer's scale; the 3.1c gadgets are left as
 they are. The button is pressed with the pointer or a finger, and so with a
 gamepad's pointer, as the main menu's OA button is. Automation lists the
 button as `oa.get-map`, the line as `oa.get-map-text` and the bar as
-`oa.get-map-progress`, with the dialog `oa.get-map`, only while they show.
+`oa.get-map-progress`, with no dialog, as it lists the OA button, and only
+while they show; on the multiplayer screens the endpoint lists the OA
+layer's controls before the panel's.
 
 Pressing GET MAP for a registry the player has not added opens the Add
 registry window with the address the record names, which checks it at once
