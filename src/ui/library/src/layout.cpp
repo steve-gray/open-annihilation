@@ -550,6 +550,35 @@ kit::ChipState chip_state_of(State state) {
     return kit::ChipState::get;
 }
 
+/// Returns the kit mark a maker shows.
+///
+/// @param maker the maker
+/// @return the mark; none when the maker is none
+std::optional<kit::MakerMark> shown_maker(PackageMaker maker) noexcept {
+    switch (maker) {
+    case PackageMaker::open_annihilation:
+        return kit::MakerMark::open_annihilation;
+    case PackageMaker::cavedog:
+        return kit::MakerMark::bone;
+    case PackageMaker::none:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+/// Returns a row's read text: its name, and the maker when a mark shows.
+///
+/// @param name the package's name
+/// @param maker the maker the row shows; none adds nothing
+/// @return the text
+std::string maker_reading(std::string name, PackageMaker maker) {
+    if (maker == PackageMaker::open_annihilation)
+        name += " · Open Annihilation";
+    else if (maker == PackageMaker::cavedog)
+        name += " · Cavedog Entertainment";
+    return name;
+}
+
 /// Returns the state icon a state is shown with: a download arrow for GET,
 /// a circled up-arrow for UPDATE, and a circled check for INSTALLED and
 /// PLAYING.
@@ -689,6 +718,7 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.badge_colour = badge_face;
     look.title = std::string(entry_name(entry));
     look.chip = entry_chip(library, entry);
+    look.maker = shown_maker(entry_maker(entry));
     const std::string version = entry_version(library, entry);
     const std::string size = entry_size(library, entry);
     if (form == RowForm::compact) {
@@ -1580,7 +1610,7 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
             const Action action = entry.state == State::get ? Action::get : Action::update;
             kit::Control icon;
             icon.id = icon_id;
-            icon.rect = kit::list_row_chip_rect(*building.fonts, rect, *look.chip);
+            icon.rect = kit::list_row_icon_rect(*building.fonts, rect, look);
             icon.clip = view;
             icon.enabled = controls::row_icon_action(library, entry).has_value();
             icon.focusable = false;
@@ -1600,7 +1630,7 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         row.clip = view;
         row.group = controls::list_group;
         row.focusable = false;
-        row.text = std::string(entry_name(entry));
+        row.text = maker_reading(std::string(entry_name(entry)), entry_maker(entry));
     }
     if (limit > 0) {
         kit::ScrollArea scroll;
@@ -2938,6 +2968,23 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             std::move(fingerprints),
             view
         );
+        // A built-in registry's mark sits under the key, inside the header
+        // band (the avatar is two icons tall). It is not a control.
+        if (const std::optional<kit::MakerMark> mark = shown_maker(
+                registry.built_in ? package_maker(registry.author) : PackageMaker::none
+            )) {
+            kit::ChipLook mark_look;
+            mark_look.icon = *mark == kit::MakerMark::open_annihilation ? kit::StateIcon::oa
+                                                                        : kit::StateIcon::bone;
+            const kit::Rect mark_rect{
+                key_rect.x,
+                key_rect.y + metrics.state_icon_side,
+                metrics.state_icon_side,
+                metrics.state_icon_side,
+            };
+            kit::add_chip(building.list, mark_rect, mark_look, kit::no_control, {});
+            building.list.items.back().clip = view;
+        }
         if (show_mark) {
             kit::ButtonLook spinning;
             spinning.style = kit::ButtonStyle::quiet;

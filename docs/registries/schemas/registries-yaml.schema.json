@@ -55,6 +55,12 @@
           "maxLength": 400,
           "description": "A paragraph on the card under the address and refresh lines, 1 to 400 Unicode scalar values."
         },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Who publishes the registry, 1 to 64 bytes with no control character."
+        },
         "url": { "type": "string" },
         "homepage": { "type": "string" },
         "catalogue": { "type": "string" },

@@ -210,14 +210,24 @@ enum class ChipState : uint8_t {
     filter,    ///< a filter the player turns on and off: the list's selected face while on
 };
 
-/// A state icon: a shape the kit draws from rings and strokes at the
-/// canvas's own pixels, never from a picture or a one-bit mark, so that it
-/// is as crisp at 2x, 3x and 150% as at 1x (draw_state_icon).
+/// A state icon: a shape the kit draws at the canvas's own pixels, never
+/// from a picture or a one-bit mark, so that it is as crisp at 2x, 3x and
+/// 150% as at 1x (draw_state_icon). The four action icons are rings and
+/// strokes in one colour. The OA badge and the bone are filled shapes in
+/// their own colours.
 enum class StateIcon : uint8_t {
     circled_check,    ///< a check in a ring: installed and up to date
     circled_up_arrow, ///< an arrow pointing up in a ring: installed, with an update
     download_arrow,   ///< an arrow pointing down into a tray: not installed, to get
     key,              ///< a key, bow and shaft and teeth, with no ring: a registry's signing key
+    oa,               ///< the OA badge: a rounded plate and the letters, in their own colours
+    bone,             ///< a dog bone: off-white with a dark outline, in its own colours
+};
+
+/// A maker's mark drawn under a list row's state icon, or on a registry card.
+enum class MakerMark : uint8_t {
+    open_annihilation, ///< the OA badge
+    bone,              ///< the bone
 };
 
 /// A chip: a short text in a box, in the colours of its state. The text is
@@ -266,9 +276,12 @@ struct ListRowLook {
     std::vector<std::string> lines{}; ///< the lines under the title, top to bottom
     std::vector<std::string> aside{}; ///< the entries at the right, one a line from the top
     std::optional<ChipLook> chip{};   ///< the chip at the right; none when unset
-    std::vector<ChipLook> tags{};     ///< chips on the line after the last line
-    bool selected{};                  ///< the row is the chosen one: the accent tint and outline
-    bool hovered{};                   ///< the pointer is over it, or holds it
+    /// A maker's mark in the state-icon column, under the state icon when
+    /// the row has one. None when unset. The row's height does not grow.
+    std::optional<MakerMark> maker{};
+    std::vector<ChipLook> tags{}; ///< chips on the line after the last line
+    bool selected{};              ///< the row is the chosen one: the accent tint and outline
+    bool hovered{};               ///< the pointer is over it, or holds it
 };
 
 /// A text field: the plain one, or with the magnifier the search field.

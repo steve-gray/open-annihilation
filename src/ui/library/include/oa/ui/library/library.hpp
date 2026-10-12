@@ -70,6 +70,10 @@ struct Registry {
     bool refreshing{};
     /// The keys its signatures are checked against, in the descriptor's order.
     std::vector<SigningKey> keys{};
+    /// The descriptor's author. A built-in registry shows a maker's mark
+    /// when this is Open Annihilation or Cavedog Entertainment. Last so
+    /// existing positional aggregates keep compiling with it empty.
+    std::string author{};
 };
 
 /// One map of a map pack, as its catalogue entry lists it.
@@ -375,6 +379,37 @@ struct Entry {
     /// for a package.
     std::string shown_summary{};
 };
+
+/// Which maker a trusted package or registry may show.
+enum class PackageMaker : uint8_t {
+    none,              ///< no mark
+    open_annihilation, ///< the OA badge
+    cavedog,           ///< the bone
+};
+
+/// Matches an author name to a maker.
+///
+/// ASCII case is ignored, and space or tab at either end is ignored. Open
+/// Annihilation is "OpenAnnihilation", "Open Annihilation" or "OA team".
+/// The bone is "Cavedog Entertainment". Any other name matches none. The
+/// publisher is not a name this matches unless it is passed as the author.
+///
+/// @param author the author, as a manifest or a descriptor writes it
+/// @return the maker; none when the name is not one of those
+[[nodiscard]] PackageMaker package_maker(std::string_view author) noexcept;
+
+/// Returns the maker an entry may show.
+///
+/// None unless the entry comes from a built-in registry, listed by one or
+/// installed from one. The name is the listing's author when that listing
+/// names one, otherwise the installed manifest's author, otherwise the
+/// listing's publisher. A named author that is not a maker does not fall
+/// through, so a third party's package on a built-in registry shows no
+/// mark. The publisher is read only when no author is named.
+///
+/// @param entry the entry
+/// @return the maker; none when the entry is not trusted or names none
+[[nodiscard]] PackageMaker entry_maker(const Entry& entry) noexcept;
 
 /// How the model looks up its words in the language shown.
 ///

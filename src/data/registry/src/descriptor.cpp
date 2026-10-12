@@ -66,6 +66,9 @@ bool read_mapping(
                     max_description_characters
                 ))
                 return false;
+        } else if (key == "author") {
+            if (!take_name(entry, read.author, error, field_path(where, "author")))
+                return false;
         } else if (key == "homepage") {
             formats::url::Url homepage;
             if (!take_web_url(entry, homepage, error, field_path(where, "homepage")))
@@ -178,6 +181,11 @@ std::string descriptor_text(const Descriptor& descriptor) {
     if (!descriptor.description.empty()) {
         out += "description: ";
         append_quoted(out, descriptor.description);
+        out.push_back('\n');
+    }
+    if (!descriptor.author.empty()) {
+        out += "author: ";
+        append_quoted(out, descriptor.author);
         out.push_back('\n');
     }
     if (descriptor.homepage) {

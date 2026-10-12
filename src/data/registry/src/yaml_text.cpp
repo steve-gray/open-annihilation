@@ -67,9 +67,10 @@ bool take_string(
 
 bool same_descriptor(const Descriptor& left, const Descriptor& right) {
     if (left.id != right.id || left.name != right.name || left.title != right.title ||
-        left.description != right.description || left.catalogue != right.catalogue ||
-        left.mode != right.mode || left.install_id != right.install_id ||
-        left.homepage != right.homepage || left.api != right.api || left.mirrors != right.mirrors ||
+        left.description != right.description || left.author != right.author ||
+        left.catalogue != right.catalogue || left.mode != right.mode ||
+        left.install_id != right.install_id || left.homepage != right.homepage ||
+        left.api != right.api || left.mirrors != right.mirrors ||
         left.keys.size() != right.keys.size())
         return false;
     for (std::size_t index = 0; index < left.keys.size(); ++index) {

@@ -128,8 +128,8 @@ struct Drawing {
 };
 
 /// Dresses the Registries pictures: the built-in card carries Core Prime's
-/// short name, title and description, and the added card a sample of its own.
-/// The fixture itself stays Fixture Core. Other tabs are not dressed.
+/// short name, title, description and author, and the added card a sample of
+/// its own. The fixture itself stays Fixture Core. Other tabs are not dressed.
 ///
 /// @param[in,out] library the scene's library
 void dress_registries(lib::Library& library) {
@@ -142,6 +142,7 @@ void dress_registries(lib::Library& library) {
                 "Annihilation team, and checked for compatibility, as well as official releases "
                 "from some leading mods.";
             registry.address = "http://downloads.coreprime.net/v1/catalogue.json";
+            registry.author = "Open Annihilation";
             registry.packages = 1;
             registry.checked_ago = 300;
             lib::SigningKey signing_key;

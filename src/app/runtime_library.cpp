@@ -836,6 +836,7 @@ library::Inputs Runtime::library_inputs() {
             registry.name = descriptor.name;
             registry.title = descriptor.title;
             registry.description = descriptor.description;
+            registry.author = descriptor.author;
             registry.built_in = view.registry.origin == data::registry::Origin::built_in;
             registry.downloads_on =
                 descriptor.install_id != data::registry::InstallIdUse::required ||

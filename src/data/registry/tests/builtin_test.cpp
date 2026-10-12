@@ -140,6 +140,7 @@ int main(int argc, char** argv) {
             "Annihilation team, and checked for compatibility, as well as official releases from "
             "some leading mods."
         );
+        OA_CHECK(coreprime->author == "Open Annihilation");
         OA_CHECK(coreprime->mode == registry::DownloadMode::tokens);
         OA_CHECK(coreprime->install_id == registry::InstallIdUse::required);
         OA_CHECK(
