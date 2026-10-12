@@ -1055,7 +1055,7 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
 
     preview.cache.new_frame();
     oa::ui::map_previews::PreviewHost reader;
-    reader.context = &state;
+    reader.context = &preview;
     reader.read_map = preview_read_map;
     reader.read_file = preview_read_file;
     reader.online_bytes = preview_online_bytes;
