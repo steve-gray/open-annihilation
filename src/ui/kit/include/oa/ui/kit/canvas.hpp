@@ -5,8 +5,9 @@
 
 // The canvas the kit's components draw on, and the few primitives every one
 // of them draws through: a fill, a blend, an outline, a raised edge, a
-// hairline rule, a line of text in a box and its width, a picture, a one-bit
-// mark, a coverage map at the canvas's own pixels, and a clip. Places and
+// rounded fill and outline, a hairline rule, a line of text in a box and its
+// width, a picture, a one-bit mark, a coverage map at the canvas's own
+// pixels, and a clip. Places and
 // sizes are in points. A canvas has two forms.
 // The crisp form draws with the artless painter at a whole scale in the
 // game's own fonts. The smooth form draws with the painter of
@@ -125,6 +126,30 @@ void blend_rect(const Canvas& canvas, const Rect& rect, Colour ink, uint32_t opa
 /// @param rect the rectangle, in points; its inside is left as it is
 /// @param ink the outline's colour
 void outline_rect(const Canvas& canvas, const Rect& rect, Colour ink);
+
+/// Fills a rectangle whose ends are semicircles of the given radius, clamped
+/// to half its shorter side: a pill when the radius is half the height. The
+/// shape is worked out at the canvas's own pixels. At scale 1 the corner is
+/// stepped; at any other scale, and on the smooth form, the edge is blended
+/// by how much of each pixel the shape covers. A rectangle too large to
+/// sample is filled square.
+///
+/// @param canvas where it is drawn
+/// @param rect the rectangle, in points
+/// @param radius the ends' radius, in points; 0 fills the rectangle square
+/// @param ink the colour
+void fill_round_rect(const Canvas& canvas, const Rect& rect, int32_t radius, Colour ink);
+
+/// Draws a one-point outline of that rounded rectangle. On the smooth form
+/// it is max(1, lround(scale)) whole pixels thick, as outline_rect is. The
+/// inside is left as it is. A rectangle too large to sample is outlined
+/// square.
+///
+/// @param canvas where it is drawn
+/// @param rect the rectangle, in points
+/// @param radius the ends' radius, in points; 0 outlines the rectangle square
+/// @param ink the outline's colour
+void outline_round_rect(const Canvas& canvas, const Rect& rect, int32_t radius, Colour ink);
 
 /// Draws a one-point raised edge round the inside of a rectangle: light along
 /// the top and left, dark along the bottom and right, the dark edges running

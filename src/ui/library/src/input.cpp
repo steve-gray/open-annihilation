@@ -38,6 +38,31 @@ constexpr auto filter_controls = static_cast<int32_t>(filter_total);
 /// How far a notch of the wheel scrolls the details, in points: a full list row.
 constexpr int32_t details_step = kit::compact_metrics.list_row_height;
 
+/// The part of a control a press reaches.
+///
+/// @param control the control
+/// @return its rectangle, within its clip when it has one
+kit::Rect shown_area(const kit::Control& control) {
+    if (control.clip.width > 0 && control.clip.height > 0)
+        return kit::intersect(control.rect, control.clip);
+    return control.rect;
+}
+
+/// Tells whether the pointer rests on a disabled UNLOAD MOD. hit passes
+/// over a disabled control, and the button's hint still belongs to it.
+///
+/// @param list the display list
+/// @param at the pointer
+/// @return true when it rests on that button and the button cannot act
+bool over_disabled_unload(const kit::DisplayList& list, kit::Point at) {
+    for (const kit::Control& control : list.controls) {
+        if (control.id != controls::active_unload)
+            continue;
+        return !control.enabled && kit::contains(shown_area(control), at);
+    }
+    return false;
+}
+
 /// A pane's scroll, as the display list shows it.
 struct PaneScroll {
     kit::Rect view{}; ///< what the pane is seen through
@@ -687,6 +712,20 @@ ScreenResult activate(
     case controls::close:
         result.action = Action::close;
         return result;
+    case controls::active_unload:
+        // The same action SWITCH OFF returns. The host asks switch_off_question
+        // and, on SWITCH, plays no mod. The entry is the mod being played,
+        // which the host requires to be an installed one; the list's selection
+        // may be another entry, or none, while this tab shows.
+        result.action = Action::switch_off;
+        for (const Entry& entry : library.entries) {
+            if (entry.id.kind == Kind::mod && entry.installed != nullptr &&
+                entry.installed->playing) {
+                result.entry = entry.id;
+                break;
+            }
+        }
+        return result;
     default:
         break;
     }
@@ -879,6 +918,10 @@ ScreenResult library_pointer(
         const kit::PointerOutcome outcome = kit::pointer_move(interaction, list, at);
         ScreenResult result;
         result.redraw = outcome.result != kit::PointerResult::none;
+        if (over_disabled_unload(list, at) && interaction.hovered != controls::active_unload) {
+            interaction.hovered = controls::active_unload;
+            result.redraw = true;
+        }
         if (state.menu != MenuKind::none && menu_item_control(outcome.control)) {
             const int32_t marked = outcome.control - controls::first_menu_item;
             if (marked != state.menu_marked) {
