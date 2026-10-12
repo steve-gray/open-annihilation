@@ -4,7 +4,8 @@
 // The Library's model over made-up registries and packages: every state,
 // every reason GET or UPDATE is off, built-in and added registries, a key
 // installed from another registry, tabs, each tab's own filter, New, the
-// filters' counts and tags, the order with no search, the update count, the
+// filters' counts and tags, a tag left from another tab, an update a finished
+// install has already reached, the order with no search, the update count, the
 // Active tab's setup, the selection across refreshes, the buttons, the facts
 // with the sample numbers, the status lines, the bylines, the playing note,
 // the queue lines and every text.
@@ -2050,7 +2051,9 @@ void test_base_game() {
     lib::Listing dated = listing(core, Kind::mod, "dated", "Dated Mod");
     dated.published = "2026-10-01";
     inputs.listings.push_back(dated);
-    inputs.listings.push_back(listing(core, Kind::mod, "game-kit", "Game Kit"));
+    lib::Listing kit = listing(core, Kind::mod, "game-kit", "Game Kit");
+    kit.tags = {"units"};
+    inputs.listings.push_back(kit);
     inputs.listings.push_back(listing(example, Kind::map_pack, "pack", "Pack"));
     inputs.installed.push_back(installed(core, Kind::mod, "dated", "Dated Mod"));
     inputs.updates.push_back(update(core, Kind::mod, "dated"));
@@ -2132,6 +2135,151 @@ void test_tab_counts() {
     OA_CHECK(lib::find_entry(library, lib::base_game_id()) != nullptr);
 }
 
+void test_tabs_list_what_their_counts_hold() {
+    // Mods can read "Mods (n)" and "Installed (n)" while the list says
+    // "Nothing to show." That line is drawn only when the visible list is
+    // empty, the search is empty and the filter is not Updates. Counts
+    // ignore the tag. A tag chosen where the filter offers it, then carried
+    // to a tab that does not, used to empty the list. A finished install
+    // used to leave Updates counting the note the queue had already reached.
+    lib::Inputs inputs = base_inputs();
+    lib::Listing alpha = listing(core, Kind::mod, "alpha-mod", "Alpha Mod");
+    alpha.tags = {"balance"};
+    inputs.listings.push_back(alpha);
+    inputs.installed.push_back(installed(core, Kind::mod, "alpha-mod", "Alpha Mod"));
+    lib::Listing ridge = listing(core, Kind::mod, "ridge", "Ridge");
+    ridge.tags = {"units"};
+    inputs.listings.push_back(ridge);
+    lib::Listing shore = listing(core, Kind::map_pack, "shore", "Shore");
+    shore.tags = {"naval"};
+    inputs.listings.push_back(shore);
+    inputs.installed.push_back(installed(core, Kind::map_pack, "shore", "Shore"));
+    lib::Listing hans = listing(core, Kind::language, "zh-hans", "Simplified Chinese");
+    hans.tags = {"translation"};
+    hans.release = 6;
+    hans.revision = 4;
+    inputs.listings.push_back(hans);
+    // The copy in the folder is still the previous release. The worker has
+    // not rewritten it, and the download of release 6 has finished.
+    lib::Installed hans_installed =
+        installed(core, Kind::language, "zh-hans", "Simplified Chinese");
+    hans_installed.release = 5;
+    hans_installed.revision = 3;
+    inputs.installed.push_back(hans_installed);
+    lib::UpdateNote hans_update = update(core, Kind::language, "zh-hans");
+    hans_update.to_release = 6;
+    hans_update.to_revision = 4;
+    inputs.updates.push_back(hans_update);
+
+    lib::Library library = built(std::move(inputs));
+    lib::set_tab(library, lib::Tab::updates);
+    OA_CHECK(lib::update_count(library) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 1);
+    lib::set_tag(library, "translation");
+    using Keys = std::vector<std::string>;
+    OA_CHECK(visible_keys(library) == Keys({"zh-hans@fixture-core"}));
+
+    // The install finishes. The note is still in the inputs. The queue holds
+    // the finished item at the catalogue release it installed.
+    lib::Inputs finished = library.inputs;
+    lib::QueueItem done = queued(core, "zh-hans", "Simplified Chinese", Phase::installed);
+    done.kind = Kind::language;
+    done.release = 6;
+    finished.queue.push_back(std::move(done));
+    lib::refresh(library, std::move(finished));
+    const lib::Entry* language = at(library, core, Kind::language, "zh-hans");
+    OA_CHECK(
+        language != nullptr && language->state == State::installed && language->update == nullptr
+    );
+    OA_CHECK(lib::update_count(library) == 0);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 0);
+    OA_CHECK(library.visible.empty());
+    OA_CHECK(library.tag == "translation");
+
+    lib::set_tab(library, lib::Tab::mods);
+    lib::set_filter(library, lib::Filter::installed);
+    OA_CHECK(lib::tab_count(library, lib::Tab::mods) == 2);
+    OA_CHECK(lib::filter_count(library, lib::Filter::installed) == 1);
+    OA_CHECK(visible_keys(library) == Keys({"@base-game@", "alpha-mod@fixture-core"}));
+    OA_CHECK(library.tag == "translation");
+    lib::set_filter(library, lib::Filter::all);
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 2);
+    OA_CHECK(
+        visible_keys(library) ==
+        Keys({"@base-game@", "alpha-mod@fixture-core", "ridge@fixture-core"})
+    );
+
+    lib::set_tab(library, lib::Tab::maps);
+    OA_CHECK(lib::tab_count(library, lib::Tab::maps) == 1);
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 1);
+    OA_CHECK(visible_keys(library) == Keys({"shore@fixture-core"}));
+
+    // A mod's tag, chosen next, still must not blank Languages or Maps.
+    lib::set_tag(library, "balance");
+    lib::set_tab(library, lib::Tab::languages);
+    OA_CHECK(library.tag == "balance");
+    OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 1);
+    OA_CHECK(visible_keys(library) == Keys({"zh-hans@fixture-core"}));
+    language = at(library, core, Kind::language, "zh-hans");
+    OA_CHECK(language != nullptr && language->state == State::installed);
+    lib::set_tab(library, lib::Tab::maps);
+    OA_CHECK(visible_keys(library) == Keys({"shore@fixture-core"}));
+
+    // Where the tab offers the tag, it filters again. It was never cleared.
+    lib::set_tab(library, lib::Tab::mods);
+    lib::set_filter(library, lib::Filter::all);
+    OA_CHECK(visible_keys(library) == Keys({"alpha-mod@fixture-core"}));
+
+    // A search that matches nothing still empties the list. That line is
+    // "Nothing matches …", which an empty search does not say.
+    lib::set_filter(library, lib::Filter::installed);
+    lib::set_query(library, "zzz");
+    OA_CHECK(library.visible.empty());
+    OA_CHECK(lib::filter_count(library, lib::Filter::installed) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::mods) == 2);
+    lib::set_query(library, "");
+    // balance is offered by the installed mod, so the base game stays out.
+    OA_CHECK(visible_keys(library) == Keys({"alpha-mod@fixture-core"}));
+
+    // The worker has rewritten the copy and dropped the queue item. The last
+    // search's note is still in the inputs, and the copy is already there.
+    lib::Inputs caught_up = library.inputs;
+    caught_up.queue.clear();
+    for (lib::Installed& copy : caught_up.installed) {
+        if (copy.key == "zh-hans") {
+            copy.release = 6;
+            copy.revision = 4;
+        }
+    }
+    lib::refresh(library, std::move(caught_up));
+    language = at(library, core, Kind::language, "zh-hans");
+    OA_CHECK(
+        language != nullptr && language->state == State::installed && language->update == nullptr
+    );
+    OA_CHECK(lib::update_count(library) == 0);
+
+    // A later release is still an update. Held, and a finished item that
+    // names no release, do not hide the note. The finished release does.
+    lib::Inputs later = library.inputs;
+    later.updates.clear();
+    lib::UpdateNote next = update(core, Kind::language, "zh-hans");
+    next.to_release = 7;
+    later.updates.push_back(next);
+    lib::QueueItem held = queued(core, "zh-hans", "Simplified Chinese", Phase::held);
+    held.kind = Kind::language;
+    held.release = 7;
+    later.queue = {held};
+    lib::refresh(library, later);
+    OA_CHECK(lib::update_count(library) == 1);
+    later.queue[0].phase = Phase::installed;
+    later.queue[0].release = 0;
+    lib::refresh(library, later);
+    OA_CHECK(lib::update_count(library) == 1);
+    later.queue[0].release = 7;
+    lib::refresh(library, std::move(later));
+    OA_CHECK(lib::update_count(library) == 0);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -2169,6 +2317,7 @@ int main() {
     test_base_game();
     test_check_now();
     test_tab_counts();
+    test_tabs_list_what_their_counts_hold();
     test_own_mod_description();
     test_facts();
     test_status_lines_and_bylines();

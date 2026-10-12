@@ -40,7 +40,9 @@ namespace oa::ui::library {
 /// @return true when its listing has the tag, and for every entry while no tag is shown
 [[nodiscard]] bool has_shown_tag(const Library& library, const Entry& entry);
 
-/// Recomputes the visible entries and their order from the tab, its filter, the tag and search.
+/// Recomputes the visible entries and their order from the tab, its filter, the tag and the search.
+///
+/// A tag the tab does not offer under its filter hides nothing, and is not cleared.
 ///
 /// @param[in,out] library the Library; only `visible` changes
 void update_visible(Library& library);
