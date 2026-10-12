@@ -300,7 +300,7 @@ bool plain_stem(std::string_view stem) {
 ///
 /// @param game_dir the base game's folder
 /// @return the TDF text
-std::string ridge_marker_tdf(const fs::path& game_dir) {
+std::string ridge_marker_tdf(const fs::path& game_dir, std::string_view feature) {
     const GameInstall install = inspect_game_install(game_dir);
     require(usable(install), "the base game cannot be read");
     oa::AssetStore store(install.folders);
@@ -317,16 +317,22 @@ std::string ridge_marker_tdf(const fs::path& game_dir) {
         }
     }
     require(!stem.empty(), "the base game has no animation a map can name");
-    return "[zz ridge marker]\n{\nfilename=" + stem + ";\n}\n";
+    return "[" + std::string(feature) + "]\n{\nfilename=" + stem + ";\n}\n";
 }
 
 /// Writes a two-map pack that places only its own feature.
 ///
 /// @param file the package
 /// @param game_dir the base game's folder
-void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
-    constexpr std::string_view feature = "zz ridge marker";
-    const std::string tdf = ridge_marker_tdf(game_dir);
+/// @param id the pack's id
+/// @param feature the one feature the maps place
+void write_ridge_pack(
+    const fs::path& file,
+    const fs::path& game_dir,
+    std::string_view id = "ridge-pack",
+    std::string_view feature = "zz ridge marker"
+) {
+    const std::string tdf = ridge_marker_tdf(game_dir, feature);
     const std::string ota = "[GlobalHeader]\n"
                             "{\n"
                             "[Schema 0]\n"
@@ -349,7 +355,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
     const std::string terrain_text(terrain.begin(), terrain.end());
     oa::data::map_pack::Manifest manifest;
     manifest.format = oa::data::map_pack::format_version;
-    manifest.id = "ridge-pack";
+    manifest.id = std::string(id);
     manifest.name = "Ridge Pack";
     manifest.version = "1.0";
     manifest.author = {"Ridge", {}};
@@ -364,7 +370,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
         map.files = {
             "maps/" + map.stem + ".ota",
             "maps/" + map.stem + ".tnt",
-            "features/ridgepack/marker.tdf",
+            "features/" + std::string(id) + "/marker.tdf",
         };
         manifest.maps.push_back(std::move(map));
     };
@@ -377,7 +383,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
          {"maps/north.tnt", terrain_text},
          {"maps/south.ota", ota},
          {"maps/south.tnt", terrain_text},
-         {"features/ridgepack/marker.tdf", tdf}}
+         {"features/" + std::string(id) + "/marker.tdf", tdf}}
     );
 }
 
@@ -711,9 +717,16 @@ void Runtime::check_mod_install() {
             return !outcomes.empty() &&
                    outcomes.front().result == install::OutcomeResult::installed;
         });
-        fs::remove_all(pack_folder, remove_error);
-        require(!remove_error, "the catalogue map pack's folder could not be removed");
-        install::post_opened_file(pack_file);
+        // A different pack, removed first so each run asks INSTALL. Replacing
+        // ridge-pack with a file would leave a file origin, and the next
+        // run's catalogue install of ridge-pack would wait for a question
+        // instead of reporting.
+        const fs::path opened_folder = user_folder_ / "Maps" / "opened-pack";
+        fs::remove_all(opened_folder, remove_error);
+        require(!remove_error, "the opened map pack's folder could not be removed");
+        const fs::path opened_pack = packages / "opened-pack.oamap";
+        write_ridge_pack(opened_pack, options_.game_dir, "opened-pack", "zz opened marker");
+        install::post_opened_file(opened_pack);
         until_prompt("the map pack opened as --open opens it");
         require(titled("INSTALL MAP PACK"), "--open did not ask before installing the map pack");
         click(install::Answer::alongside);
