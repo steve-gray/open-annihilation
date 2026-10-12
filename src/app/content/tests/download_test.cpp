@@ -57,6 +57,15 @@ constexpr std::string_view kInstallId = "7f3a90d2-4c1b-4e8a-9d07-c91e00000001";
 /// A second install ID, used when the first is replaced.
 constexpr std::string_view kInstallIdNext = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
 
+/// How long a state, a request or a saved file may take to appear. The queue
+/// publishes those from its own thread, and a machine running many tests at
+/// once can leave that thread waiting. Five and eight seconds ran out before
+/// the challenge state was published (the check used to sit at the challenge
+/// wait below). A wait returns as soon as the condition holds, so a quiet
+/// machine still finishes in the time the work itself takes. The same bound
+/// is what the longer checks in this file already used.
+constexpr uint32_t kBusyWaitMs = 20000;
+
 std::atomic<int64_t> g_now{kEpoch};
 
 /// The test clock, in seconds since 1970.
@@ -420,7 +429,7 @@ struct Session {
                 }
                 return false;
             },
-            8000
+            kBusyWaitMs
         );
         if (!ready) {
             const auto snapshot = service->snapshot();
@@ -659,7 +668,7 @@ void test_direct_large() {
         return;
     OA_CHECK(downloads.busy());
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(!downloads.busy());
     OA_CHECK(!fs::exists(session.part_path()));
     OA_CHECK(file_bytes(session.final_path()) == session.package.bytes);
@@ -700,8 +709,8 @@ void test_tokens_outcome(content::InstallOutcome outcome, std::string_view word,
         outcome == content::InstallOutcome::installed   ? content::DownloadState::done
         : outcome == content::InstallOutcome::set_aside ? content::DownloadState::cancelled
                                                         : content::DownloadState::failed;
-    OA_CHECK(wait_state(downloads, *id, want, 5000));
-    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
+    OA_CHECK(wait_state(downloads, *id, want, kBusyWaitMs));
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, kBusyWaitMs));
     const std::string result = result_body(session.server);
     if (check_body) {
         const std::string wanted = std::string("{\"result\":\"") + std::string(word) +
@@ -723,7 +732,7 @@ void test_tokens_outcome(content::InstallOutcome outcome, std::string_view word,
         );
     }
     // The worker marks the download done, then posts its result: wait for the post.
-    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, kBusyWaitMs));
     OA_CHECK(count_results(session.server) == 1);
 }
 
@@ -835,7 +844,7 @@ void test_package_rekey() {
     if (!id)
         return;
     OA_CHECK(wait_until(
-        [&] { return count_method(session.server, "GET", session.package.path) >= 1; }, 5000
+        [&] { return count_method(session.server, "GET", session.package.path) >= 1; }, kBusyWaitMs
     ));
     downloads.set_install_id(session.registry_id, std::string(kInstallIdNext));
     {
@@ -844,7 +853,7 @@ void test_package_rekey() {
         gate.notify_all();
     }
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 2);
     OA_CHECK(
         body_at(session.server, "POST", "/api/v1/downloads", 0).find(kInstallId) !=
@@ -856,7 +865,7 @@ void test_package_rekey() {
         expected_key(session, std::string(kInstallIdNext), content::DownloadReason::update)
     );
     // The worker marks the download done, then posts its result: wait for the post.
-    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, kBusyWaitMs));
     OA_CHECK(count_results(session.server) == 1);
 }
 
@@ -881,11 +890,11 @@ void test_key_expires_soon() {
     if (!id)
         return;
     OA_CHECK(wait_until(
-        [&] { return count_method(session.server, "GET", session.package.path) >= 1; }, 5000
+        [&] { return count_method(session.server, "GET", session.package.path) >= 1; }, kBusyWaitMs
     ));
     OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 2);
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
 }
 
 void test_challenge_solved() {
@@ -928,7 +937,7 @@ void test_challenge_solved() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::challenge, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::challenge, kBusyWaitMs));
     const auto shown = view_of(downloads, *id);
     OA_CHECK(shown.has_value() && shown->challenge.has_value());
     if (shown && shown->challenge) {
@@ -936,7 +945,7 @@ void test_challenge_solved() {
         OA_CHECK(shown->challenge->address == "downloads.example.net/verify");
     }
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(polls.load() >= 2);
     OA_CHECK(count_method(session.server, "GET", "/api/v1/challenges/HXQ7-4KP2") >= 2);
 }
@@ -969,7 +978,7 @@ void test_challenge_expired() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
@@ -1011,17 +1020,30 @@ void test_challenge_cancel() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::challenge, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::challenge, kBusyWaitMs));
     downloads.cancel(*id);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, 5000));
-    // A poll already on the wire when the cancel lands may still arrive. Let it
-    // land, then no other may come in six poll times (40 ms apart here).
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, kBusyWaitMs));
+    // A poll already on the wire when the cancel lands may still arrive. Wait
+    // until the count has stayed still for six poll times (40 ms apart here).
+    // A fixed sleep ended before that poll on a busy machine, and counted it
+    // as a poll that kept going.
     const int cancelled_at = polls.load();
-    threads::sleep_ms(100);
-    const int stopped = polls.load();
-    OA_CHECK(stopped <= cancelled_at + 1);
-    threads::sleep_ms(250);
-    OA_CHECK(polls.load() == stopped);
+    int settled = cancelled_at;
+    auto quiet_since = std::chrono::steady_clock::now();
+    OA_CHECK(wait_until(
+        [&] {
+            const int polls_now = polls.load();
+            if (polls_now != settled) {
+                settled = polls_now;
+                quiet_since = std::chrono::steady_clock::now();
+                return false;
+            }
+            return std::chrono::steady_clock::now() - quiet_since >= std::chrono::milliseconds(240);
+        },
+        kBusyWaitMs
+    ));
+    OA_CHECK(settled <= cancelled_at + 1);
+    OA_CHECK(polls.load() == settled);
     OA_CHECK(count_results(session.server) == 0);
 }
 
@@ -1045,7 +1067,7 @@ void test_not_offered(int status, const char* error) {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
@@ -1077,7 +1099,7 @@ void test_client_fault(int status) {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
@@ -1116,7 +1138,7 @@ void test_rate_limit() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_until([&] { return posts.load() >= 2; }, 8000));
+    OA_CHECK(wait_until([&] { return posts.load() >= 2; }, kBusyWaitMs));
     std::chrono::steady_clock::time_point first{};
     std::chrono::steady_clock::time_point second{};
     {
@@ -1132,7 +1154,7 @@ void test_rate_limit() {
         std::fprintf(stderr, "retry gap %lld ms\n", static_cast<long long>(gap));
     OA_CHECK(gap >= 800);
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
 }
 
 void test_unavailable_then_mirror() {
@@ -1156,7 +1178,7 @@ void test_unavailable_then_mirror() {
     if (!id)
         return;
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(posts.load() == 4);
     OA_CHECK(count_method(session.mirror, "GET", session.package.path) >= 1);
     OA_CHECK(file_bytes(session.final_path()) == session.package.bytes);
@@ -1179,7 +1201,7 @@ void test_refusal_skips_mirror() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     threads::sleep_ms(200);
     OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 1);
     OA_CHECK(session.mirror.requests().empty());
@@ -1243,7 +1265,7 @@ void test_wrong_hash_twice() {
     OA_CHECK(view.has_value());
     if (view)
         OA_CHECK(view->failure == content::DownloadFailure::hash_mismatch);
-    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, 5000));
+    OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, kBusyWaitMs));
     OA_CHECK(result_body(session.server).find("\"result\":\"failed\"") != std::string::npos);
 }
 
@@ -1262,7 +1284,7 @@ void test_wrong_size() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view) {
@@ -1314,10 +1336,10 @@ void test_match_pauses() {
             downloads.set_match_running(true);
             return true;
         },
-        8000
+        kBusyWaitMs
     ));
     downloads.set_match_running(true);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::paused_for_match, 8000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::paused_for_match, kBusyWaitMs));
     const auto paused = view_of(downloads, *id);
     OA_CHECK(paused.has_value());
     if (paused) {
@@ -1340,7 +1362,7 @@ void test_match_pauses() {
     OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 20000));
     OA_CHECK(saw_step_range(session.server));
     finish(downloads, *second, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *second, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *second, content::DownloadState::done, kBusyWaitMs));
 }
 
 void test_one_at_a_time() {
@@ -1359,14 +1381,14 @@ void test_one_at_a_time() {
         return;
     const auto second = downloads.queue(std::move(*other), content::DownloadReason::install, &why);
     OA_CHECK(second.has_value());
-    OA_CHECK(wait_state(downloads, *first, content::DownloadState::installing, 8000));
+    OA_CHECK(wait_state(downloads, *first, content::DownloadState::installing, kBusyWaitMs));
     const auto held = view_of(downloads, *second);
     OA_CHECK(held.has_value() && held->state == content::DownloadState::waiting);
     OA_CHECK(downloads.busy());
     downloads.report_install(*first, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *first, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *first, content::DownloadState::done, kBusyWaitMs));
     finish(downloads, *second, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *second, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *second, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(!downloads.busy());
 }
 
@@ -1397,7 +1419,7 @@ void test_resume_after_restart() {
                 downloads.set_match_running(true);
                 return true;
             },
-            8000
+            kBusyWaitMs
         ));
     }
     OA_CHECK(wait_until(
@@ -1406,13 +1428,13 @@ void test_resume_after_restart() {
             return fs::is_regular_file(session.part_path(), error) && !error &&
                    fs::file_size(session.part_path(), error) >= content::download_step_bytes;
         },
-        5000
+        kBusyWaitMs
     ));
     OA_CHECK(fs::is_regular_file(session.part_path()));
     session.server.clear_log();
     content::Downloads again(session.queue_options());
     again.start(*session.service->snapshot());
-    OA_CHECK(wait_until([&] { return !again.view().empty(); }, 5000));
+    OA_CHECK(wait_until([&] { return !again.view().empty(); }, kBusyWaitMs));
     OA_CHECK(!again.view().empty());
     if (again.view().empty())
         return;
@@ -1440,7 +1462,7 @@ void test_drop_changed_release() {
                 const std::string text(bytes.begin(), bytes.end());
                 return text.find(session.package_id) != std::string::npos;
             },
-            5000
+            kBusyWaitMs
         ));
     }
     Listed listed{&session.package, session.package_id, "Ridge", 2};
@@ -1460,7 +1482,7 @@ void test_drop_changed_release() {
             }
             return false;
         },
-        8000
+        kBusyWaitMs
     ));
     Logs fresh;
     content::DownloadsOptions options = session.queue_options();
@@ -1469,7 +1491,7 @@ void test_drop_changed_release() {
     again.start(*session.service->snapshot());
     OA_CHECK(wait_until(
         [&] { return logs_text(fresh).find("no longer has that release") != std::string::npos; },
-        5000
+        kBusyWaitMs
     ));
     OA_CHECK(logs_text(fresh).find("no longer has that release") != std::string::npos);
     OA_CHECK(again.view().empty());
@@ -1520,7 +1542,7 @@ void test_install_id_off() {
     if (!id)
         return;
     downloads.set_install_id("ridge", std::nullopt);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
@@ -1546,13 +1568,13 @@ void test_no_install_member() {
     if (!id)
         return;
     OA_CHECK(wait_until(
-        [&] { return count_method(session.server, "POST", "/api/v1/downloads") >= 1; }, 5000
+        [&] { return count_method(session.server, "POST", "/api/v1/downloads") >= 1; }, kBusyWaitMs
     ));
     const std::string sent = body_at(session.server, "POST", "/api/v1/downloads", 0);
     OA_CHECK(sent.find("install") == std::string::npos);
     OA_CHECK(sent == expected_key(session, std::nullopt, content::DownloadReason::update));
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
 }
 
 void test_cancel_keeps_part() {
@@ -1582,10 +1604,10 @@ void test_cancel_keeps_part() {
             downloads.cancel(*id);
             return true;
         },
-        8000
+        kBusyWaitMs
     ));
     downloads.cancel(*id);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::cancelled, kBusyWaitMs));
     OA_CHECK(wait_until(
         [&] {
             std::error_code error;
@@ -1594,7 +1616,7 @@ void test_cancel_keeps_part() {
             const auto size = fs::file_size(session.part_path(), error);
             return !error && size >= content::download_step_bytes;
         },
-        5000
+        kBusyWaitMs
     ));
     std::error_code kept_error;
     const auto kept = fs::file_size(session.part_path(), kept_error);
@@ -1650,7 +1672,7 @@ void test_cancel_registry() {
             const auto snapshot = service.snapshot();
             return snapshot && snapshot->entries.size() >= 2;
         },
-        8000
+        kBusyWaitMs
     ));
     Handed handed;
     content::DownloadsOptions queue;
@@ -1684,7 +1706,7 @@ void test_cancel_registry() {
     OA_CHECK(vale_view.has_value() && vale_view->state == content::DownloadState::waiting);
     downloads.set_match_running(false);
     finish(downloads, *vale_id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *vale_id, content::DownloadState::done, 8000));
+    OA_CHECK(wait_state(downloads, *vale_id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(view_of(downloads, *ridge_id)->state == content::DownloadState::cancelled);
 }
 
@@ -1702,7 +1724,7 @@ void test_final_already_there() {
     if (!id)
         return;
     finish(downloads, *id, content::InstallOutcome::installed);
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::done, kBusyWaitMs));
     OA_CHECK(session.server.requests().empty());
     OA_CHECK(handed_count(session.handed) == 1);
     threads::LockGuard guard(session.handed.mutex);
@@ -1747,7 +1769,7 @@ void test_no_space() {
     OA_CHECK(id.has_value());
     if (!id)
         return;
-    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 5000));
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
     if (view)
