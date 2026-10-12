@@ -1,0 +1,64 @@
+# Base games and expansions
+
+`oa-data-content-bundles` is the built-in description of every base game and
+expansion. Copying, checking, mounting and the Library read this one table:
+an id, the English name, whether it is a base game or an expansion, the
+base games an expansion extends, the expansions it needs, and each file's
+copy name, the source names it may have, its size and its known SHA-256
+values. The table holds names, sizes and hashes only.
+
+The demo's installer is still recognised where it is today
+(`demo_1997` in `oa/app/demo_installer.hpp`). This table names the unpacked
+archive, `TADemo.hpi`, with the same size and SHA-256 that recognition
+checks. It does not repeat the installer's size, hash or resource.
+
+## Entry points
+
+`oa/data/content_bundles.hpp` (namespace `oa::data::content_bundles`):
+
+- `bundles` and `find_bundle` read the table.
+- `requirement_closure` is what turning a set on needs, including itself.
+  `removal_closure` is what turning a set off removes, including itself.
+- `after_turning_on` and `after_turning_off` apply that to a set that is
+  already on. Turning one on also turns on an expansion whose only missing
+  need was that one. Turning one off turns off everything that needs it.
+- `match_file` finds a file by a source path and its size, without regard
+  to ASCII case. `known_hash` checks a SHA-256 against the file's known
+  values.
+- `installers`, `find_installer` and `known_installer_hash` are the three
+  Commander Pack installers, recognised by size and SHA-256.
+- `table_fault` is empty when every dependency names a real bundle and
+  following the needs reaches no cycle.
+
+## State
+
+None. The table is fixed for the process. Pointers from `find_bundle`,
+`match_file` and `find_installer` address it.
+
+## Invariants
+
+- The ids are `totala`, `totala-demo`, `campaign`, `core-contingency`,
+  `battle-tactics`, `music`, `cavedog-units` and `cavedog-tilesets`.
+- Campaign, music and the tilesets extend `totala` and need no expansion.
+  Core Contingency and Battle Tactics need the campaign. Cavedog units need
+  Core Contingency. Nothing extends the demo.
+- A file's copy name, or a source name, plus its size, belongs to one file.
+- Results that list bundles follow the table's order.
+- The installer archive `totala3.hpi` and the sample `Example.ufo` are not
+  files of any bundle.
+
+## Tests
+
+`data-content-bundles` looks bundles up, follows both closures, turns a
+bundle on and off from a set, matches a file by name and case and size,
+checks a known hash and a different one, and checks that the table's own
+dependencies hold. The demo archive's size and hash are the ones
+`demo_1997` checks.
+
+## Limitations
+
+A file whose hash is not one listed here is still a copy of that file when
+its name and size match; callers decide what to say about it. The table
+does not say where a bundle is installed, and it does not read an
+installer. Music is an expansion like the others; callers that compare
+rules leave it out themselves.
