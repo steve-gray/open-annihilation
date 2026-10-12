@@ -3,7 +3,8 @@
 Open Annihilation adds settings of its own to the game: a few controls, the
 unit limit, the language and fonts of the game's text, graphics and the
 size of Open Annihilation's own screens, touch and gamepad controls,
-downloads, and Developer Mode. The registries packages come from are a tab
+downloads, where the game keeps your files and which of its file types it
+opens, and Developer Mode. The registries packages come from are a tab
 of the Library. They live in one dialog, apart from the game's own
 options, which stay in 3.1c's Options menu. This page shows each section
 of the dialog and says what every setting does, its default, when it takes
@@ -32,6 +33,7 @@ before Downloads joined it.
 - [Controller](#controller)
 - [Game files](#game-files)
 - [Downloads](#downloads)
+- [System](#system)
 - [Developer](#developer)
 - [For one run: the command line](#for-one-run-the-command-line)
 - [Where the settings are kept](#where-the-settings-are-kept)
@@ -55,8 +57,8 @@ multiplayer game keeps running, and the dialog's header says so in amber:
 The column on the left lists the sections: Controls, Common Tweaks,
 Language & Text, Graphics and User Interface, then Touch while the game
 has touch controls, Controller once a gamepad has been used, and Game
-files in the main menu on an iPhone or an iPad, then Downloads, and
-Developer at its foot under a divider. A
+files in the main menu on an iPhone or an iPad, then Downloads, then
+System, and Developer at its foot under a divider. A
 section taller than the dialog, such as Graphics, scrolls with the mouse
 wheel, its scroll bar, Page Up, Page Down, Home and End.
 
@@ -177,20 +179,8 @@ Each of these takes effect at once.
 
 ## Common Tweaks
 
-![The Common Tweaks section: Your files showing …/Users/player/Documents/Open Annihilation with its SAVES, SCREENSHOTS and MODS buttons, Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/common-tweaks.png)
+![The Common Tweaks section: Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/common-tweaks.png)
 
-- **Your files** is not a setting: it shows where your saved games,
-  screenshots, films, recordings and mods go, the Open Annihilation folder
-  in your Documents folder unless you moved it. **SAVES**, **SCREENSHOTS**
-  and **MODS** open those folders in the system's file manager. Films and
-  the recordings of network games are in its `Films` and `Recordings`
-  folders, which have no button. `Saves`, `Screenshots`, `Films` and
-  `Recordings` each hold a folder for each mod, named after its id, and
-  `default` for games without a mod. The installation guides say what each
-  folder holds and how to move the folder
-  ([macOS](installation/macos.md#where-it-keeps-its-files),
-  [Windows](installation/windows.md#where-it-keeps-its-files),
-  [Linux](installation/linux.md#where-it-keeps-its-files)).
 - **Unit limit**, 50 to 1500 units per player in steps of 50 (a mod may
   allow more). By default it is the unit limit your Total Annihilation
   installation sets, or 250 where it sets none; a mod may give a default
@@ -623,6 +613,48 @@ download sends and records.
 
 During a game RESET and EMPTY are locked ("Locked during a game."). The
 check and the install-ID switch can still change.
+
+## System
+
+![The System section on a Mac: Your files showing the Open Annihilation folder with its SAVES, SCREENSHOTS and MODS buttons, and File types, whose hint says the system takes these file types from the app and that Finder's Get Info › Open with chooses another opener.](images/settings/system.png)
+
+System is where the game sits on your computer: your own folder, and which
+of the game's file types this copy opens.
+
+- **Your files** is not a setting: it shows where your saved games,
+  screenshots, films, recordings and mods go, the Open Annihilation folder
+  in your Documents folder unless you moved it. **SAVES**, **SCREENSHOTS**
+  and **MODS** open those folders in the system's file manager. Films and
+  the recordings of network games are in its `Films` and `Recordings`
+  folders, which have no button. `Saves`, `Screenshots`, `Films` and
+  `Recordings` each hold a folder for each mod, named after its id, and
+  `default` for games without a mod. The installation guides say what each
+  folder holds and how to move the folder
+  ([macOS](installation/macos.md#where-it-keeps-its-files),
+  [Windows](installation/windows.md#where-it-keeps-its-files),
+  [Linux](installation/linux.md#where-it-keeps-its-files)).
+- **File Type Registration**, on Windows and Linux. Four switches, each On
+  until you turn it off:
+  - **Mod packages (.oamod)**
+  - **Map packs (.oamap)**
+  - **Language packs (.oalang)**
+  - **Registry files (.oareg)**
+
+  A switch that is on makes this copy of the game the opener of that kind
+  of file. The hint says "Open these files with the game from your file
+  manager." **OK** registers a type you turned on, and withdraws one you
+  turned off, at once: the file manager takes the change with no restart.
+  **Cancel** leaves the registration as it was when the dialog opened.
+  Each switch is kept as `on` or `off` under
+  `open-annihilation.file-types.` and its extension (`.oamod`, `.oamap`,
+  `.oalang`, `.oareg`). A missing key, or any text other than `off`, leaves
+  the type on.
+- **File types**, on a Mac and on iPhone and iPad, in place of the four
+  switches. The system takes the types from the app, and the game cannot
+  withdraw one while it runs, so there is no switch. On a Mac the hint also
+  says that Finder's Get Info › Open with chooses another opener. The
+  picture above is that Mac row. On iPhone and iPad the hint is only the
+  first sentence.
 
 ## Developer
 

@@ -21,8 +21,7 @@ the locks a running game puts on them (`settings_locks`).
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
-| Common Tweaks | Your files: the player's own folder and buttons that open its Saves, Screenshots and Mods folders | changes no setting | | `open-annihilation.user-folder`, read at start (`src/app/include/oa/app/user_folder.hpp`) |
-| | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
+| Common Tweaks | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
 | Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
 | | Use modern fonts for game text; On, locked, while a language drawn only in them is chosen | Off, On | On with the player's own preferences file; Off with `--preferences-file` | `open-annihilation.modern-fonts` |
@@ -65,7 +64,10 @@ the locks a running game puts on them (`settings_locks`).
 | | Left-handed | Off, On | Off | `open-annihilation.pad-left-handed` |
 | | Control size, Hold delay, QUEUE and ADD | Touch's own rows, shared | | as in Touch |
 | Game files, listed only in the main menu's dialog where the platform brings game files in | Include in device backups | Off, On | Off | `open-annihilation.game-files-backed-up` |
-| Downloads, listed in every dialog of the engine's settings, before Developer | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
+| Downloads, listed in every dialog of the engine's settings, before System | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
+| System, listed in every dialog of the engine's settings, after Downloads and before Developer | Your files: the player's own folder and buttons that open its Saves, Screenshots and Mods folders | changes no setting | | `open-annihilation.user-folder`, read at start (`src/app/include/oa/app/user_folder.hpp`) |
+| | File Type Registration, then one switch for each type, on Windows and Linux | Off, On | On | `open-annihilation.file-types.oamod`, `.oamap`, `.oalang`, `.oareg` (`on` or `off`; only `off` turns one off). OK registers a type turned on and withdraws one turned off, at once |
+| | File types, the text row on macOS and iOS in place of the switches | changes no setting | | none |
 | Developer | Enable Developer Mode | Off, On | Off | `open-annihilation.developer-mode` |
 | | Show performance statistics | Off, On | Off | `open-annihilation.frame-stats` |
 | | UI kit gallery: SHOW opens the gallery of every part of OA's own screens (`DialogAction::show_gallery`) | | | none |
@@ -414,7 +416,7 @@ edge and hairline rules, and one green accent for what is selected:
 - the sections down the left (Controls, Common Tweaks, Language & Text,
   Graphics, User Interface, Touch while the game has touch controls,
   Controller once a gamepad has sent input, and Game files where the host
-  lists it),
+  lists it, then Downloads, then System),
   Developer at the foot after a line, the open one marked;
 - the open section's heading and rows: a label, a hint of one or two lines,
   and an Off/On switch, a level strip (Off, 2x, 4x, 8x, 16x for Enhanced
@@ -442,8 +444,8 @@ the Text size slider, by 129, User Interface, with its three switches, Menu
 scaling's strip and Interface size's drop-down, by 88, Touch, with its
 three strips, the Hold delay slider and two switches, by 121, and Controls,
 with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge
-and Select groups without Alt, by 84; Common Tweaks fits, its Your files and
-two sliders in 210 pixels, and draws as if there were no scrolling,
+and Select groups without Alt, by 84; Common Tweaks fits, its two sliders
+in 151 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the
 lines of a hint or a notice lie three pixels further apart
@@ -468,18 +470,19 @@ focus, and a press on it leaves the focus where it is. While a press is held
 the wheel and the scroll keys do nothing, so only a drag of the scroll bar
 scrolls then. No scroll changes a setting or moves the focus.
 
-Controls are numbered: the sections' entries 0 to 9, each its place among
-the sections with Touch, Controller, Game files and Downloads whether or
-not the first three are listed (Touch 5, Controller 6, Developer 7, Game
-files 8, Downloads 9, so a dialog without Touch has no control 5, one
-without Controller no control 6, and one without Game files no control 8).
+Controls are numbered: the sections' entries 0 to 10, each its place among
+the sections with Touch, Controller, Game files, Downloads and System
+whether or not the first three are listed (Touch 5, Controller 6,
+Developer 7, Game files 8, Downloads 9, System 10, so a dialog without
+Touch has no control 5, one without Controller no control 6, and one
+without Game files no control 8).
 Touch, Controller and Developer keep their numbers in every dialog (a
-mod's options' 0 to 4). Restore defaults is 10, Cancel 11, OK 12, the
-scroll bar 13, and the open section's rows from 14, with no upper end. The
+mod's options' 0 to 4). Restore defaults is 11, Cancel 12, OK 13, the
+scroll bar 14, and the open section's rows from 15, with no upper end. The
 list draws its entries by their place in the list it shows, and the focus
 walks that list, so the dialog without Touch, Controller or Game files
-draws and answers exactly as it did before they were added. Downloads is
-always in that list.
+draws and answers exactly as it did before they were added. Downloads and
+System are always in that list.
 
 The Touch section is listed only while the game has touch controls:
 `Dialog::touch`, which the host gives `open_dialog` and keeps with
@@ -978,7 +981,7 @@ settings; this library neither reads nor writes them.
 
 ## Your files and the notice
 
-Common Tweaks' first row, Your files (`Setting::user_folder`, a row of
+System's first row, Your files (`Setting::user_folder`, a row of
 buttons), changes no setting. Its first hint line shows the player's own
 folder (`Dialog::user_folder`, which the host sets as the dialog opens) by
 its tail that fits (`geometry::hint_is_path`, `path_tail`); its second says "Saved
@@ -1229,7 +1232,10 @@ order on every section); the OA button's icon at its size in both buttons, at re
 the pointer, held and twice as large, and the mark without it; with the
 installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
-and Common Tweaks holding Your files over the unit limit and pathfinding;
+and System holding Your files, then File Type Registration's switches
+where the game registers file types at run time or the File types text row
+where the app declares them, and Common Tweaks holding the unit limit and
+pathfinding;
 Language's drop-down, four switches and Text size slider,
 their place in the list, their texts, clicks, drags and keys on them, the
 text style they set, the slider's 26 stops from 50% to 300%, and its lock
@@ -1275,7 +1281,7 @@ press 15 points off nothing) at several scales, a slider dragged from under
 its track and an open list's nearest item; Game files: listed only with
 its flag, between Touch or User Interface and Downloads, the line and
 Developer under it, its entry numbered 8 with Touch 5, Controller 6,
-Developer 7 and Downloads 9, the
+Developer 7, Downloads 9 and System 10, the
 focus walking it, its three rows and their texts, MANAGE… returning
 `manage_game_files` to a click, to Space and to a finger beside it, the
 switch by either half and the keys, Restore defaults and Cancel, where the

@@ -207,6 +207,8 @@ std::string_view page_slug(settings::Page page) {
         return "game-files";
     case settings::Page::downloads:
         return "downloads";
+    case settings::Page::system:
+        return "system";
     case settings::Page::mod_keys:
     case settings::Page::mod_patrol:
     case settings::Page::mod_guard:
@@ -220,12 +222,13 @@ std::string_view page_slug(settings::Page page) {
 }
 
 /// The dialog's sections, in the order its list shows them.
-constexpr std::array<settings::Page, 6> kPages{
+constexpr std::array<settings::Page, 7> kPages{
     settings::Page::controls,
     settings::Page::common_tweaks,
     settings::Page::language,
     settings::Page::graphics,
     settings::Page::user_interface,
+    settings::Page::system,
     settings::Page::developer,
 };
 
@@ -344,6 +347,18 @@ std::string_view label_of(settings::Setting setting) {
         return "Your files";
     case settings::Setting::kit_gallery:
         return "UI kit gallery";
+    case settings::Setting::file_type_registration:
+        return "File Type Registration";
+    case settings::Setting::file_type_oamod:
+        return "Mod packages (.oamod)";
+    case settings::Setting::file_type_oamap:
+        return "Map packs (.oamap)";
+    case settings::Setting::file_type_oalang:
+        return "Language packs (.oalang)";
+    case settings::Setting::file_type_oareg:
+        return "Registry files (.oareg)";
+    case settings::Setting::file_types_note:
+        return "File types";
     default:
         return {};
     }
@@ -771,7 +786,7 @@ void Runtime::check_engine_settings_dialog() {
         );
     };
     click(settings::page_control(settings::Page::common_tweaks), {}, "Common Tweaks' entry");
-    focus(settings::first_row_control + 2, "Pathfinding cycles");
+    focus(settings::first_row_control + 1, "Pathfinding cycles");
     tap(SDLK_RIGHT);
     chosen.path_search_nodes = kChosenPathNodes;
     expect("Pathfinding cycles at 2x");
@@ -824,7 +839,7 @@ void Runtime::check_engine_settings_dialog() {
     expect("Escape opens the game menu On");
 
     click(settings::page_control(settings::Page::common_tweaks), {}, "Common Tweaks' entry");
-    focus(settings::first_row_control + 1, "Unit limit");
+    focus(settings::first_row_control, "Unit limit");
     tap(SDLK_RIGHT);
     chosen.unit_limit = kChosenUnitLimit;
     expect("Unit limit one stop up");

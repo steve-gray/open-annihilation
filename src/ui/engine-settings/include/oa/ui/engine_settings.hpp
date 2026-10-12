@@ -157,6 +157,18 @@ inline constexpr std::string_view hack_overrides = "open-annihilation.hack-overr
 /// "automatically", "library" or "never" (EngineSettings::content_check).
 /// When Open Annihilation looks for new content and updates.
 inline constexpr std::string_view content_check = "open-annihilation.content-updates";
+/// "on" or "off" (EngineSettings::file_type_oamod). Absent, or any text
+/// other than off, the game opens mod packages.
+inline constexpr std::string_view file_type_oamod = "open-annihilation.file-types.oamod";
+/// "on" or "off" (EngineSettings::file_type_oamap). Absent, or any text
+/// other than off, the game opens map packs.
+inline constexpr std::string_view file_type_oamap = "open-annihilation.file-types.oamap";
+/// "on" or "off" (EngineSettings::file_type_oalang). Absent, or any text
+/// other than off, the game opens language packs.
+inline constexpr std::string_view file_type_oalang = "open-annihilation.file-types.oalang";
+/// "on" or "off" (EngineSettings::file_type_oareg). Absent, or any text
+/// other than off, the game opens registry files.
+inline constexpr std::string_view file_type_oareg = "open-annihilation.file-types.oareg";
 } // namespace key
 
 /// Tells whether two tags are the same, ignoring ASCII case and reading '_' as '-'.
@@ -943,6 +955,13 @@ struct EngineSettings {
     /// When Open Annihilation looks for new content and updates. It takes
     /// effect when OK is pressed; Cancel and Restore defaults apply.
     ContentCheck content_check{ContentCheck::automatically};
+    /// The game opens mod packages (.oamod). On unless the preference is the
+    /// word off. Windows and Linux register it when OK is pressed; macOS and
+    /// iOS take the type from the app.
+    bool file_type_oamod{true};
+    bool file_type_oamap{true};  ///< the game opens map packs (.oamap)
+    bool file_type_oalang{true}; ///< the game opens language packs (.oalang)
+    bool file_type_oareg{true};  ///< the game opens registry files (.oareg)
 
     friend bool operator==(const EngineSettings&, const EngineSettings&) = default;
 };

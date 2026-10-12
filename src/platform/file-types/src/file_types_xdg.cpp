@@ -25,6 +25,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <unistd.h>
@@ -225,6 +226,220 @@ std::span<const uint8_t> bytes_of(const std::string& text) {
     return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
 }
 
+/// What came of reading one file.
+enum class Read : uint8_t {
+    missing, ///< the file is not there
+    read,    ///< the file was read
+    failed,  ///< it could not be read; the reason is given
+};
+
+/// A file's text, and whether it was read.
+struct TextFile {
+    Read state{Read::missing}; ///< what came of the read
+    std::string text{};        ///< the text, when it was read
+};
+
+/// Reads a whole file.
+///
+/// @param file the file
+/// @param[out] why why it could not be read, when it could not
+/// @return the text, or that the file is missing
+TextFile read_text(const fs::path& file, std::string& why) {
+    std::error_code error;
+    const fs::file_status status = fs::symlink_status(file, error);
+    // A path that is not there is reported as an error on some platforms, and as not_found
+    // on others. Either way the file is missing.
+    if (status.type() == fs::file_type::not_found || error == std::errc::no_such_file_or_directory)
+        return {Read::missing, {}};
+    if (error) {
+        why = "cannot read " + detail::utf8_of(file) + ": " + error.message();
+        return {Read::failed, {}};
+    }
+    if (!fs::exists(status))
+        return {Read::missing, {}};
+    std::FILE* stream = oa::platform::open_file(file, "rb");
+    if (stream == nullptr) {
+        why = "cannot read " + detail::utf8_of(file) + ": " + std::strerror(errno);
+        return {Read::failed, {}};
+    }
+    std::string text;
+    char buffer[4096];
+    while (true) {
+        const std::size_t got = std::fread(buffer, 1, sizeof buffer, stream);
+        text.append(buffer, got);
+        if (got < sizeof buffer)
+            break;
+    }
+    const bool failed = std::ferror(stream) != 0;
+    std::fclose(stream);
+    if (failed) {
+        why = "cannot read " + detail::utf8_of(file);
+        return {Read::failed, {}};
+    }
+    return {Read::read, std::move(text)};
+}
+
+/// Removes `file` when it is there, and the stamp of the tool that reads it, so that the
+/// tool's run is due. A file that is already absent is left so.
+///
+/// @param file the file
+/// @param stamp the stamp file; empty for none
+/// @param[out] why why it could not be removed, when it could not
+/// @param[in,out] done the registration's record; a removal is a line
+/// @return what came of it; written means the file was removed
+Written remove_if_present(
+    const fs::path& file, const fs::path& stamp, std::string& why, Registration& done
+) {
+    std::error_code error;
+    const fs::file_status status = fs::symlink_status(file, error);
+    // A path that is not there is reported as an error on some platforms, and as not_found
+    // on others. Either way there is nothing to remove.
+    if (status.type() == fs::file_type::not_found || error == std::errc::no_such_file_or_directory)
+        return Written::same;
+    if (error) {
+        why = "cannot remove " + detail::utf8_of(file) + ": " + error.message();
+        return Written::failed;
+    }
+    if (!fs::exists(status))
+        return Written::same;
+    error.clear();
+    if (!stamp.empty() && !fs::remove(stamp, error) && error) {
+        why = "cannot remove " + detail::utf8_of(stamp) + ": " + error.message();
+        return Written::failed;
+    }
+    error.clear();
+    // remove answers false both when the file is already gone and when it cannot be removed.
+    // Only an error is a failure.
+    const bool removed = fs::remove(file, error);
+    if (error) {
+        why = "cannot remove " + detail::utf8_of(file) + ": " + error.message();
+        return Written::failed;
+    }
+    if (!removed)
+        return Written::same;
+    done.lines.push_back("removed " + detail::utf8_of(file));
+    return Written::written;
+}
+
+/// The mimetype icon of one file type, in the hicolor theme.
+///
+/// @param hicolor_folder the hicolor folder
+/// @param extension the extension, without its dot
+/// @return the icon's path
+fs::path type_icon(const fs::path& hicolor_folder, std::string_view extension) {
+    return hicolor_folder / icon_size_folder / "mimetypes" /
+           ("application-x-" + std::string(extension) + ".png");
+}
+
+/// Reports whether a MIME type belongs to a file type in `which`.
+///
+/// @param mime the MIME type
+/// @param which the file types
+/// @return true when one of them has that MIME type
+bool mime_in(std::string_view mime, TypeSet which) {
+    for (const FileType& type : file_types)
+        if (which.contains(type.extension) && type.mime_type == mime)
+            return true;
+    return false;
+}
+
+/// Reports whether a MimeType value lists no type.
+///
+/// @param value the text after MimeType=, up to the line's end
+/// @return true when it holds no type
+bool mime_list_empty(std::string_view value) {
+    std::size_t cursor = 0;
+    while (cursor < value.size()) {
+        const std::size_t semi = value.find(';', cursor);
+        const std::size_t end = semi == std::string_view::npos ? value.size() : semi;
+        if (end > cursor)
+            return false;
+        if (semi == std::string_view::npos)
+            break;
+        cursor = semi + 1;
+    }
+    return true;
+}
+
+/// Takes the MIME types in `which` out of a desktop entry's MimeType line.
+///
+/// @param entry the entry's text
+/// @param which the file types to take out
+/// @param[out] emptied true when the line lists no type afterwards, or never listed one
+/// @return the entry's text, and whether it changed
+std::pair<std::string, bool> desktop_without(std::string entry, TypeSet which, bool& emptied) {
+    emptied = false;
+    const std::string prefix = "MimeType=";
+    const std::size_t line_start = entry.find(prefix);
+    if (line_start == std::string::npos)
+        return {std::move(entry), false};
+    const std::size_t line_end = entry.find('\n', line_start);
+    const std::size_t value_end = line_end == std::string::npos ? entry.size() : line_end;
+    const std::size_t value_at = line_start + prefix.size();
+    const std::string value = entry.substr(value_at, value_end - value_at);
+    std::string kept;
+    std::size_t cursor = 0;
+    while (cursor < value.size()) {
+        const std::size_t semi = value.find(';', cursor);
+        const std::size_t end = semi == std::string::npos ? value.size() : semi;
+        const std::string one = value.substr(cursor, end - cursor);
+        if (!one.empty() && !mime_in(one, which)) {
+            kept += one;
+            kept += ';';
+        }
+        if (semi == std::string::npos)
+            break;
+        cursor = semi + 1;
+    }
+    emptied = mime_list_empty(kept);
+    if (kept == value)
+        return {std::move(entry), false};
+    entry.replace(value_at, value_end - value_at, kept);
+    return {std::move(entry), true};
+}
+
+/// Takes the MIME types in `which` out of a shared-mime-info package.
+///
+/// @param[in,out] package the package's text
+/// @param which the file types to take out
+/// @return true when a mime-type element was removed
+bool drop_mime_blocks(std::string& package, TypeSet which) {
+    bool changed = false;
+    for (const FileType& type : file_types) {
+        if (!which.contains(type.extension))
+            continue;
+        const std::string marker = "<mime-type type=\"" + std::string(type.mime_type) + "\"";
+        const std::string close = "</mime-type>";
+        while (true) {
+            const std::size_t start = package.find(marker);
+            if (start == std::string::npos)
+                break;
+            const std::size_t close_at = package.find(close, start);
+            if (close_at == std::string::npos)
+                break;
+            std::size_t end = close_at + close.size();
+            if (end < package.size() && package[end] == '\r')
+                ++end;
+            if (end < package.size() && package[end] == '\n')
+                ++end;
+            std::size_t begin = start;
+            while (begin > 0 && (package[begin - 1] == ' ' || package[begin - 1] == '\t'))
+                --begin;
+            package.erase(begin, end - begin);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/// Reports whether a package still names a MIME type.
+///
+/// @param package the package's text
+/// @return true when a mime-type element remains
+bool package_lists_type(std::string_view package) {
+    return package.find("<mime-type ") != std::string_view::npos;
+}
+
 #if OA_PROCESS_SPAWNING
 /// Joins a program and its arguments with spaces, for a line of the log.
 ///
@@ -374,14 +589,115 @@ bool run_due(const fs::path& stamp) {
     return !fs::exists(fs::symlink_status(stamp, error));
 }
 
+/// The folders and stamp files one data folder's registration uses.
+struct DataPlaces {
+    fs::path mime_folder{};
+    fs::path applications_folder{};
+    fs::path hicolor_folder{};
+    fs::path package_file{};
+    fs::path entry_file{};
+    fs::path mime_stamp{};
+    fs::path applications_stamp{};
+    fs::path icon_stamp{};
+    std::string name{};
+};
+
+/// Names the files a registration writes under a data folder.
+///
+/// @param data the XDG data folder
+/// @return the files
+DataPlaces data_places(const fs::path& data) {
+    DataPlaces named{};
+    named.mime_folder = data / "mime";
+    named.applications_folder = data / "applications";
+    named.hicolor_folder = data / "icons" / "hicolor";
+    named.name = std::string(desktop_id);
+    const std::string stamp_name = "." + named.name + std::string(stamp_suffix);
+    named.mime_stamp = named.mime_folder / stamp_name;
+    named.applications_stamp = named.applications_folder / stamp_name;
+    named.icon_stamp = named.hicolor_folder / stamp_name;
+    named.package_file = named.mime_folder / "packages" / (named.name + ".xml");
+    named.entry_file = named.applications_folder / (named.name + ".desktop");
+    return named;
+}
+
+/// Runs each database tool whose stamp is missing.
+///
+/// @param named the files
+/// @param refresh_icons the icon cache may hide a new or removed icon
+/// @param places whether and how long tools run
+/// @param[in,out] done the registration's record
+void run_due_tools(
+    const DataPlaces& named, bool refresh_icons, const Places& places, Registration& done
+) {
+    if (run_due(named.mime_stamp))
+        run_database_tool(
+            {"update-mime-database", detail::utf8_of(named.mime_folder)},
+            named.mime_stamp,
+            places,
+            done
+        );
+    if (run_due(named.applications_stamp))
+        run_database_tool(
+            {"update-desktop-database", detail::utf8_of(named.applications_folder)},
+            named.applications_stamp,
+            places,
+            done
+        );
+    // A cache another program made of the user's hicolor icons hides a new icon until it is
+    // made again; without one, the icons are read from their folders.
+    std::error_code error;
+    if (refresh_icons && run_due(named.icon_stamp) &&
+        fs::exists(named.hicolor_folder / "icon-theme.cache", error))
+        run_database_tool(
+            {"gtk-update-icon-cache",
+             "--force",
+             "--ignore-theme-index",
+             "--quiet",
+             detail::utf8_of(named.hicolor_folder)},
+            named.icon_stamp,
+            places,
+            done
+        );
+}
+
+/// Removes the mimetype icons of the file types in `which`. The program's icon stays.
+///
+/// @param named the files
+/// @param which the file types
+/// @param[out] why why one could not be removed, when one could not
+/// @param[in,out] done the registration's record
+/// @return written when an icon was removed, failed when one could not be
+Written
+remove_type_icons(const DataPlaces& named, TypeSet which, std::string& why, Registration& done) {
+    Written result = Written::same;
+    for (const FileType& type : file_types) {
+        if (!which.contains(type.extension))
+            continue;
+        const Written removed = remove_if_present(
+            type_icon(named.hicolor_folder, type.extension), named.icon_stamp, why, done
+        );
+        if (removed == Written::failed)
+            return Written::failed;
+        if (removed == Written::written)
+            result = Written::written;
+    }
+    return result;
+}
+
 /// The registration itself; register_xdg catches what it throws.
 ///
 /// @param executable the program, absolute
 /// @param icon_png the icon's PNG bytes; empty writes no icon
 /// @param places where it writes
+/// @param types the file types to register
 /// @return what was done
-Registration
-register_in(const fs::path& executable, std::span<const uint8_t> icon_png, const Places& places) {
+Registration register_in(
+    const fs::path& executable,
+    std::span<const uint8_t> icon_png,
+    const Places& places,
+    TypeSet types
+) {
     Registration done{};
     done.supported = true;
     if (set_value(flatpak_variable) || set_value(snap_variable)) {
@@ -399,8 +715,15 @@ register_in(const fs::path& executable, std::span<const uint8_t> icon_png, const
         );
         return done;
     }
-    const std::string entry = desktop_entry(executable);
-    if (entry.empty()) {
+    // A path a desktop entry cannot hold registers nothing, and removes nothing.
+    if (desktop_entry(executable, types).empty() && !types.none()) {
+        done.lines.push_back(
+            "skipped: the program's path holds a control character or is not "
+            "UTF-8, which a desktop entry cannot hold"
+        );
+        return done;
+    }
+    if (types.none() && desktop_exec_argument(detail::utf8_of(executable)).empty()) {
         done.lines.push_back(
             "skipped: the program's path holds a control character or is not "
             "UTF-8, which a desktop entry cannot hold"
@@ -413,99 +736,186 @@ register_in(const fs::path& executable, std::span<const uint8_t> icon_png, const
         done.error = why;
         return done;
     }
-    const fs::path mime_folder = *data / "mime";
-    const fs::path applications_folder = *data / "applications";
-    const fs::path hicolor_folder = *data / "icons" / "hicolor";
-    const std::string name(desktop_id);
-    const std::string stamp_name = "." + name + std::string(stamp_suffix);
-    const fs::path mime_stamp = mime_folder / stamp_name;
-    const fs::path applications_stamp = applications_folder / stamp_name;
-    const fs::path icon_stamp = hicolor_folder / stamp_name;
+    const DataPlaces named = data_places(*data);
+    const std::string entry = types.none() ? std::string{} : desktop_entry(executable, types);
 
     // The icons first, so that the desktop entry finds its icon once it is read: the
-    // program's, and one for each of the four file types.
-    bool icon_written = false;
+    // program's, and one for each file type that stays on. A type left out loses its icon.
+    // The program's icon stays even when every type is off.
+    bool icon_changed = false;
     if (!icon_png.empty()) {
         std::vector<fs::path> icons;
-        icons.push_back(hicolor_folder / icon_size_folder / "apps" / (name + ".png"));
-        for (const FileType& type : file_types)
-            icons.push_back(
-                hicolor_folder / icon_size_folder / "mimetypes" /
-                ("application-x-" + std::string(type.extension) + ".png")
-            );
+        icons.push_back(named.hicolor_folder / icon_size_folder / "apps" / (named.name + ".png"));
+        for (const FileType& type : file_types) {
+            if (types.contains(type.extension))
+                icons.push_back(type_icon(named.hicolor_folder, type.extension));
+        }
         for (const fs::path& icon : icons) {
-            const Written written = write_if_different(icon, icon_png, icon_stamp, why);
+            const Written written = write_if_different(icon, icon_png, named.icon_stamp, why);
             if (written == Written::failed) {
                 done.error = why;
                 return done;
             }
             if (written == Written::written) {
-                icon_written = true;
+                icon_changed = true;
                 done.lines.push_back("wrote " + detail::utf8_of(icon));
             }
         }
     }
-    const fs::path package_file = mime_folder / "packages" / (name + ".xml");
-    const Written package =
-        write_if_different(package_file, bytes_of(mime_package()), mime_stamp, why);
-    if (package == Written::failed) {
+    const Written removed_icons = remove_type_icons(named, types.complement(), why, done);
+    if (removed_icons == Written::failed) {
         done.error = why;
         return done;
     }
-    if (package == Written::written)
-        done.lines.push_back("wrote " + detail::utf8_of(package_file));
-    const fs::path entry_file = applications_folder / (name + ".desktop");
-    const Written desktop =
-        write_if_different(entry_file, bytes_of(entry), applications_stamp, why);
-    if (desktop == Written::failed) {
-        done.error = why;
-        return done;
-    }
-    if (desktop == Written::written)
-        done.lines.push_back("wrote " + detail::utf8_of(entry_file));
+    if (removed_icons == Written::written)
+        icon_changed = true;
 
-    done.changed = icon_written || package == Written::written || desktop == Written::written;
+    Written package = Written::same;
+    Written desktop = Written::same;
+    if (types.none()) {
+        package = remove_if_present(named.package_file, named.mime_stamp, why, done);
+        if (package == Written::failed) {
+            done.error = why;
+            return done;
+        }
+        desktop = remove_if_present(named.entry_file, named.applications_stamp, why, done);
+        if (desktop == Written::failed) {
+            done.error = why;
+            return done;
+        }
+    } else {
+        package = write_if_different(
+            named.package_file, bytes_of(mime_package(types)), named.mime_stamp, why
+        );
+        if (package == Written::failed) {
+            done.error = why;
+            return done;
+        }
+        if (package == Written::written)
+            done.lines.push_back("wrote " + detail::utf8_of(named.package_file));
+        desktop =
+            write_if_different(named.entry_file, bytes_of(entry), named.applications_stamp, why);
+        if (desktop == Written::failed) {
+            done.error = why;
+            return done;
+        }
+        if (desktop == Written::written)
+            done.lines.push_back("wrote " + detail::utf8_of(named.entry_file));
+    }
+
+    done.changed = icon_changed || package == Written::written || desktop == Written::written;
     // Each tool runs after a change to the files it reads, and at each later start until a
     // run succeeds and leaves its stamp.
-    if (run_due(mime_stamp))
-        run_database_tool(
-            {"update-mime-database", detail::utf8_of(mime_folder)}, mime_stamp, places, done
-        );
-    if (run_due(applications_stamp))
-        run_database_tool(
-            {"update-desktop-database", detail::utf8_of(applications_folder)},
-            applications_stamp,
-            places,
-            done
-        );
-    // A cache another program made of the user's hicolor icons hides a new icon until it is
-    // made again; without one, the icons are read from their folders.
-    std::error_code error;
-    if (!icon_png.empty() && run_due(icon_stamp) &&
-        fs::exists(hicolor_folder / "icon-theme.cache", error))
-        run_database_tool(
-            {"gtk-update-icon-cache",
-             "--force",
-             "--ignore-theme-index",
-             "--quiet",
-             detail::utf8_of(hicolor_folder)},
-            icon_stamp,
-            places,
-            done
-        );
+    run_due_tools(named, !icon_png.empty() || icon_changed, places, done);
+    return done;
+}
+
+/// The withdrawal itself; withdraw_xdg catches what it throws. It edits the files that are
+/// there, so a type an earlier registration left out is not put back.
+///
+/// @param types the file types to withdraw
+/// @param places where it writes
+/// @return what was done
+Registration withdraw_in(TypeSet types, const Places& places) {
+    Registration done{};
+    done.supported = true;
+    if (types.none())
+        return done;
+    if (set_value(flatpak_variable) || set_value(snap_variable)) {
+        done.lines.push_back("skipped: a Flatpak or Snap package registers its own file types");
+        return done;
+    }
+    std::string why;
+    const auto data = data_folder(places, why);
+    if (!data) {
+        done.error = why;
+        return done;
+    }
+    const DataPlaces named = data_places(*data);
+    const Written removed_icons = remove_type_icons(named, types, why, done);
+    if (removed_icons == Written::failed) {
+        done.error = why;
+        return done;
+    }
+    bool icons_changed = removed_icons == Written::written;
+
+    const TextFile entry_read = read_text(named.entry_file, why);
+    if (entry_read.state == Read::failed) {
+        done.error = why;
+        return done;
+    }
+    Written desktop = Written::same;
+    if (entry_read.state == Read::read) {
+        bool emptied = false;
+        const std::pair<std::string, bool> revised =
+            desktop_without(entry_read.text, types, emptied);
+        if (emptied)
+            desktop = remove_if_present(named.entry_file, named.applications_stamp, why, done);
+        else if (revised.second)
+            desktop = write_if_different(
+                named.entry_file, bytes_of(revised.first), named.applications_stamp, why
+            );
+        if (desktop == Written::failed) {
+            done.error = why;
+            return done;
+        }
+        if (desktop == Written::written && !emptied)
+            done.lines.push_back("wrote " + detail::utf8_of(named.entry_file));
+    }
+
+    const TextFile package_read = read_text(named.package_file, why);
+    if (package_read.state == Read::failed) {
+        done.error = why;
+        return done;
+    }
+    Written package = Written::same;
+    if (package_read.state == Read::read) {
+        std::string package_text = package_read.text;
+        const bool dropped = drop_mime_blocks(package_text, types);
+        if (!package_lists_type(package_text))
+            package = remove_if_present(named.package_file, named.mime_stamp, why, done);
+        else if (dropped)
+            package = write_if_different(
+                named.package_file, bytes_of(package_text), named.mime_stamp, why
+            );
+        if (package == Written::failed) {
+            done.error = why;
+            return done;
+        }
+        if (package == Written::written && package_lists_type(package_text))
+            done.lines.push_back("wrote " + detail::utf8_of(named.package_file));
+    }
+
+    done.changed = icons_changed || desktop == Written::written || package == Written::written;
+    run_due_tools(named, icons_changed, places, done);
     return done;
 }
 
 } // namespace
 
-Registration
-register_xdg(const fs::path& executable, std::span<const uint8_t> icon_png, const Places& places) {
+Registration register_xdg(
+    const fs::path& executable,
+    std::span<const uint8_t> icon_png,
+    const Places& places,
+    const TypeSet types
+) {
     try {
-        return register_in(executable, icon_png, places);
+        return register_in(executable, icon_png, places, types);
     } catch (const std::exception& error) {
         Registration failed{};
         failed.supported = true;
         failed.error = std::string("the file types could not be registered: ") + error.what();
+        return failed;
+    }
+}
+
+Registration withdraw_xdg(const TypeSet types, const Places& places) {
+    try {
+        return withdraw_in(types, places);
+    } catch (const std::exception& error) {
+        Registration failed{};
+        failed.supported = true;
+        failed.error = std::string("the file types could not be withdrawn: ") + error.what();
         return failed;
     }
 }

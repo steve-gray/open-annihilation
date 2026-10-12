@@ -174,6 +174,16 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.language` | `system`, or a language's BCP-47 tag (`en`, `de`, `es`, `fr`, `it`) | `system` with the player's own file, else `en` |
 | `open-annihilation.language-notice-dismissed` | comma-separated BCP-47 tags of languages the player chose Use English for, when the game asked about a language the operating system wanted that was not installed | none dismissed; each such language is still asked about |
 | `open-annihilation.content-updates` | `automatically`, `library` (only when the Library opens) or `never`; any other text reads as `automatically` | `automatically` |
+| `open-annihilation.file-types.oamod` | `on` or `off`. Only the word `off` turns the switch off; any other text reads as on. Not `0` and `1` | on: this copy opens mod packages |
+| `open-annihilation.file-types.oamap` | `on` or `off`, as the mod packages' key | on: this copy opens map packs |
+| `open-annihilation.file-types.oalang` | `on` or `off`, as the mod packages' key | on: this copy opens language packs |
+| `open-annihilation.file-types.oareg` | `on` or `off`, as the mod packages' key | on: this copy opens registry files |
+
+The four file-type keys are words, `on` and `off`, not the `0` and `1` of
+the other switches. Settings › System shows a switch for each on Windows
+and Linux, and OK registers or withdraws that type at once. On macOS and
+iOS the keys are still read at start, and the page shows a text row instead
+of the switches, because those systems take the types from the app.
 
 The settings dialog's Select groups without Alt is the game's own
 `Total Annihilation|SwitchAlt`, which `+switchalt` also sets. `+stats`
