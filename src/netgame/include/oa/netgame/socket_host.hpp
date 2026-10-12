@@ -147,7 +147,8 @@ struct Host {
 
 /// Binds the stream listener and datagram socket in their port ranges and initialises the engine.
 ///
-/// Host is large: allocate it on the heap.
+/// Host is large: allocate it on the heap. A port the system refuses writes one line on standard error naming
+/// the step and the system's reason, and the same words in the host's error text.
 ///
 /// @param[in,out] host Host to open; on failure its error text says why and every socket is closed.
 /// @param config Addresses, port ranges and engine seed.
@@ -155,7 +156,8 @@ struct Host {
 [[nodiscard]] bool host_open(Host* host, const HostConfig& config) noexcept;
 
 /// Binds the enumeration port; called when a session is created, and when this machine takes the name server's
-/// place in a session another machine created.
+/// place in a session another machine created. One game holds the port. A refusal writes one line on standard
+/// error naming the port and the system's reason, and the same words in the host's error text.
 ///
 /// @param[in,out] host Open host.
 /// @return True when the port is bound, also when it already was.

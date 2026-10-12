@@ -1698,12 +1698,12 @@ std::vector<ShownMap> maps_shown(const Library& library, const Entry& entry) {
 /// What a map pack's row shows in place of its badge.
 struct RowPreview {
     const MapPicture* picture{}; ///< the minimap to fit; null to keep the badge
-    bool placeholder{};          ///< a dashed square: the minimap is not here yet
+    bool placeholder{};          ///< the minimap is not here yet: the row keeps its letters
 };
 
 /// Returns the minimap a map pack's row shows.
 ///
-/// One map always shows its minimap, or a placeholder while it is not
+/// One map always shows its minimap, or the row's letters while it is not
 /// decoded. Several maps on the Maps tab show the pack's badge when it has
 /// a picture, and otherwise the first map's minimap. Everywhere else a pack
 /// of several keeps its badge or its letters.
@@ -1807,14 +1807,18 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         const kit::Rect rect{view.x, top, rows_width, height};
         const RowPreview preview = row_preview(library, entry);
         if (preview.picture != nullptr || preview.placeholder) {
-            look.badge = {};
-            look.badge_text.clear();
-            if (preview.picture != nullptr) {
-                const oa::ui::frontend_renderer::RgbaPicture fitted = fitted_well_picture(
+            // A minimap that has not arrived leaves the letters a row with
+            // no picture shows. An empty square is not drawn in its place.
+            oa::ui::frontend_renderer::RgbaPicture fitted;
+            if (preview.picture != nullptr)
+                fitted = fitted_well_picture(
                     building, picture_of_map(*preview.picture), row_badge_square(rect)
                 );
-                if (oa::ui::frontend_renderer::picture_drawable(fitted))
-                    look.badge = fitted;
+            if (oa::ui::frontend_renderer::picture_drawable(fitted)) {
+                look.badge = fitted;
+                look.badge_text.clear();
+            } else {
+                look.badge = {};
             }
         } else if (
             base_badge(library, entry.badge) &&
@@ -4823,6 +4827,100 @@ bool step_refresh_marks(
         const bool turning = held != nullptr && held->was_refreshing;
         const uint16_t shown = held != nullptr ? held->check_ms : uint16_t{0};
         if (mark_shot(turning, state.refresh_turn, shown) != rows_before[row])
+            return true;
+    }
+    return false;
+}
+
+namespace {
+
+/// Returns the first and last visible places whose rows the list shows.
+///
+/// @param library the model
+/// @param list the display list
+/// @return the places, inclusive; nothing when no row shows
+std::optional<std::pair<std::size_t, std::size_t>>
+shown_row_span(const Library& library, const kit::DisplayList& list) {
+    std::optional<std::size_t> first;
+    std::optional<std::size_t> last;
+    for (const kit::Control& control : list.controls) {
+        if (!controls::row_control(control.id))
+            continue;
+        const auto place = static_cast<std::size_t>(control.id - controls::first_row);
+        if (place >= library.visible.size())
+            continue;
+        if (!first || place < *first)
+            first = place;
+        if (!last || place > *last)
+            last = place;
+    }
+    if (!first || !last)
+        return std::nullopt;
+    return std::pair<std::size_t, std::size_t>{*first, *last};
+}
+
+} // namespace
+
+std::vector<std::size_t> picture_places(const Library& library, const kit::DisplayList& list) {
+    std::vector<std::size_t> places;
+    const auto add = [&](std::size_t place) {
+        if (place >= library.visible.size())
+            return;
+        if (std::find(places.begin(), places.end(), place) != places.end())
+            return;
+        places.push_back(place);
+    };
+    // The selected row is asked before the rows in view.
+    if (library.selected) {
+        for (std::size_t place = 0; place < library.visible.size(); ++place) {
+            if (library.entries[library.visible[place]].id == *library.selected) {
+                add(place);
+                break;
+            }
+        }
+    }
+    const std::optional<std::pair<std::size_t, std::size_t>> shown = shown_row_span(library, list);
+    if (!shown)
+        return places;
+    const std::size_t begin = shown->first > picture_margin ? shown->first - picture_margin : 0;
+    std::size_t end = shown->second + 1;
+    if (end < library.visible.size()) {
+        const std::size_t room = library.visible.size() - end;
+        end += room < picture_margin ? room : picture_margin;
+    }
+    for (std::size_t place = begin; place < end; ++place)
+        add(place);
+    return places;
+}
+
+void request_visible_pictures(
+    const Library& library, const kit::DisplayList& list, const PictureSource& source
+) {
+    if (source.request == nullptr)
+        return;
+    const std::vector<std::size_t> places = picture_places(library, list);
+    for (std::size_t index = 0; index < places.size(); ++index) {
+        const std::size_t place = places[index];
+        if (place >= library.visible.size())
+            continue;
+        const Entry& entry = library.entries[library.visible[place]];
+        const bool lead = index == 0 && library.selected && entry.id == *library.selected;
+        if (!lead && source.known != nullptr && source.known(source.context, entry))
+            continue;
+        source.request(source.context, entry, lead);
+    }
+}
+
+bool entry_row_shown(const Library& library, const kit::DisplayList& list, const EntryId& id) {
+    if (library.selected && *library.selected == id)
+        return true;
+    for (const kit::Control& control : list.controls) {
+        if (!controls::row_control(control.id))
+            continue;
+        const auto place = static_cast<std::size_t>(control.id - controls::first_row);
+        if (place >= library.visible.size())
+            continue;
+        if (library.entries[library.visible[place]].id == id)
             return true;
     }
     return false;
