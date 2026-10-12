@@ -186,6 +186,7 @@ void require(bool ok, std::string_view what) {
         throw std::runtime_error("engine settings check: " + std::string(what));
 }
 
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
 /// The four file-type switches, cleared, so a comparison can ignore them.
 ///
 /// @param settings the settings
@@ -197,6 +198,7 @@ settings::EngineSettings without_file_type_switches(settings::EngineSettings set
     settings.file_type_oareg = false;
     return settings;
 }
+#endif
 
 /// Reports whether two settings agree. On macOS the file-type switches show
 /// what the system reports, which an empty preferences file does not hold, and
