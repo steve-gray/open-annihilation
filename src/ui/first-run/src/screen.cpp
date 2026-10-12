@@ -477,26 +477,10 @@ SampleFit fit_sample(int32_t room_width, int32_t room_height) {
 bool step_carousel(kit::CarouselModel& model, bool next) {
     if (model.count <= 1)
         return false;
-    if (next && model.selected + 1 >= model.count) {
-        kit::carousel_go(model, 0);
-        return true;
-    }
-    if (!next && model.selected <= 0) {
-        kit::carousel_go(model, model.count - 1);
-        return true;
-    }
+    // The unwrapped index keeps the direction when two cards make both ways
+    // the same length. carousel_go turns that into one step.
     const kit::CarouselCommand command{!next, next, false};
     return kit::carousel_command(model, command) != kit::CarouselEvent::none;
-}
-
-/// A line's width, estimated when the font reports nothing.
-///
-/// @param fonts the fonts; null estimates
-/// @param font which font
-/// @param text the line
-/// @return the width, in points
-int32_t line_width(const kit::Fonts* fonts, kit::FontRole font, std::string_view text) {
-    return measure_of(fonts, font)(text);
 }
 
 /// Lays the language step out.
@@ -973,20 +957,10 @@ void lay_buttons(
         "how Open Annihilation looks and plays. Everything else on this menu is the game's own."
     );
     const int32_t button_height = kit::compact_metrics.button_height;
-    const auto skip_width_of = [](int32_t panel_w) {
-        return std::min(int32_t{130}, std::max(panel_w - 20, int32_t{72}));
-    };
-    const auto skip_beside = [&](int32_t panel_w) {
-        const int32_t kicker_w = line_width(fonts, kit::FontRole::small, kicker);
-        return 10 + kicker_w + 8 + skip_width_of(panel_w) + 10 <= panel_w;
-    };
     const auto content_of = [&](int32_t panel_w) {
         const int32_t inner = std::max(panel_w - 20, int32_t{1});
         int32_t tall = 10;
-        if (skip_beside(panel_w))
-            tall += std::max(kit::compact_metrics.small_line, button_height);
-        else
-            tall += kit::compact_metrics.small_line + 4 + button_height;
+        tall += kit::compact_metrics.small_line;
         tall += 6;
         tall += paragraph_height(fonts, inner, heading, kit::FontRole::regular);
         tall += 6;
@@ -1055,25 +1029,14 @@ void lay_buttons(
 
     int32_t row = panel.y + 10;
     const int32_t text_width = std::max(panel.width - 20, int32_t{1});
-    const int32_t skip_width = skip_width_of(panel.width);
-    const bool skip_on_kicker = skip_beside(panel.width);
-    const int32_t kicker_width =
-        skip_on_kicker ? std::max(text_width - skip_width - 8, int32_t{1}) : text_width;
     add_text(
         scene.list,
-        {panel.x + 10, row, kicker_width, kit::compact_metrics.small_line},
+        {panel.x + 10, row, text_width, kit::compact_metrics.small_line},
         kicker,
         kit::FontRole::small,
         kit::colour::quiet
     );
-    const kit::Rect skip_rect{
-        panel.x + std::max(panel.width - skip_width - 10, int32_t{10}),
-        skip_on_kicker ? row : row + kit::compact_metrics.small_line + 4,
-        skip_width,
-        button_height
-    };
-    row += skip_on_kicker ? std::max(kit::compact_metrics.small_line, button_height)
-                          : kit::compact_metrics.small_line + 4 + button_height;
+    row += kit::compact_metrics.small_line;
     row += 6;
     row = add_paragraph(
         scene.list,
@@ -1108,16 +1071,6 @@ void lay_buttons(
     const kit::Rect start_rect{start_left, row, start_w, button_height};
 
     std::vector<kit::ControlId> order;
-    add_button(
-        scene.list,
-        order,
-        skip_rect,
-        skip_id,
-        control_name(Step::buttons, "skip"),
-        show("Skip setup"),
-        true,
-        kit::ButtonStyle::quiet
-    );
     add_button(
         scene.list,
         order,
@@ -1354,7 +1307,12 @@ Scene lay_out(const Session& session, const kit::Frame& frame, const kit::Fonts*
 }
 
 Outcome pointer(
-    Session& session, const Scene& scene, PointerKind kind, kit::Point at, int32_t finger_reach
+    Session& session,
+    const Scene& scene,
+    PointerKind kind,
+    kit::Point at,
+    int32_t finger_reach,
+    uint8_t clicks
 ) {
     Outcome outcome;
     if (session.model.step == Step::language && !scene.places.empty()) {
@@ -1363,8 +1321,9 @@ Outcome pointer(
                                                                     : kit::PointerPhase::up;
         // Arrows are ordinary controls, so a press on either end wraps. The
         // carousel's own arrow handling stops at the first and last card.
-        const kit::CarouselEvent event =
-            kit::carousel_pointer(session.carousel, scene.places, {}, {}, session.drag, phase, at);
+        const kit::CarouselEvent event = kit::carousel_pointer(
+            session.carousel, scene.places, {}, {}, session.drag, phase, at, clicks
+        );
         if (kind == PointerKind::up && event != kit::CarouselEvent::none) {
             std::ignore = kit::pointer_up(session.interaction, scene.list, at);
             outcome.redraw = true;
@@ -1398,6 +1357,12 @@ Outcome pointer(
 
 Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     Outcome outcome;
+    // On the last step both keys finish the walk, even when Back has the focus.
+    if (session.model.step == Step::buttons &&
+        (pressed == kit::Key::escape || pressed == kit::Key::enter)) {
+        outcome.ask = Ask::advance;
+        return outcome;
+    }
     if (pressed == kit::Key::escape) {
         if (session.model.step != Step::language)
             outcome.ask = Ask::back;
@@ -1434,6 +1399,16 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     }
     if (taken.result == kit::KeyResult::accept)
         return activate(session, scene, session.interaction.focused);
+    return outcome;
+}
+
+Outcome wheel(Session& session, const Scene& /*scene*/, float notches) {
+    Outcome outcome;
+    if (session.model.step != Step::language || session.carousel.count <= 1 || notches == 0.F)
+        return outcome;
+    // A turn away from the player is the previous card. One card does not move.
+    if (step_carousel(session.carousel, notches < 0.F))
+        outcome.redraw = true;
     return outcome;
 }
 

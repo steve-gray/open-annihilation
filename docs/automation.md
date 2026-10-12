@@ -389,7 +389,7 @@ are listed as `oa.first-run.<step>.<control>`, with `<step>` one of
 
 | Control | Name |
 |---|---|
-| Skip setup | `oa.first-run.language.skip`, `oa.first-run.online.skip`, `oa.first-run.buttons.skip` |
+| Skip setup | `oa.first-run.language.skip`, `oa.first-run.online.skip` |
 | Back | `oa.first-run.language.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
 | Next | `oa.first-run.language.next`, `oa.first-run.online.next` |
 | A language card | `oa.first-run.language.card.<tag>`, the tag in lower case and anything else a hyphen (`de`, `en-xa`) |

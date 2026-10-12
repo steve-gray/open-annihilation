@@ -568,7 +568,7 @@ class FirstRunScreen final : public LayerScreen {
         first_run::draw(canvas, scene_, session_);
     }
 
-    /// Takes a pointer.
+    /// Takes a pointer. A single click is one press.
     ///
     /// @param kind pointer_move, pointer_down or pointer_up
     /// @param button the pointer's button
@@ -577,6 +577,20 @@ class FirstRunScreen final : public LayerScreen {
     /// @return what the setup did
     LayerAnswer
     pointer(ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach) override {
+        return pointer_with_clicks(kind, button, at, finger_reach, 1);
+    }
+
+    /// Takes a pointer, including a double-click.
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button
+    /// @param at the pointer, in the setup's points
+    /// @param finger_reach a finger's reach; 0 for a mouse
+    /// @param clicks how many presses landed as one
+    /// @return what the setup did
+    LayerAnswer pointer_with_clicks(
+        ScreenInputKind kind, uint8_t button, kit::Point at, int32_t finger_reach, uint8_t clicks
+    ) override {
         first_run::PointerKind phase = first_run::PointerKind::move;
         switch (kind) {
         case ScreenInputKind::pointer_move:
@@ -595,10 +609,11 @@ class FirstRunScreen final : public LayerScreen {
         default:
             return LayerAnswer::none;
         }
-        return apply(first_run::pointer(session_, scene_, phase, at, finger_reach));
+        return apply(first_run::pointer(session_, scene_, phase, at, finger_reach, clicks));
     }
 
-    /// Takes a key. Escape does nothing on the language step.
+    /// Takes a key. Escape does nothing on the language step. On the buttons
+    /// step Escape and Enter finish the walk.
     ///
     /// @param pressed the key
     /// @return what the setup did
@@ -620,10 +635,14 @@ class FirstRunScreen final : public LayerScreen {
         return LayerAnswer::pass;
     }
 
-    /// Takes a turn of the wheel, which the setup swallows.
+    /// Takes a turn of the wheel. On the language step it moves the carousel.
     ///
-    /// @return none
-    LayerAnswer wheel(kit::Point /*at*/, float /*notches*/) override { return LayerAnswer::none; }
+    /// @param at the pointer, in the setup's points
+    /// @param notches how far the wheel turned; positive is away from the player
+    /// @return what the setup did
+    LayerAnswer wheel(kit::Point /*at*/, float notches) override {
+        return apply(first_run::wheel(session_, scene_, notches));
+    }
 
     /// Returns the display list.
     ///
