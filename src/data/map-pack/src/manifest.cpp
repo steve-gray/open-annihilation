@@ -956,6 +956,9 @@ void read_document_manifest(
     manifest.requires_engine = std::move(keys.requires_engine);
 
     const oamod::Node* maps = oamod::find_entry(root, "maps");
+    // A folder may leave the index out. The packer then writes one entry per map.
+    if (maps == nullptr && use == ManifestUse::source)
+        return;
     if (maps == nullptr || maps->kind != oamod::NodeKind::sequence) {
         add_problem(
             problems,
