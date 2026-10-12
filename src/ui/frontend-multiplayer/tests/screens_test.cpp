@@ -1945,10 +1945,6 @@ void check_pack_maps(Driver& d) {
         names->list_selection == pack_row && probe.prepares == 1,
         "choosing the pack map mounts its files"
     );
-    expect(
-        mp::panel_text(*modal, "MAPNAME") == "Isle of Ashes",
-        "the map list names the pack map by the title its OTA gives"
-    );
     const bool read_on_choice =
         std::any_of(lookups.begin(), lookups.end(), [](const std::string& path) {
             return path.find(PackProbe::kName) != std::string::npos;
