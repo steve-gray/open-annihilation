@@ -839,6 +839,7 @@ ScreenResult activate(
         result.action = Action::settings;
         return result;
     case controls::close:
+    case controls::close_x:
         result.action = Action::close;
         return result;
     case controls::active_unload:

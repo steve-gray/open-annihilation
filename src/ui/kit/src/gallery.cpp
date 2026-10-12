@@ -753,6 +753,29 @@ int32_t buttons_section(Builder& b, Point at, int32_t width, std::string_view wo
                }
            ) +
            kLineGap;
+    // A close mark in each state: the same square face as a refresh mark,
+    // with an × in the text colour.
+    top += add_states(
+               b.list,
+               {at.x, top},
+               width,
+               {kMetrics.button_height, kMetrics.button_height},
+               kFiveStates,
+               [&](const Rect& rect, Sample shown) {
+                   add_fixed(b.list, rect, rect, shown, false, [&] {
+                       ButtonLook look = button_look(
+                           "Close",
+                           ButtonStyle::quiet,
+                           looks_hovered(shown),
+                           shown == Sample::pressed,
+                           shown != Sample::disabled
+                       );
+                       look.mark = ButtonMark::close;
+                       add_button(b.list, rect, look, no_control, {});
+                   });
+               }
+           ) +
+           kLineGap;
     // A link in each state.
     LinkLook sample_link;
     sample_link.caption = "Homepage";

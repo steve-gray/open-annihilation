@@ -385,7 +385,9 @@ struct Sizes {
     sized.content_right = sized.dialog_width - edge - sized.padding;
     sized.content_width = sized.content_right - sized.content_left;
     sized.list_item_width = sized.list_width - 12;
-    sized.version_right = sized.dialog_width - edge - oa::ui::kit::compact_metrics.padding;
+    sized.version_right = sized.dialog_width - edge - oa::ui::kit::compact_metrics.padding -
+                          oa::ui::kit::compact_metrics.button_height -
+                          oa::ui::kit::compact_metrics.header_gap;
     sized.heading = {sized.content_left, heading_top, sized.content_width, heading_height};
     sized.button_top = sized.footer_top + (footer_height - button_height) / 2;
     sized.restore_button = {sized.padding, sized.button_top, restore_button_width, button_height};
@@ -1543,5 +1545,22 @@ inline constexpr int32_t title_suffix_width = 68;
 inline constexpr int32_t version_width = 44;
 /// The columns between the shared game's text and the version.
 inline constexpr int32_t version_gap = 8;
+/// The header's close mark. Its accessible caption is "Close".
+inline constexpr std::string_view close_x_text = "Close";
+
+/// Returns the header's close mark, the same square at every size class,
+/// in the place a window keeps for its close button.
+///
+/// @param sized the dialog's sizes
+/// @return the button
+[[nodiscard]] constexpr SourceRect header_close_button(const Sizes& sized) noexcept {
+    const int32_t side = oa::ui::kit::compact_metrics.button_height;
+    return {
+        sized.dialog_width - edge - oa::ui::kit::compact_metrics.padding - side,
+        header_top + (header_height - side) / 2,
+        side,
+        side,
+    };
+}
 
 } // namespace oa::ui::engine_settings::geometry

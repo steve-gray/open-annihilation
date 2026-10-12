@@ -72,6 +72,8 @@ inline constexpr std::string_view action_refresh = "Refresh";
 inline constexpr std::string_view action_refreshing = "Refreshing";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
+/// The header's close mark. The footer's CLOSE keeps its own word.
+inline constexpr std::string_view action_close_x = "Close";
 inline constexpr std::string_view action_uninstall = "UNINSTALL";
 
 // The Registries tab. The words are the ones Downloads' Registries part used.

@@ -719,6 +719,14 @@ std::vector<uint8_t> state_icon_coverage(StateIcon icon, int32_t columns, int32_
     return coverage;
 }
 
+/// An ×: two strokes, in the state icon's quarter units. The ends stay
+/// inside the square so the round caps are not clipped. It is drawn, not
+/// taken from a font, so a language pack's face cannot lack it.
+constexpr std::array<IconStroke, 2> kCloseStrokes{{
+    {{22, 22}, {74, 74}},
+    {{74, 22}, {22, 74}},
+}};
+
 /// A circular arrow: an arc of straight strokes and an arrowhead, in the
 /// state icon's quarter units. Turning it is a clockwise step of an eighth
 /// of a turn, 90 degree steps exact and 45 degree steps at 181/256.
@@ -850,6 +858,15 @@ std::vector<uint8_t> refresh_icon_coverage(int32_t columns, int32_t rows, uint8_
 /// @return columns times rows bytes, rows top to bottom: 0 uncovered to 255 covered
 std::vector<uint8_t> refresh_check_coverage(int32_t columns, int32_t rows) {
     return stroke_coverage(kCheckStrokes, columns, rows);
+}
+
+/// Returns how much of each pixel a close mark's × covers.
+///
+/// @param columns the rectangle's pixels across, at most kMostIconPixels
+/// @param rows the rectangle's pixels down, at most kMostIconPixels
+/// @return columns times rows bytes, rows top to bottom: 0 uncovered to 255 covered
+std::vector<uint8_t> close_icon_coverage(int32_t columns, int32_t rows) {
+    return stroke_coverage(kCloseStrokes, columns, rows);
 }
 
 /// Blends a coverage map at a share of its ink. A share of 0 draws nothing
@@ -1237,11 +1254,44 @@ void draw_refresh_button(const Canvas& canvas, const Rect& area, const ButtonLoo
         blend_share(canvas, icon, refresh_check_coverage(pixels.x, pixels.y), ease, colour::accent);
 }
 
+/// Draws an × in a button, on the same face as a refresh mark: the quiet
+/// look while the pointer is over an enabled button, and the plain look's
+/// disabled face while it cannot be pressed. The × is the text colour.
+///
+/// @param canvas where it is drawn
+/// @param area the button
+/// @param look the mark and its state
+void draw_close_button(const Canvas& canvas, const Rect& area, const ButtonLook& look) {
+    ButtonLook face = look;
+    face.style = look.enabled ? ButtonStyle::quiet : ButtonStyle::plain;
+    const ButtonColours colours = button_colours(face);
+    if (colours.face)
+        fill_rect(canvas, area, *colours.face);
+    outline_rect(canvas, area, colours.border);
+    constexpr int32_t inset = 2;
+    const Rect icon{
+        area.x + inset,
+        area.y + inset,
+        std::max(area.width - 2 * inset, int32_t{0}),
+        std::max(area.height - 2 * inset, int32_t{0}),
+    };
+    if (icon.width <= 0 || icon.height <= 0)
+        return;
+    const Point pixels = covered_pixels(canvas, icon);
+    if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
+        return;
+    blend_coverage(canvas, icon, close_icon_coverage(pixels.x, pixels.y), colours.caption);
+}
+
 void draw_button(const Canvas& canvas, const Rect& area, const ButtonLook& look) {
     if (!drawable(canvas))
         return;
     if (look.mark == ButtonMark::refresh) {
         draw_refresh_button(canvas, area, look);
+        return;
+    }
+    if (look.mark == ButtonMark::close) {
+        draw_close_button(canvas, area, look);
         return;
     }
     const ButtonColours colours = button_colours(look);

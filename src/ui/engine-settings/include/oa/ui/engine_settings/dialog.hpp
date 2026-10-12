@@ -309,6 +309,11 @@ enum class Setting : uint8_t {
 
 /// No control: what Dialog::hovered, pressed and focused hold when they name none.
 inline constexpr int32_t no_control = -1;
+/// The header's close mark. It asks for the same close as Cancel: the
+/// dialog puts back what it opened with, including a change not kept with OK.
+/// An open drop-down's items take the numbers just under no_control, so the
+/// mark keeps a number clear of that run and of the registered list.
+inline constexpr int32_t close_x_control = -9000;
 /// The first section's entry in the list; each section's entry is its
 /// place among its kind of dialog's sections with Touch and Controller
 /// (page_control), whether or not the dialog lists them.
