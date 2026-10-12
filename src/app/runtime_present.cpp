@@ -4,6 +4,7 @@
 // SDL output textures, viewport sizing and frame presentation.
 #include "mod_install_watch.hpp"
 #include "window_live_size.hpp"
+#include "oa/app/frame_coordinates.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/game_directory.hpp"
 #include "graphics_report.hpp"
@@ -942,11 +943,19 @@ void Runtime::present_software_cursor(bool match_layers) {
     const auto& frame = *rendered.frame;
     // Above an OA screen the cursor is stamped into a texture the size of
     // the picture, at the same whole pixels as the cursor in the picture,
-    // and enlarged with the picture. A texture of the cursor alone, scaled
-    // on its own rectangle, does not land on those pixels.
+    // and enlarged with the picture, while the whole sprite sits inside that
+    // picture. A texture of the cursor alone, scaled on its own rectangle,
+    // does not land on those pixels. A sprite that crosses the picture, as
+    // the pointer does over a footer in the letterbox, is drawn in the
+    // window's own pixels on the rectangle the picture is drawn in.
     const bool over_layer = !match_layers && screen_ != Screen::match && oa_layer().shows(false);
-    const int canvas_w = over_layer ? output_texture_w_ : static_cast<int>(frame.width);
-    const int canvas_h = over_layer ? output_texture_h_ : static_cast<int>(frame.height);
+    const int sprite_x = static_cast<int>(cursor_x) - frame.origin_x;
+    const int sprite_y = static_cast<int>(cursor_y) - frame.origin_y;
+    const bool stamp_in_picture = over_layer && sprite_x >= 0 && sprite_y >= 0 &&
+                                  sprite_x + static_cast<int>(frame.width) <= output_texture_w_ &&
+                                  sprite_y + static_cast<int>(frame.height) <= output_texture_h_;
+    const int canvas_w = stamp_in_picture ? output_texture_w_ : static_cast<int>(frame.width);
+    const int canvas_h = stamp_in_picture ? output_texture_h_ : static_cast<int>(frame.height);
     if (canvas_w <= 0 || canvas_h <= 0)
         return;
     if (match_cursor_tex_ == nullptr || match_cursor_tex_w_ != canvas_w ||
@@ -983,7 +992,7 @@ void Runtime::present_software_cursor(bool match_layers) {
         return 0xff000000u | (static_cast<uint32_t>(pal[pal_i]) << 16) |
                (static_cast<uint32_t>(pal[pal_i + 1]) << 8) | static_cast<uint32_t>(pal[pal_i + 2]);
     };
-    if (over_layer) {
+    if (stamp_in_picture) {
         for (int row = 0; row < canvas_h; ++row) {
             auto* dst = reinterpret_cast<uint32_t*>(
                 static_cast<uint8_t*>(pixels) + static_cast<std::size_t>(row) * pitch
@@ -991,8 +1000,8 @@ void Runtime::present_software_cursor(bool match_layers) {
             std::fill(dst, dst + canvas_w, 0u);
         }
         // The same whole pixels tick_and_draw_cursor writes into the picture.
-        const int destination_x = static_cast<int>(cursor_x) - frame.origin_x;
-        const int destination_y = static_cast<int>(cursor_y) - frame.origin_y;
+        const int destination_x = sprite_x;
+        const int destination_y = sprite_y;
         for (uint32_t row = 0; row < frame.height; ++row) {
             const int y = destination_y + static_cast<int>(row);
             if (y < 0 || y >= canvas_h)
@@ -1021,7 +1030,45 @@ void Runtime::present_software_cursor(bool match_layers) {
         }
     }
     SDL_UnlockTexture(match_cursor_tex_);
-    if (over_layer) {
+    if (over_layer && !stamp_in_picture) {
+        int logical_w = 0;
+        int logical_h = 0;
+        SDL_RendererLogicalPresentation presentation = SDL_LOGICAL_PRESENTATION_DISABLED;
+        SDL_FRect reckoned{};
+        if (SDL_GetRenderLogicalPresentation(
+                sdl_.renderer, &logical_w, &logical_h, &presentation
+            ) &&
+            presentation != SDL_LOGICAL_PRESENTATION_DISABLED && logical_w > 0 && logical_h > 0 &&
+            SDL_GetRenderLogicalPresentationRect(sdl_.renderer, &reckoned) && reckoned.w > 0.0F &&
+            reckoned.h > 0.0F) {
+            // The picture's filter, read before the window-pixel state drops
+            // the logical presentation this lookup needs.
+            const SDL_ScaleMode picture_mode = standard_frame_scale_mode(output_texture_w_);
+            RenderState window_pixels(sdl_.renderer);
+            window_pixels.use_window_pixels();
+            const SDL_Rect picture = drawn_frame_rect(reckoned);
+            const float scale_x = static_cast<float>(picture.w) / static_cast<float>(logical_w);
+            const float scale_y = static_cast<float>(picture.h) / static_cast<float>(logical_h);
+            const SDL_FRect outside{
+                static_cast<float>(picture.x) + static_cast<float>(sprite_x) * scale_x,
+                static_cast<float>(picture.y) + static_cast<float>(sprite_y) * scale_y,
+                static_cast<float>(frame.width) * scale_x,
+                static_cast<float>(frame.height) * scale_y
+            };
+            const bool filtered = picture_mode != SDL_SCALEMODE_NEAREST;
+            if (filtered)
+                std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, picture_mode);
+            else
+                std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, SDL_SCALEMODE_NEAREST);
+            std::ignore = SDL_RenderTexture(sdl_.renderer, match_cursor_tex_, nullptr, &outside);
+            if (filtered && SDL_GetVersion() < SDL_VERSIONNUM(3, 2, 10))
+                std::ignore = SDL_FlushRenderer(sdl_.renderer);
+            if (filtered)
+                std::ignore = SDL_SetTextureScaleMode(match_cursor_tex_, SDL_SCALEMODE_NEAREST);
+            return;
+        }
+    }
+    if (stamp_in_picture) {
         // The picture's filter, over the picture's whole rectangle, so the
         // cursor enlarges as it does inside the picture.
         const SDL_ScaleMode mode = standard_frame_scale_mode(canvas_w);

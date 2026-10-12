@@ -227,6 +227,27 @@ class LayerScreen {
     virtual LayerAnswer
     pointer(ScreenInputKind kind, uint8_t button, oa::ui::kit::Point at, int32_t finger_reach) = 0;
 
+    /// Takes a pointer the same way pointer does, and how many presses landed
+    /// as one. A screen that does not care drops the count. The layer calls
+    /// this, not pointer, so one screen can tell a double-click.
+    ///
+    /// @param kind pointer_move, pointer_down or pointer_up
+    /// @param button the pointer's button, 1 for the left; 0 for a move
+    /// @param at the pointer, in the screen's points; it may lie outside the screen
+    /// @param finger_reach how far a finger's press may lie from a control,
+    ///     in the screen's points; 0 for a mouse
+    /// @param clicks how many presses landed as one; 1 for a single click
+    /// @return what the screen did
+    virtual LayerAnswer pointer_with_clicks(
+        ScreenInputKind kind,
+        uint8_t button,
+        oa::ui::kit::Point at,
+        int32_t finger_reach,
+        uint8_t /*clicks*/
+    ) {
+        return pointer(kind, button, at, finger_reach);
+    }
+
     /// Takes a key's press.
     ///
     /// @param pressed the key, as the kit names it (layer_key)

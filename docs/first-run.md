@@ -32,7 +32,11 @@ are already installed, then each language pack Core Prime lists when
 downloads are on and that catalogue can be read. A pack that is not
 installed yet wears **Get** and its size. Choosing a built-in language, or
 an installed one the game can show, switches at once and the screen is
-drawn again in that language. Choosing a pack downloads it. The card says
+drawn again in that language. The carousel is a ring: left from the
+first card goes to the last, and right from the last goes to the first,
+one card either way. A single click on a side card brings it to the
+centre. A double-click on any card centres it and chooses it. Choosing a
+pack downloads it. The card says
 "Downloading" and how much of the file has come. **Cancel download** stops
 it. The card then says "Checking…", and the pack is installed and switched
 to as soon as it is ready. A download that fails says "Couldn't download",
@@ -99,14 +103,17 @@ Open Annihilation adds", then: "The Library is where you get mods, map
 packs and languages. Settings is where you change how Open Annihilation
 looks and plays. Everything else on this menu is the game's own."
 **Back** returns to online features. **Start playing** finishes the walk.
-**Skip setup** is on this step too.
+This step has no **Skip setup**. Escape and Enter do what **Start playing**
+does.
 
 ## Keys and controllers
 
 Tab and the arrows move between the controls. Enter, or A on a controller,
-presses the one with the focus. Escape, or B, is **Back**, except on the
-first step, where they do nothing. On the language step the shoulder
-buttons and the focus keys also move the carousel.
+presses the one with the focus. Escape, or B, is **Back** on the online
+step, and does nothing on the first step. On the last step Escape and Enter
+finish the walk, as **Start playing** does. On the language step the
+shoulder buttons, the wheel and the focus keys also move the carousel one
+card, wrapping at either end.
 
 ## Showing it again
 
@@ -135,5 +142,5 @@ cards are `oa.first-run.language.card.` and the tag in lower case, with
 anything else a hyphen (`de`, `en-xa`). The rest are `skip`, `back`,
 `next`, `previous`, `next-card`, `cancel` and `retry` on the language
 step; `skip`, `back`, `next`, `on` and `not-now` on the online step; and
-`back`, `start` and `skip` on the buttons. [automation.md](automation.md#the-welcome-setup)
+`back` and `start` on the buttons. [automation.md](automation.md#the-welcome-setup)
 lists them with the other screens.

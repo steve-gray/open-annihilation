@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace {
@@ -345,6 +346,135 @@ void check_lookup() {
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
 }
 
+Card named_card(std::string_view tag, std::string_view own_name) {
+    Card card;
+    card.tag = std::string(tag);
+    card.own_name = std::string(own_name);
+    card.english_name = std::string(own_name);
+    card.kind = CardKind::built_in;
+    return card;
+}
+
+const oa::ui::kit::CarouselSlot* slot_of(const oa::ui::first_run::Scene& scene, int32_t index) {
+    for (const oa::ui::kit::CarouselSlot& slot : scene.places)
+        if (slot.index == index)
+            return &slot;
+    return nullptr;
+}
+
+void check_wrap_click_and_buttons() {
+    Session session;
+    session.model.cards = {
+        named_card("en", "English"),
+        named_card("de", "Deutsch"),
+        named_card("es", "Espanol"),
+        named_card("fr", "Francais"),
+        named_card("it", "Italiano"),
+    };
+    session.carousel.selected = 0;
+    oa::ui::first_run::bind(session);
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+    const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+    oa::ui::first_run::ensure_focus(session, scene.list);
+    const auto left = oa::ui::first_run::key(session, scene, oa::ui::kit::Key::left);
+    OA_CHECK(left.redraw);
+    OA_CHECK(session.carousel.selected == 4);
+    const int32_t started = oa::ui::kit::carousel_index_milli(session.carousel);
+    OA_CHECK(started - 4 * 1000 == 1000);
+    oa::ui::first_run::tick(session, 20);
+    OA_CHECK(oa::ui::kit::carousel_index_milli(session.carousel) < started);
+
+    Session wheeled;
+    wheeled.model.cards = session.model.cards;
+    wheeled.carousel.selected = 0;
+    oa::ui::first_run::bind(wheeled);
+    const auto wheel_scene = oa::ui::first_run::lay_out(wheeled, frame, nullptr);
+    const auto turned = oa::ui::first_run::wheel(wheeled, wheel_scene, 1.F);
+    OA_CHECK(turned.redraw);
+    OA_CHECK(wheeled.carousel.selected == 4);
+    const int32_t wheel_start = oa::ui::kit::carousel_index_milli(wheeled.carousel);
+    oa::ui::first_run::tick(wheeled, 20);
+    OA_CHECK(oa::ui::kit::carousel_index_milli(wheeled.carousel) < wheel_start);
+
+    Session picking;
+    picking.model.cards = session.model.cards;
+    picking.carousel.selected = 0;
+    oa::ui::first_run::bind(picking);
+    const auto pick_scene = oa::ui::first_run::lay_out(picking, frame, nullptr);
+    const oa::ui::kit::CarouselSlot* side = slot_of(pick_scene, 1);
+    OA_CHECK(side != nullptr);
+    if (side != nullptr) {
+        const oa::ui::kit::Point at{
+            side->face.x + side->face.width / 2, side->face.y + side->face.height / 2
+        };
+        const auto down = oa::ui::first_run::pointer(
+            picking, pick_scene, oa::ui::first_run::PointerKind::down, at, 0, 2
+        );
+        OA_CHECK(down.ask == Ask::none);
+        const auto up = oa::ui::first_run::pointer(
+            picking, pick_scene, oa::ui::first_run::PointerKind::up, at, 0, 2
+        );
+        OA_CHECK(up.ask == Ask::pick);
+        OA_CHECK(up.index == side->index);
+        OA_CHECK(picking.carousel.selected == side->index);
+    }
+
+    Session centring;
+    centring.model.cards = session.model.cards;
+    centring.carousel.selected = 0;
+    oa::ui::first_run::bind(centring);
+    const auto centre_scene = oa::ui::first_run::lay_out(centring, frame, nullptr);
+    const oa::ui::kit::CarouselSlot* other = slot_of(centre_scene, 1);
+    OA_CHECK(other != nullptr);
+    if (other != nullptr) {
+        const oa::ui::kit::Point at{
+            other->face.x + other->face.width / 2, other->face.y + other->face.height / 2
+        };
+        std::ignore = oa::ui::first_run::pointer(
+            centring, centre_scene, oa::ui::first_run::PointerKind::down, at, 0, 1
+        );
+        const auto up = oa::ui::first_run::pointer(
+            centring, centre_scene, oa::ui::first_run::PointerKind::up, at, 0, 1
+        );
+        OA_CHECK(up.ask == Ask::none);
+        OA_CHECK(up.redraw);
+        OA_CHECK(centring.carousel.selected == other->index);
+    }
+
+    Session buttons;
+    buttons.model.step = Step::buttons;
+    buttons.model.cards = session.model.cards;
+    const auto button_scene = oa::ui::first_run::lay_out(buttons, frame, nullptr);
+    bool saw_skip = false;
+    bool saw_back = false;
+    bool saw_start = false;
+    bool saw_pulse = false;
+    for (const oa::ui::kit::Control& control : button_scene.list.controls) {
+        if (control.name == "first-run.buttons.skip")
+            saw_skip = true;
+        if (control.name == "first-run.buttons.back")
+            saw_back = true;
+        if (control.name == "first-run.buttons.start")
+            saw_start = true;
+    }
+    for (const oa::ui::kit::Item& item : button_scene.list.items) {
+        if (item.role == oa::ui::kit::Role::call_to_action &&
+            std::holds_alternative<oa::ui::kit::CallToActionLook>(item.look))
+            saw_pulse = true;
+    }
+    OA_CHECK(!saw_skip);
+    OA_CHECK(saw_back);
+    OA_CHECK(saw_start);
+    OA_CHECK(saw_pulse);
+    buttons.interaction.focused = oa::ui::first_run::back_id;
+    const auto enter = oa::ui::first_run::key(buttons, button_scene, oa::ui::kit::Key::enter);
+    OA_CHECK(enter.ask == Ask::advance);
+    const auto escape = oa::ui::first_run::key(buttons, button_scene, oa::ui::kit::Key::escape);
+    OA_CHECK(escape.ask == Ask::advance);
+}
+
 } // namespace
 
 int main() {
@@ -354,6 +484,7 @@ int main() {
     check_coaches(oa::ui::kit::SizeClass::large, 1280, 720, false);
     check_coaches(oa::ui::kit::SizeClass::large, 1280, 720, true);
     check_keys();
+    check_wrap_click_and_buttons();
     check_lookup();
     return oa::test::check_exit_status();
 }

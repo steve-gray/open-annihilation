@@ -695,6 +695,25 @@ bool game_font_has_glyphs(const Fonts& fonts) {
     );
 }
 
+/// The card nearest a centre, wrapping past either end.
+///
+/// Halfway rounds the same way a non-negative centre does. A centre of -1000
+/// on five cards is the last card, and one of count times 1000 is the first.
+///
+/// @param centre_milli where the centre sits, in thousandths of an index
+/// @param count how many cards
+/// @return the card, from 0
+int32_t wrapped_card(int32_t centre_milli, int32_t count) noexcept {
+    if (count <= 0)
+        return 0;
+    const int64_t shifted = static_cast<int64_t>(centre_milli) + 500;
+    const int64_t rounded = shifted >= 0 ? shifted / 1000 : (shifted - 999) / 1000;
+    int32_t index = static_cast<int32_t>(rounded % count);
+    if (index < 0)
+        index += count;
+    return index;
+}
+
 } // namespace
 
 std::string step_line(const StepLook& look) {
@@ -722,15 +741,36 @@ std::string step_line(const StepLook& look) {
 }
 
 void carousel_go(CarouselModel& model, int32_t index) noexcept {
-    if (model.count <= 0) {
+    if (model.count <= 1) {
         model.selected = 0;
-        model.origin_milli = 0;
+        model.origin_milli = model.count <= 0 ? 0 : carousel_index_milli(model);
         model.elapsed_ms = 0;
         return;
     }
-    const int32_t next = std::clamp(index, int32_t{0}, model.count - 1);
-    model.origin_milli = carousel_index_milli(model);
-    model.selected = next;
+    int32_t end = index % model.count;
+    if (end < 0)
+        end += model.count;
+    const int32_t current = carousel_index_milli(model);
+    const int32_t span = model.count * 1000;
+    const int32_t asked = index * 1000;
+    int32_t best_dest = end * 1000;
+    int32_t best_distance = std::abs(best_dest - current);
+    for (int lap = -2; lap <= 2; ++lap) {
+        const int32_t dest = end * 1000 + lap * span;
+        const int32_t distance = std::abs(dest - current);
+        if (distance < best_distance) {
+            best_dest = dest;
+            best_distance = distance;
+        } else if (
+            distance == best_distance && distance > 0 && (asked > current) == (dest > current) &&
+            (asked > current) != (best_dest > current)
+        ) {
+            best_dest = dest;
+        }
+    }
+    const int32_t laps = (best_dest - end * 1000) / span;
+    model.origin_milli = current - laps * span;
+    model.selected = end;
     model.elapsed_ms = 0;
 }
 
@@ -784,7 +824,9 @@ std::vector<CarouselSlot> carousel_places(
     if (count <= 0 || area.width <= 0 || area.height <= 0 || geometry.card_width <= 0 ||
         geometry.card_height <= 0)
         return slots;
-    const int32_t nearest = std::clamp((centre_milli + 500) / 1000, int32_t{0}, count - 1);
+    const int32_t nearest = wrap && count > 1
+                                ? wrapped_card(centre_milli, count)
+                                : std::clamp((centre_milli + 500) / 1000, int32_t{0}, count - 1);
     const int32_t mid = area.x + area.width / 2;
     for (int32_t index = 0; index < count; ++index) {
         int32_t delta = index * 1000 - centre_milli;
@@ -871,7 +913,8 @@ CarouselEvent carousel_pointer(
     const Rect& next,
     CarouselDrag& drag,
     PointerPhase phase,
-    Point at
+    Point at,
+    uint8_t clicks
 ) noexcept {
     if (phase == PointerPhase::down) {
         drag = {};
@@ -919,10 +962,13 @@ CarouselEvent carousel_pointer(
         return carousel_command(model, CarouselCommand{false, true, false});
     if (card < 0)
         return CarouselEvent::none;
+    if (clicks >= 2) {
+        if (card != model.selected)
+            carousel_go(model, card);
+        return CarouselEvent::picked;
+    }
     const int32_t centre =
-        model.count <= 0
-            ? 0
-            : std::clamp((carousel_index_milli(model) + 500) / 1000, int32_t{0}, model.count - 1);
+        model.count <= 1 ? 0 : wrapped_card(carousel_index_milli(model), model.count);
     // The selected card is the one a press is bringing to the centre. A second
     // press on it picks it before that move has arrived.
     if (card == centre || card == model.selected)
@@ -1157,7 +1203,9 @@ void draw_carousel(const Canvas& canvas, const Rect& rect, const CarouselLook& l
     constexpr int32_t kBar = 14;
     constexpr int32_t kGap = 3;
     constexpr int32_t kBarHeight = 3;
-    const int32_t lit = std::clamp((look.centre_milli + 500) / 1000, int32_t{0}, count - 1);
+    const int32_t lit = look.wrap && count > 1
+                            ? wrapped_card(look.centre_milli, count)
+                            : std::clamp((look.centre_milli + 500) / 1000, int32_t{0}, count - 1);
     const int32_t row_w = count * kBar + (count - 1) * kGap;
     int32_t x = rect.x + std::max(rect.width - row_w, int32_t{0}) / 2;
     const int32_t y =
