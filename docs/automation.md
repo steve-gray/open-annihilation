@@ -183,7 +183,7 @@ centre would land on the line between Off and On.
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library · 1 mod" or "Library · N mods", and "Library · N mods · 1 update" or "Library · N mods · M updates" while updates wait; while the mod count is not final yet the mod count is left out, so the text is "Library", or "Library · 1 update" and "Library · N updates"; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
 | The Settings button (main menu) | `oa.settings-button` | button; no dialog; the settings icon right of the OA button, which opens Settings with no Library under it; its text "Settings" |
 | GET MAP in the battle room, while a joiner lacks the host's pack map | `oa.get-map`, `oa.get-map-text`, `oa.get-map-progress` | no dialog, listed only while they show: the button (its text "GET MAP"); a label, its text the line saying what it fetches; a label, its text how much of the download has come, as a percentage, while the bar shows in the button's place |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
@@ -264,8 +264,7 @@ included.
 map zoom out to the whole map, from the main menu:
 
 1. click `oa.settings-button`, which opens Settings, and wait until
-   `oa.settings.ok` is listed (or click `oa.button`, which opens the
-   Library, then its `oa.library.settings`);
+   `oa.settings.ok` is listed;
 2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
    (its `checked` turns true);
 3. click `oa.settings.max-zoom-out`, then
@@ -296,7 +295,10 @@ A row's circled check, installed and up to date, is no control. A click
 at a row's centre chooses it; a click at its icon's centre presses GET or
 UPDATE for that row, as the details' button does, asking the same
 questions. `<registry>` and `<key>` are the registry's id and the package's
-key, lower-cased, every other run of characters one `-`.
+key, lower-cased, every other run of characters one `-`. The base game
+entry is not a package. Its key is `@base-game`, and the row is
+`oa.library.row.base-game`: the `@` is not a letter or a digit, so the
+row's name does not keep it.
 
 ## Input
 

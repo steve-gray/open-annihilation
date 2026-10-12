@@ -8,9 +8,10 @@
 // catalogue at 127.0.0.1:1, where nothing answers. The check switches it
 // off and on at once, and removes it at once, reading the player's
 // registry list after each; CLOSE does not put a change back. It types an
-// https address, which is refused without a check; and opens an .oareg
-// file of another registry, which is refused once its catalogue cannot be
-// reached. It makes no connection beyond that refused one to 127.0.0.1.
+// https address on 127.0.0.1:1, which the content service is asked about
+// and which is refused; and opens an .oareg file of another registry,
+// which is refused once its catalogue cannot be reached. It makes no
+// connection beyond those to 127.0.0.1.
 
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -68,11 +69,11 @@ constexpr std::string_view kOfferedId = "check-lan";
 constexpr std::string_view kCatalogue = "http://127.0.0.1:1/v1/catalogue.json";
 /// The address the refused .oareg is named by.
 constexpr std::string_view kUnreachable = "127.0.0.1:1";
-/// The https address the window refuses before it asks anything.
-constexpr std::string_view kHttpsAddress = "https://maps.example.org/oa/registry.yaml";
-/// The sentence it refuses that address with.
-constexpr std::string_view kHttpsSentence =
-    "Use the registry's http:// address. OA checks every catalogue's signature itself.";
+/// The https address the window asks the content service about. Nothing
+/// answers on this port, and the address is not a public host.
+constexpr std::string_view kHttpsAddress = "https://127.0.0.1:1/oa/registry.yaml";
+/// The sentence when this system read https as http and the host served none.
+constexpr std::string_view kNeedsHttps = "This registry needs HTTPS, which this system cannot use";
 /// The .oareg file's name.
 constexpr std::string_view kOfferedFile = "check-lan.oareg";
 /// The window the check drives the dialog at: Large, at 1×, so that every
@@ -374,8 +375,9 @@ void Runtime::check_registries() {
     );
     std::cout << "registries check: REMOVE removed the registry\n";
 
-    // ADD REGISTRY… with an https address: refused at once, and the content
-    // service never asked.
+    // ADD REGISTRY… with an https address on a closed port. The content
+    // service is asked. TLS fails closed, or the address is read as http
+    // and the host's silence is the needs-HTTPS sentence.
     const uint64_t asked = registry_checks_asked();
     click_named("oa.library.add-registry");
     require(!window_list().controls.empty(), "ADD REGISTRY… did not open the window");
@@ -391,19 +393,31 @@ void Runtime::check_registries() {
         text_of(window_list(), "add-registry.url") == https, "the field did not take the address"
     );
     tap(SDLK_RETURN);
+    std::optional<std::string> https_refusal;
+    for (int frame = 0; frame < kAnswerFrames && !https_refusal; ++frame) {
+        run_frame(running);
+        require(running, "a frame ended the run");
+        https_refusal = text_of(window_list(), "add-registry.refusal");
+    }
+    require(https_refusal.has_value(), "the https address's check never ended");
+    const bool needs = *https_refusal == std::string(kNeedsHttps);
+    const bool reached = https_refusal->find("127.0.0.1") != std::string::npos &&
+                         (https_refusal->find("cannot be reached") != std::string::npos ||
+                          https_refusal->find("certificate") != std::string::npos);
+    require(needs || reached, "the https address was not refused: " + *https_refusal);
     require(
-        text_of(window_list(), "add-registry.refusal") == std::string(kHttpsSentence),
-        "the https address was not refused with its sentence"
+        https_refusal->find("Use the registry's http:// address") == std::string::npos,
+        "the old https refusal is still shown"
     );
     require(
-        registry_checks_asked() == asked, "the content service was asked about an https address"
+        registry_checks_asked() > asked, "the content service was not asked about an https address"
     );
     keep_frame("menu-add-registry-refused");
     click_named("oa.add-registry.cancel");
     require(oa_layer().find("add-registry") == nullptr, "CANCEL did not close the window");
     require(oa_layer().find("library") != nullptr, "CANCEL closed the Library too");
     close_library_and_settings();
-    std::cout << "registries check: an https address was refused without a check\n";
+    std::cout << "registries check: an https address was refused: " << *https_refusal << '\n';
 
     // An .oareg file of another registry, posted as --open posts it: the
     // window opens filled in, and ends refused, naming the address its

@@ -686,7 +686,9 @@ void test_structure() {
     OA_CHECK(parsed.has_value());
     if (parsed)
         OA_CHECK(queried.downloads == url::url_text(*parsed));
-    refuse(catalogue_of("", "\"downloads\":\"https://downloads.example.net/api\""), "downloads");
+    const auto secure_downloads =
+        read_ok(catalogue_of("", "\"downloads\":\"https://downloads.example.net/api\""));
+    OA_CHECK(secure_downloads.downloads == "https://downloads.example.net/api");
     refuse(
         catalogue_of("", "\"mirrors\":[\"http://mirror.example.net/v1/catalogue.json?x=1\"]"),
         "mirrors"

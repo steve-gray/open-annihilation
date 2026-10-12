@@ -553,7 +553,7 @@ const char* url_error_text(UrlError error) noexcept {
     case UrlError::unknown_scheme:
         return "address scheme is not http or https";
     case UrlError::https_not_fetched:
-        return "OA fetches over plain HTTP and checks what it gets with signatures";
+        return "an https address is accepted and the fetch chooses the transport";
     case UrlError::user_info:
         return "address carries user info";
     case UrlError::ipv6_host:
@@ -575,7 +575,34 @@ std::optional<Url> parse_web_url(std::string_view text, UrlError* error) {
 }
 
 std::optional<Url> parse_http_url(std::string_view text, UrlError* error) {
-    return parse_absolute(text, error, true);
+    return parse_absolute(text, error, false);
+}
+
+std::optional<FetchAddress>
+address_for_fetch(std::string_view text, bool tls_available, UrlError* error) {
+    if (const UrlError text_error = check_text(text, false); text_error != UrlError::none) {
+        if (error != nullptr)
+            *error = text_error;
+        return std::nullopt;
+    }
+    Reference reference;
+    if (const UrlError read_error = read_absolute(text, reference, false);
+        read_error != UrlError::none) {
+        if (error != nullptr)
+            *error = read_error;
+        return std::nullopt;
+    }
+    FetchAddress decided;
+    // An omitted port takes the scheme's default inside url_from_parts, so
+    // changing the scheme here makes an unnamed https port 80. A port the
+    // text named, including 443, stays.
+    if (reference.scheme == Scheme::https && !tls_available) {
+        reference.scheme = Scheme::http;
+        decided.rewritten_to_http = true;
+    }
+    succeed(error);
+    decided.url = url_from_parts(std::move(reference));
+    return decided;
 }
 
 std::string url_text(const Url& url) {

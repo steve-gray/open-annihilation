@@ -612,6 +612,122 @@ void oa_button_wears_the_dot() {
     same(direct, painted);
 }
 
+void oa_button_wears_the_count() {
+    OA_CHECK(kit::oa_button_count_text(7) == "7");
+    OA_CHECK(kit::oa_button_count_text(123) == "123");
+    OA_CHECK(kit::oa_button_count_text(999) == "999");
+    OA_CHECK(kit::oa_button_count_text(1000) == "999+");
+    OA_CHECK(kit::oa_button_count_text(10000) == "999+");
+
+    renderer::Surface sample = black(48, 48);
+    kit::Canvas measuring = canvas_on(sample, 1);
+    const int32_t seven_columns = kit::measure_text(measuring, kit::FontRole::small, "7");
+    const int32_t many_columns = kit::measure_text(measuring, kit::FontRole::small, "123");
+    const int32_t capped_columns = kit::measure_text(measuring, kit::FontRole::small, "999+");
+    const kit::Rect seven = kit::oa_button_badge(48, seven_columns);
+    const kit::Rect many = kit::oa_button_badge(48, many_columns);
+    const kit::Rect capped = kit::oa_button_badge(48, capped_columns);
+    const kit::Rect spinner = kit::oa_button_badge(48, 0);
+    OA_CHECK(
+        seven.width == kit::oa_button_badge_height && seven.height == kit::oa_button_badge_height
+    );
+    OA_CHECK(seven.x == 48 - kit::oa_button_badge_inset - seven.width);
+    OA_CHECK(seven.y == 48 - kit::oa_button_badge_inset - seven.height);
+    OA_CHECK(many.width > seven.width && capped.width >= many.width);
+    OA_CHECK(spinner.x == seven.x && spinner.y == seven.y && spinner.width == seven.width);
+    OA_CHECK(kit::oa_button_badge(10, 0).width == 0);
+
+    const auto mark_of = [](kit::OaButtonCorner corner, std::size_t count, uint32_t turn) {
+        kit::OaButtonMark mark;
+        mark.corner = corner;
+        mark.count = count;
+        mark.turn = turn;
+        return mark;
+    };
+    const auto painted = [&](int32_t scale, const kit::OaButtonMark& mark) {
+        renderer::Surface surface = black(64 * scale, 64 * scale);
+        kit::Canvas canvas = canvas_on(surface, scale);
+        kit::draw_oa_button(canvas, 48, kit::OaButtonState::idle, mark);
+        return surface;
+    };
+    for (const int32_t scale : {1, 2}) {
+        const renderer::Surface plain = painted(scale, {});
+        const renderer::Surface seven_face =
+            painted(scale, mark_of(kit::OaButtonCorner::count, 7, 0));
+        const renderer::Surface many_face =
+            painted(scale, mark_of(kit::OaButtonCorner::count, 123, 0));
+        // Every count above 999 reads "999+" and draws alike.
+        const renderer::Surface capped_face =
+            painted(scale, mark_of(kit::OaButtonCorner::count, 10000, 0));
+        const renderer::Surface over = painted(scale, mark_of(kit::OaButtonCorner::count, 1000, 0));
+        const kit::Rect seven_pixels{
+            seven.x * scale, seven.y * scale, seven.width * scale, seven.height * scale
+        };
+        const kit::Rect many_pixels{
+            many.x * scale, many.y * scale, many.width * scale, many.height * scale
+        };
+        OA_CHECK(differ_only_inside(plain, seven_face, seven_pixels));
+        OA_CHECK(differ_only_inside(seven_face, many_face, many_pixels));
+        OA_CHECK(over.rgb == capped_face.rgb);
+
+        bool saw_band = false;
+        bool saw_text = false;
+        for (int32_t row = seven_pixels.y; row < seven_pixels.y + seven_pixels.height; ++row) {
+            for (int32_t column = seven_pixels.x; column < seven_pixels.x + seven_pixels.width;
+                 ++column) {
+                const std::size_t at = (static_cast<std::size_t>(row) * seven_face.width +
+                                        static_cast<std::size_t>(column)) *
+                                       3;
+                const uint8_t red = seven_face.rgb[at];
+                const uint8_t green = seven_face.rgb[at + 1];
+                const uint8_t blue = seven_face.rgb[at + 2];
+                if (red == 0x14 && green == 0x16 && blue == 0x12)
+                    saw_band = true;
+                if (red == 0xe7 && green == 0xe8 && blue == 0xdf)
+                    saw_text = true;
+            }
+        }
+        OA_CHECK(saw_band && saw_text);
+
+        const renderer::Surface turned =
+            painted(scale, mark_of(kit::OaButtonCorner::spinner, 0, 0));
+        const renderer::Surface next = painted(scale, mark_of(kit::OaButtonCorner::spinner, 0, 1));
+        const kit::Rect spinner_pixels{
+            spinner.x * scale, spinner.y * scale, spinner.width * scale, spinner.height * scale
+        };
+        OA_CHECK(differ_only_inside(plain, turned, spinner_pixels));
+        OA_CHECK(differ_only_inside(turned, next, spinner_pixels));
+
+        kit::OaButtonMark dotted = mark_of(kit::OaButtonCorner::count, 7, 0);
+        dotted.dot = true;
+        const renderer::Surface with_dot = painted(scale, dotted);
+        const kit::Rect dot = kit::oa_button_dot(48);
+        OA_CHECK(differ_only_inside(
+            seven_face,
+            with_dot,
+            {dot.x * scale, dot.y * scale, dot.width * scale, dot.height * scale}
+        ));
+    }
+
+    renderer::Surface direct = black(64, 64);
+    renderer::Surface listed = black(64, 64);
+    kit::draw_oa_button(
+        canvas_on(direct, 1),
+        48,
+        kit::OaButtonState::idle,
+        mark_of(kit::OaButtonCorner::count, 123, 0)
+    );
+    kit::Item oa;
+    oa.role = kit::Role::oa_button;
+    oa.rect = {0, 0, 48, 48};
+    oa.look =
+        kit::OaButtonLook{48, kit::OaButtonState::idle, false, kit::OaButtonCorner::count, 123, 0};
+    kit::DisplayList list;
+    list.items.push_back(oa);
+    kit::paint(canvas_on(listed, 1), list);
+    same(direct, listed);
+}
+
 void clip_hides_what_it_misses() {
     const kit::ButtonLook look = button("A", kit::ButtonStyle::accent, false, false);
     renderer::Surface missed = black(80, 40);
@@ -1024,6 +1140,7 @@ int main() {
     a_menu_draws_a_divider_an_aside_and_a_greyed_row();
     oa_button_and_mark_match();
     oa_button_wears_the_dot();
+    oa_button_wears_the_count();
     clip_hides_what_it_misses();
     paint_matches_the_direct_draw(1);
     paint_matches_the_direct_draw(2);

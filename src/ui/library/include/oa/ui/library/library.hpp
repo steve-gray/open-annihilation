@@ -253,6 +253,10 @@ struct Inputs {
     /// Why the last change of a registry was refused, in the player's words.
     /// The Registries tab shows it in amber; empty for none.
     std::string registries_notice{};
+    /// The base game entry's badge: the Open Annihilation logo, or the 3.1c
+    /// logo. Empty shows the entry's letters. The entry's `badge` points here
+    /// until the next refresh.
+    std::optional<Badge> base_game_badge{};
 };
 
 /// One of the Library's tabs, in the order they are shown.
@@ -300,6 +304,27 @@ struct EntryId {
     friend auto operator<=>(const EntryId&, const EntryId&) = default;
 };
 
+/// The base game entry's key.
+///
+/// A package key is lower-case kebab-case, letters, digits and hyphens, so
+/// it cannot hold `@`. No package's id is this one.
+inline constexpr std::string_view base_game_key = "@base-game";
+
+/// Returns the base game entry's id: a mod, no registry, and base_game_key.
+///
+/// @return the id
+[[nodiscard]] inline EntryId base_game_id() {
+    return {{}, Kind::mod, std::string(base_game_key)};
+}
+
+/// Tells whether an id is the base game entry's.
+///
+/// @param id the id
+/// @return true for a mod, an empty registry and base_game_key
+[[nodiscard]] inline bool is_base_game(const EntryId& id) {
+    return id.kind == Kind::mod && id.registry.empty() && id.key == base_game_key;
+}
+
 /// One row of the Library.
 ///
 /// The pointers point into the owning Library's `inputs` and stay valid until
@@ -323,6 +348,16 @@ struct Entry {
     std::string registry_name{}; ///< the registry's name; empty for the player's own
     /// The registry the same kind and key is installed from, when GET would replace it.
     std::string replaces_registry_name{};
+    /// A badge that is neither the listing's nor the installed copy's. The
+    /// base game entry's points at Inputs::base_game_badge. Null otherwise,
+    /// and valid until the next refresh.
+    const Badge* badge{};
+    /// The name the base game entry shows, in the language shown. Empty for
+    /// a package, whose name comes from its listing or its installed copy.
+    std::string shown_name{};
+    /// The summary the base game entry shows, in the language shown. Empty
+    /// for a package.
+    std::string shown_summary{};
 };
 
 /// How the model looks up its words in the language shown.
@@ -369,7 +404,8 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 ///
 /// Makes one entry per listing, joined with the package installed from the
 /// same registry, kind and key, and one per installed package no listing
-/// names. Keeps the tab, each tab's filter, the tag, query and selection.
+/// names, then the base game entry (base_game_id), which is not a package.
+/// Keeps the tab, each tab's filter, the tag, query and selection.
 /// When the selected entry no longer shows, the first visible entry is
 /// selected and the details close.
 ///
@@ -471,7 +507,8 @@ void close_details(Library& library);
 /// Mods, Maps and Languages hold their kind and Updates every kind; All
 /// keeps them all, New the newest_count listings with the latest published
 /// day, Installed those installed, playing or with an update, and Updates
-/// those with an update. The Active tab holds none.
+/// those with an update. The Active tab holds none. The base game entry is
+/// never counted, on any tab or filter.
 ///
 /// @param library the Library
 /// @param filter the filter
@@ -657,6 +694,10 @@ struct ActionButton {
 /// HOMEPAGE when the listing has one. PLAY NOW, SWITCH OFF and ROLL BACK are
 /// off during a game, and PLAY NOW and SWITCH OFF while the command line
 /// chose the mod; UNINSTALL is off while uninstall_off_reason gives a reason.
+/// The base game entry is not a package: while no mod is played it offers
+/// nothing, and while one is it offers PLAY NOW alone, on and off by the
+/// same rule as SWITCH OFF, and never UPDATE, ROLL BACK, UNINSTALL or
+/// OPEN FOLDER.
 ///
 /// @param library the Library
 /// @param entry one of its entries

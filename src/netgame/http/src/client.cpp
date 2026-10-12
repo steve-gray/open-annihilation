@@ -8,6 +8,7 @@
 #include "gzip.hpp"
 #include "lookup.hpp"
 #include "response_reader.hpp"
+#include "tls.hpp"
 #include "url_request.hpp"
 
 #include "oa/formats/url.hpp"
@@ -124,7 +125,10 @@ bool redirect_status(int status) {
 /// @param origin the address the fetch started with
 /// @return true when the redirect may be followed
 bool host_allowed(const RedirectPolicy& policy, const url::Url& target, const url::Url& origin) {
-    if (target.host == origin.host && target.port == origin.port)
+    // The same host on the same port, or on the port the target scheme uses
+    // when an address names none: http to https on 443, and the reverse.
+    const uint16_t scheme_port = target.scheme == url::Scheme::https ? uint16_t{443} : uint16_t{80};
+    if (target.host == origin.host && (target.port == origin.port || target.port == scheme_port))
         return true;
     for (const std::string& entry : policy.allowed_hosts) {
         if (entry.empty())
@@ -281,6 +285,10 @@ const char* io_detail(Failure failure) {
         return "the body could not be decoded";
     case Failure::sink_stopped:
         return "the body was stopped";
+    case Failure::certificate:
+        return "the server's certificate was rejected";
+    case Failure::https_needs_tls:
+        return "This registry needs HTTPS, which this system cannot use";
     default:
         return "the fetch failed";
     }
@@ -335,13 +343,43 @@ bool open_connection(
 /// @param stream the connection
 /// @param bytes the request
 /// @param budget the clocks
+/// @param tls the TLS session, or null for plain HTTP
+/// @param[out] detail a certificate or handshake failure's sentence
 /// @return none when the request was written
-Failure write_all(intptr_t stream, std::span<const uint8_t> bytes, Budget& budget) {
+Failure write_all(
+    intptr_t stream,
+    std::span<const uint8_t> bytes,
+    Budget& budget,
+    TlsSession* tls,
+    std::string& detail
+) {
     std::size_t sent = 0;
     while (sent < bytes.size()) {
         const Budget::Hit hit = budget.hit(false);
         if (hit != Budget::Hit::ok)
             return hit == Budget::Hit::cancel ? Failure::cancelled : Failure::timed_out;
+        if (tls != nullptr) {
+            const TlsIoResult result = tls_write(tls, bytes.data() + sent, bytes.size() - sent);
+            if (result.kind == TlsIoResult::Kind::ready && result.count > 0) {
+                sent += static_cast<std::size_t>(result.count);
+                budget.touch();
+                continue;
+            }
+            if (result.kind == TlsIoResult::Kind::failed ||
+                result.kind == TlsIoResult::Kind::closed) {
+                detail =
+                    result.detail.empty() ? std::string(io_detail(result.failure)) : result.detail;
+                return result.failure == Failure::none ? Failure::connection_lost : result.failure;
+            }
+            sock::StreamWaitEntry entry{};
+            entry.stream = stream;
+            entry.read = result.kind == TlsIoResult::Kind::want_read;
+            entry.write = result.kind != TlsIoResult::Kind::want_read;
+            const int ready = sock::stream_wait(&entry, 1, budget.slice(false));
+            if (ready < 0 || entry.failed)
+                return Failure::connection_lost;
+            continue;
+        }
         sock::StreamWaitEntry entry{};
         entry.stream = stream;
         entry.write = true;
@@ -362,11 +400,157 @@ Failure write_all(intptr_t stream, std::span<const uint8_t> bytes, Budget& budge
     return Failure::none;
 }
 
+/// Finishes a TLS handshake on the connect clock. A rejected certificate is
+/// returned as certificate and is not turned into HTTP.
+///
+/// @param stream the connection
+/// @param tls the session
+/// @param budget the clocks
+/// @param[out] failure why the handshake stopped
+/// @param[out] detail the sentence
+/// @return true when the server's certificate was accepted
+bool drive_handshake(
+    intptr_t stream, TlsSession* tls, Budget& budget, Failure& failure, std::string& detail
+) {
+    while (true) {
+        const Budget::Hit hit = budget.hit(true);
+        if (hit != Budget::Hit::ok) {
+            failure = hit == Budget::Hit::cancel ? Failure::cancelled : Failure::timed_out;
+            detail = io_detail(failure);
+            return false;
+        }
+        const TlsIoResult result = tls_handshake(tls);
+        if (result.kind == TlsIoResult::Kind::ready) {
+            budget.touch();
+            return true;
+        }
+        if (result.kind == TlsIoResult::Kind::failed || result.kind == TlsIoResult::Kind::closed) {
+            failure = result.failure == Failure::none ? Failure::connection_lost : result.failure;
+            detail =
+                result.detail.empty() ? std::string("the secure connection failed") : result.detail;
+            return false;
+        }
+        sock::StreamWaitEntry entry{};
+        entry.stream = stream;
+        entry.read = result.kind != TlsIoResult::Kind::want_write;
+        entry.write = result.kind == TlsIoResult::Kind::want_write;
+        const int ready = sock::stream_wait(&entry, 1, budget.slice(true));
+        if (ready < 0 || entry.failed) {
+            failure = Failure::connection_lost;
+            detail = "the secure connection failed";
+            return false;
+        }
+    }
+}
+
+/// Where a redirect may go, and whether an https location was read as http.
+struct RedirectChoice {
+    bool ok = false;
+    std::string detail;
+    url::Url location;
+    Method method = Method::get;
+    std::vector<uint8_t> body;
+    bool rewritten = false;
+};
+
+/// Decides whether a redirect is followed. An absolute https location is read
+/// as http when TLS is off, with the same port rule as the first address.
+///
+/// @param request the caller's limits and allow-list
+/// @param current the address of this hop
+/// @param origin the address the fetch opened first
+/// @param followed how many redirects have been followed
+/// @param method the method on this hop
+/// @param body the POST body on this hop
+/// @param status the redirect status
+/// @param location_text the Location value
+/// @param tls_on true when https is fetched with TLS
+/// @return the next hop, or a refusal
+RedirectChoice decide_redirect(
+    const Request& request,
+    const url::Url& current,
+    const url::Url& origin,
+    uint32_t followed,
+    Method method,
+    const std::vector<uint8_t>& body,
+    int status,
+    std::string_view location_text,
+    bool tls_on
+) {
+    RedirectChoice choice;
+    if (followed >= request.limits.max_redirects) {
+        choice.detail = "the redirect was refused";
+        return choice;
+    }
+    if (method == Method::post && (status == 301 || status == 302)) {
+        choice.detail = "a POST redirect was refused";
+        return choice;
+    }
+    location_text = trim_ows(location_text);
+    if (location_text.empty()) {
+        choice.detail = "the redirect has no location";
+        return choice;
+    }
+    url::UrlError url_error = url::UrlError::none;
+    std::optional<url::Url> next;
+    const bool absolute = location_text.find("://") != std::string_view::npos;
+    if (absolute && !tls_on) {
+        const std::optional<url::FetchAddress> decided =
+            url::address_for_fetch(location_text, false, &url_error);
+        if (!decided) {
+            choice.detail = url::url_error_text(url_error);
+            return choice;
+        }
+        next = decided->url;
+        choice.rewritten = decided->rewritten_to_http;
+    } else {
+        next = url::resolve_reference(current, location_text, &url_error);
+        if (!next) {
+            choice.detail = url::url_error_text(url_error);
+            return choice;
+        }
+    }
+    if (next->scheme != url::Scheme::http && next->scheme != url::Scheme::https) {
+        choice.detail = "the redirect is not an http or https address";
+        return choice;
+    }
+    if (!tls_on && next->scheme == url::Scheme::https) {
+        choice.detail = "the redirect is not plain HTTP";
+        return choice;
+    }
+    if (!host_allowed(request.redirects, *next, origin)) {
+        choice.detail = "the redirect names a host that is not allowed";
+        return choice;
+    }
+    choice.ok = true;
+    choice.location = *next;
+    choice.method = status == 303 ? Method::get : method;
+    if (status != 303)
+        choice.body = body;
+    return choice;
+}
+
+/// A rewritten https hop that never got an HTTP status is the system's way
+/// of saying it cannot speak HTTPS and the host did not speak HTTP.
+///
+/// @param[in,out] response the hop's outcome
+/// @param rewritten true when this hop was an https address read as http
+void note_needs_https(Response& response, bool rewritten) {
+    if (!rewritten || response.status != 0)
+        return;
+    if (response.failure != Failure::cannot_connect &&
+        response.failure != Failure::connection_lost && response.failure != Failure::bad_response)
+        return;
+    response.failure = Failure::https_needs_tls;
+    response.detail = failure_text(Failure::https_needs_tls);
+}
+
 /// What reading one response decided.
 struct ReadEnd {
     bool retry = false;
     bool follow = false;
     bool reusable = false;
+    bool rewritten = false;
     Response response;
     url::Url location;
     Method method = Method::get;
@@ -386,6 +570,8 @@ struct ReadEnd {
 /// @param followed how many redirects have been followed
 /// @param final_url the text of this hop
 /// @param allow_retry true when a dead pooled connection may be tried once more
+/// @param tls the TLS session, or null for plain HTTP
+/// @param tls_on true when an https redirect is fetched with TLS
 /// @return what the hop decided
 ReadEnd read_response(
     intptr_t stream,
@@ -398,7 +584,9 @@ ReadEnd read_response(
     const url::Url& origin,
     uint32_t followed,
     const std::string& final_url,
-    bool allow_retry
+    bool allow_retry,
+    TlsSession* tls,
+    bool tls_on
 ) {
     ReadEnd end;
     end.response.final_url = final_url;
@@ -411,6 +599,7 @@ ReadEnd read_response(
     bool gzip_body = false;
     bool saw_byte = false;
     bool pending_follow = false;
+    bool next_rewritten = false;
     Method next_method = method;
     std::vector<uint8_t> next_body = body;
     std::optional<uint64_t> expected;
@@ -498,7 +687,52 @@ ReadEnd read_response(
                 return end;
             }
             uint8_t buffer[8192];
-            const std::ptrdiff_t got = sock::stream_read(stream, buffer, sizeof buffer);
+            std::ptrdiff_t got = 0;
+            if (tls == nullptr) {
+                got = sock::stream_read(stream, buffer, sizeof buffer);
+            } else {
+                while (true) {
+                    const TlsIoResult result = tls_read(tls, buffer, sizeof buffer);
+                    if (result.kind == TlsIoResult::Kind::ready && result.count > 0) {
+                        got = result.count;
+                        break;
+                    }
+                    if (result.kind == TlsIoResult::Kind::closed) {
+                        got = sock::stream_ended;
+                        break;
+                    }
+                    if (result.kind == TlsIoResult::Kind::failed) {
+                        fail(
+                            result.failure == Failure::none ? Failure::connection_lost
+                                                            : result.failure,
+                            result.detail.empty() ? std::string("the secure connection failed")
+                                                  : result.detail
+                        );
+                        return end;
+                    }
+                    const Budget::Hit tls_hit = budget.hit(false);
+                    if (tls_hit != Budget::Hit::ok) {
+                        fail(
+                            tls_hit == Budget::Hit::cancel ? Failure::cancelled
+                                                           : Failure::timed_out,
+                            io_detail(
+                                tls_hit == Budget::Hit::cancel ? Failure::cancelled
+                                                               : Failure::timed_out
+                            )
+                        );
+                        return end;
+                    }
+                    sock::StreamWaitEntry tls_entry{};
+                    tls_entry.stream = stream;
+                    tls_entry.read = result.kind != TlsIoResult::Kind::want_write;
+                    tls_entry.write = result.kind == TlsIoResult::Kind::want_write;
+                    const int tls_ready = sock::stream_wait(&tls_entry, 1, budget.slice(false));
+                    if (tls_ready < 0 || tls_entry.failed) {
+                        got = sock::stream_failed;
+                        break;
+                    }
+                }
+            }
             if (got > 0) {
                 saw_byte = true;
                 budget.touch();
@@ -536,41 +770,27 @@ ReadEnd read_response(
             end.response.headers = reader.headers();
             end.response.content_length = reader.content_length();
             if (redirect_status(end.response.status)) {
-                if (followed >= request.limits.max_redirects) {
-                    fail(Failure::redirect_refused, "the redirect was refused");
-                    return end;
-                }
-                if (method == Method::post &&
-                    (end.response.status == 301 || end.response.status == 302)) {
-                    fail(Failure::redirect_refused, "a POST redirect was refused");
-                    return end;
-                }
                 const std::string* location = end.response.header("location");
-                if (location == nullptr) {
-                    fail(Failure::redirect_refused, "the redirect has no location");
-                    return end;
-                }
-                url::UrlError url_error = url::UrlError::none;
-                const std::optional<url::Url> next =
-                    url::resolve_reference(current, trim_ows(*location), &url_error);
-                if (!next || next->scheme != url::Scheme::http) {
-                    fail(
-                        Failure::redirect_refused,
-                        next ? "the redirect is not plain HTTP" : url::url_error_text(url_error)
-                    );
-                    return end;
-                }
-                if (!host_allowed(request.redirects, *next, origin)) {
-                    fail(
-                        Failure::redirect_refused, "the redirect names a host that is not allowed"
-                    );
+                const RedirectChoice choice = decide_redirect(
+                    request,
+                    current,
+                    origin,
+                    followed,
+                    method,
+                    body,
+                    end.response.status,
+                    location == nullptr ? std::string_view{} : std::string_view(*location),
+                    tls_on
+                );
+                if (!choice.ok) {
+                    fail(Failure::redirect_refused, choice.detail);
                     return end;
                 }
                 pending_follow = true;
-                end.location = *next;
-                next_method = end.response.status == 303 ? Method::get : method;
-                if (end.response.status == 303)
-                    next_body.clear();
+                end.location = choice.location;
+                next_method = choice.method;
+                next_body = choice.body;
+                next_rewritten = choice.rewritten;
                 continue;
             }
             if (request.range_from.has_value() && end.response.status == 206) {
@@ -622,6 +842,7 @@ ReadEnd read_response(
                 end.follow = true;
                 end.method = next_method;
                 end.body = std::move(next_body);
+                end.rewritten = next_rewritten;
                 end.reusable = reader.reusable() && stash.empty();
                 end.response.failure = Failure::none;
                 return end;
@@ -642,13 +863,37 @@ ReadEnd read_response(
     }
 }
 
+/// Copies one system-stack hop into the response the caller sees.
+///
+/// @param exchange the hop
+/// @param final_url the address of this hop
+/// @return the outcome
+Response response_from_exchange(const HttpsExchange& exchange, const std::string& final_url) {
+    Response response;
+    response.failure = exchange.failure;
+    if (exchange.detail.empty() && exchange.failure != Failure::none)
+        response.detail = failure_text(exchange.failure);
+    else
+        response.detail = exchange.detail;
+    response.status = exchange.status;
+    response.headers = exchange.headers;
+    response.final_url = final_url;
+    response.content_length = exchange.content_length;
+    response.content_range = exchange.content_range;
+    response.body_bytes = exchange.body_bytes;
+    return response;
+}
+
 /// Closes a connection unless it has already been released.
 struct StreamGuard {
     intptr_t fd = sock::invalid_socket;
+    TlsSession* tls = nullptr;
 
     StreamGuard() = default;
 
     ~StreamGuard() {
+        if (tls != nullptr)
+            tls_close(tls);
         if (fd != sock::invalid_socket)
             sock::stream_close(&fd);
     }
@@ -666,7 +911,11 @@ const char* failure_text(Failure failure) noexcept {
     case Failure::bad_url:
         return "the address is not one OA can fetch";
     case Failure::https_unsupported:
-        return "OA fetches over plain HTTP";
+        return "This system cannot use HTTPS";
+    case Failure::certificate:
+        return "the server's certificate was rejected";
+    case Failure::https_needs_tls:
+        return "This registry needs HTTPS, which this system cannot use";
     case Failure::bad_request:
         return "the request cannot be sent";
     case Failure::cannot_resolve:
@@ -831,17 +1080,17 @@ Response Client::fetch(const Request& request, std::vector<uint8_t>& body) {
 
 Response Client::fetch(const Request& request, BodySink& sink) {
     state_->reap();
+    // Rewrite https to http only before any connection, and only when TLS is
+    // off. A failed handshake or a rejected certificate is never tried again
+    // as HTTP.
+    const bool tls_on = options_.tls.value_or(tls_available());
     url::UrlError url_error = url::UrlError::none;
-    const std::optional<url::Url> parsed = url::parse_http_url(request.url, &url_error);
-    if (!parsed) {
+    const std::optional<url::FetchAddress> decided =
+        url::address_for_fetch(request.url, tls_on, &url_error);
+    if (!decided) {
         Response response;
-        if (url_error == url::UrlError::https_not_fetched) {
-            response.failure = Failure::https_unsupported;
-            response.detail = url::url_error_text(url_error);
-        } else {
-            response.failure = Failure::bad_url;
-            response.detail = url::url_error_text(url_error);
-        }
+        response.failure = Failure::bad_url;
+        response.detail = url::url_error_text(url_error);
         return response;
     }
 
@@ -851,11 +1100,12 @@ Response Client::fetch(const Request& request, BodySink& sink) {
     Budget budget;
     budget.timeouts = request.timeouts;
     budget.cancel = request.cancel;
-    const url::Url origin = *parsed;
+    const url::Url origin = decided->url;
     url::Url current = origin;
     Method method = request.method;
     std::vector<uint8_t> body = request.body;
     uint32_t followed = 0;
+    bool hop_rewritten = decided->rewritten_to_http;
 
     while (true) {
         budget.begin_hop();
@@ -874,6 +1124,64 @@ Response Client::fetch(const Request& request, BodySink& sink) {
             response.detail = prepared.detail;
             response.final_url = final_url;
             return response;
+        }
+
+        const bool secure = current.scheme == url::Scheme::https;
+        if (secure) {
+            const HttpsTransport transport = https_transport();
+            if (transport == HttpsTransport::none) {
+                Response response;
+                response.failure = Failure::https_unsupported;
+                response.detail = failure_text(Failure::https_unsupported);
+                response.final_url = final_url;
+                return response;
+            }
+            if (transport == HttpsTransport::platform) {
+                FetchClock clock;
+                clock.started = budget.started;
+                clock.hop = budget.hop;
+                clock.timeouts = budget.timeouts;
+                clock.cancel = budget.cancel;
+                const HttpsExchange exchange =
+                    fetch_https_hop(request, current, method, body, user_agent, sink, clock);
+                if (exchange.failure == Failure::none && redirect_status(exchange.status)) {
+                    const std::string* location = nullptr;
+                    for (const Header& header : exchange.headers) {
+                        if (same_name(header.name, "location")) {
+                            location = &header.value;
+                            break;
+                        }
+                    }
+                    RedirectChoice choice = decide_redirect(
+                        request,
+                        current,
+                        origin,
+                        followed,
+                        method,
+                        body,
+                        exchange.status,
+                        location == nullptr ? std::string_view{} : std::string_view(*location),
+                        tls_on
+                    );
+                    if (!choice.ok) {
+                        Response response = response_from_exchange(exchange, final_url);
+                        response.failure = Failure::redirect_refused;
+                        response.detail = std::move(choice.detail);
+                        return response;
+                    }
+                    current = std::move(choice.location);
+                    method = choice.method;
+                    body = std::move(choice.body);
+                    hop_rewritten = choice.rewritten;
+                    ++followed;
+                    continue;
+                }
+                Response response = response_from_exchange(exchange, final_url);
+                if (response.failure == Failure::certificate)
+                    return response;
+                note_needs_https(response, hop_rewritten);
+                return response;
+            }
         }
 
         const LookupResult looked =
@@ -897,7 +1205,9 @@ Response Client::fetch(const Request& request, BodySink& sink) {
         while (true) {
             StreamGuard guard;
             bool pooled = false;
-            if (!retried) {
+            // A TLS socket is never pooled. The pool key is host and port, so a
+            // later plain fetch would be handed a session it cannot speak.
+            if (!secure && !retried) {
                 guard.fd = state_->take(current.host, current.port);
                 pooled = guard.fd != sock::invalid_socket;
             }
@@ -909,14 +1219,38 @@ Response Client::fetch(const Request& request, BodySink& sink) {
                     response.failure = failure;
                     response.detail = std::move(detail);
                     response.final_url = final_url;
+                    note_needs_https(response, hop_rewritten && !secure);
+                    return response;
+                }
+            }
+            if (secure) {
+                Failure opened = Failure::none;
+                std::string opened_detail;
+                guard.tls = tls_open(
+                    guard.fd,
+                    current.host,
+                    url::is_ipv4_literal(current.host),
+                    opened,
+                    opened_detail
+                );
+                if (guard.tls == nullptr ||
+                    !drive_handshake(guard.fd, guard.tls, budget, opened, opened_detail)) {
+                    Response response;
+                    response.failure = opened == Failure::none ? Failure::connection_lost : opened;
+                    response.detail = opened_detail.empty()
+                                          ? std::string(io_detail(response.failure))
+                                          : std::move(opened_detail);
+                    response.final_url = final_url;
                     return response;
                 }
             }
 
-            // Lookup and the TCP connect are not idle time. The idle clock
-            // starts as the request is written.
+            // Lookup, the TCP connect and the handshake are not idle time.
+            // The idle clock starts as the request is written.
             budget.touch();
-            const Failure wrote = write_all(guard.fd, prepared.bytes, budget);
+            std::string write_detail;
+            const Failure wrote =
+                write_all(guard.fd, prepared.bytes, budget, guard.tls, write_detail);
             if (wrote != Failure::none) {
                 if (wrote == Failure::connection_lost && pooled && !retried &&
                     method != Method::post) {
@@ -925,8 +1259,11 @@ Response Client::fetch(const Request& request, BodySink& sink) {
                 }
                 Response response;
                 response.failure = wrote;
-                response.detail = io_detail(wrote);
+                response.detail =
+                    write_detail.empty() ? std::string(io_detail(wrote)) : std::move(write_detail);
                 response.final_url = final_url;
+                if (response.failure != Failure::certificate)
+                    note_needs_https(response, hop_rewritten && !secure);
                 return response;
             }
 
@@ -941,23 +1278,28 @@ Response Client::fetch(const Request& request, BodySink& sink) {
                 origin,
                 followed,
                 final_url,
-                pooled && !retried && method != Method::post
+                pooled && !retried && method != Method::post && !secure,
+                guard.tls,
+                tls_on
             );
             if (end.retry) {
                 retried = true;
                 continue;
             }
             if (end.follow) {
-                if (end.reusable)
+                if (end.reusable && !secure)
                     state_->keep(current.host, current.port, guard.fd);
                 current = std::move(end.location);
                 method = end.method;
                 body = std::move(end.body);
+                hop_rewritten = end.rewritten;
                 ++followed;
                 break;
             }
-            if (end.reusable)
+            if (end.reusable && !secure)
                 state_->keep(current.host, current.port, guard.fd);
+            if (end.response.failure != Failure::certificate)
+                note_needs_https(end.response, hop_rewritten && !secure);
             return end.response;
         }
     }

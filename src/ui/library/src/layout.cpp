@@ -617,15 +617,16 @@ oa::ui::frontend_renderer::RgbaPicture picture_of(const Badge* badge) {
     return picture;
 }
 
-/// Returns an entry's badge picture: its listing's, else its installed copy's.
+/// Returns an entry's badge picture: its own, else its listing's, else its
+/// installed copy's.
 ///
 /// @param entry the entry
 /// @return the picture; empty without one
 oa::ui::frontend_renderer::RgbaPicture badge_picture(const Entry& entry) {
-    const Badge* badge = nullptr;
-    if (entry.listing != nullptr && entry.listing->badge)
+    const Badge* badge = entry.badge;
+    if (badge == nullptr && entry.listing != nullptr && entry.listing->badge)
         badge = &*entry.listing->badge;
-    else if (entry.installed != nullptr && entry.installed->badge)
+    else if (badge == nullptr && entry.installed != nullptr && entry.installed->badge)
         badge = &*entry.installed->badge;
     return picture_of(badge);
 }
@@ -704,6 +705,11 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.by = byline(entry, library.text);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
+    else if (is_base_game(entry.id)) {
+        const std::string_view about = entry_summary(entry);
+        if (!about.empty())
+            look.lines.push_back(std::string(about));
+    }
     if (!version.empty())
         look.aside.push_back(version);
     if (!size.empty())

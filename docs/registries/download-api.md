@@ -85,7 +85,7 @@ first failure as `400 invalid_field` with `field` set to the member's name.
 |---|---|
 | `download` | 1 to 128 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`. This is the id used in the result path. |
 | `expires` | UTC time. The URL is valid until this moment. |
-| `url` | An `http` address. A query is allowed. `https` is refused by OA. |
+| `url` | An `http` or `https` address. A query is allowed. |
 
 Core Prime's ids are `d_` plus 22 characters from that alphabet, made from
 16 random bytes. That shape is one registry's habit. OA accepts any id of

@@ -30,6 +30,7 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/app/window_icon.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/languages.hpp"
@@ -215,6 +216,17 @@ std::optional<library::Badge> badge_of(const ModBadge& picture) {
     if (picture.width == 0 || picture.height == 0 || picture.pixels.empty())
         return std::nullopt;
     return library::Badge{picture.pixels, picture.width, picture.height};
+}
+
+/// Returns the Open Annihilation logo as the base game entry's badge.
+///
+/// Read once from the icon the window shows. Empty when that icon cannot
+/// be read; the entry then shows its letters.
+///
+/// @return the badge
+std::optional<library::Badge> base_game_logo() {
+    static const std::optional<library::Badge> logo = badge_of(read_mod_badge(window_icon_png()));
+    return logo;
 }
 
 /// Returns the seconds since 1970 by the system's clock.
@@ -1057,6 +1069,7 @@ library::Inputs Runtime::library_inputs() {
         );
     }
     inputs.registries_notice = registry_edit_notice();
+    inputs.base_game_badge = base_game_logo();
     return inputs;
 }
 

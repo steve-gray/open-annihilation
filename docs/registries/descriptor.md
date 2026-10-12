@@ -20,8 +20,8 @@ of file for a registry that uses the download API. The schema is
 | `id` | yes | Kebab-case, 1 to 32 bytes: words of `a-z` and `0-9` joined by single hyphens, not starting or ending with a hyphen. |
 | `name` | yes | 1 to 64 bytes of UTF-8, with no control character (C0, DEL, or U+007F to U+009F) and no byte that is not UTF-8. |
 | `homepage` | no | An `http` or `https` address, opened only in a browser. |
-| `catalogue` | yes | An `http` address with no query. The catalogue file. |
-| `mirrors` | no | At most 8 other copies of the catalogue. Each is `http` with no query. Absent reads as none. |
+| `catalogue` | yes | An `http` or `https` address with no query. The catalogue file. |
+| `mirrors` | no | At most 8 other copies of the catalogue. Each is `http` or `https` with no query. Absent reads as none. |
 | `keys` | no | At most 8 signing keys. Absent or empty means the registry is unsigned. |
 | `downloads` | yes | How packages are fetched. See below. |
 
@@ -30,7 +30,7 @@ of file for a registry that uses the download API. The schema is
 - `direct` refuses `api`. It refuses `install-id: required`. When
   `install-id` is absent it is `none`. A direct registry is fetched from
   the catalogue's own file address and checked by SHA-256.
-- `tokens` requires `api`, an `http` address with no query. When
+- `tokens` requires `api`, an `http` or `https` address with no query. When
   `install-id` is absent it is `required`. Packages are fetched through
   the [download API](download-api.md).
 
@@ -43,13 +43,18 @@ An address OA reads is 1 to 2048 bytes of printable ASCII. The scheme is
 and no IPv6 literal. The host is lower-cased and loses one trailing dot. A
 fragment is dropped. `.` and `..` path segments are removed.
 
-A catalogue, a mirror and a download API MUST be `http` and MUST NOT have a
-query. OA fetches them over plain HTTP and checks what it gets. `https` is
-refused for those. A homepage, the page where a descriptor was added, and a
-challenge page MAY be `http` or `https`, and MAY have a query.
+A catalogue, a mirror and a download API MAY be `http` or `https` and MUST
+NOT have a query. OA fetches an `https` address with the system's TLS where
+the system has it, and as `http` (the same host, port 80 unless the text
+named a port) where it does not. A named port is kept, including an
+explicit 443. A certificate error is a failure, not a downgrade to `http`.
+The signature is the trust, whatever the transport. A homepage, the page
+where a descriptor was added, and a challenge page MAY be `http` or
+`https`, and MAY have a query.
 
 The address a player is shown for a registry is the catalogue's host, and
-`:port` when the port is not 80.
+`:port` when the port is not the scheme's default (80 for `http`, 443 for
+`https`).
 
 ## Signing keys
 
@@ -91,7 +96,7 @@ refusal. Built-in registries are the ones that ship with the game.
 
 A player MUST NOT add a mirror to a built-in registry. Only that registry's
 signed catalogue can name one. A mirror a player adds to a registry they
-added MUST be `http` with no query, and MUST NOT already be listed.
+added MUST be an `http` or `https` address with no query, and MUST NOT already be listed.
 
 An unsigned registry is only for Developer mode, and only when every
 catalogue, mirror and API host is exactly `127.0.0.1`.

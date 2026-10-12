@@ -184,12 +184,22 @@ void bad_id_and_name_are_refused() {
 }
 
 void catalogue_rules_are_refused() {
-    refuse(
-        "registry: 1\nid: example-maps\nname: Example Maps\n"
-        "catalogue: https://downloads.example.net/v1/catalogue.json\n"
-        "downloads:\n  mode: direct\n",
-        "catalogue"
+    registry::Descriptor secure;
+    std::string error;
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of(
+                "registry: 1\nid: example-maps\nname: Example Maps\n"
+                "catalogue: https://downloads.example.net/v1/catalogue.json\n"
+                "downloads:\n  mode: direct\n"
+            ),
+            secure,
+            &error
+        )
     );
+    OA_CHECK(secure.catalogue.scheme == url::Scheme::https);
+    OA_CHECK(secure.catalogue.host == "downloads.example.net");
+    OA_CHECK(secure.catalogue.port == 443);
     refuse(
         "registry: 1\nid: example-maps\nname: Example Maps\n"
         "catalogue: \"http://[::1]/catalogue.json\"\n"
