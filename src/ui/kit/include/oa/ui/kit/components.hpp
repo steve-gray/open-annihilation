@@ -89,6 +89,7 @@ void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around);
 /// the plain look's disabled face while it cannot be pressed, and the arrow
 /// in the text colour while it is turning. When the look's check has been
 /// showing, the arrow eases into a check in the accent, then the arrow returns.
+/// A close mark draws an × the same way, in the text colour, on that same face.
 ///
 /// @param canvas where it is drawn
 /// @param area the button

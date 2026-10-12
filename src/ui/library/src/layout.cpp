@@ -791,7 +791,8 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
 
 /// Appends the header: the OA mark, the title and its second word, and the
 /// version at the right. right_inset keeps columns clear inside the padding
-/// for the refresh icon and, when the last refresh failed, the offline mark.
+/// for the refresh icon, the close mark and, when the last refresh failed,
+/// the offline mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -847,14 +848,41 @@ void add_header(
         std::move(look);
 }
 
-/// Returns the columns the header keeps clear for the refresh icon, and for
-/// the offline mark when the last refresh could not reach a registry.
+/// Returns the header's close mark, the right-hand square.
+///
+/// @param window the window
+/// @return the button
+kit::Rect header_close_rect(const Window& window) {
+    const kit::Metrics& compact = kit::compact_metrics;
+    const int32_t side = compact.button_height;
+    return {
+        window.width - compact.edge - compact.padding - side,
+        compact.edge + (compact.header_height - side) / 2,
+        side,
+        side,
+    };
+}
+
+/// Returns the header's refresh icon, the same square, one gap left of the
+/// close mark.
+///
+/// @param window the window
+/// @return the button
+kit::Rect header_refresh_rect(const Window& window) {
+    const kit::Rect close = header_close_rect(window);
+    const int32_t gap = kit::compact_metrics.header_gap;
+    return {close.x - gap - close.width, close.y, close.width, close.height};
+}
+
+/// Returns the columns the header keeps clear for the refresh icon, the
+/// close mark and, when the last refresh could not reach a registry, the
+/// offline mark.
 ///
 /// @param building the layout
 /// @return the columns, inside the header's padding
 int32_t header_reserve(const Building& building) {
     const kit::Metrics& compact = kit::compact_metrics;
-    int32_t reserve = compact.button_height + compact.header_gap;
+    int32_t reserve = 2 * (compact.button_height + compact.header_gap);
     if (building.library->inputs.offline) {
         const std::string_view mark = shown(building.library->text, words::offline_mark);
         reserve += width_of(building, kit::FontRole::small, mark) + compact.header_gap;
@@ -883,14 +911,7 @@ uint16_t registry_check_ms(const ScreenState& state, std::string_view id) noexce
 /// @param window the window
 void add_refresh_button(Building& building, const Window& window) {
     const Library& library = *building.library;
-    const kit::Metrics& compact = kit::compact_metrics;
-    const int32_t side = compact.button_height;
-    const kit::Rect rect{
-        window.width - compact.edge - compact.padding - side,
-        compact.edge + (compact.header_height - side) / 2,
-        side,
-        side,
-    };
+    const kit::Rect rect = header_refresh_rect(window);
     const bool turning = library.inputs.checking;
     kit::ButtonLook look;
     look.style = kit::ButtonStyle::quiet;
@@ -912,6 +933,29 @@ void add_refresh_button(Building& building, const Window& window) {
     tab_stop(building, building.top.back());
 }
 
+/// Appends the header's close mark, the same square as the refresh icon and
+/// one gap to its right. Pressing it asks for the same close as CLOSE.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_close_button(Building& building, const Window& window) {
+    const Library& library = *building.library;
+    const kit::Rect rect = header_close_rect(window);
+    kit::ButtonLook look;
+    look.style = kit::ButtonStyle::quiet;
+    look.hovered = hovered(building, controls::close_x);
+    look.held = held(building, controls::close_x);
+    look.mark = kit::ButtonMark::close;
+    const std::size_t before = building.list.controls.size();
+    kit::add_button(
+        building.list, rect, look, controls::close_x, unique_name(building, named("close-x"))
+    );
+    move_controls(building.list, before, building.top);
+    building.top.back().text = std::string(shown(library.text, words::action_close_x));
+    // Tab's order gains it in finish, after every other stop, so it stays
+    // last in the title bar (the refresh icon, when it takes focus, is earlier).
+}
+
 /// Appends the word "offline" in the lock colour, immediately left of the
 /// refresh icon, when the last refresh could not reach a registry.
 ///
@@ -924,8 +968,7 @@ void add_offline_mark(Building& building, const Window& window) {
     const kit::Metrics& compact = kit::compact_metrics;
     const std::string mark(shown(library.text, words::offline_mark));
     const int32_t mark_width = width_of(building, kit::FontRole::small, mark);
-    const int32_t side = compact.button_height;
-    const int32_t icon_left = window.width - compact.edge - compact.padding - side;
+    const int32_t icon_left = header_refresh_rect(window).x;
     const kit::Rect box{
         icon_left - compact.header_gap - mark_width,
         compact.edge,
@@ -935,7 +978,7 @@ void add_offline_mark(Building& building, const Window& window) {
     add_text(building, kit::FontRole::small, mark, box, kit::Align::right, kit::colour::lock, {});
 }
 
-/// Appends the header, the offline mark and the refresh icon.
+/// Appends the header, the offline mark, the refresh icon and the close mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -952,6 +995,7 @@ void add_library_header(
     add_header(building, window, title, second, version, header_reserve(building));
     add_offline_mark(building, window);
     add_refresh_button(building, window);
+    add_close_button(building, window);
 }
 
 /// Returns a tab's title, with its count in brackets after every tab but Active.
@@ -4612,6 +4656,9 @@ kit::DisplayList finish(Building& building, const Window& window) {
     add_open_menu(building, window.footer_rule);
     add_unload_note(building, window);
     add_key_tooltip(building, window);
+    for (const kit::Control& control : building.top)
+        if (control.id == controls::close_x)
+            tab_stop(building, control);
     kit::DisplayList list = std::move(building.list);
     list.controls.clear();
     for (auto* group :
@@ -4937,30 +4984,6 @@ kit::DisplayList details_page_layout(
         const int32_t first = view.y - offset;
         const std::size_t first_item = into.list.items.size();
         int32_t top = first;
-        kit::LinkLook link;
-        link.caption =
-            cut(into,
-                kit::FontRole::small,
-                filled(
-                    library.text,
-                    words::back_to_tab,
-                    {{"tab", std::string(tab_text(library.tab, false, library.text))}}
-                ),
-                width);
-        link.hovered =
-            hovered(into, controls::back) || into.state->interaction.pressed == controls::back;
-        const kit::Rect link_rect{
-            view.x, top, kit::link_width(*into.fonts, link), metrics.small_line
-        };
-        const std::size_t before = into.list.controls.size();
-        kit::add_link(into.list, link_rect, link, controls::back, unique_name(into, named("back")));
-        into.list.items.back().clip = view;
-        move_controls(into.list, before, into.detail);
-        into.detail.back().clip = view;
-        into.detail.back().group = controls::details_group;
-        tab_stop(into, into.detail.back());
-        top += metrics.small_line + metrics.paragraph_gap;
-
         const std::string status =
             cut(into, kit::FontRole::small, status_line(library, *entry), width);
         const kit::Rect status_box{view.x, top, width, metrics.small_line};
@@ -5035,7 +5058,8 @@ kit::DisplayList details_page_layout(
             kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), false};
     }
 
-    // The footer: the first three actions, MORE ▾ with the rest, and CLOSE.
+    // The footer: the first three actions, MORE ▾ with the rest, and BACK.
+    // BACK does what the old breadcrumb did: the list, with its place kept.
     add_item(
         building.list,
         kit::Role::footer_band,
@@ -5080,17 +5104,17 @@ kit::DisplayList details_page_layout(
             named("action")
         );
     }
-    const std::string_view close_caption = action_text(Action::close, library.text);
-    const int32_t close_width = button_width(building, close_caption);
+    const std::string_view back_caption = action_text(Action::back, library.text);
+    const int32_t back_width = button_width(building, back_caption);
     add_button(
         building,
         building.footer,
-        {window.right - close_width, window.button_top, close_width, metrics.button_height},
-        close_caption,
+        {window.right - back_width, window.button_top, back_width, metrics.button_height},
+        back_caption,
         true,
         true,
-        controls::close,
-        named("close"),
+        controls::back,
+        named("back"),
         {},
         -1
     );

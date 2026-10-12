@@ -70,12 +70,15 @@ inline constexpr std::string_view action_unload_mod = "UNLOAD MOD";
 inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
+/// BACK on Compact's details page. It returns to the list, which keeps its place.
 inline constexpr std::string_view action_back = "BACK";
 /// The header's refresh icon, and the same words while it is turning.
 inline constexpr std::string_view action_refresh = "Refresh";
 inline constexpr std::string_view action_refreshing = "Refreshing";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
+/// The header's close mark. The footer's CLOSE keeps its own word.
+inline constexpr std::string_view action_close_x = "Close";
 inline constexpr std::string_view action_uninstall = "UNINSTALL";
 
 // The Registries tab. The words are the ones Downloads' Registries part used.
@@ -395,8 +398,6 @@ inline constexpr std::string_view offline_list =
     "Showing the list from {age}. OA couldn't reach the registries.";
 
 // The details.
-/// The Compact details page's way back to the list, with the tab's name.
-inline constexpr std::string_view back_to_tab = "‹ {tab}";
 /// After a fact's value that is met.
 inline constexpr std::string_view fact_met = "✓";
 
