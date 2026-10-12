@@ -315,6 +315,16 @@ using ListPress = oa::ui::gui_input::ScrollListPress;
 /// @return What the press did.
 ListPress panel_press_list(Panel& panel, int32_t index, int32_t y) noexcept;
 
+/// The rows a list shows at once: its height over its row pitch, at least one.
+///
+/// The pitch is the list's own, or `line_height` when the list has none.
+/// This is the page the automation endpoint reports and moves.
+///
+/// @param list the list
+/// @param line_height the panel's line height, used when the list has no pitch
+/// @return the rows; 1 when the list has no height
+[[nodiscard]] int32_t list_shown_rows(const Control& list, int32_t line_height) noexcept;
+
 /// Scrolls a list with a pitch by whole rows within its first row and its
 /// last page's first row, then brings its group in line with it.
 ///

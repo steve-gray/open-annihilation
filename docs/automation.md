@@ -21,6 +21,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [Input](#input)
 - [Events](#events)
 - [What it never does](#what-it-never-does)
+- [A list that does not fit](#a-list-that-does-not-fit)
 - [In a battle room](#in-a-battle-room)
 - [Checks](#checks)
 
@@ -352,6 +353,10 @@ to the next; nothing is added to the game to produce them.
   time, and never waits.
   A client that stops reading is dropped once 68 MiB of answers wait for
   it (`automation: client dropped: not reading` in the log).
+
+## A list that does not fit
+
+When a list on a multiplayer screen holds more rows than it can show, `controls` names the scroll arrows that move it. `scroll_up` is the arrow toward the start of the list and `scroll_down` is the arrow toward the end. A click on either, sent as input in the game's own space, moves the list by one page, the `rows` it shows at once. Select Map in the battle room is that list: `MAPNAMES`, with arrows `SLIDER.up` and `SLIDER.down`. A player clicking the same arrow still moves the knob by one step. A list whose rows all fit, and a list on any other screen, reports no arrows.
 
 ## In a battle room
 

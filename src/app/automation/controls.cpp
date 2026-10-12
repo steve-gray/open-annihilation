@@ -78,6 +78,24 @@ std::optional<AutomationControlKind> multiplayer_kind(const mp::Control& control
     return std::nullopt;
 }
 
+/// Names a list's scroll arrows and adds them as controls a program can click.
+///
+/// The bar's own rectangle lies between its arrows, so a click at its centre
+/// is not a click on an arrow. The arrows are `<bar>.up` and `<bar>.down`.
+/// A list with no row pitch, a hidden bar or a bar with no arrows is left
+/// with none: every row fits, or the bar is not a list's.
+///
+/// @param panel the panel shown
+/// @param offset where the panel lies on the canvas
+/// @param dialog the dialog's name; empty for the screen's own panel
+/// @param[in,out] controls the panel's controls, which gain the arrows
+void name_list_scroll(
+    const mp::Panel& panel,
+    mp::PanelOffset offset,
+    const std::string& dialog,
+    std::vector<AutomationControl>& controls
+);
+
 /// Collects the controls of the multiplayer screen shown, or of the dialog
 /// over it: those of the panel that takes the pointer.
 ///
@@ -117,7 +135,7 @@ void multiplayer_controls(std::vector<AutomationControl>& controls) {
             control.first_visible = std::max<int32_t>(0, source.list_first);
             control.row_height =
                 source.list_item_height > 0 ? source.list_item_height : panel.line_height;
-            control.rows = control.row_height > 0 ? control.height / control.row_height : 0;
+            control.rows = mp::list_shown_rows(source, panel.line_height);
             control.selected =
                 source.list_selection >= 0 &&
                         static_cast<size_t>(source.list_selection) < source.items.size()
@@ -125,6 +143,66 @@ void multiplayer_controls(std::vector<AutomationControl>& controls) {
                     : -1;
         }
         controls.push_back(std::move(control));
+    }
+    name_list_scroll(panel, offset, dialog, controls);
+}
+
+void name_list_scroll(
+    const mp::Panel& panel,
+    mp::PanelOffset offset,
+    const std::string& dialog,
+    std::vector<AutomationControl>& controls
+) {
+    std::vector<std::string> added;
+    for (int32_t index = 1; index < panel.count; ++index) {
+        const mp::Control& source = panel.controls[static_cast<size_t>(index)];
+        if (source.type != mp::ControlType::list_box || source.list_item_height <= 0)
+            continue;
+        const int32_t bar = mp::panel_group_member(panel, index, mp::ControlType::slider);
+        if (bar == mp::kNoControl)
+            continue;
+        const mp::Control& slider = panel.controls[static_cast<size_t>(bar)];
+        if (slider.active == 0 || slider.scroll.art == oa::ui::gui_input::ScrollArt::unbound)
+            continue;
+        const auto& back = slider.scroll.back_arrow;
+        const auto& forward = slider.scroll.forward_arrow;
+        if (back.width <= 0 || back.height <= 0 || forward.width <= 0 || forward.height <= 0)
+            continue;
+        const std::string bar_name(mp::control_name(slider));
+        if (bar_name.empty())
+            continue;
+        const std::string up = bar_name + ".up";
+        const std::string down = bar_name + ".down";
+        const std::string list_name(mp::control_name(source));
+        for (AutomationControl& listed : controls) {
+            if (listed.kind == AutomationControlKind::list && listed.name == list_name) {
+                listed.scroll_up = up;
+                listed.scroll_down = down;
+                break;
+            }
+        }
+        const auto add = [&](const std::string& name,
+                             int32_t arrow_x,
+                             int32_t arrow_y,
+                             int32_t arrow_width,
+                             int32_t arrow_height) {
+            if (std::find(added.begin(), added.end(), name) != added.end())
+                return;
+            added.push_back(name);
+            AutomationControl arrow;
+            arrow.name = name;
+            arrow.kind = AutomationControlKind::button;
+            arrow.dialog = dialog;
+            arrow.x = arrow_x + offset.x;
+            arrow.y = arrow_y + offset.y;
+            arrow.width = arrow_width;
+            arrow.height = arrow_height;
+            arrow.visible = true;
+            arrow.enabled = true;
+            controls.push_back(std::move(arrow));
+        };
+        add(up, back.x, back.y, back.width, back.height);
+        add(down, forward.x, forward.y, forward.width, forward.height);
     }
 }
 
@@ -348,12 +426,18 @@ void answer_controls(Endpoint& endpoint, const Request& request, Answer& answer)
             json.integer(control.row_height);
             json.key("selected");
             json.integer(control.selected);
-            // The lists' scroll bars carry their own arrows; no control of
-            // its own scrolls a list.
+            // Empty when every row fits, or the list has no scroll bar.
+            // A multiplayer list names its bar's arrows.
             json.key("scroll_up");
-            json.null();
+            if (control.scroll_up.empty())
+                json.null();
+            else
+                json.string(control.scroll_up);
             json.key("scroll_down");
-            json.null();
+            if (control.scroll_down.empty())
+                json.null();
+            else
+                json.string(control.scroll_down);
         }
         json.end_object();
     }

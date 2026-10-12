@@ -4000,6 +4000,87 @@ bool multiplayer_map_list_rect(int32_t* x, int32_t* y, int32_t* width, int32_t* 
     return true;
 }
 
+namespace {
+
+/// A point on the canvas, in a rectangle whose right and bottom edges are open.
+///
+/// @param x the point's column
+/// @param y the point's row
+/// @param left the rectangle's left column
+/// @param top the rectangle's top row
+/// @param width the rectangle's width
+/// @param height the rectangle's height
+/// @return true when the point lies inside
+bool point_inside(
+    int32_t x, int32_t y, int32_t left, int32_t top, int32_t width, int32_t height
+) noexcept {
+    return width > 0 && height > 0 && x >= left && y >= top && x < left + width && y < top + height;
+}
+
+/// The list a canvas point's scroll arrow pages, and which way.
+struct PageArrow {
+    int32_t list = kNoControl; ///< the list; kNoControl when the point pages none
+    bool toward_end = false;   ///< the arrow toward the list's end, rather than its start
+};
+
+/// Finds the shown list whose scroll arrow contains a canvas point.
+///
+/// A bar that is hidden, a list with no row pitch and a point off both arrows
+/// page nothing. The frontmost bar wins, as a click does.
+///
+/// @param x the point's column on the canvas
+/// @param y the point's row on the canvas
+/// @return the list and the way; the list is kNoControl when there is none
+PageArrow page_arrow_at(int32_t x, int32_t y) noexcept {
+    PageArrow found;
+    if (!ui().showing)
+        return found;
+    auto& shown = front();
+    auto& panel = shown.panel;
+    for (int32_t index = panel.count - 1; index >= 1; --index) {
+        const auto& slider = panel.controls[static_cast<std::size_t>(index)];
+        if (slider.type != ControlType::slider || slider.active == 0 ||
+            slider.scroll.art == oa::ui::gui_input::ScrollArt::unbound)
+            continue;
+        const auto list = panel_group_member(panel, index, ControlType::list_box);
+        if (list == kNoControl)
+            continue;
+        const auto& rows = panel.controls[static_cast<std::size_t>(list)];
+        if (rows.list_item_height <= 0)
+            continue;
+        const int32_t left = shown.offset_x;
+        const int32_t top = shown.offset_y;
+        const auto& back = slider.scroll.back_arrow;
+        const auto& forward = slider.scroll.forward_arrow;
+        const bool on_back =
+            point_inside(x, y, back.x + left, back.y + top, back.width, back.height);
+        const bool on_forward =
+            point_inside(x, y, forward.x + left, forward.y + top, forward.width, forward.height);
+        if (!on_back && !on_forward)
+            continue;
+        found.list = list;
+        found.toward_end = on_forward && !on_back;
+        return found;
+    }
+    return found;
+}
+
+} // namespace
+
+bool multiplayer_list_page_arrow(int32_t x, int32_t y) noexcept {
+    return page_arrow_at(x, y).list != kNoControl;
+}
+
+bool multiplayer_scroll_list_page(int32_t x, int32_t y) noexcept {
+    const PageArrow arrow = page_arrow_at(x, y);
+    if (arrow.list == kNoControl)
+        return false;
+    auto& panel = front().panel;
+    const auto& rows = panel.controls[static_cast<std::size_t>(arrow.list)];
+    const int32_t page = list_shown_rows(rows, panel.line_height);
+    return panel_scroll_list(panel, arrow.list, arrow.toward_end ? page : -page);
+}
+
 bool multiplayer_offer_map(const char* name) noexcept {
     auto& state = ui();
     if (name == nullptr || !multiplayer_map_list_rect(nullptr, nullptr, nullptr, nullptr))
