@@ -89,9 +89,10 @@ inline constexpr std::string_view registry_refresh = "REFRESH";
 inline constexpr std::string_view registry_refreshed = "refreshed {age}";
 /// A registry no refresh has read yet.
 inline constexpr std::string_view registry_never = "never refreshed";
-/// The key tooltip's title for one key, and for more than one.
-inline constexpr std::string_view registry_key_one = "Key";
-inline constexpr std::string_view registry_key_many = "Keys";
+/// The key tooltip's title for one signing key, and for more than one.
+/// These are not the key bindings' "Keys".
+inline constexpr std::string_view registry_key_one = "Signing key";
+inline constexpr std::string_view registry_key_many = "Signing keys";
 /// The key tooltip's aside for a registry that ships with the game.
 inline constexpr std::string_view registry_key_built_in = "built in";
 /// The key tooltip's aside for a registry the player added.

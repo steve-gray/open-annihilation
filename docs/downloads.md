@@ -113,7 +113,7 @@ registry** window shows what you are about to trust:
 - the registry's name;
 - **Address**: the host its catalogue comes from;
 - **Packages**: how many it lists and of which kinds, as "31 · maps";
-- **Key**, or **Keys**: the fingerprint of each key that signs its
+- **Signing key**, or **Signing keys**: the fingerprint of each key that signs its
   catalogue, four groups of four hexadecimal digits such as
   `7001 · af50 · b971 · 5bb4`, up to three and then how many more. When
   you gave a signing key, this is that key's fingerprint;

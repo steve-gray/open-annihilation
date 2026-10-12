@@ -10,6 +10,7 @@
 
 #include "oa/ui/kit/first_run.hpp"
 #include "oa/ui/kit/input.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -135,6 +136,10 @@ struct Model {
     int32_t library_count{};                      ///< the number the Library button shows
     std::string sample_own{};                     ///< the sample Library's language, in itself
     std::string sample_english{};                 ///< that language's English name
+    /// How the sample Library looks its words up. The same hook the live
+    /// Library uses: each pattern from the Library's texts, whole, then filled.
+    /// Empty shows those words in English.
+    library::TextHooks sample_text{};
 };
 
 /// The setup's controls and motion between layouts.
@@ -268,6 +273,16 @@ enum class PointerKind : uint8_t {
 /// @param pressed the key
 /// @return what the setup did
 [[nodiscard]] Outcome key(Session& session, const Scene& scene, kit::Key pressed);
+
+/// Words the sample Library looks up through the model's text hook: the Active
+/// and Mods tabs, PLAYING, UNLOAD MOD and Built in, one a line.
+///
+/// The picture well draws the same Library. A hook that marks each text
+/// changes these words; an empty hook leaves them in English.
+///
+/// @param model the sample's language and its text hook
+/// @return the looked-up words
+[[nodiscard]] std::string sample_words(const Model& model);
 
 /// Draws a laid-out step. On the buttons step the dim leaves both buttons clear.
 /// The sample Library is drawn into the picture well when the scene asks.

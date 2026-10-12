@@ -312,7 +312,8 @@ app removes the folder (`Runtime::library_uninstall`,
     how many packages, "not reviewed" for one the player added, and how
     many mirrors). The key icon is the kit's key glyph in the icon square
     (`state_icon_side`) at the right of the title band; resting on it
-    shows each fingerprint and full public key, and "built in" or "added
+    shows a card headed "Signing key" or "Signing keys", each fingerprint
+    and full public key, and "built in" or "added
     by you", and pressing it asks for nothing. REFRESH sits beside the
     switch and asks the host to refresh that registry
     (`Action::refresh_registry`); it is greyed while the registry is off

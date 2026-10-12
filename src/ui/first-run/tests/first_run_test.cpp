@@ -5,9 +5,15 @@
 
 #include "oa/ui/first_run/first_run.hpp"
 
+#include "oa/data/languages.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/test/check.hpp"
+#include "oa/ui/kit/looks.hpp"
 
+#include <cstdio>
 #include <string>
+#include <string_view>
+#include <variant>
 
 namespace {
 
@@ -203,6 +209,142 @@ void check_keys() {
     OA_CHECK(saw_card);
 }
 
+/// The step line the setup chrome will draw.
+///
+/// @param scene the layout
+/// @return the filled line; empty when the step has no chrome
+std::string chrome_step(const oa::ui::first_run::Scene& scene) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        const auto* look = std::get_if<oa::ui::kit::SetupChromeLook>(&item.look);
+        if (look == nullptr)
+            continue;
+        oa::ui::kit::StepLook step;
+        step.name = look->step_name;
+        step.pattern = look->step_pattern;
+        step.index = look->step_index;
+        step.count = look->step_count;
+        return oa::ui::kit::step_line(step);
+    }
+    return {};
+}
+
+/// Tells whether a scene draws a line.
+///
+/// @param scene the layout
+/// @param text the line
+/// @return true when an item shows it
+bool shows_line(const oa::ui::first_run::Scene& scene, std::string_view text) {
+    for (const oa::ui::kit::Item& item : scene.list.items)
+        if (item.text == text)
+            return true;
+    return false;
+}
+
+/// A fake catalogue that marks a text, so a missed lookup stays English.
+///
+/// @param scene a step, laid out
+/// @param line the line it should show
+void expect_line(const oa::ui::first_run::Scene& scene, std::string_view line, bool chrome) {
+    const std::string got = chrome ? chrome_step(scene) : std::string{};
+    const bool shown = chrome ? got == line : shows_line(scene, line);
+    if (!shown) {
+        std::fprintf(stderr, "step line: %s\n", chrome ? got.c_str() : "(not in the list)");
+        OA_CHECK(shown);
+    }
+}
+
+/// The step line and the sample Library are looked up. A catalogue that marks
+/// each text changes them; the sample changes only when its hook is set.
+void check_lookup() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+    frame.scale_percent = 100;
+    Session welcome;
+    welcome.model.step = Step::language;
+    const auto welcome_scene = oa::ui::first_run::lay_out(welcome, frame, nullptr);
+    expect_line(welcome_scene, "WELCOME · 1 OF 3", true);
+    Session online;
+    online.model.step = Step::online;
+    expect_line(oa::ui::first_run::lay_out(online, frame, nullptr), "ONLINE · 2 OF 3", true);
+    const Session buttons = buttons_session({100, 16, 48, 48}, {160, 16, 48, 48});
+    expect_line(
+        oa::ui::first_run::lay_out(buttons, frame, nullptr), "THE MAIN MENU · 3 OF 3", false
+    );
+
+    Model english;
+    const std::string plain = oa::ui::first_run::sample_words(english);
+    OA_CHECK(plain.find("Active\n") != std::string::npos);
+    OA_CHECK(plain.find("UNLOAD MOD\n") != std::string::npos);
+    OA_CHECK(plain.find("Built in\n") != std::string::npos);
+    OA_CHECK(plain.find("~") == std::string::npos);
+
+    const char* catalogue_text = "[{step} · {index} OF {count}]\n"
+                                 "{\n"
+                                 "fr=^{step}|{index}|{count}^;\n"
+                                 "}\n"
+                                 "[WELCOME]\n"
+                                 "{\n"
+                                 "fr=~WELCOME~;\n"
+                                 "}\n"
+                                 "[ONLINE]\n"
+                                 "{\n"
+                                 "fr=~ONLINE~;\n"
+                                 "}\n"
+                                 "[THE MAIN MENU]\n"
+                                 "{\n"
+                                 "fr=~THE MAIN MENU~;\n"
+                                 "}\n"
+                                 "[Active]\n"
+                                 "{\n"
+                                 "fr=~Active~;\n"
+                                 "}\n"
+                                 "[Mods]\n"
+                                 "{\n"
+                                 "fr=~Mods~;\n"
+                                 "}\n"
+                                 "[PLAYING]\n"
+                                 "{\n"
+                                 "fr=~PLAYING~;\n"
+                                 "}\n"
+                                 "[UNLOAD MOD]\n"
+                                 "{\n"
+                                 "fr=~UNLOAD MOD~;\n"
+                                 "}\n"
+                                 "[Built in]\n"
+                                 "{\n"
+                                 "fr=~Built in~;\n"
+                                 "}\n";
+    oa::data::languages::InterfaceText catalogue;
+    OA_CHECK(catalogue.add(catalogue_text));
+    const oa::data::languages::Language* french = oa::data::languages::find_by_tag("fr");
+    OA_CHECK(french != nullptr);
+    if (french == nullptr)
+        return;
+    oa::data::languages::set_interface_language(&catalogue, *french);
+
+    expect_line(oa::ui::first_run::lay_out(welcome, frame, nullptr), "^~WELCOME~|1|3^", true);
+    expect_line(oa::ui::first_run::lay_out(online, frame, nullptr), "^~ONLINE~|2|3^", true);
+    expect_line(
+        oa::ui::first_run::lay_out(buttons, frame, nullptr), "^~THE MAIN MENU~|3|3^", false
+    );
+
+    // The catalogue is installed, and the sample still shows English until it
+    // uses the same lookup the live Library uses.
+    OA_CHECK(oa::ui::first_run::sample_words(english).find("~") == std::string::npos);
+    english.sample_text.shown = [](void*, std::string_view text) {
+        return oa::data::languages::interface_text(text);
+    };
+    const std::string marked = oa::ui::first_run::sample_words(english);
+    OA_CHECK(marked.find("~Active~\n") != std::string::npos);
+    OA_CHECK(marked.find("~Mods~\n") != std::string::npos);
+    OA_CHECK(marked.find("~PLAYING~\n") != std::string::npos);
+    OA_CHECK(marked.find("~UNLOAD MOD~\n") != std::string::npos);
+    OA_CHECK(marked.find("~Built in~\n") != std::string::npos);
+
+    oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
+}
+
 } // namespace
 
 int main() {
@@ -212,5 +354,6 @@ int main() {
     check_coaches(oa::ui::kit::SizeClass::large, 1280, 720, false);
     check_coaches(oa::ui::kit::SizeClass::large, 1280, 720, true);
     check_keys();
+    check_lookup();
     return oa::test::check_exit_status();
 }

@@ -533,14 +533,33 @@ void draw_fitted(
     draw_bitmap_line(canvas, role, text, box, ink);
 }
 
-/// The words a step indicator shows.
+/// Writes one place of a step line, or leaves a place this line does not use.
 ///
-/// @param look the step
-/// @return the line, such as "LANGUAGE · 1 OF 3"
-std::string step_line(const StepLook& look) {
-    const int32_t index = std::max(look.index, int32_t{0});
-    const int32_t count = std::max(look.count, int32_t{0});
-    return look.name + " · " + std::to_string(index) + " OF " + std::to_string(count);
+/// @param[in,out] result the line so far
+/// @param pattern the pattern
+/// @param open the '{'
+/// @param close the '}'
+/// @param step the step's name
+/// @param index the step, as text
+/// @param count how many steps, as text
+void write_place(
+    std::string& result,
+    std::string_view pattern,
+    std::size_t open,
+    std::size_t close,
+    std::string_view step,
+    std::string_view index,
+    std::string_view count
+) {
+    const std::string_view name = pattern.substr(open + 1, close - open - 1);
+    if (name == "step")
+        result.append(step);
+    else if (name == "index")
+        result.append(index);
+    else if (name == "count")
+        result.append(count);
+    else
+        result.append(pattern.substr(open, close - open + 1));
 }
 
 /// Returns a button's width: button_width, or the caption with its insets.
@@ -677,6 +696,30 @@ bool game_font_has_glyphs(const Fonts& fonts) {
 }
 
 } // namespace
+
+std::string step_line(const StepLook& look) {
+    const std::string_view pattern = look.pattern.empty() ? step_line_pattern : look.pattern;
+    const std::string index = std::to_string(std::max(look.index, int32_t{0}));
+    const std::string count = std::to_string(std::max(look.count, int32_t{0}));
+    std::string result;
+    std::size_t at = 0;
+    while (at < pattern.size()) {
+        const std::size_t open = pattern.find('{', at);
+        if (open == std::string_view::npos) {
+            result.append(pattern.substr(at));
+            break;
+        }
+        const std::size_t close = pattern.find('}', open);
+        if (close == std::string_view::npos) {
+            result.append(pattern.substr(at));
+            break;
+        }
+        result.append(pattern.substr(at, open - at));
+        write_place(result, pattern, open, close, look.name, index, count);
+        at = close + 1;
+    }
+    return result;
+}
 
 void carousel_go(CarouselModel& model, int32_t index) noexcept {
     if (model.count <= 0) {
@@ -1229,6 +1272,7 @@ void draw_setup_chrome(const Canvas& canvas, const SetupChromeLook& look) {
 
     StepLook step;
     step.name = look.step_name;
+    step.pattern = look.step_pattern;
     step.index = look.step_index;
     step.count = look.step_count;
     const bool smooth = canvas.smooth.painter != nullptr && canvas.smooth.fonts != nullptr;

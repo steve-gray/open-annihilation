@@ -9,8 +9,10 @@
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/screen.hpp"
+#include "oa/ui/library/text.hpp"
 
 #include <algorithm>
+#include <string>
 
 namespace oa::ui::first_run {
 namespace {
@@ -19,8 +21,10 @@ namespace {
 ///
 /// @param own the language's name in itself
 /// @param english the language's English name
+/// @param text how the Library looks its words up; empty shows English
 /// @return the Library, on the Active tab
-library::Library ridge_library(std::string_view own, std::string_view english) {
+library::Library
+ridge_library(std::string_view own, std::string_view english, const library::TextHooks& text) {
     library::Inputs inputs;
     library::Registry registry;
     registry.id = "coreprime";
@@ -62,6 +66,7 @@ library::Library ridge_library(std::string_view own, std::string_view english) {
         inputs.language.english = std::string(english);
 
     library::Library library;
+    library.text = text;
     library::refresh(library, std::move(inputs));
     library::set_tab(library, library::Tab::active);
     return library;
@@ -69,12 +74,29 @@ library::Library ridge_library(std::string_view own, std::string_view english) {
 
 } // namespace
 
+std::string sample_words(const Model& model) {
+    const library::Library sample =
+        ridge_library(model.sample_own, model.sample_english, model.sample_text);
+    std::string words;
+    const auto add = [&](std::string_view text) {
+        words.append(text);
+        words.push_back('\n');
+    };
+    add(library::tab_text(library::Tab::active, false, sample.text));
+    add(library::tab_text(library::Tab::mods, false, sample.text));
+    add(library::state_text(library::State::playing, sample.text));
+    add(library::shown(sample.text, library::words::action_unload_mod));
+    add(library::shown(sample.text, library::words::registry_built_in));
+    return words;
+}
+
 void draw_sample(
     const kit::Canvas& canvas, const kit::Rect& inset, const Model& model, kit::SizeClass size_class
 ) {
     if (canvas.fonts == nullptr || inset.width < 8 || inset.height < 8)
         return;
-    library::Library library = ridge_library(model.sample_own, model.sample_english);
+    library::Library library =
+        ridge_library(model.sample_own, model.sample_english, model.sample_text);
     kit::Frame sample_frame;
     sample_frame.size_class = size_class;
     sample_frame.area = {0, 0, inset.width, inset.height};

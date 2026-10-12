@@ -444,20 +444,28 @@ struct CarouselLook {
     bool wrap{false};
 };
 
-/// A step indicator: a letter-spaced name and number, and one segment a step.
+/// A step indicator: a letter-spaced line, and one segment a step.
+///
+/// The line is `pattern` with `{step}`, `{index}` and `{count}` filled.
+/// An empty pattern is the English `{step} · {index} OF {count}`. The caller
+/// looks the pattern up whole before it is stored here.
 struct StepLook {
-    std::string name{}; ///< the step's name, already in the case to show, such as "LANGUAGE"
-    int32_t index{1};   ///< the current step, from 1
-    int32_t count{1};   ///< how many steps
+    std::string name{};    ///< the step's name, already looked up, such as "LANGUAGE"
+    int32_t index{1};      ///< the current step, from 1
+    int32_t count{1};      ///< how many steps
+    std::string pattern{}; ///< the line's pattern, already looked up; empty is the English one
 };
 
 /// The setup window's header and footer. It spans the window the width and
 /// height name, not a dialog. The words are already looked up.
 struct SetupChromeLook {
-    int32_t width{};                ///< the window's width, in points
-    int32_t height{};               ///< the window's height, in points
-    std::string page{};             ///< the muted word after the title
-    std::string step_name{};        ///< the step indicator's name
+    int32_t width{};         ///< the window's width, in points
+    int32_t height{};        ///< the window's height, in points
+    std::string page{};      ///< the muted word after the title
+    std::string step_name{}; ///< the step indicator's name, already looked up
+    /// The step line's pattern, already looked up. Empty is the English
+    /// `{step} · {index} OF {count}`.
+    std::string step_pattern{};
     int32_t step_index{1};          ///< the current step, from 1
     int32_t step_count{1};          ///< how many steps
     std::string skip{"Skip setup"}; ///< the quiet button on the left

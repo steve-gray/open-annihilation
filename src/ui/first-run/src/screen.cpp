@@ -356,7 +356,10 @@ kit::SetupChromeLook chrome_look(
     look.width = width;
     look.height = height;
     look.page = show("Welcome");
-    look.step_name = session.model.step == Step::online ? show("ONLINE") : show("WELCOME");
+    // Each call copies before the next, so a view into the catalogue is not kept.
+    look.step_name = session.model.step == Step::online ? std::string(interface_text("ONLINE"))
+                                                        : std::string(interface_text("WELCOME"));
+    look.step_pattern = std::string(interface_text(kit::step_line_pattern));
     look.step_index = session.model.step == Step::online ? 2 : 1;
     look.step_count = 3;
     look.skip = show("Skip setup");
@@ -958,7 +961,12 @@ void lay_buttons(
     const int32_t width = frame.area.width;
     const int32_t height = frame.area.height;
     const kit::Rect room{0, 0, width, height};
-    const std::string kicker = show("THE MAIN MENU · 3 OF 3");
+    kit::StepLook step;
+    step.name = std::string(interface_text("THE MAIN MENU"));
+    step.pattern = std::string(interface_text(kit::step_line_pattern));
+    step.index = 3;
+    step.count = 3;
+    const std::string kicker = kit::step_line(step);
     const std::string heading = show("Two buttons for everything Open Annihilation adds");
     const std::string paragraph = show(
         "The Library is where you get mods, map packs and languages. Settings is where you change "

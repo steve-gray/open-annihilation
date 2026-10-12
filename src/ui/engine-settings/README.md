@@ -1055,7 +1055,7 @@ content service found, and the window shows:
 - checking: "Checking {address}…" and CANCEL, with both fields disabled;
 - ready, adding a registry: its name in the heading role
   (`add-registry.name`), Address (`add-registry.address`), Packages
-  ("{n} · {kinds}", the kinds as mods, maps and languages), Key or Keys
+  ("{n} · {kinds}", the kinds as mods, maps and languages), Signing key or Signing keys
   (each fingerprint, at most three, then "+N more"; `add-registry.key`),
   or for a registry that names no key the amber "Unsigned · accepted in
   Developer mode only" in its place, Downloads (direct, with download

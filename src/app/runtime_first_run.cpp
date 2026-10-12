@@ -208,6 +208,15 @@ std::string looked_up(std::string_view english) {
     return std::string(languages::interface_text(english));
 }
 
+/// Looks one of the sample Library's words up. The same catalogue the live
+/// Library uses: the English pattern, whole, then the caller fills its places.
+///
+/// @param english the word, in English as the Library's text.hpp writes it
+/// @return its translation, or the English
+std::string_view sample_shown(void* /*context*/, std::string_view english) {
+    return languages::interface_text(english);
+}
+
 /// Tells whether two tags match.
 ///
 /// @param left a tag
@@ -815,6 +824,7 @@ class FirstRunScreen final : public LayerScreen {
         session_.model.library_count = library_count;
         session_.model.sample_own = sample_own;
         session_.model.sample_english = sample_english;
+        session_.model.sample_text = oa::ui::library::TextHooks{nullptr, sample_shown};
 
         std::string current_tag;
         for (const first_run::Card& card : session_.model.cards)

@@ -339,6 +339,21 @@ void add_carousel_control(
 
 // ---- Step indicator ----
 
+/// The step line's pattern. A caller looks this up whole, then the kit fills
+/// `{step}`, `{index}` and `{count}`. A translation keeps the places and may
+/// move them. The English line is the same shape as before, such as
+/// "WELCOME · 1 OF 3".
+inline constexpr std::string_view step_line_pattern = "{step} · {index} OF {count}";
+
+/// Fills a step indicator's line from its pattern.
+///
+/// An empty pattern is `step_line_pattern`. The name and the pattern are
+/// already looked up; this only writes the places.
+///
+/// @param look the name, the pattern and the step
+/// @return the line, such as "LANGUAGE · 1 OF 3"
+[[nodiscard]] std::string step_line(const StepLook& look);
+
 /// Returns a step indicator's width: its letter-spaced line, or its segments,
 /// whichever is wider.
 ///
@@ -354,12 +369,12 @@ void add_carousel_control(
     return compact_metrics.small_line + 2 + 3;
 }
 
-/// Draws a step indicator: the name and "N OF M" in the small font,
+/// Draws a step indicator: the filled pattern in the small font,
 /// letter-spaced, and one segment a step, lit from the first up to the current.
 ///
 /// @param canvas where it is drawn
 /// @param rect the indicator
-/// @param look the name and the step
+/// @param look the name, the pattern and the step
 void draw_step_indicator(const Canvas& canvas, const Rect& rect, const StepLook& look);
 
 /// Appends a step indicator: one item and no control.
