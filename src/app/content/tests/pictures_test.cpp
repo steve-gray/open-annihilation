@@ -20,6 +20,7 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -299,6 +300,96 @@ void test_bytes() {
     server.stop();
 }
 
+// The pictures that wait are fetched in the order they were asked for, and
+// one put first is fetched before the others. A picture taken is no longer
+// asked for; a refused one stays asked for and is not fetched again.
+void test_fetch_order() {
+    const fs::path folder =
+        oa::test::make_scratch_directory("app-content-pictures-order") / "pictures";
+    fixture::Server server;
+    std::string error;
+    OA_CHECK(server.start(&error));
+
+    const std::vector<uint8_t> first_file = badge_file(0x11);
+    const std::vector<uint8_t> second_file = badge_file(0x22);
+    const std::string first_path = picture_path(sha::digest_of(first_file));
+    const std::string second_path = picture_path(sha::digest_of(second_file));
+    server.serve_bytes(first_path, first_file, "image/png");
+    server.serve_bytes(second_path, second_file, "image/png");
+    const std::string missing_path = picture_path(sha::digest_of(badge_file(0x33)));
+    const std::string first_url = server.url(first_path);
+    const std::string second_url = server.url(second_path);
+    const std::string missing_url = server.url(missing_path);
+
+    http::Client client;
+    server.clear_log();
+    {
+        content::PictureCache cache(folder);
+        OA_CHECK(!cache.asked(kRegistry, first_url));
+        cache.request(kRegistry, first_url);
+        cache.request(kRegistry, second_url);
+        OA_CHECK(cache.asked(kRegistry, first_url));
+        OA_CHECK(cache.asked(kRegistry, second_url));
+        cache.fetch_waiting(client, false);
+        OA_CHECK(server.requests().size() == 2);
+        if (server.requests().size() == 2) {
+            OA_CHECK(server.requests()[0].target == first_path);
+            OA_CHECK(server.requests()[1].target == second_path);
+        }
+        OA_CHECK(cache.take(kRegistry, first_url).has_value());
+        OA_CHECK(!cache.asked(kRegistry, first_url));
+    }
+
+    // The second picture is put first, so it is fetched before the first.
+    const fs::path preferred =
+        oa::test::make_scratch_directory("app-content-pictures-prefer") / "pictures";
+    server.clear_log();
+    {
+        content::PictureCache cache(preferred);
+        cache.request(kRegistry, first_url);
+        cache.request(kRegistry, second_url);
+        cache.prefer(kRegistry, second_url);
+        cache.fetch_waiting(client, false);
+        OA_CHECK(server.requests().size() == 2);
+        if (server.requests().size() == 2) {
+            OA_CHECK(server.requests()[0].target == second_path);
+            OA_CHECK(server.requests()[1].target == first_path);
+        }
+    }
+
+    // A picture not yet asked for is put at the front when it is preferred.
+    const fs::path inserted =
+        oa::test::make_scratch_directory("app-content-pictures-prefer-new") / "pictures";
+    server.clear_log();
+    {
+        content::PictureCache cache(inserted);
+        cache.request(kRegistry, first_url);
+        cache.prefer(kRegistry, second_url);
+        cache.fetch_waiting(client, false);
+        OA_CHECK(server.requests().size() == 2);
+        if (server.requests().size() == 2) {
+            OA_CHECK(server.requests()[0].target == second_path);
+            OA_CHECK(server.requests()[1].target == first_path);
+        }
+    }
+
+    server.clear_log();
+    {
+        content::PictureCache cache({});
+        cache.request(kRegistry, missing_url);
+        cache.fetch_waiting(client, false);
+        OA_CHECK(cache.refused(kRegistry, missing_url));
+        OA_CHECK(cache.asked(kRegistry, missing_url));
+        const std::size_t fetches = server.requests().size();
+        cache.prefer(kRegistry, missing_url);
+        cache.request(kRegistry, missing_url);
+        cache.fetch_waiting(client, false);
+        OA_CHECK(server.requests().size() == fetches);
+        OA_CHECK(!cache.waiting());
+    }
+    server.stop();
+}
+
 void test_cancel() {
     fixture::Server server;
     std::string error;
@@ -325,6 +416,7 @@ int main() {
     test_names();
     test_fetches();
     test_bytes();
+    test_fetch_order();
     test_cancel();
     return oa::test::check_exit_status();
 }

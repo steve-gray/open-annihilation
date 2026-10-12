@@ -224,6 +224,53 @@ enum class ScreenCommand : uint8_t {
 /// @param list the display list library_layout made
 void draw_library(const kit::Canvas& canvas, const kit::DisplayList& list);
 
+/// How many rows past each edge of the list have their pictures asked for,
+/// so a short scroll meets pictures already on the way.
+inline constexpr std::size_t picture_margin = 3;
+
+/// What the list asks for the pictures of its rows.
+struct PictureSource {
+    void* context{}; ///< passed back to each function
+    /// Tells whether this entry's pictures were already asked for, are held
+    /// or were refused. Null asks every time. The selected row is still
+    /// offered, so its picture can keep the first place.
+    bool (*known)(void* context, const Entry& entry){};
+    /// Asks for one entry's pictures. `lead` is the selected row, asked
+    /// before the others.
+    void (*request)(void* context, const Entry& entry, bool lead){};
+};
+
+/// Returns the places, among the visible entries, whose pictures are asked
+/// for. The selected entry is first. Then every row the list shows, and
+/// picture_margin rows before the first of those and after the last.
+///
+/// @param library the model
+/// @param list the display list the screen shows
+/// @return the places, from 0, the selected entry's first when it shows
+[[nodiscard]] std::vector<std::size_t>
+picture_places(const Library& library, const kit::DisplayList& list);
+
+/// Asks the source for the pictures of picture_places. An entry the source
+/// already knows is skipped, except the selected row, which is always
+/// offered first.
+///
+/// @param library the model
+/// @param list the display list the screen shows
+/// @param source where the pictures are asked for; a null request asks nothing
+void request_visible_pictures(
+    const Library& library, const kit::DisplayList& list, const PictureSource& source
+);
+
+/// Tells whether an entry's row is on the list the screen shows, or is the
+/// selected entry.
+///
+/// @param library the model
+/// @param list the display list the screen shows
+/// @param id the entry
+/// @return true when its row is shown, or it is selected
+[[nodiscard]] bool
+entry_row_shown(const Library& library, const kit::DisplayList& list, const EntryId& id);
+
 /// Returns the letters a badge shows when its package has no picture: a
 /// name of one word gives its first three characters, a name of more its
 /// words' first characters, at most three; letters a to z in capitals.

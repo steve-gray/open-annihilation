@@ -64,11 +64,20 @@ class PictureCache {
     /// Asks for one picture. A picture already asked for, ready, or refused
     /// while this cache lives (its name names no SHA-256, its bytes hash to
     /// another, it is too large or could not be fetched) is not asked for
-    /// again.
+    /// again. Pictures that wait are fetched in the order they were asked for.
     ///
     /// @param registry the registry whose catalogue names it
     /// @param url its address, resolved against the host that served the catalogue
     void request(std::string_view registry, std::string_view url);
+
+    /// Puts a picture first among those that wait, asking for it when it
+    /// has not been asked for. One that is being fetched, is ready or was
+    /// refused stays as it is. The selected row's picture is put first, so
+    /// it arrives before the rows around it.
+    ///
+    /// @param registry the registry whose catalogue names it
+    /// @param url its address, resolved against the host that served the catalogue
+    void prefer(std::string_view registry, std::string_view url);
 
     /// Hands over a picture that is ready, and forgets it.
     ///
@@ -98,6 +107,14 @@ class PictureCache {
     /// @param url its address, as asked for
     /// @return true when it was refused
     [[nodiscard]] bool refused(std::string_view registry, std::string_view url) const;
+
+    /// Tells whether a picture was asked for and not yet taken, or was
+    /// refused. A picture that was taken is neither: the caller holds it.
+    ///
+    /// @param registry the registry it was asked for under
+    /// @param url its address, as asked for
+    /// @return true when it waits, is being fetched, is ready or was refused
+    [[nodiscard]] bool asked(std::string_view registry, std::string_view url) const;
 
     /// Forgets every picture asked for and every one ready and not taken. The
     /// pictures refused stay refused, and the folder is left as it is.
