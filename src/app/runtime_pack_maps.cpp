@@ -9,6 +9,7 @@
 #include "map_packs.hpp"
 
 #include "oa/app/content/downloads.hpp"
+#include "oa/app/package_install/origin.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -17,6 +18,7 @@
 #include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include <algorithm>
 #include <array>
@@ -26,6 +28,7 @@
 #include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -65,6 +68,16 @@ struct Runtime::PackMapState {
     std::string held_id{};
     /// The queue item that downloads and installs the held pack.
     uint64_t held_item{};
+    /// Pack maps that fit the mod being played, in the index's order.
+    std::vector<std::string> listed{};
+    /// Packs already named in the log for a mod, as the pack id and the key.
+    std::vector<std::pair<std::string, std::string>> omission_logged{};
+    /// Those log lines, for a check to read.
+    std::vector<std::string> omission_lines{};
+    /// The catalogue generation the lists were last built from.
+    uint64_t catalogue_generation{};
+    /// True once the lists have been built from a catalogue snapshot.
+    bool catalogue_noted{};
 };
 
 namespace {
@@ -74,6 +87,12 @@ constexpr std::string_view kRefusedText = "Doesn't fit {game}: {reason}";
 
 /// The interface's name for the base game, when no mod is played.
 constexpr std::string_view kBaseGameText = "Total Annihilation 3.1c";
+
+/// The compatible table's key for the base game, when no mod is played.
+constexpr std::string_view kBaseGameKey = "ta-3.1c";
+
+/// The words a log line uses when the mod being played has no catalogue key.
+constexpr std::string_view kUnkeyedMod = "the mod being played";
 
 /// Why a held pack's map is not mounted: its download is being installed.
 constexpr std::string_view kHeldReason = "its pack is being downloaded";
@@ -340,6 +359,161 @@ void Runtime::show_refused_map(std::string_view name, std::string_view reason) {
         0
     );
     invalidate_menu();
+}
+
+std::string Runtime::played_map_key() const {
+    if (!plays_mod())
+        return std::string(kBaseGameKey);
+    try {
+        const std::optional<package_install::Origin> origin =
+            package_install::read_origin(played_mod_folder());
+        if (!origin || origin->kind != package_install::OriginKind::catalogue ||
+            origin->catalogue_id.empty() || origin->release <= 0)
+            return {};
+        return origin->catalogue_id + "@" + std::to_string(origin->release);
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
+const std::vector<std::string>& Runtime::listed_pack_maps() {
+    if (pack_map_state_ == nullptr) {
+        static const std::vector<std::string> none;
+        return none;
+    }
+    return pack_map_state_->listed;
+}
+
+std::vector<std::string> Runtime::pack_map_omission_lines() const {
+    if (pack_map_state_ == nullptr)
+        return {};
+    return pack_map_state_->omission_lines;
+}
+
+void Runtime::refresh_listed_pack_maps() {
+    auto& state = pack_map_state();
+    const std::string key = played_map_key();
+    const std::string shown_key = key.empty() ? std::string(kUnkeyedMod) : key;
+
+    // Copy the index out before the lists change. A later refresh of the
+    // index would free the span maps() returns.
+    std::vector<PackMap> installed;
+    for (const PackMap& installed_map : map_packs().maps())
+        installed.push_back(installed_map);
+
+    std::vector<std::string> base;
+    base.reserve(eligible_map_names_.size());
+    for (const std::string& name : eligible_map_names_)
+        if (!pack::split_pack_map_name(name))
+            base.push_back(name);
+
+    std::map<std::string, int, std::less<>> omitted;
+    std::vector<std::string> listed;
+    listed.reserve(installed.size());
+    for (const PackMap& installed_map : installed) {
+        if (std::find(base.begin(), base.end(), installed_map.name) != base.end())
+            continue;
+        const bool from_registry = !installed_map.registry.empty() && installed_map.release > 0;
+        bool include = false;
+        bool final_omit = false;
+        if (from_registry) {
+            const std::optional<bool> recorded = catalogue_map_fits(installed_map, key);
+            if (!recorded) {
+                // The catalogue has not listed this release yet. The file
+                // check keeps a map that fits until that table arrives, and
+                // a miss here is not final, so it is not logged.
+                include = pack_map_fit(installed_map).fits();
+            } else if (*recorded) {
+                include = true;
+            } else {
+                final_omit = true;
+            }
+        } else {
+            include = pack_map_fit(installed_map).fits();
+            final_omit = !include;
+        }
+        if (include)
+            listed.push_back(installed_map.name);
+        else if (final_omit)
+            ++omitted[installed_map.id];
+    }
+
+    for (const auto& [id, count] : omitted) {
+        if (count <= 0)
+            continue;
+        const bool said = std::any_of(
+            state.omission_logged.begin(),
+            state.omission_logged.end(),
+            [&](const std::pair<std::string, std::string>& kept) {
+                return kept.first == id && kept.second == key;
+            }
+        );
+        if (said)
+            continue;
+        state.omission_logged.emplace_back(id, key);
+        const char* verb = count == 1 ? " map does not fit " : " maps do not fit ";
+        const std::string line =
+            "open-annihilation: map pack " + id + ": " + std::to_string(count) + verb + shown_key;
+        std::cerr << line << '\n';
+        state.omission_lines.push_back(line);
+    }
+
+    state.listed = listed;
+    eligible_map_names_ = std::move(base);
+    for (const std::string& name : state.listed)
+        eligible_map_names_.push_back(name);
+    if (!first_map_name_.empty() &&
+        std::find(eligible_map_names_.begin(), eligible_map_names_.end(), first_map_name_) ==
+            eligible_map_names_.end()) {
+        if (!eligible_map_names_.empty())
+            first_map_name_ = eligible_map_names_.front();
+        else
+            first_map_name_.clear();
+    }
+
+    if (screen_ == Screen::map_selection && map_modal_.active) {
+        std::string highlighted;
+        if (modal_map_index_ >= 0 &&
+            static_cast<std::size_t>(modal_map_index_) < bound_map_names_.size())
+            highlighted = bound_map_names_[static_cast<std::size_t>(modal_map_index_)];
+        std::vector<std::string> names = copy_map_names();
+        try {
+            map_modal::sort_map_names(names);
+        } catch (const std::exception& error) {
+            std::cerr << "open-annihilation: map list: " << error.what() << '\n';
+            names = copy_map_names();
+        }
+        std::ignore =
+            std::stable_partition(names.begin(), names.end(), [](const std::string& name) {
+                return !pack::split_pack_map_name(name);
+            });
+        map_modal_.names = names;
+        bind_map_names(names);
+        if (!highlighted.empty()) {
+            const auto row =
+                std::find(bound_map_names_.begin(), bound_map_names_.end(), highlighted);
+            if (row != bound_map_names_.end()) {
+                const auto place = static_cast<std::ptrdiff_t>(row - bound_map_names_.begin());
+                if (place >= 0 &&
+                    place <= static_cast<std::ptrdiff_t>(std::numeric_limits<int16_t>::max()))
+                    set_selected_map_index(static_cast<int16_t>(place));
+            }
+        }
+    }
+
+    oa::ui::frontend_multiplayer::multiplayer_reload_maps();
+}
+
+void Runtime::note_pack_catalogue() {
+    const std::optional<uint64_t> generation = content_catalogue_generation();
+    if (!generation)
+        return;
+    auto& state = pack_map_state();
+    if (state.catalogue_noted && state.catalogue_generation == *generation)
+        return;
+    state.catalogue_noted = true;
+    state.catalogue_generation = *generation;
+    refresh_listed_pack_maps();
 }
 
 } // namespace oa::app

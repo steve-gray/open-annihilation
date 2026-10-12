@@ -524,12 +524,10 @@ void Runtime::discover_first_map() {
     });
     if (!eligible_map_names_.empty())
         first_map_name_ = eligible_map_names_.front();
-    // The installed pack maps, from their packs' manifests: none of their
-    // files is opened until one is chosen.
-    for (const PackMap& map : map_packs().maps())
-        if (std::find(eligible_map_names_.begin(), eligible_map_names_.end(), map.name) ==
-            eligible_map_names_.end())
-            eligible_map_names_.push_back(map.name);
+    // Pack maps that fit the mod being played join after the base maps.
+    // A map that does not fit is left out. None of a pack map's files is
+    // opened here for a registry pack whose catalogue entry is already known.
+    refresh_listed_pack_maps();
 }
 
 void Runtime::save_preferences() {

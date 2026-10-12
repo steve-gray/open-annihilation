@@ -571,9 +571,10 @@ struct Options {
     // level.
     bool check_mod_switch = false;
     // Writes two map packs into the player's own Maps folder and requires
-    // the skirmish list to show their maps after the base maps, the one that
-    // fits mounted alone while chosen and for its match and unmounted after,
-    // and the one that clashes with the game refused with its reason.
+    // the skirmish list to show the map that fits after the base maps, the
+    // one that clashes left out, the one that fits mounted alone while
+    // chosen and for its match and unmounted after, and the clash refused
+    // when it is chosen by name.
     bool check_map_packs = false;
     // Writes the map pack check's two packs into the player's own folder,
     // with every built-in registry off, and at four window sizes opens
@@ -581,6 +582,12 @@ struct Options {
     // columns and window, its installed maps, its search, the clashing map
     // greyed with its reason, and Select moving SELMAP's selection.
     bool check_map_browser = false;
+    // Installs one map pack from the check's own registry while both map
+    // lists already exist. Requires the map whose stem has a space, an
+    // apostrophe and parentheses in both lists, under its index title,
+    // played to the first frame and named in a saved game, and the map
+    // that fits only another mod left out with one log line.
+    bool check_map_pack_lists = false;
     // Switches to a made-up mod whose unit files are missing and to one
     // that plays whole, each a soft restart, and requires the first's
     // warning once over the main menu and over a refused Skirmish start,

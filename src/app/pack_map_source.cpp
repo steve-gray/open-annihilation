@@ -47,23 +47,29 @@ oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime) {
     mp::LobbyMapSource source;
     source.context = &runtime;
     source.count = [](void* context) {
-        const auto maps = static_cast<Runtime*>(context)->map_packs().maps();
-        if (maps.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+        const auto& names = static_cast<Runtime*>(context)->listed_pack_maps();
+        if (names.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
             return std::numeric_limits<int32_t>::max();
-        return static_cast<int32_t>(maps.size());
+        return static_cast<int32_t>(names.size());
     };
     source.at = [](void* context, int32_t index, mp::LobbyPackMap* out) {
         if (out == nullptr || index < 0)
             return false;
-        const auto maps = static_cast<Runtime*>(context)->map_packs().maps();
-        if (static_cast<std::size_t>(index) >= maps.size())
+        auto& runtime = *static_cast<Runtime*>(context);
+        const auto& names = runtime.listed_pack_maps();
+        if (static_cast<std::size_t>(index) >= names.size())
             return false;
-        const PackMap& map = maps[static_cast<std::size_t>(index)];
-        out->name = map.name.c_str();
-        out->description = map.description.c_str();
-        out->size = map.size.c_str();
-        out->title = map.title.c_str();
-        const uint64_t bytes = map.terrain_bytes;
+        // Copy the name before find: find may refresh the index, and the
+        // name must not point into a list that refresh frees.
+        const std::string name = names[static_cast<std::size_t>(index)];
+        const PackMap* map = runtime.map_packs().find(name);
+        if (map == nullptr)
+            return false;
+        out->name = map->name.c_str();
+        out->description = map->description.c_str();
+        out->size = map->size.c_str();
+        out->title = map->title.c_str();
+        const uint64_t bytes = map->terrain_bytes;
         const auto clamped = bytes > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())
                                  ? std::numeric_limits<int32_t>::max()
                                  : static_cast<int32_t>(bytes);

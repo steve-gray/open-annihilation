@@ -809,8 +809,8 @@ hosts them on the OA layer.
   removes the packs an earlier run installed as a catalogue's.
 - **Limitations.** The fit of an installed pack map is checked on the main
   thread as its card comes into view, once per pack. A map pack installed
-  while SELMAP is open joins its list as Select or Download and select
-  chooses it.
+  while SELMAP is open joins its list, when the map fits, as Select or
+  Download and select chooses it.
 
 ## Files
 
@@ -3165,13 +3165,38 @@ size of the map's TNT file. The index does not open a map.
 
 ### Map packs in the game
 
-The skirmish map list (`discover_first_map`) lists the base maps as the
-scan of `Maps/*.ota` finds them, then every installed pack map by its name,
-`<stem>@<id>`, in the index's order. The pack maps come from the packs'
-manifests, read once when the list is first made: no pack map's OTA or TNT
-is opened to list it. The first base map stays the default selection. The
-map picker (SELMAP) sorts the base maps as before and the pack maps after
-them, so a base map keeps its row.
+The skirmish map list lists the base maps as the scan of `Maps/*.ota` finds
+them, then each installed pack map that fits the mod being played, by its
+name `<stem>@<id>`, in the index's order. The battle room's map list holds
+the same pack maps among the base maps, sorted by name. A row is that game
+name. The title under a chosen pack map is the title from the pack's index
+when the screen has a name there. The stock skirmish screen has none, so
+its rows stay the game's names. The battle room's map name is the title.
+
+`refresh_listed_pack_maps` (`runtime_pack_maps.cpp`) builds that pack-map
+tail. It runs from `discover_first_map`, after a map pack is installed or
+removed, and when the catalogue snapshot moves on. No pack map's OTA or TNT
+is opened to list it. The base maps stay in the order and under the names
+the scan gave them, and are not scanned again. The first base map stays the
+default selection while it is still listed. The map picker (SELMAP) sorts
+the base maps as before and the pack maps after them.
+
+A pack from a registry fits when the catalogue snapshot records the mod's
+key as true for that map. The base game's key is `ta-3.1c`. A catalogue
+mod's key is `<catalogue-id>@<release>` from the mod folder's origin
+record. A key the catalogue does not record, or records as false, leaves
+the map out. A release the snapshot does not list yet is listed by the
+map-fit check until the catalogue has it, and a miss then is not logged. A
+pack with no catalogue origin is sideloaded: the map-fit check decides, and
+a miss is final. One log line names each pack and mod the first time a map
+of that pair is left out:
+
+```
+open-annihilation: map pack <id>: <n> map does not fit <key>
+```
+
+The plural is `maps do not fit`. `<key>` is `the mod being played` when the
+mod has no catalogue key.
 
 Only one map's files are ever mounted (`runtime_pack_maps.cpp`). Choosing a
 pack map (`select_map`, from the picker, the skirmish setup, a saved game,
@@ -3184,17 +3209,20 @@ game's names are collected once for the run, whose archives never change,
 and the result is kept for each pack's SHA-256 and map stem. Once mounted,
 the files are checked again as the store shows them, whatever the kept
 check found, since the pack's folder may have changed on disk; a failure
-there unmounts them. A map that fails either check is refused: it stays in
-the list, highlighting it shows its title, its size and players and
-"Doesn't fit {game}: {reason}", where the game is the mod played or Total
-Annihilation 3.1c and the reason is the first failure, with no picture,
-and choosing it says why in a message box and keeps the earlier map. A
-start on a refused map fails as other loads do. The layer stays while that
-map is selected and through its match. It is unmounted when another map is
-chosen, at the end of the match (`leave_match`) and whenever the main menu
-shows (`Runtime::load`). Mounting and unmounting happen on the main thread,
-never while a match loads or runs: the match's start mounts its map, if a
-refused highlight released it, before it reads anything.
+there unmounts them. A map that fails either check is refused. One the
+lists left out is still refused when something chooses it by name. One
+the lists kept, because a catalogue recorded it as fitting, stays
+listed: highlighting it shows its title, its size and players and
+"Doesn't fit {game}: {reason}", where the game is the mod played or
+Total Annihilation 3.1c and the reason is the first failure, with no
+picture, and choosing it says why in a message box and keeps the earlier
+map. A start on a refused map fails as other loads do. The layer stays
+while that map is selected and through its match. It is unmounted when
+another map is chosen, at the end of the match (`leave_match`) and
+whenever the main menu shows (`Runtime::load`). Mounting and unmounting
+happen on the main thread, never while a match loads or runs: the
+match's start mounts its map, if a refused highlight released it, before
+it reads anything.
 
 The log says what happened, one line each:
 
@@ -3210,12 +3238,14 @@ A map that does not fit logs one line per failure, each time it is refused.
 writes two packs into the Maps folder of the run's own `--user-folder`: one
 whose map, made in code with one feature of its own drawn with a model of
 the game, fits, and one whose feature file also defines a feature the game
-has. It requires both listed after every base map, in the list and in the
-picker; nothing mounted before a map is chosen; the first mounted alone when
-chosen and unmounted for a base map; a skirmish on it playing 30 ticks with
-its terrain readable, and its end unmounting it and leaving the archives as
-they were; the second refused for New names, the picker showing that reason
-and LOAD keeping the earlier map; and nothing mounted at the main menu.
+has. It requires the fitting map listed after every base map, in the list
+and in the picker, and the clashing map in neither, with one log line for
+that pack and the base game; nothing mounted before a map is chosen; the
+fitting map mounted alone when chosen and unmounted for a base map; a
+skirmish on it playing 30 ticks with its terrain readable, and its end
+unmounting it and leaving the archives as they were; the clashing map
+refused for New names when it is chosen by name; and nothing mounted at
+the main menu.
 
 ### Developer Mode
 
