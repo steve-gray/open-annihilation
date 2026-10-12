@@ -96,6 +96,16 @@ constexpr std::array<uint8_t, 7 * 7> kMagnifierBits{
     0, 0, 0, 0, 0, 1, 0, //
     0, 0, 0, 0, 0, 0, 1, //
 };
+/// A signing key, 7 by 7, row by row: the bow, then the shaft and its teeth.
+constexpr std::array<uint8_t, 7 * 7> kKeyBits{
+    0, 1, 1, 1, 0, 0, 0, //
+    1, 0, 0, 0, 1, 0, 0, //
+    1, 0, 1, 0, 1, 1, 1, //
+    1, 0, 0, 0, 1, 0, 1, //
+    0, 1, 1, 1, 0, 0, 1, //
+    0, 0, 0, 0, 0, 1, 1, //
+    0, 0, 0, 0, 0, 0, 1, //
+};
 
 /// The OA button's attention dot, 7 by 7, row by row: the whole disc, which
 /// its ring's colour fills.
@@ -135,6 +145,7 @@ constexpr renderer::Mark kClosedArrow{5, 5, kClosedArrowBits};
 constexpr renderer::Mark kOpenArrow{5, 5, kOpenArrowBits};
 constexpr renderer::Mark kChoiceArrow{7, 4, kChoiceArrowBits};
 constexpr renderer::Mark kMagnifier{7, 7, kMagnifierBits};
+constexpr renderer::Mark kKeyMark{7, 7, kKeyBits};
 static_assert(
     kMagnifier.width == compact_metrics.magnifier_side &&
         kMagnifier.height == compact_metrics.magnifier_side,
@@ -164,6 +175,8 @@ const renderer::Mark& bits_of(Mark mark) noexcept {
         return kChoiceArrow;
     case Mark::magnifier:
         return kMagnifier;
+    case Mark::key:
+        return kKeyMark;
     }
     return kSmallMark;
 }

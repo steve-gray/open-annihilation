@@ -83,15 +83,25 @@ inline constexpr kit::ControlId first_row = 10000;
 /// entry's place in the model's visible entries, below first_registry.
 inline constexpr kit::ControlId first_row_icon = 1000000;
 /// A Registries-tab switch: this and the registry's place in the inputs.
-/// Switches occupy 2000000 until 3000000, REMOVE 3000000 until 4000000 and
-/// ADD MIRROR… 4000000 until 5000000, after the row icons at 1000000.
+/// Switches occupy 2000000 until 3000000, REMOVE 3000000 until 4000000,
+/// ADD MIRROR… 4000000 until 5000000, REFRESH 5000000 until 6000000, the
+/// key icon 6000000 until 7000000, the address 7000000 until 8000000 and
+/// the refresh line 8000000 until 9000000, after the row icons at 1000000.
 inline constexpr kit::ControlId first_registry = 2000000;
 /// A Registries-tab REMOVE: this and the registry's place in the inputs.
 inline constexpr kit::ControlId first_registry_remove = 3000000;
 /// A Registries-tab ADD MIRROR…: this and the registry's place in the inputs.
 inline constexpr kit::ControlId first_registry_mirror = 4000000;
+/// A Registries-tab REFRESH: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_refresh = 5000000;
+/// A Registries-tab key icon: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_key = 6000000;
+/// A Registries-tab address label: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_address = 7000000;
+/// A Registries-tab refresh-time label: this and the registry's place in the inputs.
+inline constexpr kit::ControlId first_registry_refreshed = 8000000;
 /// The first number after the Registries-tab controls.
-inline constexpr kit::ControlId registry_controls_end = 5000000;
+inline constexpr kit::ControlId registry_controls_end = 9000000;
 
 /// The list's scroll area, the group of its rows.
 inline constexpr int32_t list_group = 0;
@@ -143,14 +153,38 @@ inline constexpr int32_t details_group = 1;
 /// @param id the control
 /// @return true for a Registries-tab ADD MIRROR…
 [[nodiscard]] constexpr bool registry_mirror_control(kit::ControlId id) noexcept {
-    return id >= first_registry_mirror && id < registry_controls_end;
+    return id >= first_registry_mirror && id < first_registry_refresh;
+}
+
+/// Tells whether a control is a registry's REFRESH.
+///
+/// @param id the control
+/// @return true for a Registries-tab REFRESH
+[[nodiscard]] constexpr bool registry_refresh_control(kit::ControlId id) noexcept {
+    return id >= first_registry_refresh && id < first_registry_key;
+}
+
+/// Tells whether a control is a registry's key icon.
+///
+/// @param id the control
+/// @return true for a Registries-tab key icon
+[[nodiscard]] constexpr bool registry_key_control(kit::ControlId id) noexcept {
+    return id >= first_registry_key && id < first_registry_address;
 }
 
 /// Returns the registry a Registries-tab control belongs to.
 ///
-/// @param id a switch, REMOVE or ADD MIRROR… of the tab
+/// @param id a switch, REMOVE, ADD MIRROR…, REFRESH, key icon, address or refresh line
 /// @return its place in the inputs, from 0
 [[nodiscard]] constexpr std::size_t registry_index(kit::ControlId id) noexcept {
+    if (id >= first_registry_refreshed)
+        return static_cast<std::size_t>(id - first_registry_refreshed);
+    if (id >= first_registry_address)
+        return static_cast<std::size_t>(id - first_registry_address);
+    if (id >= first_registry_key)
+        return static_cast<std::size_t>(id - first_registry_key);
+    if (id >= first_registry_refresh)
+        return static_cast<std::size_t>(id - first_registry_refresh);
     if (id >= first_registry_mirror)
         return static_cast<std::size_t>(id - first_registry_mirror);
     if (id >= first_registry_remove)

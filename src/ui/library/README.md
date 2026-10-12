@@ -253,18 +253,30 @@ app removes the folder (`Runtime::library_uninstall`,
     search and no filters, one row for each registry: its avatar (the
     initials, `registry_initials`, on the accent for a built-in registry
     and on `colour::switch_idle` for one the player added), its name with
-    a Built in chip when it ships with the game, its subtitle
-    (`registry_subtitle`) and an Off/On switch; REMOVE and ADD MIRROR…
-    under the subtitle for one the player added. A note under the list
-    (`registry_note`) names the built-in registries, and a refusal
-    (`Inputs::registries_notice`) stands over it in the lock colour. The rows and
-    the note scroll as the details do. The footer holds ADD REGISTRY… and
-    CLOSE, and no DETAILS. During a match ADD REGISTRY… and
-    ADD MIRROR… give way to the padlock and "Choose from the main menu.";
-    the switches and REMOVE stay. A switch, REMOVE, ADD MIRROR… and ADD
-    REGISTRY… ask the host (`Action::set_registry`, `remove_registry`,
-    `add_mirror`, `add_registry`); the host applies a switch and a removal
-    at once;
+    a Built in chip when it ships with the game, its address, when it was
+    last read (`registry_refresh_line`: "refreshed 5 min ago", "never
+    refreshed", or "couldn't reach · 2 h ago"), its subtitle
+    (`registry_subtitle`: how many packages, "not reviewed" for one the
+    player added, and how many mirrors) and an Off/On switch. A key icon
+    shows the keys the catalogue is checked against when the pointer, the
+    keys or the pad rest on it (each fingerprint and full public key, and
+    "built in" or "added by you"); pressing it asks for nothing. REFRESH
+    sits beside the switch and asks the host to refresh that registry
+    (`Action::refresh_registry`); it is greyed while the registry is off
+    or already being asked, and the refresh mark beside it turns while it
+    is. REMOVE and ADD MIRROR… sit under the subtitle for one the player
+    added. A note under the list (`registry_note`) names the built-in
+    registries, and a refusal (`Inputs::registries_notice`) stands over it
+    in the lock colour. The rows and the note scroll as the details do.
+    ADD REGISTRY… sits at the top right, above the list, and joins Tab's
+    order after the rows; the footer holds CLOSE and no DETAILS. During a
+    match the padlock and "Choose from the main menu." stand where ADD
+    REGISTRY… was, and ADD MIRROR… gives way to the same lock; the
+    switches, REFRESH and REMOVE stay. A switch, REFRESH, REMOVE, ADD
+    MIRROR… and ADD REGISTRY… ask the host (`Action::set_registry`,
+    `refresh_registry`, `remove_registry`, `add_mirror`, `add_registry`);
+    the host applies a switch and a removal at once, and asks the content
+    service to refresh that one registry;
   - **Compact** shows a list page: the header (the OA mark, "Library", this
     build's version, and a refresh icon at the top right; "offline" in the
     lock colour beside it when the last refresh could not reach a registry),
@@ -360,8 +372,9 @@ app removes the folder (`Runtime::library_uninstall`,
     `library.tab.languages`, `library.tab.updates` (their text holds the
     count: "Updates 2"), `library.tab.registries`; `library.search`;
   - on the Registries tab `library.registry.<id>` (its halves `.off` and
-    `.on`), and for a registry the player added `.remove` and
-    `.add-mirror`; `library.add-registry`; the labels
+    `.on`), `.key` (its text the fingerprints, one a line) and `.refresh`,
+    and for a registry the player added `.remove` and `.add-mirror`; the
+    labels `.address` and `.refreshed`; `library.add-registry`; the labels
     `library.registries.note` and `library.registries.notice`;
   - `library.filter` (Compact's drop-down, whose items, while it is open,
     are `library.filter.all`, `.new`, `.installed`, `.updates` and
@@ -519,10 +532,15 @@ on the Updates tab beside the Mods tab's filters, the refresh icon and CLOSE;
 that the Active tab is first, has no search, filter, list or DETAILS,
 reads its mod, language and maps as labels and keeps only the tabs and
 the footer in Tab's order; that the Registries tab lists each registry's
-switch, REMOVE and ADD MIRROR… only for one the player added, ADD
-REGISTRY… in the footer, and no search or DETAILS, and that a switch's
-halves, Space, REMOVE, ADD MIRROR… and ADD REGISTRY… ask for those
-actions, with ADD REGISTRY… and ADD MIRROR… absent during a match; that
+switch, key icon and REFRESH, its address and refresh time, REMOVE and
+ADD MIRROR… only for one the player added, and ADD REGISTRY… at the top
+right above the list, with no search or DETAILS; that resting on the key
+icon or focusing it shows that registry's fingerprints and public keys,
+and pressing it asks for nothing; that REFRESH asks for that registry and
+is greyed, with the refresh mark turning beside it, while the registry is
+off or already being asked; that a switch's halves, Space, REMOVE, ADD
+MIRROR… and ADD REGISTRY… ask for those actions, with ADD REGISTRY… and
+ADD MIRROR… absent during a match; that
 Tab follows the declared order and the
 arrows reach every control that takes the focus from the first tab, and
 no label; that the names are the screen's and unique; that every text

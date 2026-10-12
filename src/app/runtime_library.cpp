@@ -30,6 +30,7 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/base/signing/ed25519.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/languages.hpp"
@@ -709,12 +710,26 @@ library::Inputs Runtime::library_inputs() {
                 content::read_install_id(preference_values_, descriptor.id).state !=
                     content::InstallIdState::off;
             registry.on = view.registry.enabled;
-            registry.address = data::registry::address_text(descriptor);
+            if (!view.registry.url.empty())
+                registry.address = view.registry.url;
+            else
+                registry.address = formats::url::url_text(descriptor.catalogue);
             registry.packages = view.catalogue ? view.catalogue->packages.size() : 0;
             if (view.checked)
                 registry.checked_ago = std::max(now - *view.checked, int64_t{0});
             registry.mirrors = view.registry.player_mirrors.size();
             registry.unreachable = !view.last_error.empty();
+            registry.refreshing = view.refreshing;
+            for (const data::registry::RegistryKey& signing_key : descriptor.keys) {
+                const base::signing::FingerprintText fingerprint =
+                    base::signing::fingerprint(signing_key.key);
+                const base::signing::KeyText key_text =
+                    base::signing::public_key_text(signing_key.key);
+                library::SigningKey shown_key;
+                shown_key.fingerprint = std::string(fingerprint.view());
+                shown_key.public_key = std::string(key_text.view());
+                registry.keys.push_back(std::move(shown_key));
+            }
             inputs.registries.push_back(std::move(registry));
             if (!view.registry.enabled)
                 continue;
@@ -1486,6 +1501,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
             return false;
         case library::Action::set_registry:
             runtime_.change_library_registry(result.registry, result.registry_on);
+            return false;
+        case library::Action::refresh_registry:
+            // One registry: its catalogue, then its download counts once that
+            // catalogue is newer than the counts last fetched for it.
+            runtime_.content_service().refresh(content::RefreshReason::check_now, result.registry);
             return false;
         case library::Action::uninstall:
             runtime_.library_entry_action(action, id);

@@ -402,6 +402,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::registry_remove);
     case Action::set_registry:
         return shown(text, words::registry_on);
+    case Action::refresh_registry:
+        return shown(text, words::registry_refresh);
     case Action::uninstall:
         return shown(text, words::action_uninstall);
     }
@@ -494,45 +496,35 @@ std::string listed_names(const std::vector<std::string>& names) {
 
 } // namespace
 
+std::string registry_refresh_line(const Registry& registry, const TextHooks& text) {
+    const std::string separator = " · ";
+    if (registry.unreachable) {
+        std::string line(shown(text, words::registry_unreachable));
+        if (registry.checked_ago)
+            line += separator + registry_age_text(*registry.checked_ago, text);
+        return line;
+    }
+    if (registry.checked_ago)
+        return filled(
+            text,
+            words::registry_refreshed,
+            {{"age", registry_age_text(*registry.checked_ago, text)}}
+        );
+    return std::string(shown(text, words::registry_never));
+}
+
 std::string registry_subtitle(const Registry& registry, const TextHooks& text) {
     const std::string separator = " · ";
-    std::string unreached;
-    if (registry.unreachable) {
-        unreached = std::string(shown(text, words::registry_unreachable));
-        if (registry.checked_ago)
-            unreached += separator + filled(
-                                         text,
-                                         words::registry_list_from,
-                                         {{"age", registry_age_text(*registry.checked_ago, text)}}
-                                     );
-    }
-    const std::string packages = counted_things(
+    std::string line = counted_things(
         registry.packages, words::registry_package_one, words::registry_package_many, text
     );
-    std::string line;
-    if (registry.built_in) {
-        line = packages + separator;
-        if (registry.unreachable)
-            line += unreached;
-        else if (registry.checked_ago)
-            line += filled(
-                text,
-                words::registry_checked,
-                {{"age", registry_age_text(*registry.checked_ago, text)}}
-            );
-        else
-            line += shown(text, words::registry_not_checked);
-    } else {
-        line = registry.address + separator + packages + separator +
-               std::string(shown(text, words::registry_not_reviewed));
-    }
+    if (!registry.built_in)
+        line += separator + std::string(shown(text, words::registry_not_reviewed));
     if (registry.mirrors > 0)
         line += separator +
                 counted_things(
                     registry.mirrors, words::registry_mirror_one, words::registry_mirror_many, text
                 );
-    if (!registry.built_in && registry.unreachable)
-        line += separator + unreached;
     return line;
 }
 

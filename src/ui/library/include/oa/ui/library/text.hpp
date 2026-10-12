@@ -81,8 +81,21 @@ inline constexpr std::string_view registry_off = "OFF";
 inline constexpr std::string_view registry_on = "ON";
 inline constexpr std::string_view registry_unreachable = "couldn't reach";
 inline constexpr std::string_view registry_not_reviewed = "not reviewed";
-inline constexpr std::string_view registry_checked = "checked {age}";
-inline constexpr std::string_view registry_not_checked = "not checked yet";
+/// REFRESH on a registry's row. The header's icon keeps action_refresh.
+inline constexpr std::string_view registry_refresh = "REFRESH";
+/// When a refresh last read the registry, with the age in its place.
+inline constexpr std::string_view registry_refreshed = "refreshed {age}";
+/// A registry no refresh has read yet.
+inline constexpr std::string_view registry_never = "never refreshed";
+/// The key tooltip's title for one key, and for more than one.
+inline constexpr std::string_view registry_key_one = "Key";
+inline constexpr std::string_view registry_key_many = "Keys";
+/// The key tooltip's aside for a registry that ships with the game.
+inline constexpr std::string_view registry_key_built_in = "built in";
+/// The key tooltip's aside for a registry the player added.
+inline constexpr std::string_view registry_key_added = "added by you";
+/// The key tooltip when the registry names no signing key.
+inline constexpr std::string_view registry_no_key = "No signing key";
 inline constexpr std::string_view registry_one_day = "1 day ago";
 inline constexpr std::string_view registry_package_one = "{n} package";
 inline constexpr std::string_view registry_package_many = "{n} packages";
@@ -164,8 +177,6 @@ inline constexpr std::string_view age_just_now = "just now";
 inline constexpr std::string_view age_minutes = "{count} min ago";
 inline constexpr std::string_view age_hours = "{count} h ago";
 inline constexpr std::string_view age_days = "{count} days ago";
-/// A registry row, when the last refresh found nothing usable and a list was kept.
-inline constexpr std::string_view registry_list_from = "list from {age}";
 
 // Versions.
 inline constexpr std::string_view version_with_revision = "{version} · rev {revision}";
@@ -595,11 +606,18 @@ engine_short_text(const formats::oamod::EngineRange& range, const TextHooks& tex
 /// @return such as "4 min ago", "2 h ago" or "3 days ago"
 [[nodiscard]] std::string registry_age_text(int64_t seconds, const TextHooks& text = {});
 
-/// Returns a registry's subtitle. A built-in one: "{n} packages · checked
-/// {age}". An added one: "{address} · {n} packages · not reviewed", with
-/// " · {k} mirrors" after it when the player added mirrors. When the last
-/// refresh found nothing usable, "couldn't reach · list from {age}" stands
-/// where a built-in registry's checked age stands, and after an added one's.
+/// Returns when a registry was last read: "refreshed 5 min ago", "never
+/// refreshed", or "couldn't reach · 2 h ago" when the last refresh found
+/// nothing usable.
+///
+/// @param registry the registry
+/// @param text how texts are looked up
+/// @return the line
+[[nodiscard]] std::string
+registry_refresh_line(const Registry& registry, const TextHooks& text = {});
+
+/// Returns a registry's subtitle: how many packages it lists, "not reviewed"
+/// when the player added it, and how many mirrors the player added.
 ///
 /// @param registry the registry
 /// @param text how texts are looked up

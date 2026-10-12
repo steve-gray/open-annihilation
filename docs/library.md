@@ -390,13 +390,24 @@ Each row shows:
 - an avatar, the name's initials in a square: the first letters of its
   first three words, or of a name of one word its first two letters;
 - the name, and a **Built in** chip when the registry ships with the game;
-- a subtitle. A built-in registry's says how many packages it lists and
-  when its list was last checked ("1 package · checked 4 min ago", or
-  "not checked yet" before the first check). One you added says its
-  address, how many packages and "not reviewed"
-  ("maps.example.org · 31 packages · not reviewed"), then how many mirrors
-  you added (" · 2 mirrors"). When the last check found nothing usable it
-  says "couldn't reach", and "list from *age*" when a list was kept;
+- the address it was added from, or its catalogue's address when it was
+  not added from one;
+- when it was last read: "refreshed 5 min ago", "never refreshed" before
+  the first refresh, or "couldn't reach · 2 h ago" when the last refresh
+  found nothing usable;
+- a subtitle. A built-in registry's says how many packages it lists
+  ("1 package"). One you added says how many packages and "not reviewed"
+  ("31 packages · not reviewed"), then how many mirrors you added
+  (" · 2 mirrors");
+- a key icon. Resting on it, or moving the keys or the pad onto it, shows
+  the keys its signatures are checked against: each key's fingerprint
+  ("7001 · af50 · b971 · 5bb4") and its full public key (`ed25519:…`), and
+  "built in" or "added by you". A registry that names no key says "No
+  signing key". Pressing the icon asks for nothing;
+- **REFRESH**, beside the switch. It asks that registry for its catalogue
+  and its download counts. It is greyed while the registry is off or
+  already being asked, and while it is being asked the refresh icon beside
+  it turns;
 - an Off/On switch.
 
 A registry you added also has **REMOVE** and **ADD MIRROR…** under the
@@ -413,14 +424,15 @@ registries isn't reviewed by the OA team. …". When a change is refused,
 the reason stands over the note ("OA could not change the registries:
 …").
 
-**ADD REGISTRY…** sits in the footer, beside **CLOSE**. It opens the same
-Add registry window as opening an `.oareg` file: the address or "From
-*file*", the fingerprints of the keys, and
-"Not reviewed by the OA team"
+**ADD REGISTRY…** sits at the top right of the tab, above the list. The
+footer holds **CLOSE**. It opens the same Add registry window as opening
+an `.oareg` file: the address or "From *file*", the fingerprints of the
+keys, and "Not reviewed by the OA team"
 ([adding a registry](downloads.md#adding-a-registry)). **CLOSE** leaves a
-switch or a removal as it was stored. During a game **ADD REGISTRY…** and
-**ADD MIRROR…** are locked ("Choose from the main menu."); the switches
-and **REMOVE** stay.
+switch or a removal as it was stored. During a game the padlock and
+"Choose from the main menu." stand where **ADD REGISTRY…** was, and
+**ADD MIRROR…** is locked the same way; the switches, **REFRESH** and
+**REMOVE** stay.
 
 The rows and the note scroll together when they are taller than the
 window. Settings › Downloads, on the main menu, has **REGISTRIES IN THE

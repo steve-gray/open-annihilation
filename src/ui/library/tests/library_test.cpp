@@ -1752,8 +1752,7 @@ void test_texts() {
     );
 }
 
-/// The Registries tab's initials, ages, subtitles and note, in the words the
-/// Settings part used.
+/// The Registries tab's initials, ages, refresh line, subtitle and note.
 void test_registry_texts() {
     OA_CHECK_TEXT(lib::registry_initials("Core Prime"), "CP");
     OA_CHECK_TEXT(lib::registry_initials("Example Maps"), "EM");
@@ -1775,35 +1774,36 @@ void test_registry_texts() {
     built.built_in = true;
     built.packages = 218;
     built.checked_ago = 4 * 60;
-    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages · checked 4 min ago");
+    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages");
+    OA_CHECK_TEXT(lib::registry_refresh_line(built), "refreshed 4 min ago");
     built.checked_ago.reset();
-    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages · not checked yet");
-    built.checked_ago = 2 * 86400;
+    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages");
+    OA_CHECK_TEXT(lib::registry_refresh_line(built), "never refreshed");
+    built.checked_ago = 2 * 3600;
     built.unreachable = true;
-    OA_CHECK_TEXT(
-        lib::registry_subtitle(built), "218 packages · couldn't reach · list from 2 days ago"
-    );
+    OA_CHECK_TEXT(lib::registry_subtitle(built), "218 packages");
+    OA_CHECK_TEXT(lib::registry_refresh_line(built), "couldn't reach · 2 h ago");
+    built.checked_ago.reset();
+    OA_CHECK_TEXT(lib::registry_refresh_line(built), "couldn't reach");
+    built.checked_ago = 2 * 86400;
+    OA_CHECK_TEXT(lib::registry_refresh_line(built), "couldn't reach · 2 days ago");
 
     lib::Registry added;
     added.address = "maps.example.org";
     added.packages = 31;
-    OA_CHECK_TEXT(lib::registry_subtitle(added), "maps.example.org · 31 packages · not reviewed");
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "31 packages · not reviewed");
+    OA_CHECK_TEXT(lib::registry_refresh_line(added), "never refreshed");
     added.mirrors = 2;
-    OA_CHECK_TEXT(
-        lib::registry_subtitle(added), "maps.example.org · 31 packages · not reviewed · 2 mirrors"
-    );
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "31 packages · not reviewed · 2 mirrors");
     added.mirrors = 1;
     added.unreachable = true;
     added.checked_ago = 60;
-    OA_CHECK_TEXT(
-        lib::registry_subtitle(added),
-        "maps.example.org · 31 packages · not reviewed · 1 mirror · couldn't reach · "
-        "list from 1 min ago"
-    );
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "31 packages · not reviewed · 1 mirror");
+    OA_CHECK_TEXT(lib::registry_refresh_line(added), "couldn't reach · 1 min ago");
     added = {};
     added.address = "192.168.1.20";
     added.packages = 1;
-    OA_CHECK_TEXT(lib::registry_subtitle(added), "192.168.1.20 · 1 package · not reviewed");
+    OA_CHECK_TEXT(lib::registry_subtitle(added), "1 package · not reviewed");
 
     lib::Registry core_prime;
     core_prime.name = "Core Prime";

@@ -34,6 +34,7 @@ enum class Mark : uint8_t {
     arrow_open,   ///< an arrow pointing down, 5 by 5
     choice_arrow, ///< a drop-down's arrow, 7 by 4
     magnifier,    ///< a search field's magnifier, 7 by 7
+    key,          ///< a signing key, 7 by 7
 };
 
 /// Which of the five button looks a button is drawn in.
