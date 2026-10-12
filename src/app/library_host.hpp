@@ -159,7 +159,11 @@ struct Runtime::LibraryHost {
     std::map<std::pair<std::string, std::string>, std::string> picture_urls{};
     std::vector<KeptUpdate> kept_updates{};  ///< the updates queued from the Library
     std::vector<uint64_t> installed_items{}; ///< the queue's items seen installed
-    LibraryWork work{};                      ///< the worker and what it found
+    /// The installed-data reading a finished queue item was first listed
+    /// against, by the queue's item id. A later reading of the installed
+    /// packages no longer lets that item hide its update.
+    std::map<uint64_t, uint64_t> finished_scans{};
+    LibraryWork work{}; ///< the worker and what it found
 
     /// Starts the worker when it has not started.
     ///

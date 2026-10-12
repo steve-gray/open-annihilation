@@ -1340,6 +1340,9 @@ library::Inputs Runtime::library_inputs() {
         matches = host.work.matches;
         updates = host.work.updates;
         pictures = host.work.installed_badges;
+        // searches starts at 0. One more keeps a named reading apart from
+        // "the inputs do not say", which is 0.
+        inputs.installed_generation = host.work.searches + 1;
     }
     for (std::size_t index = 0; index < installed.size() && index < matches.size(); ++index) {
         const content::InstalledPackage& package = installed[index];
@@ -1486,6 +1489,15 @@ library::Inputs Runtime::library_inputs() {
         item.key = queued.target.key;
         item.name = queued.target.name;
         item.release = queued.target.release;
+        if (*phase == library::QueueItem::Phase::installed) {
+            const auto remembered = host.finished_scans.find(queued.item);
+            if (remembered == host.finished_scans.end())
+                item.finished_scan =
+                    host.finished_scans.emplace(queued.item, inputs.installed_generation)
+                        .first->second;
+            else
+                item.finished_scan = remembered->second;
+        }
         if (snapshot)
             for (const content::Entry& entry : snapshot->entries)
                 if (entry.package != nullptr && entry.registry == item.registry &&
@@ -1506,6 +1518,19 @@ library::Inputs Runtime::library_inputs() {
                              queued.failure != content::DownloadFailure::not_offered;
         }
         inputs.queue.push_back(std::move(item));
+    }
+    for (auto remembered = host.finished_scans.begin(); remembered != host.finished_scans.end();) {
+        bool still_finished = false;
+        for (const content::DownloadView& queued : content_downloads().view()) {
+            if (queued.item == remembered->first && queued.state == content::DownloadState::done) {
+                still_finished = true;
+                break;
+            }
+        }
+        if (still_finished)
+            ++remembered;
+        else
+            remembered = host.finished_scans.erase(remembered);
     }
 
     inputs.engine = content::this_engine_rules().engine;

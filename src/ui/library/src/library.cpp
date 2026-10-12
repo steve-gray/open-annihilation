@@ -669,14 +669,33 @@ Fact fact_of(std::string_view label, std::string long_value, std::string short_v
     return fact;
 }
 
+/// Tells whether a finished queue item still stands in for the installed copy.
+///
+/// The install can finish before the installed packages are read again, and
+/// the note from the last search stays. While that reading is still the one
+/// the item finished against, the item's release is the copy in place. A
+/// later reading is the copy on disk: a roll back, or an older item, no
+/// longer hides the note. When the inputs name no reading, or the item names
+/// none, the finished release hides the note on its own.
+///
+/// @param library the Library, with its inputs stored
+/// @param item the queue item
+/// @return true when this finished item still counts as the copy in place
+bool finished_item_stands_in(const Library& library, const QueueItem& item) {
+    if (item.phase != Phase::installed || item.release <= 0)
+        return false;
+    if (library.inputs.installed_generation == 0 || item.finished_scan == 0)
+        return true;
+    return item.finished_scan == library.inputs.installed_generation;
+}
+
 /// Tells whether an update is already in place.
 ///
-/// A finished download stays in the queue until the worker rewrites the
-/// installed copy, and the note from the last search stays with it. The
-/// installed release, or a finished queue item's release, both above 0 and
-/// at least the note's, means the player already has that catalogue release.
-/// A release of 0 names none, and a held item is not finished. The listing's
-/// release is the newest the catalogue names, not the copy in place.
+/// The installed release, or a finished queue item that still stands in for
+/// it, both above 0 and at least the note's, means the player already has
+/// that catalogue release. A release of 0 names none, and a held item is not
+/// finished. The listing's release is the newest the catalogue names, not
+/// the copy in place.
 ///
 /// @param library the Library, with its inputs stored
 /// @param update the note
@@ -690,7 +709,7 @@ bool update_already_in_place(const Library& library, const UpdateNote& update) {
     }
     for (const QueueItem& item : library.inputs.queue) {
         if (item.registry == update.registry && item.kind == update.kind &&
-            item.key == update.key && item.phase == Phase::installed && item.release > 0 &&
+            item.key == update.key && finished_item_stands_in(library, item) &&
             item.release >= update.to_release)
             return true;
     }

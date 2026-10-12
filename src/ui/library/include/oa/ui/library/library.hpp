@@ -230,6 +230,10 @@ struct QueueItem {
     std::string version{}; ///< as written; empty when the kind has none
     /// The catalogue release it installs; 0 when the queue did not name one.
     int64_t release{};
+    /// The installed-data reading (Inputs::installed_generation) this item
+    /// was first listed against once it had finished. 0 names none. A later
+    /// reading no longer lets a finished item hide an update.
+    uint64_t finished_scan{};
     Phase phase{Phase::waiting};
     uint64_t done_bytes{};  ///< bytes downloaded so far
     uint64_t total_bytes{}; ///< the package's size; 0 when unknown
@@ -288,7 +292,15 @@ struct Inputs {
     std::vector<Listing> listings{};
     std::vector<Installed> installed{};
     std::vector<UpdateNote> updates{};
-    std::vector<QueueItem> queue{};         ///< in the order the items were queued
+    std::vector<QueueItem> queue{}; ///< in the order the items were queued
+    /// Moves on whenever the installed packages are read again. 0 means the
+    /// inputs do not say which reading this is. A finished queue item then
+    /// hides an update by its release alone. Once this names a reading, a
+    /// finished item hides an update only while it finished against this
+    /// same reading: the install has finished and the installed copy has not
+    /// been read again. A later reading that still names an older release,
+    /// such as after ROLL BACK, lets the update show.
+    uint64_t installed_generation{};
     formats::oamod::EngineVersion engine{}; ///< this build's release
     std::string version_text{};             ///< this build's version as the header shows it
     int64_t list_age_seconds{-1};           ///< how old the newest list is; -1 for none
@@ -532,10 +544,13 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 /// Keeps the tab, each tab's filter, the tag, query and selection.
 /// When the selected entry no longer shows, the first visible entry is
 /// selected and the details close.
-/// An update note is not attached when the installed copy, or a queue item
-/// whose phase is installed, already names a catalogue release above 0 that
-/// is at least the note's. A release of 0 names none, and a held item has
-/// not finished, so neither retires the note.
+/// An update note is not attached when the installed copy already names a
+/// catalogue release above 0 that is at least the note's, or a queue item
+/// whose phase is installed does and either the inputs name no installed
+/// reading or that item finished against the reading now in place. A later
+/// reading leaves the note, so a roll back offers the update again. A
+/// release of 0 names none, and a held item has not finished, so neither
+/// retires the note.
 ///
 /// @param[in,out] library the Library
 /// @param inputs the new inputs, which the Library keeps

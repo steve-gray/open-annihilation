@@ -2438,6 +2438,64 @@ void test_tabs_list_what_their_counts_hold() {
     OA_CHECK(lib::update_count(library) == 0);
 }
 
+void test_rolled_back_update_returns() {
+    // Install release 1, update to release 2, then roll back to release 1.
+    // The finished queue item hides the note only while the installed copy
+    // has not been read again. Once a later reading names release 1, Updates
+    // counts the note and the row offers UPDATE.
+    lib::Inputs inputs = base_inputs();
+    lib::Listing ridge = listing(core, Kind::mod, "ridge", "Ridge");
+    ridge.release = 2;
+    inputs.listings.push_back(ridge);
+    lib::Installed copy = installed(core, Kind::mod, "ridge", "Ridge");
+    copy.release = 1;
+    inputs.installed.push_back(copy);
+    lib::UpdateNote note = update(core, Kind::mod, "ridge");
+    note.to_release = 2;
+    inputs.updates.push_back(note);
+    inputs.installed_generation = 1;
+
+    lib::Library library = built(std::move(inputs));
+    lib::set_tab(library, lib::Tab::updates);
+    const lib::Entry* row = at(library, core, Kind::mod, "ridge");
+    OA_CHECK(row != nullptr && row->state == State::update);
+    OA_CHECK(lib::update_count(library) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 1);
+    if (row != nullptr) {
+        OA_CHECK_TEXT(lib::entry_actions(library, *row).front().text, "UPDATE");
+        OA_CHECK(lib::entry_actions(library, *row).front().action == Action::update);
+        OA_CHECK(lib::entry_actions(library, *row).front().enabled);
+    }
+
+    // The update finishes. The next reading of the installed copy still
+    // names release 1, and the finished item is of that same reading.
+    lib::Inputs finished = library.inputs;
+    lib::QueueItem done = queued(core, "ridge", "Ridge", Phase::installed);
+    done.release = 2;
+    done.finished_scan = finished.installed_generation;
+    finished.queue.push_back(std::move(done));
+    lib::refresh(library, std::move(finished));
+    row = at(library, core, Kind::mod, "ridge");
+    OA_CHECK(row != nullptr && row->state == State::installed && row->update == nullptr);
+    OA_CHECK(lib::update_count(library) == 0);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 0);
+
+    // Roll back. A later reading names release 1 again. The finished item
+    // is of the earlier reading, so it no longer hides the note.
+    lib::Inputs rolled = library.inputs;
+    rolled.installed_generation = 2;
+    lib::refresh(library, std::move(rolled));
+    lib::set_tab(library, lib::Tab::updates);
+    row = at(library, core, Kind::mod, "ridge");
+    OA_CHECK(row != nullptr && row->state == State::update);
+    OA_CHECK(lib::update_count(library) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 1);
+    if (row != nullptr) {
+        OA_CHECK_TEXT(lib::entry_actions(library, *row).front().text, "UPDATE");
+        OA_CHECK(lib::entry_actions(library, *row).front().enabled);
+    }
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -2477,6 +2535,7 @@ int main() {
     test_built_in_languages();
     test_tab_counts();
     test_tabs_list_what_their_counts_hold();
+    test_rolled_back_update_returns();
     test_own_mod_description();
     test_facts();
     test_status_lines_and_bylines();
