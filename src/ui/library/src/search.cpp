@@ -261,6 +261,24 @@ bool shows_base_game(const Library& library, Filter filter) {
     return library.tab == Tab::mods && (filter == Filter::all || filter == Filter::installed);
 }
 
+/// Tells whether the tab's filter offers the tag that is stored.
+///
+/// Counts never apply the tag, and the chip row lists only the tags of this
+/// filter. One scan decides it: a tag left from another tab or filter would
+/// otherwise drop every row while those counts stay, and with an empty
+/// search the list would read "Nothing to show."
+///
+/// @param library the Library
+/// @return true when the stored tag is one tags_in_tab names
+bool tag_is_offered(const Library& library) {
+    if (library.tag.empty())
+        return false;
+    for (const auto& counted : tags_in_tab(library))
+        if (counted.first == library.tag)
+            return true;
+    return false;
+}
+
 } // namespace
 
 std::string folded(std::string_view text) {
@@ -341,10 +359,13 @@ bool has_shown_tag(const Library& library, const Entry& entry) {
 
 void update_visible(Library& library) {
     const std::vector<bool> by_filter = kept_by_filter(library, shown_filter(library));
+    const bool offered = tag_is_offered(library);
     std::vector<Candidate> kept;
     for (std::size_t index = 0; index < library.entries.size(); ++index) {
         const Entry& entry = library.entries[index];
-        if (!by_filter[index] || !has_shown_tag(library, entry))
+        if (!by_filter[index])
+            continue;
+        if (offered && !has_shown_tag(library, entry))
             continue;
         const std::optional<Rank> ranked = rank(entry, library.query);
         if (!ranked)

@@ -53,7 +53,11 @@ translator finds them together. Every word passes through `Library::text`
 
   It keeps the tab, each tab's filter, the tag, search and selection. When
   the selected entry no longer shows, the first visible entry is selected
-  and the details close.
+  and the details close. An update the installed copy has already reached,
+  or a finished queue item whose catalogue release is above 0 and at least
+  the note's, is not attached, so the entry is not an update and Updates
+  does not count it. A release of 0 names none, and an item waiting until
+  the player leaves the mod being played has not finished.
 - `set_tab`, `set_filter`, `set_tag`, `set_query`, `select`,
   `move_selection`, `open_details` and `close_details` browse; each
   recomputes `visible`, the entries shown in their order:
@@ -63,7 +67,9 @@ translator finds them together. Every word passes through `Library::text`
     below). Registries lists the registries (`Inputs::registries`) and has
     no search, no filter and no package list;
   - Mods, Maps and Languages show their kind and Updates every kind, under
-    the tab's own filter (`Library::filters`, `shown_filter`) and the tag:
+    the tab's own filter (`Library::filters`, `shown_filter`) and, when that
+    filter offers it, the tag. A tag left from another tab or filter is kept
+    and hides nothing until a tab offers it again. The filters are:
     All; New keeps the tab's ten listings (`newest_count`) with the latest
     `Listing::published` day, ties by name, and never a listing without a
     day, so a package's release and revision play no part; Installed keeps
@@ -84,7 +90,8 @@ translator finds them together. Every word passes through `Library::text`
     kept to 64 bytes, cut at a character boundary. Whenever the list keeps
     the base game entry, it is moved to the front after that order;
 - `tags_in_tab` counts the tags of the entries a tab shows under its
-  filter; `filter_count` counts the packages a filter keeps on the tab
+  filter. The list applies a stored tag only when that count includes it;
+  `filter_count` counts the packages a filter keeps on the tab
   shown before the tag and the search, so no count moves with them, and
   leaves the base game entry out of every count, and
   `filter_caption` writes it as the filters show it, "Installed (4)"
