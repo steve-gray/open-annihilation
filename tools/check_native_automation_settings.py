@@ -8,8 +8,8 @@ The game runs on the dummy drivers with --fark, once in a 640x480 window
 and once in a 1920x1080 one, where the menus are drawn larger. In each:
 
 - controls lists the OA button as oa.button, with no dialog and enabled, and
-  a click at its rectangle's centre opens the Library, whose
-  oa.library.settings opens Settings over it;
+  a click at its rectangle's centre opens the Library, which offers no
+  SETTINGS… (oa.library.settings) and closes by oa.library.close;
 - controls lists the Settings button beside it as oa.settings-button, a
   button with no dialog, enabled, its text "Settings", and a click at its
   centre opens Settings;
@@ -22,7 +22,7 @@ and once in a 1920x1080 one, where the menus are drawn larger. In each:
   oa.settings.max-zoom-out.whole-map item chooses it;
 - oa.settings.ok keeps them: prefs then holds wheel zoom 0 and the
   maximum zoom out whole-map;
-- once Settings closes, oa.library.close closes the Library under it;
+- once Settings closes, the main menu shows with no Library;
 - opened again by oa.settings-button, Settings shows wheel zoom off; a click
   on its On half and then oa.settings.cancel keeps the value stored, and
   goes back to the main menu with no Library, since none was under it;
@@ -116,14 +116,22 @@ def check_listing(controls, window):
 
 
 def open_settings(client):
-    """Clicks the OA button, then the Library's SETTINGS…, and waits for Settings' OK."""
+    """Opens the Library from the OA button and closes it, then opens Settings from its button.
+
+    The Library offers no SETTINGS… since 0.8.0's M22: the main menu's
+    Settings button opens Settings.
+    """
     button = wait_control(client, "oa.button", lambda control: control.get("enabled"))
     if button.get("dialog") is not None or button.get("kind") != "button":
         raise automation.AutomationFailure(f"the OA button is listed as {button}")
     click(client, "oa.button")
-    wait_control(client, "oa.library.settings")
-    click(client, "oa.library.settings")
-    wait_control(client, "oa.settings.ok")
+    wait_control(client, "oa.library.close")
+    offered = [control for control in listed(client)
+               if control.get("name") == "oa.library.settings" and control.get("visible")]
+    if offered:
+        raise automation.AutomationFailure(f"the Library still offers SETTINGS…: {offered}")
+    close_library(client)
+    open_settings_directly(client)
 
 
 def open_settings_directly(client):
@@ -146,7 +154,7 @@ def back_on_main_menu(client):
 
 
 def close_library(client):
-    """Closes the Library Settings was opened over, back to the main menu."""
+    """Closes the Library, back to the main menu."""
     click(client, "oa.library.close")
     wait_gone(client, "oa.library.close")
 
@@ -191,7 +199,7 @@ def check_at(native, game_dir, workdir, resolution):
         wait_gone(client, "oa.settings.ok")
         wait_preference(client, WHEEL_ZOOM, "0")
         wait_preference(client, MAX_ZOOM_OUT, "whole-map")
-        close_library(client)
+        back_on_main_menu(client)
 
         open_settings_directly(client)
         if not any(control.get("name") == "oa.settings.wheel-zoom.off" for control in listed(client)):

@@ -8,7 +8,7 @@
 // window: the two drawings are byte for byte the same, the margin keeps its
 // colour, and every pixel of the window is drawn. In the game's fonts every
 // text fits and every part lies in the window. The same holds for the
-// Active tab at Compact and Regular, and the Updates tab at Compact and
+// Active tab at Compact, Regular and Large, and the Updates tab at Compact and
 // Large. The characters the game's fonts lack are drawn in the modern fonts
 // beside the test, as the game draws them. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png
@@ -313,6 +313,7 @@ int main(int argc, char** argv) {
         {"details-compact", window_of(640, 480, 100), true},
         {"active-compact", window_of(640, 480, 100), false, lib::Tab::active},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active},
+        {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active},
         {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
         {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
     };

@@ -836,12 +836,19 @@ void test_active_setup() {
     inputs.language = {"Deutsch", "Deutsch (Fixture)", "1.2"};
     inputs.map_packs.push_back({"zeta pack", {{"Last Map", 1, "8x8"}}});
     inputs.map_packs.push_back({"Alpha Pack", {{"Ridgeline", 4, "16x16"}, {"Twin", 2, "12x12"}}});
+    lib::Installed alpha = installed(core, Kind::map_pack, "alpha", "Alpha Pack");
+    alpha.badge = lib::Badge{std::vector<uint8_t>(4, 0xff), 1, 1};
+    inputs.installed.push_back(std::move(alpha));
     lib::Library library = built(inputs);
 
     // The installed mod marked playing comes first, by its listing's name and badge.
     lib::ActiveSetup setup = lib::active_setup(library);
     OA_CHECK_TEXT(setup.mod_name, "Ridge");
     OA_CHECK_TEXT(setup.mod_version, "4.8 · rev 3");
+    OA_CHECK_TEXT(setup.mod_release, "4.8 (rev 3)");
+    OA_CHECK_TEXT(setup.mod_author, "by Fixture Author");
+    OA_CHECK_TEXT(setup.mod_state, "Playing");
+    OA_CHECK(setup.base_title.empty());
     OA_CHECK_TEXT(setup.mod_line, "Ridge 4.8 · rev 3");
     OA_CHECK(setup.mod_badge != nullptr && setup.mod_badge->width == 4);
     OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
@@ -857,6 +864,8 @@ void test_active_setup() {
         }
         if (!setup.packs[1].maps.empty())
             OA_CHECK_TEXT(setup.packs[1].maps[0].line, "Last Map · 1 player · 8x8");
+        OA_CHECK(setup.packs[0].badge != nullptr && setup.packs[0].badge->width == 1);
+        OA_CHECK(setup.packs[1].badge == nullptr);
     }
 
     // Without one, the mod the app says is played; a pack without a version is named alone.
@@ -865,6 +874,9 @@ void test_active_setup() {
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);
     OA_CHECK_TEXT(setup.mod_line, "Ridge (settings) 4.8");
+    OA_CHECK_TEXT(setup.mod_release, "4.8");
+    OA_CHECK_TEXT(setup.mod_state, "Playing");
+    OA_CHECK(setup.mod_author.empty());
     OA_CHECK(setup.mod_badge == nullptr);
     OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture)");
 
@@ -875,12 +887,46 @@ void test_active_setup() {
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);
     OA_CHECK(setup.mod_name.empty() && setup.mod_badge == nullptr);
-    OA_CHECK_TEXT(setup.mod_line, "No mod is played");
+    OA_CHECK_TEXT(setup.mod_line, "No mod: the game as it was made");
+    OA_CHECK_TEXT(setup.base_title, "Base Game");
+    OA_CHECK_TEXT(setup.base_look, "Total Annihilation 3.1c");
+    OA_CHECK(setup.mod_state.empty() && setup.mod_release.empty() && setup.mod_author.empty());
+    OA_CHECK_TEXT(setup.language_name, "Français");
+    OA_CHECK_TEXT(setup.language_note, "Built in");
+    OA_CHECK(setup.language_english.empty() && setup.language_version.empty());
     OA_CHECK_TEXT(setup.language_line, "Français · built in");
     OA_CHECK(setup.packs.empty());
     inputs.language = {};
     lib::refresh(library, inputs);
-    OA_CHECK_TEXT(lib::active_setup(library).language_line, "English · built in");
+    setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.language_line, "English · built in");
+    OA_CHECK_TEXT(setup.language_name, "English");
+    OA_CHECK_TEXT(setup.language_note, "Built in");
+
+    // A pack in use names itself, its English name, its revision and its coverage.
+    inputs.language.name = "Deutsch";
+    inputs.language.pack = "Deutsch (Fixture)";
+    inputs.language.version = "1.2";
+    inputs.language.english = "German";
+    inputs.language.revision = 4;
+    lib::Listing deutsch = listing(core, Kind::language, "de", "Deutsch");
+    deutsch.coverage = 0.92;
+    inputs.listings.push_back(deutsch);
+    lib::Installed deutsch_installed = installed(core, Kind::language, "de", "Deutsch (folder)");
+    deutsch_installed.version = "1.2";
+    deutsch_installed.revision = 4;
+    deutsch_installed.in_use = true;
+    inputs.installed.push_back(deutsch_installed);
+    lib::refresh(library, inputs);
+    setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.language_name, "Deutsch");
+    OA_CHECK_TEXT(setup.language_english, "German");
+    OA_CHECK_TEXT(setup.language_pack, "Deutsch (Fixture)");
+    OA_CHECK_TEXT(setup.language_version, "1.2 (rev 4)");
+    OA_CHECK_TEXT(setup.language_coverage, "Coverage 92%");
+    OA_CHECK(setup.language_note.empty());
+    OA_CHECK(setup.language_badge == nullptr);
+    OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
 }
 
 void test_order_without_search() {
