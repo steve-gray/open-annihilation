@@ -834,31 +834,9 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         Runtime& game = runtime_;
         if (std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name) ==
             game.bound_map_names_.end()) {
-            // A pack installed since the list was made joins it, after the
-            // base maps, as the start's scan lists the pack maps.
-            for (const PackMap& map : game.map_packs().maps())
-                if (std::find(
-                        game.eligible_map_names_.begin(), game.eligible_map_names_.end(), map.name
-                    ) == game.eligible_map_names_.end())
-                    game.eligible_map_names_.push_back(map.name);
-            std::vector<std::string> names = game.copy_map_names();
-            names.resize(
-                std::min<std::size_t>(
-                    names.size(), static_cast<std::size_t>(std::max(game.map_count(), int32_t{0}))
-                )
-            );
-            try {
-                map_modal::sort_map_names(names);
-            } catch (const std::exception& error) {
-                std::cerr << "open-annihilation: map browser: " << error.what() << '\n';
-                return false;
-            }
-            std::ignore =
-                std::stable_partition(names.begin(), names.end(), [](const std::string& listed) {
-                    return !oa::data::map_pack::split_pack_map_name(listed);
-                });
-            game.map_modal_.names = names;
-            game.bind_map_names(names);
+            // A pack installed since the list was made joins it when the map
+            // fits the mod being played, after the base maps.
+            game.refresh_listed_pack_maps();
         }
         const auto row =
             std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name);

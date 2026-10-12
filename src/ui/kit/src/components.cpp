@@ -540,6 +540,44 @@ constexpr std::array<IconStroke, 6> kDownloadStrokes{{
     {{14, 82}, {82, 82}},
     {{82, 82}, {82, 62}},
 }};
+/// A signing key: a twelve-sided bow, a shaft to the right, and two teeth.
+/// Every end stays kStrokeHalf inside the square, so the round ends are not
+/// clipped. The bow's centre is (28, 48) and its radius is 16.
+constexpr std::array<IconStroke, 15> kKeyStrokes{{
+    {{44, 48}, {42, 56}},
+    {{42, 56}, {36, 62}},
+    {{36, 62}, {28, 64}},
+    {{28, 64}, {20, 62}},
+    {{20, 62}, {14, 56}},
+    {{14, 56}, {12, 48}},
+    {{12, 48}, {14, 40}},
+    {{14, 40}, {20, 34}},
+    {{20, 34}, {28, 32}},
+    {{28, 32}, {36, 34}},
+    {{36, 34}, {42, 40}},
+    {{42, 40}, {44, 48}},
+    {{40, 48}, {88, 48}},
+    {{70, 48}, {70, 66}},
+    {{82, 48}, {82, 76}},
+}};
+
+/// Reports whether a key stroke's round ends stay inside the icon square.
+///
+/// @return true when every end is kStrokeHalf inside the square
+constexpr bool key_strokes_fit() noexcept {
+    constexpr int64_t least = kStrokeHalf;
+    constexpr int64_t most = kIconGrid - kStrokeHalf;
+    for (const IconStroke& stroke : kKeyStrokes) {
+        const IconPoint ends[] = {stroke.from, stroke.to};
+        for (const IconPoint end : ends) {
+            if (end.x < least || end.x > most || end.y < least || end.y > most)
+                return false;
+        }
+    }
+    return true;
+}
+
+static_assert(key_strokes_fit(), "the key glyph stays inside its square");
 
 /// Returns a state icon's strokes.
 ///
@@ -553,6 +591,11 @@ std::span<const IconStroke> strokes_of(StateIcon icon) noexcept {
         return kUpArrowStrokes;
     case StateIcon::download_arrow:
         return kDownloadStrokes;
+    case StateIcon::key:
+        return kKeyStrokes;
+    case StateIcon::oa:
+    case StateIcon::bone:
+        return {};
     }
     return {};
 }
@@ -823,6 +866,266 @@ void blend_share(
     blend_coverage(canvas, rect, scaled, ink);
 }
 
+/// The OA badge's plate, lighter than the list's face so the plate reads on it.
+constexpr Colour kOaPlate{0x3c, 0x40, 0x38};
+/// The bone's outline, dark enough to separate the off-white from the list.
+constexpr Colour kBoneOutline{0x0c, 0x0a, 0x08};
+/// The bone's fill.
+constexpr Colour kBoneFill{0xf4, 0xef, 0xe0};
+
+/// A design scaled into the sample space of one icon square.
+struct DesignScale {
+    int64_t square{}; ///< the square's samples across, in eighths of a pixel
+
+    /// Scales a design coordinate into that space.
+    ///
+    /// @param quarters the coordinate, in quarter units
+    /// @return the same place, in eighths of a pixel of the square
+    [[nodiscard]] int64_t scaled(int64_t quarters) const noexcept {
+        return (quarters * square + kIconGrid / 2) / kIconGrid;
+    }
+};
+
+/// Tells whether a sample lies in a disc.
+///
+/// @param point the sample
+/// @param centre the disc's centre
+/// @param radius the radius
+/// @return true when the sample is inside or on the disc
+bool in_disc(IconPoint point, IconPoint centre, int64_t radius) noexcept {
+    const int64_t across = point.x - centre.x;
+    const int64_t down = point.y - centre.y;
+    return across * across + down * down <= radius * radius;
+}
+
+/// Tells whether a sample lies in an axis-aligned rounded rectangle.
+///
+/// @param point the sample
+/// @param left the left edge
+/// @param top the top edge
+/// @param right the right edge
+/// @param bottom the bottom edge
+/// @param radius the corner radius
+/// @return true when the sample is inside
+bool in_round_rect(
+    IconPoint point, int64_t left, int64_t top, int64_t right, int64_t bottom, int64_t radius
+) noexcept {
+    if (point.x < left || point.x > right || point.y < top || point.y > bottom)
+        return false;
+    if (radius <= 0)
+        return true;
+    const int64_t inner_left = left + radius;
+    const int64_t inner_right = right - radius;
+    const int64_t inner_top = top + radius;
+    const int64_t inner_bottom = bottom - radius;
+    if (inner_left > inner_right || inner_top > inner_bottom)
+        return true;
+    if ((point.x >= inner_left && point.x <= inner_right) ||
+        (point.y >= inner_top && point.y <= inner_bottom))
+        return true;
+    const int64_t corner_x = point.x < inner_left ? inner_left : inner_right;
+    const int64_t corner_y = point.y < inner_top ? inner_top : inner_bottom;
+    return in_disc(point, {corner_x, corner_y}, radius);
+}
+
+/// The cross product of AB and AP, for a point-in-triangle test.
+///
+/// @param from one end
+/// @param to the other end
+/// @param point the point
+/// @return the cross product
+int64_t cross_at(IconPoint from, IconPoint to, IconPoint point) noexcept {
+    return (to.x - from.x) * (point.y - from.y) - (to.y - from.y) * (point.x - from.x);
+}
+
+/// Tells whether two cross products lie on the same side of an edge.
+///
+/// A zero lies on the edge and counts as inside.
+///
+/// @param left one cross product
+/// @param right the other
+/// @return true when they do not point opposite ways
+bool same_side(int64_t left, int64_t right) noexcept {
+    if (left == 0 || right == 0)
+        return true;
+    return (left > 0) == (right > 0);
+}
+
+/// Tells whether a sample lies in a triangle, edges included.
+///
+/// @param point the sample
+/// @param a the first corner
+/// @param b the second corner
+/// @param c the third corner
+/// @return true when the sample is inside
+bool in_triangle(IconPoint point, IconPoint a, IconPoint b, IconPoint c) noexcept {
+    const int64_t ab = cross_at(a, b, point);
+    const int64_t bc = cross_at(b, c, point);
+    const int64_t ca = cross_at(c, a, point);
+    return same_side(ab, bc) && same_side(bc, ca);
+}
+
+/// Tells whether a sample lies on the OA badge's plate.
+///
+/// @param point the sample, in the scaled space
+/// @param scale how the design was scaled
+/// @return true on the plate
+bool on_oa_plate(IconPoint point, const DesignScale& scale) noexcept {
+    return in_round_rect(
+        point,
+        scale.scaled(4),
+        scale.scaled(4),
+        scale.scaled(92),
+        scale.scaled(92),
+        scale.scaled(14)
+    );
+}
+
+/// Tells whether a sample lies on the OA badge's letters.
+///
+/// The O is a rounded ring. The A is a triangle with a counter and a bar.
+///
+/// @param point the sample, in the scaled space
+/// @param scale how the design was scaled
+/// @return true on a letter
+bool on_oa_letters(IconPoint point, const DesignScale& scale) noexcept {
+    const bool ring = in_round_rect(
+                          point,
+                          scale.scaled(12),
+                          scale.scaled(26),
+                          scale.scaled(40),
+                          scale.scaled(70),
+                          scale.scaled(10)
+                      ) &&
+                      !in_round_rect(
+                          point,
+                          scale.scaled(20),
+                          scale.scaled(36),
+                          scale.scaled(32),
+                          scale.scaled(60),
+                          scale.scaled(4)
+                      );
+    const bool body = in_triangle(
+        point,
+        {scale.scaled(70), scale.scaled(24)},
+        {scale.scaled(48), scale.scaled(72)},
+        {scale.scaled(92), scale.scaled(72)}
+    );
+    const bool counter = in_triangle(
+        point,
+        {scale.scaled(70), scale.scaled(42)},
+        {scale.scaled(60), scale.scaled(64)},
+        {scale.scaled(80), scale.scaled(64)}
+    );
+    const bool bar = point.x >= scale.scaled(54) && point.x <= scale.scaled(86) &&
+                     point.y >= scale.scaled(50) && point.y <= scale.scaled(58);
+    return ring || (body && !counter) || bar;
+}
+
+/// Tells whether a sample lies on a bone of the given thickness.
+///
+/// Two knobs at each end and a shaft between them. The outline is the
+/// thicker bone; the fill is the thinner one drawn over it.
+///
+/// @param point the sample, in the scaled space
+/// @param scale how the design was scaled
+/// @param knob the knob radius, in quarter units
+/// @param shaft_half half the shaft's thickness, in quarter units
+/// @return true on the bone
+bool on_bone(IconPoint point, const DesignScale& scale, int64_t knob, int64_t shaft_half) noexcept {
+    const int64_t radius = scale.scaled(knob);
+    const IconPoint knobs[] = {
+        {scale.scaled(24), scale.scaled(34)},
+        {scale.scaled(24), scale.scaled(62)},
+        {scale.scaled(72), scale.scaled(34)},
+        {scale.scaled(72), scale.scaled(62)},
+    };
+    for (const IconPoint centre : knobs)
+        if (in_disc(point, centre, radius))
+            return true;
+    const int64_t half = scale.scaled(shaft_half);
+    const int64_t centre = scale.scaled(48);
+    return point.x >= scale.scaled(24) && point.x <= scale.scaled(72) && point.y >= centre - half &&
+           point.y <= centre + half;
+}
+
+/// Returns how much of each pixel a filled maker's shape covers.
+///
+/// The same sampling as a stroke icon. `covers` is asked about each sample
+/// in the scaled space.
+///
+/// @param columns the rectangle's pixels across, at most kMostIconPixels
+/// @param rows the rectangle's pixels down, at most kMostIconPixels
+/// @param covers whether a sample, and the scale, lie in the shape
+/// @return columns times rows bytes, rows top to bottom: 0 uncovered to 255 covered
+template <class Covers>
+std::vector<uint8_t> sample_maker(int32_t columns, int32_t rows, Covers covers) {
+    std::vector<uint8_t> coverage(
+        static_cast<std::size_t>(std::max(columns, 0)) * static_cast<std::size_t>(std::max(rows, 0))
+    );
+    const int32_t side = std::min(columns, rows);
+    if (side <= 0)
+        return coverage;
+    const int32_t left = (columns - side) / 2;
+    const int32_t top = (rows - side) / 2;
+    const DesignScale scale{2 * kIconSamples * side};
+    constexpr int64_t samples = kIconSamples * kIconSamples;
+    for (int32_t row = 0; row < side; ++row) {
+        for (int32_t column = 0; column < side; ++column) {
+            int64_t inside = 0;
+            for (int64_t down = 0; down < kIconSamples; ++down) {
+                for (int64_t across = 0; across < kIconSamples; ++across) {
+                    const IconPoint sample{
+                        2 * kIconSamples * column + 2 * across + 1,
+                        2 * kIconSamples * row + 2 * down + 1,
+                    };
+                    if (covers(sample, scale))
+                        ++inside;
+                }
+            }
+            const std::size_t at =
+                static_cast<std::size_t>(top + row) * static_cast<std::size_t>(columns) +
+                static_cast<std::size_t>(left + column);
+            coverage[at] = static_cast<uint8_t>((inside * 255 + samples / 2) / samples);
+        }
+    }
+    return coverage;
+}
+
+/// Draws the OA badge or the bone in their own colours. `ink` is not used.
+///
+/// @param canvas where it is drawn
+/// @param rect the rectangle, in points
+/// @param icon oa or bone
+void draw_maker_icon(const Canvas& canvas, const Rect& rect, StateIcon icon) {
+    const Point pixels = covered_pixels(canvas, rect);
+    if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
+        return;
+    if (icon == StateIcon::oa) {
+        const std::vector<uint8_t> plate =
+            sample_maker(pixels.x, pixels.y, [](IconPoint point, const DesignScale& scale) {
+                return on_oa_plate(point, scale);
+            });
+        const std::vector<uint8_t> letters =
+            sample_maker(pixels.x, pixels.y, [](IconPoint point, const DesignScale& scale) {
+                return on_oa_letters(point, scale);
+            });
+        blend_coverage(canvas, rect, plate, kOaPlate);
+        blend_coverage(canvas, rect, letters, colour::lock);
+        return;
+    }
+    const std::vector<uint8_t> outline =
+        sample_maker(pixels.x, pixels.y, [](IconPoint point, const DesignScale& scale) {
+            return on_bone(point, scale, 18, 13);
+        });
+    const std::vector<uint8_t> fill =
+        sample_maker(pixels.x, pixels.y, [](IconPoint point, const DesignScale& scale) {
+            return on_bone(point, scale, 10, 5);
+        });
+    blend_coverage(canvas, rect, outline, kBoneOutline);
+    blend_coverage(canvas, rect, fill, kBoneFill);
+}
+
 } // namespace
 
 Point mark_size(Mark mark) noexcept {
@@ -839,6 +1142,10 @@ void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink) {
 void draw_state_icon(const Canvas& canvas, const Rect& rect, StateIcon icon, Colour ink) {
     if (!drawable(canvas))
         return;
+    if (icon == StateIcon::oa || icon == StateIcon::bone) {
+        draw_maker_icon(canvas, rect, icon);
+        return;
+    }
     const Point pixels = covered_pixels(canvas, rect);
     if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
         return;

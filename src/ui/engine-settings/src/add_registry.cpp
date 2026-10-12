@@ -47,6 +47,11 @@ constexpr int32_t kNameGap = 4;
 constexpr std::string_view kAddTitle = "Add registry";
 constexpr std::string_view kMirrorTitle = "Add mirror";
 constexpr std::string_view kPlaceholder = "http://…";
+constexpr std::string_view kSigningKeyLabel = "Signing key";
+constexpr std::string_view kKeyPlaceholder = "ed25519:…";
+/// A public key is 52 characters. A longer paste stays too long to be a key
+/// rather than being cut into one.
+constexpr std::size_t kMaxSigningKeyBytes = 128;
 constexpr std::string_view kCancelCaption = "CANCEL";
 constexpr std::string_view kCheckCaption = "CHECK";
 constexpr std::string_view kAddCaption = "ADD";
@@ -91,13 +96,44 @@ struct PlacedButton {
 
 /// The window, placed.
 struct Placed {
-    int32_t width{};                   ///< the window's width
-    int32_t height{};                  ///< its height
-    int32_t footer_rule{};             ///< the row of the line over the footer
-    std::optional<kit::Rect> field{};  ///< the address field; none for a file
-    std::vector<LabelledLine> lines;   ///< the text that fits, top to bottom
-    std::vector<PlacedButton> buttons; ///< the footer's buttons, left to right
+    int32_t width{};                      ///< the window's width
+    int32_t height{};                     ///< its height
+    int32_t footer_rule{};                ///< the row of the line over the footer
+    std::optional<kit::Rect> field{};     ///< the address field; none for a file
+    std::optional<kit::Rect> key_field{}; ///< the signing-key field; an address add only
+    std::vector<LabelledLine> lines;      ///< the text that fits, top to bottom
+    std::vector<PlacedButton> buttons;    ///< the footer's buttons, left to right
 };
+
+/// Where the address field and, for an address add, the signing-key field sit.
+struct FieldGeometry {
+    int32_t row{};                      ///< the address field's top
+    int32_t width{};                    ///< the window's width
+    int32_t line_width{};               ///< the text width inside the padding
+    std::optional<int32_t> key_label{}; ///< the "Signing key" line, for an address add
+    std::optional<int32_t> key_field{}; ///< the signing-key field
+};
+
+/// Returns the address field's row, and the signing-key field's for an address add.
+///
+/// @param window the window
+/// @return the rows, in points
+FieldGeometry field_geometry(const AddRegistry& window) noexcept {
+    FieldGeometry geometry;
+    geometry.width = add_registry_width(window.size_class);
+    geometry.line_width = geometry.width - 2 * metrics.padding;
+    int32_t row = metrics.text_top;
+    if (window.mode == AddRegistry::Mode::mirror)
+        row += metrics.small_line + metrics.paragraph_gap;
+    geometry.row = row;
+    if (window.mode == AddRegistry::Mode::by_url) {
+        row += metrics.field_height + metrics.paragraph_gap;
+        geometry.key_label = row;
+        row += metrics.small_line;
+        geometry.key_field = row;
+    }
+    return geometry;
+}
 
 /// Returns a text's width in a font, or its estimated width without fonts.
 ///
@@ -265,6 +301,7 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
         row += metrics.small_line;
     };
 
+    const FieldGeometry fields = field_geometry(window);
     const bool mirror = window.mode == AddRegistry::Mode::mirror;
     if (mirror) {
         heading_line(filled("Mirror of {name}", "name", window.mirror_of), Label::name);
@@ -273,8 +310,16 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
     if (window.mode == AddRegistry::Mode::from_file) {
         text_line(filled("From {file}", "file", window.file_name), kit::colour::text, Label::none);
     } else {
-        placed.field = kit::Rect{metrics.padding, row, line_width, metrics.field_height};
-        row += metrics.field_height;
+        placed.field =
+            kit::Rect{metrics.padding, fields.row, fields.line_width, metrics.field_height};
+        row = fields.row + metrics.field_height;
+    }
+    if (fields.key_label && fields.key_field) {
+        row = *fields.key_label;
+        text_line(std::string(kSigningKeyLabel), kit::colour::hint, Label::none);
+        placed.key_field =
+            kit::Rect{metrics.padding, *fields.key_field, fields.line_width, metrics.field_height};
+        row = *fields.key_field + metrics.field_height;
     }
     row += metrics.paragraph_gap;
 
@@ -340,6 +385,8 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
             placed.lines.push_back(std::move(line));
     if (placed.field && !fits_over(*placed.field, placed.footer_rule))
         placed.field.reset();
+    if (placed.key_field && !fits_over(*placed.key_field, placed.footer_rule))
+        placed.key_field.reset();
 
     placed.buttons = buttons_of(window);
     int32_t right = placed.width - metrics.padding;
@@ -377,8 +424,9 @@ AddRegistryAction action_for(const AddRegistry& window, kit::ControlId id) noexc
 /// @return the control's action, redraw, or none
 AddRegistryAction from_pointer(AddRegistry& window, const kit::PointerOutcome& outcome) noexcept {
     if (outcome.result == kit::PointerResult::activated) {
-        if (outcome.control == add_registry_url_control) {
-            window.interaction.focused = add_registry_url_control;
+        if (outcome.control == add_registry_url_control ||
+            outcome.control == add_registry_key_field_control) {
+            window.interaction.focused = outcome.control;
             window.interaction.focus_shown = true;
             return AddRegistryAction::start_typing;
         }
@@ -439,6 +487,33 @@ void add_label(
     list.controls.push_back(std::move(control));
 }
 
+/// Inserts text into one field, keeping only the first line and at most `most` bytes.
+///
+/// @param[in,out] text the field's text
+/// @param[in,out] caret the caret, in bytes
+/// @param utf8 the text being typed or pasted
+/// @param most the most bytes the field holds
+/// @return redraw when the field changed; none when it did not
+AddRegistryAction
+insert_into(std::string& text, std::size_t& caret, std::string_view utf8, std::size_t most) {
+    const std::size_t line_break = utf8.find_first_of("\r\n");
+    if (line_break != std::string_view::npos)
+        utf8 = utf8.substr(0, line_break);
+    const std::size_t room = most > text.size() ? most - text.size() : 0;
+    if (utf8.size() > room) {
+        std::size_t cut = room;
+        while (cut > 0 && kit::continuation_byte(utf8[cut]))
+            --cut;
+        utf8 = utf8.substr(0, cut);
+    }
+    kit::TextField field{text, std::min(caret, text.size())};
+    if (!kit::insert_text(field, utf8))
+        return AddRegistryAction::none;
+    text = std::move(field.text);
+    caret = field.caret;
+    return AddRegistryAction::redraw;
+}
+
 } // namespace
 
 int32_t add_registry_width(kit::SizeClass size_class) noexcept {
@@ -456,14 +531,17 @@ bool add_registry_editable(const AddRegistry& window) noexcept {
 }
 
 std::optional<kit::Rect> add_registry_field(const AddRegistry& window) noexcept {
-    if (!add_registry_editable(window) || !window.interaction.focus_shown ||
-        window.interaction.focused != add_registry_url_control)
+    if (!add_registry_editable(window) || !window.interaction.focus_shown)
         return std::nullopt;
-    int32_t row = metrics.text_top;
-    if (window.mode == AddRegistry::Mode::mirror)
-        row += metrics.small_line + metrics.paragraph_gap;
-    const int32_t width = add_registry_width(window.size_class);
-    return kit::Rect{metrics.padding, row, width - 2 * metrics.padding, metrics.field_height};
+    const FieldGeometry fields = field_geometry(window);
+    if (window.interaction.focused == add_registry_key_field_control && fields.key_field)
+        return kit::Rect{
+            metrics.padding, *fields.key_field, fields.line_width, metrics.field_height
+        };
+    if (window.interaction.focused == add_registry_url_control &&
+        window.mode != AddRegistry::Mode::from_file)
+        return kit::Rect{metrics.padding, fields.row, fields.line_width, metrics.field_height};
+    return std::nullopt;
 }
 
 kit::DisplayList add_registry_list(const AddRegistry& window, const kit::Fonts* fonts) {
@@ -493,39 +571,61 @@ kit::DisplayList add_registry_list(const AddRegistry& window, const kit::Fonts* 
 
     const kit::Interaction& interaction = window.interaction;
     const bool editable = add_registry_editable(window);
-    if (placed.field) {
-        const bool focused =
-            editable && interaction.focus_shown && interaction.focused == add_registry_url_control;
+    const auto text_field = [&](kit::ControlId id,
+                                const kit::Rect& rect,
+                                std::string_view name,
+                                std::string_view placeholder,
+                                const std::string& value,
+                                std::size_t caret) {
+        const bool focused = editable && interaction.focus_shown && interaction.focused == id;
         kit::SearchLook look;
-        look.placeholder = std::string(kPlaceholder);
-        look.field.text = window.url;
-        look.field.caret = std::min(window.caret, window.url.size());
+        look.placeholder = std::string(placeholder);
+        look.field.text = value;
+        look.field.caret = std::min(caret, value.size());
         look.focused = focused;
-        look.hovered = editable && interaction.hovered == add_registry_url_control;
+        look.hovered = editable && interaction.hovered == id;
         look.magnifier = false;
         kit::Item item;
         item.role = kit::Role::field;
-        item.rect = *placed.field;
-        item.control = add_registry_url_control;
-        item.text = window.url;
+        item.rect = rect;
+        item.control = id;
+        item.text = value;
         item.state.hovered = look.hovered;
         item.state.focused = focused;
         item.state.disabled = !editable;
         item.look = std::move(look);
         list.items.push_back(std::move(item));
         kit::Control control;
-        control.id = add_registry_url_control;
-        control.rect = *placed.field;
+        control.id = id;
+        control.rect = rect;
         control.enabled = editable;
         control.focusable = editable;
         control.steps = true;
-        control.name = "add-registry.url";
+        control.name = std::string(name);
         control.kind = kit::ControlKind::text_field;
-        control.text = window.url;
+        control.text = value;
         list.controls.push_back(std::move(control));
         if (editable)
-            list.tab_order.push_back(add_registry_url_control);
-    }
+            list.tab_order.push_back(id);
+    };
+    if (placed.field)
+        text_field(
+            add_registry_url_control,
+            *placed.field,
+            "add-registry.url",
+            kPlaceholder,
+            window.url,
+            window.caret
+        );
+    if (placed.key_field)
+        text_field(
+            add_registry_key_field_control,
+            *placed.key_field,
+            "add-registry.key-field",
+            kKeyPlaceholder,
+            window.signing_key,
+            window.key_caret
+        );
 
     for (const LabelledLine& labelled : placed.lines) {
         const Line& line = labelled.line;
@@ -607,28 +707,15 @@ void add_registry_settle(AddRegistry& window) noexcept {
 AddRegistryAction add_registry_text(AddRegistry& window, std::string_view utf8) {
     if (!add_registry_editable(window))
         return AddRegistryAction::none;
-    const std::size_t line_break = utf8.find_first_of("\r\n");
-    if (line_break != std::string_view::npos)
-        utf8 = utf8.substr(0, line_break);
-    const std::size_t room = oa::formats::url::max_url_bytes > window.url.size()
-                                 ? oa::formats::url::max_url_bytes - window.url.size()
-                                 : 0;
-    if (utf8.size() > room) {
-        std::size_t cut = room;
-        while (cut > 0 && kit::continuation_byte(utf8[cut]))
-            --cut;
-        utf8 = utf8.substr(0, cut);
-    }
-    kit::TextField field{window.url, std::min(window.caret, window.url.size())};
-    if (!kit::insert_text(field, utf8))
-        return AddRegistryAction::none;
-    window.url = std::move(field.text);
-    window.caret = field.caret;
-    if (window.phase == AddRegistry::Phase::refused) {
+    const bool signing = window.interaction.focused == add_registry_key_field_control;
+    const AddRegistryAction action =
+        signing ? insert_into(window.signing_key, window.key_caret, utf8, kMaxSigningKeyBytes)
+                : insert_into(window.url, window.caret, utf8, oa::formats::url::max_url_bytes);
+    if (action == AddRegistryAction::redraw && window.phase == AddRegistry::Phase::refused) {
         window.phase = AddRegistry::Phase::editing;
         window.shown = {};
     }
-    return AddRegistryAction::redraw;
+    return action;
 }
 
 AddRegistryAction add_registry_key(AddRegistry& window, kit::Key pressed, const kit::Fonts* fonts) {
@@ -647,16 +734,20 @@ AddRegistryAction add_registry_key(AddRegistry& window, kit::Key pressed, const 
     case kit::KeyResult::to_control:
         break;
     }
-    if (outcome.control != add_registry_url_control)
+    const bool url_field = outcome.control == add_registry_url_control;
+    const bool key_field = outcome.control == add_registry_key_field_control;
+    if (!url_field && !key_field)
         return action_for(window, outcome.control);
     if (pressed == kit::Key::space)
         return AddRegistryAction::start_typing;
-    kit::TextField field{window.url, std::min(window.caret, window.url.size())};
+    std::string& current = key_field ? window.signing_key : window.url;
+    std::size_t& caret = key_field ? window.key_caret : window.caret;
+    kit::TextField field{current, std::min(caret, current.size())};
     if (!kit::edit_text(field, pressed))
         return AddRegistryAction::none;
-    const bool changed = field.text != window.url;
-    window.url = std::move(field.text);
-    window.caret = field.caret;
+    const bool changed = field.text != current;
+    current = std::move(field.text);
+    caret = field.caret;
     if (changed && window.phase == AddRegistry::Phase::refused) {
         window.phase = AddRegistry::Phase::editing;
         window.shown = {};

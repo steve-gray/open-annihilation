@@ -89,7 +89,8 @@ rules hash. A mod that needs hacks this build does not have is listed, and
 says which, but cannot be got. **GET** downloads the mod, checks it as a
 `.oamod` file is checked, and installs it in your Mods folder as
 `Mods/<id>`; **PLAY NOW** then switches to it
-([the Library](../library.md)).
+([the Library](../library.md)). That install shows no notice: the Library's
+row says it is in place. A file you open still does.
 
 **Where it came from.** The installer writes `.oa-origin.yaml` in the
 mod's folder: the registry, the mod's key there, its release and the
@@ -137,7 +138,7 @@ folder holds already:
 
 | Your Mods folder holds | What happens |
 |---|---|
-| no folder of the mod's id | it installs, and says where; **PLAY NOW** plays it |
+| no folder of the mod's id | it installs, and says where (**MOD INSTALLED**, with **OPEN FOLDER** and **OK**); **PLAY NOW** plays it |
 | the same mod and version, another revision | **UPDATE MOD**: **REPLACE** or **CANCEL**; it says when the file is the older revision |
 | the same mod, version and revision | **ALREADY INSTALLED**: **REINSTALL** puts its files back as they came, or **CANCEL** |
 | the same mod at another version | **ANOTHER VERSION**: **REPLACE**, **INSTALL ALONGSIDE** in a folder of its own (`Mods/<id>-<version>`), or **CANCEL** |

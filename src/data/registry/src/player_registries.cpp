@@ -50,6 +50,27 @@ bool read_added(
             if (!take_name(entry, read.descriptor.name, error, field_path(where, "name")))
                 return false;
             saw_name = true;
+        } else if (key == "title") {
+            if (!take_limited_text(
+                    entry,
+                    read.descriptor.title,
+                    error,
+                    field_path(where, "title"),
+                    max_title_characters
+                ))
+                return false;
+        } else if (key == "description") {
+            if (!take_limited_text(
+                    entry,
+                    read.descriptor.description,
+                    error,
+                    field_path(where, "description"),
+                    max_description_characters
+                ))
+                return false;
+        } else if (key == "author") {
+            if (!take_name(entry, read.descriptor.author, error, field_path(where, "author")))
+                return false;
         } else if (key == "url") {
             formats::url::Url parsed;
             if (!take_web_url(entry, parsed, error, field_path(where, "url")))
@@ -225,6 +246,12 @@ std::string player_registries_text(const PlayerRegistries& registries) {
             append_quoted(out, entry.descriptor.id);
             out.push_back('\n');
             append_line(out, "name", entry.descriptor.name);
+            if (!entry.descriptor.title.empty())
+                append_line(out, "title", entry.descriptor.title);
+            if (!entry.descriptor.description.empty())
+                append_line(out, "description", entry.descriptor.description);
+            if (!entry.descriptor.author.empty())
+                append_line(out, "author", entry.descriptor.author);
             if (!entry.url.empty())
                 append_line(out, "url", entry.url);
             if (entry.descriptor.homepage)

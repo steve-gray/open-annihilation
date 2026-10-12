@@ -4086,22 +4086,42 @@ settings::DialogFonts block_fonts() {
 
 void the_dialog_draws_the_scroll_bar_and_clips_the_rows() {
     const auto fonts = block_fonts();
-    // Sections that fit draw no scroll bar, whatever offset they hold:
-    // every one but Controls, Graphics, Language & Text, User Interface, and
-    // Developer, whose list scrolls in a view of its own.
+    // A section draws a scroll bar when its rows are taller than the view,
+    // and none when they fit, whatever offset it holds. The height is the
+    // dialog's own, so a section that grows on one system is checked as that
+    // system lays it out. System is checked both ways: the file-type
+    // switches, and the text row. Developer's list scrolls in its own view,
+    // and that view's bar is the one this checks.
     for (const Page page : kPages) {
-        if (page == Page::controls || page == Page::graphics || page == Page::language ||
-            page == Page::user_interface || page == Page::developer)
-            continue;
-        Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
-        settings::Dialog dialog = opened(page);
-        settings::draw_dialog(canvas.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
-        CHECK(canvas.at(473, 150) == kPanel);
-        CHECK(canvas.at(300, geometry::first_row_top) == kRule);
-        Canvas held = blank(settings::dialog_width, settings::dialog_height);
-        dialog.scroll[static_cast<std::size_t>(page)] = 50;
-        settings::draw_dialog(held.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
-        CHECK(held.surface.rgb == canvas.surface.rgb);
+        const int layouts = page == Page::system ? 2 : 1;
+        for (int layout = 0; layout < layouts; ++layout) {
+            settings::Dialog dialog = opened(page);
+            if (page == Page::system)
+                dialog.file_type_switches = layout == 0;
+            const auto placed = geometry::open_rows(dialog);
+            Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
+            settings::draw_dialog(canvas.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
+            CHECK(canvas.at(300, geometry::first_row_top) == kRule);
+            if (placed.limit == 0) {
+                CHECK(canvas.at(473, 150) == kPanel);
+                Canvas steady = blank(settings::dialog_width, settings::dialog_height);
+                dialog.scroll[static_cast<std::size_t>(page)] = 50;
+                settings::draw_dialog(steady.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
+                CHECK(steady.surface.rgb == canvas.surface.rgb);
+                continue;
+            }
+            const auto thumb = geometry::scroll_thumb(
+                placed.area, placed.scroll, placed.limit, placed.content_height
+            );
+            const int32_t sample_x = placed.area.well.x + placed.area.well.width / 2;
+            const int32_t sample_y = placed.area.well.y + placed.area.well.height / 2;
+            const bool on_thumb = sample_y >= thumb.y && sample_y < thumb.y + thumb.height;
+            CHECK(canvas.at(sample_x, sample_y) == (on_thumb ? kControlHover : kWell));
+            Canvas moved = blank(settings::dialog_width, settings::dialog_height);
+            dialog.scroll[static_cast<std::size_t>(page)] = placed.limit;
+            settings::draw_dialog(moved.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
+            CHECK(moved.surface.rgb != canvas.surface.rgb);
+        }
     }
 
     // At the top: the well with its border, the thumb in its top 174 rows.

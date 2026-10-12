@@ -400,7 +400,8 @@ bool black_outside(const renderer::Surface& surface, const kit::Rect& inside) {
 void state_icons_are_drawn_at_their_own_pixels() {
     using Icon = kit::StateIcon;
     const kit::Colour ink = kit::colour::accent;
-    for (const Icon icon : {Icon::circled_check, Icon::circled_up_arrow, Icon::download_arrow}) {
+    for (const Icon icon :
+         {Icon::circled_check, Icon::circled_up_arrow, Icon::download_arrow, Icon::key}) {
         renderer::Surface one = black(30, 30);
         kit::draw_state_icon(canvas_on(one), {3, 3, 14, 14}, icon, ink);
         OA_CHECK(black_outside(one, {3, 3, 14, 14}));
@@ -427,7 +428,7 @@ void state_icons_are_drawn_at_their_own_pixels() {
         if (icon == Icon::download_arrow) {
             expect(two, 6 + 2, 6 + 13, kBlack);
             expect(two, 6 + 13, 6 + 10, ink);
-        } else {
+        } else if (icon == Icon::circled_check || icon == Icon::circled_up_arrow) {
             expect(two, 6 + 2, 6 + 13, ink);
         }
     }
@@ -1210,6 +1211,104 @@ void paint_matches_each_direct_draw(int32_t scale) {
         OA_CHECK(list.items[index].role == roles[index]);
 }
 
+/// The OA badge and the bone stay inside their square, ignore the ink they
+/// are passed, and at 2x are finer than a doubled bitmap. On a row the mark
+/// sits under the state icon without moving a row that has no mark.
+void maker_marks_sit_under_the_icon() {
+    constexpr kit::Colour kPlate{0x3c, 0x40, 0x38};
+    constexpr kit::Colour kGold = kit::colour::lock;
+    constexpr kit::Colour kOutline{0x0c, 0x0a, 0x08};
+    constexpr kit::Colour kBone{0xf4, 0xef, 0xe0};
+    const auto count_ink =
+        [](const renderer::Surface& surface, const kit::Rect& box, kit::Colour ink) {
+            int found = 0;
+            for (int32_t y = box.y; y < box.y + box.height; ++y)
+                for (int32_t x = box.x; x < box.x + box.width; ++x)
+                    found += pixel(surface, x, y) == ink ? 1 : 0;
+            return found;
+        };
+
+    renderer::Surface badge = black(20, 20);
+    kit::draw_state_icon(canvas_on(badge), {1, 1, 14, 14}, kit::StateIcon::oa, kit::colour::danger);
+    OA_CHECK(black_outside(badge, {1, 1, 14, 14}));
+    OA_CHECK(count_ink(badge, {1, 1, 14, 14}, kPlate) > 0);
+    OA_CHECK(count_ink(badge, {1, 1, 14, 14}, kit::colour::danger) == 0);
+    OA_CHECK(pixel(badge, 1, 1) != kPlate);
+
+    renderer::Surface bone = black(20, 20);
+    kit::draw_state_icon(
+        canvas_on(bone), {1, 1, 14, 14}, kit::StateIcon::bone, kit::colour::danger
+    );
+    OA_CHECK(black_outside(bone, {1, 1, 14, 14}));
+    OA_CHECK(count_ink(bone, {1, 1, 14, 14}, kit::colour::danger) == 0);
+
+    for (const kit::StateIcon icon : {kit::StateIcon::oa, kit::StateIcon::bone}) {
+        renderer::Surface two = black(40, 40);
+        kit::draw_state_icon(canvas_on(two, 2), {3, 3, 14, 14}, icon, kit::colour::danger);
+        OA_CHECK(black_outside(two, {6, 6, 28, 28}));
+        bool mixed = false;
+        bool finer = false;
+        for (int32_t y = 6; y < 34; ++y)
+            for (int32_t x = 6; x < 34; ++x) {
+                const kit::Colour got = pixel(two, x, y);
+                mixed = mixed || (got != kBlack && got != kPlate && got != kGold && got != kBone &&
+                                  got != kOutline);
+                const int32_t left = x - (x - 6) % 2;
+                const int32_t top = y - (y - 6) % 2;
+                finer = finer || got != pixel(two, left, top);
+            }
+        OA_CHECK(mixed && finer);
+        if (icon == kit::StateIcon::oa) {
+            OA_CHECK(count_ink(two, {6, 6, 28, 28}, kPlate) > 0);
+            OA_CHECK(count_ink(two, {6, 6, 28, 28}, kGold) > 0);
+        } else {
+            OA_CHECK(count_ink(two, {6, 6, 28, 28}, kBone) > 0);
+            OA_CHECK(count_ink(two, {6, 6, 28, 28}, kOutline) > 0);
+        }
+    }
+
+    const int32_t side = kit::compact_metrics.state_icon_side;
+    const kit::Rect row{10, 10, 300, kit::compact_metrics.list_row_height};
+    kit::ListRowLook look;
+    look.title = "Ridge";
+    look.chip = kit::ChipLook{
+        "UPDATE", kit::ChipState::update, false, false, false, kit::StateIcon::circled_up_arrow
+    };
+    look.maker = kit::MakerMark::open_annihilation;
+    const kit::Rect icon = kit::list_row_icon_rect(fonts(), row, look);
+    const kit::Rect mark = kit::list_row_maker_rect(row, look);
+    const int32_t offset = (row.height - 2 * side) / 2;
+    OA_CHECK(icon.y == row.y + offset && icon.width == side && icon.height == side);
+    OA_CHECK(mark.x == icon.x && mark.y == icon.y + side && mark.width == side);
+    const kit::Rect centred = kit::list_row_chip_rect(fonts(), row, *look.chip);
+    OA_CHECK(centred.y == row.y + (row.height - side) / 2);
+
+    renderer::Surface drawn = black(320, 60);
+    kit::draw_list_row(canvas_on(drawn), row, look);
+    renderer::Surface direct = black(320, 60);
+    kit::draw_state_icon(
+        canvas_on(direct), icon, kit::StateIcon::circled_up_arrow, kit::colour::lock
+    );
+    kit::draw_state_icon(canvas_on(direct), mark, kit::StateIcon::oa, kit::colour::text);
+    for (const kit::Rect& box : {icon, mark})
+        for (int32_t y = box.y; y < box.y + box.height; ++y)
+            for (int32_t x = box.x; x < box.x + box.width; ++x)
+                OA_CHECK(pixel(drawn, x, y) == pixel(direct, x, y));
+
+    kit::ListRowLook bare;
+    bare.maker = kit::MakerMark::bone;
+    const kit::Rect alone = kit::list_row_maker_rect(row, bare);
+    OA_CHECK(alone.y == row.y + (row.height - side) / 2 && alone.width == side);
+
+    const kit::Rect short_row{0, 0, 200, side};
+    kit::ListRowLook cramped = look;
+    OA_CHECK(kit::list_row_maker_rect(short_row, cramped).width == 0);
+    OA_CHECK(
+        kit::list_row_icon_rect(fonts(), short_row, cramped).y ==
+        kit::list_row_chip_rect(fonts(), short_row, *cramped.chip).y
+    );
+}
+
 /// A disabled chip takes no press, and a disabled link none either.
 void a_disabled_control_takes_no_press() {
     kit::DisplayList list;
@@ -1249,5 +1348,6 @@ int main() {
     paint_matches_each_direct_draw(1);
     paint_matches_each_direct_draw(2);
     a_disabled_control_takes_no_press();
+    maker_marks_sit_under_the_icon();
     return oa::test::check_exit_status();
 }

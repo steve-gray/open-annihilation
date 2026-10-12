@@ -10,6 +10,24 @@
     "registry": { "type": "integer", "const": 1 },
     "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "minLength": 1, "maxLength": 32 },
     "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "description": "The card heading, 1 to 96 Unicode scalar values. Absent: the card heads with name."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "description": "A paragraph on the card under the address and refresh lines, 1 to 400 Unicode scalar values."
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Who publishes the registry, 1 to 64 bytes with no control character. A built-in registry shows a maker's mark from this name."
+    },
     "homepage": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "catalogue": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "mirrors": {

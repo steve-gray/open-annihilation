@@ -18,7 +18,10 @@ of file for a registry that uses the download API. The schema is
 |---|---|---|
 | `registry` | yes | The whole number `1`. |
 | `id` | yes | Kebab-case, 1 to 32 bytes: words of `a-z` and `0-9` joined by single hyphens, not starting or ending with a hyphen. |
-| `name` | yes | 1 to 64 bytes of UTF-8, with no control character (C0, DEL, or U+007F to U+009F) and no byte that is not UTF-8. |
+| `name` | yes | 1 to 64 bytes of UTF-8, with no control character (C0, DEL, or U+007F to U+009F) and no byte that is not UTF-8. The short name, used everywhere except the card's heading. |
+| `title` | no | The card's heading, 1 to 96 characters when present. A character is one Unicode scalar value. Absent or omitted on write when empty: the card heads with `name`. |
+| `description` | no | A paragraph on the card, under the address and the refresh lines, 1 to 400 characters when present, counted the same way as `title`. Absent or omitted on write when empty: the card shows no paragraph. |
+| `author` | no | Who publishes the registry, 1 to 64 bytes of UTF-8 when present, with no control character, the same rule as `name`. Absent or omitted on write when empty. A built-in registry shows a maker's mark when this is Open Annihilation or Cavedog Entertainment ([the Library](../library.md)). |
 | `homepage` | no | An `http` or `https` address, opened only in a browser. |
 | `catalogue` | yes | An `http` or `https` address with no query. The catalogue file. |
 | `mirrors` | no | At most 8 other copies of the catalogue. Each is `http` or `https` with no query. Absent reads as none. |
@@ -113,9 +116,13 @@ the limit of 64 again; OA refuses the add that would pass it.
 
 Each added registry requires `id`, `name`, `catalogue`, `trusted-keys`,
 `downloads`, `added` and `enabled`. Optional, and empty when absent: `url`,
-`homepage`, `mirrors`, `player-mirrors`. Every value follows the descriptor
-rule for it. `trusted-keys` replaces the descriptor's `keys` and may be
-empty only for an unsigned registry. `url` is where the descriptor was
+`homepage`, `mirrors`, `player-mirrors`, `title`, `description`, `author`.
+Every value follows the descriptor rule for it. `title` and `description`
+are the card's heading and paragraph; `author` is who publishes the
+registry; `name` stays the short name. `trusted-keys` replaces
+the descriptor's `keys` and may be empty only for an unsigned registry. When
+a player types a signing key while adding by address, `trusted-keys` holds
+that one key and not the keys the descriptor named. `url` is where the descriptor was
 read, `http` or `https`, and is absent when it came from a file.
 `player-mirrors` are mirrors this player added. `added` is the day it was
 added, `YYYY-MM-DD`: month `01` to `12`, day `01` to `31`. OA does not check

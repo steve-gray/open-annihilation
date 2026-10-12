@@ -275,6 +275,41 @@ Rect chip_in_row(const Rect& row, int32_t width, int32_t height) noexcept {
     };
 }
 
+/// Tells whether a mark is drawn under the row's state icon.
+///
+/// The stack is two icons with no gap, so the row has to be at least that tall.
+///
+/// @param row the row
+/// @param look the row
+/// @return true when both are drawn, one under the other
+bool maker_under_icon(const Rect& row, const ListRowLook& look) noexcept {
+    return look.maker.has_value() && look.chip.has_value() && look.chip->icon.has_value() &&
+           row.height >= 2 * kMetrics.state_icon_side;
+}
+
+/// Returns the upper square of a centred stack of two state icons.
+///
+/// @param row the row, at least two icons tall
+/// @return the upper square, at the row's right inset
+Rect stacked_icon_rect(const Rect& row) noexcept {
+    const int32_t side = kMetrics.state_icon_side;
+    const int32_t offset = (row.height - 2 * side) / 2;
+    return {
+        row.x + row.width - kMetrics.list_row_inset - side,
+        row.y + offset,
+        side,
+        side,
+    };
+}
+
+/// Returns the state icon a maker's mark draws.
+///
+/// @param mark the mark
+/// @return the badge or the bone
+StateIcon maker_icon(MakerMark mark) noexcept {
+    return mark == MakerMark::open_annihilation ? StateIcon::oa : StateIcon::bone;
+}
+
 /// Returns the width a line of text takes in a box both forms of a canvas
 /// draw it whole in: the wider of the canvas's measure and the game's
 /// fonts', which lay the screens out and cut what does not fit.
@@ -508,6 +543,32 @@ Rect list_row_chip_rect(const Fonts& fonts, const Rect& row, const ChipLook& chi
     return chip_in_row(row, chip_width(fonts, chip), chip_height_of(chip));
 }
 
+Rect list_row_icon_rect(const Fonts& fonts, const Rect& row, const ListRowLook& look) {
+    if (!look.chip.has_value())
+        return {};
+    if (maker_under_icon(row, look))
+        return stacked_icon_rect(row);
+    return list_row_chip_rect(fonts, row, *look.chip);
+}
+
+Rect list_row_maker_rect(const Rect& row, const ListRowLook& look) {
+    if (!look.maker.has_value())
+        return {};
+    const int32_t side = kMetrics.state_icon_side;
+    if (look.chip.has_value() && look.chip->icon.has_value()) {
+        if (!maker_under_icon(row, look))
+            return {};
+        const Rect icon = stacked_icon_rect(row);
+        return {icon.x, icon.y + side, side, side};
+    }
+    return {
+        row.x + row.width - kMetrics.list_row_inset - side,
+        row.y + (row.height - side) / 2,
+        side,
+        side,
+    };
+}
+
 void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& look) {
     if (!drawable(canvas))
         return;
@@ -527,9 +588,17 @@ void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& lo
     int32_t right = rect.x + rect.width - inset;
     if (look.chip.has_value()) {
         const Rect chip =
-            chip_in_row(rect, chip_width_on(canvas, *look.chip), chip_height_of(*look.chip));
+            maker_under_icon(rect, look)
+                ? stacked_icon_rect(rect)
+                : chip_in_row(rect, chip_width_on(canvas, *look.chip), chip_height_of(*look.chip));
         draw_chip(canvas, chip, *look.chip);
         right = chip.x - kMetrics.list_row_gap;
+    }
+    const Rect mark = list_row_maker_rect(rect, look);
+    if (mark.width > 0 && mark.height > 0) {
+        draw_state_icon(canvas, mark, maker_icon(*look.maker), colour::text);
+        if (!look.chip.has_value())
+            right = mark.x - kMetrics.list_row_gap;
     }
 
     // The text: the title's line, then each line, then the tags' line,
@@ -1176,8 +1245,10 @@ void draw_hover_card(const Canvas& canvas, const Rect& rect, const HoverCardLook
         }
         int32_t aside_width = 0;
         if (!look.aside.empty()) {
+            // The wider of the two measures, as a list row's aside is, so
+            // "built in" is not cut when the canvas's measure is the narrower.
             aside_width = std::min(
-                measured(canvas, FontRole::small, look.aside), std::max(right - pen, int32_t{0})
+                whole_width(canvas, FontRole::small, look.aside), std::max(right - pen, int32_t{0})
             );
             cut_line(
                 canvas,

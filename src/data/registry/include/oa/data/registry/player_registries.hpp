@@ -46,8 +46,9 @@ struct PlayerRegistries {
 /// registries and disabled are optional, and an absent one reads as empty.
 /// Nothing else is allowed at the top. Each added registry requires id,
 /// name, catalogue, trusted-keys, downloads, added and enabled. url,
-/// homepage, mirrors and player-mirrors are optional and read as empty when
-/// absent. trusted-keys may be empty only for an unsigned registry. Every
+/// homepage, mirrors, player-mirrors, title, description and author are
+/// optional and read as empty when absent. trusted-keys may be empty only
+/// for an unsigned registry. Every
 /// value follows the descriptor's rule for it. Plain, single-quoted and
 /// double-quoted scalars read alike. A key this build does not know is
 /// refused.

@@ -1125,6 +1125,37 @@ int32_t chips_section(Builder& b, Point at, int32_t width, std::string_view word
             });
         }
     );
+    // The two maker's marks, at the state icon's size, with a caption each.
+    // They are not controls: a press does nothing and they add no name.
+    top += kLineGap;
+    const int32_t side = kMetrics.state_icon_side;
+    constexpr int32_t kCaption = 48;
+    ChipLook oa_mark;
+    oa_mark.icon = StateIcon::oa;
+    oa_mark.text = "OA";
+    add_chip(b.list, {at.x, top, side, side}, oa_mark, no_control, {});
+    add_words(
+        b.list,
+        {at.x + side + kMetrics.chip_gap, top, kCaption, side},
+        "OA",
+        FontRole::small,
+        Align::left,
+        colour::text
+    );
+    const int32_t bone_x = at.x + side + kMetrics.chip_gap + kCaption + kMetrics.chip_gap;
+    ChipLook bone_mark;
+    bone_mark.icon = StateIcon::bone;
+    bone_mark.text = "Bone";
+    add_chip(b.list, {bone_x, top, side, side}, bone_mark, no_control, {});
+    add_words(
+        b.list,
+        {bone_x + side + kMetrics.chip_gap, top, kCaption, side},
+        "Bone",
+        FontRole::small,
+        Align::left,
+        colour::text
+    );
+    top += side;
     return top - at.y;
 }
 

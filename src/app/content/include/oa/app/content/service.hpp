@@ -319,18 +319,23 @@ class Service {
     /// Checks a registry at an address, on the worker.
     ///
     /// The descriptor is fetched and read, every rule for a new registry is
-    /// applied, and the catalogue is fetched and checked with that
-    /// descriptor's own keys. Nothing is written. An https address is fetched
-    /// with the system's TLS where this system has it, and read as http where
-    /// it does not. The fetch stops at registry_check_connect_ms while the
-    /// connection opens, at registry_check_idle_ms while a byte is waited for,
-    /// and at registry_check_descriptor_ms or registry_check_catalogue_ms for
-    /// the whole fetch, so one check cannot hold the next past those limits.
+    /// applied, and the catalogue is fetched and checked with the keys about
+    /// to be trusted. A signing key replaces the descriptor's keys: the
+    /// catalogue must verify with that key alone, and it is the only key
+    /// stored. An empty signing key keeps the descriptor's keys. A signing
+    /// key that cannot be read is refused before any fetch. Nothing is
+    /// written. An https address is fetched with the system's TLS where this
+    /// system has it, and read as http where it does not. The fetch stops at
+    /// registry_check_connect_ms while the connection opens, at
+    /// registry_check_idle_ms while a byte is waited for, and at
+    /// registry_check_descriptor_ms or registry_check_catalogue_ms for the
+    /// whole fetch, so one check cannot hold the next past those limits.
     /// The result is read with registry_check.
     ///
     /// @param url the address of the descriptor
+    /// @param signing_key a public key, `ed25519:` and its base64; empty keeps the descriptor's keys
     /// @return the request id
-    uint64_t check_registry_url(std::string url);
+    uint64_t check_registry_url(std::string url, std::string signing_key = {});
 
     /// Checks a registry from the bytes of a descriptor file, on the worker.
     ///

@@ -375,7 +375,8 @@ void coverage_lands_on_the_canvass_own_pixels() {
     for (const kit::StateIcon icon :
          {kit::StateIcon::circled_check,
           kit::StateIcon::circled_up_arrow,
-          kit::StateIcon::download_arrow}) {
+          kit::StateIcon::download_arrow,
+          kit::StateIcon::key}) {
         Smooth drawn(40, 40, kOneAndAHalf);
         kit::draw_state_icon(drawn.canvas, {2, 2, 14, 14}, icon, kInk);
         // 2 * 1.5 = 3 to 16 * 1.5 = 24: 21 pixels square.
@@ -391,6 +392,25 @@ void coverage_lands_on_the_canvass_own_pixels() {
                 smoothed += pixel.a > 0 && pixel.a < 255 ? 1 : 0;
             }
         OA_CHECK(whole_pixels > 0 && smoothed > 0);
+    }
+}
+
+/// The OA badge and the bone at 1.5x stay inside their square and keep a
+/// partial edge, so the smooth form is not a doubled bitmap.
+void maker_marks_are_smooth_at_one_and_a_half() {
+    for (const kit::StateIcon icon : {kit::StateIcon::oa, kit::StateIcon::bone}) {
+        Smooth drawn(40, 40, kOneAndAHalf);
+        kit::draw_state_icon(drawn.canvas, {2, 2, 14, 14}, icon, kInk);
+        const paint::Box box = inked(drawn.pixels);
+        OA_CHECK(!box.empty() && box.x >= 3 && box.y >= 3);
+        OA_CHECK(box.x + box.width <= 24 && box.y + box.height <= 24);
+        int partial = 0;
+        for (int y = 3; y < 24; ++y)
+            for (int x = 3; x < 24; ++x) {
+                const paint::Rgba pixel = paint::pixel_at(drawn.pixels, x, y);
+                partial += pixel.a > 0 && pixel.a < 255 ? 1 : 0;
+            }
+        OA_CHECK(partial > 0);
     }
 }
 
@@ -459,5 +479,6 @@ int main() {
     coverage_lands_on_the_canvass_own_pixels();
     components_draw_on_the_smooth_form();
     a_pill_is_smooth_at_one_and_a_half();
+    maker_marks_are_smooth_at_one_and_a_half();
     return oa::test::check_exit_status();
 }

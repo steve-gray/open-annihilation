@@ -202,6 +202,7 @@ add_subdirectory(src/formats/url)
 add_subdirectory(src/data/mod-profile)
 add_subdirectory(src/data/map-pack)
 add_subdirectory(src/data/map-fit)
+add_subdirectory(src/data/pe-icon)
 add_subdirectory(src/formats/zip)
 add_subdirectory(src/sim/sprite-animation)
 add_subdirectory(src/formats/tnt)
@@ -1019,6 +1020,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_multiplayer_check.cpp src/app/runtime_notice_check.cpp
   src/app/runtime_user_folder_check.cpp src/app/runtime_mod_switch_check.cpp
   src/app/runtime_map_packs_check.cpp
+  src/app/runtime_map_pack_lists_check.cpp
   src/app/runtime_map_browser_check.cpp
   src/app/runtime_mod_warning_check.cpp src/app/runtime_mod_install_check.cpp
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
@@ -1047,7 +1049,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-window-icon
   oa-app-video-capture oa-app-render-host
   oa-ui-frontend-renderer oa-ui-gui-input oa-ui-frontend-state oa-audio-sdl
-  oa-platform-preferences oa-app-command-line oa-formats-tnt oa-sim-unit-spawn-runtime oa-data-mission-types oa-data-limits oa-present-world-renderer oa-sim-combat-state oa-sim-match-runtime oa-sim-unit-effects oa-sim-map-runtime oa-base-game-loop oa-sim-gameplay-input oa-sim-sprite-animation oa-ui-screen-registry oa-options
+  oa-platform-preferences oa-app-command-line oa-formats-tnt oa-sim-unit-spawn-runtime oa-data-mission-types oa-data-limits oa-data-pe-icon oa-present-world-renderer oa-sim-combat-state oa-sim-match-runtime oa-sim-unit-effects oa-sim-map-runtime oa-base-game-loop oa-sim-gameplay-input oa-sim-sprite-animation oa-ui-screen-registry oa-options
   oa-ui-hud oa-present-model oa-present-unit-playout oa-ui-frontend oa-ui-campaign oa-sim-session oa-ui-console
   oa-ui-services oa-sim-mission-units oa-sim-match-runtime-mission-units oa-sim-selection oa-sim-messages oa-sim-speed
   oa-data-campaign-assets oa-sim-profile oa-sim-state-hash oa-app-extensions
@@ -1159,6 +1161,10 @@ if(OA_BUILD_PLATFORM)
     oa-formats-oascript oa-formats-zip oa-app-director-output)
   target_link_libraries(oa-game PRIVATE ${oa_game_intro_player} SDL3::SDL3 ${oa_game_libraries}
     oa-ui-frontend-dialogs)
+  if(OA_SELF_CHECKS)
+    # --check-map-pack-lists serves its catalogue from the test fixture.
+    target_link_libraries(oa-game PRIVATE oa-netgame-http-fixture)
+  endif()
   if(WIN32)
     # The shell's open verb shows the player's folders (user_folder_open.cpp).
     target_link_libraries(oa-game PRIVATE shell32 ole32)
@@ -1605,8 +1611,8 @@ if(OA_BUILD_PLATFORM)
       # map fits, listed after the base maps, mounted alone when it is chosen,
       # unmounted for a base map, played for 30 ticks with its files readable
       # and unmounted when the match ends; and one whose feature the game
-      # already defines, refused, the map picker showing why and keeping the
-      # earlier map.
+      # already defines, left out of the list and the picker, and refused
+      # when it is chosen by name.
       set(oa_map_packs_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-packs")
       file(MAKE_DIRECTORY "${oa_map_packs_dir}")
       add_test(NAME native-map-packs COMMAND oa-game --game-dir "${OA_GAME_DIR}"
@@ -1641,6 +1647,27 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_map_browser_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED map-browser-clean)
+      # A two-map pack installed from the check's own registry while both
+      # lists already exist. One stem has a space, an apostrophe and
+      # parentheses and fits the base game; the other fits only another mod
+      # and is left out. The fitting map is played to its first frame and
+      # named in a saved game. Each run starts from a clean folder. No game
+      # file is committed: the check serves the pack itself.
+      set(oa_map_pack_lists_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-pack-lists")
+      file(MAKE_DIRECTORY "${oa_map_pack_lists_dir}")
+      add_test(NAME map-pack-lists-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_map_pack_lists_dir}/Open Annihilation" "${oa_map_pack_lists_dir}/data"
+        "${oa_map_pack_lists_dir}/map-pack-lists.conf")
+      set_tests_properties(map-pack-lists-clean PROPERTIES FIXTURES_SETUP map-pack-lists-clean)
+      add_test(NAME native-map-pack-lists COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-map-pack-lists
+        --preferences-file "${oa_map_pack_lists_dir}/map-pack-lists.conf"
+        --user-folder "${oa_map_pack_lists_dir}/Open Annihilation"
+        --data-dir "${oa_map_pack_lists_dir}/data")
+      set_tests_properties(native-map-pack-lists PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_map_pack_lists_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED map-pack-lists-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three

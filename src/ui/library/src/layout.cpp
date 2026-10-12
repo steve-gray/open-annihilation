@@ -4,7 +4,7 @@
 // The Library's layout at Compact, Regular and Large, made of the UI kit's
 // components: the window's face, header and footer, the tabs, the search,
 // the filters with their counts, the list and the details, the Active tab's
-// setup, and the Registries tab's rows, every control named for automation.
+// setup, and the Registries tab's cards, every control named for automation.
 // It reads the model and decides none of its rules.
 #include "oa/ui/library/screen.hpp"
 
@@ -251,6 +251,7 @@ struct Building {
     const kit::Fonts* fonts{};     ///< the fonts texts are measured in
     const kit::Metrics* metrics{}; ///< the class's metrics
     kit::SizeClass size_class{};   ///< the class
+    int32_t scale_percent{100};    ///< the frame's scale, in percent; the base badge is sized to it
     kit::DisplayList list{}; ///< the items, in drawing order; its controls are moved to the groups
     std::vector<kit::Control> menu{};    ///< an open drop-down's items, tried first
     std::vector<kit::Control> top{};     ///< the tabs, the search and the filters
@@ -549,6 +550,35 @@ kit::ChipState chip_state_of(State state) {
     return kit::ChipState::get;
 }
 
+/// Returns the kit mark a maker shows.
+///
+/// @param maker the maker
+/// @return the mark; none when the maker is none
+std::optional<kit::MakerMark> shown_maker(PackageMaker maker) noexcept {
+    switch (maker) {
+    case PackageMaker::open_annihilation:
+        return kit::MakerMark::open_annihilation;
+    case PackageMaker::cavedog:
+        return kit::MakerMark::bone;
+    case PackageMaker::none:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+/// Returns a row's read text: its name, and the maker when a mark shows.
+///
+/// @param name the package's name
+/// @param maker the maker the row shows; none adds nothing
+/// @return the text
+std::string maker_reading(std::string name, PackageMaker maker) {
+    if (maker == PackageMaker::open_annihilation)
+        name += " · Open Annihilation";
+    else if (maker == PackageMaker::cavedog)
+        name += " · Cavedog Entertainment";
+    return name;
+}
+
 /// Returns the state icon a state is shown with: a download arrow for GET,
 /// a circled up-arrow for UPDATE, and a circled check for INSTALLED and
 /// PLAYING.
@@ -688,6 +718,7 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.badge_colour = badge_face;
     look.title = std::string(entry_name(entry));
     look.chip = entry_chip(library, entry);
+    look.maker = shown_maker(entry_maker(entry));
     const std::string version = entry_version(library, entry);
     const std::string size = entry_size(library, entry);
     if (form == RowForm::compact) {
@@ -786,17 +817,6 @@ void add_header(
     const int32_t header_rule = compact.edge + compact.header_height;
     add_item(building.list, kit::Role::header, {0, 0, window.width, header_rule + 1}, {}).look =
         std::move(look);
-}
-
-/// Returns a count as a tab's number, never past what a 32-bit count holds.
-///
-/// @param count the count
-/// @return the number the tab shows
-int32_t counted_as_int(std::size_t count) noexcept {
-    constexpr std::size_t most = 1000000000;
-    if (count > most)
-        return static_cast<int32_t>(most);
-    return static_cast<int32_t>(count);
 }
 
 /// Returns the columns the header keeps clear for the refresh icon, and for
@@ -906,9 +926,28 @@ void add_library_header(
     add_refresh_button(building, window);
 }
 
-/// Appends the strip of tabs. Each tab after Active shows its All count,
-/// before the search and the tag, through one pattern. Updates' digits are
-/// amber while that count is above 0.
+/// Returns a tab's title, with its count in brackets after every tab but Active.
+///
+/// @param library the model
+/// @param tab the tab
+/// @param short_name the short title
+/// @return the title, such as "Mods (13)" or "Active"
+std::string tab_caption(const Library& library, Tab tab, bool short_name) {
+    const std::string title(tab_text(tab, short_name, library.text));
+    if (tab == Tab::active)
+        return title;
+    return filled(
+        library.text,
+        words::tab_with_count,
+        {{"tab", title}, {"count", std::to_string(tab_count(library, tab))}}
+    );
+}
+
+/// Appends the strip of tabs. Each tab after Active shows its count in
+/// brackets after its title, in that title's font and colour. Active has
+/// no count. A strip too narrow for the full titles takes the short names,
+/// with the counts the same way. The counts the kit would draw beside a
+/// caption stay unset, so the brackets are the only digits.
 ///
 /// @param[in,out] building the layout
 /// @param strip the strip
@@ -922,10 +961,8 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
         kit::TabsLook full;
         full.count_style = kit::TabCountStyle::words;
         for (const Tab tab : tab_order) {
-            full.captions.emplace_back(tab_text(tab, false, library.text));
-            full.counts.push_back(
-                tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab))
-            );
+            full.captions.push_back(tab_caption(library, tab, false));
+            full.counts.push_back(-1);
         }
         const std::vector<kit::Rect> rects = kit::tab_rects(*building.fonts, strip, full);
         compact = !rects.empty() && rects.back().x + rects.back().width > strip.x + strip.width;
@@ -936,21 +973,14 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
     std::array<std::string, tab_order.size()> names{};
     for (std::size_t index = 0; index < tab_order.size(); ++index) {
         const Tab tab = tab_order[index];
-        const std::string caption(tab_text(tab, compact, library.text));
+        const std::string caption = tab_caption(library, tab, compact);
         look.captions.push_back(caption);
-        const int32_t count =
-            tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab));
-        look.counts.push_back(count);
-        if (count < 0) {
+        look.counts.push_back(-1);
+        look.count_amber.push_back(0);
+        if (tab == Tab::active)
             look.readings.emplace_back();
-            look.count_amber.push_back(0);
-        } else {
-            const std::string number = std::to_string(count);
-            look.readings.push_back(
-                filled(library.text, words::tab_with_count, {{"tab", caption}, {"count", number}})
-            );
-            look.count_amber.push_back(tab == Tab::updates && count > 0 ? uint8_t{1} : uint8_t{0});
-        }
+        else
+            look.readings.push_back(caption);
         if (tab == library.tab)
             look.selected = index;
         ids[index] = controls::tab_control(tab);
@@ -1356,6 +1386,160 @@ std::string empty_words(const Library& library) {
     return std::string(shown(library.text, words::empty_tab));
 }
 
+/// The most bytes one scaled base-game badge may take. A larger square keeps
+/// the icon as it was read, and the kit scales that.
+constexpr uint64_t most_scaled_badge_bytes = 8U * 1024U * 1024U;
+
+/// Returns the square a list row's badge is drawn in. The kit's row uses
+/// Compact's inset and badge side at every size class.
+///
+/// @param row the row
+/// @return the square, inside the row
+kit::Rect row_badge_square(const kit::Rect& row) noexcept {
+    const kit::Metrics& metrics = kit::compact_metrics;
+    const int32_t inset = metrics.list_row_inset;
+    const int32_t side =
+        std::max(std::min(row.height - 2 * inset, metrics.list_row_badge), int32_t{0});
+    return {row.x + inset, row.y + (row.height - side) / 2, side, side};
+}
+
+/// Tells whether a badge is the base game's icon.
+///
+/// @param library the model
+/// @param badge the badge; may be null
+/// @return true when it is Inputs::base_game_badge
+bool base_badge(const Library& library, const Badge* badge) noexcept {
+    return library.inputs.base_game_badge.has_value() && badge == &*library.inputs.base_game_badge;
+}
+
+/// Tells whether a picture is the base game's icon, still at the size it was read.
+///
+/// @param library the model
+/// @param picture the picture
+/// @return true when its pixels are Inputs::base_game_badge
+bool base_picture(
+    const Library& library, const oa::ui::frontend_renderer::RgbaPicture& picture
+) noexcept {
+    if (!library.inputs.base_game_badge)
+        return false;
+    const Badge& badge = *library.inputs.base_game_badge;
+    return picture.width == badge.width && picture.height == badge.height &&
+           picture.pixels.data() == badge.rgba.data();
+}
+
+/// Returns how many surface pixels a badge square covers at this layout's scale.
+/// A whole scale is that many times the square; any other scale rounds each
+/// edge on its own, as the canvas does. The Library's canvas starts at the origin.
+///
+/// @param building the layout
+/// @param rect the badge's square, in points
+/// @return the pixels; empty when the square covers none
+kit::Point badge_pixel_size(const Building& building, const kit::Rect& rect) noexcept {
+    if (rect.width <= 0 || rect.height <= 0)
+        return {};
+    const kit::Rect drawn = kit::to_canvas(rect, building.scale_percent);
+    if (drawn.width <= 0 || drawn.height <= 0)
+        return {};
+    return {drawn.width, drawn.height};
+}
+
+/// Scales an icon to a pixel square, nearest-neighbour, whole pixels, and
+/// centres it. A scale of one or more copies each source pixel into a block;
+/// a smaller scale keeps the icon's shape and samples one source pixel for
+/// each drawn pixel. The square around it is clear.
+///
+/// @param picture the icon
+/// @param dest_columns the square's columns
+/// @param dest_rows the square's rows
+/// @return the square, dest_columns by dest_rows, or empty when it would be too large
+std::vector<uint8_t> scale_nearest(
+    const oa::ui::frontend_renderer::RgbaPicture& picture, uint32_t dest_columns, uint32_t dest_rows
+) {
+    if (dest_columns == 0 || dest_rows == 0 || dest_rows > most_scaled_badge_bytes / 4U ||
+        uint64_t{dest_columns} > most_scaled_badge_bytes / 4U / dest_rows)
+        return {};
+    std::vector<uint8_t> scaled(static_cast<std::size_t>(dest_columns) * dest_rows * 4U, 0);
+    const uint32_t source_columns = picture.width;
+    const uint32_t source_rows = picture.height;
+    if (source_columns == 0 || source_rows == 0)
+        return scaled;
+    uint32_t drawn_columns = dest_columns;
+    uint32_t drawn_rows = dest_rows;
+    uint32_t block = 0;
+    if (dest_columns / source_columns >= 1U && dest_rows / source_rows >= 1U) {
+        block = std::min(dest_columns / source_columns, dest_rows / source_rows);
+        drawn_columns = source_columns * block;
+        drawn_rows = source_rows * block;
+    } else if (uint64_t{source_columns} * dest_rows >= uint64_t{source_rows} * dest_columns) {
+        drawn_columns = dest_columns;
+        drawn_rows = static_cast<uint32_t>(uint64_t{dest_columns} * source_rows / source_columns);
+    } else {
+        drawn_rows = dest_rows;
+        drawn_columns = static_cast<uint32_t>(uint64_t{dest_rows} * source_columns / source_rows);
+    }
+    if (drawn_columns == 0)
+        drawn_columns = 1;
+    if (drawn_rows == 0)
+        drawn_rows = 1;
+    if (drawn_columns > dest_columns)
+        drawn_columns = dest_columns;
+    if (drawn_rows > dest_rows)
+        drawn_rows = dest_rows;
+    const uint32_t origin_column = (dest_columns - drawn_columns) / 2U;
+    const uint32_t origin_row = (dest_rows - drawn_rows) / 2U;
+    const uint8_t* source = picture.pixels.data();
+    for (uint32_t row = 0; row < drawn_rows; ++row) {
+        uint32_t source_row = block >= 1U ? row / block : row * source_rows / drawn_rows;
+        if (source_row >= source_rows)
+            source_row = source_rows - 1U;
+        for (uint32_t column = 0; column < drawn_columns; ++column) {
+            uint32_t source_column =
+                block >= 1U ? column / block : column * source_columns / drawn_columns;
+            if (source_column >= source_columns)
+                source_column = source_columns - 1U;
+            const uint8_t* from =
+                source + (static_cast<std::size_t>(source_row) * source_columns + source_column) *
+                             oa::ui::frontend_renderer::picture_pixel_bytes;
+            uint8_t* to =
+                scaled.data() + (static_cast<std::size_t>(origin_row + row) * dest_columns +
+                                 origin_column + column) *
+                                    oa::ui::frontend_renderer::picture_pixel_bytes;
+            to[0] = from[0];
+            to[1] = from[1];
+            to[2] = from[2];
+            to[3] = from[3];
+        }
+    }
+    return scaled;
+}
+
+/// Returns the base game's icon scaled to the pixels of a badge square.
+/// The pixels live on the Library until the next layout.
+///
+/// @param building the layout
+/// @param picture the icon, at the size it was read
+/// @param rect the badge's square, in points
+/// @return the scaled picture, or `picture` when this square is not drawn
+oa::ui::frontend_renderer::RgbaPicture fitted_base_picture(
+    Building& building, const oa::ui::frontend_renderer::RgbaPicture& picture, const kit::Rect& rect
+) {
+    const kit::Point pixels = badge_pixel_size(building, rect);
+    if (pixels.x <= 0 || pixels.y <= 0)
+        return picture;
+    const auto columns = static_cast<uint32_t>(pixels.x);
+    const auto rows = static_cast<uint32_t>(pixels.y);
+    std::vector<uint8_t> scaled = scale_nearest(picture, columns, rows);
+    if (scaled.empty())
+        return picture;
+    std::vector<uint8_t>& kept =
+        building.library->scaled_badge_pixels.emplace_back(std::move(scaled));
+    oa::ui::frontend_renderer::RgbaPicture fitted;
+    fitted.width = columns;
+    fitted.height = rows;
+    fitted.pixels = kept;
+    return fitted;
+}
+
 /// Appends the list pane: the note on a list the last fetch could not
 /// bring up to date, the rows that show, an empty list's words, the scroll
 /// bar and the list's own control.
@@ -1415,6 +1599,9 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         look.selected = library.selected.has_value() && *library.selected == entry.id;
         look.hovered = hovered(building, id);
         const kit::Rect rect{view.x, top, rows_width, height};
+        if (base_badge(library, entry.badge) &&
+            oa::ui::frontend_renderer::picture_drawable(look.badge))
+            look.badge = fitted_base_picture(building, look.badge, row_badge_square(rect));
         if (look.chip && (entry.state == State::get || entry.state == State::update)) {
             // The download arrow and the up-arrow are GET and UPDATE: a
             // control of their own, tried before the row, named after it.
@@ -1423,7 +1610,7 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
             const Action action = entry.state == State::get ? Action::get : Action::update;
             kit::Control icon;
             icon.id = icon_id;
-            icon.rect = kit::list_row_chip_rect(*building.fonts, rect, *look.chip);
+            icon.rect = kit::list_row_icon_rect(*building.fonts, rect, look);
             icon.clip = view;
             icon.enabled = controls::row_icon_action(library, entry).has_value();
             icon.focusable = false;
@@ -1443,7 +1630,7 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         row.clip = view;
         row.group = controls::list_group;
         row.focusable = false;
-        row.text = std::string(entry_name(entry));
+        row.text = maker_reading(std::string(entry_name(entry)), entry_maker(entry));
     }
     if (limit > 0) {
         kit::ScrollArea scroll;
@@ -1480,8 +1667,11 @@ void add_badge_of(
     const kit::Rect& rect,
     const kit::Rect& clip
 ) {
-    if (oa::ui::frontend_renderer::picture_drawable(picture)) {
-        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{picture};
+    oa::ui::frontend_renderer::RgbaPicture drawn = picture;
+    if (base_picture(*building.library, picture))
+        drawn = fitted_base_picture(building, picture, rect);
+    if (oa::ui::frontend_renderer::picture_drawable(drawn)) {
+        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{drawn};
         add_item(building.list, kit::Role::outline, rect, clip).colour =
             kit::colour::control_border;
         return;
@@ -2615,12 +2805,12 @@ void add_registry_switch(
     tab_stop(building, building.detail.back());
 }
 
-/// Appends the key icon: a quiet square the pointer and the keys can rest
-/// on, with the signing-key mark centred on it. Its text is the fingerprints,
-/// one a line. Pressing it asks for nothing.
+/// Appends the key icon: the kit's key glyph in the icon square, so the
+/// pointer and the keys can rest on it. Its text is the fingerprints, one a
+/// line. Pressing it asks for nothing.
 ///
 /// @param[in,out] building the layout
-/// @param rect the square
+/// @param rect the square, state_icon_side on each side
 /// @param id its control's number
 /// @param name its control's name
 /// @param fingerprints the fingerprints, one a line
@@ -2633,35 +2823,27 @@ void add_key_button(
     std::string fingerprints,
     const kit::Rect& clip
 ) {
-    kit::ButtonLook look;
-    look.style = kit::ButtonStyle::quiet;
+    kit::ChipLook look;
+    look.text = std::move(fingerprints);
+    look.state = kit::ChipState::get;
     look.hovered = hovered(building, id);
-    look.held = held(building, id);
-    look.enabled = true;
+    look.icon = kit::StateIcon::key;
     const std::size_t before = building.list.controls.size();
-    kit::add_button(building.list, rect, look, id, unique_name(building, std::move(name)));
+    kit::add_chip(building.list, rect, look, id, unique_name(building, std::move(name)));
     building.list.items.back().clip = clip;
     move_controls(building.list, before, building.detail);
     building.detail.back().clip = clip;
     building.detail.back().group = controls::details_group;
-    building.detail.back().text = std::move(fingerprints);
     tab_stop(building, building.detail.back());
-    // The signing-key mark is 7 by 7, the magnifier's size.
-    constexpr int32_t mark_side = 7;
-    kit::add_mark(
-        building.list,
-        {rect.x + (rect.width - mark_side) / 2, rect.y + (rect.height - mark_side) / 2},
-        kit::Mark::key,
-        kit::colour::text
-    );
-    building.list.items.back().clip = clip;
 }
 
-/// Appends the Registries tab's parts, scrolled up by an offset: one row
-/// for each registry (its avatar, name, address, refresh time, subtitle,
-/// key icon, REFRESH and switch; REMOVE and ADD MIRROR… for one the player
-/// added), then the refusal in amber and the note under the list. Each
-/// control is in the details' scroll area.
+/// Appends the Registries tab's parts, scrolled up by an offset: one card
+/// for each registry (its avatar, heading, address, refresh time, description,
+/// subtitle, key icon, REFRESH and switch; REMOVE and ADD MIRROR… for one the
+/// player added, and a Built in pill for one that ships with the game), then
+/// the refusal in amber and the note under the last card. Each control is in
+/// the details' scroll area. The heading is the registry's title, or its
+/// short name when it has no title.
 ///
 /// @param[in,out] building the layout
 /// @param view the area, which clips them
@@ -2680,12 +2862,74 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
     for (std::size_t index = 0; index < registries.size(); ++index) {
         const Registry& registry = registries[index];
         const std::string word = registry_word(registry.id);
-        const int32_t line = cursor + metrics.row_padding;
+        if (index > 0)
+            cursor += metrics.card_gap;
+        const int32_t card_top = cursor;
+        const int32_t inset = metrics.card_inset;
+        const int32_t inner_left = left + inset;
+        const int32_t inner_right = left + width - inset;
+        const int32_t band_top = card_top + inset;
         const int32_t side = metrics.list_row_badge;
-        add_item(building.list, kit::Role::rule, {left, cursor, width, metrics.hairline}, view)
-            .colour = kit::colour::rule;
+        const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
+        // The right cluster, from the switch inward: REFRESH, the refresh
+        // mark while this registry is being asked or its check is showing,
+        // and the key icon. The key, REFRESH and the switch share the band's
+        // top, so Tab reads them left to right and then the buttons below.
+        // A wrapped heading grows under that band.
+        const uint16_t check_ms =
+            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
+        const bool show_mark = registry.refreshing || check_ms > 0;
+        int32_t cluster = inner_right;
+        cluster -= metrics.switch_width;
+        const kit::Rect toggle{
+            cluster,
+            band_top,
+            metrics.switch_width,
+            metrics.regular_line,
+        };
+        cluster -= metrics.button_gap;
+        const std::string_view refresh_caption = shown(library.text, words::registry_refresh);
+        const int32_t refresh_width = button_width(building, refresh_caption);
+        cluster -= refresh_width;
+        const kit::Rect refresh_rect{cluster, band_top, refresh_width, metrics.button_height};
+        cluster -= metrics.button_gap;
+        kit::Rect turning_rect{};
+        if (show_mark) {
+            cluster -= metrics.button_height;
+            turning_rect = {cluster, band_top, metrics.button_height, metrics.button_height};
+            cluster -= metrics.button_gap;
+        }
+        cluster -= metrics.state_icon_side;
+        const kit::Rect key_rect{
+            cluster, band_top, metrics.state_icon_side, metrics.state_icon_side
+        };
+        const int32_t text_left = inner_left + side + metrics.list_row_gap;
+        const int32_t title_right = cluster - metrics.label_gap;
+        const int32_t title_width = title_right - text_left;
+        const std::string_view heading = registry.title.empty() ? std::string_view{registry.name}
+                                                                : std::string_view{registry.title};
+        std::vector<std::string> heading_lines;
+        if (title_width > 0)
+            heading_lines = wrapped(
+                building, kit::FontRole::regular, heading, std::max(title_width, int32_t{1}), 0
+            );
+        const int32_t heading_height =
+            static_cast<int32_t>(std::max(heading_lines.size(), std::size_t{1})) *
+            metrics.regular_line;
+        const int32_t header_height = std::max(title_band, std::max(heading_height, side));
+        const int32_t lines_width = std::max(inner_right - text_left, int32_t{0});
+        std::vector<std::string> description_lines;
+        if (!registry.description.empty() && lines_width > 0)
+            description_lines = wrapped(
+                building,
+                kit::FontRole::small,
+                registry.description,
+                std::max(lines_width, int32_t{1}),
+                0
+            );
 
-        const kit::Rect avatar{left, line + 1, side, side};
+        const std::size_t card_at = building.list.items.size();
+        const kit::Rect avatar{inner_left, band_top, side, side};
         add_item(building.list, kit::Role::fill, avatar, view).colour =
             registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
         add_text(
@@ -2697,69 +2941,18 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             kit::colour::on_accent,
             view
         );
-
-        const int32_t text_left = left + side + metrics.list_row_gap;
-        const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
-        // The right cluster, from the switch inward: REFRESH, the refresh
-        // mark while this registry is being asked or its check is showing,
-        // and the key icon.
-        const uint16_t check_ms =
-            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
-        const bool show_mark = registry.refreshing || check_ms > 0;
-        int32_t cluster = left + width;
-        cluster -= metrics.switch_width;
-        const kit::Rect toggle{
-            cluster,
-            line + (title_band - metrics.regular_line) / 2,
-            metrics.switch_width,
-            metrics.regular_line,
-        };
-        cluster -= metrics.button_gap;
-        const std::string_view refresh_caption = shown(library.text, words::registry_refresh);
-        const int32_t refresh_width = button_width(building, refresh_caption);
-        cluster -= refresh_width;
-        const kit::Rect refresh_rect{cluster, line, refresh_width, metrics.button_height};
-        cluster -= metrics.button_gap;
-        kit::Rect turning_rect{};
-        if (show_mark) {
-            cluster -= metrics.button_height;
-            turning_rect = {cluster, line, metrics.button_height, metrics.button_height};
-            cluster -= metrics.button_gap;
-        }
-        cluster -= metrics.button_height;
-        const kit::Rect key_rect{cluster, line, metrics.button_height, metrics.button_height};
-        const int32_t title_right = cluster - metrics.label_gap;
-        const int32_t title_width = std::max(title_right - text_left, int32_t{0});
-        int32_t chip_span = 0;
-        kit::ChipLook chip;
-        if (registry.built_in) {
-            chip.text = std::string(shown(library.text, words::registry_built_in));
-            chip.state = kit::ChipState::installed;
-            chip_span = kit::chip_width(*building.fonts, chip) + metrics.list_row_gap;
-        }
-        const int32_t name_room = std::max(title_width - chip_span, int32_t{0});
-        const std::string name = cut(building, kit::FontRole::regular, registry.name, name_room);
-        const int32_t name_width = width_of(building, kit::FontRole::regular, name);
-        const int32_t name_top = line + (title_band - metrics.regular_line) / 2;
-        add_text(
-            building,
-            kit::FontRole::regular,
-            name,
-            {text_left, name_top, std::max(name_width, int32_t{0}), metrics.regular_line},
-            kit::Align::left,
-            kit::colour::text,
-            view
-        );
-        if (registry.built_in && name_width + chip_span <= title_width) {
-            const int32_t chip_width = chip_span - metrics.list_row_gap;
-            const kit::Rect chip_rect{
-                text_left + name_width + metrics.list_row_gap,
-                name_top + (metrics.regular_line - metrics.chip_height) / 2,
-                chip_width,
-                metrics.chip_height,
-            };
-            kit::add_chip(building.list, chip_rect, chip, kit::no_control, {});
-            building.list.items.back().clip = view;
+        int32_t heading_top = band_top;
+        for (const std::string& heading_line : heading_lines) {
+            add_text(
+                building,
+                kit::FontRole::regular,
+                heading_line,
+                {text_left, heading_top, std::max(title_width, int32_t{0}), metrics.regular_line},
+                kit::Align::left,
+                kit::colour::text,
+                view
+            );
+            heading_top += metrics.regular_line;
         }
         std::string fingerprints;
         for (const SigningKey& signing_key : registry.keys) {
@@ -2775,6 +2968,23 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             std::move(fingerprints),
             view
         );
+        // A built-in registry's mark sits under the key, inside the header
+        // band (the avatar is two icons tall). It is not a control.
+        if (const std::optional<kit::MakerMark> mark = shown_maker(
+                registry.built_in ? package_maker(registry.author) : PackageMaker::none
+            )) {
+            kit::ChipLook mark_look;
+            mark_look.icon = *mark == kit::MakerMark::open_annihilation ? kit::StateIcon::oa
+                                                                        : kit::StateIcon::bone;
+            const kit::Rect mark_rect{
+                key_rect.x,
+                key_rect.y + metrics.state_icon_side,
+                metrics.state_icon_side,
+                metrics.state_icon_side,
+            };
+            kit::add_chip(building.list, mark_rect, mark_look, kit::no_control, {});
+            building.list.items.back().clip = view;
+        }
         if (show_mark) {
             kit::ButtonLook spinning;
             spinning.style = kit::ButtonStyle::quiet;
@@ -2807,9 +3017,8 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             view
         );
 
-        const int32_t lines_width = std::max(left + width - text_left, int32_t{0});
-        int32_t facts_top = line + title_band + metrics.hint_gap;
-        int32_t bottom = line + title_band;
+        int32_t facts_top = band_top + header_height + metrics.hint_gap;
+        int32_t bottom = band_top + header_height;
         const auto place_line = [&](std::string full, kit::ControlId id, std::string control_name) {
             if (full.empty() || lines_width <= 0)
                 return;
@@ -2845,6 +3054,22 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             controls::first_registry_refreshed + static_cast<kit::ControlId>(index),
             named("registry." + word + ".refreshed")
         );
+        if (!description_lines.empty()) {
+            for (const std::string& description_line : description_lines) {
+                add_text(
+                    building,
+                    kit::FontRole::small,
+                    description_line,
+                    {text_left, facts_top, lines_width, metrics.small_line},
+                    kit::Align::left,
+                    kit::colour::text,
+                    view
+                );
+                facts_top += metrics.small_line;
+            }
+            bottom = facts_top;
+            facts_top += metrics.hint_gap;
+        }
         const std::string subtitle = registry_subtitle(registry, library.text);
         if (!subtitle.empty() && lines_width > 0) {
             add_text(
@@ -2876,7 +3101,7 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             );
             const int32_t mirror_left = text_left + remove_width + metrics.button_gap;
             if (library.inputs.in_match) {
-                const int32_t lock_width = std::max(left + width - mirror_left, int32_t{0});
+                const int32_t lock_width = std::max(inner_right - mirror_left, int32_t{0});
                 if (lock_width > 0) {
                     kit::LockLook look;
                     look.text = std::string(shown(library.text, words::registry_game_lock));
@@ -2907,9 +3132,32 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
                 );
             }
             bottom = buttons_top + metrics.button_height;
+        } else {
+            kit::PillLook pill;
+            pill.text = std::string(shown(library.text, words::registry_built_in));
+            pill.state = kit::PillState::neutral;
+            const int32_t pill_w = kit::pill_width(*building.fonts, pill);
+            const int32_t pill_top = bottom + metrics.hint_gap;
+            const int32_t pill_right = toggle.x + toggle.width;
+            kit::add_pill(
+                building.list,
+                {pill_right - pill_w, pill_top, pill_w, kit::pill_height()},
+                pill,
+                kit::no_control,
+                {}
+            );
+            building.list.items.back().clip = view;
+            bottom = pill_top + kit::pill_height();
         }
-        bottom = std::max(bottom, avatar.y + avatar.height);
-        cursor = bottom + metrics.row_padding;
+        const kit::Rect card{left, card_top, width, bottom + inset - card_top};
+        const std::size_t drawn = building.list.items.size();
+        add_tile_face(building, card, view);
+        std::rotate(
+            building.list.items.begin() + static_cast<std::ptrdiff_t>(card_at),
+            building.list.items.begin() + static_cast<std::ptrdiff_t>(drawn),
+            building.list.items.end()
+        );
+        cursor = card.y + card.height;
     }
 
     cursor += metrics.label_gap;
@@ -2974,7 +3222,7 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
     return extent ? extent->bottom - first : 0;
 }
 
-/// Appends the Registries tab: its rows in an area that scrolls when they
+/// Appends the Registries tab: its cards in an area that scrolls when they
 /// are taller than it, with a column for the scroll bar at its right.
 ///
 /// @param[in,out] building the layout
@@ -3283,6 +3531,8 @@ Building start(
     building.fonts = &fonts;
     building.metrics = &kit::metrics_of(frame.size_class);
     building.size_class = frame.size_class;
+    building.scale_percent = frame.scale_percent > 0 ? frame.scale_percent : 100;
+    library.scaled_badge_pixels.clear();
     const kit::Point size = window_size(frame);
     add_item(building.list, kit::Role::fill, {0, 0, size.x, size.y}, {}).colour =
         kit::colour::panel;

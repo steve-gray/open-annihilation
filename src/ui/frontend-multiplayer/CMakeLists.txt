@@ -11,6 +11,7 @@ add_library(oa-ui-frontend-multiplayer
   src/restrict.cpp
   src/connect.cpp
   src/dialogs.cpp
+  src/map_list.cpp
   src/screens.cpp
   src/presence_card.cpp
   src/get_map.cpp)

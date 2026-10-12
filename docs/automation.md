@@ -21,6 +21,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [Input](#input)
 - [Events](#events)
 - [What it never does](#what-it-never-does)
+- [A map list's names](#a-map-lists-names)
 - [A list that does not fit](#a-list-that-does-not-fit)
 - [In a battle room](#in-a-battle-room)
 - [Checks](#checks)
@@ -144,7 +145,7 @@ print(read(sock)[0]["screen"])  # main_menu
 |---|---|
 | `hello` | the protocol's version, the engine's, the window's size, where the game's 640x480 canvas lies in it, the tick rate (30) |
 | `screen` | the screen shown (`main_menu`, `skirmish`, `mp_battleroom`, `match` and the like), the dialogs over it, the control that takes the keys, the pointer, and in a match where the camera looks |
-| `controls` | an extension's windows first, then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows |
+| `controls` | an extension's windows first, then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows. A map list's rows are the words it shows, and `item_keys` names each row ([below](#a-map-lists-names)) |
 | `input` | once the game has taken the events it was given, the frame and tick at which it took them ([below](#input)) |
 | `frame` | the frame the game presented in its window, or the one it composed, whole or a region of it, as RGB pixels, a PNG file, or a hash and mean colour |
 | `prefs` | the preferences as the game holds them now, and their file |
@@ -208,10 +209,11 @@ centre would land on the line between Off and On.
 | A notice's or a prompt's words | `oa.<word>.body` | label; its title and paragraphs, one a line |
 | The Library's UNINSTALL in an installed package's details, its question and its notices | `oa.library.action.uninstall`; the question's `oa.prompt.cancel` and `oa.prompt.uninstall`; a notice's `oa.prompt.ok` | button; UNINSTALL is listed disabled for a map pack during a game and while the package is in the download queue, and `oa.library.note` then says why |
 | The UI kit gallery's working samples, in dialog `oa.gallery` | `oa.gallery.<section>.<n>` from 1, as `oa.gallery.toggle.1` (with `.off`/`.on`), `oa.gallery.drop-down.1`; CLOSE `oa.gallery.close` | as above, by kind |
-| The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, `registries`, in that order, so the last is `oa.library.tab.registries` | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; `updates`' text holds the updates that can be installed, "Updates 2" |
-| The Library's Registries tab | `oa.library.registry.<id>` with its halves `.off` and `.on`, and for a registry the player added `.remove` and `.add-mirror`; `.key` (the signing-key icon; its text the fingerprints, one a line), `.refresh` (REFRESH, beside the switch, disabled while that registry is off or already being asked), and the labels `.address` (the address it was added from, or its catalogue's address) and `.refreshed` ("refreshed 5 min ago", "never refreshed", or "couldn't reach · 2 h ago"); `oa.library.add-registry` at the top right of the tab, above the list, absent during a game; the labels `oa.library.registries.note` and `oa.library.registries.notice` | the switch a label, its halves check boxes; the key icon, REFRESH, REMOVE, ADD MIRROR… and ADD REGISTRY… buttons; the labels' text the address, the refresh time, the note under the list and, while a change was refused, why |
+| The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, `registries`, in that order, so the last is `oa.library.tab.registries` | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; every tab after Active reads its title and its count in brackets, "Updates (2)", and Active's text stays "Active" |
+| The Library's Registries tab | `oa.library.registry.<id>` with its halves `.off` and `.on`, and for a registry the player added `.remove` and `.add-mirror`; `.key` (the signing-key icon on the card; its text the fingerprints, one a line), `.refresh` (REFRESH, beside the switch, disabled while that registry is off or already being asked), and the labels `.address` (the address it was added from, or its catalogue's address) and `.refreshed` ("refreshed 5 min ago", "never refreshed", or "couldn't reach · 2 h ago"); `oa.library.add-registry` at the top right of the tab, above the cards, absent during a game; the labels `oa.library.registries.note` and `oa.library.registries.notice` | each registry is a card. The switch is a label, its halves check boxes; the key icon, REFRESH, REMOVE, ADD MIRROR… and ADD REGISTRY… are buttons. The heading (the title, or the short name) and the description are drawn text, not controls. Built in is a neutral pill under the key icon, REFRESH and the switch, and it is not a control. The labels' text is the address, the refresh time, the note under the last card and, while a change was refused, why |
 | The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
 | The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown; while a mod is played, `oa.library.active.unload` | label on the mod tile, the language tile and each map line: "Ridge 4.8 · rev 3" or "No mod: the game as it was made"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; the labels take no press. UNLOAD MOD is a button, its text "UNLOAD MOD", at the mod tile's bottom right; pressing it asks what SWITCH OFF asks. It is listed disabled during a game and while the command line chose the mod, and is absent on the base-game tile |
+| The Add registry window, in dialog `oa.add-registry` | `oa.add-registry.url`, `oa.add-registry.key-field` (the Signing key field, under the address, for an address add only; absent for an `.oareg` file and for a mirror), `oa.add-registry.check`, `oa.add-registry.add`, `oa.add-registry.cancel`, and the labels `oa.add-registry.name`, `oa.add-registry.address`, `oa.add-registry.key` (the fingerprints), `oa.add-registry.refusal` | the fields are text fields; the buttons are buttons; the labels are labels. The names of the controls that were already there are unchanged |
 
 `<page>` is the section's word (`controls`, `engine-limits`, `language`,
 `graphics`, `user-interface`, `downloads`, `system`, `mod-keys`). A stage
@@ -289,7 +291,7 @@ Its rows and their state icons are listed so:
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| A row of the list | `oa.library.row.<registry>.<key>`, or `oa.library.row.<key>` for a package of the player's own | check box, checked while chosen; its text the package's name |
+| A row of the list | `oa.library.row.<registry>.<key>`, or `oa.library.row.<key>` for a package of the player's own | check box, checked while chosen; its text the package's name, and " · Open Annihilation" or " · Cavedog Entertainment" when the row shows that maker's mark |
 | A row's download arrow, its GET | `oa.library.row.<registry>.<key>.get` | button, its text "GET", listed just before its row; disabled while the details offer no GET that can act: blocked, in the download queue, or failed |
 | A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
 | The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.play-now`, `.switch-off`, `.roll-back`, `.uninstall`, `.open-folder`, `.homepage` | button, its text the button's words; SWITCH OFF stands in PLAY NOW's place on the mod being played, and both are listed disabled during a game and while the command line chose the mod. The Active tab's UNLOAD MOD (`oa.library.active.unload`) asks the same question |
@@ -358,6 +360,10 @@ to the next; nothing is added to the game to produce them.
   time, and never waits.
   A client that stops reading is dropped once 68 MiB of answers wait for
   it (`automation: client dropped: not reading` in the log).
+
+## A map list's names
+
+A map list's `items` are the words each row shows. A pack map's row shows the title its pack's index gives, or the title in its map file when the index has none. When that title would read the same as another row, the pack map's row adds its pack's name in brackets, as in `Comet Catcher (Cavedog: Comet Catcher)`. The game's own maps keep their file names. The same list gives `item_keys`, one key for each row, in the same order: the name the battle room, a saved game and GET MAP use, `<stem>@<id>` for a pack map and the file name for one of the game's own maps. `select_item` takes either the shown text or the key, matched exactly, the shown text first, so a request that names `isle_one@oa-test-isles` still chooses that map when the row reads its title. Other lists omit `item_keys`.
 
 ## A list that does not fit
 

@@ -18,8 +18,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::ui::frontend_multiplayer {
 
@@ -153,13 +155,18 @@ void multiplayer_bind_launch_link(const LaunchLink& link) noexcept;
 ///
 /// The pointers stay valid until the next call of the source that wrote them.
 struct LobbyPackMap {
-    const char* name{};        ///< `<stem>@<id>`, the name the list shows
+    const char* name{};        ///< `<stem>@<id>`, the name a choice and the battle room use
     const char* description{}; ///< one line about the map; empty when unwritten
     const char* size{};        ///< the map's width and height, as the list shows it
     int32_t memory_mb{};       ///< memory the map needs, in MB
-    /// The name the pack's index gives the map, the words players see.
-    /// Null when this row is a base map, or the index has no entry.
+    /// The name the pack's index gives the map. Null when this row is a base
+    /// map, or the index has no entry.
     const char* title{};
+    /// The pack's name. Null when this row is a base map, or the pack has none.
+    const char* pack_name{};
+    /// The map file's title, when the source already holds it. The list does
+    /// not open the file to find one. Null when it is not held.
+    const char* file_title{};
 };
 
 /// Where the battle room reads installed pack maps and the base maps' summaries,
@@ -168,7 +175,7 @@ struct LobbyPackMap {
 /// A null member does nothing. The binding survives multiplayer_reset.
 struct LobbyMapSource {
     void* context{};
-    /// Returns how many pack maps are installed.
+    /// Returns how many pack maps fit the mod being played.
     int32_t (*count)(void* context){};
     /// Writes the pack map at `index`.
     ///
@@ -214,8 +221,9 @@ struct LobbyMapSource {
 /// base maps' summaries when the source carries them.
 ///
 /// The binding survives multiplayer_reset. A null member does nothing. The
-/// list is read again the next time the battle room opens. With no base maps
-/// bound, the list scans the installed maps as before.
+/// list is read the next time it is asked for, and again when a pack is
+/// installed or removed. With no base maps bound, the list scans the
+/// installed maps as before.
 ///
 /// @param source the pack maps; a null member keeps that part unused
 void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept;
@@ -559,6 +567,59 @@ bool multiplayer_scroll_list_page(int32_t x, int32_t y) noexcept;
 /// @return false when the dialog is not open, this machine is not the
 ///     host, or no map has the name
 bool multiplayer_offer_map(const char* name) noexcept;
+
+/// Builds the battle room's map list again when it has already been read.
+///
+/// A list that has not been read yet is left for the next read, which sees
+/// the packs installed then. The selected map keeps its place by name. An
+/// open map dialog's rows are filled again, and the highlighted row stays
+/// when that map is still listed. The dialog does not preview the map.
+void multiplayer_reload_maps();
+
+/// Returns how many maps the battle room's list holds, reading it as the
+/// battle room does.
+///
+/// A fully bound map source is read even when no multiplayer screen has a
+/// context yet. Any other list waits for that context and then counts nothing
+/// until it is set.
+///
+/// @return the number of maps
+[[nodiscard]] int32_t multiplayer_map_count();
+
+/// Returns the game name of one map in the battle room's list.
+///
+/// The pointer stays valid until the list is read again.
+///
+/// @param index the map's place, from 0
+/// @return the name; null when `index` is out of range
+[[nodiscard]] const char* multiplayer_map_at(int32_t index);
+
+/// The words a map list shows for each name, in the same order.
+///
+/// A pack map shows the title its index gives, or the map file's title when
+/// the source already holds one, and a shared title adds the pack's name in
+/// brackets. A base map's row is its file name. A name the list does not
+/// hold is shown as itself.
+///
+/// @param names the maps' names, in list order
+/// @return one string per name
+[[nodiscard]] std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names);
+
+/// Fills MAPNAMES with the words `multiplayer_map_texts` gives `names`, and
+/// keeps `names` as the rows' keys.
+///
+/// @param[in,out] panel the dialog
+/// @param names the maps' names, in list order
+void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names);
+
+/// Returns the pack index's title for a pack map the battle room's source lists.
+///
+/// The pointer stays valid until the next call of that source.
+///
+/// @param name the map's game name; null returns null
+/// @return the title; null when the source does not list the map, or its
+///     index has no title
+[[nodiscard]] const char* multiplayer_pack_map_title(const char* name);
 
 /// Fills the map dialog's MAPNAMES list again from the lobby's maps, in name
 /// order, selects the row of a map and previews it (mapselect_preview), as a

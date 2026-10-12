@@ -52,6 +52,23 @@ bool read_mapping(
             if (!take_name(entry, read.name, error, field_path(where, "name")))
                 return false;
             saw_name = true;
+        } else if (key == "title") {
+            if (!take_limited_text(
+                    entry, read.title, error, field_path(where, "title"), max_title_characters
+                ))
+                return false;
+        } else if (key == "description") {
+            if (!take_limited_text(
+                    entry,
+                    read.description,
+                    error,
+                    field_path(where, "description"),
+                    max_description_characters
+                ))
+                return false;
+        } else if (key == "author") {
+            if (!take_name(entry, read.author, error, field_path(where, "author")))
+                return false;
         } else if (key == "homepage") {
             formats::url::Url homepage;
             if (!take_web_url(entry, homepage, error, field_path(where, "homepage")))
@@ -156,6 +173,21 @@ std::string descriptor_text(const Descriptor& descriptor) {
     out += "name: ";
     append_quoted(out, descriptor.name);
     out.push_back('\n');
+    if (!descriptor.title.empty()) {
+        out += "title: ";
+        append_quoted(out, descriptor.title);
+        out.push_back('\n');
+    }
+    if (!descriptor.description.empty()) {
+        out += "description: ";
+        append_quoted(out, descriptor.description);
+        out.push_back('\n');
+    }
+    if (!descriptor.author.empty()) {
+        out += "author: ";
+        append_quoted(out, descriptor.author);
+        out.push_back('\n');
+    }
     if (descriptor.homepage) {
         out += "homepage: ";
         append_quoted(out, formats::url::url_text(*descriptor.homepage));

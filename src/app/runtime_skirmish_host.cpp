@@ -3,6 +3,7 @@
 
 // Skirmish menu and map-selection modal host services.
 #include "oa/app/runtime.hpp"
+#include "map_packs.hpp"
 #include "map_picture_state.hpp"
 #include <algorithm>
 #include <cctype>
@@ -306,6 +307,7 @@ void Runtime::install_map_event_callback(map_modal::MenuHandle) {
 
 void Runtime::bind_map_names(std::span<const std::string> names) {
     bound_map_names_.assign(names.begin(), names.end());
+    label_bound_maps();
     fill_frontend_list("MAPNAMES", bound_map_names_.size());
 }
 
@@ -335,6 +337,9 @@ bool Runtime::has_map_name_widget() {
 }
 
 std::string Runtime::map_display_name() {
+    if (const PackMap* installed = pack_map(selected_map_name_runtime_);
+        installed != nullptr && !installed->title.empty())
+        return installed->title;
     return selected_map_metadata_ ? selected_map_metadata_->mission_name : std::string{};
 }
 

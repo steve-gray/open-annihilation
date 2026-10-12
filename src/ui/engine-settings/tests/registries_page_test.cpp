@@ -190,11 +190,29 @@ void the_window_shows_each_mode_and_phase() {
     );
     OA_CHECK(editing.interaction.focused == settings::add_registry_url_control);
     OA_CHECK(settings::add_registry_field(editing).has_value());
-    bool placeholder = false;
-    for (const kit::Item& item : list.items)
-        if (const auto* field = std::get_if<kit::SearchLook>(&item.look))
-            placeholder = field->placeholder == "http://…" && !field->magnifier;
-    OA_CHECK(placeholder);
+    bool url_placeholder = false;
+    bool key_placeholder = false;
+    for (const kit::Item& item : list.items) {
+        const auto* field = std::get_if<kit::SearchLook>(&item.look);
+        if (field == nullptr)
+            continue;
+        if (item.control == settings::add_registry_url_control)
+            url_placeholder = field->placeholder == "http://…" && !field->magnifier;
+        if (item.control == settings::add_registry_key_field_control)
+            key_placeholder = field->placeholder == "ed25519:…" && !field->magnifier;
+    }
+    OA_CHECK(url_placeholder);
+    OA_CHECK(key_placeholder);
+    OA_CHECK(
+        named(list, "add-registry.key-field") != nullptr &&
+        named(list, "add-registry.key-field")->enabled
+    );
+    OA_CHECK(words_of(list).find("Signing key") != std::string::npos);
+    OA_CHECK(list.tab_order.size() >= 4);
+    OA_CHECK(list.tab_order[0] == settings::add_registry_url_control);
+    OA_CHECK(list.tab_order[1] == settings::add_registry_key_field_control);
+    OA_CHECK(list.tab_order[2] == settings::add_registry_cancel_control);
+    OA_CHECK(list.tab_order[3] == settings::add_registry_check_control);
 
     // Checking: the address, and CANCEL alone.
     AddRegistry checking = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::checking);
@@ -202,6 +220,10 @@ void the_window_shows_each_mode_and_phase() {
     OA_CHECK(words_of(list).find("Checking maps.example.org…") != std::string::npos);
     OA_CHECK((buttons_of(list) == std::vector<std::string>{"add-registry.cancel"}));
     OA_CHECK(!named(list, "add-registry.url")->enabled);
+    OA_CHECK(
+        named(list, "add-registry.key-field") != nullptr &&
+        !named(list, "add-registry.key-field")->enabled
+    );
     OA_CHECK(!settings::add_registry_field(checking).has_value());
     OA_CHECK(checking.interaction.focused == settings::add_registry_cancel_control);
 
@@ -272,6 +294,7 @@ void the_window_shows_each_mode_and_phase() {
     list = settings::add_registry_list(file);
     OA_CHECK(words_of(list).find("From maps.oareg") != std::string::npos);
     OA_CHECK(named(list, "add-registry.url") == nullptr);
+    OA_CHECK(named(list, "add-registry.key-field") == nullptr);
     file = window_of(AddRegistry::Mode::from_file, AddRegistry::Phase::ready);
     list = settings::add_registry_list(file);
     OA_CHECK(label_of(list, "add-registry.name") == std::string("Example Maps"));
@@ -289,6 +312,8 @@ void the_window_shows_each_mode_and_phase() {
     list = settings::add_registry_list(mirror);
     OA_CHECK(words_of(list).find("Add mirror") != std::string::npos);
     OA_CHECK(label_of(list, "add-registry.name") == std::string("Mirror of Example Maps"));
+    OA_CHECK(named(list, "add-registry.url") != nullptr);
+    OA_CHECK(named(list, "add-registry.key-field") == nullptr);
     OA_CHECK(mirror.interaction.focused == settings::add_registry_url_control);
     mirror = window_of(AddRegistry::Mode::mirror, AddRegistry::Phase::ready);
     mirror.shown.address = "copy.example.net";
@@ -382,6 +407,63 @@ void the_window_takes_keys_and_typing() {
         OA_CHECK(settings::add_registry_pointer_up(clicked, at) == AddRegistryAction::start_typing);
         OA_CHECK(clicked.interaction.focused == settings::add_registry_url_control);
         OA_CHECK(settings::add_registry_field(clicked).has_value());
+    }
+
+    // The signing-key field: Tab reaches it, a paste stops at the line break,
+    // and it holds at most 128 bytes. A refused key goes back to editing.
+    AddRegistry keyed = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::editing);
+    keyed.url = "http://maps.example.org/";
+    keyed.caret = keyed.url.size();
+    OA_CHECK(settings::add_registry_key(keyed, kit::Key::tab) == AddRegistryAction::redraw);
+    OA_CHECK(keyed.interaction.focused == settings::add_registry_key_field_control);
+    const std::optional<kit::Rect> key_rect = settings::add_registry_field(keyed);
+    const kit::DisplayList key_list = settings::add_registry_list(keyed);
+    const kit::Control* key_control = named(key_list, "add-registry.key-field");
+    OA_CHECK(key_rect.has_value());
+    OA_CHECK(key_control != nullptr && key_rect && same_rect(*key_rect, key_control->rect));
+    OA_CHECK(settings::add_registry_text(keyed, "ed25519:abc\nrest") == AddRegistryAction::redraw);
+    OA_CHECK(keyed.signing_key == "ed25519:abc");
+    OA_CHECK(keyed.url == "http://maps.example.org/");
+    OA_CHECK(settings::add_registry_key(keyed, kit::Key::backspace) == AddRegistryAction::redraw);
+    OA_CHECK(keyed.signing_key == "ed25519:ab");
+    OA_CHECK(settings::add_registry_key(keyed, kit::Key::space) == AddRegistryAction::start_typing);
+
+    AddRegistry long_key = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::editing);
+    OA_CHECK(settings::add_registry_key(long_key, kit::Key::tab) == AddRegistryAction::redraw);
+    long_key.signing_key = std::string(126, 'k');
+    long_key.key_caret = long_key.signing_key.size();
+    OA_CHECK(settings::add_registry_text(long_key, "éé") == AddRegistryAction::redraw);
+    OA_CHECK(long_key.signing_key.size() == 128);
+    OA_CHECK(settings::add_registry_text(long_key, "b") == AddRegistryAction::none);
+
+    AddRegistry refused_key = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::refused);
+    OA_CHECK(settings::add_registry_key(refused_key, kit::Key::tab) == AddRegistryAction::redraw);
+    OA_CHECK(settings::add_registry_text(refused_key, "k") == AddRegistryAction::redraw);
+    OA_CHECK(refused_key.phase == AddRegistry::Phase::editing && refused_key.shown.refusal.empty());
+    refused_key = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::refused);
+    refused_key.signing_key = "ed25519:ab";
+    refused_key.key_caret = refused_key.signing_key.size();
+    OA_CHECK(settings::add_registry_key(refused_key, kit::Key::tab) == AddRegistryAction::redraw);
+    OA_CHECK(
+        settings::add_registry_key(refused_key, kit::Key::backspace) == AddRegistryAction::redraw
+    );
+    OA_CHECK(refused_key.phase == AddRegistry::Phase::editing);
+    OA_CHECK(refused_key.signing_key == "ed25519:a");
+
+    AddRegistry key_click = window_of(AddRegistry::Mode::by_url, AddRegistry::Phase::refused);
+    key_click.interaction.focused = settings::add_registry_cancel_control;
+    const kit::DisplayList key_click_list = settings::add_registry_list(key_click);
+    const kit::Control* key_press = named(key_click_list, "add-registry.key-field");
+    OA_CHECK(key_press != nullptr);
+    if (key_press != nullptr) {
+        const kit::Point at = centre(key_press->rect);
+        static_cast<void>(settings::add_registry_pointer_down(key_click, at));
+        OA_CHECK(
+            settings::add_registry_pointer_up(key_click, at) == AddRegistryAction::start_typing
+        );
+        OA_CHECK(key_click.interaction.focused == settings::add_registry_key_field_control);
+        const std::optional<kit::Rect> pressed_field = settings::add_registry_field(key_click);
+        OA_CHECK(pressed_field.has_value() && same_rect(*pressed_field, key_press->rect));
     }
 }
 

@@ -49,12 +49,41 @@ cut_to_width(const Fonts& fonts, FontRole role, std::string_view text, int32_t w
 ///
 /// A screen whose row chip takes a press adds the chip with this rectangle
 /// and its own control before the row, so that a press there reaches it.
+/// A row that also shows a maker's mark uses list_row_icon_rect for that
+/// press: this one stays centred, so a row with no mark is unchanged.
 ///
 /// @param fonts the fonts
 /// @param row the row
 /// @param chip the chip
 /// @return the chip's rectangle
 [[nodiscard]] Rect list_row_chip_rect(const Fonts& fonts, const Rect& row, const ChipLook& chip);
+
+/// Returns where a list row draws its state icon.
+///
+/// With no maker's mark, or when the mark would not fit under the icon,
+/// this is list_row_chip_rect. When the row has a mark and a state icon and
+/// is at least two icons tall, the icon is the upper square of a stack of
+/// two, centred down the row, with no gap between the squares. A row with
+/// no chip returns an empty rectangle.
+///
+/// @param fonts the fonts
+/// @param row the row
+/// @param look the row
+/// @return the icon's rectangle; empty when the row has no chip
+[[nodiscard]] Rect list_row_icon_rect(const Fonts& fonts, const Rect& row, const ListRowLook& look);
+
+/// Returns where a list row draws its maker's mark: state_icon_side square,
+/// in the state-icon column.
+///
+/// Under a state icon, it is the lower square of the centred stack, and
+/// only when the row is at least two icons tall. With no state icon, it is
+/// centred down the column. Empty when the row has no mark, or the mark
+/// would not fit under an icon.
+///
+/// @param row the row
+/// @param look the row
+/// @return the mark's rectangle; empty when none is drawn
+[[nodiscard]] Rect list_row_maker_rect(const Rect& row, const ListRowLook& look);
 
 /// Draws a list row.
 ///
@@ -68,8 +97,13 @@ cut_to_width(const Fonts& fonts, FontRole role, std::string_view text, int32_t w
 /// room, and the tags as chips on the line after the last. The text is
 /// centred down the row; in a row short_list_row_height high it lies as the
 /// Mods row's does. The aside is right-aligned in the hint colour, one entry
-/// a line from the title's, left of the chip, which sits at the right inset;
-/// its column is as wide as its widest entry by the canvas's measure and by
+/// a line from the title's, left of the chip, which sits at the right inset.
+/// A maker's mark, when the row has one, is drawn in that same column:
+/// under the state icon when the row has one and is at least two icons
+/// tall, and centred in the column when it has no state icon. A mark that
+/// would not fit under an icon is left out. The row's rectangle is not
+/// grown. The aside's column is as wide as its widest entry by the canvas's
+/// measure and by
 /// the game's fonts', whichever is wider, so that no entry is cut on either
 /// form of the canvas.
 ///
