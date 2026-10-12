@@ -72,20 +72,37 @@ else()
 endif()
 message(STATUS "Text fonts: FreeType ${OA_FREETYPE_VERSION}, fonts from ${OA_TEXT_FONTS_DIR}")
 
-# Copies the text fonts into the fonts folder of a directory after a target
-# is built. The folder holds those fonts and nothing else: it is emptied
-# first, so a font the list drops leaves a build folder that built it before.
+# Stages the text fonts into <directory>/fonts once for that directory, and
+# makes <target> depend on the staging. Programs that share a directory must
+# pass the same <directory> text, generator expressions included: one rule
+# then owns the folder. The rule empties the folder before it copies, so a
+# font the list drops is not left where a program could open it, and nothing
+# else deletes a folder this rule writes.
+#
+# The directory is often $<TARGET_FILE_DIR:...> or another target generator
+# expression. Those are not allowed as the output of a custom command, so
+# this is a custom target and it runs whenever a program that needs the
+# folder is built. A wiped fonts folder is filled again on the next build,
+# and a changed font is copied then too.
 #   oa_copy_text_fonts(<target> <directory>)
 # The directory may be a generator expression, such as the game's
 # OA_GAME_FILES_DIR.
 function(oa_copy_text_fonts target directory)
-  set(sources "")
-  foreach(font IN LISTS OA_TEXT_FONT_FILES)
-    list(APPEND sources "${OA_TEXT_FONTS_DIR}/${font}")
-  endforeach()
-  add_custom_command(TARGET ${target} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${directory}/fonts"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${directory}/fonts"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${sources} "${directory}/fonts"
-    VERBATIM)
+  string(SHA256 oa_font_dir_key "${directory}")
+  string(SUBSTRING "${oa_font_dir_key}" 0 32 oa_font_dir_key)
+  set(oa_font_stage_target "oa-stage-text-fonts-${oa_font_dir_key}")
+  if(NOT TARGET ${oa_font_stage_target})
+    set(sources "")
+    foreach(font IN LISTS OA_TEXT_FONT_FILES)
+      list(APPEND sources "${OA_TEXT_FONTS_DIR}/${font}")
+    endforeach()
+    add_custom_target(${oa_font_stage_target}
+      COMMAND ${CMAKE_COMMAND} -E rm -rf "${directory}/fonts"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${directory}/fonts"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${sources} "${directory}/fonts"
+      DEPENDS ${sources}
+      COMMENT "Staging text fonts"
+      VERBATIM)
+  endif()
+  add_dependencies(${target} ${oa_font_stage_target})
 endfunction()

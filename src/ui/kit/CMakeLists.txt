@@ -31,7 +31,11 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-kit-text-test PRIVATE oa-ui-kit oa-test-support oa-options oa-ui-paint
     oa-platform-text-font oa-base-text)
   # The moved paint wrap checks read the bundled fonts beside the test.
-  oa_copy_text_fonts(oa-ui-kit-text-test "$<TARGET_FILE_DIR:oa-ui-kit-text-test>")
+  # This program, the smooth test and the first-run test are written into one
+  # folder, so one rule stages that folder's fonts and each of them depends
+  # on it. The directory text has to be the same for the rule to be shared.
+  set(oa_ui_kit_font_dir "$<TARGET_FILE_DIR:oa-ui-kit-text-test>")
+  oa_copy_text_fonts(oa-ui-kit-text-test "${oa_ui_kit_font_dir}")
   add_test(NAME ui-kit-text COMMAND oa-ui-kit-text-test)
   set_tests_properties(ui-kit-text PROPERTIES TIMEOUT 30)
 
@@ -70,7 +74,7 @@ if(BUILD_TESTING)
   add_executable(oa-ui-kit-smooth-test tests/smooth_test.cpp)
   target_link_libraries(oa-ui-kit-smooth-test PRIVATE oa-ui-kit oa-test-support oa-options oa-ui-paint
     oa-platform-text-font)
-  oa_copy_text_fonts(oa-ui-kit-smooth-test "$<TARGET_FILE_DIR:oa-ui-kit-smooth-test>")
+  oa_copy_text_fonts(oa-ui-kit-smooth-test "${oa_ui_kit_font_dir}")
   add_test(NAME ui-kit-smooth COMMAND oa-ui-kit-smooth-test)
   set_tests_properties(ui-kit-smooth PROPERTIES TIMEOUT 30)
 
@@ -94,7 +98,7 @@ if(BUILD_TESTING)
   add_executable(oa-ui-kit-first-run-test tests/first_run_test.cpp)
   target_link_libraries(oa-ui-kit-first-run-test PRIVATE oa-ui-kit oa-test-support oa-options
     oa-ui-paint oa-platform-text-font)
-  oa_copy_text_fonts(oa-ui-kit-first-run-test "$<TARGET_FILE_DIR:oa-ui-kit-first-run-test>")
+  oa_copy_text_fonts(oa-ui-kit-first-run-test "${oa_ui_kit_font_dir}")
   add_test(NAME ui-kit-first-run COMMAND oa-ui-kit-first-run-test)
   set_tests_properties(ui-kit-first-run PROPERTIES TIMEOUT 30)
 endif()

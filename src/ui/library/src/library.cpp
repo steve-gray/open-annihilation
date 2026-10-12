@@ -586,6 +586,34 @@ Fact fact_of(std::string_view label, std::string long_value, std::string short_v
     return fact;
 }
 
+/// Tells whether an update is already in place.
+///
+/// A finished download stays in the queue until the worker rewrites the
+/// installed copy, and the note from the last search stays with it. The
+/// installed release, or a finished queue item's release, both above 0 and
+/// at least the note's, means the player already has that catalogue release.
+/// A release of 0 names none, and a held item is not finished. The listing's
+/// release is the newest the catalogue names, not the copy in place.
+///
+/// @param library the Library, with its inputs stored
+/// @param update the note
+/// @return true when that release is already installed or queued as installed
+bool update_already_in_place(const Library& library, const UpdateNote& update) {
+    for (const Installed& installed : library.inputs.installed) {
+        if (installed.registry == update.registry && installed.kind == update.kind &&
+            installed.key == update.key && installed.release > 0 &&
+            installed.release >= update.to_release)
+            return true;
+    }
+    for (const QueueItem& item : library.inputs.queue) {
+        if (item.registry == update.registry && item.kind == update.kind &&
+            item.key == update.key && item.phase == Phase::installed && item.release > 0 &&
+            item.release >= update.to_release)
+            return true;
+    }
+    return false;
+}
+
 } // namespace
 
 PackageMaker package_maker(std::string_view author) noexcept {
@@ -633,7 +661,8 @@ void refresh(Library& library, Inputs inputs) {
         if (found == by_id.end())
             continue;
         Entry& entry = library.entries[found->second];
-        if (entry.installed != nullptr && entry.update == nullptr)
+        if (entry.installed != nullptr && entry.update == nullptr &&
+            !update_already_in_place(library, update))
             entry.update = &update;
     }
     for (const QueueItem& item : in.queue) {

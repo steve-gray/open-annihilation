@@ -1501,6 +1501,7 @@ library::Inputs Runtime::library_inputs() {
         item.kind = kind_of(queued.target.kind);
         item.key = queued.target.key;
         item.name = queued.target.name;
+        item.release = queued.target.release;
         if (snapshot)
             for (const content::Entry& entry : snapshot->entries)
                 if (entry.package != nullptr && entry.registry == item.registry &&
