@@ -49,6 +49,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -170,6 +171,110 @@ void dress_languages(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Walks up from a directory until a relative path is a file.
+///
+/// @param start where the walk begins
+/// @param relative the file sought under each directory
+/// @return the file; empty when none of the directories holds it
+std::filesystem::path
+climb_for(std::filesystem::path start, const std::filesystem::path& relative) {
+    std::error_code ignored;
+    for (int32_t step = 0; step < 12 && !start.empty(); ++step) {
+        const std::filesystem::path candidate = start / relative;
+        if (std::filesystem::is_regular_file(candidate, ignored))
+            return candidate;
+        const std::filesystem::path parent = start.parent_path();
+        if (parent == start)
+            break;
+        start = parent;
+    }
+    return {};
+}
+
+/// The app icon, cropped to the pixels that show, for Core Prime's card.
+///
+/// The file is the plates the window icon is made from. Empty when it cannot
+/// be read, and the card then keeps its lettermark.
+///
+/// @return the picture
+std::optional<lib::Badge> shipped_logo() {
+    const std::filesystem::path relative =
+        std::filesystem::path("branding") / "open-annihilation-256.png";
+    std::error_code ignored;
+    std::filesystem::path file = climb_for(std::filesystem::current_path(ignored), relative);
+    if (file.empty())
+        file = climb_for(text_font::bundled_font_directory(), relative);
+    if (file.empty()) {
+        std::fprintf(stderr, "registries picture: the app icon was not found\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    std::ifstream input(file, std::ios::binary);
+    input.seekg(0, std::ios::end);
+    const std::streamoff length = input.tellg();
+    if (!input || length <= 0) {
+        std::fprintf(stderr, "registries picture: the app icon could not be read\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    input.seekg(0, std::ios::beg);
+    std::vector<uint8_t> bytes(static_cast<std::size_t>(length));
+    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(length));
+    if (!input) {
+        std::fprintf(stderr, "registries picture: the app icon could not be read\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    namespace png = oa::formats::png;
+    if (!png::has_signature(bytes))
+        return std::nullopt;
+    png::Messages messages;
+    png::Info info;
+    if (!png::read_info(bytes, messages, &info))
+        return std::nullopt;
+    const png::Header& header = info.header;
+    if (header.color_type != png::ColorType::rgb_alpha || header.bit_depth != 8 ||
+        header.width == 0 || header.height == 0)
+        return std::nullopt;
+    const std::size_t stride = png::row_bytes(header, {});
+    if (stride == 0 || header.height > std::numeric_limits<std::size_t>::max() / stride)
+        return std::nullopt;
+    std::vector<uint8_t> pixels(stride * header.height);
+    const png::Progress progress = png::read_image(bytes, info, {}, messages, pixels);
+    if (progress == png::Progress::none)
+        return std::nullopt;
+    const std::size_t row_bytes = std::size_t{header.width} * 4U;
+    if (pixels.size() / row_bytes < header.height)
+        return std::nullopt;
+    uint32_t left = header.width;
+    uint32_t top = header.height;
+    uint32_t right = 0;
+    uint32_t bottom = 0;
+    for (uint32_t y = 0; y < header.height; ++y) {
+        for (uint32_t x = 0; x < header.width; ++x) {
+            if (pixels[y * row_bytes + std::size_t{x} * 4U + 3U] == 0)
+                continue;
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + 1);
+            bottom = std::max(bottom, y + 1);
+        }
+    }
+    if (left >= right || top >= bottom)
+        return std::nullopt;
+    lib::Badge badge;
+    badge.width = right - left;
+    badge.height = bottom - top;
+    const std::size_t part_row = std::size_t{badge.width} * 4U;
+    badge.rgba.reserve(part_row * badge.height);
+    for (uint32_t y = top; y < bottom; ++y) {
+        const auto first =
+            pixels.begin() + static_cast<std::ptrdiff_t>(y * row_bytes + std::size_t{left} * 4U);
+        badge.rgba.insert(badge.rgba.end(), first, first + static_cast<std::ptrdiff_t>(part_row));
+    }
+    return badge;
+}
+
 /// Marks one language pack as the one in use, adding it when the fixture
 /// does not list it. Built for the picture of 简体中文 in use.
 ///
@@ -231,6 +336,9 @@ void dress_registries(lib::Library& library) {
             signing_key.fingerprint = "21fe · 31df · a154 · a261";
             signing_key.public_key = "ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=";
             registry.keys = {std::move(signing_key)};
+            registry.shipped_logo = true;
+            if (std::optional<lib::Badge> logo = shipped_logo())
+                registry.icon = std::move(*logo);
         } else if (registry.id == fixture::added) {
             registry.title = "Example Mods - Sample packages";
             registry.description = "A sample registry of mods, including the made-up mod Ridge.";

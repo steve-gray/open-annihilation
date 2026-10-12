@@ -144,9 +144,13 @@ struct Runtime::LibraryHost {
     uint64_t queue_generation{};          ///< the download queue's generation last read
     uint64_t model_revision{};            ///< counts the model's rebuilds
     std::size_t update_count{};           ///< the updates that can be installed (update_count)
-    /// The pictures taken from the worker, by address: they stay while the
-    /// host lives.
+    /// The pictures taken from the worker, by address: badges and registry
+    /// icons. They stay while the host lives.
     std::map<std::string, oa::ui::library::Badge> badges{};
+    /// The logo the game ships, decoded once for a built-in registry that
+    /// names it. Never fetched.
+    std::optional<oa::ui::library::Badge> shipped_logo{};
+    bool shipped_logo_tried{}; ///< true once the logo was decoded, or the decode failed
     /// Minimaps decoded for the rows on screen. Null until the host is made.
     /// The type lives in runtime_library.cpp.
     std::unique_ptr<MapPreviewState> previews{};
@@ -176,13 +180,41 @@ struct Runtime::LibraryHost {
     void rebuild(Runtime& runtime);
 
     /// Asks for the pictures of the rows in view and a few rows beyond each
-    /// edge, the selected row's first, and wakes the worker while any waits.
+    /// edge, the selected row's first, and for a registry icon the Registries
+    /// tab or a From line is showing. Wakes the worker while any waits.
     /// The runtime's own feed only; nothing while a match runs. A picture
     /// already asked for, held or refused is not asked for again. A map
-    /// pack's catalogue preview is asked for the same rows.
+    /// pack's catalogue preview is asked for the same rows. One picture
+    /// cache serves badges, map previews and registry icons.
     ///
     /// @param list the display list the Library shows
     void request_pictures(const oa::ui::kit::DisplayList& list);
+
+    /// Returns the logo the game ships, decoded once from the app icon.
+    ///
+    /// The visible part of the window icon, so the plates fill the card.
+    /// Nothing is fetched. Empty when the icon cannot be decoded, and then
+    /// the lettermark stays.
+    ///
+    /// @return the logo; null when it could not be decoded
+    const oa::ui::library::Badge* shipped_logo_badge();
+
+    /// Asks the picture cache for one picture and wakes the worker. Nothing
+    /// while a match runs. A picture already asked for, held or refused is
+    /// not asked for again.
+    ///
+    /// @param registry the registry the catalogue names it under
+    /// @param url its address, resolved against the host that served the catalogue
+    void ask_cached_picture(std::string_view registry, std::string_view url);
+
+    /// Returns a picture the cache has handed over, taking it into `badges`
+    /// the first time. The caller gets a copy.
+    ///
+    /// @param registry the registry it was asked for under
+    /// @param url its address, as asked for
+    /// @return the picture; nothing while it is not ready
+    [[nodiscard]] std::optional<oa::ui::library::Badge>
+    cached_picture(std::string_view registry, std::string_view url);
 
     /// The picture source's known: an entry whose badge and map previews
     /// are held, already asked for or refused.
@@ -199,6 +231,20 @@ struct Runtime::LibraryHost {
     /// @param entry the entry
     /// @param lead the selected row
     static void picture_request(void* context, const oa::ui::library::Entry& entry, bool lead);
+
+    /// The registry-icon source's known: a shipped logo, an empty address,
+    /// a picture already held, or one already asked for or refused.
+    ///
+    /// @param context the host
+    /// @param registry the registry
+    /// @return true when nothing remains to ask for
+    static bool registry_icon_known(void* context, const oa::ui::library::Registry& registry);
+
+    /// The registry-icon source's request. A shipped logo is never asked for.
+    ///
+    /// @param context the host
+    /// @param registry the registry
+    static void registry_icon_request(void* context, const oa::ui::library::Registry& registry);
 
     /// Decodes a few minimaps for the rows this list shows, into `previews`.
     ///

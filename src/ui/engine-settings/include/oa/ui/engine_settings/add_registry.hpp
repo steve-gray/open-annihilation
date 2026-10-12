@@ -68,6 +68,16 @@ struct ProbeView {
     std::string downloads;
     bool is_signed{true}; ///< false for a registry that names no key
     std::string refusal;  ///< why it cannot be added, one sentence; empty when it can
+    /// The registry's icon, once the picture cache has handed it over.
+    /// Empty while it is missing or on its way. A display list's picture
+    /// points into these pixels, which this view keeps.
+    std::vector<uint8_t> icon_rgba{};
+    uint32_t icon_width{};  ///< in pixels; 0 when there is no icon yet
+    uint32_t icon_height{}; ///< in pixels; 0 when there is no icon yet
+    /// The picture's address, resolved against the catalogue that was read.
+    /// Empty when the catalogue names no icon. Never the logo the game ships.
+    std::string icon_url{};
+    std::string icon_registry{}; ///< the registry id the cache is asked under
 };
 
 /// One Add registry window, as the host last told it and the player left it.

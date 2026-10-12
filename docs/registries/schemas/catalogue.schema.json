@@ -19,6 +19,7 @@
       "items": { "$ref": "#/$defs/key" }
     },
     "mirrors": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+    "icon": { "type": "string", "description": "A picture reference ending .png. The registry's own icon." },
     "packages": {
       "type": "array",
       "maxItems": 20000,

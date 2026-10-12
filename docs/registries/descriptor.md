@@ -22,6 +22,7 @@ of file for a registry that uses the download API. The schema is
 | `title` | no | The card's heading, 1 to 96 characters when present. A character is one Unicode scalar value. Absent or omitted on write when empty: the card heads with `name`. |
 | `description` | no | A paragraph on the card, under the address and the refresh lines, 1 to 400 characters when present, counted the same way as `title`. Absent or omitted on write when empty: the card shows no paragraph. |
 | `author` | no | Who publishes the registry, 1 to 64 bytes of UTF-8 when present, with no control character, the same rule as `name`. Absent or omitted on write when empty. A built-in registry shows a maker's mark when this is Open Annihilation or Cavedog Entertainment ([the Library](../library.md)). |
+| `icon` | no | `oa`, and nothing else. A built-in registry that names it shows the logo the game ships, and a catalogue `icon` does not replace that logo. An `.oareg` a player adds cannot name it. Absent or omitted on write when unset. Not stored in `Registries.yaml`. |
 | `homepage` | no | An `http` or `https` address, opened only in a browser. |
 | `catalogue` | yes | An `http` or `https` address with no query. The catalogue file. |
 | `mirrors` | no | At most 8 other copies of the catalogue. Each is `http` or `https` with no query. Absent reads as none. |
@@ -96,6 +97,7 @@ refusal. Built-in registries are the ones that ship with the game.
 7. The registry is unsigned and the host of the catalogue, a mirror or the
    API is not exactly `127.0.0.1`. The homepage is not part of this check.
 8. The player already has 64 added registries.
+9. The descriptor names `icon: oa`. Only a registry that ships with the game may show that logo.
 
 A player MUST NOT add a mirror to a built-in registry. Only that registry's
 signed catalogue can name one. A mirror a player adds to a registry they

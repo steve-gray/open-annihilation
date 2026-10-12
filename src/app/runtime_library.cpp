@@ -29,6 +29,7 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/app/window_icon.hpp"
 #include "oa/base/signing/ed25519.hpp"
 #include "oa/data/pe_icon.hpp"
 #include "oa/base/threads.hpp"
@@ -825,6 +826,84 @@ void Runtime::LibraryHost::picture_request(void* context, const library::Entry& 
     }
 }
 
+const library::Badge* Runtime::LibraryHost::shipped_logo_badge() {
+    if (!shipped_logo_tried) {
+        shipped_logo_tried = true;
+        WindowIcon decoded;
+        std::string error;
+        if (decode_window_icon(window_icon_png(), decoded, error)) {
+            const WindowIcon part = visible_part(decoded);
+            if (!part.pixels.empty() && part.width > 0 && part.height > 0)
+                shipped_logo = library::Badge{part.pixels, part.width, part.height};
+        }
+    }
+    return shipped_logo ? &*shipped_logo : nullptr;
+}
+
+void Runtime::LibraryHost::ask_cached_picture(std::string_view registry, std::string_view url) {
+    if (!work.pictures || url.empty())
+        return;
+    {
+        base::threads::LockGuard guard(work.mutex);
+        if (work.match_running)
+            return;
+    }
+    const std::string key(url);
+    if (badges.find(key) != badges.end() || work.pictures->refused(registry, key))
+        return;
+    if (!work.pictures->asked(registry, key))
+        work.pictures->request(registry, key);
+    if (!work.pictures->waiting())
+        return;
+    {
+        base::threads::LockGuard guard(work.mutex);
+        work.pictures_due = true;
+    }
+    if (ensure_worker())
+        work.wake.notify_all();
+}
+
+std::optional<library::Badge>
+Runtime::LibraryHost::cached_picture(std::string_view registry, std::string_view url) {
+    if (url.empty())
+        return std::nullopt;
+    const std::string key(url);
+    auto held = badges.find(key);
+    if (held == badges.end() && work.pictures) {
+        if (std::optional<ModBadge> taken = work.pictures->take(registry, key)) {
+            if (std::optional<library::Badge> decoded = badge_of(*taken))
+                held = badges.emplace(key, std::move(*decoded)).first;
+        }
+    }
+    if (held == badges.end())
+        return std::nullopt;
+    return held->second;
+}
+
+bool Runtime::LibraryHost::registry_icon_known(void* context, const library::Registry& registry) {
+    auto* host = static_cast<LibraryHost*>(context);
+    if (host == nullptr || host->work.pictures == nullptr)
+        return true;
+    if (registry.shipped_logo || registry.icon_url.empty() || registry.icon)
+        return true;
+    if (host->badges.find(registry.icon_url) != host->badges.end())
+        return true;
+    return host->work.pictures->asked(registry.id, registry.icon_url);
+}
+
+void Runtime::LibraryHost::registry_icon_request(void* context, const library::Registry& registry) {
+    auto* host = static_cast<LibraryHost*>(context);
+    if (host == nullptr || host->work.pictures == nullptr)
+        return;
+    if (registry.shipped_logo || registry.icon_url.empty() || registry.icon)
+        return;
+    if (host->badges.find(registry.icon_url) != host->badges.end())
+        return;
+    if (host->work.pictures->refused(registry.id, registry.icon_url))
+        return;
+    host->work.pictures->request(registry.id, registry.icon_url);
+}
+
 void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
     if (!own_feed || !work.pictures)
         return;
@@ -836,12 +915,17 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
     // Rows are asked by their control, not by the text they draw: a maker's
     // mark rides on that text, and matching it left every marked row
     // unasked. The selected row is first. What waits is
-    // forgotten as the Library closes.
+    // forgotten as the Library closes. A registry icon uses this same cache.
     library::PictureSource source;
     source.context = this;
     source.known = picture_known;
     source.request = picture_request;
     library::request_visible_pictures(model, list, source);
+    library::RegistryPictureSource icons;
+    icons.context = this;
+    icons.known = registry_icon_known;
+    icons.request = registry_icon_request;
+    library::request_registry_icons(model, icons);
     if (!work.pictures->waiting())
         return;
     {
@@ -1140,6 +1224,22 @@ library::Inputs Runtime::library_inputs() {
                 shown_key.public_key = std::string(key_text.view());
                 registry.keys.push_back(std::move(shown_key));
             }
+            // A built-in registry that names the shipped logo shows that
+            // logo, from the game's own files. A catalogue icon does not
+            // replace it, and nothing is fetched.
+            if (registry.built_in && descriptor.shipped_logo) {
+                registry.shipped_logo = true;
+                if (const library::Badge* logo = host.shipped_logo_badge())
+                    registry.icon = *logo;
+            } else if (view.catalogue && !view.catalogue->icon.empty() && view.served_from) {
+                if (const std::optional<formats::url::Url> resolved =
+                        formats::url::resolve_reference(*view.served_from, view.catalogue->icon)) {
+                    registry.icon_url = formats::url::url_text(*resolved);
+                    if (std::optional<library::Badge> picture =
+                            host.cached_picture(descriptor.id, registry.icon_url))
+                        registry.icon = std::move(*picture);
+                }
+            }
             inputs.registries.push_back(std::move(registry));
             if (!view.registry.enabled)
                 continue;
@@ -1219,14 +1319,9 @@ library::Inputs Runtime::library_inputs() {
                         formats::url::resolve_reference(*view->served_from, package.badge)) {
                     const std::string url = formats::url::url_text(*resolved);
                     host.picture_urls[{entry.registry, package.id}] = url;
-                    auto held = host.badges.find(url);
-                    if (held == host.badges.end() && host.work.pictures)
-                        if (std::optional<ModBadge> taken =
-                                host.work.pictures->take(entry.registry, url))
-                            if (std::optional<library::Badge> badge = badge_of(*taken))
-                                held = host.badges.emplace(url, std::move(*badge)).first;
-                    if (held != host.badges.end())
-                        listing.badge = held->second;
+                    if (std::optional<library::Badge> badge =
+                            host.cached_picture(entry.registry, url))
+                        listing.badge = std::move(*badge);
                 }
             }
             inputs.listings.push_back(std::move(listing));

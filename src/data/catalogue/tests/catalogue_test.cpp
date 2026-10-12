@@ -250,6 +250,7 @@ void test_sample() {
     }
     const auto mirror = url::parse_http_url("http://mirror.example.net/v1/catalogue.json");
     OA_CHECK(mirror.has_value() && out.mirrors.size() == 1 && out.mirrors[0] == *mirror);
+    OA_CHECK(out.icon.empty());
     OA_CHECK(out.packages.size() == 4);
     if (out.packages.size() != 4)
         return;
@@ -355,6 +356,29 @@ void test_sample() {
         OA_CHECK(!oamod::engine_range_met(*unmet.requires_engine, oamod::EngineVersion{0, 8, 0}));
         OA_CHECK(oamod::engine_range_met(*unmet.requires_engine, oamod::EngineVersion{9, 0, 0}));
     }
+}
+
+void test_registry_icon() {
+    const auto plain = read_ok(catalogue_of(bare("oamod", "keeper")));
+    OA_CHECK(plain.icon.empty());
+    const std::string reference =
+        "/v1/i/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png";
+    const auto with_icon =
+        read_ok(catalogue_of(bare("oamod", "keeper"), "\"icon\":\"" + reference + "\""));
+    OA_CHECK(with_icon.icon == reference);
+    OA_CHECK(with_icon.packages.size() == 1);
+    refuse(catalogue_of(bare("oamod", "keeper"), "\"icon\":1"), "icon is not a picture reference");
+    refuse(
+        catalogue_of(bare("oamod", "keeper"), "\"icon\":\"/v1/i/badge.jpg\""),
+        "icon is not a picture reference"
+    );
+    refuse(
+        catalogue_of(bare("oamod", "keeper"), "\"icon\":\"http://example.org/a.png\""),
+        "icon is not a picture reference"
+    );
+    refuse(
+        catalogue_of(bare("oamod", "keeper"), "\"icon\":\"\""), "icon is not a picture reference"
+    );
 }
 
 void test_skipped_entries() {
@@ -800,6 +824,7 @@ void test_published() {
 
 int main() {
     test_sample();
+    test_registry_icon();
     test_skipped_entries();
     test_language_key_and_fields();
     test_coverage_and_bounds();

@@ -27,6 +27,7 @@ signs.
 | `downloads` | no | An `http` or `https` address. A query is allowed here. Informational. |
 | `keys` | no | At most 8 current signing keys. See [signatures.md](signatures.md). |
 | `mirrors` | no | At most 8 `http` or `https` addresses with no query. |
+| `icon` | no | A picture reference ending `.png`. The registry's own icon. |
 | `packages` | yes | The entries. At most 20,000. An empty array is a catalogue. |
 
 A UTC time is `YYYY-MM-DDTHH:MM:SSZ`. A fraction of a second may follow the
@@ -100,9 +101,11 @@ tab with the latest days, and an entry without `published` is never among
 them. `release` and `revision` count the releases of one package and say
 nothing of when any came out.
 
-A picture reference, `badge` or a map `preview`, MUST be a valid reference
-ending `.png`. OA does not require the file name to be a hash. A registry
-SHOULD still serve pictures at `/v1/i/<sha256>.png`.
+A picture reference, a catalogue `icon`, a package `badge` or a map
+`preview`, MUST be a valid reference ending `.png`. OA does not require
+the file name to be a hash. A registry SHOULD still serve pictures at
+`/v1/i/<sha256>.png`. `icon` is signed with the rest of the catalogue. An
+older reader ignores it.
 
 ## Mods
 

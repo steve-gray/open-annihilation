@@ -646,6 +646,24 @@ void fingerprints_match_the_signing_fingerprint() {
     }
 }
 
+void added_registry_cannot_claim_the_shipped_logo() {
+    registry::Descriptor descriptor = fresh("http://other.example.org/catalogue.json");
+    OA_CHECK(registry::check_new_registry(descriptor, base_context()) == registry::Refusal::none);
+    const std::string yaml = "registry: 1\nid: other-maps\nname: Other Maps\nicon: oa\n"
+                             "catalogue: \"http://other.example.org/catalogue.json\"\n"
+                             "keys:\n  - {id: other-2026, public: \"" +
+                             key_text(other_key()) + "\"}\ndownloads:\n  mode: direct\n";
+    registry::Descriptor claimed;
+    std::string error;
+    OA_CHECK(registry::read_descriptor(bytes_of(yaml), claimed, &error));
+    OA_CHECK(claimed.shipped_logo);
+    OA_CHECK(
+        registry::check_new_registry(claimed, base_context()) == registry::Refusal::shipped_logo
+    );
+    const char* sentence = registry::refusal_text(registry::Refusal::shipped_logo);
+    OA_CHECK(sentence != nullptr && std::string(sentence).find("logo") != std::string::npos);
+}
+
 void every_refusal_has_a_sentence() {
     const registry::Refusal refusals[] = {
         registry::Refusal::none,
@@ -663,6 +681,7 @@ void every_refusal_has_a_sentence() {
         registry::Refusal::bad_mirror,
         registry::Refusal::mirror_listed,
         registry::Refusal::no_keys,
+        registry::Refusal::shipped_logo,
     };
     for (const registry::Refusal refusal : refusals) {
         const char* text = registry::refusal_text(refusal);
@@ -696,6 +715,7 @@ int main() {
     pinned_keys_are_honoured();
     registries_in_effect_order_disabled_and_conflicting();
     fingerprints_match_the_signing_fingerprint();
+    added_registry_cannot_claim_the_shipped_logo();
     every_refusal_has_a_sentence();
     return oa::test::check_exit_status();
 }

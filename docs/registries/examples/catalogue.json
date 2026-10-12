@@ -14,6 +14,7 @@
   "mirrors": [
     "http://mirror.example.org/oa/v1/catalogue.json"
   ],
+  "icon": "/v1/i/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png",
   "packages": [
     {
       "kind": "oamod",

@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The catalogue pictures the Library and the map browser show: asked for on
+// The catalogue pictures the Library and the map browser show, including a
+// registry's own icon: asked for on
 // the main thread, fetched and checked on a worker, kept on disk under the
 // name of their SHA-256, and handed back decoded as a badge, or as the
 // checked file's bytes.

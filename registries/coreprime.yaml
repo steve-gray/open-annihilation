@@ -12,6 +12,7 @@ name: Core Prime
 title: "Core Prime - Official Open Annihilation Packages"
 description: "The CorePrime.net registry provides packages and content curated by the Open Annihilation team, and checked for compatibility, as well as official releases from some leading mods."
 author: "Open Annihilation"
+icon: oa # the logo the game ships; only a built-in descriptor may name this
 homepage: https://coreprime.net
 catalogue: http://downloads.coreprime.net/v1/catalogue.json
 keys: # Ed25519; any one signs a catalogue

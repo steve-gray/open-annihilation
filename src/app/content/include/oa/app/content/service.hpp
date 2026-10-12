@@ -219,6 +219,9 @@ struct RegistryCheck {
     std::vector<std::pair<data::catalogue::Kind, std::size_t>> kinds;
     /// The catalogue. Set only when it verified with the keys being trusted.
     std::shared_ptr<const data::catalogue::Catalogue> catalogue;
+    /// The catalogue address that verified, so a picture reference resolves
+    /// against the host that served it. Empty when no catalogue verified.
+    std::optional<formats::url::Url> served_from;
 };
 
 /// Holds the registries, the cache and the worker that refreshes them.
