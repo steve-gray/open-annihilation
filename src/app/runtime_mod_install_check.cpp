@@ -6,7 +6,8 @@
 // pointer, and the player's Mods folder checked after each. Each run of
 // the check is one turn. The first: the command line's missing package
 // refused; a catalogue map pack installed from the skirmish setup with no
-// prompt, and a catalogue mod left waiting until the main menu; a package
+// prompt, and a catalogue mod installed on the main menu with no notice,
+// the same files opened as --open does still showing theirs; a package
 // the Finder made installed with no question from a dropped file; an update
 // asked and cancelled, then replaced; a third
 // revision replacing, keeping one .backup; a reinstall dropping a file
@@ -669,10 +670,59 @@ void Runtime::check_mod_install() {
         require(screen_ == Screen::single_player, "PrevMenu did not leave the skirmish setup");
         exercise_click(entry::resource_name(entry::Button::previous_menu));
         require(screen_ == Screen::main_menu, "PrevMenu did not return to the main menu");
-        until_prompt("the catalogue mod");
-        require(titled("MOD INSTALLED"), "the catalogue mod was not installed on the main menu");
+        // A catalogue install shows no notice. The same file, posted as
+        // --open posts it, still does.
+        const auto installed_quietly = [&](std::string_view what, const auto& done) {
+            bool placed = false;
+            for (int frame = 0; frame < kMostFrames; ++frame) {
+                tell_mod_installs();
+                require(
+                    state.stage != ModInstallState::Stage::telling,
+                    std::string(what) + " showed an installed notice"
+                );
+                if (done() && state.stage == ModInstallState::Stage::idle && !state.unpacking &&
+                    state.prompt == nullptr) {
+                    placed = true;
+                    break;
+                }
+            }
+            require(placed, std::string(what) + " was not installed with no notice");
+        };
+        installed_quietly("the catalogue mod", [&] {
+            return revision_in(mods / "ridge-mod") == 1;
+        });
+        std::error_code remove_error;
+        fs::remove_all(mods / "ridge-mod", remove_error);
+        require(!remove_error, "the catalogue mod's folder could not be removed");
+        install::post_opened_file(waiting_mod);
+        until_prompt("the mod opened as --open opens it");
+        require(titled("MOD INSTALLED"), "--open did not tell that the mod was installed");
+        require(
+            std::find(state.answers.begin(), state.answers.end(), install::Answer::open_folder) !=
+                state.answers.end(),
+            "--open's notice has no OPEN FOLDER"
+        );
         key(SDLK_RETURN);
-        require(state.prompt == nullptr, "Enter did not close the catalogue mod's notice");
+        require(state.prompt == nullptr, "Enter did not close the mod's notice");
+
+        install::post_package_file(pack_file, pack_origin);
+        installed_quietly("the catalogue map pack on the main menu", [&] {
+            const auto outcomes = install::take_package_outcomes();
+            return !outcomes.empty() &&
+                   outcomes.front().result == install::OutcomeResult::installed;
+        });
+        fs::remove_all(pack_folder, remove_error);
+        require(!remove_error, "the catalogue map pack's folder could not be removed");
+        install::post_opened_file(pack_file);
+        until_prompt("the map pack opened as --open opens it");
+        require(titled("INSTALL MAP PACK"), "--open did not ask before installing the map pack");
+        click(install::Answer::alongside);
+        until_prompt("the map pack installed from outside");
+        require(
+            titled("MAP PACK INSTALLED"), "--open did not tell that the map pack was installed"
+        );
+        key(SDLK_RETURN);
+        require(state.prompt == nullptr, "Enter did not close the map pack's notice");
 
         // A package the Finder made, dropped on the window: installed with
         // no question.

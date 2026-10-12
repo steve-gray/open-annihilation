@@ -20,7 +20,7 @@
 // built-in update to it asks nothing and waits, held, for the player to
 // leave the mod, CANCEL on that line drops it and the update is taken again
 // and held, and PLAY NOW switches to another mod; the third finds the
-// update put in place as the mod was switched, then asks for made-up updates:
+// update put in place as the mod was switched, with no notice, then asks for made-up updates:
 // an added registry's whose rules change asks the update question first, NOT
 // NOW leaving it and UPDATE queuing it, and one that keeps the rules is
 // queued at once; the built-in registry's whose rules change, or cannot be
@@ -1086,12 +1086,12 @@ void Runtime::check_library_install() {
                 !install::pending_change_waiting(),
             "the held update was not put in place as the mod was switched"
         );
-        until_prompt("the held update's outcome");
+        for (int frame = 0; frame < 30; ++frame)
+            tell_mod_installs();
         require(
-            titled("MOD UPDATED") && says("is now 1.0 revision 5"), "the held update was not told"
+            state.prompt == nullptr && state.stage != ModInstallState::Stage::telling,
+            "the held catalogue update showed a notice"
         );
-        tap(SDLK_RETURN);
-        require(state.prompt == nullptr, "Enter did not close the held update's notice");
         // The folders the change dropped go, a step a frame, and nothing an
         // install keeps while it works is left.
         for (int count = 0; count < kMostFrames && state.discarder.busy(); ++count)

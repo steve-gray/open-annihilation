@@ -373,9 +373,11 @@ installed before. Then:
 
 Whether a download asks you anything first depends on where it comes from
 and what you already have: [which downloads ask first](#which-downloads-ask-first).
-While the Library is open, how an install went shows in its queue. A mod
-whose install finishes after you close the Library says so in a notice on
-the main menu, as a `.oamod` file you open does.
+While the Library is open, how an install went shows in its queue. An
+install from the Library shows no notice when it is in place, whether or
+not the Library is still open: the row and its pill already say so. A
+file you open, from the command line or from outside the game, still says
+so in a notice on the main menu.
 
 ## The download queue
 
@@ -660,8 +662,9 @@ The mod being played cannot change under the running game, so an update to
 it, from the Library, downloads and is checked now, and is made when you
 leave that mod, by switching to another, switching it off or quitting.
 Until then the details say "Finishes when you leave Ridge.", and the queue
-says "Waiting · finishes when you leave Ridge". Once it is made, a **MOD
-UPDATED** notice says so on the main menu.
+says "Waiting · finishes when you leave Ridge". Once it is made, the mod's
+row shows the new revision. No notice is shown. A file you opened still
+says so on the main menu.
 **CANCEL** on the waiting update drops it, and leaves the mod as it was; it
 is offered again.
 
