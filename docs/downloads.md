@@ -207,8 +207,8 @@ needs the host's registry's list.
 
 Whatever the choice, OA never installs anything until you press a button.
 Without a network, everything you installed keeps working, and the Library
-shows the last list it fetched and how old it is
-([offline](library.md#offline-and-the-lists-age)).
+shows the last list it fetched, marked offline
+([offline](library.md#offline)).
 
 ### The install ID
 

@@ -31,7 +31,7 @@ settings and exactly what a download sends and records.
 - [Rolling back](#rolling-back)
 - [Uninstalling](#uninstalling)
 - [Finishes when you leave …](#finishes-when-you-leave-)
-- [Offline, and the list's age](#offline-and-the-lists-age)
+- [Offline](#offline)
 - [Check that you're a person](#check-that-youre-a-person)
 - [Where packages go](#where-packages-go)
 
