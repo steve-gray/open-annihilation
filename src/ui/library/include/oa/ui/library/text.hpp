@@ -322,6 +322,8 @@ inline constexpr std::string_view offline_mark = "offline";
 inline constexpr std::string_view search_mods = "Search mods, authors, tags";
 inline constexpr std::string_view search_maps = "Search maps, authors, tags";
 inline constexpr std::string_view search_languages = "Search languages";
+/// The Active tab's maps field, above the maps pane.
+inline constexpr std::string_view search_active_maps = "Search maps";
 inline constexpr std::string_view search_updates = "Search updates";
 /// A tag in Compact's filter drop-down.
 inline constexpr std::string_view filter_tag = "Tag: {tag} ({count})";
@@ -343,6 +345,8 @@ inline constexpr std::string_view mod_count_many = "{count} mods";
 inline constexpr std::string_view active_heading_mod = "MOD";
 inline constexpr std::string_view active_heading_language = "LANGUAGE";
 inline constexpr std::string_view active_heading_maps = "MAPS";
+/// Beside MAPS while the maps search holds text: how many tiles show, of every installed map.
+inline constexpr std::string_view active_maps_count = "{shown} of {all}";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
 /// The tile shown when no mod is played: the base game. Its badge is the
@@ -366,6 +370,8 @@ inline constexpr std::string_view map_players_size = "{players} · {size}";
 /// The link on an Active map's tile that opens its pack on the Maps tab.
 inline constexpr std::string_view active_from_pack = "From {pack}";
 inline constexpr std::string_view active_no_maps = "No map packs are installed.";
+/// The maps pane while a search matches none of the maps that are installed.
+inline constexpr std::string_view active_no_map_match = "No installed map matches.";
 
 // A row: the version and size under the name at Compact.
 inline constexpr std::string_view row_version_size = "{version} · {size}";

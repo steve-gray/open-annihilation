@@ -113,16 +113,26 @@ filters.
   holds itself, **Built in** is a rounded pill at the top right, on the
   title's line, in a muted ground so it does not look like an installed
   chip.
-- **MAPS**: one tile for each map you have installed. The tile shows
-  that map's minimap, its title, how many
-  players it is for and its size ("4 players · 16x16"), and its
+- **MAPS**: each map you have installed. On a small window a map is one
+  line: its name, how many players it is for and its size ("Twin Rivers ·
+  2 players · 12x12"). On a larger window it is a tile with that map's
+  minimap, its title, its players and size ("4 players · 16x16"), and its
   description cut to one line. When the pack holds several maps, **From**
-  and the pack's name is a link under that. When the pack holds just that
+  and the pack's name is a link: at the right of the line on a small
+  window, and under the lines on a tile. When the pack holds just that
   map, there is no **From** line: the title is the link, in the same accent,
   lighter while the pointer rests on it. Choosing the link, with the
   pointer, Enter or a controller's A, opens the Maps tab with that pack
-  selected and its row in view. When you have no map pack, the tile says
+  selected and its row in view. When you have no map pack, the pane says
   "No map packs are installed."
+
+  The **MAPS** heading stays put, with a search field at its right,
+  **Search maps**. Typing there leaves the maps whose name or pack name
+  contains what you typed, ignoring capitals. While the field holds text
+  the heading counts them, "2 of 5". When none match, the pane says "No
+  installed map matches." Clearing the field shows every map again. The
+  words stay while the Library is open, including on the other tabs. The
+  search does not hide **MOD** or **LANGUAGE**.
 
 The badge, the title and the lines start at the top of each tile, with the
 same small padding above them and below the last line or, on the mod tile,
@@ -131,18 +141,22 @@ line and the same height, and so do maps in one row. Extra room stays
 under the shorter tile's lines. A minimap keeps its shape: it is centred
 in its square, and the rest of the square is the list's well colour.
 
-On a small window the tiles stand in one column. On a larger window the
-mod and the language stand side by side, and on the largest the maps
-stand in two columns when you have more than one. The tab has no search
-and no filters. The mod and language labels and each map's title line take
+On a small window the mod and the language stand in one column, and the
+maps are one line each, several of them in the pane. On a larger window
+the mod and the language stand side by side, and on the largest the maps
+stand in two columns when you have more than one. The tab has no catalogue
+search and no filters. The mod and language labels and each map's title line take
 no press, except the title of a map whose pack holds only that map: that
 title is the link to the pack. **UNLOAD MOD** does, and so does each map's
-link to its pack while that link shows. Tab and the arrows reach both. When the
-tiles are taller than the window they scroll with the mouse wheel, a
-finger, Page Up and Page Down, Home and End, and a controller's right
-stick. The other tabs are where packages are got, updated and played.
+link to its pack while that link shows, and so does the maps search. Tab
+and the arrows reach them. **MOD** and **LANGUAGE** stay where they are.
+The maps pane runs from under the **MAPS** heading to the bottom of the
+window, and when the maps are taller than that pane they scroll inside it
+with the mouse wheel, a finger, the scroll bar, Page Up and Page Down,
+Home and End, and a controller's right stick. The other tabs are where
+packages are got, updated and played.
 
-![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and Atoll's minimap with its description cut short and no From line.](images/library/library-active-compact.png)
+![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and several maps on one line each. Atoll's title is the link and has no From line; the others keep From at the right of the line.](images/library/library-active-compact.png)
 
 ![The Active tab at Regular: the mod and the language side by side, and under them each installed map with its minimap and a cut description. Atoll, alone in its pack, has no From line; the others keep one.](images/library/library-active-regular.png)
 
@@ -387,14 +401,15 @@ where a mod's folder goes to be listed
 |---|---|
 | Tab, Shift+Tab | the next and previous control |
 | arrow keys | move by where controls are; on the list, Up and Down choose the row |
-| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
-| Enter, Space | on a row: open its details page in Compact, or go to its first button; on UNLOAD MOD: ask SWITCH MOD; on a map's From link: open Maps on that pack |
-| Cmd+F (Ctrl+F elsewhere), or `/` | the search |
+| Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and on the Active tab scroll the maps pane |
+| Enter, Space | on a row: open its details page in Compact, or go to its first button; on UNLOAD MOD: ask SWITCH MOD; on a map's From link: open Maps on that pack; on the maps search, Enter moves to the first map link |
+| Cmd+F (Ctrl+F elsewhere), or `/` | the search; on the Active tab, the maps search |
 | F5 | the header's refresh icon, when a registry can be asked |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |
 | Escape | clears the search while it has the focus, else leaves the details page, else closes the Library |
 
-With a controller, Y focuses the search, X presses the chosen entry's GET,
+With a controller, Y focuses the search (the maps search on the Active tab),
+X presses the chosen entry's GET,
 UPDATE, CANCEL or RETRY, L1 and R1 change tab, B goes back as Escape does,
 and the right stick scrolls ([gamepad controls](controllers.md#menus)).
 A finger or the mouse presses any control. A press, double click or tap on

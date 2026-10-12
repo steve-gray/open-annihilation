@@ -20,6 +20,7 @@
 // the tiles, the row and the details show those pictures and not a file
 // from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
+// library-active-many-regular.png,
 // library-updates-<class>.png, library-registries-<class>.png,
 // library-languages-compact.png, library-maps-one-large.png and
 // library-maps-several-large.png there.
@@ -130,6 +131,8 @@ struct Scene {
     bool previews{};
     std::string select_registry{}; ///< selected after the tab, when select_key is set
     std::string select_key{};
+    /// Extra installed maps, so the Active picture shows the maps pane scrolled.
+    bool many{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -269,6 +272,29 @@ void dress_map_previews(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Adds one installed pack of many maps, so the Active picture shows the maps
+/// pane filling the room under its heading, with its own scroll bar. The
+/// fixture's maps stay. This drawing only.
+///
+/// @param[in,out] library the scene's library
+void add_many_maps(lib::Library& library) {
+    const lib::MapPicture wash = solid_minimap(90, 110, 140);
+    lib::InstalledMaps pack;
+    pack.name = "Wide Atlas";
+    pack.maps.reserve(24);
+    for (int index = 1; index <= 24; ++index) {
+        lib::MapLine map;
+        map.name = "Atlas " + std::to_string(index);
+        map.players = 2;
+        map.size = "16x16";
+        map.description = "A wide sheet of the atlas.";
+        map.preview = wash;
+        pack.maps.push_back(std::move(map));
+    }
+    library.inputs.map_packs.push_back(std::move(pack));
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -282,6 +308,8 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_languages(library);
     if (scene.previews)
         dress_map_previews(library);
+    if (scene.many)
+        add_many_maps(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
     if (!scene.select_key.empty())
@@ -466,6 +494,14 @@ int main(int argc, char** argv) {
         {"active-compact", window_of(640, 480, 100), false, lib::Tab::active, true},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
+        {"active-many-regular",
+         window_of(1920, 1080, 200),
+         false,
+         lib::Tab::active,
+         true,
+         {},
+         {},
+         true},
         {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
         {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
         {"registries-compact", window_of(640, 480, 100), false, lib::Tab::registries},
