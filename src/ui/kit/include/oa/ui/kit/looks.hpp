@@ -44,6 +44,12 @@ enum class ButtonStyle : uint8_t {
     inset,  ///< the list's face at rest: a mod row's ROLL BACK
 };
 
+/// What a button draws in place of its caption.
+enum class ButtonMark : uint8_t {
+    none,    ///< the caption
+    refresh, ///< a circular arrow, crisp at the button's size
+};
+
 /// A button's caption and which of its looks to draw.
 struct ButtonLook {
     std::string caption{};                 ///< the words, already looked up
@@ -51,6 +57,12 @@ struct ButtonLook {
     bool hovered{};                        ///< the pointer is over it, as the caller counts that
     bool held{};                           ///< a press is held on it with the pointer over it
     bool enabled{true};                    ///< false draws the plain look's disabled face
+    ButtonMark mark{ButtonMark::none};     ///< a mark in place of the caption
+    /// How far a refresh arrow has turned, in eighths of a turn, 0 to 7.
+    uint8_t turn{};
+    /// The refresh arrow is turning: it stays in the text colour while the
+    /// button is disabled, so the turn can be seen.
+    bool turning{};
 };
 
 /// An Off/On switch. The captions are already looked up.
@@ -245,12 +257,25 @@ struct SearchLook {
     bool magnifier{true}; ///< the magnifier before the text, as the search field has
 };
 
+/// How a tab shows its count.
+enum class TabCountStyle : uint8_t {
+    pill,  ///< a count above 0 in an amber pill; 0, or none given, draws no count
+    words, ///< the count as digits beside the caption, 0 included; a negative count draws none
+};
+
 /// A strip of tabs, left to right. Captions are already looked up.
 struct TabsLook {
-    std::vector<std::string> captions{};  ///< each tab's words
-    std::vector<int32_t> counts{};        ///< each tab's count; 0, or none given, draws no count
-    std::size_t selected{};               ///< the open tab's index
-    std::optional<std::size_t> hovered{}; ///< the tab under the pointer; none when unset
+    std::vector<std::string> captions{};            ///< each tab's words
+    std::vector<int32_t> counts{};                  ///< each tab's count; see count_style
+    std::size_t selected{};                         ///< the open tab's index
+    std::optional<std::size_t> hovered{};           ///< the tab under the pointer; none when unset
+    TabCountStyle count_style{TabCountStyle::pill}; ///< how a count is drawn
+    /// 1 draws that tab's word-style digits in the lock colour when its count
+    /// is above 0. Empty, the digits take the caption's colour.
+    std::vector<uint8_t> count_amber{};
+    /// A tab's automation text when set. Empty, the text is the caption and,
+    /// for a count above 0, a space and the count.
+    std::vector<std::string> readings{};
 };
 
 /// A card of a grid: a square preview, its chips, a title and a subtitle.

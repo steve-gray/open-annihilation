@@ -1055,7 +1055,7 @@ void test_entry_actions() {
     OA_CHECK_TEXT(lib::action_text(Action::update_all), "UPDATE ALL");
     OA_CHECK_TEXT(lib::action_text(Action::play_now), "PLAY NOW");
     OA_CHECK_TEXT(lib::action_text(Action::switch_off), "SWITCH OFF");
-    OA_CHECK_TEXT(lib::action_text(Action::check_now), "CHECK NOW");
+    OA_CHECK_TEXT(lib::action_text(Action::check_now), "Refresh");
     OA_CHECK_TEXT(lib::action_text(Action::settings), "SETTINGS…");
     OA_CHECK_TEXT(lib::action_text(Action::close), "CLOSE");
 }
@@ -1181,8 +1181,8 @@ void test_own_mod_description() {
 }
 
 void test_check_now() {
-    // CHECK NOW can be pressed while a registry is on to ask, none is being
-    // asked, and no game is being played.
+    // The header's refresh icon can be pressed while a registry is on to
+    // ask, none is being asked, and no game is being played.
     lib::Inputs inputs = base_inputs();
     OA_CHECK(!lib::can_check_now(built(inputs)));
     inputs.can_check = true;
@@ -1704,14 +1704,6 @@ void test_texts() {
     OA_CHECK_TEXT(lib::age_text(172799), "47 h ago");
     OA_CHECK_TEXT(lib::age_text(172800), "2 days ago");
 
-    lib::Inputs inputs = base_inputs();
-    OA_CHECK_TEXT(lib::header_age_text(inputs), "list from 4 min ago");
-    inputs.offline = true;
-    OA_CHECK_TEXT(lib::header_age_text(inputs), "list from 4 min ago · offline");
-    inputs.offline = false;
-    inputs.list_age_seconds = -1;
-    OA_CHECK_TEXT(lib::header_age_text(inputs), "no list yet");
-
     OA_CHECK_TEXT(lib::rules_text(old_rules), "9c1f 4e0b");
     OA_CHECK_TEXT(lib::rules_text(new_rules), "51d2 07aa");
 
@@ -1862,6 +1854,27 @@ std::string_view reversed_words(void*, std::string_view english) {
     return english;
 }
 
+void test_tab_counts() {
+    // A tab's count is its All count, before the search and the tag, and it
+    // does not follow the tab that is open. Registries counts its rows.
+    lib::Inputs inputs = base_inputs();
+    inputs.listings.push_back(listing(core, Kind::mod, "counted-mod", "Counted Mod"));
+    inputs.listings.push_back(listing(core, Kind::mod, "counted-other", "Counted Other"));
+    inputs.listings.push_back(listing(core, Kind::map_pack, "counted-maps", "Counted Maps"));
+    inputs.listings.push_back(listing(core, Kind::language, "counted-lang", "Counted Lang"));
+    lib::Library library = built(inputs);
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::installed);
+    lib::set_tag(library, "missing");
+    lib::set_query(library, "nothing-matches");
+    OA_CHECK(lib::tab_count(library, lib::Tab::active) == 0);
+    OA_CHECK(lib::tab_count(library, lib::Tab::mods) == 2);
+    OA_CHECK(lib::tab_count(library, lib::Tab::maps) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 1);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == lib::update_count(library));
+    OA_CHECK(lib::tab_count(library, lib::Tab::registries) == 2);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -1897,6 +1910,7 @@ int main() {
     test_entry_actions();
     test_switch_off();
     test_check_now();
+    test_tab_counts();
     test_own_mod_description();
     test_facts();
     test_status_lines_and_bylines();

@@ -185,8 +185,8 @@ void add_search(
 
 /// Returns each tab's rectangle, left to right from the strip's left, each
 /// as tall as the strip: its caption in the small font with tab_tracking,
-/// tab_padding either side, and its count after the caption when it is
-/// above 0.
+/// tab_padding either side, and its count after the caption. A pill shows a
+/// count above 0. Words show a count of 0 or more, and skip a negative one.
 ///
 /// @param fonts the fonts
 /// @param strip the strip, tab_height high
@@ -198,8 +198,10 @@ tab_rects(const Fonts& fonts, const Rect& strip, const TabsLook& look);
 /// Draws a strip of tabs: a hairline along the strip's foot, each caption
 /// in the small font, the selected one in the text colour over a tab_rule
 /// accent rule along the foot, the hovered one in the text colour and the
-/// others in the hint colour, and each count above 0 in a pill of the lock
-/// colour with on_accent digits. Without fonts only the hairline is drawn.
+/// others in the hint colour. A pill draws each count above 0 in the lock
+/// colour with on_accent digits. Words draw the digits beside the caption,
+/// in the lock colour where the look asks and the count is above 0, and
+/// otherwise in the caption's colour. Without fonts only the hairline is drawn.
 ///
 /// @param canvas where it is drawn
 /// @param strip the strip
@@ -208,8 +210,9 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look);
 
 /// Appends a strip of tabs: one item for the strip and one control per tab,
 /// of kind tab, which does not take steps (Left and Right move the focus),
-/// checked on the selected tab, its text the caption and its count
-/// ("Updates 2"). The screen opens a tab when Space or Enter goes to it.
+/// checked on the selected tab, its text the look's reading when one is set
+/// and otherwise the caption and its count ("Updates 2"). The screen opens a
+/// tab when Space or Enter goes to it.
 ///
 /// @param[in,out] list the display list
 /// @param fonts the fonts the strip is drawn in, which place the tabs

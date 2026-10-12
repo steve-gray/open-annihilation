@@ -127,7 +127,7 @@ std::string_view action_word(Action action) {
     case Action::back:
         return "back";
     case Action::check_now:
-        return "check-now";
+        return "refresh";
     case Action::settings:
         return "settings";
     case Action::close:
@@ -718,25 +718,28 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
 }
 
 /// Appends the header: the OA mark, the title and its second word, and the
-/// words at the right, each kept to the columns it is given.
+/// version at the right. right_inset keeps columns clear inside the padding
+/// for the refresh icon and, when the last refresh failed, the offline mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
 /// @param title the title, cut to fit when it is an entry's name
 /// @param second the word after the title; empty for none
-/// @param right the words at the right, cut to fit
+/// @param right the version at the right, cut to fit
+/// @param right_inset the columns kept clear inside the padding
 void add_header(
     Building& building,
     const Window& window,
     std::string_view title,
     std::string_view second,
-    std::string_view right
+    std::string_view right,
+    int32_t right_inset
 ) {
     const kit::Metrics& compact = kit::compact_metrics;
     const int32_t tracking = building.metrics->heading_tracking;
     // The kit's header keeps Compact's places from the window's edges.
     const int32_t title_left = compact.padding + compact.mark_side + compact.header_gap;
-    const int32_t right_edge = window.width - compact.edge - compact.padding;
+    const int32_t right_edge = window.width - compact.edge - compact.padding - right_inset;
     const int32_t second_width =
         second.empty()
             ? 0
@@ -750,6 +753,7 @@ void add_header(
     kit::HeaderLook look;
     look.width = window.width;
     look.tracking = tracking;
+    look.right_inset = right_inset;
     look.title = std::string(title);
     if (kit::tracked_width(*building.fonts, kit::FontRole::regular, title, tracking) > title_room)
         look.title =
@@ -771,22 +775,156 @@ void add_header(
         std::move(look);
 }
 
-/// Appends the strip of tabs, with the update count on Updates.
+/// Returns a count as a tab's number, never past what a 32-bit count holds.
+///
+/// @param count the count
+/// @return the number the tab shows
+int32_t counted_as_int(std::size_t count) noexcept {
+    constexpr std::size_t most = 1000000000;
+    if (count > most)
+        return static_cast<int32_t>(most);
+    return static_cast<int32_t>(count);
+}
+
+/// Returns the columns the header keeps clear for the refresh icon, and for
+/// the offline mark when the last refresh could not reach a registry.
+///
+/// @param building the layout
+/// @return the columns, inside the header's padding
+int32_t header_reserve(const Building& building) {
+    const kit::Metrics& compact = kit::compact_metrics;
+    int32_t reserve = compact.button_height + compact.header_gap;
+    if (building.library->inputs.offline) {
+        const std::string_view mark = shown(building.library->text, words::offline_mark);
+        reserve += width_of(building, kit::FontRole::small, mark) + compact.header_gap;
+    }
+    return reserve;
+}
+
+/// Appends the header's refresh icon, at the top right, the same square at
+/// every size class. Its words are "Refresh", or "Refreshing" while the
+/// registries are being asked. It can be pressed only when a registry can
+/// be asked.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_refresh_button(Building& building, const Window& window) {
+    const Library& library = *building.library;
+    const kit::Metrics& compact = kit::compact_metrics;
+    const int32_t side = compact.button_height;
+    const kit::Rect rect{
+        window.width - compact.edge - compact.padding - side,
+        compact.edge + (compact.header_height - side) / 2,
+        side,
+        side,
+    };
+    const bool turning = library.inputs.checking;
+    kit::ButtonLook look;
+    look.style = kit::ButtonStyle::quiet;
+    look.hovered = hovered(building, controls::refresh);
+    look.held = held(building, controls::refresh);
+    look.enabled = can_check_now(library);
+    look.mark = kit::ButtonMark::refresh;
+    look.turn = building.state->refresh_turn;
+    look.turning = turning;
+    const std::size_t before = building.list.controls.size();
+    kit::add_button(
+        building.list, rect, look, controls::refresh, unique_name(building, named("refresh"))
+    );
+    move_controls(building.list, before, building.top);
+    building.top.back().text = std::string(
+        shown(library.text, turning ? words::action_refreshing : words::action_refresh)
+    );
+    tab_stop(building, building.top.back());
+}
+
+/// Appends the word "offline" in the lock colour, immediately left of the
+/// refresh icon, when the last refresh could not reach a registry.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_offline_mark(Building& building, const Window& window) {
+    const Library& library = *building.library;
+    if (!library.inputs.offline)
+        return;
+    const kit::Metrics& compact = kit::compact_metrics;
+    const std::string mark(shown(library.text, words::offline_mark));
+    const int32_t mark_width = width_of(building, kit::FontRole::small, mark);
+    const int32_t side = compact.button_height;
+    const int32_t icon_left = window.width - compact.edge - compact.padding - side;
+    const kit::Rect box{
+        icon_left - compact.header_gap - mark_width,
+        compact.edge,
+        std::max(mark_width, int32_t{0}),
+        compact.header_height,
+    };
+    add_text(building, kit::FontRole::small, mark, box, kit::Align::right, kit::colour::lock, {});
+}
+
+/// Appends the header, the offline mark and the refresh icon.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+/// @param title the title
+/// @param second the word after the title; empty for none
+/// @param version the version at the right
+void add_library_header(
+    Building& building,
+    const Window& window,
+    std::string_view title,
+    std::string_view second,
+    std::string_view version
+) {
+    add_header(building, window, title, second, version, header_reserve(building));
+    add_offline_mark(building, window);
+    add_refresh_button(building, window);
+}
+
+/// Appends the strip of tabs. Each tab after Active shows its All count,
+/// before the search and the tag, through one pattern. Updates' digits are
+/// amber while that count is above 0.
 ///
 /// @param[in,out] building the layout
 /// @param strip the strip
-/// @param compact the tabs take their short names
+/// @param compact the tabs take their short names, as they also do when the
+///     full names and counts do not fit the strip
 void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
     const Library& library = *building.library;
+    // A strip too narrow for the full names and their counts takes the short
+    // names, as Compact's does.
+    if (!compact && building.fonts != nullptr) {
+        kit::TabsLook full;
+        full.count_style = kit::TabCountStyle::words;
+        for (const Tab tab : tab_order) {
+            full.captions.emplace_back(tab_text(tab, false, library.text));
+            full.counts.push_back(
+                tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab))
+            );
+        }
+        const std::vector<kit::Rect> rects = kit::tab_rects(*building.fonts, strip, full);
+        compact = !rects.empty() && rects.back().x + rects.back().width > strip.x + strip.width;
+    }
     kit::TabsLook look;
+    look.count_style = kit::TabCountStyle::words;
     std::array<kit::ControlId, tab_order.size()> ids{};
     std::array<std::string, tab_order.size()> names{};
     for (std::size_t index = 0; index < tab_order.size(); ++index) {
         const Tab tab = tab_order[index];
-        look.captions.emplace_back(tab_text(tab, compact, library.text));
-        look.counts.push_back(
-            tab == Tab::updates ? static_cast<int32_t>(update_count(library)) : 0
-        );
+        const std::string caption(tab_text(tab, compact, library.text));
+        look.captions.push_back(caption);
+        const int32_t count =
+            tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab));
+        look.counts.push_back(count);
+        if (count < 0) {
+            look.readings.emplace_back();
+            look.count_amber.push_back(0);
+        } else {
+            const std::string number = std::to_string(count);
+            look.readings.push_back(
+                filled(library.text, words::tab_with_count, {{"tab", caption}, {"count", number}})
+            );
+            look.count_amber.push_back(tab == Tab::updates && count > 0 ? uint8_t{1} : uint8_t{0});
+        }
         if (tab == library.tab)
             look.selected = index;
         ids[index] = controls::tab_control(tab);
@@ -951,7 +1089,7 @@ void add_updates_line(Building& building, const kit::Rect& row) {
         building.top,
         button,
         caption,
-        false,
+        true,
         update_count(library) > 0,
         controls::update_all,
         named("action.update-all"),
@@ -2274,8 +2412,8 @@ void add_registries(Building& building, const kit::Rect& area) {
 }
 
 /// Appends the footer's band, the queue's words at its left and its buttons
-/// at its right: CHECK NOW, ADD REGISTRY… on the Registries tab, SETTINGS…,
-/// DETAILS at Compact but not on the Active or Registries tabs, and CLOSE.
+/// at its right: ADD REGISTRY… on the Registries tab, DETAILS at Compact
+/// but not on the Active or Registries tabs, and CLOSE, the main action.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -2297,9 +2435,7 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
         bool enabled{};
     };
 
-    std::vector<FooterButton> buttons{
-        {Action::check_now, controls::check_now, can_check_now(library)},
-    };
+    std::vector<FooterButton> buttons;
     int32_t lock_reserve = 0;
     if (library.tab == Tab::registries) {
         if (library.inputs.in_match) {
@@ -2312,7 +2448,6 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
             buttons.push_back({Action::add_registry, controls::add_registry, true});
         }
     }
-    buttons.push_back({Action::settings, controls::settings, true});
     if (compact && library.tab != Tab::active && library.tab != Tab::registries)
         buttons.push_back({Action::details, controls::details, library.selected.has_value()});
     buttons.push_back({Action::close, controls::close, true});
@@ -2339,7 +2474,7 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
             building.footer,
             {left, window.button_top, width, metrics.button_height},
             caption,
-            false,
+            button.action == Action::close,
             button.enabled,
             button.id,
             named(std::string(action_word(button.action))),
@@ -2719,25 +2854,20 @@ kit::DisplayList library_layout(
     const bool compact = frame.size_class == kit::SizeClass::compact;
     const bool large = frame.size_class == kit::SizeClass::large;
     if (compact) {
-        add_header(
+        add_library_header(
             building,
             window,
             shown(library.text, words::title_library),
             {},
-            header_age_text(library.inputs, library.text)
+            library.inputs.version_text
         );
     } else {
-        add_header(
+        add_library_header(
             building,
             window,
             shown(library.text, words::title_open_annihilation),
             shown(library.text, words::title_library),
-            filled(
-                library.text,
-                words::header_version_list,
-                {{"version", library.inputs.version_text},
-                 {"list", header_age_text(library.inputs, library.text)}}
-            )
+            library.inputs.version_text
         );
     }
     const int32_t content_width = window.right - window.left;
@@ -2839,10 +2969,10 @@ kit::DisplayList details_page_layout(
     const kit::Metrics& metrics = *building.metrics;
     const Entry* entry = selected_entry(library);
     if (entry == nullptr) {
-        add_header(building, window, shown(library.text, words::title_library), {}, {});
+        add_library_header(building, window, shown(library.text, words::title_library), {}, {});
         return finish(building, window);
     }
-    add_header(building, window, entry_name(*entry), {}, entry_version(library, *entry));
+    add_library_header(building, window, entry_name(*entry), {}, entry_version(library, *entry));
 
     // The body scrolls between the header and the footer.
     const int32_t content_width = window.right - window.left;
@@ -3003,7 +3133,7 @@ kit::DisplayList details_page_layout(
         building.footer,
         {window.right - close_width, window.button_top, close_width, metrics.button_height},
         close_caption,
-        false,
+        true,
         true,
         controls::close,
         named("close"),

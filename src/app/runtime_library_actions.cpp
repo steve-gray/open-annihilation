@@ -9,7 +9,7 @@
 // request_update, the one place an update reaches the download queue;
 // UNINSTALL, which asks first and removes an installed package's folder,
 // never the mod being played or the language pack in use; and the footer's
-// CHECK NOW, which asks the registries for their lists again. An update that
+// the header's refresh icon, which asks the registries for their lists again. An update that
 // may stop saved games loading, of a mod from a registry the player added,
 // asks the update question first (oa::ui::library::asks_before_update);
 // every other starts at once.
@@ -132,8 +132,8 @@ void wait_pumping_events(void*, uint32_t milliseconds) {
 void Runtime::library_entry_action(library::Action action, const library::EntryId& entry) {
     LibraryHost& host = library_host();
     if (action == library::Action::check_now) {
-        // CHECK NOW: the registries are asked for their lists again; the
-        // header's age and CHECK NOW itself follow the check.
+        // The header's refresh icon: the registries are asked for their lists
+        // again, and the icon turns until they answer.
         content_service().refresh(content::RefreshReason::check_now);
         return;
     }

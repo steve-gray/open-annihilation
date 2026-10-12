@@ -53,7 +53,10 @@ void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around);
 
 /// Draws a button in one of the five looks. The caption is centred in the
 /// small font. A plain button that is not enabled draws the disabled look,
-/// whatever the pointer is doing.
+/// whatever the pointer is doing. A refresh mark draws a circular arrow in
+/// place of the caption: the quiet look's face while the pointer is over it,
+/// the plain look's disabled face while it cannot be pressed, and the arrow
+/// in the text colour while it is turning.
 ///
 /// @param canvas where it is drawn
 /// @param area the button

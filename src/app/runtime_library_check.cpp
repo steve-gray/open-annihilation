@@ -10,7 +10,7 @@
 // Updates tab opens on its Updates filter with UPDATE ALL over the list.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
 // openers, ROLL BACK asks the Roll Back Mod question over the Library and
-// PLAY NOW asks for a soft restart. SETTINGS… opens Settings over the Library, Settings ›
+// PLAY NOW asks for a soft restart. The settings shortcut opens Settings over the Library, Settings ›
 // Language's MORE IN THE LIBRARY… the Library over Settings, and never two
 // of either; the shortcut and the in-match OA button open Settings. At
 // 640x480 and 1920x1080. Then, at 640x480, a stand-in controller: Y focuses
@@ -1032,16 +1032,19 @@ void Runtime::check_library() {
             );
         }
 
-        // 7. SETTINGS… opens Settings over the Library; the shortcut on the
-        // main menu opens Settings, not the Library. Compact's details page
-        // goes back to the list first, whose footer holds SETTINGS….
+        // 7. The settings shortcut opens Settings over the Library; the same
+        // shortcut on the main menu opens Settings, not the Library. The
+        // footer has no Settings button. Compact's details page goes back
+        // to the list first.
         if (named("oa.library.back"))
             click_named("oa.library.back");
-        click_named("oa.library.settings");
+        require(named("oa.library.refresh").has_value(), "the header has no refresh icon" + on);
+        require(!named("oa.library.settings").has_value(), "the footer still offers Settings" + on);
+        tap(SDLK_COMMA, kShortcutModifier);
         require(
             engine_settings_dialog() != nullptr && top_is("settings") &&
                 oa_layer().find(library_screen_name) != nullptr,
-            "SETTINGS… did not open Settings over the Library" + on
+            "the shortcut did not open Settings over the Library" + on
         );
         tap(SDLK_ESCAPE);
         require(top_is(library_screen_name), "Settings did not close back to the Library" + on);
@@ -1074,7 +1077,7 @@ void Runtime::check_library() {
         // From the Library, Settings, then MORE IN THE LIBRARY… goes back to
         // the Library: never two of either.
         press_button();
-        click_named("oa.library.settings");
+        tap(SDLK_COMMA, kShortcutModifier);
         click_named("oa.settings.nav.language");
         click_named("oa.settings.more-in-library");
         require(
@@ -1247,11 +1250,11 @@ void Runtime::check_library() {
     require(top_is(library_screen_name), "the Library did not open under Settings");
     if (named("oa.library.back"))
         click_named("oa.library.back");
-    click_named("oa.library.settings");
+    tap(SDLK_COMMA, kShortcutModifier);
     require(
         engine_settings_dialog() != nullptr && top_is("settings") &&
             oa_layer().find(library_screen_name) != nullptr,
-        "SETTINGS… did not open Settings over the Library for the controller"
+        "the shortcut did not open Settings over the Library for the controller"
     );
     settings::Dialog* dialog = engine_settings_dialog();
     const int32_t focus_before = dialog->focused;
