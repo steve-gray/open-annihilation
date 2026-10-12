@@ -139,7 +139,8 @@ struct RowSpec {
     /// What the row is.
     RowKind kind{};
     /// The row's word. Its control is named <prefix>.<id>, and a
-    /// value_and_button row's <prefix>.<id>.<button id>.
+    /// value_and_button row's <prefix>.<id>.<button id> when the button has a
+    /// word. An empty button word leaves the name as <prefix>.<id>.
     std::string_view id{};
     /// The label, in English.
     std::string_view label{};
@@ -1096,9 +1097,10 @@ struct RowsState {
 ///
 /// A row with a control area and no lock adds one control, named
 /// <name_prefix>.<id> (a value_and_button row's <name_prefix>.<id>.<button
-/// id>; with no prefix, the id alone), of the row's kind (a value_and_button
-/// row's a button), taking steps unless it is a button or a link, enabled as
-/// its view says, in the state's group and clip. Its parts' words
+/// id> when the button has a word; with no prefix, the id alone), of the
+/// row's kind (a value_and_button row's a button), taking steps unless it is
+/// a button or a link, enabled as its view says, in the state's group and
+/// clip. Its parts' words
 /// (Control::parts) are a strip's levels' or a drop-down's items' ids, or a
 /// row of buttons' buttons' words. The enabled controls take Tab in the
 /// rows' order.

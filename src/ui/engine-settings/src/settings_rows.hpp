@@ -54,6 +54,9 @@ inline constexpr oa::ui::kit::ActionId open_library_action = 6;
 /// It follows MORE IN THE LIBRARY… and Downloads' REGISTRIES IN THE LIBRARY…
 /// (downloads_page.hpp).
 inline constexpr oa::ui::kit::ActionId show_gallery_action = 8;
+/// What SHOW AGAIN, System's Welcome setup, asks for: the welcome setup at
+/// the next main menu, once OK is pressed. It follows SHOW.
+inline constexpr oa::ui::kit::ActionId show_welcome_action = 9;
 
 /// Returns a setting's row spec.
 ///

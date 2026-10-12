@@ -226,6 +226,8 @@ Runtime::Runtime(
             prepare_map_browser_check();
         if (options_.check_map_pack_lists)
             prepare_map_pack_lists_check();
+        if (options_.check_first_run)
+            prepare_first_run_check();
     }
     start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
@@ -261,6 +263,7 @@ Runtime::ExtensionRelease::~ExtensionRelease() {
 }
 
 int Runtime::run() {
+    log_first_run_gate(false);
     int exit_code = 0;
     const auto extension_run = [&](RunPhase phase) {
         return call_hook_or_raise<&Extension::run_mode>(extension_, *this, phase, exit_code);
@@ -535,6 +538,11 @@ int Runtime::run() {
         }
         if (options_.check_language_notice) {
             check_language_notice();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_first_run) {
+            check_first_run();
             flush_preferences();
             return 0;
         }
@@ -819,7 +827,9 @@ void Runtime::idle_tick() {
     tick_library();
     // A catalogue that moved on adds its language packs to the registry.
     note_catalogue_languages();
-    // After the catalogue, so a size that arrived this frame is on the notice.
+    // After the catalogue, so a size that arrived this frame is on the cards,
+    // and before the language notice, which stays closed while this shows.
+    tell_first_run();
     tell_missing_language();
     tell_mod_installs();
     // An .oareg file the game was opened with opens the Add registry window

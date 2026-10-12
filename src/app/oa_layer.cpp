@@ -3552,6 +3552,29 @@ AutomationControlKind automation_kind(const kit::AutomationEntry& entry) noexcep
     return AutomationControlKind::area;
 }
 
+OaLayer::MenuButtonWindows OaLayer::menu_button_windows() const {
+    const LayerView seen = view();
+    const WindowPlace place = window_place(
+        runtime_.sdl_.renderer,
+        seen.match,
+        static_cast<int32_t>(runtime_.surface_.width),
+        static_cast<int32_t>(runtime_.surface_.height)
+    );
+    const auto window_of = [&](const artless::SourceRect& at) {
+        return window_rect_of(
+            place,
+            {static_cast<double>(at.x),
+             static_cast<double>(at.y),
+             static_cast<double>(at.x) + static_cast<double>(at.width),
+             static_cast<double>(at.y) + static_cast<double>(at.height)}
+        );
+    };
+    return {
+        window_of(Runtime::EngineSettingsMenuHost::button_rect(runtime_)),
+        window_of(Runtime::EngineSettingsMenuHost::settings_button_rect(runtime_))
+    };
+}
+
 void OaLayer::automation_controls(std::vector<AutomationControl>& controls) const {
     const LayerView seen = view();
     const LayerScreen* modal = top_modal(seen);

@@ -67,7 +67,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 76> kExpected{{
+constexpr std::array<Expected, 77> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 2, 2, 7, 200, 0, false, Lock::none, nullptr},
@@ -148,16 +148,17 @@ constexpr std::array<Expected, 76> kExpected{{
 #else
     {Setting::file_types_note, RowKind::text, "File types", 3, 3, 0, 0, 0, false, Lock::none, nullptr},
 #endif
+    {Setting::welcome_setup, RowKind::value_and_button, "Welcome setup", 2, 2, 0, 0, 0, false, Lock::main_menu, &Locks::welcome_setup},
 }};
 // clang-format on
 
 static_assert(
-    kExpected.size() == static_cast<std::size_t>(Setting::file_types_note) + 1,
+    kExpected.size() == static_cast<std::size_t>(Setting::welcome_setup) + 1,
     "every setting has its row"
 );
 
 /// Every field of the dialog's locks that locks a row.
-constexpr std::array<Lock Locks::*, 13> kLockFields{
+constexpr std::array<Lock Locks::*, 14> kLockFields{
     &Locks::path_search,
     &Locks::unit_limit,
     &Locks::max_frame_rate,
@@ -171,6 +172,7 @@ constexpr std::array<Lock Locks::*, 13> kLockFields{
     &Locks::unicode_chat,
     &Locks::native_density,
     &Locks::zoomed_out_after,
+    &Locks::welcome_setup,
 };
 
 /// Returns a dialog of the engine's settings opened over the defaults.

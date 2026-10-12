@@ -139,13 +139,17 @@ constexpr const Metrics& kMetrics = compact_metrics;
 ///
 /// @param state the names' prefix
 /// @param view the row
-/// @return <prefix>.<id>, a value_and_button's with its button's word; the id alone without a prefix
+/// @return <prefix>.<id>, a value_and_button's with its button's word when that
+///     word is not empty; the id alone without a prefix
 [[nodiscard]] std::string control_name(const RowsState& state, const RowView& view) {
     std::string name = state.name_prefix;
     if (!name.empty())
         name += '.';
     name += view.id;
-    if (view.kind == RowKind::value_and_button && !view.button_ids.empty()) {
+    // An empty button word is not part of the name. A value_and_button always
+    // carries one button id, and an empty one would leave a trailing dot.
+    if (view.kind == RowKind::value_and_button && !view.button_ids.empty() &&
+        !view.button_ids.front().empty()) {
         name += '.';
         name += view.button_ids.front();
     }

@@ -661,6 +661,8 @@ std::string_view lock_text(Lock lock) noexcept {
         return "Set by the language";
     case Lock::needs_dots:
         return "Needs Dots";
+    case Lock::main_menu:
+        return "Choose from the main menu.";
     }
     return {};
 }
@@ -1260,12 +1262,12 @@ DialogAction open_folder(Dialog& dialog, FolderButton button) noexcept {
 /// Takes what a row's button asks for: MANAGE… the Game files screen, a
 /// button of Your files its folder, MORE IN THE LIBRARY… the Library's
 /// Languages, REGISTRIES IN THE LIBRARY… the Library's Registries, SHOW
-/// the UI kit gallery.
+/// the UI kit gallery, SHOW AGAIN the welcome setup at the next main menu.
 ///
 /// @param[in,out] dialog the dialog
 /// @param action the button's action (manage_game_files_action,
-///     first_folder_action and its place, open_library_action or
-///     show_gallery_action)
+///     first_folder_action and its place, open_library_action,
+///     show_gallery_action or show_welcome_action)
 /// @return what it asks of the host
 DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
     static_assert(
@@ -1288,6 +1290,24 @@ DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
                  layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
         "SHOW asks for an action no other row's button asks for"
     );
+    static_assert(
+        layout::show_welcome_action != downloads::reset_install_id_action &&
+            layout::show_welcome_action != downloads::empty_downloads_action &&
+            layout::show_welcome_action != downloads::manage_registries_action &&
+            layout::show_welcome_action != layout::manage_game_files_action &&
+            layout::show_welcome_action != layout::open_library_action &&
+            layout::show_welcome_action != layout::show_gallery_action &&
+            (layout::show_welcome_action < layout::first_folder_action ||
+             layout::show_welcome_action >=
+                 layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
+        "SHOW AGAIN asks for an action no other row's button asks for"
+    );
+    if (action == layout::show_welcome_action) {
+        // The preference stays until OK. Cancel drops the dialog, and the
+        // flag with it.
+        dialog.welcome_again = true;
+        return DialogAction::changed;
+    }
     if (action == layout::show_gallery_action)
         return DialogAction::show_gallery;
     if (action == downloads::reset_install_id_action)

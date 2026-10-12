@@ -1404,6 +1404,10 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             settings::registered_writes(*dialog);
         for (const settings::RegisteredWrite& write : registered)
             preference_values_[write.key] = write.value;
+        // SHOW AGAIN is kept only when OK is pressed. The key is erased
+        // before the settings are written, so the same flush records it.
+        if (dialog->welcome_again)
+            forget_first_run();
         const auto failure = save_engine_settings(dialog->opened, chosen, dialog->restored);
         tell_install_switches(content_downloads(), switches_opened, switches_chosen);
         if (check_changed)

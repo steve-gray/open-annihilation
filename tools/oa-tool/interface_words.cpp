@@ -10,6 +10,7 @@
 #include "oa/formats/json.hpp"
 #include "oa/netgame/match/interface_words.hpp"
 #include "oa/ui/engine_settings/interface_words.hpp"
+#include "oa/ui/first_run/interface_words.hpp"
 #include "oa/ui/folder_chooser/interface_words.hpp"
 #include "oa/ui/frontend_multiplayer/interface_words.hpp"
 #include "oa/ui/game_files/interface_words.hpp"
@@ -42,6 +43,7 @@ int run_interface_words(std::span<const std::string> arguments, Output& output) 
     std::vector<std::string_view> words;
     append(words, oa::ui::library::interface_words);
     append(words, oa::ui::engine_settings::interface_words);
+    append(words, oa::ui::first_run::interface_words);
     append(words, oa::ui::map_browser::interface_words);
     append(words, oa::ui::frontend_multiplayer::interface_words);
     append(words, oa::app::package_install::interface_words);

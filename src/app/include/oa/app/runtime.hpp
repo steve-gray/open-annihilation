@@ -3920,6 +3920,36 @@ class Runtime final : public menu::Host,
     /// run only.
     void tell_missing_language();
 
+    /// Shows the first-run setup over the settled main menu, once that menu
+    /// has been up for two frames and stays, with no dialog and no settings
+    /// over it. --first-run shows it even when it is done and in a run that
+    /// would otherwise leave it closed. Finish and Skip setup record it
+    /// done; leaving another way does not, so it returns.
+    void tell_first_run();
+
+    /// Writes "first-run: not showing" once when the setup stays hidden, and
+    /// again when that reason changes.
+    ///
+    /// @param sdl_ready the video driver can be read
+    void log_first_run_gate(bool sdl_ready);
+
+    /// Tells whether the missing-language notice stays closed: the setup is
+    /// showing, about to show, or a stage line opened it.
+    ///
+    /// @return true when the notice stays closed
+    [[nodiscard]] bool first_run_blocks_language_notice();
+
+    /// Erases the finished-setup preference so the next main menu shows the
+    /// setup. The caller writes the preferences.
+    void forget_first_run();
+
+    /// Opens one step of the setup for a stage line. A stage-opened step
+    /// stays up until the line asks for another.
+    ///
+    /// @param token language, online or buttons
+    /// @return false when the token is not a step
+    bool open_staged_first_run(std::string_view token);
+
     /// Returns the folder of the mod played: the mod folder laid over the
     /// game folder, else the folder of the profile --mod names, else the game
     /// folder whose own profile plays.
@@ -11284,6 +11314,14 @@ class Runtime final : public menu::Host,
     /// what differed.
     void check_language_notice();
 
+    /// Walks the first-run setup over the main menu: a built-in language, a
+    /// pack that fails and then retries, Skip setup, and both online
+    /// choices. Throws std::runtime_error naming what differed.
+    void check_first_run();
+
+    /// Writes the first-run check's registries file before content starts.
+    void prepare_first_run_check();
+
     /// Checks the commander's build pages against the side column on windows of several sizes.
     ///
     /// On each window from 640x480 to 5120x2880 a skirmish starts, the commander
@@ -14193,6 +14231,25 @@ class Runtime final : public menu::Host,
     };
 
     LanguageNoticeRun language_notice_run_{};
+
+    /// The first-run setup for this run (runtime_first_run.cpp).
+    friend class FirstRunHost;
+    friend class FirstRunScreen;
+
+    struct FirstRunRun {
+        bool gate_logged{};              ///< a not-showing line has been written for gate_hold
+        int gate_hold{-1};               ///< the hold last logged; -1 before any
+        uint32_t main_menu_frames{};     ///< settled main-menu frames since the case last applied
+        bool staged{};                   ///< a stage line opened a step; tell leaves it up
+        bool opened_logged{};            ///< a showing line has been written for opened_step
+        int opened_step{-1};             ///< the step last logged; -1 before any
+        std::string download_tag;        ///< the pack asked for, until it can be shown
+        uint64_t download_item{};        ///< the queue item of that pack; 0 when none
+        std::string pending_failure;     ///< a refusal, already looked up
+        std::string pending_failure_tag; ///< the pack that refusal is about
+    };
+
+    FirstRunRun first_run_run_{};
     fs::path preference_path_;
     std::string first_map_name_;
     std::vector<std::string> eligible_map_names_;

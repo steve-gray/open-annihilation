@@ -778,6 +778,20 @@ class OaLayer {
     /// @param[in,out] controls the list they are appended to
     void automation_controls(std::vector<AutomationControl>& controls) const;
 
+    /// The Library button and the Settings button beside it, in the window's
+    /// pixels, mapped the way automation lists them. During a match the
+    /// canvas positions are mapped the same way, even when the main menu's
+    /// buttons are not drawn.
+    struct MenuButtonWindows {
+        oa::ui::display_layout::Rect library{};  ///< the Library button
+        oa::ui::display_layout::Rect settings{}; ///< the Settings button
+    };
+
+    /// Returns both OA buttons in the window's pixels.
+    ///
+    /// @return the buttons
+    [[nodiscard]] MenuButtonWindows menu_button_windows() const;
+
     /// The layer's overlay's input callback (OverlayDesc::event): take_input.
     ///
     /// @param context the screen context, with its input and the runtime as its host
