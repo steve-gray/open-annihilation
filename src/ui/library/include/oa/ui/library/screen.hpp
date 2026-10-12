@@ -210,9 +210,9 @@ enum class ScreenCommand : uint8_t {
 );
 
 /// Lays out Compact's details page of the selected entry: its name and
-/// version in the header; the way back to the list, the status line, the
-/// byline, the summary, the short facts and the playing note; and the first
-/// three actions, MORE ▾ with the rest and CLOSE in the footer.
+/// version in the header; the status line, the byline, the summary, the
+/// short facts and the playing note; and the first three actions, MORE ▾
+/// with the rest and BACK in the footer. BACK returns to the list.
 ///
 /// @param library the model, with an entry selected
 /// @param state the hover, press, focus, scroll and open drop-down

@@ -4912,30 +4912,6 @@ kit::DisplayList details_page_layout(
         const int32_t first = view.y - offset;
         const std::size_t first_item = into.list.items.size();
         int32_t top = first;
-        kit::LinkLook link;
-        link.caption =
-            cut(into,
-                kit::FontRole::small,
-                filled(
-                    library.text,
-                    words::back_to_tab,
-                    {{"tab", std::string(tab_text(library.tab, false, library.text))}}
-                ),
-                width);
-        link.hovered =
-            hovered(into, controls::back) || into.state->interaction.pressed == controls::back;
-        const kit::Rect link_rect{
-            view.x, top, kit::link_width(*into.fonts, link), metrics.small_line
-        };
-        const std::size_t before = into.list.controls.size();
-        kit::add_link(into.list, link_rect, link, controls::back, unique_name(into, named("back")));
-        into.list.items.back().clip = view;
-        move_controls(into.list, before, into.detail);
-        into.detail.back().clip = view;
-        into.detail.back().group = controls::details_group;
-        tab_stop(into, into.detail.back());
-        top += metrics.small_line + metrics.paragraph_gap;
-
         const std::string status =
             cut(into, kit::FontRole::small, status_line(library, *entry), width);
         const kit::Rect status_box{view.x, top, width, metrics.small_line};
@@ -5010,7 +4986,8 @@ kit::DisplayList details_page_layout(
             kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), false};
     }
 
-    // The footer: the first three actions, MORE ▾ with the rest, and CLOSE.
+    // The footer: the first three actions, MORE ▾ with the rest, and BACK.
+    // BACK does what the old breadcrumb did: the list, with its place kept.
     add_item(
         building.list,
         kit::Role::footer_band,
@@ -5055,17 +5032,17 @@ kit::DisplayList details_page_layout(
             named("action")
         );
     }
-    const std::string_view close_caption = action_text(Action::close, library.text);
-    const int32_t close_width = button_width(building, close_caption);
+    const std::string_view back_caption = action_text(Action::back, library.text);
+    const int32_t back_width = button_width(building, back_caption);
     add_button(
         building,
         building.footer,
-        {window.right - close_width, window.button_top, close_width, metrics.button_height},
-        close_caption,
+        {window.right - back_width, window.button_top, back_width, metrics.button_height},
+        back_caption,
         true,
         true,
-        controls::close,
-        named("close"),
+        controls::back,
+        named("back"),
         {},
         -1
     );

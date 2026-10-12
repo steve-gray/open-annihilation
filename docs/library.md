@@ -272,8 +272,10 @@ on in Settings › Downloads."
 ## The details
 
 Choosing a row shows its details: beside the list in the Regular and Large
-layouts, or as a page of its own in Compact, with "‹ Mods" (or the tab's
-name) back to the list.
+layouts, or as a page of its own in Compact. On that page the footer's
+right button is **BACK**. It returns to the same tab, filter, search,
+scroll and row. The list's button stays **CLOSE**. Escape and the pad's
+back button follow whichever of those is showing.
 
 - **A status line**: "Not installed · 41.0 MB", "Installed", "Playing",
   "Revision 4 available · 3.2 MB to download" or "Version 4.9 available ·

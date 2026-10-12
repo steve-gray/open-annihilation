@@ -271,7 +271,6 @@ inline constexpr std::string_view interface_words[] = {
     words::row_version_size,
     words::engine_at_least_short,
     words::one_decimal,
-    words::back_to_tab,
     words::fact_met,
 };
 

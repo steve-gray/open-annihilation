@@ -35,7 +35,7 @@ inline constexpr kit::ControlId update_all = 30;
 inline constexpr kit::ControlId list = 40;
 /// Compact's DETAILS.
 inline constexpr kit::ControlId details = 50;
-/// The Compact details page's way back to the list.
+/// BACK on Compact's details page. It returns to the list.
 inline constexpr kit::ControlId back = 51;
 /// The shortcut still asks for Settings. The footer does not place this control.
 inline constexpr kit::ControlId settings = 52;

@@ -363,11 +363,12 @@ app removes the folder (`Runtime::library_uninstall`,
     main button). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
-    (`details_page_layout`): its name and version in the header, the way
-    back ("‹ Mods"), the status line, the byline, the summary in at most
-    three lines, the short facts in label and value columns, the playing
-    note, and in the footer the first three actions, MORE ▾ holding the
-    rest, and CLOSE;
+    (`details_page_layout`): its name and version in the header, the status
+    line, the byline, the summary in at most three lines, the short facts
+    in label and value columns, the playing note, and in the footer the
+    first three actions, MORE ▾ holding the rest, and BACK. BACK returns
+    to the list and keeps its tab, filter, search, scroll and row. The
+    list page's button stays CLOSE;
   - **Regular** shows "Open Annihilation Library" and "v0.8.0", the same
     refresh icon, the tabs with their All counts and a 240-point search, a row of chips (All, New,
     Installed and Updates with their counts, and the tags while they fit,
@@ -403,8 +404,8 @@ app removes the folder (`Runtime::library_uninstall`,
     actions, the footer's buttons (on Active, the tabs and the footer's
     buttons alone; on Registries, the tabs, each registry's key icon,
     REFRESH, switch, REMOVE and ADD MIRROR…, ADD REGISTRY…, and the
-    footer's buttons); on Compact's details page, the way back, the actions,
-    MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
+    footer's buttons); on Compact's details page, the actions, MORE and
+    BACK. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
