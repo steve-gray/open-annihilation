@@ -45,6 +45,7 @@
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/file_types.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 
 #include "geometry.hpp"
@@ -67,6 +68,7 @@
 #include <cstdlib>
 #include <ios>
 #include <iostream>
+#include <map>
 #include <limits>
 #include <optional>
 #include <set>
@@ -9168,6 +9170,108 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     CHECK(named_toggle && named_nav);
 }
 
+/// A Launch Services stand-in. A change that does not store leaves the opener as it was.
+struct FakeLaunchServices {
+    std::map<std::string, oa::platform::file_types::Handler> handlers{};
+    bool store_writes = true;
+};
+
+oa::platform::file_types::Handler
+fake_read(void* context, const std::string_view content_type, std::string& failure) {
+    auto* fake = static_cast<FakeLaunchServices*>(context);
+    (void)failure;
+    const auto found = fake->handlers.find(std::string(content_type));
+    if (found == fake->handlers.end())
+        return {};
+    return found->second;
+}
+
+bool fake_write(
+    void* context,
+    const std::string_view content_type,
+    const oa::platform::file_types::Handler& handler,
+    std::string& failure
+) {
+    auto* fake = static_cast<FakeLaunchServices*>(context);
+    (void)failure;
+    if (fake->store_writes)
+        fake->handlers[std::string(content_type)] = handler;
+    return true;
+}
+
+/// The hint under File Type Registration, joined as one sentence.
+std::string registration_hint(const settings::Dialog& dialog) {
+    std::string text;
+    for (std::size_t line = 0;; ++line) {
+        const std::string part =
+            geometry::row_hint(dialog, Setting::file_type_registration, line).text;
+        if (part.empty())
+            break;
+        if (!text.empty())
+            text += ' ';
+        text += part;
+    }
+    return text;
+}
+
+/// A fake that keeps the opener shows the hint. One that takes the change shows none.
+void file_type_hint_when_the_opener_stays() {
+    namespace file_types = oa::platform::file_types;
+    file_types::Handler application;
+    application.bundle_id = "net.coreprime.open-annihilation";
+    file_types::Handler archive;
+    archive.bundle_id = "com.example.archive";
+    FakeLaunchServices fake;
+    fake.handlers["public.zip-archive"] = archive;
+    fake.handlers["public.plain-text"] = archive;
+    for (const file_types::ExportedContentType& type : file_types::exported_content_types)
+        fake.handlers[std::string(type.content_type)] = application;
+    fake.store_writes = false;
+    file_types::HandlerCalls calls;
+    calls.context = &fake;
+    calls.default_handler = &fake_read;
+    calls.set_handler = &fake_write;
+    const file_types::OpenerChange off[] = {{file_types::mod_extension, false}};
+    const file_types::Registration kept = file_types::apply_opener_changes(calls, application, off);
+    CHECK(kept.error.find("oamod: the change did not take") != std::string::npos);
+    file_types::TypeSet asked;
+    asked.mod = false;
+    const file_types::OpenerReport still =
+        file_types::reported_openers(calls, application.bundle_id, asked);
+    CHECK(still.open.mod);
+    const std::vector<std::string> stayed = file_types::extensions_still_opened(asked, still.open);
+    CHECK(stayed.size() == 1 && stayed[0] == ".oamod");
+    settings::Dialog dialog = opened(Page::system);
+    dialog.file_type_switches = true;
+    const std::string_view dotted = stayed[0];
+    dialog.file_type_kept_hint =
+        settings::kept_opener_hint(std::span<const std::string_view>(&dotted, 1));
+    CHECK(
+        registration_hint(dialog) ==
+        "macOS kept Open Annihilation as the opener of .oamod. To choose another, select a "
+        ".oamod file in Finder, then File › Get Info › Open with › Change All."
+    );
+
+    fake.store_writes = true;
+    const file_types::Registration taken =
+        file_types::apply_opener_changes(calls, application, off);
+    CHECK(taken.error.empty());
+    const file_types::OpenerReport changed =
+        file_types::reported_openers(calls, application.bundle_id, asked);
+    CHECK(!changed.open.mod);
+    CHECK(file_types::extensions_still_opened(asked, changed.open).empty());
+    dialog.file_type_kept_hint.clear();
+    CHECK(
+        geometry::row_hint(dialog, Setting::file_type_registration, 0).text ==
+        "Open these files with the game"
+    );
+    CHECK(
+        geometry::row_hint(dialog, Setting::file_type_registration, 1).text ==
+        "from your file manager."
+    );
+    CHECK(geometry::row_hint(dialog, Setting::file_type_registration, 2).text.empty());
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -9257,6 +9361,7 @@ int main(int argc, char** argv) {
         language_text_lists_one_section_and_draws_without_the_game_fonts();
         dark_letters_on_the_accent_are_drawn_bare();
         your_files_shows_the_folder_and_opens_its_folders();
+        file_type_hint_when_the_opener_stays();
         hint_lines_part_while_the_modern_fonts_draw_the_words();
         hint_lines_stay_whole_at_the_end_of_a_section();
         the_notice_wraps_its_text_and_places_its_buttons();

@@ -383,6 +383,14 @@ struct OpenerReport {
 [[nodiscard]] OpenerReport
 reported_openers(const HandlerCalls& calls, std::string_view bundle_id, TypeSet fallback);
 
+/// The extensions, each with its dot, in the order the switches are listed, that `asked` turned
+/// off and `open` still has this copy opening. Empty when none stayed.
+///
+/// @param asked what OK asked
+/// @param open what the system reports now
+/// @return those extensions
+[[nodiscard]] std::vector<std::string> extensions_still_opened(TypeSet asked, TypeSet open);
+
 /// Asks `calls` to make each change in `changes`. A switch that is on sets `application`. A
 /// switch that is off asks for the default opener of the content type that file hands back
 /// to, and sets that opener on the file's own content type. A change whose question fails is
