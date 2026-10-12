@@ -2051,7 +2051,9 @@ void test_base_game() {
     lib::Listing dated = listing(core, Kind::mod, "dated", "Dated Mod");
     dated.published = "2026-10-01";
     inputs.listings.push_back(dated);
-    inputs.listings.push_back(listing(core, Kind::mod, "game-kit", "Game Kit"));
+    lib::Listing kit = listing(core, Kind::mod, "game-kit", "Game Kit");
+    kit.tags = {"units"};
+    inputs.listings.push_back(kit);
     inputs.listings.push_back(listing(example, Kind::map_pack, "pack", "Pack"));
     inputs.installed.push_back(installed(core, Kind::mod, "dated", "Dated Mod"));
     inputs.updates.push_back(update(core, Kind::mod, "dated"));
