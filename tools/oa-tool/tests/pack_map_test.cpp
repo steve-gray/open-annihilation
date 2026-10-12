@@ -652,7 +652,7 @@ map_pack::Manifest packed_manifest(const fs::path& path) {
 
 /// Packs one folder twice and returns the first run. The two packages match.
 Captured pack_twice(const fs::path& folder, const fs::path& game, const fs::path& out) {
-    const fs::path second = fs::path(out.string() + ".again");
+    const fs::path second = out.parent_path() / (out.stem().string() + "-again.oamap");
     const Captured first =
         run({"pack", folder.string(), "--game-dir", game.string(), "--out", out.string()});
     const Captured again =
