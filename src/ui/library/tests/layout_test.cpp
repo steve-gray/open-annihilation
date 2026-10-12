@@ -287,7 +287,7 @@ bool designed_name(const std::string& name) {
         "details|back|refresh|close|status|queue|note|from|rules|"
         "active\\.(mod|language|map\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
-        "registry\\.[a-z0-9-]+(\\.(remove|add-mirror))?)"
+        "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
     return std::regex_match(name, pattern);
 }
@@ -1465,8 +1465,47 @@ void details_page_keeps_its_entry() {
     }
 }
 
-/// The Registries tab lists every registry, with REMOVE and ADD MIRROR… only
-/// for one the player added, and ADD REGISTRY… in the footer. It has no search.
+/// Returns the words of every hover card, each title, aside and block line
+/// joined so a line the card split still reads as one.
+///
+/// @param list the display list
+/// @return the words; empty when no card shows
+std::string hover_card_words(const kit::DisplayList& list) {
+    std::string card;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::hover_card)
+            continue;
+        const auto* look = std::get_if<kit::HoverCardLook>(&item.look);
+        if (look == nullptr)
+            continue;
+        card += look->title;
+        card += look->aside;
+        for (const std::string& line : look->block)
+            card += line;
+    }
+    return card;
+}
+
+/// Tells whether a registry row shows the turning refresh mark beside REFRESH.
+///
+/// @param list the display list
+/// @return true when that mark is turning
+bool row_refresh_turning(const kit::DisplayList& list) {
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::button || item.control != kit::no_control)
+            continue;
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        if (look != nullptr && look->mark == kit::ButtonMark::refresh && look->turning &&
+            !look->enabled)
+            return true;
+    }
+    return false;
+}
+
+/// The Registries tab lists every registry. ADD REGISTRY… sits at the top
+/// right, above the list. Each row shows its refresh time, a key icon and
+/// REFRESH beside the switch; REMOVE and ADD MIRROR… only for one the player
+/// added. It has no search.
 void registries_tab_lists_every_registry() {
     lib::Library library = with_ridge();
     lib::set_tab(library, lib::Tab::registries);
@@ -1487,6 +1526,36 @@ void registries_tab_lists_every_registry() {
         OA_CHECK(fixture::named(list, "library.add-registry") != nullptr);
         OA_CHECK(fixture::named(list, "library.registries.note") != nullptr);
         OA_CHECK(fixture::named(list, "library.details") == nullptr);
+        const kit::Metrics& metrics = kit::metrics_of(named.frame.size_class);
+        const kit::Control* add = fixture::named(list, "library.add-registry");
+        const kit::Control* core_row = fixture::named(list, "library.registry.fixture-core");
+        const kit::Control* core_key = fixture::named(list, "library.registry.fixture-core.key");
+        const kit::Control* core_refresh =
+            fixture::named(list, "library.registry.fixture-core.refresh");
+        const kit::Control* core_when =
+            fixture::named(list, "library.registry.fixture-core.refreshed");
+        OA_CHECK(add != nullptr && core_row != nullptr);
+        if (add != nullptr && core_row != nullptr) {
+            OA_CHECK(add->rect.x + add->rect.width == window.x - metrics.edge - metrics.padding);
+            OA_CHECK(add->rect.y + add->rect.height <= core_row->rect.y);
+        }
+        OA_CHECK(core_key != nullptr && core_key->text.empty());
+        OA_CHECK(core_refresh != nullptr && core_refresh->enabled);
+        OA_CHECK(core_when != nullptr && core_when->text == "never refreshed");
+        OA_CHECK(fixture::named(list, "library.registry.fixture-core.address") == nullptr);
+        OA_CHECK(
+            core_key != nullptr && core_refresh != nullptr && core_row != nullptr &&
+            !fixture::has_room(kit::intersect(core_key->rect, core_refresh->rect)) &&
+            !fixture::has_room(kit::intersect(core_refresh->rect, core_row->rect))
+        );
+        const kit::Control* added_key = fixture::named(list, "library.registry.example-mods.key");
+        const kit::Control* added_refresh =
+            fixture::named(list, "library.registry.example-mods.refresh");
+        const kit::Control* added_when =
+            fixture::named(list, "library.registry.example-mods.refreshed");
+        OA_CHECK(added_key != nullptr && added_key->text.empty());
+        OA_CHECK(added_refresh != nullptr && added_refresh->enabled);
+        OA_CHECK(added_when != nullptr && added_when->text == "never refreshed");
     }
 
     const kit::Frame regular = fixture::frames()[1].frame;
@@ -1536,6 +1605,111 @@ void registries_tab_lists_every_registry() {
         keyed.action == lib::Action::set_registry && keyed.registry == fixture::core &&
         !keyed.registry_on
     );
+
+    // A registry with no key still has the icon. Resting on it shows that.
+    lib::ScreenState bare_state;
+    kit::DisplayList bare_list = laid_out(library, bare_state, regular);
+    const kit::Control* bare_key = fixture::named(bare_list, "library.registry.fixture-core.key");
+    OA_CHECK(bare_key != nullptr);
+    if (bare_key != nullptr) {
+        static_cast<void>(lib::library_pointer(
+            library, bare_state, bare_list, lib::PointerKind::move, 0, centre_of(*bare_key), 0
+        ));
+        bare_list = laid_out(library, bare_state, regular);
+        OA_CHECK(
+            hover_card_words(bare_list).find("Keybuilt inNo signing key") != std::string::npos
+        );
+        OA_EXPECT_NONE(
+            fixture::outside_window(bare_list, lib::window_size(regular)), "empty key tooltip"
+        );
+    }
+
+    // The address, the refresh time and the signing keys, and REFRESH.
+    lib::Library with_keys = library;
+    const std::string first_fingerprint = "7001 · af50 · b971 · 5bb4";
+    const std::string second_fingerprint = "1111 · 2222 · 3333 · 4444";
+    const std::string first_public = std::string("ed25519:") + std::string(200, 'A');
+    const std::string second_public = "ed25519:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    for (lib::Registry& registry : with_keys.inputs.registries) {
+        if (registry.id != fixture::added)
+            continue;
+        registry.address = "http://maps.example.org/oa/registry.yaml";
+        registry.checked_ago = 5 * 60;
+        lib::SigningKey first_key;
+        first_key.fingerprint = first_fingerprint;
+        first_key.public_key = first_public;
+        lib::SigningKey second_key;
+        second_key.fingerprint = second_fingerprint;
+        second_key.public_key = second_public;
+        registry.keys = {first_key, second_key};
+    }
+    lib::ScreenState key_state;
+    kit::DisplayList key_list = laid_out(with_keys, key_state, regular);
+    const kit::Control* address = fixture::named(key_list, "library.registry.example-mods.address");
+    const kit::Control* when = fixture::named(key_list, "library.registry.example-mods.refreshed");
+    const kit::Control* icon = fixture::named(key_list, "library.registry.example-mods.key");
+    OA_CHECK(address != nullptr && address->text == "http://maps.example.org/oa/registry.yaml");
+    OA_CHECK(when != nullptr && when->text == "refreshed 5 min ago");
+    OA_CHECK(
+        icon != nullptr && icon->text.find(first_fingerprint) != std::string::npos &&
+        icon->text.find(second_fingerprint) != std::string::npos
+    );
+    if (icon != nullptr) {
+        static_cast<void>(lib::library_pointer(
+            with_keys, key_state, key_list, lib::PointerKind::move, 0, centre_of(*icon), 0
+        ));
+        key_list = laid_out(with_keys, key_state, regular);
+        const std::string card = hover_card_words(key_list);
+        OA_CHECK(card.find("Keys") != std::string::npos);
+        OA_CHECK(card.find("added by you") != std::string::npos);
+        OA_CHECK(card.find(first_fingerprint) != std::string::npos);
+        OA_CHECK(card.find(first_public) != std::string::npos);
+        OA_CHECK(card.find(second_fingerprint) != std::string::npos);
+        OA_CHECK(card.find(second_public) != std::string::npos);
+        OA_EXPECT_NONE(fixture::outside_window(key_list, lib::window_size(regular)), "key tooltip");
+    }
+    lib::ScreenState focused = focused_on(key_list, "library.registry.example-mods.key");
+    focused.interaction.hovered = id_of(key_list, "library.registry.fixture-core.key");
+    const std::string focused_card = hover_card_words(laid_out(with_keys, focused, regular));
+    OA_CHECK(focused_card.find(first_public) != std::string::npos);
+    OA_CHECK(focused_card.find("added by you") != std::string::npos);
+    OA_CHECK(focused_card.find("built in") == std::string::npos);
+    const lib::ScreenResult key_press =
+        click(with_keys, key_state, key_list, "library.registry.example-mods.key");
+    OA_CHECK(!key_press.action);
+    const lib::ScreenResult asked =
+        click(with_keys, key_state, key_list, "library.registry.example-mods.refresh");
+    OA_CHECK(asked.action == lib::Action::refresh_registry && asked.registry == fixture::added);
+
+    for (lib::Registry& registry : with_keys.inputs.registries) {
+        if (registry.id != fixture::added)
+            continue;
+        registry.on = false;
+    }
+    kit::DisplayList off_list = laid_out(with_keys, key_state, regular);
+    const kit::Control* off_refresh =
+        fixture::named(off_list, "library.registry.example-mods.refresh");
+    OA_CHECK(off_refresh != nullptr && !off_refresh->enabled);
+    OA_EXPECT_NONE(order_problems(off_list), "registry off");
+    const lib::ScreenResult off_press =
+        click(with_keys, key_state, off_list, "library.registry.example-mods.refresh");
+    OA_CHECK(!off_press.action);
+
+    for (lib::Registry& registry : with_keys.inputs.registries) {
+        if (registry.id != fixture::added)
+            continue;
+        registry.on = true;
+        registry.refreshing = true;
+    }
+    const kit::DisplayList spinning = laid_out(with_keys, {}, regular);
+    const kit::Control* busy = fixture::named(spinning, "library.registry.example-mods.refresh");
+    OA_CHECK(busy != nullptr && !busy->enabled);
+    OA_CHECK(row_refresh_turning(spinning));
+    OA_CHECK(!row_refresh_turning(laid_out(library, {}, regular)));
+    OA_EXPECT_NONE(order_problems(spinning), "registry refreshing");
+    const lib::ScreenResult busy_press =
+        click(with_keys, key_state, spinning, "library.registry.example-mods.refresh");
+    OA_CHECK(!busy_press.action);
 
     library.inputs.in_match = true;
     list = laid_out(library, state, regular);

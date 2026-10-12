@@ -60,8 +60,8 @@ Core Prime's registry is built into Open Annihilation. Its descriptor ships
 in the `registries` folder beside the game, and the key that signs its
 catalogue is compiled into the engine, so no one else can sign a list OA
 takes for Core Prime's. Its row on the Library's Registries tab says
-"Built in", how many packages it lists and when its list was last checked
-("1 package · checked 4 min ago"). It can be turned off, but not removed,
+"Built in", how many packages it lists ("1 package") and when it was last
+read ("refreshed 4 min ago"). It can be turned off, but not removed,
 so it is always one switch away. Its packages are published by the OA team.
 
 A download from Core Prime's registry installs when you press its button,
@@ -76,7 +76,7 @@ Prime ([which downloads ask first](library.md#which-downloads-ask-first)).
 OA suggests no registry: you add each one yourself. There are three ways:
 
 - **By its address.** On the Library's Registries tab, press
-  **ADD REGISTRY…** at the left of the footer, type the address of the
+  **ADD REGISTRY…** at the top right, above the list, type the address of the
   registry's descriptor (`http://…` or `https://…`, for example
   `https://maps.example.org/oa/registry.yaml`) and press **CHECK**. Where
   this system has TLS, an `https://` address uses it, and a certificate

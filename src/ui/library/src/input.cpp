@@ -493,8 +493,10 @@ ScreenResult show_tab(Library& library, ScreenState& state, const kit::DisplayLi
 ///
 /// A switch's left half and Left turn it off, its right half and Right turn
 /// it on, and Space or Enter toggles it. Nothing is asked when that is
-/// already its state. REMOVE and ADD MIRROR… name the registry; ADD REGISTRY…
-/// does not. During a match ADD REGISTRY… and ADD MIRROR… do nothing.
+/// already its state. REFRESH names the registry and asks for it while it
+/// is on and not already being asked. The key icon asks for nothing. REMOVE
+/// and ADD MIRROR… name the registry; ADD REGISTRY… does not. During a match
+/// ADD REGISTRY… and ADD MIRROR… do nothing.
 ///
 /// @param library the model
 /// @param list the display list
@@ -512,7 +514,10 @@ std::optional<ScreenResult> registry_press(
     const bool on_switch = controls::registry_switch_control(id);
     const bool on_remove = controls::registry_remove_control(id);
     const bool on_mirror = controls::registry_mirror_control(id);
-    if (!on_switch && !on_remove && !on_mirror && id != controls::add_registry)
+    const bool on_refresh = controls::registry_refresh_control(id);
+    const bool on_key = controls::registry_key_control(id);
+    if (!on_switch && !on_remove && !on_mirror && !on_refresh && !on_key &&
+        id != controls::add_registry)
         return std::nullopt;
     if (id == controls::add_registry) {
         if (library.inputs.in_match)
@@ -521,10 +526,20 @@ std::optional<ScreenResult> registry_press(
         result.action = Action::add_registry;
         return result;
     }
+    if (on_key)
+        return redrawn();
     const std::size_t index = controls::registry_index(id);
     if (index >= library.inputs.registries.size())
         return ScreenResult{};
     const Registry& registry = library.inputs.registries[index];
+    if (on_refresh) {
+        if (!registry.on || registry.refreshing)
+            return ScreenResult{};
+        ScreenResult result = redrawn();
+        result.action = Action::refresh_registry;
+        result.registry = registry.id;
+        return result;
+    }
     if (on_switch) {
         bool next = registry.on;
         if (key) {

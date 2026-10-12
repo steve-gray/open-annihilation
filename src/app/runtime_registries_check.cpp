@@ -5,13 +5,14 @@
 // window over a registry list the check writes itself before the content
 // service starts. Settings › Downloads links to that tab. One added
 // registry, signed with a key the check makes from a fixed seed, its
-// catalogue at 127.0.0.1:1, where nothing answers. The check switches it
-// off and on at once, and removes it at once, reading the player's
-// registry list after each; CLOSE does not put a change back. It types an
-// https address on 127.0.0.1:1, which the content service is asked about
-// and which is refused; and opens an .oareg file of another registry,
-// which is refused once its catalogue cannot be reached. It makes no
-// connection beyond those to 127.0.0.1.
+// catalogue at 127.0.0.1:1, where nothing answers. The check shows the key
+// that catalogue is checked against, asks that registry to refresh (refused,
+// since nothing answers), switches it off and on at once, and removes it at
+// once, reading the player's registry list after each; CLOSE does not put a
+// change back. It types an https address on 127.0.0.1:1, which the content
+// service is asked about and which is refused; and opens an .oareg file of
+// another registry, which is refused once its catalogue cannot be reached.
+// It makes no connection beyond those to 127.0.0.1.
 
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -43,6 +44,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <variant>
 #include <vector>
 
 namespace oa::app {
@@ -318,7 +320,8 @@ void Runtime::check_registries() {
     };
 
     // The tab lists the added registry with REMOVE, and every built-in
-    // registry this build has with its switch alone.
+    // registry this build has with its switch, its key icon and REFRESH,
+    // and no REMOVE.
     open_registries();
     const std::string added_switch = "oa.library.registry." + std::string(kAddedId);
     require(named(added_switch).has_value(), "the added registry is not listed");
@@ -332,12 +335,118 @@ void Runtime::check_registries() {
             require(named(word).has_value(), word + " is not listed");
             require(!named(word + ".remove").has_value(), word + " offers REMOVE");
             require(!named(word + ".add-mirror").has_value(), word + " offers ADD MIRROR…");
+            require(named(word + ".key").has_value(), word + " has no key icon");
+            require(named(word + ".refresh").has_value(), word + " has no REFRESH");
             ++built_ins;
         }
     }
     keep_frame("menu-registries");
     std::cout << "registries check: listed " << kAddedId << " with REMOVE and " << built_ins
               << " built-in registr" << (built_ins == 1 ? "y" : "ies") << " without\n";
+
+    // The added row shows where its catalogue is, the key that catalogue is
+    // checked against, and REFRESH. The key icon asks for nothing; resting
+    // on it shows the fingerprint and the full public key.
+    const std::string added_address = added_switch + ".address";
+    const std::string added_key = added_switch + ".key";
+    const std::string added_refresh = added_switch + ".refresh";
+    const std::string added_refreshed = added_switch + ".refreshed";
+    {
+        const std::optional<AutomationControl> address = named(added_address);
+        require(
+            address.has_value() && address->text.find("127.0.0.1") != std::string::npos,
+            "the row does not show the catalogue address"
+        );
+        require(named(added_refresh).has_value(), "the added registry has no REFRESH");
+        require(named(added_refreshed).has_value(), "the added registry has no refresh time");
+        std::array<uint8_t, 32> seed{};
+        seed.fill(0x21);
+        signing::SecretKey secret{};
+        signing::PublicKey public_key{};
+        signing::key_pair_from_seed(seed, secret, public_key);
+        const signing::FingerprintText fingerprint = signing::fingerprint(public_key);
+        const signing::KeyText key_text = signing::public_key_text(public_key);
+        const std::optional<AutomationControl> icon = named(added_key);
+        require(
+            icon.has_value() && icon->text.find(fingerprint.view()) != std::string::npos,
+            "the key icon does not name the signing key"
+        );
+        const uint64_t generation_before = content_service().generation();
+        click_named(added_key);
+        require(
+            content_service().generation() == generation_before, "the key icon asked for a refresh"
+        );
+        run_frame(running);
+        require(running, "a frame ended the run");
+        LayerScreen* library_screen = oa_layer().top();
+        require(
+            library_screen != nullptr && library_screen->name() == "library",
+            "the key icon left the Library"
+        );
+        const kit::DisplayList shown = library_screen->display_list();
+        bool card_holds_key = false;
+        for (const kit::Item& item : shown.items) {
+            if (item.role != kit::Role::hover_card)
+                continue;
+            const auto* look = std::get_if<kit::HoverCardLook>(&item.look);
+            if (look == nullptr)
+                continue;
+            std::string card = look->title;
+            card += look->aside;
+            for (const std::string& line : look->block)
+                card += line;
+            card_holds_key = look->aside == "added by you" &&
+                             card.find(fingerprint.view()) != std::string::npos &&
+                             card.find(key_text.view()) != std::string::npos;
+            if (card_holds_key)
+                break;
+        }
+        require(card_holds_key, "the key tooltip does not show the registry's signing key");
+    }
+    std::cout << "registries check: the key tooltip shows the signing key\n";
+
+    // REFRESH asks that one catalogue. Nothing answers at 127.0.0.1:1, so the
+    // row says it could not be reached and the button can be pressed again.
+    {
+        bool refresh_ready = false;
+        for (int frame = 0; frame < kAnswerFrames && !refresh_ready; ++frame) {
+            const std::optional<AutomationControl> button = named(added_refresh);
+            require(button.has_value(), "REFRESH left the row");
+            refresh_ready = button->enabled;
+            if (!refresh_ready) {
+                run_frame(running);
+                require(running, "a frame ended the run");
+            }
+        }
+        require(refresh_ready, "REFRESH stayed disabled");
+        const uint64_t generation_before = content_service().generation();
+        click_named(added_refresh);
+        bool saw_working = false;
+        bool refresh_done = false;
+        int frames_run = 0;
+        for (int frame = 0; frame < kAnswerFrames && !refresh_done; ++frame) {
+            const std::optional<AutomationControl> button = named(added_refresh);
+            const std::optional<AutomationControl> line = named(added_refreshed);
+            require(button.has_value() && line.has_value(), "REFRESH or its time left the row");
+            if (!button->enabled)
+                saw_working = true;
+            // The click asks at once. The row shows that on the next frame,
+            // so a row still reading as it did before the frame does not count.
+            const bool settled =
+                button->enabled && line->text.find("couldn't reach") != std::string::npos;
+            const bool asked = content_service().generation() != generation_before &&
+                               (saw_working || frames_run > 0);
+            if (asked && settled)
+                refresh_done = true;
+            else {
+                run_frame(running);
+                require(running, "a frame ended the run");
+                ++frames_run;
+            }
+        }
+        require(refresh_done, "REFRESH did not report that the catalogue could not be reached");
+    }
+    std::cout << "registries check: REFRESH was refused for " << kAddedId << '\n';
 
     // Off applies at once, without OK.
     click_named(added_switch + ".off");

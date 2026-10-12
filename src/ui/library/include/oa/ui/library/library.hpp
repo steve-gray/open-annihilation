@@ -31,6 +31,14 @@ enum class Kind : uint8_t {
     language, ///< an .oalang
 };
 
+/// One signing key a registry's catalogue is checked against.
+struct SigningKey {
+    /// The fingerprint as the game shows one, "7001 · af50 · b971 · 5bb4".
+    std::string fingerprint{};
+    /// The full public key, "ed25519:" and its base64.
+    std::string public_key{};
+};
+
 /// A registry the Library lists packages from.
 ///
 /// `built_in` is true when the registry ships with Open Annihilation (its
@@ -46,7 +54,8 @@ struct Registry {
     std::string downloads_off_reason{};
     /// The registry's own switch: false when the player turned the registry off.
     bool on{true};
-    /// Its catalogue's host, and the port when it is not 80. Empty for a built-in one.
+    /// Where the registry was read from: the address it was added from, or
+    /// its catalogue's address when it was not added from one.
     std::string address{};
     std::size_t packages{}; ///< the packages the catalogue kept for it lists
     /// How long ago a refresh last found a usable catalogue, in seconds.
@@ -54,6 +63,10 @@ struct Registry {
     std::optional<int64_t> checked_ago{};
     std::size_t mirrors{}; ///< the mirrors the player added
     bool unreachable{};    ///< the last refresh found nothing usable
+    /// True while this registry is being asked for its catalogue.
+    bool refreshing{};
+    /// The keys its signatures are checked against, in the descriptor's order.
+    std::vector<SigningKey> keys{};
 };
 
 /// One map of a map pack, as its catalogue entry lists it.
@@ -673,6 +686,9 @@ enum class Action : uint8_t {
     /// A registry's switch. `ScreenResult::registry` names it and
     /// `ScreenResult::registry_on` is the half that was chosen.
     set_registry,
+    /// REFRESH on one registry's row. `ScreenResult::registry` names it.
+    /// The host asks that registry for its catalogue and its download counts.
+    refresh_registry,
     /// An installed package's: asks first, then removes its folder and the
     /// copy ROLL BACK keeps (uninstall.hpp).
     uninstall,
