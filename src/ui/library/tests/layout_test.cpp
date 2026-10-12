@@ -714,6 +714,10 @@ void check_frame(const fixture::NamedFrame& named) {
         } else {
             OA_CHECK(atoll->rect.y < ridgeline->rect.y && atoll->rect.x == ridgeline->rect.x);
         }
+        if (compact) {
+            OA_CHECK(atoll->rect.height == kit::compact_metrics.small_line);
+            OA_CHECK(ridgeline->rect.height == kit::compact_metrics.small_line);
+        }
     }
     // Island Hopping holds Atoll alone, so its title is the link and the
     // tile has no From line. Core Map Pack holds two, so those keep From.
@@ -727,13 +731,30 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(from_atoll->enabled && from_atoll->focusable);
         if (atoll != nullptr)
             OA_CHECK(from_atoll->rect.y == atoll->rect.y && from_atoll->rect.x == atoll->rect.x);
-        if (first_map != nullptr)
-            OA_CHECK(from_atoll->rect.y < first_map->rect.y);
+        if (first_map != nullptr) {
+            if (compact) {
+                // One line: the title is the link, and the players and size
+                // follow it on that same line.
+                OA_CHECK(
+                    from_atoll->rect.y == first_map->rect.y &&
+                    from_atoll->rect.x < first_map->rect.x
+                );
+            } else {
+                OA_CHECK(from_atoll->rect.y < first_map->rect.y);
+            }
+        }
     }
     if (from_ridge != nullptr) {
         OA_CHECK(from_ridge->text == "From Core Map Pack");
-        if (ridgeline != nullptr)
-            OA_CHECK(from_ridge->rect.y > ridgeline->rect.y);
+        if (ridgeline != nullptr) {
+            if (compact)
+                OA_CHECK(
+                    from_ridge->rect.y == ridgeline->rect.y &&
+                    from_ridge->rect.x > ridgeline->rect.x
+                );
+            else
+                OA_CHECK(from_ridge->rect.y > ridgeline->rect.y);
+        }
     }
     if (from_twin != nullptr)
         OA_CHECK(from_twin->text == "From Core Map Pack");

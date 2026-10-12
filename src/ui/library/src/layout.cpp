@@ -3121,8 +3121,10 @@ int32_t tile_column(const MapGrid& grid, int32_t pane_left, std::size_t place) {
     return pane_left + grid.left_width + grid.gap;
 }
 
-/// Measures the maps that match, without appending them. A tile's height
-/// follows its width, so a narrower pane is measured again.
+/// Measures the maps that match, without appending them. At Compact each
+/// map is one line, the small font high, with no gap, so several fit in
+/// the pane. At Regular and Large a tile's height follows its width, so a
+/// narrower pane is measured again.
 ///
 /// @param building the layout
 /// @param setup what the tab shows
@@ -3136,10 +3138,12 @@ MapGrid measure_map_grid(
     int32_t width
 ) {
     const kit::Metrics& metrics = *building.metrics;
+    const bool one_line = building.size_class == kit::SizeClass::compact;
     MapGrid grid;
     grid.content_width = std::max(width, int32_t{0});
-    grid.gap = metrics.card_gap;
-    grid.columns = building.size_class == kit::SizeClass::large && shown.size() > 1 ? 2 : 1;
+    grid.gap = one_line ? 0 : metrics.card_gap;
+    grid.columns =
+        !one_line && building.size_class == kit::SizeClass::large && shown.size() > 1 ? 2 : 1;
     grid.left_width = grid.columns == 1 ? grid.content_width
                                         : std::max((grid.content_width - grid.gap) / 2, int32_t{0});
     std::size_t index = 0;
@@ -3147,17 +3151,20 @@ MapGrid measure_map_grid(
     while (index < shown.size()) {
         const std::size_t count =
             std::min(static_cast<std::size_t>(grid.columns), shown.size() - index);
-        int32_t row_height = 0;
-        for (std::size_t place = 0; place < count; ++place) {
-            const ActiveMap& map = setup.maps[shown[index + place]];
-            const int32_t across = tile_across(grid, index + place);
-            const int32_t side = std::min(
-                active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
-            );
-            row_height = std::max(
-                row_height,
-                map_tile_height(metrics, side, !map.description.empty(), !map.from.empty())
-            );
+        int32_t row_height = one_line ? metrics.small_line : 0;
+        if (!one_line) {
+            for (std::size_t place = 0; place < count; ++place) {
+                const ActiveMap& map = setup.maps[shown[index + place]];
+                const int32_t across = tile_across(grid, index + place);
+                const int32_t side = std::min(
+                    active_badge_side(metrics),
+                    std::max(across - 2 * metrics.card_inset, int32_t{0})
+                );
+                row_height = std::max(
+                    row_height,
+                    map_tile_height(metrics, side, !map.description.empty(), !map.from.empty())
+                );
+            }
         }
         grid.rows.push_back(MapRowGeom{top, row_height, index, count});
         top += row_height;
@@ -3318,10 +3325,178 @@ void add_maps_note(
         );
 }
 
-/// Appends the map tiles that meet the pane. The rest are left out. Marks at
+/// Appends one installed map on Compact: one line of its name, its players
+/// and its size. A pack of several maps keeps the pack's link at the right
+/// of that line. A pack of one map leaves the link out and makes the name
+/// the link, in the same accent. The composed line stays a label, on the
+/// part of the line that is not the link, so the two do not meet.
+///
+/// @param[in,out] building the layout
+/// @param map the map
+/// @param row the line
+/// @param number the map's place among the maps, from 1
+/// @param clip what drawing may touch
+void add_compact_map_row(
+    Building& building,
+    const ActiveMap& map,
+    const kit::Rect& row,
+    std::size_t number,
+    const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    if (row.width <= 0 || row.height <= 0)
+        return;
+    const int32_t gap = metrics.list_row_gap;
+    const bool named_map = number <= controls::most_active_maps;
+    const bool title_links = map.from.empty();
+    const kit::ControlId link_id =
+        controls::first_active_from + static_cast<kit::ControlId>(number - 1);
+
+    int32_t from_width = 0;
+    std::string from_caption;
+    if (!title_links && named_map && !map.from.empty()) {
+        const int32_t name_full = width_of(building, kit::FontRole::small, map.name);
+        const int32_t from_full = width_of(building, kit::FontRole::small, map.from);
+        // The name keeps a share of the line. The pack link takes its own
+        // width beside it, cut when the two cannot both be whole.
+        int32_t from_room = 0;
+        if (from_full > 0 && name_full + gap < row.width)
+            from_room = std::min(from_full, row.width - name_full - gap);
+        else if (from_full > 0 && row.width > gap)
+            from_room = std::max((row.width - gap) / 2, int32_t{0});
+        if (from_room > 0) {
+            from_caption = cut(building, kit::FontRole::small, map.from, from_room);
+            if (!from_caption.empty() &&
+                width_of(building, kit::FontRole::small, from_caption) <= from_room)
+                from_width = width_of(building, kit::FontRole::small, from_caption);
+            else
+                from_caption.clear();
+        }
+    }
+    const int32_t reading =
+        from_width > 0 ? std::max(row.width - from_width - gap, int32_t{0}) : row.width;
+    if (reading <= 0)
+        return;
+
+    const std::string title = cut(building, kit::FontRole::small, map.name, reading);
+    const int32_t title_width = width_of(building, kit::FontRole::small, title);
+    const bool title_fits = !title.empty() && title_width <= reading;
+    const bool title_is_link = title_links && named_map && title_fits;
+    kit::Colour title_ink = kit::colour::text;
+    if (title_is_link) {
+        const bool over =
+            hovered(building, link_id) || building.state->interaction.pressed == link_id;
+        title_ink = over ? kit::colour::accent_light : kit::colour::accent;
+    }
+    if (title_fits)
+        add_text(
+            building,
+            kit::FontRole::small,
+            title,
+            {row.x, row.y, title_width, metrics.small_line},
+            kit::Align::left,
+            title_ink,
+            clip
+        );
+    if (title_is_link) {
+        const kit::Rect link_rect =
+            kit::intersect({row.x, row.y, title_width, metrics.small_line}, clip);
+        if (link_rect.width > 0 && link_rect.height > 0) {
+            kit::LinkLook link;
+            link.caption = title;
+            link.hovered =
+                hovered(building, link_id) || building.state->interaction.pressed == link_id;
+            const std::size_t items_before = building.list.items.size();
+            const std::size_t controls_before = building.list.controls.size();
+            kit::add_link(
+                building.list,
+                link_rect,
+                link,
+                link_id,
+                unique_name(building, named("active.from." + std::to_string(number)))
+            );
+            // The name is already drawn above, in the small font the link
+            // would use, so the link item is dropped and only its control
+            // remains.
+            building.list.items.resize(items_before);
+            move_controls(building.list, controls_before, building.detail);
+            kit::Control& control = building.detail.back();
+            control.clip = clip;
+            control.group = controls::maps_group;
+            control.focusable = true;
+            control.enabled = true;
+            tab_stop(building, control);
+        }
+    }
+
+    std::string suffix;
+    if (map.line.size() >= map.name.size() && map.line.compare(0, map.name.size(), map.name) == 0)
+        suffix = map.line.substr(map.name.size());
+    const int32_t suffix_left = row.x + (title_fits ? title_width : 0);
+    const int32_t suffix_room = std::max(row.x + reading - suffix_left, int32_t{0});
+    if (suffix_room > 0 && !suffix.empty()) {
+        const std::string drawn = cut(building, kit::FontRole::small, suffix, suffix_room);
+        if (!drawn.empty() && width_of(building, kit::FontRole::small, drawn) <= suffix_room)
+            add_text(
+                building,
+                kit::FontRole::small,
+                drawn,
+                {suffix_left, row.y, suffix_room, metrics.small_line},
+                kit::Align::left,
+                kit::colour::hint,
+                clip
+            );
+    }
+    if (named_map) {
+        // When the name is the link, the label is the players and size, so
+        // it does not meet the link. Otherwise it covers the reading line.
+        const kit::Rect label_rect =
+            title_is_link ? kit::Rect{suffix_left, row.y, suffix_room, metrics.small_line}
+                          : kit::Rect{row.x, row.y, reading, metrics.small_line};
+        const kit::Rect shown_label = kit::intersect(label_rect, clip);
+        if (shown_label.width > 0 && shown_label.height > 0)
+            add_label(
+                building.detail,
+                controls::first_active_map + static_cast<kit::ControlId>(number - 1),
+                shown_label,
+                unique_name(building, named("active.map." + std::to_string(number))),
+                map.line,
+                clip,
+                controls::maps_group
+            );
+    }
+    if (from_width <= 0 || from_caption.empty())
+        return;
+    kit::LinkLook link;
+    link.caption = from_caption;
+    link.hovered = hovered(building, link_id) || building.state->interaction.pressed == link_id;
+    const kit::Rect link_rect = kit::intersect(
+        {row.x + row.width - from_width, row.y, from_width, metrics.small_line}, clip
+    );
+    if (link_rect.width <= 0 || link_rect.height <= 0)
+        return;
+    const std::size_t before = building.list.controls.size();
+    kit::add_link(
+        building.list,
+        link_rect,
+        link,
+        link_id,
+        unique_name(building, named("active.from." + std::to_string(number)))
+    );
+    building.list.items.back().clip = clip;
+    move_controls(building.list, before, building.detail);
+    kit::Control& control = building.detail.back();
+    control.clip = clip;
+    control.group = controls::maps_group;
+    control.focusable = true;
+    control.enabled = true;
+    tab_stop(building, control);
+}
+
+/// Appends the map rows that meet the pane. The rest are left out. Marks at
 /// the content's edges, when those edges are outside the pane, keep the
-/// scroll extent equal to the measured height. Each tile keeps its place in
-/// the full list, so a From link still opens that map's pack.
+/// scroll extent equal to the measured height. Each row keeps its place in
+/// the full list, so a pack link still opens that map's pack.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
@@ -3349,16 +3524,16 @@ void add_visible_map_rows(
         for (std::size_t place = 0; place < row.count; ++place) {
             const std::size_t shown_index = row.begin + place;
             const std::size_t map_index = shown[shown_index];
-            add_map_tile(
-                building,
-                setup.maps[map_index],
-                {tile_column(grid, pane.x, shown_index),
-                 placed,
-                 tile_across(grid, shown_index),
-                 row.height},
-                map_index + 1,
-                pane
-            );
+            const kit::Rect tile{
+                tile_column(grid, pane.x, shown_index),
+                placed,
+                tile_across(grid, shown_index),
+                row.height,
+            };
+            if (building.size_class == kit::SizeClass::compact)
+                add_compact_map_row(building, setup.maps[map_index], tile, map_index + 1, pane);
+            else
+                add_map_tile(building, setup.maps[map_index], tile, map_index + 1, pane);
         }
     }
 }

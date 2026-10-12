@@ -280,24 +280,29 @@ app removes the folder (`Runtime::library_uninstall`,
     `Action::switch_off` of the mod being played. The language tile has the
     pack's badge or a language mark, the name in itself and in English,
     the version and revision and the coverage, or Built in as a neutral
-    pill on the title's line. Each installed map is a tile with its minimap,
-    its title, its players and size, its description cut to one line, and
-    a link `library.active.from.<n>` that opens the Maps tab with that pack
+    pill on the title's line. Each installed map on a small window is one
+    line: its name, its players and its size ("Twin Rivers · 2 players ·
+    12x12"). On a larger window each map is a tile with its minimap, its
+    title, its players and size, its description cut to one line, and a
+    link `library.active.from.<n>` that opens the Maps tab with that pack
     selected and its row in view. A pack of several maps keeps the link on
-    a From line ("From Core Map Pack"). A pack of one map leaves that line
-    out and the title is the link, its text the title, drawn in the accent
-    and lighter while hovered. A minimap is
+    a From line ("From Core Map Pack") under the tile's lines, and at the
+    right of the one line on a small window. A pack of one map leaves that
+    line out and the title is the link, its text the title, drawn in the
+    accent and lighter while hovered. A minimap is
     fitted in its square, centred, and the letterbox is the list's well
     colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
-    last line or the button. Compact stacks the tiles; Regular and Large
-    put the mod and the language side by side, the titles on one line and
-    the tiles the same height; Large puts the maps in two columns of
-    equal height when more than one is installed. The mod label stops
-    above UNLOAD MOD, the language label covers its tile, and each map's
-    label covers its title line, or the players-and-size line when the
-    title is the link, so it does not meet the link. They scroll
-    as the details do when they are taller than the window. The labels take
+    last line or the button. Compact stacks the mod and the language and
+    lists the maps on one line each; Regular and Large put the mod and the
+    language side by side, the titles on one line and the tiles the same
+    height; Large puts the maps in two columns of equal height when more
+    than one is installed. The mod label stops above UNLOAD MOD, the
+    language label covers its tile, and each map's label covers its title
+    line, or the players-and-size line when the title is the link, and on
+    a small window the part of the line after the title when that title is
+    the link, so it does not meet the link. The maps pane scrolls on its
+    own when the maps are taller than the room under the heading. The labels take
     no press. UNLOAD MOD does, while it is enabled, and so does a map's
     link while its line shows; Tab and the arrows reach both. A pack of one map
     wears that map's minimap on every row and in the details. A pack of
@@ -671,10 +676,11 @@ several: each twice, byte for byte the same, with nothing
 drawn outside the window and every pixel of it drawn, every part inside
 it and every text fitting. The Active and Maps pictures dress the
 fixture's maps with made-up minimaps and a long description, on that
-drawing only, so the tiles show a minimap, a cut description and a From
-link, a one-map pack shows its minimap on the row and large in the
-details, and a several-map pack with no badge shows the first map on the
-row and a grid in the details. The Registries pictures dress the fixture's
+drawing only. Compact lists each map on one line, the pack link at the
+right when the pack holds several. Regular and Large show a minimap, a
+cut description and a From link. A one-map pack shows its minimap on the
+Maps row and large in the details, and a several-map pack with no badge
+shows the first map on the row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
 name, on that copy only. That author is Open Annihilation, so the card
 shows the app icon under its key, the plates filtered down, or the drawn
