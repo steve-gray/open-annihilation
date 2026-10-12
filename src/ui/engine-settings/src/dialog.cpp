@@ -2261,22 +2261,27 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         DialogFont::regular,
         layout::heading_tracking
     );
-    const layout::SourceRect version{
-        sized.version_right - layout::version_width,
-        layout::header_top,
-        layout::version_width,
-        layout::header_height,
-    };
     control_part(layout::header_close_button(sized), close_x_control);
-    text_part(version, dialog.version, DialogFont::small);
+    const int32_t shared_left = suffix_left + layout::title_suffix_width + layout::header_gap;
+    // The version keeps a fixed box beside the close mark. While the shared
+    // game's note is up, the version gives way and the note takes that box,
+    // so the note is not cut against the mark.
     if (dialog.locks.shared_game) {
-        const int32_t shared_left = suffix_left + layout::title_suffix_width + layout::header_gap;
         text_part(
             {shared_left,
              layout::header_top,
-             version.x - layout::version_gap - shared_left,
+             sized.version_right - layout::version_gap - shared_left,
              layout::header_height},
             layout::shared_game_text,
+            DialogFont::small
+        );
+    } else {
+        text_part(
+            {sized.version_right - layout::version_width,
+             layout::header_top,
+             layout::version_width,
+             layout::header_height},
+            dialog.version,
             DialogFont::small
         );
     }
