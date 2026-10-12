@@ -248,12 +248,18 @@ language_card_layout(Point at, const Metrics& metrics, bool progress) noexcept;
 
 /// Draws a language card into a rectangle.
 ///
-/// The badge is the pack's picture, or the letters on a grey ground, accent
-/// while the card is active. Under it, or beside it when the rectangle is
-/// tall enough, come the language's own name, its English name and the facts
-/// line. The pill sits at the bottom. Offline, and a disabled card, are
-/// dimmed into the panel. The rectangle is clipped: a gallery sample may be
-/// smaller than the metric card.
+/// The design's card is 232 by 304 points. Padding, the badge and the gap
+/// under it scale from that card to this rectangle. The badge is centred at
+/// the top: the pack's picture, or the letters on a grey ground, accent
+/// while the card is active. Under it, centred, come the language's own
+/// name, its English name and the facts line. The own name is large. Where
+/// the modern fonts are open it is drawn at about 27 points on the design
+/// card, in the endonym face for a name the sans faces lack, and shrunk
+/// until it fits before an ellipsis. In the game's bitmap fonts it uses the
+/// regular font, and the same shrink. The pill is centred at the bottom. An
+/// active card has an accent border and a one-point accent ring outside it.
+/// Offline, and a disabled card, are dimmed into the panel. The rectangle is
+/// clipped: a gallery sample may be smaller than the metric card.
 ///
 /// @param canvas where it is drawn
 /// @param rect the card

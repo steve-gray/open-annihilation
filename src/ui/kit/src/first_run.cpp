@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +27,7 @@
 namespace oa::ui::kit {
 
 namespace renderer = oa::ui::frontend_renderer;
+namespace text_font = oa::platform::text_font;
 
 namespace {
 
@@ -152,12 +154,383 @@ bool card_dimmed(const LanguageCardLook& look) noexcept {
 /// @param text the text
 /// @param box the box
 /// @param ink the colour
+/// @param align where the text sits along the box
 void line_in(
-    const Canvas& canvas, FontRole role, std::string_view text, const Rect& box, Colour ink
+    const Canvas& canvas,
+    FontRole role,
+    std::string_view text,
+    const Rect& box,
+    Colour ink,
+    Align align = Align::left
 ) {
     if (box.width <= 0 || box.height <= 0 || text.empty())
         return;
-    box_text(canvas, role, text, box, Align::left, ink, 0);
+    box_text(canvas, role, text, box, align, ink, 0);
+}
+
+/// The design's language card, in points, at Large. Every measure on a card
+/// scales from these to the rectangle being drawn.
+constexpr int32_t kDesignCardWidth = 232;
+constexpr int32_t kDesignCardHeight = 304;
+constexpr int32_t kDesignPadTop = 30;
+constexpr int32_t kDesignPadSide = 18;
+constexpr int32_t kDesignPadBottom = 22;
+constexpr int32_t kDesignBadge = 88;
+constexpr int32_t kDesignNameGap = 10;
+constexpr int32_t kDesignNamePoints = 27;
+/// Letters in the badge, in points, on the design's 88-point badge.
+constexpr int32_t kDesignLetterPoints = 32;
+
+/// Scales a design measure to a rectangle's side.
+///
+/// @param design the measure on the design card
+/// @param have the rectangle's side, in points
+/// @param of the design card's side
+/// @return the measure, in points; 0 when a side is empty
+int32_t scale_measure(int32_t design, int32_t have, int32_t of) noexcept {
+    if (design <= 0 || have <= 0 || of <= 0)
+        return 0;
+    return design * have / of;
+}
+
+/// The padding, badge and name size of one card.
+struct CardMeasures {
+    int32_t pad_top{};       ///< points above the badge
+    int32_t pad_side{};      ///< points at each side
+    int32_t pad_bottom{};    ///< points under the pill
+    int32_t badge{};         ///< the badge's side, in points
+    int32_t name_gap{};      ///< points between the badge and the own name
+    int32_t name_points{};   ///< the own name's size, in points, before it shrinks
+    int32_t letter_points{}; ///< the badge letters' size, in points, before they shrink
+};
+
+/// Returns a card's measures scaled from the design card.
+///
+/// @param rect the card
+/// @return the measures; a badge no larger than the padded rectangle
+CardMeasures card_measures(const Rect& rect) noexcept {
+    CardMeasures measures;
+    measures.pad_top = scale_measure(kDesignPadTop, rect.height, kDesignCardHeight);
+    measures.pad_side = scale_measure(kDesignPadSide, rect.width, kDesignCardWidth);
+    measures.pad_bottom = scale_measure(kDesignPadBottom, rect.height, kDesignCardHeight);
+    measures.badge = scale_measure(kDesignBadge, rect.width, kDesignCardWidth);
+    measures.name_gap = scale_measure(kDesignNameGap, rect.height, kDesignCardHeight);
+    measures.name_points =
+        std::max(scale_measure(kDesignNamePoints, rect.height, kDesignCardHeight), int32_t{1});
+    measures.letter_points =
+        std::max(scale_measure(kDesignLetterPoints, measures.badge, kDesignBadge), int32_t{1});
+    const int32_t room_w = std::max(rect.width - 2 * measures.pad_side, int32_t{0});
+    const int32_t room_h =
+        std::max(rect.height - measures.pad_top - measures.pad_bottom, int32_t{0});
+    measures.badge = std::min(measures.badge, std::min(room_w, room_h));
+    if (measures.badge < 0)
+        measures.badge = 0;
+    return measures;
+}
+
+/// A line drawn in the modern fonts at one pixel size, the endonym face
+/// included at that size.
+struct EndonymLine {
+    text_font::Coverage coverage{}; ///< the drawn line
+    bool drawn{};                   ///< false when the fonts refused the text
+};
+
+/// Draws a line so a name the sans faces lack comes from the endonym face
+/// at the same pixel size.
+///
+/// @param fonts the modern fonts
+/// @param text the text, in UTF-8
+/// @param pixel_size pixels per em
+/// @return the line
+EndonymLine draw_endonym(text_font::FontStack& fonts, std::string_view text, int32_t pixel_size) {
+    text_font::Style style;
+    style.pixel_size = std::clamp(pixel_size, int32_t{1}, text_font::max_pixel_size);
+    style.weight = text_font::Weight::bold;
+    style.rendering = text_font::Rendering::antialiased;
+    style.least_cjk_pixel_size = style.pixel_size;
+    EndonymLine line;
+    if (std::optional<text_font::Coverage> coverage = fonts.draw(text, style)) {
+        line.coverage = std::move(*coverage);
+        line.drawn = true;
+    }
+    return line;
+}
+
+/// Returns how many rows a bold capital H stands, at a pixel size.
+///
+/// @param fonts the modern fonts
+/// @param pixel_size pixels per em
+/// @return the rows; a share of the size when the fonts cannot draw it
+int32_t endonym_capitals(text_font::FontStack& fonts, int32_t pixel_size) {
+    const EndonymLine line = draw_endonym(fonts, "H", pixel_size);
+    const text_font::Coverage& drawn = line.coverage;
+    if (!line.drawn || drawn.width <= 0)
+        return std::max(pixel_size * 7 / 10, int32_t{1});
+    constexpr uint8_t half_covered = 128;
+    for (int32_t row = 0; row < drawn.height && row < drawn.baseline; ++row) {
+        for (int32_t column = 0; column < drawn.width; ++column) {
+            const std::size_t at =
+                static_cast<std::size_t>(row) * static_cast<std::size_t>(drawn.width) +
+                static_cast<std::size_t>(column);
+            if (drawn.alpha[at] >= half_covered)
+                return drawn.baseline - row;
+        }
+    }
+    return std::max(pixel_size * 7 / 10, int32_t{1});
+}
+
+/// Returns the largest pixel size at or under a wanted size whose line fits.
+///
+/// @param fonts the modern fonts
+/// @param text the text
+/// @param wanted the size to start from, in pixels per em
+/// @param room the width the line may take, in pixels
+/// @return the size, at least 1
+int32_t
+endonym_size(text_font::FontStack& fonts, std::string_view text, int32_t wanted, int32_t room) {
+    int32_t size = std::clamp(wanted, int32_t{1}, text_font::max_pixel_size);
+    if (room <= 0)
+        return 1;
+    while (size > 1) {
+        const EndonymLine line = draw_endonym(fonts, text, size);
+        if (line.drawn && line.coverage.advance <= room)
+            return size;
+        --size;
+    }
+    return 1;
+}
+
+/// Shortens a line with an ellipsis once shrinking to one pixel still misses.
+///
+/// @param fonts the modern fonts
+/// @param text the text
+/// @param pixel_size the size it is drawn at
+/// @param room the width, in pixels
+/// @return the text when it fits; a shortened line, or empty, when it does not
+std::string endonym_ellipsis(
+    text_font::FontStack& fonts, std::string_view text, int32_t pixel_size, int32_t room
+) {
+    constexpr std::string_view mark = "\xE2\x80\xA6";
+    const auto fits = [&](std::string_view words) {
+        const EndonymLine line = draw_endonym(fonts, words, pixel_size);
+        return line.drawn && line.coverage.advance <= room;
+    };
+    if (fits(text))
+        return std::string(text);
+    std::string kept;
+    std::string best;
+    for (std::size_t at = 0; at < text.size();) {
+        const std::size_t bytes = character_bytes(text.substr(at));
+        if (bytes == 0)
+            break;
+        kept.append(text.substr(at, bytes));
+        std::string candidate = kept;
+        while (!candidate.empty() && candidate.back() == ' ')
+            candidate.pop_back();
+        candidate += mark;
+        if (!fits(candidate))
+            break;
+        best = std::move(candidate);
+        at += bytes;
+    }
+    if (!best.empty())
+        return best;
+    return fits(mark) ? std::string(mark) : std::string{};
+}
+
+/// Returns a rectangle of a smooth canvas as the painter's pixels.
+///
+/// @param canvas the canvas, smooth
+/// @param box the rectangle, in points
+/// @return the pixels
+oa::ui::paint::Box smooth_pixels(const Canvas& canvas, const Rect& box) noexcept {
+    const int32_t percent = std::max(canvas.smooth.scale_percent, int32_t{1});
+    const Rect drawn = to_canvas(
+        {canvas.smooth.origin.x + box.x, canvas.smooth.origin.y + box.y, box.width, box.height},
+        percent
+    );
+    return {drawn.x, drawn.y, drawn.width, drawn.height};
+}
+
+/// Draws a centred line in the modern fonts, shrunk until it fits.
+///
+/// @param canvas the canvas, smooth, with fonts
+/// @param text the text
+/// @param box the box, in points
+/// @param ink the colour
+/// @param points the size to start from, in points
+void draw_modern_line(
+    const Canvas& canvas, std::string_view text, const Rect& box, Colour ink, int32_t points
+) {
+    oa::ui::paint::Painter* painter = canvas.smooth.painter;
+    text_font::FontStack* fonts = canvas.smooth.fonts;
+    if (painter == nullptr || fonts == nullptr || text.empty() || box.width <= 0 || box.height <= 0)
+        return;
+    if (!canvas.smooth.clip) {
+        painter->reset_clip();
+    } else if (canvas.smooth.clip->empty()) {
+        return;
+    } else {
+        painter->set_clip(*canvas.smooth.clip);
+    }
+    const oa::ui::paint::Box pixels = smooth_pixels(canvas, box);
+    if (pixels.width <= 0 || pixels.height <= 0)
+        return;
+    const int32_t percent = std::max(canvas.smooth.scale_percent, int32_t{1});
+    const int32_t wanted = std::clamp(
+        to_canvas({0, 0, std::max(points, int32_t{1}), 0}, percent).width,
+        int32_t{1},
+        text_font::max_pixel_size
+    );
+    const int32_t size = endonym_size(*fonts, text, wanted, pixels.width);
+    std::string shown(text);
+    EndonymLine line = draw_endonym(*fonts, shown, size);
+    if (!line.drawn || line.coverage.advance > pixels.width) {
+        shown = endonym_ellipsis(*fonts, text, size, pixels.width);
+        line = draw_endonym(*fonts, shown, size);
+    }
+    if (!line.drawn || shown.empty())
+        return;
+    const int32_t capitals_tall = endonym_capitals(*fonts, size);
+    const int32_t pen = pixels.x + (pixels.width - line.coverage.advance) / 2;
+    const int32_t baseline = pixels.y + (pixels.height - capitals_tall) / 2 + capitals_tall;
+    oa::ui::paint::TextLine painted;
+    painted.coverage = std::move(line.coverage);
+    painted.drawn = true;
+    oa::ui::paint::paint_line(
+        *painter, painted, pen, baseline, oa::ui::paint::Rgba{ink.r, ink.g, ink.b, ink.a}
+    );
+}
+
+/// Draws a centred line in a game font, grown to the box and shrunk when
+/// that would be wider than the box. An ellipsis is not used: the whole
+/// line is kept.
+///
+/// @param canvas the canvas, crisp
+/// @param role which font
+/// @param text the text
+/// @param box the box, in points
+/// @param ink the colour
+void draw_bitmap_line(
+    const Canvas& canvas, FontRole role, std::string_view text, const Rect& box, Colour ink
+) {
+    if (canvas.surface == nullptr || canvas.fonts == nullptr || text.empty() || box.width <= 0 ||
+        box.height <= 0)
+        return;
+    const int32_t full = text_width(*canvas.fonts, role, text);
+    const int32_t rows = std::max(capitals(*canvas.fonts, role), int32_t{1});
+    if (full <= 0)
+        return;
+    constexpr int32_t kMostSource = 4096;
+    std::string shown(text);
+    int32_t src_w = full;
+    if (src_w > kMostSource) {
+        shown = fit(text, kMostSource, [&](std::string_view words) {
+            return text_width(*canvas.fonts, role, words);
+        });
+        src_w = std::max(text_width(*canvas.fonts, role, shown), int32_t{1});
+    }
+    const int32_t src_h = rows + 2;
+    renderer::Surface source;
+    source.width = static_cast<uint32_t>(src_w);
+    source.height = static_cast<uint32_t>(src_h);
+    source.rgb.assign(
+        static_cast<std::size_t>(src_w) * static_cast<std::size_t>(src_h) * 3, uint8_t{0}
+    );
+    renderer::Placement place;
+    place.scale = 1;
+    const int32_t pen_row = (src_h - rows) / 2 - 1;
+    draw_text(source, place, *canvas.fonts, role, shown, 0, pen_row, rgb(ink));
+
+    int32_t left = src_w;
+    int32_t top = src_h;
+    int32_t right = 0;
+    int32_t bottom = 0;
+    for (int32_t y = 0; y < src_h; ++y) {
+        for (int32_t x = 0; x < src_w; ++x) {
+            const std::size_t at = (static_cast<std::size_t>(y) * static_cast<std::size_t>(src_w) +
+                                    static_cast<std::size_t>(x)) *
+                                   3;
+            if ((source.rgb[at] | source.rgb[at + 1] | source.rgb[at + 2]) == 0)
+                continue;
+            if (x < left)
+                left = x;
+            if (y < top)
+                top = y;
+            if (x + 1 > right)
+                right = x + 1;
+            if (y + 1 > bottom)
+                bottom = y + 1;
+        }
+    }
+    if (right <= left || bottom <= top)
+        return;
+    const int32_t crop_w = right - left;
+    const int32_t crop_h = bottom - top;
+    std::vector<uint8_t> pixels(
+        static_cast<std::size_t>(crop_w) * static_cast<std::size_t>(crop_h) * 4, uint8_t{0}
+    );
+    for (int32_t y = 0; y < crop_h; ++y) {
+        for (int32_t x = 0; x < crop_w; ++x) {
+            const std::size_t from =
+                (static_cast<std::size_t>(top + y) * static_cast<std::size_t>(src_w) +
+                 static_cast<std::size_t>(left + x)) *
+                3;
+            if ((source.rgb[from] | source.rgb[from + 1] | source.rgb[from + 2]) == 0)
+                continue;
+            const std::size_t to = (static_cast<std::size_t>(y) * static_cast<std::size_t>(crop_w) +
+                                    static_cast<std::size_t>(x)) *
+                                   4;
+            pixels[to] = source.rgb[from];
+            pixels[to + 1] = source.rgb[from + 1];
+            pixels[to + 2] = source.rgb[from + 2];
+            pixels[to + 3] = 255;
+        }
+    }
+    // The box is the design size. Grow the line to that height, and shrink
+    // it only when the grown line would be wider than the box.
+    int32_t dest_h = box.height;
+    int32_t dest_w = std::max(crop_w * box.height / crop_h, int32_t{1});
+    if (dest_w > box.width) {
+        dest_w = box.width;
+        dest_h = std::max(crop_h * box.width / crop_w, int32_t{1});
+    }
+    dest_w = std::clamp(dest_w, int32_t{1}, box.width);
+    dest_h = std::clamp(dest_h, int32_t{1}, box.height);
+    const Rect dest{
+        box.x + (box.width - dest_w) / 2,
+        box.y + (box.height - dest_h) / 2,
+        dest_w,
+        dest_h,
+    };
+    const renderer::RgbaPicture picture{
+        static_cast<uint32_t>(crop_w), static_cast<uint32_t>(crop_h), pixels
+    };
+    draw_picture(canvas, dest, picture);
+}
+
+/// Draws a centred line: large in the modern fonts when they are open, and
+/// in a game font otherwise. It shrinks until the whole line fits.
+///
+/// @param canvas where it is drawn
+/// @param role the game font, when the modern fonts are not open
+/// @param text the text
+/// @param box the box
+/// @param ink the colour
+/// @param modern_points the modern size to start from, in points
+void draw_fitted(
+    const Canvas& canvas,
+    FontRole role,
+    std::string_view text,
+    const Rect& box,
+    Colour ink,
+    int32_t modern_points
+) {
+    if (canvas.smooth.painter != nullptr && canvas.smooth.fonts != nullptr) {
+        draw_modern_line(canvas, text, box, ink, modern_points);
+        return;
+    }
+    draw_bitmap_line(canvas, role, text, box, ink);
 }
 
 /// The words a step indicator shows.
@@ -473,9 +846,14 @@ LanguageCardLayout language_card_layout(Point at, const Metrics& metrics, bool p
 void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCardLook& look) {
     if (!can_draw(canvas) || rect.width <= 0 || rect.height <= 0)
         return;
+    const bool active = look.availability == LanguageAvailability::active;
+    // The ring sits one point outside the card, so it is drawn before the
+    // card clips itself. A carousel copies the card from a buffer of the
+    // card's own size and draws the centre card's ring afterwards.
+    if (active && !look.disabled)
+        outline_rect(canvas, grown(rect, 1), colour::accent);
     Canvas local = placed_at(clipped(canvas, rect), {rect.x, rect.y});
     const Rect face{0, 0, rect.width, rect.height};
-    const bool active = look.availability == LanguageAvailability::active;
     Colour ground = colour::panel;
     if (!look.disabled && look.held)
         ground = colour::list;
@@ -484,13 +862,23 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
     fill_rect(local, face, ground);
     outline_rect(local, face, active && !look.disabled ? colour::accent : colour::control_border);
 
-    const int32_t pad = rect.height < 64 ? 2 : 6;
-    int32_t badge = rect.height < 64 ? 14 : 22;
-    if (badge > rect.width - 2 * pad)
-        badge = std::max(rect.width - 2 * pad, int32_t{0});
-    if (badge > rect.height - 2 * pad)
-        badge = std::max(rect.height - 2 * pad, int32_t{0});
-    const Rect badge_rect{pad, pad, badge, badge};
+    const CardMeasures measures = card_measures(rect);
+    const int32_t content_w = std::max(rect.width - 2 * measures.pad_side, int32_t{0});
+    const int32_t pill_h = std::min(
+        pill_height(), std::max(rect.height - measures.pad_top - measures.pad_bottom, int32_t{0})
+    );
+    const int32_t pill_top = rect.height - measures.pad_bottom - pill_h;
+    int32_t badge = measures.badge;
+    const int32_t name_h = std::max(measures.name_points, int32_t{1});
+    if (measures.pad_top + badge + measures.name_gap + name_h > pill_top)
+        badge = std::max(pill_top - measures.pad_top - measures.name_gap - name_h, int32_t{0});
+    badge = std::min(badge, content_w);
+    const Rect badge_rect{
+        measures.pad_side + std::max(content_w - badge, int32_t{0}) / 2,
+        measures.pad_top,
+        std::max(badge, int32_t{0}),
+        std::max(badge, int32_t{0}),
+    };
     if (badge > 0) {
         if (renderer::picture_drawable(look.badge)) {
             draw_picture(local, badge_rect, look.badge);
@@ -498,14 +886,21 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
             fill_rect(
                 local, badge_rect, active && !look.disabled ? colour::accent : colour::control_hover
             );
-            box_text(
+            const int32_t letter_h =
+                std::min(std::max(measures.letter_points, int32_t{1}), badge_rect.height);
+            const Rect letter_box{
+                badge_rect.x,
+                badge_rect.y + (badge_rect.height - letter_h) / 2,
+                badge_rect.width,
+                letter_h,
+            };
+            draw_fitted(
                 local,
-                FontRole::small,
+                FontRole::regular,
                 look.letters,
-                badge_rect,
-                Align::centre,
+                letter_box,
                 active && !look.disabled ? colour::on_accent : colour::text,
-                0
+                measures.letter_points
             );
         }
     }
@@ -513,54 +908,77 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
     const Colour ink = look.disabled ? colour::switch_idle : colour::text;
     const Colour hint = look.disabled ? colour::switch_idle : colour::hint;
     const Colour quiet = look.disabled ? colour::switch_idle : colour::quiet;
-    const int32_t pill_h = std::min(pill_height(), std::max(rect.height - 2 * pad, int32_t{0}));
-    const int32_t pill_top = rect.height - pad - pill_h;
-    const int32_t text_x = badge > 0 ? pad + badge + 4 : pad;
-    const int32_t text_w = std::max(rect.width - text_x - pad, int32_t{0});
-    int32_t text_y = pad;
-    const int32_t line = rect.height < 64 ? 10 : compact_metrics.regular_line;
+    int32_t text_y = measures.pad_top + badge + measures.name_gap;
     const int32_t small = rect.height < 64 ? 8 : compact_metrics.small_line;
-    if (text_y + line <= pill_top) {
-        line_in(local, FontRole::regular, look.own_name, {text_x, text_y, text_w, line}, ink);
-        text_y += line;
+    if (text_y + name_h <= pill_top && content_w > 0) {
+        draw_fitted(
+            local,
+            FontRole::regular,
+            look.own_name,
+            {measures.pad_side, text_y, content_w, name_h},
+            ink,
+            measures.name_points
+        );
+        text_y += name_h;
     }
-    if (text_y + small <= pill_top) {
-        line_in(local, FontRole::small, look.english_name, {text_x, text_y, text_w, small}, hint);
+    if (text_y + small <= pill_top && content_w > 0) {
+        line_in(
+            local,
+            FontRole::small,
+            look.english_name,
+            {measures.pad_side, text_y, content_w, small},
+            hint,
+            Align::centre
+        );
         text_y += small;
     }
     // Facts stay one line when they fit. A line wider than the card wraps
     // onto the next small line, above the pill, so a narrow card still shows
     // every word. The pill is drawn under that, not over it.
-    const int32_t facts_w = std::max(rect.width - 2 * pad, int32_t{0});
-    if (text_y + small <= pill_top && facts_w > 0 && !look.facts.empty()) {
+    if (text_y + small <= pill_top && content_w > 0 && !look.facts.empty()) {
         const auto width_of = [&](std::string_view words) {
-            if (local.fonts == nullptr)
-                return estimated_width(words);
-            return text_width(*local.fonts, FontRole::small, words);
+            const int32_t measured = measure_text(local, FontRole::small, words);
+            if (measured > 0 || local.fonts != nullptr)
+                return measured;
+            return estimated_width(words);
         };
-        if (width_of(look.facts) <= facts_w) {
-            line_in(local, FontRole::small, look.facts, {pad, text_y, facts_w, small}, quiet);
+        if (width_of(look.facts) <= content_w) {
+            line_in(
+                local,
+                FontRole::small,
+                look.facts,
+                {measures.pad_side, text_y, content_w, small},
+                quiet,
+                Align::centre
+            );
         } else {
-            const std::vector<std::string> lines = wrap(look.facts, facts_w, width_of);
+            const std::vector<std::string> lines = wrap(look.facts, content_w, width_of);
             int32_t y = text_y;
             for (const std::string& wrapped : lines) {
                 if (y + small > pill_top)
                     break;
-                line_in(local, FontRole::small, wrapped, {pad, y, facts_w, small}, quiet);
+                line_in(
+                    local,
+                    FontRole::small,
+                    wrapped,
+                    {measures.pad_side, y, content_w, small},
+                    quiet,
+                    Align::centre
+                );
                 y += small;
             }
         }
     }
 
-    if (pill_h > 0 && !look.pill.empty()) {
+    if (pill_h > 0 && !look.pill.empty() && content_w > 0) {
         int32_t pill_w = pill_h * 2;
         if (local.fonts != nullptr)
             pill_w = pill_width(*local.fonts, PillLook{look.pill, pill_of(look.availability)});
-        pill_w = std::min(pill_w, std::max(rect.width - 2 * pad, int32_t{0}));
+        pill_w = std::min(pill_w, content_w);
         if (pill_w > 0) {
             draw_pill(
                 local,
-                {pad, pill_top, pill_w, pill_h},
+                {measures.pad_side + (content_w - pill_w) / 2, pill_top, pill_w, pill_h},
                 PillLook{look.pill, pill_of(look.availability)}
             );
         }
@@ -619,6 +1037,13 @@ void draw_carousel(const Canvas& canvas, const Rect& rect, const CarouselLook& l
         perspective_blit(canvas, drawn, slot.face, how, [&](const Canvas& offscreen) {
             draw_language_card(offscreen, drawn, card);
         });
+        // The centre card's accent border and the one-point ring outside it.
+        // A side card keeps the border it was drawn with; its turn and its
+        // opacity come from the slot.
+        if (slot.centre && slot.degrees == 0 && !source.disabled) {
+            outline_rect(canvas, slot.face, colour::accent);
+            outline_rect(canvas, grown(slot.face, 1), colour::accent);
+        }
     }
 
     if (count <= 0)

@@ -329,7 +329,7 @@ void carousel_place_is_a_function_of_time() {
 
     const kit::CarouselGeometry fitted = kit::carousel_fit(1280, kit::large_metrics);
     expect(
-        fitted.card_width == 200 && fitted.card_height == 148 && fitted.step == 236,
+        fitted.card_width == 232 && fitted.card_height == 304 && fitted.step == 236,
         "Large in a 1280-point room is not the design's card and step"
     );
     const kit::CarouselGeometry narrow = kit::carousel_fit(200, kit::large_metrics);
@@ -789,10 +789,75 @@ void every_component_at_every_class_and_scale(text_font::FontStack* modern) {
 
 } // namespace
 
+/// Rows in the own-name band whose red is above the panel.
+int name_rows(const renderer::Surface& surface, int32_t top, int32_t bottom) {
+    int rows = 0;
+    for (int32_t y = top; y < bottom; ++y) {
+        bool bright = false;
+        for (uint32_t x = 0; x < surface.width; ++x) {
+            const std::size_t at = (static_cast<std::size_t>(y) * surface.width + x) * 3;
+            if (surface.rgb[at] > 40)
+                bright = true;
+        }
+        if (bright)
+            ++rows;
+    }
+    return rows;
+}
+
+void own_name_shrinks_to_fit_and_the_active_card_has_a_ring() {
+    const int32_t card_w = kit::large_metrics.language_card_width;
+    const int32_t card_h = kit::large_metrics.language_card_height;
+    const int32_t origin = 4;
+    const int32_t pad_top = 30 * card_h / 304;
+    const int32_t badge = 88 * card_w / 232;
+    const int32_t gap = 10 * card_h / 304;
+    const int32_t name_h = 27 * card_h / 304;
+    const int32_t name_top = origin + pad_top + badge + gap;
+    auto draw = [&](std::string name, kit::LanguageAvailability availability) {
+        auto surface = black(card_w + 16, card_h + 16);
+        kit::Canvas canvas = canvas_on(surface);
+        kit::LanguageCardLook look = language_look(availability, false, false, false);
+        look.own_name = std::move(name);
+        look.english_name.clear();
+        look.facts.clear();
+        look.pill.clear();
+        kit::draw_language_card(canvas, {origin, origin, card_w, card_h}, look);
+        return surface;
+    };
+    const renderer::Surface short_name = draw("W", kit::LanguageAvailability::built_in);
+    const renderer::Surface long_name =
+        draw(std::string(80, 'W'), kit::LanguageAvailability::built_in);
+    const int short_rows = name_rows(short_name, name_top, name_top + name_h);
+    const int long_rows = name_rows(long_name, name_top, name_top + name_h);
+    expect(short_rows > 0, "a short own name drew nothing");
+    expect(long_rows > 0 && long_rows < short_rows, "a long own name was cut instead of shrunk");
+
+    const int32_t side = 18 * card_w / 232;
+    const int32_t badge_x = origin + side + (card_w - 2 * side - badge) / 2;
+    const int32_t badge_y = origin + pad_top;
+    expect(
+        pixel_is(short_name, badge_x + 2, badge_y + 2, 0x5b, 0x63, 0x52),
+        "the badge is not centred under the top padding"
+    );
+    expect(
+        pixel_is(short_name, origin + 4, badge_y + 2, 0x1b, 0x1e, 0x19),
+        "the badge still sits at the top left"
+    );
+
+    const renderer::Surface active = draw("W", kit::LanguageAvailability::active);
+    expect(
+        pixel_is(active, origin, origin - 1, 0x9c, 0xcc, 0x3c), "an active card has no accent ring"
+    );
+    const renderer::Surface built_in = draw("W", kit::LanguageAvailability::built_in);
+    expect(pixel_is(built_in, origin, origin - 1, 0, 0, 0), "a built-in card drew the active ring");
+}
+
 int main() {
     perspective_keeps_edges_opacity_and_clip();
     carousel_place_is_a_function_of_time();
     choice_and_coach_place_as_they_are_told();
+    own_name_shrinks_to_fit_and_the_active_card_has_a_ring();
     auto modern = text_font::FontStack::open(text_font::bundled_font_directory());
     expect(modern != nullptr, "the bundled fonts are not beside the test");
     // The filtered blit draws no glyphs. A missing font stack still has to
