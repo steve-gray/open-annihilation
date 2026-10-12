@@ -683,11 +683,18 @@ slides flat and the call to action holds a steady ring.
   last pixel at the far edge, so a sample between two pixels mixes them by
   the distance. `scale_blit` is that copy with no turn. A
   drawing that is already using the buffer draws nothing if it asks again.
-- **Language card** (`draw_language_card`, `language_card_layout`). A badge,
-  the pack's picture or the language's letters on the hint grey (accent
-  while the card is active), the language's own name, its English name, a
-  facts line and a pill. A facts line wider than the card wraps onto the
-  next small line, above the pill, so every word is shown.
+- **Language card** (`draw_language_card`, `language_card_layout`). At
+  Large the card is 232 by 304 points; Compact and Regular keep that
+  shape. Padding, the badge and the gap under it scale from that card to
+  the rectangle. The badge is centred at the top: the pack's picture, or
+  the language's letters on the hint grey (accent while the card is
+  active), large and centred. Under it, centred, the language's own name
+  (large, and shrunk until it fits), its English name, a facts line and a
+  pill centred at the bottom. A facts line wider than the card wraps onto
+  the next small line, above the pill, so every word is shown. An active
+  card has an accent border and a one-point accent ring outside it. The
+  carousel's centre card draws that ring too; a side card's turn and
+  opacity come from the carousel.
   `LanguageAvailability` chooses the pill: built in,
   get, downloading and checking are neutral, active uses the accent pill,
   a failed fetch uses the problem pill, and offline is neutral with the
@@ -733,7 +740,9 @@ slides flat and the call to action holds a steady ring.
   is the disabled button and sends no ring.
 
 The gallery's First run section shows every one of them, across the full
-width, at the language card's real size, with the carousel turned.
+width, at the language card's real size, with the carousel turned. The
+cards are tall, so a window shows the top of that section and the rest
+sits below it.
 
 ## The gallery
 
@@ -746,25 +755,26 @@ given one, filtered down, and the drawn plate when it has not, and the
 bone is always the drawn bone. These pictures are
 the gallery's own, as its check,
 `native-kit-gallery`, takes them on the main menu with `--snapshot`. First
-run spans the content width at every class. The compact picture is that
-section alone: the choice-card states sit over the footer, clear of CLOSE,
-and the sections under it are below the window. The regular picture shows
-First run and the headings of the next sections. The large picture shows
-First run and the tops of Window chrome, Tabs and Buttons. The
-language-card pills are on the cards themselves.
+run spans the content width at every class. The compact picture is the
+top of that section: the carousel, two rows of language cards, the choice
+cards and Start playing, with CLOSE clear at the bottom right. The regular
+and large pictures
+show the carousel, the first row of language cards, the picture well and
+the coach mark. The rest of First run, and the sections under it, are
+below the window. The language-card pills are on the cards themselves.
 
 Compact at 1x, on a 640x480 window: one column, scrolling between the
 header and the footer.
 
-![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then First run across the full width at the cards' real size. The carousel shows the centre card and two turned cards each side, with arrows and a pager. Language cards show every pill, and "From Ridge · Coverage 100%" on two lines. Choice cards "Ridge pack" and "Not now", and four short cards over the footer. The setup window, a picture well "Library, Active", a coach mark "1 Library" with its spotlight, and "Start playing" in each state. CLOSE sits clear of the cards.](../images/ui-kit/gallery-compact.png)
+![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then First run. The carousel shows five tall cards, the centre one facing with an accent border, a large badge and a large name, and two turned cards on each side. Under it, language cards for Built in, Get · 3.4 MB, Downloading… and Active, and five "Start playing" buttons. A second row shows Offline, Checking… and Couldn't download beside the choice cards "Ridge pack" and "Not now". CLOSE is at the bottom right, clear of the cards. The setup window, the picture well and the coach mark are below the window.](../images/ui-kit/gallery-compact.png)
 
 Regular at 2x, on a 1920x1080 window: two columns.
 
-![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". First run spans the width: the carousel at the real card size, language cards with every pill, the picture well, the coach mark on one line, the setup window, "Start playing" with its captions, and the choice cards. Window chrome and Tabs begin under it. CLOSE is at the bottom right.](../images/ui-kit/gallery-regular.png)
+![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". First run spans the width. The carousel's centre card is tall, with a large badge, a large own name, the English name, "Built into the game" and a pill at the bottom, and an accent border with a one-point ring. Two turned cards sit on each side. Under the carousel, four language cards and a picture well, with the coach mark "1 Library" cut off at the right. CLOSE is at the bottom right. The rest of First run is below the window.](../images/ui-kit/gallery-regular.png)
 
 Large at 1x, on a 1280x720 window: three columns.
 
-![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x". First run spans the width at the large card size, the facts on one line, the carousel with two turned cards each side, the setup window, the picture well, the coach mark, the call to action and the choice cards. Window chrome, Tabs and Buttons begin under it. CLOSE is at the bottom right.](../images/ui-kit/gallery-large.png)
+![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x". First run spans the width at the large card, 232 by 304. The centre card faces the player, with a large badge, a large own name, the facts on one line and a pill at the bottom, and an accent border with a one-point ring. Two turned cards sit on each side. Under it, four language cards, a picture well "Library, Active" and the coach mark "1 Library" with its spotlight. CLOSE is at the bottom right. The rest of First run is below the window.](../images/ui-kit/gallery-large.png)
 
 To open it in the game: Settings › Developer › UI kit gallery, and SHOW. It
 opens over the whole window, on the main menu or in a match, and Escape or
