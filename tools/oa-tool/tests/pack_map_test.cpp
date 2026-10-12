@@ -4,8 +4,11 @@
 // oa-tool pack for a map folder, in-process. Two maps share a feature file,
 // one preview is checked as a palette PNG, two packs of the same folder have
 // the same bytes, and a duplicate section, a name over 63 bytes, a missing
-// --game-dir and an existing output are refused. The source folder and the
-// stand-in game folder are left in the working folder.
+// --game-dir and an existing output are refused. numplayers sets the player
+// count, a missing or malformed value falls back to the start positions, a
+// folder's name, description and players replace the computed values, and an
+// unknown stem is refused. The source folder and the stand-in game folder are
+// left in the working folder.
 
 #include "command.hpp"
 #include "pack_map.hpp"
@@ -193,13 +196,24 @@ std::vector<uint8_t> make_tnt(const std::vector<std::string>& features, uint8_t 
     return bytes;
 }
 
-std::string
-ota_text(std::string_view title, std::string_view description, int starts, std::string_view unit) {
+std::string ota_text(
+    std::string_view title,
+    std::string_view description,
+    int starts,
+    std::string_view unit,
+    std::string_view numplayers = {}
+) {
     std::string text = "[GlobalHeader]\n{\nmissionname=";
     text += title;
     text += ";\nmissiondescription=";
     text += description;
-    text += ";\n[Schema 0]\n{\nType=Network 1;\n[specials]\n{\n";
+    text += ";\n";
+    if (!numplayers.empty()) {
+        text += "numplayers=";
+        text += numplayers;
+        text += ";\n";
+    }
+    text += "[Schema 0]\n{\nType=Network 1;\n[specials]\n{\n";
     for (int index = 0; index < starts; ++index) {
         text += "[special" + std::to_string(index) + "]{specialwhat=StartPos" +
                 std::to_string(index + 1) + ";XPos=1;ZPos=1;}\n";
@@ -229,7 +243,6 @@ std::string source_manifest() {
            "  base: \"ta-3.1c\"\n"
            "maps:\n"
            "  - stem: \"ash\"\n"
-           "    name: \"Not The Title\"\n"
            "  - stem: \"fen\"\n";
 }
 
@@ -297,6 +310,16 @@ const std::vector<uint8_t>* entry_bytes(const Package& package, std::string_view
     return nullptr;
 }
 
+void write_palette(const fs::path& game) {
+    std::vector<uint8_t> palette(1024);
+    for (int index = 0; index < 256; ++index) {
+        palette[static_cast<std::size_t>(index) * 4] = static_cast<uint8_t>(index);
+        palette[static_cast<std::size_t>(index) * 4 + 1] = static_cast<uint8_t>(255 - index);
+        palette[static_cast<std::size_t>(index) * 4 + 2] = 7;
+    }
+    write_bytes(game / "palettes" / "palette.pal", palette);
+}
+
 void write_source(const fs::path& source, const fs::path& game) {
     std::error_code error;
     fs::remove_all(source, error);
@@ -351,14 +374,7 @@ void write_source(const fs::path& source, const fs::path& game) {
     write_text(source / "__MACOSX" / "foo", "mac");
     write_text(source / ".git" / "config", "git");
     write_text(source / ".backup" / "old", "old");
-
-    std::vector<uint8_t> palette(1024);
-    for (int index = 0; index < 256; ++index) {
-        palette[static_cast<std::size_t>(index) * 4] = static_cast<uint8_t>(index);
-        palette[static_cast<std::size_t>(index) * 4 + 1] = static_cast<uint8_t>(255 - index);
-        palette[static_cast<std::size_t>(index) * 4 + 2] = 7;
-    }
-    write_bytes(game / "palettes" / "palette.pal", palette);
+    write_palette(game);
 }
 
 void check_files(const map_pack::MapEntry& map, const std::vector<std::string>& expected) {
@@ -603,11 +619,217 @@ void test_pack_map() {
     fs::remove(out_b, error);
 }
 
+std::string folder_header(std::string_view id, std::string_view maps) {
+    std::string text = std::string("oamap: 1\n") + "id: \"" + std::string{id} + "\"\n" +
+                       "name: \"Shoal Pack\"\n"
+                       "version: \"1.2\"\n"
+                       "author:\n"
+                       "  name: \"Ridge\"\n"
+                       "packaging:\n"
+                       "  revision: 1\n"
+                       "  date: \"2026-11-01\"\n"
+                       "  packager: \"oa-tool 0.8\"\n"
+                       "requires:\n"
+                       "  base: \"ta-3.1c\"\n";
+    text += maps;
+    return text;
+}
+
+map_pack::Manifest packed_manifest(const fs::path& path) {
+    const Package package = read_package(path);
+    const std::vector<uint8_t>* manifest = entry_bytes(package, "oamap.yaml");
+    OA_CHECK(manifest != nullptr);
+    map_pack::Manifest read;
+    std::vector<map_pack::Problem> problems;
+    if (manifest != nullptr) {
+        OA_CHECK(
+            map_pack::read_manifest(*manifest, map_pack::ManifestUse::package, read, problems)
+        );
+    }
+    OA_CHECK(problems.empty());
+    return read;
+}
+
+/// Packs one folder twice and returns the first run. The two packages match.
+Captured pack_twice(const fs::path& folder, const fs::path& game, const fs::path& out) {
+    const fs::path second = fs::path(out.string() + ".again");
+    const Captured first =
+        run({"pack", folder.string(), "--game-dir", game.string(), "--out", out.string()});
+    const Captured again =
+        run({"pack", folder.string(), "--game-dir", game.string(), "--out", second.string()});
+    OA_CHECK(first.status == oa::tool::exit_done);
+    OA_CHECK(again.status == oa::tool::exit_done);
+    OA_CHECK(first.err.empty());
+    OA_CHECK(again.err.empty());
+    const std::vector<uint8_t> bytes = read_bytes(out);
+    OA_CHECK(!bytes.empty());
+    OA_CHECK(bytes == read_bytes(second));
+    return first;
+}
+
+void test_players_and_names() {
+    Scratch scratch;
+    const fs::path game = scratch.path / "game";
+    write_palette(game);
+    const std::vector<uint8_t> tnt = make_tnt({}, 1);
+
+    const fs::path counted = scratch.path / "counted";
+    write_text(counted / "oamap.yaml", folder_header("counted", ""));
+    write_text(counted / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 10, "", "2, 4"));
+    write_bytes(counted / "maps" / "shore.tnt", tnt);
+    const Captured counted_run = pack_twice(counted, game, scratch.path / "counted.oamap");
+    OA_CHECK(!contains(counted_run.out, "numplayers"));
+    const map_pack::Manifest counted_manifest = packed_manifest(scratch.path / "counted.oamap");
+    OA_CHECK(counted_manifest.maps.size() == 1);
+    if (counted_manifest.maps.size() == 1) {
+        OA_CHECK(counted_manifest.maps[0].stem == "shore");
+        OA_CHECK(counted_manifest.maps[0].title == "Shew Drop");
+        OA_CHECK(counted_manifest.maps[0].players == 4);
+        OA_CHECK(counted_manifest.maps[0].size == "1x1");
+    }
+
+    const fs::path listed = scratch.path / "listed";
+    write_text(listed / "oamap.yaml", folder_header("listed", "maps:\n  - stem: \"shore\"\n"));
+    write_text(listed / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 10, "", "2, 4"));
+    write_bytes(listed / "maps" / "shore.tnt", tnt);
+    const Captured listed_run = pack_twice(listed, game, scratch.path / "listed.oamap");
+    OA_CHECK(!contains(listed_run.out, "numplayers"));
+    const map_pack::Manifest listed_manifest = packed_manifest(scratch.path / "listed.oamap");
+    OA_CHECK(listed_manifest.maps.size() == 1);
+    if (listed_manifest.maps.size() == 1)
+        OA_CHECK(listed_manifest.maps[0].players == 4);
+
+    const auto falls_back = [&](std::string_view numplayers, const fs::path& folder) {
+        write_text(folder / "oamap.yaml", folder_header("fallback", ""));
+        write_text(
+            folder / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 4, "", numplayers)
+        );
+        write_bytes(folder / "maps" / "shore.tnt", tnt);
+        const Captured packed = pack_twice(folder, game, fs::path(folder.string() + ".oamap"));
+        const std::string line = "shore: numplayers '" + std::string{numplayers} +
+                                 "' does not list whole numbers from 2 to 10; using 4 start "
+                                 "positions\n";
+        OA_CHECK(contains(packed.out, line));
+        const map_pack::Manifest manifest = packed_manifest(fs::path(folder.string() + ".oamap"));
+        OA_CHECK(manifest.maps.size() == 1);
+        if (manifest.maps.size() == 1)
+            OA_CHECK(manifest.maps[0].players == 4);
+    };
+    falls_back("12", scratch.path / "twelve");
+    falls_back("nope", scratch.path / "nope");
+    falls_back("2, 12", scratch.path / "mixed");
+
+    const fs::path absent = scratch.path / "absent";
+    write_text(absent / "oamap.yaml", folder_header("absent", ""));
+    write_text(absent / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 4, ""));
+    write_bytes(absent / "maps" / "shore.tnt", tnt);
+    const Captured absent_run = pack_twice(absent, game, scratch.path / "absent.oamap");
+    OA_CHECK(!contains(absent_run.out, "numplayers"));
+    const map_pack::Manifest absent_manifest = packed_manifest(scratch.path / "absent.oamap");
+    OA_CHECK(absent_manifest.maps.size() == 1);
+    if (absent_manifest.maps.size() == 1)
+        OA_CHECK(absent_manifest.maps[0].players == 4);
+
+    const fs::path wider = scratch.path / "wider";
+    write_text(wider / "oamap.yaml", folder_header("wider", ""));
+    write_text(wider / "maps" / "wide.ota", ota_text("Wide", "Open.", 2, "", "2, 6"));
+    write_bytes(wider / "maps" / "wide.tnt", tnt);
+    const Captured wider_run = pack_twice(wider, game, scratch.path / "wider.oamap");
+    OA_CHECK(contains(
+        wider_run.out,
+        "wide: numplayers lists 6 players, more than its 2 start positions; using 6\n"
+    ));
+    const map_pack::Manifest wider_manifest = packed_manifest(scratch.path / "wider.oamap");
+    OA_CHECK(wider_manifest.maps.size() == 1);
+    if (wider_manifest.maps.size() == 1)
+        OA_CHECK(wider_manifest.maps[0].players == 6);
+
+    const fs::path named = scratch.path / "named";
+    write_text(
+        named / "oamap.yaml",
+        folder_header(
+            "named",
+            "maps:\n"
+            "  - stem: \"ash\"\n"
+            "    name: \"Known Shore\"\n"
+            "    description: \"Packed by the folder.\"\n"
+            "    players: 2\n"
+            "    size: \"9x9\"\n"
+            "    preview: \"previews/other.png\"\n"
+            "    files:\n"
+            "      - \"maps/ash.ota\"\n"
+            "      - \"maps/ash.tnt\"\n"
+            "      - \"anims/frond.gaf\"\n"
+        )
+    );
+    write_text(named / "maps" / "ash.ota", ota_text("Ash Shore", "A ring of ash.", 4, "", "2, 4"));
+    write_bytes(named / "maps" / "ash.tnt", tnt);
+    write_text(named / "maps" / "fen.ota", ota_text("Fen Crossing", "A fen.", 4, "", "2, 4, 6"));
+    write_bytes(named / "maps" / "fen.tnt", tnt);
+    const Captured named_run = pack_twice(named, game, scratch.path / "named.oamap");
+    OA_CHECK(!contains(named_run.out, "ash: numplayers"));
+    OA_CHECK(contains(
+        named_run.out, "fen: numplayers lists 6 players, more than its 4 start positions; using 6\n"
+    ));
+    const map_pack::Manifest named_manifest = packed_manifest(scratch.path / "named.oamap");
+    OA_CHECK(named_manifest.maps.size() == 2);
+    if (named_manifest.maps.size() == 2) {
+        const map_pack::MapEntry& ash = named_manifest.maps[0];
+        const map_pack::MapEntry& fen = named_manifest.maps[1];
+        OA_CHECK(ash.stem == "ash");
+        OA_CHECK(ash.title == "Known Shore");
+        OA_CHECK(ash.description == "Packed by the folder.");
+        OA_CHECK(ash.players == 2);
+        OA_CHECK(ash.size == "1x1");
+        OA_CHECK(ash.preview == "previews/ash.png");
+        check_files(ash, {"maps/ash.ota", "maps/ash.tnt"});
+        OA_CHECK(fen.stem == "fen");
+        OA_CHECK(fen.title == "Fen Crossing");
+        OA_CHECK(fen.description == "A fen.");
+        OA_CHECK(fen.players == 6);
+        OA_CHECK(fen.size == "1x1");
+        OA_CHECK(fen.preview == "previews/fen.png");
+    }
+
+    const fs::path cleared = scratch.path / "cleared";
+    write_text(
+        cleared / "oamap.yaml",
+        folder_header("cleared", "maps:\n  - stem: \"shore\"\n    description: \"\"\n")
+    );
+    write_text(cleared / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 2, "", "2, 4"));
+    write_bytes(cleared / "maps" / "shore.tnt", tnt);
+    pack_twice(cleared, game, scratch.path / "cleared.oamap");
+    const map_pack::Manifest cleared_manifest = packed_manifest(scratch.path / "cleared.oamap");
+    OA_CHECK(cleared_manifest.maps.size() == 1);
+    if (cleared_manifest.maps.size() == 1) {
+        OA_CHECK(cleared_manifest.maps[0].title == "Shew Drop");
+        OA_CHECK(cleared_manifest.maps[0].description.empty());
+        OA_CHECK(cleared_manifest.maps[0].players == 4);
+    }
+
+    const fs::path unknown = scratch.path / "unknown";
+    write_text(unknown / "oamap.yaml", folder_header("unknown", "maps:\n  - stem: \"missing\"\n"));
+    write_text(unknown / "maps" / "shore.ota", ota_text("Shew Drop", "A bay.", 2, ""));
+    write_bytes(unknown / "maps" / "shore.tnt", tnt);
+    const Captured refused = run(
+        {"pack",
+         unknown.string(),
+         "--game-dir",
+         game.string(),
+         "--out",
+         (scratch.path / "unknown.oamap").string()}
+    );
+    OA_CHECK(refused.status == oa::tool::exit_failed);
+    OA_CHECK(contains(refused.err, "the map 'missing' has no maps/missing.ota"));
+    OA_CHECK(!fs::exists(scratch.path / "unknown.oamap"));
+}
+
 } // namespace
 
 int main() {
     try {
         test_pack_map();
+        test_players_and_names();
     } catch (const std::exception& failure) {
         std::fprintf(stderr, "pack map test threw: %s\n", failure.what());
         OA_CHECK(false);
