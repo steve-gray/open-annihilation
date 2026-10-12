@@ -3188,15 +3188,16 @@ the scan gave them, and are not scanned again. The first base map stays the
 default selection while it is still listed. The map picker (SELMAP) sorts
 the base maps as before and the pack maps after them.
 
-A pack from a registry fits when the catalogue snapshot records the mod's
-key as true for that map. The base game's key is `ta-3.1c`. A catalogue
+A pack from a registry follows the catalogue when the snapshot has a row
+for the mod's key: true lists the map, and a recorded false leaves it out
+without asking the files. The base game's key is `ta-3.1c`. A catalogue
 mod's key is `<catalogue-id>@<release>` from the mod folder's origin
-record. A key the catalogue does not record, or records as false, leaves
-the map out. A release the snapshot does not list yet is listed by the
-map-fit check until the catalogue has it, and a miss then is not logged. A
-pack with no catalogue origin is sideloaded: the map-fit check decides, and
-a miss is final. One log line names each pack and mod the first time a map
-of that pair is left out:
+record. An empty key, or a key that table lacks, is decided by the
+map-fit check, and a miss is final. A release the snapshot does not list
+yet is listed by the map-fit check until the catalogue has it, and a miss
+then is not logged. A pack with no catalogue origin is sideloaded: the
+map-fit check decides, and a miss is final. One log line names each pack
+and mod the first time a map of that pair is left out:
 
 ```
 open-annihilation: map pack <id>: <n> map does not fit <key>

@@ -1659,12 +1659,16 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_map_browser_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED map-browser-clean)
-      # A two-map pack installed from the check's own registry while both
-      # lists already exist. One stem has a space, an apostrophe and
-      # parentheses and fits the base game; the other fits only another mod
-      # and is left out. The fitting map is played to its first frame and
-      # named in a saved game. Each run starts from a clean folder. No game
-      # file is committed: the check serves the pack itself.
+      # A two-map pack installed from the check's own registry after the
+      # skirmish list has been shown and the battle room's list has been
+      # read. One stem has a space, an apostrophe and parentheses and the
+      # catalogue records it as fitting the base game. The other map's files
+      # fit too, and the catalogue records that as false, so it is left out.
+      # A local mod with no origin then lists a map the table has no row for
+      # when its files fit, and leaves one out when they do not. Uninstalling
+      # removes both. The fitting map is played to its first frame and named
+      # in a saved game. Each run starts from a clean folder. No game file is
+      # committed: the check serves the pack itself.
       set(oa_map_pack_lists_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-pack-lists")
       file(MAKE_DIRECTORY "${oa_map_pack_lists_dir}")
       add_test(NAME map-pack-lists-clean COMMAND ${CMAKE_COMMAND} -E rm -rf

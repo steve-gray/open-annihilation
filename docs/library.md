@@ -413,8 +413,12 @@ installed before. Then:
 - **a mod** goes into your Mods folder, and **PLAY NOW** switches to it;
 - **a map pack** goes into your Maps folder, and its maps join the map
   browser at once. The ones that fit the mod you are playing join the
-  skirmish list and the battle room's map list at once. One that does not
-  fit is left out of those two lists
+  skirmish list and the battle room's map list at once, including when
+  you had either list open before the download and open it again, and
+  when you go from the Library straight to Skirmish or a battle room.
+  Removing the pack takes those maps off both lists at once. A mod the
+  catalogue has no row for is decided by the map's files. One that does
+  not fit is left out of those two lists
   ([map packs](maps/README.md));
 - **a language pack** goes into your Languages folder, and Settings ›
   Language offers it at once ([languages](languages.md)).
