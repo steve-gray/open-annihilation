@@ -26,9 +26,9 @@ namespace oa::ui::kit {
 /// @param ink the colour of its set pixels
 void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink);
 
-/// Draws a state icon in one colour: a circled check, a circled up-arrow or
-/// a download arrow, filling a square of the rectangle's shorter side
-/// centred in it.
+/// Draws a state icon in one colour: a circled check, a circled up-arrow, a
+/// download arrow or a key, filling a square of the rectangle's shorter side
+/// centred in it. The key has no ring.
 ///
 /// The icon is worked out from its rings and strokes at the canvas's own
 /// pixels (covered_pixels), its edges smoothed by how much of each pixel

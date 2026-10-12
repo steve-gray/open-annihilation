@@ -212,6 +212,7 @@ enum class StateIcon : uint8_t {
     circled_check,    ///< a check in a ring: installed and up to date
     circled_up_arrow, ///< an arrow pointing up in a ring: installed, with an update
     download_arrow,   ///< an arrow pointing down into a tray: not installed, to get
+    key,              ///< a key, bow and shaft and teeth, with no ring: a registry's signing key
 };
 
 /// A chip: a short text in a box, in the colours of its state. The text is

@@ -503,6 +503,44 @@ constexpr std::array<IconStroke, 6> kDownloadStrokes{{
     {{14, 82}, {82, 82}},
     {{82, 82}, {82, 62}},
 }};
+/// A signing key: a twelve-sided bow, a shaft to the right, and two teeth.
+/// Every end stays kStrokeHalf inside the square, so the round ends are not
+/// clipped. The bow's centre is (28, 48) and its radius is 16.
+constexpr std::array<IconStroke, 15> kKeyStrokes{{
+    {{44, 48}, {42, 56}},
+    {{42, 56}, {36, 62}},
+    {{36, 62}, {28, 64}},
+    {{28, 64}, {20, 62}},
+    {{20, 62}, {14, 56}},
+    {{14, 56}, {12, 48}},
+    {{12, 48}, {14, 40}},
+    {{14, 40}, {20, 34}},
+    {{20, 34}, {28, 32}},
+    {{28, 32}, {36, 34}},
+    {{36, 34}, {42, 40}},
+    {{42, 40}, {44, 48}},
+    {{40, 48}, {88, 48}},
+    {{70, 48}, {70, 66}},
+    {{82, 48}, {82, 76}},
+}};
+
+/// Reports whether a key stroke's round ends stay inside the icon square.
+///
+/// @return true when every end is kStrokeHalf inside the square
+constexpr bool key_strokes_fit() noexcept {
+    constexpr int64_t least = kStrokeHalf;
+    constexpr int64_t most = kIconGrid - kStrokeHalf;
+    for (const IconStroke& stroke : kKeyStrokes) {
+        const IconPoint ends[] = {stroke.from, stroke.to};
+        for (const IconPoint end : ends) {
+            if (end.x < least || end.x > most || end.y < least || end.y > most)
+                return false;
+        }
+    }
+    return true;
+}
+
+static_assert(key_strokes_fit(), "the key glyph stays inside its square");
 
 /// Returns a state icon's strokes.
 ///
@@ -516,6 +554,8 @@ std::span<const IconStroke> strokes_of(StateIcon icon) noexcept {
         return kUpArrowStrokes;
     case StateIcon::download_arrow:
         return kDownloadStrokes;
+    case StateIcon::key:
+        return kKeyStrokes;
     }
     return {};
 }
