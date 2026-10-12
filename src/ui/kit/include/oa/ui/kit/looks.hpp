@@ -69,6 +69,9 @@ struct ButtonLook {
     /// Zero is the arrow. The kit eases the arrow into the check over
     /// refresh_ease_ms and holds the check until refresh_check_ms.
     uint16_t check_ms{};
+    /// An accent button drawn in accent_light while it is not held: the
+    /// call to action's bright face. Off leaves every button as it was.
+    bool bright{false};
 };
 
 /// An Off/On switch. The captions are already looked up.
@@ -370,6 +373,135 @@ struct PictureLook {
     oa::ui::frontend_renderer::RgbaPicture picture{};
 };
 
+/// What a language card's pill says. The words are the caller's; the state
+/// chooses the pill's colours and, for offline, dims the card.
+enum class LanguageAvailability : uint8_t {
+    built_in,    ///< built into the game: a neutral pill
+    get,         ///< a pack that can be fetched: a neutral pill
+    downloading, ///< a fetch in progress: a neutral pill, the bar drawn under the card
+    checking,    ///< a fetch being checked: a neutral pill
+    active,      ///< the language in use: an accent pill, and an accent badge
+    failed,      ///< a fetch that did not finish: a problem pill
+    offline,     ///< the catalogue cannot be read: a neutral pill, and the card dimmed
+};
+
+/// A language card: a badge, the language's own name, its English name, a
+/// facts line and a pill. Progress is not part of the card.
+struct LanguageCardLook {
+    /// The badge's letters, drawn when badge has no picture.
+    std::string letters{};
+    /// The pack's badge. It refers to pixels the screen keeps. Empty, the
+    /// letters are drawn on a grey ground, accent while the card is active.
+    oa::ui::frontend_renderer::RgbaPicture badge{};
+    std::string own_name{};     ///< the language's own name, in the regular font
+    std::string english_name{}; ///< its English name, in the small font
+    std::string facts{};        ///< the facts line, in the small font
+    std::string pill{};         ///< the pill's words, already looked up
+    LanguageAvailability availability{LanguageAvailability::built_in}; ///< the pill's colours
+    bool hovered{};                                                    ///< the pointer is over it
+    bool held{};                                                       ///< a press is held on it
+    bool disabled{};                                                   ///< it takes nothing
+};
+
+/// One card of a carousel, drawn turned. The words are already looked up.
+struct CarouselCard {
+    std::string letters{};
+    std::string own_name{};
+    std::string english_name{};
+    std::string facts{};
+    std::string pill{};
+    LanguageAvailability availability{LanguageAvailability::built_in};
+    bool hovered{};
+    bool held{};
+    bool disabled{};
+};
+
+/// A carousel of language cards. The item's rectangle is the band the cards
+/// and the pager share. The arrow buttons are the caller's own buttons.
+struct CarouselLook {
+    int32_t card_width{};              ///< each card's width, in points, before it shrinks
+    int32_t card_height{};             ///< each card's height, in points, before it shrinks
+    int32_t step{};                    ///< the points from one card's centre to the next
+    int32_t centre_milli{};            ///< where the centre sits, in thousandths of a card index
+    bool reduced_motion{false};        ///< slides flat: no turn, no shrink and no fall
+    std::vector<CarouselCard> cards{}; ///< the cards, in order from the left of the ring
+};
+
+/// A step indicator: a letter-spaced name and number, and one segment a step.
+struct StepLook {
+    std::string name{}; ///< the step's name, already in the case to show, such as "LANGUAGE"
+    int32_t index{1};   ///< the current step, from 1
+    int32_t count{1};   ///< how many steps
+};
+
+/// The setup window's header and footer. It spans the window the width and
+/// height name, not a dialog. The words are already looked up.
+struct SetupChromeLook {
+    int32_t width{};                ///< the window's width, in points
+    int32_t height{};               ///< the window's height, in points
+    std::string page{};             ///< the muted word after the title
+    std::string step_name{};        ///< the step indicator's name
+    int32_t step_index{1};          ///< the current step, from 1
+    int32_t step_count{1};          ///< how many steps
+    std::string skip{"Skip setup"}; ///< the quiet button on the left
+    std::string back{"Back"};       ///< the plain button
+    std::string next{"Next"};       ///< the accent button
+    bool skip_hovered{};
+    bool skip_held{};
+    bool skip_enabled{true};
+    bool back_hovered{};
+    bool back_held{};
+    bool back_enabled{true};
+    bool next_hovered{};
+    bool next_held{};
+    bool next_enabled{true};
+};
+
+/// A choice card: a radio row with a title and a hint.
+struct ChoiceCardLook {
+    std::string title{}; ///< the title, in the regular font
+    std::string hint{};  ///< the line under it, in the small font
+    bool chosen{};       ///< the radio is filled and the border is the accent
+    bool hovered{};      ///< the pointer is over it
+    bool held{};         ///< a press is held on it
+    bool disabled{};     ///< it takes nothing, and shows no accent
+};
+
+/// A coach mark: a numbered card with an accent border. Its rectangle is the
+/// card. The connector runs from the card to target, which may lie outside it.
+struct CoachMarkLook {
+    int32_t number{1};   ///< the mark's number, drawn before the title
+    std::string title{}; ///< the title, in the regular font
+    std::string body{};  ///< the lines under the title, in the small font
+    Rect target{};       ///< the rectangle the connector runs to, in the same points as the card
+};
+
+/// A spotlight under a coach mark. The item's rectangle is the layer that
+/// dims; cutout is the rectangle left clear, with an accent ring.
+struct SpotlightLook {
+    Rect cutout{}; ///< the clear rectangle, in the same points as the layer
+};
+
+/// A picture well: a one-point border, an inset, and a caption under it.
+/// The picture is not part of the look: the caller draws it into the inset.
+struct PictureWellLook {
+    std::string caption{}; ///< the line under the well, in the small font
+    /// A stand-in pattern in the inset, so a sample can show the well with
+    /// no picture of its own. Off, the inset is left for the caller.
+    bool stand_in{false};
+};
+
+/// A call to action: an accent button that brightens and sends out a ring.
+/// The item's rectangle is the button. The ring is drawn a few points outside it.
+struct CallToActionLook {
+    std::string caption{};      ///< the button's words, already looked up
+    bool hovered{};             ///< the pointer is over it
+    bool held{};                ///< a press is held on it
+    bool enabled{true};         ///< false draws the disabled button and no ring
+    uint32_t time_ms{};         ///< how long the pulse has been running, in milliseconds
+    bool reduced_motion{false}; ///< holds a steady ring instead of sending one out
+};
+
 /// What a component item draws. Empty for a generic role. Later components
 /// append looks. A locked fade has no look of its own: its rectangle is the
 /// item's.
@@ -400,6 +532,15 @@ using Look = std::variant<
     LinkLook,
     ProgressLook,
     PictureLook,
-    PillLook>;
+    PillLook,
+    LanguageCardLook,
+    CarouselLook,
+    StepLook,
+    SetupChromeLook,
+    ChoiceCardLook,
+    CoachMarkLook,
+    SpotlightLook,
+    PictureWellLook,
+    CallToActionLook>;
 
 } // namespace oa::ui::kit

@@ -66,6 +66,8 @@ struct GalleryModel {
     std::size_t row{};                             ///< the chosen working list row
     std::size_t list_row{};                        ///< the chosen row of the scroll list
     std::size_t card{};                            ///< the chosen working card
+    int32_t carousel_index{2};                     ///< the working carousel's centre card, from 0
+    std::size_t choice_index{};                    ///< the working choice cards' chosen row, from 0
 };
 
 /// A component the gallery draws from an origin of its own: the window
@@ -108,16 +110,23 @@ struct GalleryLayout {
 /// in the lock colour), the footer band with CLOSE at its right, and the
 /// edge. Between the header and the footer the sections flow, each under
 /// the column that is shortest so far, in one column at Compact, two at
-/// Regular and three at Large: Window chrome, Tabs, Buttons, Toggle, Level
-/// strip, Drop-down, Slider, Search field, Chips, Progress, Nav list, List
-/// rows, Scroll list, Card grid, Hover card, Section, label and hint, Lock,
-/// Notice, Question and OA mark, each under its heading. Where they are
-/// taller than the view between the header and the footer they scroll in
-/// it, with a scroll bar in the right margin, every part and control clipped
-/// to the view. Each interactive component shows once working on the model,
-/// named gallery.<section>.<n> from 1, and once in each fixed state (idle,
-/// hovered, pressed, focused, disabled, and locked where it has a lock),
-/// which takes no input; CLOSE is gallery.close and last in the Tab order.
+/// Regular and three at Large: First run (the carousel turned, language
+/// cards, setup chrome, choice cards, a coach mark and its spotlight, a
+/// picture well, the call to action and a step indicator), then Window
+/// chrome, Tabs, Buttons, Toggle, Level
+/// strip, Drop-down, Slider, Search field, Chips, Pills, Progress, Nav list,
+/// List rows, Scroll list, Card grid, Hover card, Section, label and hint,
+/// Lock, Notice, Question and OA mark, each under its heading. Where they
+/// are taller than the view between the header and the footer they scroll
+/// in it, with a scroll bar in the right margin, every part and control
+/// clipped to the view. Each interactive component shows once working on
+/// the model, named gallery.<section>.<n> from 1, and once in each fixed
+/// state (idle, hovered, pressed, focused, disabled, and locked where it
+/// has a lock), which takes no input. The carousel's cards are
+/// gallery.carousel.card.<tag> and its arrows gallery.carousel.previous and
+/// gallery.carousel.next; the setup buttons are gallery.setup.skip,
+/// gallery.setup.back and gallery.setup.next. CLOSE is gallery.close and
+/// last in the Tab order.
 ///
 /// @param model the gallery's model; its offsets are held to what scrolls
 /// @param frame the frame: its area's size, its size class and its scale

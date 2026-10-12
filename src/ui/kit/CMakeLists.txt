@@ -6,11 +6,11 @@
 # include/oa/ui/kit/layout.hpp, include/oa/ui/kit/input.hpp,
 # include/oa/ui/kit/looks.hpp, include/oa/ui/kit/canvas.hpp, include/oa/ui/kit/components.hpp,
 # include/oa/ui/kit/chrome.hpp, include/oa/ui/kit/controls.hpp,
-# include/oa/ui/kit/components_more.hpp), and the gallery of every component
-# (include/oa/ui/kit/gallery.hpp). Provisional until the kit is declared
-# stable.
+# include/oa/ui/kit/components_more.hpp, include/oa/ui/kit/first_run.hpp), and the
+# gallery of every component (include/oa/ui/kit/gallery.hpp). Provisional until
+# the kit is declared stable.
 add_library(oa-ui-kit src/text.cpp src/wrap.cpp src/layout.cpp src/input.cpp src/canvas.cpp src/components.cpp
-  src/chrome.cpp src/controls.cpp src/components_more.cpp src/gallery.cpp)
+  src/chrome.cpp src/controls.cpp src/components_more.cpp src/first_run.cpp src/gallery.cpp)
 # Declared rows: a settings page as a table (include/oa/ui/kit/rows.hpp).
 target_sources(oa-ui-kit PRIVATE src/rows.cpp)
 add_library(oa::ui::kit ALIAS oa-ui-kit)
@@ -88,4 +88,13 @@ if(BUILD_TESTING)
     "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
   add_test(NAME ui-kit-gallery COMMAND oa-ui-kit-gallery-test)
   set_tests_properties(ui-kit-gallery PROPERTIES TIMEOUT 30)
+
+  # The first-run pieces at Compact, Regular and Large, at 1x and at 150%.
+  # The smooth draws read the bundled fonts beside the test.
+  add_executable(oa-ui-kit-first-run-test tests/first_run_test.cpp)
+  target_link_libraries(oa-ui-kit-first-run-test PRIVATE oa-ui-kit oa-test-support oa-options
+    oa-ui-paint oa-platform-text-font)
+  oa_copy_text_fonts(oa-ui-kit-first-run-test "$<TARGET_FILE_DIR:oa-ui-kit-first-run-test>")
+  add_test(NAME ui-kit-first-run COMMAND oa-ui-kit-first-run-test)
+  set_tests_properties(ui-kit-first-run PROPERTIES TIMEOUT 30)
 endif()

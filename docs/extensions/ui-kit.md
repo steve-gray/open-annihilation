@@ -33,6 +33,7 @@ Every example below is taken from it as it is built and checked.
 - [Drawing in a match overlay](#drawing-in-a-match-overlay)
 - [Focus and touch](#focus-and-touch)
 - [Automation names](#automation-names)
+- [First-run pieces](#first-run-pieces)
 - [The gallery](#the-gallery)
 - [Limitations](#limitations)
 
@@ -658,27 +659,98 @@ well, and every word comes from the code (an id, a row's word, a button's
 word), never from a text as the player sees it, so no name changes with
 the language.
 
+## First-run pieces
+
+`oa/ui/kit/first_run.hpp` holds the pieces a first-run flow is built from.
+An extension draws them as it draws a button: a look, a rectangle and a
+draw function, or an item on a display list. The words are the caller's,
+already looked up. The kit does not read a preference.
+
+Reduced motion is `Frame::reduced_motion`, off by default. It comes from a
+later Settings row. A screen copies the flag onto the carousel's look and
+the call to action's look, and the draw functions read the look. Off, a
+carousel turns and a call to action sends out a ring. On, the carousel
+slides flat and the call to action holds a steady ring.
+
+- **Perspective blit** (`perspective_blit` and `scale_blit`, in
+  `canvas.hpp`). Draws a rectangle into one reused offscreen buffer, then
+  onto the canvas as a trapezoid. One vertical edge keeps its height and
+  the other is shorter, so the rectangle looks turned about its vertical
+  axis, at an opacity. The copy is nearest-neighbour on the crisp form and
+  filtered on the smooth form. `scale_blit` is that copy with no turn. A
+  drawing that is already using the buffer draws nothing if it asks again.
+- **Language card** (`draw_language_card`, `language_card_layout`). A badge,
+  the pack's picture or the language's letters on the hint grey (accent
+  while the card is active), the language's own name, its English name, a
+  facts line and a pill. `LanguageAvailability` chooses the pill: built in,
+  get, downloading and checking are neutral, active uses the accent pill,
+  a failed fetch uses the problem pill, and offline is neutral with the
+  card dimmed. Hovered, held and disabled change the face. Progress is the
+  kit's progress bar under the card, not inside it.
+- **Carousel** (`draw_carousel`, `carousel_fit`, `carousel_places`,
+  `carousel_go`, `carousel_tick`, `carousel_key`, `carousel_command`,
+  `carousel_pointer`). Cards in a ring. The centre faces the player. Each
+  step out turns 34°, falls back, shrinks and dims, and two cards show on
+  each side. A move takes 0.5 s and eases out, from the time passed, so
+  the place is the same however many frames drew it. The arrows are the
+  caller's buttons. A pager lights the centre card's bar. Left and Right
+  move one card, Enter on the centre picks it, a press on a side card
+  centres it, and a swipe moves one card. Shoulders and a stick are not
+  keys: the host fills a `CarouselCommand`. Each card is a control named
+  `oa.<screen>.card.<tag>`, and so is each arrow.
+- **Step indicator** (`draw_step_indicator`). The step's name and number in
+  the small font, letter-spaced, as "LANGUAGE · 1 OF 3", and one segment a
+  step, lit from the first up to the current one.
+- **Setup chrome** (`draw_setup_chrome`). The kit window's header, the mark,
+  "Open Annihilation", a muted page word and the step indicator at the
+  right, and its footer: Skip setup, a quiet button on the left, then Back
+  and an accent Next. It spans the window and is drawn from the canvas's
+  origin.
+- **Choice card** (`draw_choice_card`, `choice_step`). A radio row with a
+  title and a hint: idle, hovered, held, chosen and disabled. Up and Left
+  move to the previous row of a group, and Down and Right to the next.
+- **Coach mark** (`draw_coach_mark`, `place_coach_mark`) and **spotlight**
+  (`draw_spotlight`). A numbered card with an accent border and a one-point
+  accent connector to a target. The card is tried on the right of the
+  target, then the left, then below, then above, with a gap of 8 points,
+  so it stays in the room and never covers the target. The spotlight dims
+  the layer to 74 percent of the backdrop except a cut-out around the
+  target, which keeps an accent ring.
+- **Picture well** (`draw_picture_well`, `picture_well_layout`). A rectangle
+  with a one-point border and a 6-point inset. The caller draws into the
+  inset, scaled with `scale_blit`, and a caption sits under it. The kit
+  ships no picture for the well. A stand-in pattern fills the inset when a
+  sample shows the well alone.
+- **Call to action** (`draw_call_to_action`). An accent button for a flow's
+  last step. It brightens to the light accent and sends out a ring every
+  1.8 s, from the time. Reduced motion holds a steady ring. Disabled, it
+  is the disabled button and sends no ring.
+
+The gallery's First run section shows every one of them, with the carousel
+turned.
+
 ## The gallery
 
 The UI kit gallery shows every component of the kit, once working on its
 own model and once in each state (idle, hovered, pressed, focused,
 disabled, and locked where a component has a lock), at the scale and size
 class of the window. These pictures are the gallery's own, as its check,
-`native-kit-gallery`, takes them on the main menu with `--snapshot`. They
-were taken before the pill samples, so they do not show the PILLS section.
+`native-kit-gallery`, takes them on the main menu with `--snapshot`. The
+compact picture is the first-run section. The large picture reaches the
+pills.
 
 Compact at 1x, on a 640x480 window: one column, scrolling between the
 header and the footer.
 
-![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x" at its right, then in one scrolling column the Window chrome sample, Tabs in each state and Buttons in their four looks and five states, and CLOSE in the footer.](../images/ui-kit/gallery-compact.png)
+![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then the First run section filling the column. A turned carousel of language cards, with an arrow on each side and a pager, then language cards in each pill state, choice cards, the setup window with Skip setup, Back, Next and "LANGUAGE · 1 OF 3", a coach mark "1 Library" on a spotlight, a picture well captioned "Library, Active", a call to action "Start playing" in each state, and a step indicator. CLOSE sits in the footer.](../images/ui-kit/gallery-compact.png)
 
 Regular at 2x, on a 1920x1080 window: two columns.
 
-![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x", Window chrome, Buttons and an open Drop-down in the left column, and Tabs, Toggle, Level strip and Slider in their states in the right one.](../images/ui-kit/gallery-regular.png)
+![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". The left column is the First run section, the carousel turned, and the start of Toggle. The right column is Window chrome, showing "v1.2.3", then Tabs and Buttons.](../images/ui-kit/gallery-regular.png)
 
 Large at 1x, on a 1280x720 window: three columns.
 
-![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x", and three columns of sections: Window chrome, Toggle, Slider, Chips, Progress and Scroll list; Tabs, Level strip, Search field and List rows; Buttons, Drop-down and Nav list.](../images/ui-kit/gallery-large.png)
+![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x", and three columns. First run fills the left one, the carousel turned, and Search field begins under it. The middle column is Window chrome, Buttons, an open Drop-down, Pills and Nav list. The right column is Tabs, Toggle, Level strip, Slider, Chips and Progress.](../images/ui-kit/gallery-large.png)
 
 To open it in the game: Settings › Developer › UI kit gallery, and SHOW. It
 opens over the whole window, on the main menu or in a match, and Escape or
@@ -694,8 +766,9 @@ installed game, on SDL's dummy drivers so that no window opens:
 
 ```sh
 SDL_VIDEO_DRIVER=dummy SDL_AUDIO_DRIVER=dummy \
-open-annihilation --game-dir "/path/to/Total Annihilation" --skip-intro --mute \
-    --check-kit-gallery --preferences-file gallery.conf --snapshot gallery.ppm
+open-annihilation --game-dir "$OA_GAME_DIR" --skip-intro --mute \
+    --check-kit-gallery --preferences-file gallery.conf \
+    --user-folder gallery-user --snapshot gallery.ppm
 ```
 
 which writes `gallery-kit-gallery-640x480.ppm`,

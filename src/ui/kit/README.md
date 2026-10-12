@@ -105,7 +105,14 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   `measure_text`, `draw_picture`, `draw_mark`, `clipped` and `placed_at`;
   and, for a shape worked out at the canvas's own pixels, `covered_pixels`
   (how many pixels a rectangle covers on either form) and `blend_coverage`
-  (a colour blended through a map of one byte a pixel).
+  (a colour blended through a map of one byte a pixel). `perspective_blit`
+  draws a laid-out rectangle into one reused offscreen buffer and copies it
+  onto the canvas as a trapezoid: one vertical edge keeps its height and the
+  other is shorter, so the rectangle looks turned about its vertical axis,
+  at an opacity. The copy is nearest-neighbour on the crisp form and filtered
+  on the smooth form. `scale_blit` is that copy with no turn. The buffer is
+  kept for the thread, grown and never replaced, and a drawing that is
+  already using it draws nothing if it asks for the buffer again.
 - `components.hpp`: the controls, drawn through the canvas's primitives on
   either form. One button, five looks. `draw_state_icon` draws a state
   icon in one colour, filling a square of a rectangle's shorter side: its
@@ -224,6 +231,61 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   `press`, `drag`, `choose`, `type` and `edit` change the model as a row's
   control is used.
 
+- `first_run.hpp`: the pieces a first-run flow is built from. The words
+  arrive already looked up. Reduced motion is `Frame::reduced_motion`, off
+  until a later Settings row sets it. The kit does not read preferences: a
+  screen copies the flag onto the look, and the draw functions read the look.
+  - A language card (`draw_language_card`, `language_card_layout`,
+    `add_language_card`): a badge (the pack's picture, or the language's
+    letters on the hint grey, accent while the card is active), the
+    language's own name, its English name, a facts line and a pill. The
+    pill follows `LanguageAvailability`. Built in, get, downloading and
+    checking are neutral; active uses the accent pill and an accent badge;
+    a failed fetch uses the problem pill; offline is neutral and the card
+    is dimmed. Hovered, held and disabled change the face. A progress bar,
+    when the layout leaves room for one, sits under the card and is the
+    kit's own progress bar, not part of the card.
+  - A carousel (`draw_carousel`, `carousel_fit`, `carousel_places`,
+    `carousel_go`, `carousel_tick`, `carousel_key`, `carousel_command`,
+    `carousel_pointer`): cards in a ring. The centre card faces the player.
+    Each step out turns 34°, falls back, shrinks and dims, at 0.7 then 0.3
+    of full opacity, and two cards show on each side. A move takes 0.5 s
+    and eases out. The place at a time is the same however many frames drew
+    it. Reduced motion slides the cards flat. The arrows are the caller's
+    buttons. A pager of one bar a card lights the bar nearest the centre.
+    Left and Right move one card, Enter on the centre picks it, a press on
+    a side card centres it, and a swipe of 24 points or more moves one
+    card. Shoulders and a stick are not keys: the host fills a
+    `CarouselCommand` and `carousel_command` applies it. Each card and each
+    arrow is a control.
+  - A step indicator (`draw_step_indicator`, `step_indicator_width`): the
+    step's name and "N OF M" in the small font, letter-spaced, and one
+    segment a step, lit from the first up to the current one.
+  - The setup window (`draw_setup_chrome`, `setup_buttons`): the kit
+    window's header (the mark, "Open Annihilation", a muted page word and
+    the step indicator at the right) and its footer (Skip setup, a quiet
+    button on the left, then Back and an accent Next). It spans the window
+    and is drawn from the canvas's origin.
+  - A choice card (`draw_choice_card`, `choice_step`): a radio row with a
+    title and a hint, idle, hovered, held, chosen and disabled. Up and Left
+    move to the previous row of a group and Down and Right to the next,
+    held inside the group.
+  - A coach mark (`draw_coach_mark`, `place_coach_mark`) and its spotlight
+    (`draw_spotlight`): a numbered card with an accent border and a
+    one-point accent connector to a target rectangle. The card is placed to
+    the right of the target, then the left, then below, then above, with a
+    gap of 8 points, so it stays in the room and never covers the target.
+    The spotlight dims the layer to 74 percent of the backdrop except a
+    cut-out around the target, which keeps an accent ring.
+  - A picture well (`draw_picture_well`, `picture_well_layout`): a one-point
+    border, a 6-point inset the caller draws into, scaled with `scale_blit`,
+    and a caption under it. The kit ships no picture for it. A sample may
+    fill the inset with a stand-in pattern.
+  - A call to action (`draw_call_to_action`): an accent button for a flow's
+    last step. It brightens to the light accent and sends out a ring every
+    1.8 s, from the time. Reduced motion holds a steady ring. Disabled, it
+    is the disabled button and sends no ring.
+
 - `gallery.hpp`: the UI kit gallery (see [Gallery](#gallery)):
   `GalleryModel`, `gallery_layout`, `draw_gallery`, `gallery_act` and
   `gallery_text_field`, and its fixed samples' `gallery_version` and
@@ -304,7 +366,11 @@ takes ([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md#the-galler
   (the OA mark, "Open Annihilation", "UI kit gallery" and the class and
   scale, such as "Large · 1x", in the lock colour), the footer band with
   CLOSE, and the edge. Between them the sections, each under its heading
-  and a rule: Window chrome (an OA window over a darkened screen, its
+  and a rule: First run (a carousel of language cards, turned, with an
+  arrow on each side and a pager; language cards in each pill state; choice
+  cards; the setup window with Skip setup, Back and Next; a coach mark and
+  the spotlight under it; a picture well; a call to action; and a step
+  indicator), Window chrome (an OA window over a darkened screen, its
   header saying `v1.2.3`, never the build's version), Tabs, Buttons (the
   four looks, a link), Toggle, Level strip, Drop-down (one shown open with
   an aside), Slider, Search field (and a plain text field), Chips (every
@@ -324,13 +390,21 @@ takes ([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md#the-galler
   flips, the strip steps, the drop-down opens and chooses a language, the
   slider moves and drags, the search field takes typing, filter chips turn
   on and off, nav entries, rows and cards are chosen, and the scroll list
-  scrolls. CLOSE is `gallery.close`, last in Tab's order. Each appears
-  again in each fixed state, which takes no input: idle, hovered, pressed,
-  focused (with the focus ring), disabled (its disabled look, or the
-  locked fade over it), and locked where it has a lock. The sample texts
-  are fixed: "Sample Mod" by "the sample team", "Example Maps", "Another
-  Mod", "Third Mod", English, Deutsch, Español and Français. Nothing in the
-  gallery reads or changes a setting.
+  scrolls, the carousel's arrows and cards
+  (`gallery.carousel.previous`, `gallery.carousel.next` and
+  `gallery.carousel.card.<tag>`) move which card is centred, a choice card
+  is chosen, and the language card, Skip setup, Back and Next
+  (`gallery.setup.skip`, `gallery.setup.back`, `gallery.setup.next`) and
+  the call to action take a press. CLOSE is `gallery.close`, last in Tab's
+  order. Each appears again in each fixed state, which takes no input:
+  idle, hovered, pressed, focused (with the focus ring), disabled (its
+  disabled look, or the locked fade over it), and locked where it has a
+  lock. The sample texts are fixed: "Sample Mod" by "the sample team",
+  "Example Maps", "Another Mod", "Third Mod", English, Deutsch, Español,
+  Français and 日本語, a Ridge card ("From Ridge · Coverage 100%"), choice
+  cards "Ridge pack" and "Not now", a coach mark "Library", a picture well
+  captioned "Library, Active" and a call to action "Start playing". Nothing
+  in the gallery reads or changes a setting.
 - **How its test guards the kit.** `ui-kit-gallery` lays it out at Compact
   (640 by 480 points at 1x), Large (1280 by 720 at 1x) and Regular (960 by
   540 points at 2x), and fails when a role of `all_roles` that `paint`
@@ -360,7 +434,11 @@ and passes them in; the kit's functions read them and change only what they
 are handed. A preference row reads and writes the `PreferenceModel` its
 caller fills from the preferences and saves. `load_game_fonts` reads the
 game's font files, and the canvas draws on the surface or the painter its
-caller gives it.
+caller gives it. Reduced motion is `Frame::reduced_motion`. It comes from
+a later Settings row, and the kit does not read that row: a screen copies
+the flag onto a carousel's look and a call to action's look. Off, the
+default, the carousel turns and the call to action sends out a ring. On,
+the carousel slides flat and the call to action holds a steady ring.
 
 ## Invariants
 
@@ -372,7 +450,8 @@ caller gives it.
   change to their look is accepted.
 - Compact metrics are 0.7.3's exactly, for the controls 0.7.3 has. Regular
   and Large metrics differ from them only in the sizes the design's table
-  gives the classes; rows, text and controls keep Compact's sizes, so a
+  gives the classes, and in the first-run language card and the carousel's
+  step; rows, text and the other controls keep Compact's sizes, so a
   larger class shows more rows instead of growing them.
 - Every token's value is pinned by `ui-kit-theme`.
 - One wrap. Its rules are the only differences between its callers.
@@ -553,11 +632,18 @@ states of every component role that takes input, every part in the frame
 or its scroll area, no two controls overlapping, Tab and Down, the names,
 no text holding the build's version (which the test is given), and the
 working samples changing the model alone; and that it draws.
+`ui-kit-first-run` checks the perspective blit (a turned edge shorter than
+the near one, an opacity, a clip, a nested blit that draws nothing, and a
+smooth copy that is filtered), that a carousel's place at a time is the
+same however the time was sliced, where a choice group steps and where a
+coach mark sits, and that every first-run component draws at Compact,
+Regular and Large, on the crisp form and at 150%, with its states differing.
 
-The module's ctests are those eleven: `ui-kit-theme`, `ui-kit-text`,
+The module's ctests are those twelve: `ui-kit-theme`, `ui-kit-text`,
 `ui-kit-layout`, `ui-kit-input`, `ui-kit-components`, `ui-kit-chrome`,
-`ui-kit-controls`, `ui-kit-notices`, `ui-kit-smooth`, `ui-kit-rows` and
-`ui-kit-gallery`, none of which needs the game's data. Others guard the
+`ui-kit-controls`, `ui-kit-notices`, `ui-kit-smooth`, `ui-kit-rows`,
+`ui-kit-gallery` and `ui-kit-first-run`, none of which needs the game's
+data. Others guard the
 kit from its users: `ui-engine-settings-pixels` and
 `ui-engine-settings-pixels-data` pin Compact's pixels
 ([Invariants](#invariants));
@@ -583,10 +669,10 @@ first release that carries version 15, keeps 15 and updates the engine's
 own followers and test extensions in the same change; from 0.8.0 on, any
 change to a kit header raises the version.
 
-The gallery's stored pictures were taken before the pill samples, so they
-do not show the PILLS section. The gallery shows chips with their words
-only: a chip with a state icon
-is drawn by the same chip role, and showing it there would move the
+The compact picture is the first-run section, which fills that window, so
+the pills section sits further down the column. The large picture shows the
+pills. The gallery shows chips with their words only: a chip with a state
+icon is drawn by the same chip role, and showing it there would move the
 gallery's golden frames, so the icons are reviewed in the Library's
 pictures (`oa-ui-library-draw-test --frames`) until the gallery takes a
 sample of them.
