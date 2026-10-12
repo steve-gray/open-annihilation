@@ -7,7 +7,8 @@
 // part lies inside the window; no two controls meet, nor their press areas;
 // every action of the selected entry is a control (Compact: on its details
 // page, MORE's open); UPDATE ALL is one on the Updates tab, over its list
-// beside the same filters as Mods, SETTINGS... and CLOSE always are; Tab
+// beside the same filters as Mods, and CLOSE always is; the header's
+// refresh icon is present and SETTINGS is not a footer button; Tab
 // follows the declared order and the arrows reach every control that takes
 // the focus; the names are step 8's and unique; every text fits, and the
 // Rules fact is shown whole. The Active tab is first, has no search and no
@@ -41,6 +42,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -202,8 +204,9 @@ int declared_place(std::string_view name) {
         return 4;
     if (starts(name, "library.registry."))
         return 5;
-    if (name == "library.check-now" || name == "library.add-registry" ||
-        name == "library.settings" || name == "library.details" || name == "library.close")
+    if (name == "library.refresh")
+        return 0;
+    if (name == "library.add-registry" || name == "library.details" || name == "library.close")
         return 6;
     return -1;
 }
@@ -281,7 +284,7 @@ bool designed_name(const std::string& name) {
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
-        "details|back|check-now|settings|close|status|queue|note|from|rules|"
+        "details|back|refresh|close|status|queue|note|from|rules|"
         "active\\.(mod|language|map\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror))?)"
@@ -461,7 +464,8 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_EXPECT_NONE(order_problems(list), named.name + " list");
     OA_EXPECT_NONE(name_problems(list), named.name + " list");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), named.name + " list");
-    OA_CHECK(fixture::named(list, "library.settings") != nullptr);
+    OA_CHECK(fixture::named(list, "library.refresh") != nullptr);
+    OA_CHECK(fixture::named(list, "library.settings") == nullptr);
     OA_CHECK(fixture::named(list, "library.close") != nullptr);
     OA_CHECK(fixture::named(list, "library.list") != nullptr);
     OA_CHECK(fixture::named(list, "library.queue") != nullptr);
@@ -542,7 +546,8 @@ void check_frame(const fixture::NamedFrame& named) {
         const kit::Control* chosen = fixture::named(updates_list, "library.filter.updates");
         OA_CHECK(chosen != nullptr && chosen->checked && chosen->text == "Updates (3)");
     }
-    OA_CHECK(fixture::named(updates_list, "library.settings") != nullptr);
+    OA_CHECK(fixture::named(updates_list, "library.refresh") != nullptr);
+    OA_CHECK(fixture::named(updates_list, "library.settings") == nullptr);
     OA_CHECK(fixture::named(updates_list, "library.close") != nullptr);
     OA_EXPECT_NONE(fixture::outside_window(updates_list, window), named.name + " updates");
     OA_EXPECT_NONE(meeting_controls(updates_list), named.name + " updates");
@@ -550,7 +555,12 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_EXPECT_NONE(name_problems(updates_list), named.name + " updates");
     OA_EXPECT_NONE(fixture::texts_not_fitting(updates_list, fonts()), named.name + " updates");
     const kit::Control* updates_tab = fixture::named(updates_list, "library.tab.updates");
-    OA_CHECK(updates_tab != nullptr && updates_tab->text == (compact ? "Upd 2" : "Updates 2"));
+    // Updates counts the updates that can be installed.
+    const std::string updates_count = std::to_string(lib::update_count(library));
+    OA_CHECK(
+        updates_tab != nullptr &&
+        updates_tab->text == (compact ? "Upd " : "Updates ") + updates_count
+    );
 
     // The Active tab: first, no search, no filters and no list; its lines
     // are labels, and Tab reaches only the tabs and the footer's buttons.
@@ -577,8 +587,7 @@ void check_frame(const fixture::NamedFrame& named) {
     for (const kit::ControlId id : active_list.tab_order) {
         const kit::Control* stop = kit::control_of(active_list, id);
         OA_CHECK(
-            stop != nullptr && (starts(stop->name, "library.tab.") ||
-                                stop->name == "library.settings" || stop->name == "library.close")
+            stop != nullptr && (starts(stop->name, "library.tab.") || stop->name == "library.close")
         );
     }
     const kit::Control* mod_line = fixture::named(active_list, "library.active.mod");
@@ -623,15 +632,25 @@ void larger_classes_show_more() {
     const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
     OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
-    OA_CHECK(languages != nullptr && languages->text == "Lang");
+    OA_CHECK(languages != nullptr && languages->text == "Lang 2");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
-    OA_CHECK(updates != nullptr && updates->text == "Upd 2");
+    OA_CHECK(
+        updates != nullptr && updates->text == "Upd " + std::to_string(lib::update_count(library))
+    );
 }
 
 /// A row reads its entry's name, and a row's chip says its state.
 void rows_name_their_entries() {
     const lib::Library library = with_ridge();
     const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* base = fixture::named(list, "library.row.base-game");
+    OA_CHECK(
+        base != nullptr && base->text == "Base Game (Disable Mods)" &&
+        base->kind == kit::ControlKind::list_item && !base->checked
+    );
+    OA_CHECK(
+        !library.visible.empty() && library.entries[library.visible.front()].id.key == "@base-game"
+    );
     const kit::Control* ridge = fixture::named(list, "library.row.fixture-core.ridge");
     OA_CHECK(
         ridge != nullptr && ridge->text == "Ridge" && ridge->kind == kit::ControlKind::list_item
@@ -701,19 +720,30 @@ void empty_and_offline_lists_say_why() {
                 (item.role == kit::Role::text &&
                  item.text == "Showing the list from 4 min ago. OA couldn't reach the registries.");
     OA_CHECK(noted);
+    bool marked = false;
+    for (const kit::Item& item : offline_list.items)
+        marked = marked || (item.role == kit::Role::text && item.text == "offline" &&
+                            item.colour == kit::colour::lock);
+    OA_CHECK(marked);
     OA_EXPECT_NONE(fixture::outside_window(offline_list, {480, 324}), "offline");
     OA_EXPECT_NONE(meeting_controls(offline_list), "offline");
 
+    // No registry and no package: Mods still starts with the base game, so
+    // the empty-list line is not shown.
     lib::Library none;
     lib::refresh(none, {});
     lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
+    const kit::Control* base_row = fixture::named(none_list, "library.row.base-game");
+    OA_CHECK(
+        base_row != nullptr && base_row->text == "Base Game (Disable Mods)" && base_row->checked
+    );
     bool told = false;
     for (const kit::Item& item : none_list.items)
         told =
             told || (item.role == kit::Role::text &&
                      item.text == "Nothing here yet. Turn a registry on in Settings › Downloads.");
-    OA_CHECK(told);
+    OA_CHECK(!told);
 }
 
 /// Returns a state whose focus shows on a named control.
@@ -924,7 +954,6 @@ void tab_follows_the_declared_order() {
         "library.search",
         "library.filter",
         "library.list",
-        "library.settings",
         "library.details",
         "library.close",
     };
@@ -952,7 +981,6 @@ void tab_follows_the_declared_order() {
         "library.action.uninstall",
         "library.action.open-folder",
         "library.action.homepage",
-        "library.settings",
         "library.close",
     };
     OA_CHECK(regular.size() > regular_end.size() + 5);
@@ -1024,21 +1052,45 @@ void pressing_rows_selects_and_never_gets() {
     result = click(small, small_state, small_list, "library.back");
     OA_CHECK(!result.action && !small.details_open);
     small_list = laid_out(small, small_state, all[0].frame);
-    result = click(small, small_state, small_list, "library.settings");
-    OA_CHECK(result.action == lib::Action::settings);
     result = click(small, small_state, small_list, "library.close");
     OA_CHECK(result.action == lib::Action::close);
-    // CHECK NOW asks for nothing until a registry is on to ask, then for the check.
-    const kit::Control* check_off = fixture::named(small_list, "library.check-now");
-    OA_CHECK(check_off != nullptr && !check_off->enabled);
-    result = click(small, small_state, small_list, "library.check-now");
+    // The header's refresh icon asks for nothing until a registry can be
+    // asked, and nothing while the registries are being asked.
+    const kit::Control* refresh_off = fixture::named(small_list, "library.refresh");
+    OA_CHECK(refresh_off != nullptr && !refresh_off->enabled && refresh_off->text == "Refresh");
+    result = click(small, small_state, small_list, "library.refresh");
     OA_CHECK(!result.action);
+    OA_CHECK(
+        lib::library_command(small, small_state, small_list, lib::ScreenCommand::refresh).action ==
+        std::nullopt
+    );
     small.inputs.can_check = true;
     small_list = laid_out(small, small_state, all[0].frame);
-    const kit::Control* check_on = fixture::named(small_list, "library.check-now");
-    OA_CHECK(check_on != nullptr && check_on->enabled);
-    result = click(small, small_state, small_list, "library.check-now");
+    const kit::Control* refresh_on = fixture::named(small_list, "library.refresh");
+    OA_CHECK(refresh_on != nullptr && refresh_on->enabled && refresh_on->text == "Refresh");
+    result = click(small, small_state, small_list, "library.refresh");
     OA_CHECK(result.action == lib::Action::check_now);
+    OA_CHECK(
+        lib::library_command(small, small_state, small_list, lib::ScreenCommand::refresh).action ==
+        lib::Action::check_now
+    );
+    small.inputs.checking = true;
+    small_state.refresh_turn = 2;
+    small_list = laid_out(small, small_state, all[0].frame);
+    const kit::Control* refreshing = fixture::named(small_list, "library.refresh");
+    OA_CHECK(refreshing != nullptr && !refreshing->enabled && refreshing->text == "Refreshing");
+    result = click(small, small_state, small_list, "library.refresh");
+    OA_CHECK(!result.action);
+    bool turning = false;
+    for (const kit::Item& item : small_list.items) {
+        if (item.role != kit::Role::button || refreshing == nullptr ||
+            item.control != refreshing->id)
+            continue;
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        turning = look != nullptr && look->mark == kit::ButtonMark::refresh && look->turning &&
+                  look->turn == 2;
+    }
+    OA_CHECK(turning);
 }
 
 /// A row's state icon: a circled up-arrow pressed as UPDATE and a download

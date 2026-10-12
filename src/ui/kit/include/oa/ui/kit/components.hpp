@@ -53,7 +53,10 @@ void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around);
 
 /// Draws a button in one of the five looks. The caption is centred in the
 /// small font. A plain button that is not enabled draws the disabled look,
-/// whatever the pointer is doing.
+/// whatever the pointer is doing. A refresh mark draws a circular arrow in
+/// place of the caption: the quiet look's face while the pointer is over it,
+/// the plain look's disabled face while it cannot be pressed, and the arrow
+/// in the text colour while it is turning.
 ///
 /// @param canvas where it is drawn
 /// @param area the button
@@ -210,12 +213,68 @@ inline constexpr int32_t oa_button_dot_inset = 2;
     };
 }
 
+/// The badge's gap to the OA button's bottom and right edges, in points.
+inline constexpr int32_t oa_button_badge_inset = 2;
+
+/// The badge's height, in points: the small font's line.
+inline constexpr int32_t oa_button_badge_height = 11;
+
+/// The badge's gap between its outline and the number, on each side, in points.
+inline constexpr int32_t oa_button_badge_pad = 2;
+
+/// How many places the badge's spinner has, one full turn.
+inline constexpr int32_t oa_button_spinner_places = 8;
+
+/// The largest number the badge writes as itself. Above it, the badge says 999+.
+inline constexpr std::size_t oa_button_count_limit = 999;
+
+/// Returns the number the OA button's badge writes: the count, or "999+"
+/// above oa_button_count_limit.
+///
+/// @param count the number
+/// @return the text
+[[nodiscard]] inline std::string oa_button_count_text(std::size_t count) {
+    if (count > oa_button_count_limit)
+        return "999+";
+    return std::to_string(count);
+}
+
+/// Returns where the OA button's bottom-right badge lies. A count uses the
+/// measured width of its text plus oa_button_badge_pad on each side, and at
+/// least a square of oa_button_badge_height; a spinner passes 0 and is that
+/// square. The badge is oa_button_badge_inset points in from the button's
+/// bottom and right edges. A button too small to hold it, or a negative
+/// width, returns an empty rectangle and nothing is drawn.
+///
+/// @param side the button's side, in points
+/// @param text_columns the number's width, in points; 0 for a spinner or a count
+///     not yet measured
+/// @return the badge, from the button's top left corner, in points
+[[nodiscard]] constexpr Rect oa_button_badge(int32_t side, int32_t text_columns) noexcept {
+    if (side < oa_button_badge_inset * 2 + oa_button_badge_height || text_columns < 0)
+        return {};
+    int32_t width = text_columns + 2 * oa_button_badge_pad;
+    if (width < oa_button_badge_height)
+        width = oa_button_badge_height;
+    const int32_t room = side - 2 * oa_button_badge_inset;
+    if (width > room)
+        width = room;
+    return {
+        side - oa_button_badge_inset - width,
+        side - oa_button_badge_inset - oa_button_badge_height,
+        width,
+        oa_button_badge_height,
+    };
+}
+
 /// Draws the OA button at the canvas's origin: a bevelled square, the icon
 /// inset when the canvas has one, and otherwise the OA mark. With the dot,
 /// the kit's attention dot is drawn over its top right corner
 /// (oa_button_dot): a disc oa_button_dot_side points across in the warning
 /// token (colour::lock) whose outer point is a ring in the outline token
-/// (colour::control_border). Without it, nothing else is drawn.
+/// (colour::control_border). A corner mark draws the badge in the bottom
+/// right (oa_button_badge): the count, or the spinner in its place. Without
+/// either, nothing else is drawn.
 ///
 /// @param canvas where it is drawn; its icon is the button's
 /// @param side the square's side, in points
@@ -223,6 +282,19 @@ inline constexpr int32_t oa_button_dot_inset = 2;
 /// @param dot it wears the attention dot, as the main menu's does while
 ///     updates are waiting
 void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, bool dot = false);
+
+/// Draws the OA button as draw_oa_button does, with the dot and the
+/// bottom-right badge the mark names. The spinner's `turn` is which of
+/// oa_button_spinner_places is lit, and the same turn draws the same pixels
+/// on every machine. The badge does not move when the button is pressed.
+///
+/// @param canvas where it is drawn; its icon is the button's
+/// @param side the square's side, in points
+/// @param state how it looks
+/// @param mark the dot and the bottom-right badge
+void draw_oa_button(
+    const Canvas& canvas, int32_t side, OaButtonState state, const OaButtonMark& mark
+);
 
 /// Draws the OA mark alone at the canvas's origin: the icon filling the
 /// square, or without one the mark the OA button shows at rest. A side of

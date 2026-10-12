@@ -30,6 +30,7 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/app/window_icon.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/languages.hpp"
@@ -215,6 +216,17 @@ std::optional<library::Badge> badge_of(const ModBadge& picture) {
     if (picture.width == 0 || picture.height == 0 || picture.pixels.empty())
         return std::nullopt;
     return library::Badge{picture.pixels, picture.width, picture.height};
+}
+
+/// Returns the Open Annihilation logo as the base game entry's badge.
+///
+/// Read once from the icon the window shows. Empty when that icon cannot
+/// be read; the entry then shows its letters.
+///
+/// @return the badge
+std::optional<library::Badge> base_game_logo() {
+    static const std::optional<library::Badge> logo = badge_of(read_mod_badge(window_icon_png()));
+    return logo;
 }
 
 /// Returns the seconds since 1970 by the system's clock.
@@ -722,8 +734,8 @@ library::Inputs Runtime::library_inputs() {
                 newest = view.checked;
             if (!view.last_error.empty() && !view.refreshing)
                 inputs.offline = true;
-            // CHECK NOW asks the registries that are on and can be fetched,
-            // and waits while one of them is being asked.
+            // The header's refresh icon asks the registries that are on and
+            // can be fetched, and waits while one of them is being asked.
             if (view.status != content::RegistryStatus::needs_developer_mode) {
                 inputs.can_check = true;
                 inputs.checking = inputs.checking || view.refreshing;
@@ -1053,6 +1065,7 @@ library::Inputs Runtime::library_inputs() {
         );
     }
     inputs.registries_notice = registry_edit_notice();
+    inputs.base_game_badge = base_game_logo();
     return inputs;
 }
 
@@ -1148,8 +1161,8 @@ struct Runtime::LibraryScreen final : LayerScreen {
 
     /// Takes the Library's own keys before the kit's: Cmd+F on macOS and
     /// Ctrl+F elsewhere, and `/` outside the search, find; Ctrl+Tab and
-    /// Ctrl+Shift+Tab move between the tabs; the settings' shortcut opens
-    /// Settings over the Library, as SETTINGS… does.
+    /// Ctrl+Shift+Tab move between the tabs; F5 presses the header's
+    /// refresh icon; the settings' shortcut opens Settings over the Library.
     ///
     /// @param sdl_key the key's SDL keycode
     /// @param modifiers SDL_Keymod bits
@@ -1158,6 +1171,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
         if (Runtime::engine_settings_shortcut(sdl_key, modifiers))
             return take({.action = library::Action::settings, .redraw = true});
         LibraryHost& host = runtime_.library_host();
+        if (sdl_key == SDLK_F5) {
+            if (!library::can_check_now(host.model))
+                return LayerAnswer::none;
+            return take({.action = library::Action::check_now, .redraw = true});
+        }
         std::optional<library::ScreenCommand> command;
         if (sdl_key == SDLK_F && (modifiers & kCommandModifier) != 0)
             command = library::ScreenCommand::find;
@@ -1258,13 +1276,32 @@ struct Runtime::LibraryScreen final : LayerScreen {
         return runtime_.library_->state.interaction;
     }
 
-    /// Follows the model as the host rebuilds it, and closes off the main menu.
+    /// Follows the model as the host rebuilds it, turns the header's refresh
+    /// icon while the registries are being asked, and closes off the main menu.
     ///
-    /// @return close off the main menu; redraw when the model moved; otherwise none
+    /// @return close off the main menu; redraw when the model moved or the
+    ///     icon turned; otherwise none
     LayerAnswer tick() override {
         if (runtime_.screen_ != Screen::main_menu)
             return LayerAnswer::close;
-        if (!runtime_.library_ || runtime_.library_->model_revision == seen_model_)
+        bool spun = false;
+        if (runtime_.library_) {
+            LibraryHost& host = *runtime_.library_;
+            if (host.model.inputs.checking) {
+                ++refresh_step_;
+                if (refresh_step_ >= 4) {
+                    refresh_step_ = 0;
+                    host.state.refresh_turn =
+                        static_cast<uint8_t>((host.state.refresh_turn + 1u) & 7u);
+                    spun = true;
+                }
+            } else if (refresh_step_ != 0 || host.state.refresh_turn != 0) {
+                refresh_step_ = 0;
+                host.state.refresh_turn = 0;
+                spun = true;
+            }
+        }
+        if (!runtime_.library_ || (runtime_.library_->model_revision == seen_model_ && !spun))
             return LayerAnswer::none;
         relayout();
         return LayerAnswer::redraw;
@@ -1476,6 +1513,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
     bool laid_out_{};         ///< frame_ was set by lay_out
     uint64_t seen_model_{};   ///< the host's model revision the list was laid out from
     uint64_t revision_{};     ///< counts its layouts
+    uint8_t refresh_step_{};  ///< frames since the refresh icon last turned
 };
 
 // ---------------------------------------------------------------------------------------------

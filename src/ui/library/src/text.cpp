@@ -240,19 +240,6 @@ std::string age_text(int64_t seconds, const TextHooks& text) {
     return filled(text, words::age_days, {{"count", count}});
 }
 
-std::string header_age_text(const Inputs& inputs, const TextHooks& text) {
-    std::string line;
-    if (inputs.list_age_seconds < 0) {
-        line = shown(text, words::header_no_list);
-    } else {
-        const std::string age = age_text(inputs.list_age_seconds, text);
-        line = filled(text, words::header_list_from, {{"age", age}});
-    }
-    if (inputs.offline)
-        line = filled(text, words::header_offline, {{"list", line}});
-    return line;
-}
-
 std::string rules_text(const base::sha256::Digest& digest) {
     const auto digits = base::sha256::to_hex(digest);
     std::string written;
@@ -402,7 +389,7 @@ std::string_view action_text(Action action, const TextHooks& text) {
     case Action::back:
         return shown(text, words::action_back);
     case Action::check_now:
-        return shown(text, words::action_check_now);
+        return shown(text, words::action_refresh);
     case Action::settings:
         return shown(text, words::action_settings);
     case Action::close:
@@ -515,7 +502,7 @@ std::string registry_subtitle(const Registry& registry, const TextHooks& text) {
         if (registry.checked_ago)
             unreached += separator + filled(
                                          text,
-                                         words::header_list_from,
+                                         words::registry_list_from,
                                          {{"age", registry_age_text(*registry.checked_ago, text)}}
                                      );
     }
