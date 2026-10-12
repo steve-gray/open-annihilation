@@ -35,6 +35,7 @@ inline constexpr std::string_view interface_words[] = {
     words::action_refresh,
     words::action_refreshing,
     words::action_close,
+    words::action_close_x,
     words::status_checking,
     words::queue_checking,
     words::registry_game_lock,

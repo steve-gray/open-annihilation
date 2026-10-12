@@ -43,6 +43,9 @@ inline constexpr kit::ControlId settings = 52;
 inline constexpr kit::ControlId close = 53;
 /// The header's refresh icon.
 inline constexpr kit::ControlId refresh = 54;
+/// The header's close mark, to the right of the refresh icon. It asks for
+/// the same close as the footer's CLOSE.
+inline constexpr kit::ControlId close_x = 55;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
 /// The first queue line's label.

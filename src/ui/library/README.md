@@ -650,7 +650,8 @@ pressed as UPDATE and GET, and listed disabled and passing the press to
 the row while blocked or queued), an action's button, the refresh icon greyed
 until a registry can be asked and then asking, and saying "Refreshing" while
 one is being asked, the labels taking no
-press, the wheel and a finger's drag, typing and Backspace, the
+press, the header's close mark to the right of refresh asking what CLOSE
+asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
 Active tab with forty more maps: its lines taking no press, UNLOAD MOD

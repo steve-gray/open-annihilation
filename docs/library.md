@@ -68,14 +68,15 @@ The settings have a button of their own on the main menu, the gears beside
 the OA button, which opens them with no Library under them
 ([settings](settings.md#opening-the-settings)). From the Library, **Cmd+,**
 on macOS and **Ctrl+,** elsewhere opens them over the Library. The header's
-top right holds a refresh icon. Pressing it, or F5, asks the registries
+top right holds a refresh icon, and a close mark to its right. Pressing
+the refresh icon, or F5, asks the registries
 for their lists at once ([updates](#updates)). While they are being asked
 the icon turns, one full turn every 1.6 seconds, and it cannot be pressed
 again until they answer. When the refresh has read a list, the icon shows
 a check for 0.8 seconds and then the arrow again. A refresh that fails goes
 straight back to the arrow; the offline line says why. Pressing it during
-the check asks again at once. **CLOSE**,
-or Escape, goes back to the main menu.
+the check asks again at once. The close mark does what **CLOSE** does.
+**CLOSE**, or Escape, goes back to the main menu.
 The Library shows only on the main menu: it closes when the menu gives way
 to another screen, and in a game the in-game menu's button, which shows the
 gears too, opens the settings, not the Library.

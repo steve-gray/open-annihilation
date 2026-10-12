@@ -1439,7 +1439,7 @@ DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
 DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t control) {
     if (control == restore_control)
         return restore_defaults(dialog);
-    if (control == cancel_control)
+    if (control == cancel_control || control == close_x_control)
         return cancel(dialog);
     if (control == ok_control)
         return accept(dialog);
@@ -2267,6 +2267,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         layout::version_width,
         layout::header_height,
     };
+    control_part(layout::header_close_button(sized), close_x_control);
     text_part(version, dialog.version, DialogFont::small);
     if (dialog.locks.shared_game) {
         const int32_t shared_left = suffix_left + layout::title_suffix_width + layout::header_gap;

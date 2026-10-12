@@ -2165,13 +2165,21 @@ void the_focus_moves_round_every_control() {
     CHECK(dialog.focused == settings::page_control(Page::downloads));
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::page_control(Page::user_interface));
+    // The title bar's close mark is last in Tab's order.
+    settings::Dialog again = opened(Page::controls);
+    for (const int32_t control : expected) {
+        CHECK(settings::dialog_key(again, DialogKey::tab) == DialogAction::redraw);
+        CHECK(again.focused == control);
+    }
+    CHECK(settings::dialog_key(again, DialogKey::tab) == DialogAction::redraw);
+    CHECK(again.focused == settings::close_x_control);
     // Space on an entry shows its section.
     CHECK(settings::dialog_key(dialog, DialogKey::space) == DialogAction::redraw);
     CHECK(dialog.page == Page::user_interface);
     // Up from nothing lands on the last control.
     settings::Dialog fresh = opened(Page::controls);
     CHECK(settings::dialog_key(fresh, DialogKey::up) == DialogAction::redraw);
-    CHECK(fresh.focused == settings::page_control(Page::developer));
+    CHECK(fresh.focused == settings::close_x_control);
 }
 
 void locks_show_their_text_and_hold_their_settings() {
@@ -2535,6 +2543,7 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
         expected.push_back(control);
     for (const Page page : kPages)
         expected.push_back(settings::page_control(page));
+    expected.push_back(settings::close_x_control);
     for (const int32_t control : expected) {
         CHECK(settings::dialog_key(all.dialog, DialogKey::tab) == DialogAction::redraw);
         CHECK(all.dialog.focused == control);
@@ -2787,7 +2796,7 @@ void the_focus_scrolls_its_row_into_view() {
         CHECK(five.scroll() == expected);
     }
     CHECK(settings::dialog_key(five.dialog, DialogKey::up) == DialogAction::redraw);
-    CHECK(five.dialog.focused == settings::page_control(Page::common_tweaks)); // 2D focus (D30)
+    CHECK(five.dialog.focused == settings::close_x_control); // the title bar, above the row
     CHECK(five.scroll() == 0);
 
     // Scrolling never moves the focus; a key that acts on the focused row
@@ -4669,15 +4678,15 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // is printed, so that a change meant to move these parts can pin them
     // again.
     const std::array<std::pair<Page, uint64_t>, 9> kBefore{{
-        {Page::controls, 0x6a28b782ac519012},
-        {Page::common_tweaks, 0x149760fae781c603},
-        {Page::language, 0xb05e2e5201dce696},
-        {Page::graphics, 0x0ace5806c5962412},
-        {Page::user_interface, 0xc88952a06c3ef09b},
-        {Page::touch, 0x28fd78164e4dff94},
-        {Page::controller, 0x5eeffaeb14744f70},
-        {Page::game_files, 0xd8c530e47b0dfae3},
-        {Page::downloads, 0xd192c20b02832143},
+        {Page::controls, 0x476b1b142fec2b6b},
+        {Page::common_tweaks, 0x734b195bca146dfa},
+        {Page::language, 0xf763f5771c48b68f},
+        {Page::graphics, 0xbf34350a06276ecf},
+        {Page::user_interface, 0xe9910f53e1728786},
+        {Page::touch, 0xb9884191ca644a55},
+        {Page::controller, 0xb40af55af62d3cd9},
+        {Page::game_files, 0x6becdcdfa660522e},
+        {Page::downloads, 0x2482ea3feca0238a},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -6786,7 +6795,8 @@ void language_text_lists_one_section_and_draws_without_the_game_fonts() {
     std::vector<int32_t> walked;
     for (int32_t press = 0; press < 20; ++press) {
         static_cast<void>(settings::dialog_key(keys, DialogKey::tab));
-        if (keys.focused < settings::restore_control)
+        if (keys.focused >= settings::first_page_control &&
+            keys.focused < settings::restore_control)
             walked.push_back(keys.focused);
     }
     CHECK(!walked.empty());
@@ -8443,7 +8453,7 @@ void the_arrows_move_by_geometry() {
     // From no focus, Up shows it on the last control in Tab's order and the
     // other arrows on the first.
     for (const auto& [key, expected] :
-         {std::pair{DialogKey::up, settings::page_control(Page::developer)},
+         {std::pair{DialogKey::up, settings::close_x_control},
           std::pair{DialogKey::down, settings::first_row_control},
           std::pair{DialogKey::left, settings::first_row_control},
           std::pair{DialogKey::right, settings::first_row_control}}) {
@@ -8467,6 +8477,7 @@ void the_arrows_move_by_geometry() {
         settings::page_control(Page::downloads),
         settings::page_control(Page::system),
         settings::page_control(Page::developer),
+        settings::close_x_control,
     };
     const auto then_rest = [&rest](std::vector<int32_t> order) {
         order.insert(order.end(), rest.begin(), rest.end());
@@ -9277,6 +9288,64 @@ void file_type_hint_when_the_opener_stays() {
     CHECK(geometry::row_hint(dialog, Setting::file_type_registration, 2).text.empty());
 }
 
+/// The title bar's close mark is the rightmost control in the header at
+/// every size class. The version stops before it. Pressing it, with a
+/// change not kept, does what Cancel does, and Cancel stays.
+void the_header_close_mark_closes_as_cancel_does() {
+    for (const oa::ui::kit::SizeClass size_class :
+         {oa::ui::kit::SizeClass::compact,
+          oa::ui::kit::SizeClass::regular,
+          oa::ui::kit::SizeClass::large}) {
+        settings::Dialog dialog = opened(Page::controls);
+        dialog.size_class = size_class;
+        const oa::ui::kit::DisplayList list = geometry::dialog_list(dialog, nullptr);
+        const oa::ui::kit::Control* close = nullptr;
+        int32_t header_right = 0;
+        for (const oa::ui::kit::Control& control : list.controls) {
+            if (control.rect.y > geometry::header_rule_row)
+                continue;
+            if (control.rect.x + control.rect.width >= header_right) {
+                header_right = control.rect.x + control.rect.width;
+                close = &control;
+            }
+        }
+        CHECK(close != nullptr && close->name == "settings.close-x");
+        CHECK(close->text == "Close");
+        if (close == nullptr)
+            continue;
+        const geometry::SourceRect expected =
+            geometry::header_close_button(geometry::sizes_of(dialog));
+        CHECK(close->rect.x == expected.x && close->rect.width == expected.width);
+        bool mark = false;
+        for (const oa::ui::kit::Item& item : list.items) {
+            if (item.role != oa::ui::kit::Role::button || item.control != close->id)
+                continue;
+            const auto* look = std::get_if<oa::ui::kit::ButtonLook>(&item.look);
+            mark = look != nullptr && look->mark == oa::ui::kit::ButtonMark::close;
+        }
+        CHECK(mark);
+        const oa::ui::kit::HeaderLook* header = nullptr;
+        for (const oa::ui::kit::Item& item : list.items)
+            if (item.role == oa::ui::kit::Role::header)
+                header = std::get_if<oa::ui::kit::HeaderLook>(&item.look);
+        CHECK(header != nullptr);
+        if (header != nullptr) {
+            const int32_t version_right = header->width - geometry::edge -
+                                          oa::ui::kit::compact_metrics.padding -
+                                          header->right_inset;
+            CHECK(version_right <= close->rect.x);
+        }
+        dialog.chosen.wheel_zoom = !dialog.opened.wheel_zoom;
+        const Point at{
+            close->rect.x + close->rect.width / 2, close->rect.y + close->rect.height / 2
+        };
+        CHECK(click(dialog, at) == DialogAction::cancelled);
+        CHECK(dialog.chosen.wheel_zoom == dialog.opened.wheel_zoom);
+        const auto parts = settings::dialog_layout(opened(Page::controls), nullptr);
+        CHECK(find_part(parts, "CANCEL", settings::cancel_control) != nullptr);
+    }
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -9306,6 +9375,7 @@ int main(int argc, char** argv) {
         the_level_strip_picks_a_level();
         enter_keeps_and_escape_cancels();
         the_footer_buttons_restore_cancel_and_keep();
+        the_header_close_mark_closes_as_cancel_does();
         the_focus_moves_round_every_control();
         the_arrows_move_by_geometry();
         locks_show_their_text_and_hold_their_settings();

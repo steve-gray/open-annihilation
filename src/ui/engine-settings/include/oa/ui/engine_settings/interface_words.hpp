@@ -109,6 +109,7 @@ inline constexpr std::string_view interface_words[] = {
     "Clear Session Description",
     "Click Snap",
     "Cloak After Build",
+    "Close",
     "Closer in, units are drawn as models.",
     "Commander Builder Limit",
     "Commander Keeps Orders When Hit",

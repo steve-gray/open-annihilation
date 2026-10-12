@@ -203,6 +203,7 @@ centre would land on the line between Off and On.
 | Downloads' REGISTRIES IN THE LIBRARY… (main menu only) | `oa.settings.registries-in-library` | button; opens the Library on its Registries tab |
 | Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.kit-gallery.show` (SHOW, which opens the UI kit gallery), `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
 | Developer's list | `oa.settings.hack-area.<area>`, `oa.settings.hack.<hack>` (its header, with its switch's `.off`/`.on`), `oa.settings.hack.<hack>.<parameter>` (a switch's with `.off`/`.on`) | the headers check boxes, a hack's checked while it is on; a parameter's switch as above, its slider a slider |
+| The title bar's close mark | `oa.settings.close-x` | button, its text "Close", at the top right. It asks for the same close as Cancel |
 | The footer | `oa.settings.restore-defaults`, `oa.settings.cancel`, `oa.settings.ok` | button |
 | The section's scroll bar | `oa.settings.scroll-bar` | slider |
 | A notice's buttons | `oa.<word>.ok`, `oa.<word>.open` | button |
@@ -298,6 +299,7 @@ Its rows and their state icons are listed so:
 | The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.play-now`, `.switch-off`, `.roll-back`, `.uninstall`, `.open-folder`, `.homepage` | button, its text the button's words; SWITCH OFF stands in PLAY NOW's place on the mod being played, and both are listed disabled during a game and while the command line chose the mod. The Active tab's UNLOAD MOD (`oa.library.active.unload`) asks the same question |
 | SWITCH OFF's Switch Mod question, and the note PLAY NOW shows for a folder it cannot play | `oa.prompt.cancel`, `oa.prompt.switch`; the note's `oa.prompt.ok`; `oa.prompt.body` | button; label |
 | The header's refresh icon | `oa.library.refresh` | button, its text "Refresh", or "Refreshing" while it turns; disabled while no registry can be asked, while one is being asked and during a game. F5 presses it |
+| The header's close mark | `oa.library.close-x` | button, its text "Close", to the right of the refresh icon. It asks for the same close as `oa.library.close` |
 | The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
 
 A row's circled check, installed and up to date, is no control. A click

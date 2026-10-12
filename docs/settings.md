@@ -78,7 +78,8 @@ keep it. A row's hint says when a setting takes effect later instead:
 
 - **OK** (Enter) closes the dialog and keeps the changes.
 - **Cancel** (Escape) closes it and puts back every setting as it was when
-  the dialog opened.
+  the dialog opened. The close mark at the top right of the title bar does
+  the same, and **Cancel** stays in the footer.
 - **Restore defaults** sets every setting back to its default. It leaves
   alone the mod you play, which changes only in the Library, the changes
   Developer Mode keeps for the standard hacks, and
