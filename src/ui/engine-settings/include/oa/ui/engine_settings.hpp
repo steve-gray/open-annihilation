@@ -960,8 +960,9 @@ struct EngineSettings {
     /// effect when OK is pressed; Cancel and Restore defaults apply.
     ContentCheck content_check{ContentCheck::automatically};
     /// The game opens mod packages (.oamod). On unless the preference is the
-    /// word off. Windows and Linux register it when OK is pressed; macOS and
-    /// iOS take the type from the app.
+    /// word off. Windows and Linux register it when OK is pressed. On macOS
+    /// the switch shows whether this copy is the default opener, and OK
+    /// changes that only when the switch moved. iOS takes the type from the app.
     bool file_type_oamod{true};
     bool file_type_oamap{true};  ///< the game opens map packs (.oamap)
     bool file_type_oalang{true}; ///< the game opens language packs (.oalang)

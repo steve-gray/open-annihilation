@@ -22,10 +22,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
@@ -858,12 +860,201 @@ void test_windows_withdrawal() {
 }
 #endif
 
+/// A Launch Services stand-in: each content type has one opener, and every question is recorded.
+struct FakeLaunchServices {
+    std::map<std::string, file_types::Handler> handlers{};
+    std::string fail_read{};  ///< a content type whose question fails
+    std::string fail_write{}; ///< a content type whose change fails
+    bool store_writes = true; ///< a change that answers and leaves the opener as it was
+    std::vector<std::string> reads{};
+    std::vector<std::pair<std::string, std::string>> writes{};
+};
+
+file_types::Handler fake_read(void* context, std::string_view content_type, std::string& failure) {
+    auto* fake = static_cast<FakeLaunchServices*>(context);
+    const std::string type(content_type);
+    fake->reads.push_back(type);
+    if (type == fake->fail_read) {
+        failure = "refused";
+        return {};
+    }
+    const auto found = fake->handlers.find(type);
+    if (found == fake->handlers.end())
+        return {};
+    return found->second;
+}
+
+bool fake_write(
+    void* context,
+    std::string_view content_type,
+    const file_types::Handler& handler,
+    std::string& failure
+) {
+    auto* fake = static_cast<FakeLaunchServices*>(context);
+    const std::string type(content_type);
+    if (type == fake->fail_write) {
+        failure = "sandbox";
+        return false;
+    }
+    fake->writes.emplace_back(type, handler.bundle_id);
+    if (fake->store_writes)
+        fake->handlers[type] = handler;
+    return true;
+}
+
+file_types::HandlerCalls fake_calls(FakeLaunchServices& fake) {
+    file_types::HandlerCalls calls;
+    calls.context = &fake;
+    calls.default_handler = &fake_read;
+    calls.set_handler = &fake_write;
+    return calls;
+}
+
+file_types::Handler handler_named(std::string_view bundle_id) {
+    file_types::Handler handler;
+    handler.bundle_id = std::string(bundle_id);
+    return handler;
+}
+
+/// The four switches ask for this copy when on, and for the opener of a zip or of plain text
+/// when off. A question that fails is logged and does not stop the others.
+void test_opener_changes() {
+    const file_types::Handler application = handler_named("net.coreprime.open-annihilation");
+    const file_types::Handler archive = handler_named("com.example.archive");
+    const file_types::Handler editor = handler_named("com.example.editor");
+    FakeLaunchServices fake;
+    fake.handlers["public.zip-archive"] = archive;
+    fake.handlers["public.plain-text"] = editor;
+    for (const file_types::ExportedContentType& type : file_types::exported_content_types)
+        fake.handlers[std::string(type.content_type)] = application;
+
+    file_types::TypeSet fallback;
+    fallback.mod = false;
+    fallback.language = false;
+    fallback.map = false;
+    fallback.registry = false;
+    const file_types::OpenerReport open =
+        file_types::reported_openers(fake_calls(fake), application.bundle_id, fallback);
+    OA_CHECK(open.error.empty());
+    OA_CHECK(open.open.mod && open.open.language && open.open.map && open.open.registry);
+
+    fake.handlers[std::string(file_types::exported_content_types[0].content_type)] = archive;
+    const file_types::OpenerReport mixed =
+        file_types::reported_openers(fake_calls(fake), application.bundle_id, fallback);
+    OA_CHECK(!mixed.open.mod && mixed.open.language && mixed.open.map && mixed.open.registry);
+
+    fake.fail_read = std::string(file_types::exported_content_types[2].content_type);
+    file_types::TypeSet kept = fallback;
+    kept.map = true;
+    const file_types::OpenerReport failed =
+        file_types::reported_openers(fake_calls(fake), application.bundle_id, kept);
+    OA_CHECK(failed.open.map);
+    OA_CHECK(failed.error.find("oamap: refused") != std::string::npos);
+    fake.fail_read.clear();
+    fake.reads.clear();
+
+    const file_types::OpenerChange off[] = {
+        {file_types::mod_extension, false},
+        {file_types::registry_extension, false},
+    };
+    const file_types::Registration handed =
+        file_types::apply_opener_changes(fake_calls(fake), application, off);
+    OA_CHECK(handed.supported && handed.changed && handed.error.empty());
+    OA_CHECK(handed.lines.size() == 2);
+    OA_CHECK(handed.lines[0] == "hand back oamod to com.example.archive");
+    OA_CHECK(handed.lines[1] == "hand back oareg to com.example.editor");
+    // Each type asks for the opener it hands back to, then reads its own opener afterwards.
+    OA_CHECK(fake.reads.size() == 4);
+    OA_CHECK(fake.reads[0] == "public.zip-archive");
+    OA_CHECK(fake.reads[1] == "net.coreprime.open-annihilation.oamod");
+    OA_CHECK(fake.reads[2] == "public.plain-text");
+    OA_CHECK(fake.reads[3] == "net.coreprime.open-annihilation.oareg");
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == "com.example.archive"
+    );
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oareg"].bundle_id == "com.example.editor"
+    );
+    // The two types that did not move were not asked.
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oalang"].bundle_id == application.bundle_id
+    );
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oamap"].bundle_id == application.bundle_id
+    );
+
+    fake.reads.clear();
+    fake.writes.clear();
+    const file_types::OpenerChange on[] = {{file_types::mod_extension, true}};
+    const file_types::Registration taken =
+        file_types::apply_opener_changes(fake_calls(fake), application, on);
+    OA_CHECK(taken.changed && taken.error.empty());
+    OA_CHECK(taken.lines.size() == 1 && taken.lines[0] == "open oamod");
+    // On does not look up a zip or text opener. It reads this type back after the set.
+    OA_CHECK(fake.reads.size() == 1);
+    OA_CHECK(fake.reads[0] == "net.coreprime.open-annihilation.oamod");
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == application.bundle_id
+    );
+
+    fake.fail_read = "public.zip-archive";
+    fake.writes.clear();
+    const file_types::OpenerChange again[] = {
+        {file_types::language_extension, false},
+        {file_types::map_extension, true},
+    };
+    const file_types::Registration partial =
+        file_types::apply_opener_changes(fake_calls(fake), application, again);
+    OA_CHECK(partial.changed);
+    OA_CHECK(partial.error.find("oalang: refused") != std::string::npos);
+    OA_CHECK(partial.lines.size() == 1 && partial.lines[0] == "open oamap");
+    OA_CHECK(
+        fake.handlers["net.coreprime.open-annihilation.oamap"].bundle_id == application.bundle_id
+    );
+    fake.fail_read.clear();
+
+    fake.fail_write = "net.coreprime.open-annihilation.oamod";
+    const file_types::Registration refused =
+        file_types::apply_opener_changes(fake_calls(fake), application, on);
+    OA_CHECK(!refused.changed);
+    OA_CHECK(refused.error.find("oamod: sandbox") != std::string::npos);
+    fake.fail_write.clear();
+
+    // A set that answers and leaves another opener is logged and is not counted.
+    fake.handlers["net.coreprime.open-annihilation.oamod"] = archive;
+    fake.store_writes = false;
+    const file_types::Registration ignored =
+        file_types::apply_opener_changes(fake_calls(fake), application, on);
+    OA_CHECK(!ignored.changed && ignored.lines.empty());
+    OA_CHECK(ignored.error.find("oamod: the change did not take") != std::string::npos);
+    OA_CHECK(fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == archive.bundle_id);
+    fake.store_writes = true;
+
+    const file_types::OpenerChange unknown[] = {{"zip", true}};
+    const file_types::Registration other =
+        file_types::apply_opener_changes(fake_calls(fake), application, unknown);
+    OA_CHECK(other.error.find("unknown file type zip") != std::string::npos);
+
+    file_types::HandlerCalls none;
+    const file_types::Registration absent = file_types::apply_opener_changes(none, application, on);
+    OA_CHECK(!absent.supported && !absent.changed);
+    OA_CHECK(!absent.lines.empty() && absent.lines[0].find("skipped:") == 0);
+
+    // This test is not an application bundle, so it neither reads nor changes a real opener.
+    OA_CHECK(file_types::running_application().bundle_id.empty());
+    if (file_types::default_opener_is_a_setting())
+        OA_CHECK(file_types::system_handler_calls().default_handler != nullptr);
+    else
+        OA_CHECK(file_types::system_handler_calls().default_handler == nullptr);
+}
+
 } // namespace
 
 int main() {
     test_desktop_exec_argument();
     test_texts();
     test_running_executable();
+    test_opener_changes();
 #ifndef _WIN32
     test_xdg_registration();
     test_xdg_skips();

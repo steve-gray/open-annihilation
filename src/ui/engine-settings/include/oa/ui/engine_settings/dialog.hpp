@@ -34,6 +34,9 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace oa::ui::engine_settings {
 
@@ -107,11 +110,13 @@ inline constexpr std::size_t page_count = 17;
 /// Touch, Controller and Game files, eight without them; a mod's options have
 /// five.
 inline constexpr std::size_t most_listed_pages = 11;
-/// Windows and Linux register the four file types at run time, so System
-/// lists a switch for each. macOS and iOS take the types from the app and
-/// cannot withdraw one, so System shows a text row instead. Android does
-/// not register at run time either.
-#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+/// Windows and Linux register the four file types at run time, and macOS
+/// chooses whether this copy is the default opener of each, so System lists
+/// a switch for each. iOS takes the types from the app and has no way to
+/// choose a default opener, so System shows a text row. Android does not
+/// register at run time either.
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__)) ||                            \
+    (defined(__APPLE__) && !TARGET_OS_IPHONE)
 inline constexpr bool file_types_switchable = true;
 #else
 inline constexpr bool file_types_switchable = false;
@@ -277,7 +282,7 @@ enum class Setting : uint8_t {
     file_type_oamap,  ///< Map packs (.oamap): a switch
     file_type_oalang, ///< Language packs (.oalang): a switch
     file_type_oareg,  ///< Registry files (.oareg): a switch
-    /// File types: the text row macOS and iOS show in place of the switches.
+    /// File types: the text row iOS shows in place of the switches.
     /// It changes no setting.
     file_types_note,
 };

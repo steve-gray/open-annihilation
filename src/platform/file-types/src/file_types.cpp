@@ -11,6 +11,12 @@
 #include <algorithm>
 #include <exception>
 #include <string>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+#include "apple_handlers.hpp"
+#endif
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -214,6 +220,161 @@ Registration withdraw_file_types(const TypeSet types, const Places& places) {
     static_cast<void>(places);
     return Registration{};
 #endif
+}
+
+namespace {
+
+/// The exported content type of `extension`, or null when it is not one of the four.
+const ExportedContentType* exported_of(std::string_view extension) noexcept {
+    for (const ExportedContentType& type : exported_content_types)
+        if (type.extension == extension)
+            return &type;
+    return nullptr;
+}
+
+/// Reports whether two bundle identifiers name the same program, ignoring ASCII case.
+bool same_bundle(std::string_view left, std::string_view right) noexcept {
+    if (left.size() != right.size())
+        return false;
+    const auto lower = [](unsigned char letter) noexcept {
+        return letter >= 'A' && letter <= 'Z' ? static_cast<char>(letter - 'A' + 'a')
+                                              : static_cast<char>(letter);
+    };
+    for (std::size_t index = 0; index < left.size(); ++index)
+        if (lower(static_cast<unsigned char>(left[index])) !=
+            lower(static_cast<unsigned char>(right[index])))
+            return false;
+    return true;
+}
+
+/// Sets the switch `extension` names.
+void set_open(TypeSet& open, std::string_view extension, bool on) noexcept {
+    if (extension == mod_extension)
+        open.mod = on;
+    else if (extension == language_extension)
+        open.language = on;
+    else if (extension == map_extension)
+        open.map = on;
+    else if (extension == registry_extension)
+        open.registry = on;
+}
+
+/// Appends `more` to `failure`, after a semicolon when `failure` already holds one.
+void add_failure(std::string& failure, std::string_view more) {
+    if (more.empty())
+        return;
+    if (!failure.empty())
+        failure += "; ";
+    failure.append(more);
+}
+
+/// What a log line calls `handler`.
+std::string handler_name(const Handler& handler) {
+    if (!handler.bundle_id.empty())
+        return handler.bundle_id;
+    return handler.application_url;
+}
+
+} // namespace
+
+bool default_opener_is_a_setting() noexcept {
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+    return true;
+#else
+    return false;
+#endif
+}
+
+HandlerCalls system_handler_calls() {
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+    return apple_handler_calls();
+#else
+    return {};
+#endif
+}
+
+Handler running_application() {
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+    return apple_running_application();
+#else
+    return {};
+#endif
+}
+
+OpenerReport reported_openers(
+    const HandlerCalls& calls, const std::string_view bundle_id, const TypeSet fallback
+) {
+    OpenerReport report;
+    report.open = fallback;
+    if (calls.default_handler == nullptr || bundle_id.empty())
+        return report;
+    for (const ExportedContentType& type : exported_content_types) {
+        std::string failure;
+        const Handler opener = calls.default_handler(calls.context, type.content_type, failure);
+        if (!failure.empty()) {
+            add_failure(report.error, std::string(type.extension) + ": " + failure);
+            continue;
+        }
+        set_open(report.open, type.extension, same_bundle(opener.bundle_id, bundle_id));
+    }
+    return report;
+}
+
+Registration apply_opener_changes(
+    const HandlerCalls& calls,
+    const Handler& application,
+    const std::span<const OpenerChange> changes
+) {
+    Registration done;
+    if (calls.set_handler == nullptr || calls.default_handler == nullptr) {
+        done.lines.emplace_back("skipped: this system does not choose a default opener");
+        return done;
+    }
+    done.supported = true;
+    if (application.bundle_id.empty() && application.application_url.empty()) {
+        done.lines.emplace_back("skipped: this copy is not an application");
+        done.error = "this copy is not an application";
+        return done;
+    }
+    for (const OpenerChange& change : changes) {
+        const ExportedContentType* type = exported_of(change.extension);
+        if (type == nullptr) {
+            add_failure(done.error, "unknown file type " + std::string(change.extension));
+            continue;
+        }
+        const std::string extension(type->extension);
+        // A set is kept only when the opener read afterwards is the one asked for. The
+        // switch is drawn from that read, and a change that did not take is logged.
+        const auto kept = [&](const Handler& asked, std::string success) {
+            std::string failure;
+            if (!calls.set_handler(calls.context, type->content_type, asked, failure)) {
+                add_failure(done.error, extension + ": " + failure);
+                return;
+            }
+            const Handler now = calls.default_handler(calls.context, type->content_type, failure);
+            if (!failure.empty() || !same_bundle(now.bundle_id, asked.bundle_id)) {
+                add_failure(done.error, extension + ": the change did not take");
+                return;
+            }
+            done.changed = true;
+            done.lines.emplace_back(std::move(success));
+        };
+        if (change.open) {
+            kept(application, "open " + extension);
+            continue;
+        }
+        std::string parent_failure;
+        const Handler handed =
+            calls.default_handler(calls.context, type->hands_back_to, parent_failure);
+        if (!parent_failure.empty() || handler_name(handed).empty()) {
+            if (parent_failure.empty())
+                parent_failure = "nothing opens " + std::string(type->hands_back_to);
+            add_failure(done.error, extension + ": " + parent_failure);
+            continue;
+        }
+        kept(handed, "hand back " + extension + " to " + handler_name(handed));
+    }
+    return done;
 }
 
 } // namespace oa::platform::file_types
