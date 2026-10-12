@@ -268,21 +268,32 @@ void section_list_puts_downloads_before_developer() {
                     settings::DialogKind::engine, touch, game_files, controller
                 );
                 const auto downloads = std::find(pages.begin(), pages.end(), Page::downloads);
+                const auto system = std::find(pages.begin(), pages.end(), Page::system);
                 const auto developer = std::find(pages.begin(), pages.end(), Page::developer);
-                OA_CHECK(downloads != pages.end() && developer != pages.end());
-                OA_CHECK(downloads + 1 == developer);
+                OA_CHECK(
+                    downloads != pages.end() && system != pages.end() && developer != pages.end()
+                );
+                OA_CHECK(downloads + 1 == system);
+                OA_CHECK(system + 1 == developer);
                 const int32_t optionals =
                     (touch ? 1 : 0) + (controller ? 1 : 0) + (game_files ? 1 : 0);
+                const int32_t downloads_y =
+                    geometry::list_first_top +
+                    (5 + optionals) * (geometry::list_item_height + geometry::list_item_gap);
                 OA_CHECK(
                     geometry::list_item(Page::downloads, touch, game_files, controller).y ==
-                    geometry::list_first_top +
-                        (5 + optionals) * (geometry::list_item_height + geometry::list_item_gap)
+                    downloads_y
+                );
+                OA_CHECK(
+                    geometry::list_item(Page::system, touch, game_files, controller).y ==
+                    downloads_y + geometry::list_item_height + geometry::list_item_gap
                 );
                 OA_CHECK(
                     geometry::list_item(Page::developer, touch, game_files, controller).y == 262
                 );
                 OA_CHECK(geometry::list_divider().y == 256);
                 OA_CHECK(settings::page_control(Page::downloads) == 9);
+                OA_CHECK(settings::page_control(Page::system) == 10);
                 const settings::Dialog dialog = opened({}, touch, controller, game_files);
                 OA_CHECK(dialog.page == Page::downloads);
                 OA_CHECK(layout_has(dialog, "Downloads"));

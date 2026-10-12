@@ -21,6 +21,10 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/rows.hpp"
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -63,7 +67,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 70> kExpected{{
+constexpr std::array<Expected, 76> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 2, 2, 7, 200, 0, false, Lock::none, nullptr},
@@ -134,11 +138,21 @@ constexpr std::array<Expected, 70> kExpected{{
     {Setting::interface_size, RowKind::choice, "Interface size", 2, 2, 5, 200, 0, false, Lock::none, nullptr},
     {Setting::more_in_library, RowKind::link, "", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::kit_gallery, RowKind::value_and_button, "UI kit gallery", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::file_type_registration, RowKind::text, "File Type Registration", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::file_type_oamod, RowKind::toggle, "Mod packages (.oamod)", 0, 0, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::file_type_oamap, RowKind::toggle, "Map packs (.oamap)", 0, 0, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::file_type_oalang, RowKind::toggle, "Language packs (.oalang)", 0, 0, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::file_type_oareg, RowKind::toggle, "Registry files (.oareg)", 0, 0, 0, 0, 0, false, Lock::none, nullptr},
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    {Setting::file_types_note, RowKind::text, "File types", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
+#else
+    {Setting::file_types_note, RowKind::text, "File types", 3, 3, 0, 0, 0, false, Lock::none, nullptr},
+#endif
 }};
 // clang-format on
 
 static_assert(
-    kExpected.size() == static_cast<std::size_t>(Setting::kit_gallery) + 1,
+    kExpected.size() == static_cast<std::size_t>(Setting::file_types_note) + 1,
     "every setting has its row"
 );
 
@@ -573,19 +587,19 @@ std::vector<int32_t> tab_order(const settings::Dialog& dialog) {
 
 void tab_follows_the_dialogs_focus_order() {
     // Controls: its rows, the footer, then the sections' entries, Game files
-    // then Downloads, listed before Developer.
+    // then Downloads then System, listed before Developer.
     const settings::Dialog controls =
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
         tab_order(controls) ==
-        (std::vector<int32_t>{14, 15, 16, 17, 18, 10, 11, 12, 0, 1, 2, 3, 4, 5, 6, 8, 9, 7})
+        (std::vector<int32_t>{15, 16, 17, 18, 19, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 7})
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
-    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{14, 15, 16, 17, 18, 19, 20,
-                                                          21, 10, 11, 12, 0,  1,  2,
-                                                          3,  4,  5,  6,  8,  9,  7}));
+    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{15, 16, 17, 18, 19, 20, 21, 22,
+                                                          11, 12, 13, 0,  1,  2,  3,  4,
+                                                          5,  6,  8,  9,  10, 7}));
     // Developer with its first area open: its rows, UI kit gallery's SHOW
     // last of them, its list's headers, Show Active Only and Restore profile
     // values, then the rest.
@@ -593,11 +607,11 @@ void tab_follows_the_dialogs_focus_order() {
     developer.page = settings::Page::developer;
     developer.chosen.developer_mode = true;
     developer.developer.areas_open[0] = 1;
-    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{14, 15, 16, 19, 20, 21, 22, 23, 24,
-                                                           25, 26, 27, 28, 29, 30, 31, 32, 33,
-                                                           34, 35, 36, 37, 38, 39, 40, 41, 42,
-                                                           43, 44, 45, 17, 18, 10, 11, 12, 0,
-                                                           1,  2,  3,  4,  5,  6,  8,  9,  7}));
+    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{15, 16, 17, 20, 21, 22, 23, 24, 25, 26,
+                                                           27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                                                           37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+                                                           18, 19, 11, 12, 13, 0,  1,  2,  3,  4,
+                                                           5,  6,  8,  9,  10, 7}));
 }
 
 } // namespace

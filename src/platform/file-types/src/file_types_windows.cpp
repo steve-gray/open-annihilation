@@ -9,6 +9,7 @@
 #include "utf8.hpp"
 
 #include <exception>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -136,6 +137,103 @@ bool holds(const RegistryValue& value) {
     return same;
 }
 
+/// Returns a string value's text.
+///
+/// @param key_name the key, under HKEY_CURRENT_USER
+/// @param value_name the value; empty for the key's default value
+/// @return the text; nothing when the value is missing or is not a string
+std::optional<std::wstring>
+read_string(const std::wstring& key_name, const std::wstring& value_name) {
+    HKEY opened = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, key_name.c_str(), 0, KEY_QUERY_VALUE, &opened) !=
+        ERROR_SUCCESS)
+        return std::nullopt;
+    const wchar_t* name = value_name.empty() ? nullptr : value_name.c_str();
+    DWORD type = 0;
+    DWORD size = 0;
+    std::optional<std::wstring> text;
+    if (RegQueryValueExW(opened, name, nullptr, &type, nullptr, &size) == ERROR_SUCCESS &&
+        type == REG_SZ) {
+        std::vector<wchar_t> held(size / sizeof(wchar_t) + 2, L'\0');
+        DWORD held_size = static_cast<DWORD>((held.size() - 1) * sizeof(wchar_t));
+        if (RegQueryValueExW(
+                opened, name, nullptr, &type, reinterpret_cast<BYTE*>(held.data()), &held_size
+            ) == ERROR_SUCCESS &&
+            type == REG_SZ) {
+            std::size_t length = held_size / sizeof(wchar_t);
+            while (length > 0 && held[length - 1] == L'\0')
+                --length;
+            text = std::wstring(held.data(), length);
+        }
+    }
+    RegCloseKey(opened);
+    return text;
+}
+
+/// Deletes a string value. A missing key or value is already gone, and is not a change.
+///
+/// @param[in,out] done the registration's record
+/// @param key_name the key, under HKEY_CURRENT_USER
+/// @param value_name the value; empty for the key's default value
+/// @return false when the registry refused
+bool take_value(Registration& done, const std::wstring& key_name, const std::wstring& value_name) {
+    HKEY opened = nullptr;
+    const LONG opened_result =
+        RegOpenKeyExW(HKEY_CURRENT_USER, key_name.c_str(), 0, KEY_SET_VALUE, &opened);
+    if (opened_result == ERROR_FILE_NOT_FOUND)
+        return true;
+    if (opened_result != ERROR_SUCCESS) {
+        const RegistryValue value{key_name, value_name, {}};
+        done.error = "cannot remove " + place_of(value) + ": " + error_text(opened_result);
+        return false;
+    }
+    const wchar_t* name = value_name.empty() ? nullptr : value_name.c_str();
+    const LONG result = RegDeleteValueW(opened, name);
+    RegCloseKey(opened);
+    if (result == ERROR_FILE_NOT_FOUND)
+        return true;
+    if (result != ERROR_SUCCESS) {
+        const RegistryValue value{key_name, value_name, {}};
+        done.error = "cannot remove " + place_of(value) + ": " + error_text(result);
+        return false;
+    }
+    done.changed = true;
+    const RegistryValue value{key_name, value_name, {}};
+    done.lines.push_back("removed " + place_of(value));
+    return true;
+}
+
+/// Deletes a key that has no subkeys. A missing key is already gone. A key that still has a
+/// subkey is left, and the refusal is recorded: an unknown subkey is never wiped.
+///
+/// @param[in,out] done the registration's record
+/// @param key_name the key, under HKEY_CURRENT_USER
+/// @return false when the registry refused
+bool take_key(Registration& done, const std::wstring& key_name) {
+    const LONG result = RegDeleteKeyW(HKEY_CURRENT_USER, key_name.c_str());
+    if (result == ERROR_FILE_NOT_FOUND)
+        return true;
+    const std::string place = std::string(current_user_name) + "\\" + narrow_of(key_name);
+    if (result != ERROR_SUCCESS) {
+        done.error = "cannot remove " + place + ": " + error_text(result);
+        return false;
+    }
+    done.changed = true;
+    done.lines.push_back("removed " + place);
+    return true;
+}
+
+/// Tells the shell once that a file association changed, as a write does.
+///
+/// @param[in,out] done the registration's record
+/// @param places whether the shell is told
+void tell_shell(Registration& done, const Places& places) {
+    if (done.changed && places.notify_shell) {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        done.lines.push_back("told the shell the file types changed");
+    }
+}
+
 /// Writes a string value, making its key when it is missing.
 ///
 /// @param value the value
@@ -223,8 +321,9 @@ std::wstring temporary_folder_of(const std::wstring& executable) {
 ///
 /// @param executable the program, absolute
 /// @param places where it writes
+/// @param types the file types to register
 /// @return what was done
-Registration register_in(const fs::path& executable, const Places& places) {
+Registration register_in(const fs::path& executable, const Places& places, TypeSet types) {
     Registration done{};
     done.supported = true;
     if (!executable.is_absolute()) {
@@ -244,6 +343,8 @@ Registration register_in(const fs::path& executable, const Places& places) {
     const std::wstring command = wide_of(open_command(executable));
     bool failed = false;
     for (const FileType& type : file_types) {
+        if (!types.contains(type.extension))
+            continue;
         const std::wstring extension = classes + L"\\." + wide_of(type.extension);
         const std::wstring program_id = wide_of(type.program_id);
         const std::wstring program_key = classes + L"\\" + program_id;
@@ -272,22 +373,92 @@ Registration register_in(const fs::path& executable, const Places& places) {
         if (failed)
             break;
     }
-    if (done.changed && places.notify_shell) {
-        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-        done.lines.push_back("told the shell the file types changed");
+    tell_shell(done, places);
+    return done;
+}
+
+/// Removes one type's values that still name this game. Another program's values stay.
+///
+/// @param[in,out] done the registration's record
+/// @param classes the classes key, under HKEY_CURRENT_USER
+/// @param type the file type
+/// @return false when the registry refused
+bool withdraw_type(Registration& done, const std::wstring& classes, const FileType& type) {
+    const std::wstring extension = classes + L"\\." + wide_of(type.extension);
+    const std::wstring program_id = wide_of(type.program_id);
+    const std::wstring program_key = classes + L"\\" + program_id;
+    // The OpenWithProgids value is the game's when its name is the program identifier.
+    // Another program's value on that key has another name and is left.
+    if (!take_value(done, extension + L"\\OpenWithProgids", program_id))
+        return false;
+    // (Default) is the game's only while its text is still the program identifier.
+    if (const std::optional<std::wstring> held = read_string(extension, L"");
+        held && *held == program_id) {
+        if (!take_value(done, extension, L""))
+            return false;
     }
+    // Content Type is the game's only while its text is still the game's MIME type.
+    const std::wstring mime = wide_of(type.mime_type);
+    if (const std::optional<std::wstring> held = read_string(extension, L"Content Type");
+        held && *held == mime) {
+        if (!take_value(done, extension, L"Content Type"))
+            return false;
+    }
+    // The program-identifier key is the game's by its name. Its own subkeys go leaf first,
+    // and a key that still has an unexpected subkey is left rather than wiped.
+    const std::wstring leaves[] = {
+        program_key + L"\\shell\\open\\command",
+        program_key + L"\\shell\\open",
+        program_key + L"\\shell",
+        program_key + L"\\DefaultIcon",
+        program_key,
+    };
+    for (const std::wstring& leaf : leaves)
+        if (!take_key(done, leaf))
+            return false;
+    return true;
+}
+
+/// The withdrawal itself; withdraw_windows catches what it throws.
+///
+/// @param types the file types to withdraw
+/// @param places where it writes
+/// @return what was done
+Registration withdraw_in(TypeSet types, const Places& places) {
+    Registration done{};
+    done.supported = true;
+    const std::wstring classes = wide_of(places.classes_key);
+    for (const FileType& type : file_types) {
+        if (!types.contains(type.extension))
+            continue;
+        if (!withdraw_type(done, classes, type))
+            break;
+    }
+    tell_shell(done, places);
     return done;
 }
 
 } // namespace
 
-Registration register_windows(const fs::path& executable, const Places& places) {
+Registration
+register_windows(const fs::path& executable, const Places& places, const TypeSet types) {
     try {
-        return register_in(executable, places);
+        return register_in(executable, places, types);
     } catch (const std::exception& error) {
         Registration failed{};
         failed.supported = true;
         failed.error = std::string("the file types could not be registered: ") + error.what();
+        return failed;
+    }
+}
+
+Registration withdraw_windows(const TypeSet types, const Places& places) {
+    try {
+        return withdraw_in(types, places);
+    } catch (const std::exception& error) {
+        Registration failed{};
+        failed.supported = true;
+        failed.error = std::string("the file types could not be withdrawn: ") + error.what();
         return failed;
     }
 }

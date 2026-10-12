@@ -194,7 +194,9 @@ centre would land on the line between Off and On.
 | A drop-down's item, while open | `oa.settings.<row>.<value>` | check box, checked on the choice |
 | A slider | `oa.settings.<row>` | slider; its text the value shown |
 | A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
-| Your files' buttons | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
+| Your files' buttons, on System | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
+| File Type Registration, on System where the game registers file types at run time | `oa.settings.file-type-registration` (the heading); `oa.settings.file-type-oamod`, `oa.settings.file-type-oamap`, `oa.settings.file-type-oalang`, `oa.settings.file-type-oareg` | the heading a label; each switch as a switch |
+| File types, on System on macOS and iOS | `oa.settings.file-types` | label |
 | Language's MORE IN THE LIBRARY… (main menu only) | `oa.settings.more-in-library` | button |
 | Downloads' REGISTRIES IN THE LIBRARY… (main menu only) | `oa.settings.registries-in-library` | button; opens the Library on its Registries tab |
 | Developer's own controls | `oa.settings.developer-mode.off`/`.on`, `oa.settings.frame-stats.off`/`.on`, `oa.settings.kit-gallery.show` (SHOW, which opens the UI kit gallery), `oa.settings.active-only.off`/`.on`, `oa.settings.restore-profile-values` | as above |
@@ -212,7 +214,8 @@ centre would land on the line between Off and On.
 | The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown; while a mod is played, `oa.library.active.unload` | label on the mod tile, the language tile and each map line: "Ridge 4.8 · rev 3" or "No mod: the game as it was made"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; the labels take no press. UNLOAD MOD is a button, its text "UNLOAD MOD", at the mod tile's bottom right; pressing it asks what SWITCH OFF asks. It is listed disabled during a game and while the command line chose the mod, and is absent on the base-game tile |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `language`,
-`graphics`, `user-interface`, `mod-keys`). Language & Text keeps the word
+`graphics`, `user-interface`, `downloads`, `system`, `mod-keys`). A stage
+file's `settings system` opens System. Language & Text keeps the word
 `language`, so `oa.settings.nav.language` still names that section, and
 User Interface is `user-interface`. `<row>` is the setting's
 (`wheel-zoom`, `hud-scaling`), `<value>` the stored
