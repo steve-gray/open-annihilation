@@ -56,7 +56,7 @@ struct Canvas {
     oa::ui::frontend_renderer::Placement placement{}; ///< where points land, and its clip
     const Fonts* fonts{};                             ///< the game's fonts; null draws no text
     oa::ui::frontend_renderer::RgbaPicture
-        icon{}; ///< the Open Annihilation icon; empty draws the OA mark
+        icon{}; ///< the picture a header or an OA button draws; empty draws the OA mark
     SmoothCanvas
         smooth{}; ///< the smooth form; the crisp form's surface is not read while it paints
 };

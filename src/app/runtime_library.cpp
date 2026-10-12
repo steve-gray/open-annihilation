@@ -1686,10 +1686,15 @@ struct Runtime::LibraryScreen final : LayerScreen {
         relayout();
     }
 
-    /// Draws the Library at the canvas's scale.
+    /// Draws the Library at the canvas's scale. The layer's canvas carries
+    /// the app icon; the Library's header draws the mods icon.
     ///
     /// @param canvas where it draws
-    void draw(const kit::Canvas& canvas) const override { library::draw_library(canvas, list_); }
+    void draw(const kit::Canvas& canvas) const override {
+        kit::Canvas drawn = canvas;
+        drawn.icon = Runtime::EngineSettingsMenuHost::mods_icon(runtime_);
+        library::draw_library(drawn, list_);
+    }
 
     /// Takes a pointer's move, press or release.
     ///

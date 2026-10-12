@@ -99,10 +99,15 @@ struct Runtime::EngineSettingsState {
     oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::controls};
     std::optional<oa::ui::engine_settings::DialogFonts> fonts; ///< loaded on first use
     bool fonts_missing{}; ///< loading the fonts failed; they are not tried again
-    /// The icon the header and the main menu's OA button draw: the window
-    /// icon's visible part, decoded on first use.
+    /// The app icon, the plates alone: the window icon's visible part,
+    /// decoded on first use. Notices, prompts and the other OA headers draw
+    /// it. Settings and the Library replace it with their own icons.
     std::optional<WindowIcon> icon;
     bool icon_missing{}; ///< decoding the icon failed; it is not tried again
+    /// The app icon filtered down for the small maker's mark. Its pixels
+    /// outlive the picture the kit keeps.
+    std::optional<WindowIcon> maker_mark;
+    bool maker_mark_set{}; ///< the kit has been given the mark; it is not set again
     /// The pointer event being taken comes from a finger: its mouse is
     /// SDL_TOUCH_MOUSEID, as the touch controls' clicks and SDL's own are.
     /// A finger's press takes the nearest control of the dialog within the

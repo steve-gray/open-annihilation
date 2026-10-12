@@ -330,9 +330,10 @@ app removes the folder (`Runtime::library_uninstall`,
     `remove_registry`, `add_mirror`, `add_registry`); the host applies a
     switch and a removal at once, and asks the content service to refresh
     that one registry;
-  - **Compact** shows a list page: the header (the OA mark, "Library", this
-    build's version, and a refresh icon at the top right; "offline" in the
-    lock colour beside it when the last refresh could not reach a registry),
+  - **Compact** shows a list page: the header (the mods icon, the plates
+    over drive bays, "Library", this build's version, and a refresh icon
+    at the top right; "offline" in the lock colour beside it when the last
+    refresh could not reach a registry),
     the tabs with short names and their All counts in brackets ("Active",
     "Mods (11)", "Maps (2)", "Lang (2)", "Upd (15)", "Reg (2)"), the search
     field and the filter
@@ -657,9 +658,10 @@ details, and a several-map pack with no badge shows the first map on the
 row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
 name, on that copy only. That author is Open Annihilation, so the card
-shows the OA mark under its key. The Languages picture, on that drawing
+shows the app icon under its key, the plates filtered down, or the drawn
+plate when no icon has been given. The Languages picture, on that drawing
 only, sets the fixture language pack Portugues (Brasil) to author
-"OA team" and adds an installed copy, so the row shows the OA mark
+"OA team" and adds an installed copy, so the row shows that mark
 under its check.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,

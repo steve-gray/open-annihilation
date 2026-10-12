@@ -2031,7 +2031,7 @@ void Runtime::check_engine_settings_window_sizes() {
                     {0, 0, drawn_percent / 100},
                     *engine_settings_dialog(),
                     *engine_settings_fonts(),
-                    engine_settings_icon()
+                    EngineSettingsMenuHost::settings_icon(*this)
                 );
             } else {
                 const settings::Dialog& shown_dialog = *engine_settings_dialog();
@@ -2041,7 +2041,7 @@ void Runtime::check_engine_settings_window_sizes() {
                     drawn_percent,
                     engine_settings_fonts(),
                     oa_layer().smooth_fonts(),
-                    engine_settings_icon(),
+                    EngineSettingsMenuHost::settings_icon(*this),
                     [&shown_dialog](const oa::ui::kit::Canvas& canvas) {
                         settings::draw_dialog(canvas, shown_dialog);
                     }

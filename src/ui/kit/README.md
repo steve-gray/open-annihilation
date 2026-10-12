@@ -117,10 +117,12 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   worked out at the canvas's own pixels, each pixel's share counted from
   16 samples in integers, and drawn through `blend_coverage`, so the icon
   keeps its edges at 1x, 2x, 3x and 150% alike and never scales a picture
-  or a one-bit mark. The OA badge and the bone are filled shapes sampled
-  the same way, in their own colours, and ignore the colour passed in:
-  the badge is a rounded plate with the letters in the lock colour, and
-  the bone is off-white with a dark outline. `paint` draws a display list. The
+  or a one-bit mark. The bone is a filled shape sampled the same way, in
+  its own colours, and ignores the colour passed in: off-white with a dark
+  outline. The OA badge is the app icon when `set_open_annihilation_mark`
+  has been given one, drawn through `draw_picture` from the copy kept for
+  the mark's size, and otherwise that same kind of shape: a rounded plate
+  with the letters in the lock colour. `paint` draws a display list. The
   OA button (`draw_oa_button`, `OaButtonLook`) may wear the kit's attention
   dot, as the main menu's does while updates wait: a disc
   `oa_button_dot_side` (7) points across in the warning token

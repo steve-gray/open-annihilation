@@ -11,7 +11,7 @@ screen never opens there.
 
 The screen fills the game's window, inside the parts of the screen the
 device keeps clear (the camera housing, the rounded corners, the home
-indicator). Its header carries the OA badge, "Open Annihilation · Game
+indicator). Its header carries the app icon, the plates alone, "Open Annihilation · Game
 files", the version and, on the first start, an **OA · Aa** button that
 opens the settings limited to **Language**, the one section that
 needs no game data. On a tablet the ways in are cards side by side; on a

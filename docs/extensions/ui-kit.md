@@ -663,8 +663,10 @@ the language.
 The UI kit gallery shows every component of the kit, once working on its
 own model and once in each state (idle, hovered, pressed, focused,
 disabled, and locked where a component has a lock), at the scale and size
-class of the window. The Chips section also shows the two maker's marks,
-the OA badge and the bone, at the state icon's size. These pictures are
+class of the window. The Chips section also shows the two maker's marks
+at the state icon's size: the OA badge is the app icon when the game has
+given one, filtered down, and the drawn plate when it has not, and the
+bone is always the drawn bone. These pictures are
 the gallery's own, as its check,
 `native-kit-gallery`, takes them on the main menu with `--snapshot`. They
 were taken before the pill samples, so they do not show the PILLS section.

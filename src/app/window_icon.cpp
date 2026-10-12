@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -108,6 +109,61 @@ WindowIcon visible_part(const WindowIcon& icon) {
         );
     }
     return part;
+}
+
+WindowIcon area_scaled(const WindowIcon& icon, uint32_t side) {
+    const std::size_t source_row = std::size_t{icon.width} * window_icon_pixel_bytes;
+    if (side == 0 || icon.width == 0 || icon.height == 0 || source_row == 0 ||
+        icon.pixels.size() / source_row < icon.height)
+        return {};
+    if (side == icon.width && side == icon.height)
+        return icon;
+    WindowIcon scaled;
+    scaled.width = side;
+    scaled.height = side;
+    scaled.pixels.assign(std::size_t{side} * side * window_icon_pixel_bytes, 0);
+    const uint64_t source_columns = icon.width;
+    const uint64_t source_rows = icon.height;
+    const uint64_t dest_side = side;
+    for (uint32_t row = 0; row < side; ++row) {
+        const uint64_t shown_row = row;
+        const uint64_t first_row = shown_row * source_rows / dest_side;
+        const uint64_t end_row = std::max(first_row + 1, (shown_row + 1) * source_rows / dest_side);
+        for (uint32_t column = 0; column < side; ++column) {
+            const uint64_t shown_column = column;
+            const uint64_t first_column = shown_column * source_columns / dest_side;
+            const uint64_t end_column =
+                std::max(first_column + 1, (shown_column + 1) * source_columns / dest_side);
+            uint64_t alpha_sum = 0;
+            uint64_t red_sum = 0;
+            uint64_t green_sum = 0;
+            uint64_t blue_sum = 0;
+            for (uint64_t from_row = first_row; from_row < end_row; ++from_row) {
+                const uint8_t* from =
+                    icon.pixels.data() +
+                    static_cast<std::size_t>(from_row * source_columns + first_column) *
+                        window_icon_pixel_bytes;
+                for (uint64_t from_column = first_column; from_column < end_column; ++from_column) {
+                    const uint64_t alpha = from[alpha_byte];
+                    alpha_sum += alpha;
+                    red_sum += static_cast<uint64_t>(from[0]) * alpha;
+                    green_sum += static_cast<uint64_t>(from[1]) * alpha;
+                    blue_sum += static_cast<uint64_t>(from[2]) * alpha;
+                    from += window_icon_pixel_bytes;
+                }
+            }
+            if (alpha_sum == 0)
+                continue;
+            const uint64_t count = (end_row - first_row) * (end_column - first_column);
+            uint8_t* to = scaled.pixels.data() +
+                          (static_cast<std::size_t>(row) * side + column) * window_icon_pixel_bytes;
+            to[0] = static_cast<uint8_t>((red_sum + alpha_sum / 2) / alpha_sum);
+            to[1] = static_cast<uint8_t>((green_sum + alpha_sum / 2) / alpha_sum);
+            to[2] = static_cast<uint8_t>((blue_sum + alpha_sum / 2) / alpha_sum);
+            to[3] = static_cast<uint8_t>((alpha_sum + count / 2) / count);
+        }
+    }
+    return scaled;
 }
 
 } // namespace oa::app

@@ -10,6 +10,7 @@
 // time, a question over Settings, and the settings' Your files buttons, all
 // through a recorded opener, so that no file manager opens.
 
+#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -723,7 +724,7 @@ void Runtime::check_user_folder() {
                  1},
                 *dialog,
                 *fonts,
-                engine_settings_icon()
+                EngineSettingsMenuHost::settings_icon(*this)
             );
             darken_whole();
             settings::draw_prompt(expected, question_at, question, *fonts, engine_settings_icon());

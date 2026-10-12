@@ -146,6 +146,25 @@ artless::RgbaPicture Runtime::EngineSettingsMenuHost::settings_icon(Runtime& run
     };
 }
 
+artless::RgbaPicture Runtime::EngineSettingsMenuHost::mods_icon(Runtime& runtime) {
+    auto& host = runtime.engine_settings_menu_host();
+    if (!host.mods_picture && !host.mods_picture_missing) {
+        WindowIcon decoded;
+        std::string error;
+        if (decode_window_icon(mods_icon_png(), decoded, error))
+            host.mods_picture = visible_part(decoded);
+        if (!host.mods_picture || host.mods_picture->pixels.empty()) {
+            host.mods_picture.reset();
+            host.mods_picture_missing = true;
+            std::cerr << "open-annihilation: the mods icon is missing"
+                      << (error.empty() ? std::string{} : ": " + error) << '\n';
+        }
+    }
+    if (!host.mods_picture)
+        return {};
+    return {host.mods_picture->width, host.mods_picture->height, host.mods_picture->pixels};
+}
+
 int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*) {
     auto& runtime = *static_cast<Runtime*>(context->host);
     auto& host = runtime.engine_settings_menu_host();
@@ -241,7 +260,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         {context->surface,
          {rect.x, rect.y, 1},
          runtime.engine_settings_fonts(),
-         runtime.engine_settings_icon()},
+         mods_icon(runtime)},
         rect.width,
         static_cast<kit::OaButtonState>(
             button_look(host.button_hovered, host.button_pressed, covered)

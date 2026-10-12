@@ -36,6 +36,7 @@
 #include "oa/app/window_icon.hpp"
 #include "oa/sim/ground_orders/search_worker.hpp"
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/touch_hud.hpp"
@@ -72,6 +73,7 @@
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
+namespace kit = oa::ui::kit;
 namespace render_probe = oa::platform::render_probe;
 
 static_assert(settings::base_path_search_nodes == oa::sim::ground_orders::search_tick_credit);
@@ -1542,8 +1544,22 @@ oa::ui::frontend_renderer::RgbaPicture Runtime::engine_settings_icon() {
         if (!state.icon || state.icon->pixels.empty()) {
             state.icon.reset();
             state.icon_missing = true;
-            std::cerr << "open-annihilation: the settings' icon is missing"
+            std::cerr << "open-annihilation: the app icon is missing"
                       << (error.empty() ? std::string{} : ": " + error) << '\n';
+        } else if (!state.maker_mark_set) {
+            const WindowIcon& full = *state.icon;
+            if (full.width <= maker_mark_prepared_side && full.height <= maker_mark_prepared_side)
+                state.maker_mark = full;
+            else
+                state.maker_mark = area_scaled(full, maker_mark_prepared_side);
+            kit::OpenAnnihilationMark mark;
+            mark.full = {full.width, full.height, full.pixels};
+            if (state.maker_mark && !state.maker_mark->pixels.empty())
+                mark.prepared = {
+                    state.maker_mark->width, state.maker_mark->height, state.maker_mark->pixels
+                };
+            kit::set_open_annihilation_mark(mark);
+            state.maker_mark_set = true;
         }
     }
     if (!state.icon)
