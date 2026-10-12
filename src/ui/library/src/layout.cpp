@@ -2716,15 +2716,19 @@ void add_identity_tile(
 }
 
 /// Returns one map tile's height: the minimap or the lines beside it,
-/// whichever is taller, with the card's padding above and below.
+/// whichever is taller, with the card's padding above and below. A pack
+/// of several maps keeps a From line; a pack of one does not.
 ///
 /// @param metrics the class's metrics
 /// @param side the minimap's side
 /// @param described the map has a description to show
+/// @param from_line the tile draws "From <pack>"
 /// @return the height, in points
-int32_t map_tile_height(const kit::Metrics& metrics, int32_t side, bool described) {
-    int32_t lines = metrics.regular_line + 2 * metrics.small_line;
+int32_t map_tile_height(const kit::Metrics& metrics, int32_t side, bool described, bool from_line) {
+    int32_t lines = metrics.regular_line + metrics.small_line;
     if (described)
+        lines += metrics.small_line;
+    if (from_line)
         lines += metrics.small_line;
     return metrics.card_inset + std::max(side, lines) + metrics.card_inset;
 }
@@ -2855,7 +2859,9 @@ void place_identity(
 }
 
 /// Appends one installed map's tile: its minimap, title, players and size,
-/// its description cut to one line, and the link to its pack.
+/// its description cut to one line, and the link to its pack. A pack of
+/// several maps keeps that link on a From line. A pack of one map leaves
+/// the line out and makes the title the link, in the same accent.
 ///
 /// @param[in,out] building the layout
 /// @param map the map
@@ -2883,27 +2889,78 @@ void add_map_tile(
     if (text_width <= 0)
         return;
     int32_t row = inner_top;
+    const bool title_links = map.from.empty();
     const std::string title = cut(building, kit::FontRole::regular, map.name, text_width);
-    if (!title.empty() && width_of(building, kit::FontRole::regular, title) <= text_width)
+    const bool title_fits =
+        !title.empty() && width_of(building, kit::FontRole::regular, title) <= text_width;
+    const kit::ControlId link_id =
+        controls::first_active_from + static_cast<kit::ControlId>(number - 1);
+    // The title of a one-map pack is the pack's link: the accent, lighter
+    // while the pointer is over it, with the focus ring when it is focused.
+    const bool title_is_link = title_links && number <= controls::most_active_maps && title_fits;
+    kit::Colour title_ink = kit::colour::text;
+    if (title_is_link) {
+        const bool over =
+            hovered(building, link_id) || building.state->interaction.pressed == link_id;
+        title_ink = over ? kit::colour::accent_light : kit::colour::accent;
+    }
+    if (title_fits)
         add_text(
             building,
             kit::FontRole::regular,
             title,
             {text_left, row, text_width, metrics.regular_line},
             kit::Align::left,
-            kit::colour::text,
+            title_ink,
             clip
         );
-    if (number <= controls::most_active_maps)
+    if (title_is_link) {
+        const int32_t link_across =
+            std::min(width_of(building, kit::FontRole::regular, title), text_width);
+        const kit::Rect link_rect =
+            kit::intersect({text_left, row, link_across, metrics.regular_line}, clip);
+        if (link_rect.width > 0 && link_rect.height > 0) {
+            kit::LinkLook link;
+            link.caption = title;
+            link.hovered =
+                hovered(building, link_id) || building.state->interaction.pressed == link_id;
+            const std::size_t items_before = building.list.items.size();
+            const std::size_t controls_before = building.list.controls.size();
+            kit::add_link(
+                building.list,
+                link_rect,
+                link,
+                link_id,
+                unique_name(building, named("active.from." + std::to_string(number)))
+            );
+            // The kit draws a link in the small font. The title stays in the
+            // regular font, already drawn above, so the link item is dropped
+            // and only its control remains.
+            building.list.items.resize(items_before);
+            move_controls(building.list, controls_before, building.detail);
+            kit::Control& control = building.detail.back();
+            control.clip = clip;
+            control.group = controls::details_group;
+            control.focusable = true;
+            control.enabled = true;
+            tab_stop(building, control);
+        }
+    }
+    if (number <= controls::most_active_maps) {
+        // The composed line stays a label. When the title is the link, the
+        // label sits on the players-and-size line so the two do not meet.
+        const int32_t label_top = title_is_link ? row + metrics.regular_line : row;
+        const int32_t label_height = title_is_link ? metrics.small_line : metrics.regular_line;
         add_label(
             building.detail,
             controls::first_active_map + static_cast<kit::ControlId>(number - 1),
-            kit::intersect({text_left, row, text_width, metrics.regular_line}, clip),
+            kit::intersect({text_left, label_top, text_width, label_height}, clip),
             unique_name(building, named("active.map." + std::to_string(number))),
             map.line,
             clip,
             controls::details_group
         );
+    }
     row += metrics.regular_line;
     const std::string meta = filled(
         building.library->text,
@@ -3050,8 +3107,10 @@ int32_t add_map_tiles(
             const int32_t side = std::min(
                 active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
             );
-            tiles_height =
-                std::max(tiles_height, map_tile_height(metrics, side, !map.description.empty()));
+            tiles_height = std::max(
+                tiles_height,
+                map_tile_height(metrics, side, !map.description.empty(), !map.from.empty())
+            );
         }
         for (std::size_t place = 0; place < row_count; ++place) {
             const ActiveMap& map = setup.maps[index + place];
@@ -3102,7 +3161,8 @@ int32_t add_active_heading(
 /// mod's ending above UNLOAD MOD, and each map's is the part of its line
 /// that shows, empty while that part is scrolled out of the area. The
 /// labels take no press. UNLOAD MOD does, while a mod is played, and so
-/// does a map's From link while its line shows.
+/// does a map's link to its pack: the From line while that line shows, or
+/// the title when the pack holds that map alone.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
