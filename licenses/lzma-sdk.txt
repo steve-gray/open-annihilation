@@ -1,0 +1,9 @@
+LZMA SDK is placed in the public domain.
+
+The files under src/formats/lzma/vendor are the LZMA and LZMA2 decoder from
+the 7-Zip / LZMA SDK 25.01 by Igor Pavlov, taken unchanged from
+https://github.com/ip7z/7zip at tag 25.01, directory C/:
+
+  7zTypes.h Compiler.h Precomp.h LzmaDec.h LzmaDec.c Lzma2Dec.h Lzma2Dec.c
+
+Each of those files is marked "Igor Pavlov : Public domain".

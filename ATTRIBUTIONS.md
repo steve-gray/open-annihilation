@@ -26,6 +26,7 @@ in this repository or in the release packages.
 | [stb_vorbis](#stb_vorbis) | 1.22, changed | public domain or MIT | static | static | static |
 | [dr_mp3 and dr_flac](#dr_mp3-and-dr_flac) | 0.7.3 and 0.13.3, with later fixes | public domain or MIT No Attribution | static | static | static |
 | [Monocypher](#monocypher) | 4.0.2 | BSD-2-Clause | static | static | static |
+| [LZMA SDK](#lzma-sdk) | 25.01, decoder only | public domain | static | static | static |
 | [mingw-w64 runtime and winpthreads](#mingw-w64-runtime-and-winpthreads) | 15.0.0 | ZPL 2.1, MIT, BSD | | static | |
 | [LLVM runtime libraries](#llvm-runtime-libraries) (libc++, libc++abi, libunwind, compiler-rt) | 23.1.2 | Apache 2.0 with LLVM Exceptions | | static | |
 
@@ -44,6 +45,9 @@ repository with CMake links these components as follows:
   and the rest of the sound are decoded by the engine's own code.
 - Monocypher 4.0.2, which checks a catalogue's signature, is kept in
   [`third_party/monocypher/`](third_party/monocypher/) and compiled into
+  every build.
+- The LZMA SDK decoder, which reads LZMA and LZMA2 streams, is kept in
+  [`src/formats/lzma/vendor/`](src/formats/lzma/vendor/) and compiled into
   every build.
 - When CMake is pointed at the SDL that `tools/bootstrap_sdl.py` installs,
   as `run.sh` and the README do, SDL 3.4.16 with the changes described
@@ -198,6 +202,17 @@ licence text is in
 > THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 > (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 > OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## LZMA SDK
+
+The LZMA and LZMA2 decoder from the 7-Zip / LZMA SDK 25.01 by Igor Pavlov,
+from <https://github.com/ip7z/7zip> tag `25.01`, directory `C/`. The files
+`LzmaDec`, `Lzma2Dec`, `7zTypes.h`, `Compiler.h` and `Precomp.h` are compiled
+into the game unchanged from
+[`src/formats/lzma/vendor/`](src/formats/lzma/vendor/). The SDK is in the
+public domain. The notice is in
+[`licenses/lzma-sdk.txt`](licenses/lzma-sdk.txt). Each file carries its own
+line, "Igor Pavlov : Public domain".
 
 ## zlib
 
