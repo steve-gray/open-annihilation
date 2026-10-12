@@ -26,6 +26,8 @@ inline constexpr std::string_view interface_words[] = {
     words::fact_author,
     words::action_back,
     words::fact_base,
+    words::base_game_name,
+    words::base_game_summary,
     words::registry_built_in,
     words::action_cancel,
     words::action_refresh,

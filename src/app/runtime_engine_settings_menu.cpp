@@ -205,11 +205,8 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
     LibraryHost& shown = runtime.library_host();
     if (!shown.refreshed)
         shown.rebuild(runtime);
-    std::size_t mods = 0;
-    for (const oa::ui::library::Entry& entry : shown.model.entries) {
-        if (entry.id.kind == oa::ui::library::Kind::mod)
-            ++mods;
-    }
+    // The Mods tab's count: every mod it lists, Base Game left out.
+    const std::size_t mods = oa::ui::library::tab_count(shown.model, oa::ui::library::Tab::mods);
     kit::OaButtonMark mark;
     mark.dot = runtime.library_update_count() > 0;
     // A fetch that has not yet produced a list has no number to show. Once

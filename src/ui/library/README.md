@@ -32,7 +32,10 @@ translator finds them together. Every word passes through `Library::text`
     installed from the same registry, kind and key, and one per installed
     package no listing names (the player's own, or one whose registry is off
     or no longer lists it). Two registries that list one key are two
-    entries;
+    entries. It then makes the base game entry (`base_game_id`): a mod, no
+    registry, key `@base-game`. A package key is lower-case kebab-case, so
+    it cannot hold `@`. That entry is not a package: it has no listing, no
+    installed copy and no update, whatever a folder of the same key held;
   - its state: UPDATE when an update note names it (blocked or not), else
     PLAYING for the mod being played, else INSTALLED, else GET;
   - whether GET or UPDATE is allowed, and why not, the first reason that
@@ -64,9 +67,11 @@ translator finds them together. Every word passes through `Library::text`
     All; New keeps the tab's ten listings (`newest_count`) with the latest
     `Listing::published` day, ties by name, and never a listing without a
     day, so a package's release and revision play no part; Installed keeps
-    INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE. Each tab keeps its
-    filter when another is shown: Updates starts on Updates and the others
-    on All;
+    INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE. The base game
+    entry shows on Mods under All and Installed only, including when a
+    search matches its name, and on no other tab or filter. New never
+    holds it. Each tab keeps its filter when another is shown: Updates
+    starts on Updates and the others on All;
   - with no search: under New, the latest day first, then by name; under
     the others, updates, then the other installed entries, then GET
     entries that can be installed, then blocked ones; within each, by name
@@ -76,10 +81,12 @@ translator finds them together. Every word passes through `Library::text`
     with it, the author or publisher, the summary. Entries order by the
     worst class among the words, then the sum of the classes, then names
     that start with the first word, then as with no search. The search is
-    kept to 64 bytes, cut at a character boundary.
+    kept to 64 bytes, cut at a character boundary. Whenever the list keeps
+    the base game entry, it is moved to the front after that order;
 - `tags_in_tab` counts the tags of the entries a tab shows under its
-  filter; `filter_count` counts the entries a filter keeps on the tab
+  filter; `filter_count` counts the packages a filter keeps on the tab
   shown before the tag and the search, so no count moves with them, and
+  leaves the base game entry out of every count, and
   `filter_caption` writes it as the filters show it, "Installed (4)"
   (`words::filter_with_count`); `update_count` counts the updates that can
   be installed, the number on the Updates tab and the OA button, and
