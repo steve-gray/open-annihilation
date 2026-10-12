@@ -524,6 +524,108 @@ void test_registration_by_system() {
     std::error_code error;
     fs::remove_all(scratch.root, error);
 }
+
+/// A subset registers only its types. Withdrawing one leaves the others, and a package and an
+/// icon another program wrote. With every type off, the desktop entry and the MIME package go.
+void test_xdg_subset_and_withdrawal() {
+    const XdgScratch scratch = make_xdg_scratch();
+    const ScopedVariable path("PATH", scratch.tools.c_str());
+    const ScopedVariable flatpak("FLATPAK_ID", nullptr);
+    const ScopedVariable snap("SNAP", nullptr);
+    file_types::Places places{};
+    places.data_home = scratch.data;
+    places.tool_time_limit_ms = recording_tool_limit_ms;
+    const fs::path executable("/opt/Open Annihilation/open-annihilation");
+    const std::vector<uint8_t> icon = icon_bytes(1);
+    file_types::TypeSet packages;
+    packages.language = false;
+    packages.registry = false;
+    const fs::path package = scratch.data / "mime/packages/net.coreprime.open-annihilation.xml";
+    const fs::path entry = scratch.data / "applications/net.coreprime.open-annihilation.desktop";
+    const fs::path program_icon =
+        scratch.data / "icons/hicolor/256x256/apps/net.coreprime.open-annihilation.png";
+    const fs::path mod_icon =
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oamod.png";
+    const fs::path map_icon =
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oamap.png";
+    const fs::path language_icon =
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oalang.png";
+    const fs::path registry_icon =
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-oareg.png";
+
+    file_types::Registration done = file_types::register_xdg(executable, icon, places, packages);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    OA_CHECK(read_file(package) == file_types::mime_package(packages));
+    OA_CHECK(read_file(entry) == file_types::desktop_entry(executable, packages));
+    OA_CHECK(fs::exists(program_icon));
+    OA_CHECK(fs::exists(mod_icon));
+    OA_CHECK(fs::exists(map_icon));
+    OA_CHECK(!fs::exists(language_icon));
+    OA_CHECK(!fs::exists(registry_icon));
+
+    // Another program's package and icon, beside this game's, stay when a type is withdrawn.
+    const fs::path other_package = scratch.data / "mime/packages/other.xml";
+    const fs::path other_icon =
+        scratch.data / "icons/hicolor/256x256/mimetypes/application-x-other.png";
+    write_file(other_package, "<mime-info>other</mime-info>\n");
+    write_file(other_icon, "other-icon");
+    file_types::TypeSet maps;
+    maps.mod = false;
+    maps.language = false;
+    maps.registry = false;
+    done = file_types::withdraw_xdg(maps, places);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    file_types::TypeSet mods;
+    mods.language = false;
+    mods.map = false;
+    mods.registry = false;
+    OA_CHECK(read_file(package) == file_types::mime_package(mods));
+    OA_CHECK(read_file(entry) == file_types::desktop_entry(executable, mods));
+    OA_CHECK(!fs::exists(map_icon));
+    OA_CHECK(fs::exists(mod_icon));
+    OA_CHECK(fs::exists(program_icon));
+    OA_CHECK(read_file(other_package) == "<mime-info>other</mime-info>\n");
+    OA_CHECK(read_file(other_icon) == "other-icon");
+    // A second withdrawal of a type already gone changes nothing of what remains.
+    done = file_types::withdraw_xdg(maps, places);
+    OA_CHECK(done.supported && !done.changed && done.error.empty());
+    OA_CHECK(read_file(package) == file_types::mime_package(mods));
+
+    // With every type off, the desktop entry and the MIME package are removed, and so are the
+    // stamps a later registration's tools read. The program's icon stays.
+    places.run_tools = false;
+    file_types::TypeSet none;
+    none.mod = false;
+    none.language = false;
+    none.map = false;
+    none.registry = false;
+    done = file_types::register_xdg(executable, icon, places, none);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    OA_CHECK(!fs::exists(package));
+    OA_CHECK(!fs::exists(entry));
+    OA_CHECK(!fs::exists(mod_icon));
+    OA_CHECK(!fs::exists(map_icon));
+    OA_CHECK(!fs::exists(language_icon));
+    OA_CHECK(!fs::exists(registry_icon));
+    OA_CHECK(fs::exists(program_icon));
+    OA_CHECK(read_file(other_package) == "<mime-info>other</mime-info>\n");
+    OA_CHECK(read_file(other_icon) == "other-icon");
+    OA_CHECK(!fs::exists(scratch.data / "mime/.net.coreprime.open-annihilation.updated"));
+    OA_CHECK(!fs::exists(scratch.data / "applications/.net.coreprime.open-annihilation.updated"));
+
+    // Withdrawing every type from a full registration removes the entry and the package too.
+    done = file_types::register_xdg(executable, icon, places);
+    OA_CHECK(done.changed && fs::exists(package) && fs::exists(entry));
+    done = file_types::withdraw_xdg(file_types::TypeSet{}, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(!fs::exists(package));
+    OA_CHECK(!fs::exists(entry));
+    OA_CHECK(fs::exists(program_icon));
+    OA_CHECK(read_file(other_package) == "<mime-info>other</mime-info>\n");
+
+    std::error_code error;
+    fs::remove_all(scratch.root, error);
+}
 #else
 /// Reads a string value under HKEY_CURRENT_USER.
 std::optional<std::wstring> read_value(const std::wstring& key_name, const wchar_t* name) {
@@ -632,6 +734,128 @@ void test_windows_registration() {
     OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, scratch.c_str()) == ERROR_SUCCESS);
     static_cast<void>(RegDeleteKeyW(HKEY_CURRENT_USER, parent.c_str()));
 }
+
+/// Writes a string value, making its key.
+void write_sz(const std::wstring& key_name, const wchar_t* name, const std::wstring& data) {
+    HKEY opened = nullptr;
+    OA_CHECK(
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            key_name.c_str(),
+            0,
+            nullptr,
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            nullptr,
+            &opened,
+            nullptr
+        ) == ERROR_SUCCESS
+    );
+    const auto size = static_cast<DWORD>((data.size() + 1) * sizeof(wchar_t));
+    OA_CHECK(
+        RegSetValueExW(
+            opened, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(data.c_str()), size
+        ) == ERROR_SUCCESS
+    );
+    RegCloseKey(opened);
+}
+
+/// Reports whether a key is there.
+bool key_exists(const std::wstring& key_name) {
+    HKEY opened = nullptr;
+    const LONG result =
+        RegOpenKeyExW(HKEY_CURRENT_USER, key_name.c_str(), 0, KEY_QUERY_VALUE, &opened);
+    if (result != ERROR_SUCCESS)
+        return false;
+    RegCloseKey(opened);
+    return true;
+}
+
+/// A subset registers only its types. Withdrawing one leaves the others, and a value another
+/// program wrote, including the player's UserChoice. A value is removed only while it still
+/// names this game.
+void test_windows_withdrawal() {
+    const std::wstring parent = L"Software\\OpenAnnihilationFileTypesTest";
+    const std::wstring scratch = parent + L"\\" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                 std::to_wstring(GetTickCount()) + L"-withdraw";
+    const std::wstring classes = scratch + L"\\Classes";
+    file_types::Places places{};
+    places.classes_key = fs::path(classes).string();
+    places.notify_shell = false;
+    const fs::path executable(L"C:\\Games\\Open Annihilation\\open-annihilation.exe");
+
+    file_types::TypeSet packages;
+    packages.language = false;
+    packages.registry = false;
+    file_types::Registration done = file_types::register_windows(executable, places, packages);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    OA_CHECK(done.lines.size() == 12);
+    OA_CHECK(read_value(classes + L"\\.oamod", nullptr) == L"OpenAnnihilation.Mod");
+    OA_CHECK(read_value(classes + L"\\.oamap", nullptr) == L"OpenAnnihilation.MapPack");
+    OA_CHECK(!key_exists(classes + L"\\.oalang"));
+    OA_CHECK(!key_exists(classes + L"\\OpenAnnihilation.Language"));
+    OA_CHECK(!key_exists(classes + L"\\.oareg"));
+    OA_CHECK(!key_exists(classes + L"\\OpenAnnihilation.Registry"));
+
+    done = file_types::register_windows(executable, places);
+    OA_CHECK(done.changed && done.lines.size() == 12);
+    OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Language"));
+    OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Registry"));
+
+    // Another program's opener, and the player's own choice, planted on the game's extensions.
+    write_sz(classes + L"\\.oamod\\OpenWithProgids", L"Other.Mod", L"");
+    write_sz(classes + L"\\.oamod\\UserChoice", L"ProgId", L"Other.Mod");
+    write_sz(classes + L"\\.oamap", nullptr, L"Other.Map");
+    write_sz(classes + L"\\.oamap", L"Content Type", L"application/x-other-map");
+
+    file_types::TypeSet maps;
+    maps.mod = false;
+    maps.language = false;
+    maps.registry = false;
+    done = file_types::withdraw_windows(maps, places);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    // .oamap's (Default) and Content Type name the other program, so they stay. The game's
+    // program-identifier key, and its OpenWithProgids value, go.
+    OA_CHECK(read_value(classes + L"\\.oamap", nullptr) == L"Other.Map");
+    OA_CHECK(read_value(classes + L"\\.oamap", L"Content Type") == L"application/x-other-map");
+    OA_CHECK(!key_exists(classes + L"\\OpenAnnihilation.MapPack"));
+    OA_CHECK(!read_value(classes + L"\\.oamap\\OpenWithProgids", L"OpenAnnihilation.MapPack"));
+    OA_CHECK(read_value(classes + L"\\.oamod\\OpenWithProgids", L"Other.Mod") == L"");
+    OA_CHECK(read_value(classes + L"\\.oamod\\UserChoice", L"ProgId") == L"Other.Mod");
+    OA_CHECK(read_value(classes + L"\\.oamod", nullptr) == L"OpenAnnihilation.Mod");
+    OA_CHECK(read_value(classes + L"\\.oamod", L"Content Type") == L"application/x-oamod");
+    OA_CHECK(read_value(classes + L"\\.oalang", nullptr) == L"OpenAnnihilation.Language");
+    OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Language"));
+    OA_CHECK(read_value(classes + L"\\.oareg", nullptr) == L"OpenAnnihilation.Registry");
+    OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Registry"));
+
+    // .oamod's (Default) and Content Type still name the game, so those two values go. The
+    // extension key stays, and so does the other program's value and the player's UserChoice.
+    file_types::TypeSet mods;
+    mods.language = false;
+    mods.map = false;
+    mods.registry = false;
+    done = file_types::withdraw_windows(mods, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(!read_value(classes + L"\\.oamod", nullptr));
+    OA_CHECK(!read_value(classes + L"\\.oamod", L"Content Type"));
+    OA_CHECK(!key_exists(classes + L"\\OpenAnnihilation.Mod"));
+    OA_CHECK(!read_value(classes + L"\\.oamod\\OpenWithProgids", L"OpenAnnihilation.Mod"));
+    OA_CHECK(read_value(classes + L"\\.oamod\\OpenWithProgids", L"Other.Mod") == L"");
+    OA_CHECK(read_value(classes + L"\\.oamod\\UserChoice", L"ProgId") == L"Other.Mod");
+    OA_CHECK(key_exists(classes + L"\\.oamod"));
+    OA_CHECK(read_value(classes + L"\\.oamap", nullptr) == L"Other.Map");
+    OA_CHECK(read_value(classes + L"\\.oalang", nullptr) == L"OpenAnnihilation.Language");
+    OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Registry"));
+
+    done = file_types::withdraw_windows(mods, places);
+    OA_CHECK(done.supported && !done.changed && done.error.empty());
+    OA_CHECK(read_value(classes + L"\\.oamod\\UserChoice", L"ProgId") == L"Other.Mod");
+    OA_CHECK(read_value(classes + L"\\.oamod\\OpenWithProgids", L"Other.Mod") == L"");
+
+    OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, scratch.c_str()) == ERROR_SUCCESS);
+    static_cast<void>(RegDeleteKeyW(HKEY_CURRENT_USER, parent.c_str()));
+}
 #endif
 
 } // namespace
@@ -645,8 +869,10 @@ int main() {
     test_xdg_skips();
     test_xdg_data_folder();
     test_registration_by_system();
+    test_xdg_subset_and_withdrawal();
 #else
     test_windows_registration();
+    test_windows_withdrawal();
 #endif
     return oa::test::check_exit_status();
 }

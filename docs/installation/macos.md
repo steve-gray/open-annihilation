@@ -74,8 +74,14 @@ Open Annihilation's own settings open with **Cmd+,**, or from
 bottom right of the main menu opens. See [Settings](../settings.md), and
 [the Library](../library.md) for mods, maps and languages to download.
 
-Double-click a `.oamod` file to install the mod it holds in Open
-Annihilation ([mods](../mods/README.md#installing-a-oamod-file)).
+The app declares `.oamod`, `.oalang`, `.oamap` and `.oareg` files, and
+macOS takes those types from the app. Double-click a `.oamod` file to
+install the mod it holds in Open Annihilation
+([mods](../mods/README.md#installing-a-oamod-file)). To open one of them
+with another program, use Finder's Get Info › Open with.
+[Settings › System](../settings.md#system) shows Your files and a File
+types row that says this; it does not list a switch for each type, because
+the game cannot withdraw one while it runs.
 
 With the macOS firewall on, the first time you host or join a multiplayer
 game macOS asks whether Open Annihilation may accept incoming network

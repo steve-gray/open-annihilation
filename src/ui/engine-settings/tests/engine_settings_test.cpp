@@ -562,6 +562,57 @@ void only_changed_settings_are_written() {
     CHECK(kept.at(std::string{settings::key::unit_limit}) == "garbage");
 }
 
+void file_type_switches_store_on_and_off() {
+    const settings::EngineSettings defaults{};
+    CHECK(
+        defaults.file_type_oamod && defaults.file_type_oamap && defaults.file_type_oalang &&
+        defaults.file_type_oareg
+    );
+
+    // Absent keys, "on", and any other text read as on. Only "off" turns one off.
+    const auto from_absent = settings::read_settings({}, {}, false);
+    CHECK(
+        from_absent.file_type_oamod && from_absent.file_type_oamap &&
+        from_absent.file_type_oalang && from_absent.file_type_oareg
+    );
+    Values mixed;
+    mixed[std::string{settings::key::file_type_oamod}] = "off";
+    mixed[std::string{settings::key::file_type_oamap}] = "on";
+    mixed[std::string{settings::key::file_type_oalang}] = "0";
+    mixed[std::string{settings::key::file_type_oareg}] = "no";
+    const auto read = settings::read_settings(mixed, {}, false);
+    CHECK(!read.file_type_oamod);
+    CHECK(read.file_type_oamap);
+    CHECK(read.file_type_oalang);
+    CHECK(read.file_type_oareg);
+
+    // A switch moved off is stored as off. One left on writes nothing.
+    auto chosen = defaults;
+    chosen.file_type_oamod = false;
+    chosen.file_type_oamap = false;
+    Values written;
+    settings::write_settings(written, defaults, chosen, defaults, false);
+    CHECK(written.at(std::string{settings::key::file_type_oamod}) == "off");
+    CHECK(written.at(std::string{settings::key::file_type_oamap}) == "off");
+    CHECK(written.count(std::string{settings::key::file_type_oalang}) == 0);
+    CHECK(written.count(std::string{settings::key::file_type_oareg}) == 0);
+    CHECK(settings::read_settings(written, {}, false).file_type_oamod == false);
+    CHECK(settings::read_settings(written, {}, false).file_type_oalang);
+
+    // Turning one back on stores on. Restore defaults erases a stored off.
+    auto back = chosen;
+    back.file_type_oamod = true;
+    Values again;
+    settings::write_settings(again, chosen, back, defaults, false);
+    CHECK(again.at(std::string{settings::key::file_type_oamod}) == "on");
+    CHECK(again.count(std::string{settings::key::file_type_oamap}) == 0);
+    Values restored = written;
+    settings::write_settings(restored, chosen, defaults, defaults, true);
+    CHECK(restored.count(std::string{settings::key::file_type_oamod}) == 0);
+    CHECK(restored.count(std::string{settings::key::file_type_oamap}) == 0);
+    CHECK(settings::read_settings(restored, {}, false).file_type_oamod);
+}
+
 void restore_defaults_erases_the_keys_of_settings_at_their_defaults() {
     const settings::EngineSettings defaults{};
     const auto stored = changed_settings();
@@ -2412,6 +2463,7 @@ int main() {
     stored_values_are_read_and_clamped_into_their_ranges();
     switch_alt_comes_from_the_games_own_key();
     only_changed_settings_are_written();
+    file_type_switches_store_on_and_off();
     restore_defaults_erases_the_keys_of_settings_at_their_defaults();
     the_round_trip_keeps_every_value();
     the_frame_rate_goes_down_to_a_frame_a_tick();

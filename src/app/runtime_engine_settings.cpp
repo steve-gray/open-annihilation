@@ -30,8 +30,10 @@
 #include "render_host.hpp"
 #include "render_run.hpp"
 #include "screen_size.hpp"
+#include "oa/platform/file_types.hpp"
 #include "oa/platform/machine.hpp"
 #include "oa/platform/render_probe.hpp"
+#include "oa/app/window_icon.hpp"
 #include "oa/sim/ground_orders/search_worker.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
@@ -1266,6 +1268,37 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     return dialog;
 }
 
+/// Registers the file types `chosen` leaves on and withdraws the rest, where
+/// this system takes a registration at run time. A registration that skips
+/// or fails withdraws nothing.
+///
+/// @param chosen the settings OK is keeping
+void apply_chosen_file_types(const settings::EngineSettings& chosen) {
+    namespace file_types = oa::platform::file_types;
+    const auto executable = file_types::running_executable();
+    if (!executable)
+        return;
+    file_types::TypeSet enabled;
+    enabled.mod = chosen.file_type_oamod;
+    enabled.language = chosen.file_type_oalang;
+    enabled.map = chosen.file_type_oamap;
+    enabled.registry = chosen.file_type_oareg;
+    const auto done = file_types::register_file_types(*executable, window_icon_png(), {}, enabled);
+    const auto log = [](const file_types::Registration& result) {
+        for (const auto& line : result.lines)
+            std::cerr << "open-annihilation: file types: " << line << '\n';
+        if (!result.error.empty())
+            std::cerr << "open-annihilation: file types: " << result.error << '\n';
+    };
+    log(done);
+    if (!done.supported || !done.error.empty())
+        return;
+    for (const auto& line : done.lines)
+        if (line.rfind("skipped:", 0) == 0)
+            return;
+    log(file_types::withdraw_file_types(enabled.complement()));
+}
+
 settings::Dialog* Runtime::engine_settings_dialog() {
     if (!engine_settings_ || !engine_settings_->dialog)
         return nullptr;
@@ -1317,10 +1350,11 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         take_renderer_retry(*dialog);
         {
             // A Screen size moved to applies when OK is pressed; until then
-            // it stays as it was. The check for content updates does too.
-            // An Interface size applies as it is chosen, and the open dialog
-            // and every OA screen are laid out at it. Cancel puts back the
-            // size the dialog opened with.
+            // it stays as it was. The check for content updates does too,
+            // and so does which file types the game opens. An Interface size
+            // applies as it is chosen, and the open dialog and every OA
+            // screen are laid out at it. Cancel puts back the size the
+            // dialog opened with.
             settings::EngineSettings live = dialog->chosen;
             live.screen_size = dialog->opened.screen_size;
             live.content_check = dialog->opened.content_check;
@@ -1350,11 +1384,20 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
             chosen.screen_size = EngineSettingsState::stored_screen_size(*this, chosen.screen_size);
         const bool check_changed = chosen.content_check != dialog->opened.content_check;
         const settings::ContentCheck chosen_check = chosen.content_check;
+        const bool file_types_changed =
+            chosen.file_type_oamod != dialog->opened.file_type_oamod ||
+            chosen.file_type_oamap != dialog->opened.file_type_oamap ||
+            chosen.file_type_oalang != dialog->opened.file_type_oalang ||
+            chosen.file_type_oareg != dialog->opened.file_type_oareg;
         const std::vector<settings::InstallIdChoice> switches_opened = dialog->install_id_opened;
         const std::vector<settings::InstallIdChoice> switches_chosen = dialog->install_id_chosen;
         // The switches are stored before the settings, so one save writes both.
         store_install_switches(preference_values_, switches_opened, switches_chosen);
         apply_engine_settings(chosen);
+        // The registration follows the settings OK kept, at once. Cancel
+        // never reaches here, and a switch moved before OK does not either.
+        if (file_types_changed)
+            apply_chosen_file_types(chosen);
         // Changed registered keys join the values write_settings keeps, and
         // their owners are told once the flush succeeds.
         const std::vector<settings::RegisteredWrite> registered =
