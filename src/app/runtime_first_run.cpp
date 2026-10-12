@@ -495,6 +495,20 @@ class FirstRunScreen final : public LayerScreen {
         session_.model.step = step;
     }
 
+    /// Takes a previewed language's fonts off both stacks, so a setup
+    /// closed while such a language is in the middle leaves only the
+    /// language in use.
+    ~FirstRunScreen() override {
+        if (preview_fonts_tag_.empty())
+            return;
+        note_first_run_preview_fonts({});
+        if (text_font::FontStack* stack = runtime_.oa_layer().smooth_fonts())
+            runtime_.use_language_fonts(*stack);
+    }
+
+    FirstRunScreen(const FirstRunScreen&) = delete;
+    FirstRunScreen& operator=(const FirstRunScreen&) = delete;
+
     /// Returns the screen's name.
     ///
     /// @return first-run
