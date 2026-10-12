@@ -278,33 +278,38 @@ app removes the folder (`Runtime::library_uninstall`,
     Tab and the arrows reach it while it is enabled. Compact's footer
     holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
-    search and no filters, one row for each registry: its avatar (the
-    initials, `registry_initials`, on the accent for a built-in registry
-    and on `colour::switch_idle` for one the player added), its name with
-    a Built in chip when it ships with the game, its address, when it was
-    last read (`registry_refresh_line`: "refreshed 5 min ago", "never
-    refreshed", or "couldn't reach · 2 h ago"), its subtitle
-    (`registry_subtitle`: how many packages, "not reviewed" for one the
-    player added, and how many mirrors) and an Off/On switch. A key icon
-    shows the keys the catalogue is checked against when the pointer, the
-    keys or the pad rest on it (each fingerprint and full public key, and
-    "built in" or "added by you"); pressing it asks for nothing. REFRESH
-    sits beside the switch and asks the host to refresh that registry
+    search and no filters, one card for each registry, one under another
+    with `card_gap`. A card has its avatar (the initials,
+    `registry_initials`, from the short name, on the accent for a built-in
+    registry and on `colour::switch_idle` for one the player added), its
+    heading (the title, or the short name when the title is empty), its
+    address, when it was last read (`registry_refresh_line`: "refreshed 5
+    min ago", "never refreshed", or "couldn't reach · 2 h ago"), its
+    description when it has one, and its subtitle (`registry_subtitle`:
+    how many packages, "not reviewed" for one the player added, and how
+    many mirrors). The key icon is the kit's key glyph in the icon square
+    (`state_icon_side`) at the right of the title band; resting on it
+    shows each fingerprint and full public key, and "built in" or "added
+    by you", and pressing it asks for nothing. REFRESH sits beside the
+    switch and asks the host to refresh that registry
     (`Action::refresh_registry`); it is greyed while the registry is off
     or already being asked, and the refresh mark beside it turns while it
-    is. REMOVE and ADD MIRROR… sit under the subtitle for one the player
-    added. A note under the list (`registry_note`) names the built-in
-    registries, and a refusal (`Inputs::registries_notice`) stands over it
-    in the lock colour. The rows and the note scroll as the details do.
-    ADD REGISTRY… sits at the top right, above the list, and joins Tab's
-    order after the rows; the footer holds CLOSE and no DETAILS. During a
-    match the padlock and "Choose from the main menu." stand where ADD
-    REGISTRY… was, and ADD MIRROR… gives way to the same lock; the
-    switches, REFRESH and REMOVE stay. A switch, REFRESH, REMOVE, ADD
-    MIRROR… and ADD REGISTRY… ask the host (`Action::set_registry`,
-    `refresh_registry`, `remove_registry`, `add_mirror`, `add_registry`);
-    the host applies a switch and a removal at once, and asks the content
-    service to refresh that one registry;
+    is. The Off/On switch is the kit's switch. A built-in registry has a
+    neutral Built in pill under those controls, right-aligned with the
+    switch. REMOVE and ADD MIRROR… sit under the subtitle for one the
+    player added. A note under the last card (`registry_note`) names the
+    built-in registries by their short names, and a refusal
+    (`Inputs::registries_notice`) stands over it in the lock colour. The
+    cards and the note scroll as the details do. ADD REGISTRY… sits at
+    the top right, above the cards, and joins Tab's order after them; the
+    footer holds CLOSE and no DETAILS. During a match the padlock and
+    "Choose from the main menu." stand where ADD REGISTRY… was, and ADD
+    MIRROR… gives way to the same lock; the switches, REFRESH and REMOVE
+    stay. A switch, REFRESH, REMOVE, ADD MIRROR… and ADD REGISTRY… ask
+    the host (`Action::set_registry`, `refresh_registry`,
+    `remove_registry`, `add_mirror`, `add_registry`); the host applies a
+    switch and a removal at once, and asks the content service to refresh
+    that one registry;
   - **Compact** shows a list page: the header (the OA mark, "Library", this
     build's version, and a refresh icon at the top right; "offline" in the
     lock colour beside it when the last refresh could not reach a registry),
@@ -360,8 +365,9 @@ app removes the folder (`Runtime::library_uninstall`,
   - **Keys** (`kit::Key`): Tab and Shift+Tab follow the declared order: the
     tabs, the search, the filters, UPDATE ALL and the list, the details'
     actions, the footer's buttons (on Active, the tabs and the footer's
-    buttons alone; on Registries, the tabs, each registry's switch, REMOVE
-    and ADD MIRROR…, and the footer's buttons); on Compact's details page, the way back, the actions,
+    buttons alone; on Registries, the tabs, each registry's key icon,
+    REFRESH, switch, REMOVE and ADD MIRROR…, ADD REGISTRY…, and the
+    footer's buttons); on Compact's details page, the way back, the actions,
     MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
@@ -565,10 +571,12 @@ that the Active tab is first, has no search, filter, list or DETAILS,
 reads its mod, language and maps as labels, shows Playing and Built in
 as pills, and while a mod is played puts UNLOAD MOD in Tab's order with
 the tabs and the footer (absent on the base-game tile, and out of that
-order while disabled); that the Registries tab lists each registry's
-switch, key icon and REFRESH, its address and refresh time, REMOVE and
-ADD MIRROR… only for one the player added, and ADD REGISTRY… at the top
-right above the list, with no search or DETAILS; that resting on the key
+order while disabled); that the Registries tab lists each registry on a card, its heading the
+title, its switch, key icon and REFRESH, its address, refresh time and
+description, a neutral Built in pill under those controls for one that
+ships with the game, REMOVE and ADD MIRROR… only for one the player
+added, and ADD REGISTRY… at the top right above the cards, with no
+search or DETAILS; that resting on the key
 icon or focusing it shows that registry's fingerprints and public keys,
 and pressing it asks for nothing; that REFRESH asks for that registry and
 is greyed, with the refresh mark turning beside it, while the registry is
@@ -600,15 +608,19 @@ by the wheel, the page keys, Home, End and the right stick.
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact, Regular and Large, and the Updates tab at
-Compact and Large: each twice, byte for byte the same, with nothing drawn outside the
+page, the Active tab at Compact, Regular and Large, the Updates tab at
+Compact and Large, and the Registries tab at Compact, Regular and Large:
+each twice, byte for byte the same, with nothing drawn outside the
 window and every pixel of it drawn, every part inside it and every text
-fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
+fitting. The Registries pictures dress the fixture's built-in registry as
+Core Prime, title, description and short name, on that copy only.
+`oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
 `library-active-regular.png`, `library-active-large.png`,
-`library-updates-compact.png` and
-`library-updates-large.png` for review.
+`library-updates-compact.png`, `library-updates-large.png`,
+`library-registries-compact.png`, `library-registries-regular.png` and
+`library-registries-large.png` for review.
 
 ## Limitations
 
