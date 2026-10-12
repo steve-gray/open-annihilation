@@ -218,7 +218,8 @@ lib::MapPicture solid_minimap(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 /// Dresses the map pictures. Installed maps gain a minimap and a long
-/// description, so the Active tiles show both and a From link. Shore Pack is
+/// description, so the Active tiles show both. A one-map pack's tile has no
+/// From line. Shore Pack is
 /// one map, not installed, so its row and its details show that minimap. Desert
 /// Pack has several maps and no badge, so the Maps row shows the first and the
 /// details show the grid. The fixture's own inputs stay as they were.
