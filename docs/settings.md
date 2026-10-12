@@ -629,7 +629,7 @@ check and the install-ID switch can still change.
 
 ## System
 
-![The System section on a Mac: Your files showing the Open Annihilation folder with its SAVES, SCREENSHOTS and MODS buttons, and File types, whose hint says the system takes these file types from the app and that Finder's Get Info › Open with chooses another opener.](images/settings/system.png)
+![The System section: Your files showing the Open Annihilation folder with its SAVES, SCREENSHOTS and MODS buttons. This picture is from before macOS listed a switch for each file type.](images/settings/system.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.
@@ -646,28 +646,37 @@ of the game's file types this copy opens.
   ([macOS](installation/macos.md#where-it-keeps-its-files),
   [Windows](installation/windows.md#where-it-keeps-its-files),
   [Linux](installation/linux.md#where-it-keeps-its-files)).
-- **File Type Registration**, on Windows and Linux. Four switches, each On
-  until you turn it off:
+- **File Type Registration**, on Windows, Linux and macOS. Four switches:
   - **Mod packages (.oamod)**
   - **Map packs (.oamap)**
   - **Language packs (.oalang)**
   - **Registry files (.oareg)**
 
-  A switch that is on makes this copy of the game the opener of that kind
-  of file. The hint says "Open these files with the game from your file
-  manager." **OK** registers a type you turned on, and withdraws one you
-  turned off, at once: the file manager takes the change with no restart.
-  **Cancel** leaves the registration as it was when the dialog opened.
+  The hint says "Open these files with the game from your file manager."
+  **OK** applies a switch you moved, at once. **Cancel** leaves every
+  opener as it was when the dialog opened. A switch you do not move is
+  left as it is, including a choice you made in the file manager. Starting
+  the game does not put a type back.
   Each switch is kept as `on` or `off` under
   `open-annihilation.file-types.` and its extension (`.oamod`, `.oamap`,
   `.oalang`, `.oareg`). A missing key, or any text other than `off`, leaves
   the type on.
-- **File types**, on a Mac and on iPhone and iPad, in place of the four
-  switches. The system takes the types from the app, and the game cannot
-  withdraw one while it runs, so there is no switch. On a Mac the hint also
-  says that Finder's Get Info › Open with chooses another opener. The
-  picture above is that Mac row. On iPhone and iPad the hint is only the
-  first sentence.
+
+  On Windows and Linux, a switch that is on makes this copy of the game
+  the opener of that kind of file, and one that is off withdraws that
+  registration. The file manager takes the change with no restart.
+
+  On a Mac, a switch that is on means Open Annihilation is the program
+  Finder uses to open that type. The switch shows that choice as it is
+  now, not only what was stored. Off hands the type back to the program
+  that opens a zip archive (the three packages, usually Archive Utility)
+  or plain text (a registry file). The app keeps the type and its icon
+  either way; only the program that opens it changes. If the system
+  refuses, the log says so and the switch shows the choice the system
+  kept. [macOS](installation/macos.md) says the same for opening a file.
+- **File types**, on iPhone and iPad, in place of the four switches. The
+  system takes the types from the app, and there is no way to choose a
+  default opener, so there is no switch. The hint is one sentence.
 
 ## Developer
 

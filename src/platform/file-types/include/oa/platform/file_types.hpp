@@ -5,8 +5,10 @@
 // it, with the game's icon on those files where the system takes one: the registry under
 // HKEY_CURRENT_USER on Windows, and on Linux the MIME package, desktop entry and icons in the
 // user's XDG data folder, with the system's database tools run after a change. macOS and iOS
-// register through the bundle's Info.plist instead, and nothing is done at run time there.
-// Each registration writes only what differs from what is there.
+// declare the types in the bundle's Info.plist. On macOS a switch chooses whether this copy
+// is the default opener, and only a switch that changed is asked; a start never replaces a
+// choice made in Finder. iOS does nothing at run time. Each registration writes only what
+// differs from what is there.
 #pragma once
 
 #include <stdint.h>
@@ -81,6 +83,24 @@ inline constexpr std::array<FileType, 4> file_types{{
      "application/zip"},
     {map_extension, map_mime_type, map_type_name, map_program_id, "application/zip"},
     {registry_extension, registry_mime_type, registry_type_name, registry_program_id, "text/plain"},
+}};
+
+/// One file type as macOS names it, and the content type a switch that is off hands back to.
+/// The identifiers are the ones the bundle exports. The bundle declares each as public.data,
+/// so a browser does not unpack a package; handing a switch off gives the type to the default
+/// opener of a zip archive, or of plain text for a registry file.
+struct ExportedContentType {
+    std::string_view extension{};     ///< the file name extension, without its dot
+    std::string_view content_type{};  ///< the exported type identifier
+    std::string_view hands_back_to{}; ///< the content type Off asks for an opener
+};
+
+/// The four exported content types, in the same order as file_types.
+inline constexpr std::array<ExportedContentType, 4> exported_content_types{{
+    {mod_extension, "net.coreprime.open-annihilation.oamod", "public.zip-archive"},
+    {language_extension, "net.coreprime.open-annihilation.oalang", "public.zip-archive"},
+    {map_extension, "net.coreprime.open-annihilation.oamap", "public.zip-archive"},
+    {registry_extension, "net.coreprime.open-annihilation.oareg", "public.plain-text"},
 }};
 
 /// Which of the four file types a registration or a withdrawal acts on. Each is on unless a
@@ -185,7 +205,9 @@ struct Registration {
 /// the desktop entry and the MIME package once neither lists a type. The program's own icon
 /// stays. A missing value is already withdrawn. The same skips as a registration apply on
 /// Linux (a Flatpak, a Snap). macOS and iOS withdraw nothing at run time: there supported is
-/// false. The shell, or the database tools, are told as a write tells them. Never throws.
+/// false. On macOS the switches call apply_opener_changes, which changes the default opener
+/// and leaves the declaration. The shell, or the database tools, are told as a write tells
+/// them. Never throws.
 ///
 /// @param types the file types to withdraw
 /// @param places where it writes; the defaults are the user's own
@@ -301,5 +323,77 @@ desktop_entry(const std::filesystem::path& executable, TypeSet types = {});
 /// @param executable the program, absolute
 /// @return the location, UTF-8
 [[nodiscard]] std::string default_icon(const std::filesystem::path& executable);
+
+/// The program that opens a content type: its bundle identifier, and the file URL of that
+/// copy where the system names one.
+struct Handler {
+    std::string bundle_id{};       ///< the opener's bundle identifier; empty when none is set
+    std::string application_url{}; ///< the opener's file URL; empty when the system names none
+};
+
+/// The two questions a default-opener change asks. A test fills both; macOS fills them from
+/// the system. A null function is a system that has no such question.
+struct HandlerCalls {
+    void* context{}; ///< handed to both functions
+    /// The default opener of `content_type`. Sets `failure` and returns an empty handler when
+    /// the question fails.
+    Handler (*default_handler)(
+        void* context, std::string_view content_type, std::string& failure
+    ){};
+    /// Makes `handler` the default opener of `content_type`. Returns false and sets `failure`
+    /// when it does not.
+    bool (*set_handler)(
+        void* context, std::string_view content_type, const Handler& handler, std::string& failure
+    ){};
+};
+
+/// One switch that moved: the extension, and whether this copy should open it.
+struct OpenerChange {
+    std::string_view extension{}; ///< one of the four, without its dot
+    bool open{}; ///< true: this copy; false: the opener of the type it hands back to
+};
+
+/// What the system reports for the four switches.
+struct OpenerReport {
+    /// On when this copy's bundle identifier is the default opener. A type whose question
+    /// failed keeps the value `fallback` held.
+    TypeSet open{};
+    std::string error{}; ///< the questions that failed, for the log; empty when none did
+};
+
+/// Reports whether System's switches choose a default opener on this system: macOS does,
+/// and a start does not apply them. Windows and Linux register instead, and iOS does neither.
+[[nodiscard]] bool default_opener_is_a_setting() noexcept;
+
+/// Returns the calls the system itself answers. Both functions are null where this system
+/// has no default-opener question (everywhere but macOS).
+[[nodiscard]] HandlerCalls system_handler_calls();
+
+/// Returns this copy of the program, as a bundle. Both strings are empty when it is not an
+/// application bundle, and everywhere but macOS.
+[[nodiscard]] Handler running_application();
+
+/// Reports which of the four this copy opens by default, asking `calls`. A null
+/// default_handler leaves `fallback` as it was and records no error. Never throws.
+///
+/// @param calls the questions; a test's, or system_handler_calls
+/// @param bundle_id this copy's bundle identifier
+/// @param fallback what a failed question leaves that switch showing
+/// @return the four switches, and any question that failed
+[[nodiscard]] OpenerReport
+reported_openers(const HandlerCalls& calls, std::string_view bundle_id, TypeSet fallback);
+
+/// Asks `calls` to make each change in `changes`. A switch that is on sets `application`. A
+/// switch that is off asks for the default opener of the content type that file hands back
+/// to, and sets that opener on the file's own content type. A change whose question fails is
+/// skipped; the others are still asked. Never throws.
+///
+/// @param calls the questions; a test's, or system_handler_calls
+/// @param application this copy, as running_application gives it
+/// @param changes the switches that moved
+/// @return what was asked; supported is false when `calls` cannot set an opener
+[[nodiscard]] Registration apply_opener_changes(
+    const HandlerCalls& calls, const Handler& application, std::span<const OpenerChange> changes
+);
 
 } // namespace oa::platform::file_types
