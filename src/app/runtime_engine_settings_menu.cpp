@@ -49,9 +49,14 @@ constexpr int32_t kButtonGap = settings::menu_button_side / 4;
 /// The button overlay's z: under the extensions' overlays, which draw over
 /// the button and see input before it.
 constexpr int16_t kButtonOverlayZ = -100;
-/// How long one place of the Library button's spinner stays lit, in
-/// frame-clock units. Eight places make one turn.
-constexpr uint32_t kSpinnerTicksPerPlace = 4;
+/// The front end's clock, in units a second (Runtime::match_clock_scale).
+constexpr uint32_t kMenuClockHz = 30;
+/// How long one place of the Library button's spinner stays lit, in those
+/// units. Eight places are one turn of kit::refresh_revolution_ms, so the
+/// rate follows the clock and not the frame rate.
+constexpr uint32_t kSpinnerUnitsPerPlace = kit::refresh_revolution_ms * kMenuClockHz / 1000u /
+                                           static_cast<uint32_t>(kit::oa_button_spinner_places);
+static_assert(kSpinnerUnitsPerPlace == 6u);
 /// The sound Settings plays as it opens on the main menu.
 constexpr std::string_view kOpenSound = "Options";
 
@@ -214,7 +219,7 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
     const bool arriving = shown.model.inputs.checking && shown.model.inputs.list_age_seconds < 0;
     if (!shown.refreshed || arriving) {
         mark.corner = kit::OaButtonCorner::spinner;
-        mark.turn = runtime.frontend_tick() / kSpinnerTicksPerPlace;
+        mark.turn = runtime.frontend_tick() / kSpinnerUnitsPerPlace;
         return mark;
     }
     mark.corner = kit::OaButtonCorner::count;
