@@ -543,10 +543,10 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
         } else {
             const std::vector<std::string> lines = wrap(look.facts, facts_w, width_of);
             int32_t y = text_y;
-            for (const std::string& line : lines) {
+            for (const std::string& wrapped : lines) {
                 if (y + small > pill_top)
                     break;
-                line_in(local, FontRole::small, line, {pad, y, facts_w, small}, quiet);
+                line_in(local, FontRole::small, wrapped, {pad, y, facts_w, small}, quiet);
                 y += small;
             }
         }
