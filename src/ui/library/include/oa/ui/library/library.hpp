@@ -402,10 +402,9 @@ enum class PackageMaker : uint8_t {
 ///
 /// None unless the entry comes from a built-in registry, listed by one or
 /// installed from one. The name is the listing's author when that listing
-/// names one, otherwise the installed manifest's author, otherwise the
-/// listing's publisher. A named author that is not a maker does not fall
-/// through, so a third party's package on a built-in registry shows no
-/// mark. The publisher is read only when no author is named.
+/// names one, otherwise the installed manifest's author. A listing author
+/// that is not a maker does not fall through to the manifest. The publisher
+/// is never read, so a package that names no author shows no mark.
 ///
 /// @param entry the entry
 /// @return the maker; none when the entry is not trusted or names none

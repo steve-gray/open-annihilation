@@ -177,22 +177,19 @@ Under that icon, the same size and centred on it, a package from a
 built-in registry may show who made it. Open Annihilation's own packages
 show a small OA badge. Cavedog's show a bone, off-white with a dark
 outline. The name is the catalogue's `author`, or, when that listing
-names none, the installed manifest's `author.name`, or, when neither
-names one, the listing's publisher: "OpenAnnihilation", "Open
-Annihilation" or "OA team" for the badge, and "Cavedog Entertainment"
-for the bone, ignoring case and space at either end. A named author
-that is not one of these does not fall through, so another maker's
-package listed on Core Prime shows no mark even when its publisher is
-the OA team. Core Prime's language packs name no author and are
-published as "OA team", so they show the badge. A package you added
-yourself, or one from a registry you added, shows no mark whatever its
-author says: an author name is free text. A row with no state icon
-still puts the mark in that column. The rows do not grow to make room;
-at every size class the mark fits under the icon. When a mark shows,
-the row's read text gains " · Open Annihilation" or " · Cavedog
-Entertainment". Its automation name does not change.
+names none, the installed manifest's `author.name`: "OpenAnnihilation",
+"Open Annihilation" or "OA team" for the badge, and "Cavedog
+Entertainment" for the bone, ignoring case and space at either end.
+The publisher is not read. A package that names no author shows no
+mark, and another maker's package listed on Core Prime shows no mark.
+A package you added yourself, or one from a registry you added, shows
+no mark whatever its author says: an author name is free text. A row
+with no state icon still puts the mark in that column. The rows do not
+grow to make room; at every size class the mark fits under the icon.
+When a mark shows, the row's read text gains " · Open Annihilation" or
+" · Cavedog Entertainment". Its automation name does not change.
 
-![Languages, with 简体中文 installed from Core Prime: a green check, and the OA badge directly under it.](images/library/library-languages.png)
+![Languages: the fixture's Portugues (Brasil), author OA team, installed from the built-in registry, with the OA badge under its check.](images/library/library-languages-compact.png)
 
 A GET or UPDATE that cannot act has its icon dimmed and takes no press,
 and the details say why:

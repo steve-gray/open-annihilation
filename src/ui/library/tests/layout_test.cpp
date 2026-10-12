@@ -2227,11 +2227,11 @@ int32_t package_row_height(kit::SizeClass size_class) {
 
 /// A built-in Open Annihilation package shows the OA mark, and a Cavedog one
 /// the bone. The same authors from an added registry, or sideloaded, show
-/// none. A named author that is not a maker does not fall through to the
-/// publisher. A listing that names no author is matched on its publisher,
-/// and only when the registry is built in. A built-in registry's card shows
-/// its mark under the key, and an added registry's card does not. Row heights
-/// stay the size class's.
+/// none. A named author that is not a maker does not fall through. A listing
+/// that names no author shows no mark, whatever its publisher says. The
+/// fixture's language pack names its author. A built-in registry's card
+/// shows its mark under the key, and an added registry's card does not. Row
+/// heights stay the size class's.
 void maker_marks_follow_the_registry() {
     OA_CHECK(lib::package_maker(" OpenAnnihilation ") == lib::PackageMaker::open_annihilation);
     OA_CHECK(lib::package_maker("oPeN aNnIhIlAtIoN") == lib::PackageMaker::open_annihilation);
@@ -2349,8 +2349,8 @@ void maker_marks_follow_the_registry() {
     expect_mark(
         shown(lib::Tab::mods, "highland"),
         "library.row.fixture-core.highland",
-        kit::MakerMark::open_annihilation,
-        "Highland · Open Annihilation"
+        std::nullopt,
+        "Highland"
     );
     expect_mark(
         shown(lib::Tab::mods, "dunes"), "library.row.example-mods.dunes", std::nullopt, "Dunes"

@@ -619,20 +619,24 @@ by the wheel, the page keys, Home, End and the right stick.
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
 page, the Active tab at Compact, Regular and Large, the Updates tab at
-Compact and Large, and the Registries tab at Compact, Regular and Large:
-each twice, byte for byte the same, with nothing drawn outside the
-window and every pixel of it drawn, every part inside it and every text
-fitting. The Registries pictures dress the fixture's built-in registry as
-Core Prime, title, description, author and short name, on that copy only.
-That author is Open Annihilation, so the card shows the OA mark under
-its key.
+Compact and Large, the Registries tab at Compact, Regular and Large, and
+Languages at Compact: each twice, byte for byte the same, with nothing
+drawn outside the window and every pixel of it drawn, every part inside
+it and every text fitting. The Registries pictures dress the fixture's
+built-in registry as Core Prime, title, description, author and short
+name, on that copy only. That author is Open Annihilation, so the card
+shows the OA mark under its key. The Languages picture, on that drawing
+only, sets the fixture language pack Portugues (Brasil) to author
+"OA team" and adds an installed copy, so the row shows the OA mark
+under its check.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
 `library-active-regular.png`, `library-active-large.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
-`library-registries-compact.png`, `library-registries-regular.png` and
-`library-registries-large.png` for review.
+`library-registries-compact.png`, `library-registries-regular.png`,
+`library-registries-large.png` and `library-languages-compact.png`
+for review.
 
 ## Limitations
 

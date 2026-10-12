@@ -115,24 +115,19 @@ bool author_is(std::string_view author, std::string_view lower) noexcept {
     return true;
 }
 
-/// Returns the name a mark is matched against.
+/// Returns the author a mark is matched against.
 ///
 /// The listing's author when that listing names one, otherwise the installed
-/// manifest's author when that names one, otherwise the listing's publisher.
-/// A named author that is not a maker does not fall through, so a map whose
-/// author is Cavedog and whose publisher is the OA team keeps the bone.
-/// The publisher is read only when no author is named, which is how a
-/// language pack published as "OA team" is marked.
+/// manifest's. Empty when neither names one. The publisher is not read, so
+/// a package that names no author shows no mark.
 ///
 /// @param entry the entry
-/// @return the name
+/// @return the author
 std::string_view maker_author(const Entry& entry) noexcept {
     if (entry.listing != nullptr && !entry.listing->author.empty())
         return entry.listing->author;
-    if (entry.installed != nullptr && !entry.installed->author.empty())
+    if (entry.installed != nullptr)
         return entry.installed->author;
-    if (entry.listing != nullptr)
-        return entry.listing->publisher;
     return {};
 }
 
