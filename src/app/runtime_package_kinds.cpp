@@ -95,8 +95,10 @@ bool Runtime::package_offers_play(const package_install::PackageKind& kind) cons
 void Runtime::package_changed(const package_install::PackageKind& kind, const fs::path&) {
     if (kind.name == "oamod")
         list_offered_mods();
-    if (kind.name == "oamap")
+    if (kind.name == "oamap") {
         map_packs().refresh();
+        refresh_listed_pack_maps();
+    }
     // A pack is read whole. Nothing holds its folder, so the lists, the
     // catalogue and the font faces are replaced in place.
     if (kind.name == "oalang")

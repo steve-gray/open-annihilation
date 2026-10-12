@@ -506,7 +506,7 @@ bool mapselect_open(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
         if (const char* name = lobby.maps.at(lobby.maps.context, index))
             select.names.emplace_back(name);
     std::sort(select.names.begin(), select.names.end());
-    panel_fill_list(panel, "MAPNAMES", select.names);
+    multiplayer_fill_map_names(panel, select.names);
     for (std::size_t row = 0; row < select.names.size(); ++row)
         if (select.names[row] == select.previous) {
             panel_select_list_row(panel, "MAPNAMES", static_cast<int32_t>(row));
@@ -550,7 +550,7 @@ bool mapselect_offer(
         if (const char* listed = lobby.maps.at(lobby.maps.context, index))
             select.names.emplace_back(listed);
     std::sort(select.names.begin(), select.names.end());
-    panel_fill_list(panel, "MAPNAMES", select.names);
+    multiplayer_fill_map_names(panel, select.names);
     int32_t offered = -1;
     int32_t earlier = -1;
     for (std::size_t row = 0; row < select.names.size(); ++row) {

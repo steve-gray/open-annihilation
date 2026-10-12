@@ -210,6 +210,7 @@ std::string_view panel_text(const Panel& panel, std::string_view name) noexcept 
 void panel_set_items(Panel& panel, std::string_view name, std::vector<std::string> items) {
     if (auto* control = panel_control(panel, name)) {
         control->items = std::move(items);
+        control->item_keys.clear();
         if (control->list_selection >= static_cast<int16_t>(control->items.size()))
             control->list_selection = 0;
         panel.dirty = true;
@@ -294,6 +295,7 @@ void panel_fill_list(Panel& panel, std::string_view name, std::vector<std::strin
         return;
     auto& list = at(panel, index);
     list.items = std::move(rows);
+    list.item_keys.clear();
     auto filled = list_of(list);
     const bool overflow =
         gui_input::scroll_list_fill(filled, static_cast<int32_t>(filled.count), panel.line_height);
@@ -312,6 +314,17 @@ void panel_fill_list(Panel& panel, std::string_view name, std::vector<std::strin
             list_of(at(panel, panel_group_member(panel, bar, ControlType::list_box))),
             panel.line_height
         );
+}
+
+void panel_set_item_keys(Panel& panel, std::string_view name, std::vector<std::string> keys) {
+    auto* control = panel_control(panel, name);
+    if (control == nullptr)
+        return;
+    if (keys.size() == control->items.size())
+        control->item_keys = std::move(keys);
+    else
+        control->item_keys.clear();
+    panel.dirty = true;
 }
 
 void panel_select_list_row(Panel& panel, std::string_view name, int32_t row) noexcept {

@@ -85,9 +85,13 @@ packs' maps never share a name, whatever their authors called them. The
 whole name fits in 63 bytes, so that it travels in the battle room and in
 a saved game; the pack refuses a map whose name would not.
 
-The map browser shows a map's own title, "Isle of Ashes". The skirmish map
-list, the battle room and saved games use its name,
-`isle_of_ashes@archipelago`, and so does a 3.1c player's battle room.
+The map browser, the skirmish map list and the battle room's map list show
+a map's own title, "Isle of Ashes". When that title would read the same as
+another row, the pack map's row adds its pack's name in brackets, "Comet
+Catcher (Cavedog: Comet Catcher)". Choosing the map, the battle room's
+name sent to other players, a saved game and GET MAP use its name,
+`isle_of_ashes@archipelago`. A 3.1c player's battle room receives that
+name too. The game's own maps stay listed by their file names.
 
 ## One map's files at a time
 
@@ -115,28 +119,42 @@ anything in the game or the mod it is played with:
 
 A map that clashes with 3.1c itself keeps its whole pack out at install.
 One that clashes only with a mod, because the mod already defines a
-feature the map adds, say, is installed, and refused while that mod is
-played:
+feature the map adds, say, is installed. While that mod is played the
+skirmish list and the battle room's map list leave it out. The log says
+so once for that pack and that mod:
 
-- **In the skirmish map list** the map is listed as any other; highlighted,
-  its description says "Doesn't fit *mod*: *reason*", as "Doesn't fit
-  Ridge: New names: the feature 'rock01' is defined already by …", and
-  choosing it shows the reason and keeps the map you had.
-- **In the battle room's map list** the same: "Doesn't fit this game:
-  *reason*", and choosing it shows the reason and sends nothing.
-- **In the map browser** its card is greyed with "Doesn't fit", and
-  Select is greyed ([below](#the-map-browser)).
+```
+open-annihilation: map pack <id>: 1 map does not fit <key>
+```
+
+`<key>` is `ta-3.1c` for the base game, and `<catalogue-id>@<release>` for
+a mod installed from a catalogue. Several maps of one pack share one
+line, and then it reads `maps do not fit`. A pack from a registry is
+listed when that catalogue records the key as true. A pack installed from
+a file is listed when its files fit the game and the mod being played.
+The map browser still shows the map: its card is greyed with "Doesn't
+fit", and Select is greyed ([below](#the-map-browser)). Choosing a map
+the lists left out, from a save or by its name, is refused and keeps the
+map you had.
 
 OA checks a map again each time it adds its files, and when a match
 starts, against the game and the mod being played then.
 
 ## The map lists and MORE MAPS…
 
-3.1c's own map lists hold the packs' maps beside the base maps: the
-skirmish list after the base maps, and the battle room host's list among
-them in name order. The skirmish list is read as the game starts: a pack
-installed later joins it at the next start, or as soon as you choose one
-of its maps in the map browser.
+The skirmish list and the battle room host's map list hold a pack's maps
+beside the base maps. A pack map's row shows the title from the pack's
+index, or the title in its map file when the index has none. A row that
+would read the same as another adds the pack's name in brackets. The
+game's own rows stay their file names. The skirmish list puts the pack
+maps after the base maps, in the packs' order. The battle room's list
+sorts every name together, not by the title. The name under a list, and
+the battle room's map name, are that same title. Choosing the row still
+uses `<stem>@<id>`.
+
+A pack installed from the Library joins both lists at once. A pack
+removed leaves both lists at once. The base maps stay in the order and
+under the names they had.
 
 Under the skirmish map list, and under the battle room's map list for the
 host, **MORE MAPS…** opens the map browser, and so do Cmd+F on macOS,

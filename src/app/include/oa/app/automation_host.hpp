@@ -74,11 +74,14 @@ struct AutomationControl {
     bool focused{};                 ///< it holds the keyboard focus
     bool checked{};                 ///< a check box is checked
     std::string text;               ///< its caption, its label's text or a field's typed text
-    std::vector<std::string> items; ///< a list's rows
-    int32_t first_visible{};        ///< a list's first row shown
-    int32_t rows{};                 ///< the rows a list shows at once
-    int32_t row_height{};           ///< a list's row pitch in canvas pixels
-    int32_t selected{-1};           ///< a list's selected row; -1 for none
+    std::vector<std::string> items; ///< a list's rows, the words it shows
+    /// A list's names, one per `items` entry, when a row's words are not the
+    /// name a choice uses. Empty for every other list.
+    std::vector<std::string> item_keys;
+    int32_t first_visible{}; ///< a list's first row shown
+    int32_t rows{};          ///< the rows a list shows at once
+    int32_t row_height{};    ///< a list's row pitch in canvas pixels
+    int32_t selected{-1};    ///< a list's selected row; -1 for none
     /// A list's control that scrolls toward its start, one page of the rows
     /// it shows. Empty when the list has none: every row fits, or it has no
     /// scroll bar.
