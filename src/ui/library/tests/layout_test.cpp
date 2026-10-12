@@ -7,12 +7,14 @@
 // part lies inside the window; no two controls meet, nor their press areas;
 // every action of the selected entry is a control (Compact: on its details
 // page, MORE's open); UPDATE ALL is one on the Updates tab, over its list
-// beside the same filters as Mods, and CLOSE always is; the header's
+// beside the same filters as Mods, and CLOSE on the list; Compact's details
+// page has BACK instead, and no breadcrumb. The header's
 // refresh icon is present and SETTINGS is not a footer button; Tab
 // follows the declared order and the arrows reach every control that takes
 // the focus; the names are step 8's and unique; every text fits, and the
-// Rules fact is shown whole. The Active tab is first, has no search and no
-// filters, and its tiles are top-aligned, with UNLOAD MOD on the mod tile.
+// Rules fact is shown whole. The Active tab is first, has no catalogue
+// search and no filters, and its tiles are top-aligned, with UNLOAD MOD on
+// the mod tile. Its maps search sits on the MAPS heading.
 // Then the keys, the controller's
 // buttons, the pointer, a finger, the wheel and typing, each changing the
 // model as the screen promises, no press on a row getting anything, and a
@@ -203,15 +205,19 @@ int declared_place(std::string_view name) {
         return 2;
     if (name == "library.action.update-all" || name == "library.list")
         return 3;
-    if (name == "library.action" || starts(name, "library.action.") || name == "library.back" ||
-        name == "library.active.unload" || starts(name, "library.active.from."))
+    if (name == "library.action" || starts(name, "library.action.") ||
+        name == "library.active.unload" || name == "library.active.search" ||
+        starts(name, "library.active.from."))
         return 4;
     if (starts(name, "library.registry."))
         return 5;
     if (name == "library.refresh")
         return 0;
-    if (name == "library.add-registry" || name == "library.details" || name == "library.close")
+    if (name == "library.add-registry" || name == "library.details" || name == "library.close" ||
+        name == "library.back")
         return 6;
+    if (name == "library.close-x")
+        return 7;
     return -1;
 }
 
@@ -288,8 +294,8 @@ bool designed_name(const std::string& name) {
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
-        "details|back|refresh|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|unload|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
+        "details|back|refresh|close-x|close|status|queue|note|from|rules|"
+        "active\\.(mod|language|unload|search|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -334,7 +340,7 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
             problems.push_back(std::string(name) + " takes a press, a key or Tab");
     }
     for (const kit::Control& control : list.controls)
-        if (control.name != "library.active.unload" &&
+        if (control.name != "library.active.unload" && control.name != "library.active.search" &&
             !starts(control.name, "library.active.from.") &&
             starts(control.name, "library.active.") &&
             (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
@@ -447,6 +453,8 @@ std::string_view word_of(lib::Action action) {
         return "open-folder";
     case lib::Action::homepage:
         return "homepage";
+    case lib::Action::use_now:
+        return "use-now";
     default:
         return "other";
     }
@@ -556,14 +564,17 @@ void check_frame(const fixture::NamedFrame& named) {
         lib::ScreenState page_state;
         page_state.details_page = true;
         const kit::DisplayList page = laid_out(library, page_state, frame);
-        OA_CHECK(fixture::named(page, "library.back") != nullptr);
+        const kit::Control* back = fixture::named(page, "library.back");
+        OA_CHECK(back != nullptr && back->text == "BACK");
+        OA_CHECK(fixture::named(page, "library.close") == nullptr);
+        for (const kit::Control& control : page.controls)
+            OA_CHECK(control.text.find("‹") == std::string::npos);
         OA_EXPECT_NONE(fixture::outside_window(page, window), named.name + " details page");
         OA_EXPECT_NONE(meeting_controls(page), named.name + " details page");
         OA_EXPECT_NONE(order_problems(page), named.name + " details page");
         OA_EXPECT_NONE(name_problems(page), named.name + " details page");
         OA_EXPECT_NONE(fixture::texts_not_fitting(page, fonts()), named.name + " details page");
         OA_EXPECT_NONE(whole_fact_problems(library, page, false), named.name + " details page");
-        OA_CHECK(fixture::named(page, "library.close") != nullptr);
         OA_CHECK(fixture::named(page, "library.status") != nullptr);
         OA_CHECK(fixture::named(page, "library.note") != nullptr);
         for (std::size_t index = 0; index < 3; ++index)
@@ -626,9 +637,10 @@ void check_frame(const fixture::NamedFrame& named) {
         updates_tab->text == (compact ? "Upd (" : "Updates (") + updates_count + ")"
     );
 
-    // The Active tab: first, no search, no filters and no list. Its lines
-    // are labels. Tab reaches the tabs, UNLOAD MOD, each map's From link
-    // while that link shows, and the footer's buttons.
+    // The Active tab: first, no catalogue search, no filters and no list.
+    // Its lines are labels. Tab reaches the tabs, UNLOAD MOD, the maps
+    // search, each map's From link while that link shows, and the footer's
+    // buttons.
     lib::Library active = with_ridge();
     lib::set_tab(active, lib::Tab::active);
     const kit::DisplayList active_list = laid_out(active, state, frame);
@@ -654,7 +666,9 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(
             stop != nullptr &&
             (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
-             stop->name == "library.active.unload" || starts(stop->name, "library.active.from."))
+             stop->name == "library.close-x" || stop->name == "library.refresh" ||
+             stop->name == "library.active.unload" || stop->name == "library.active.search" ||
+             starts(stop->name, "library.active.from."))
         );
     }
     const kit::Control* mod_line = fixture::named(active_list, "library.active.mod");
@@ -710,6 +724,10 @@ void check_frame(const fixture::NamedFrame& named) {
         } else {
             OA_CHECK(atoll->rect.y < ridgeline->rect.y && atoll->rect.x == ridgeline->rect.x);
         }
+        if (compact) {
+            OA_CHECK(atoll->rect.height == kit::compact_metrics.small_line);
+            OA_CHECK(ridgeline->rect.height == kit::compact_metrics.small_line);
+        }
     }
     // Island Hopping holds Atoll alone, so its title is the link and the
     // tile has no From line. Core Map Pack holds two, so those keep From.
@@ -723,13 +741,30 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(from_atoll->enabled && from_atoll->focusable);
         if (atoll != nullptr)
             OA_CHECK(from_atoll->rect.y == atoll->rect.y && from_atoll->rect.x == atoll->rect.x);
-        if (first_map != nullptr)
-            OA_CHECK(from_atoll->rect.y < first_map->rect.y);
+        if (first_map != nullptr) {
+            if (compact) {
+                // One line: the title is the link, and the players and size
+                // follow it on that same line.
+                OA_CHECK(
+                    from_atoll->rect.y == first_map->rect.y &&
+                    from_atoll->rect.x < first_map->rect.x
+                );
+            } else {
+                OA_CHECK(from_atoll->rect.y < first_map->rect.y);
+            }
+        }
     }
     if (from_ridge != nullptr) {
         OA_CHECK(from_ridge->text == "From Core Map Pack");
-        if (ridgeline != nullptr)
-            OA_CHECK(from_ridge->rect.y > ridgeline->rect.y);
+        if (ridgeline != nullptr) {
+            if (compact)
+                OA_CHECK(
+                    from_ridge->rect.y == ridgeline->rect.y &&
+                    from_ridge->rect.x > ridgeline->rect.x
+                );
+            else
+                OA_CHECK(from_ridge->rect.y > ridgeline->rect.y);
+        }
     }
     if (from_twin != nullptr)
         OA_CHECK(from_twin->text == "From Core Map Pack");
@@ -796,9 +831,12 @@ void larger_classes_show_more() {
     OA_CHECK(all_entry != nullptr && all_entry->kind == kit::ControlKind::tab);
     OA_CHECK(fixture::named(regular, "library.filter.all") != nullptr);
     OA_CHECK(fixture::named(compact, "library.filter") != nullptr);
-    // Compact's tabs take their short names; Active is the first.
-    const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
-    OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
+    // Compact's tabs take their short names. Active is the first stop; the
+    // close mark is last, after the footer.
+    const kit::Control* first_stop = kit::control_of(compact, compact.tab_order.front());
+    OA_CHECK(first_stop != nullptr && first_stop->name == "library.tab.active");
+    const kit::Control* last_stop = kit::control_of(compact, compact.tab_order.back());
+    OA_CHECK(last_stop != nullptr && last_stop->name == "library.close-x");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
     OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
@@ -806,6 +844,60 @@ void larger_classes_show_more() {
         updates != nullptr &&
         updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
     );
+}
+
+/// Languages lists each built-in language ahead of the packs. A built-in
+/// row's chip says "Built in", and the language in use says "In use".
+/// USE NOW is in the tab order; a pack that is not installed has GET only.
+void built_in_languages_show_on_the_list() {
+    lib::Library library = fixture::fixture_library();
+    lib::set_tab(library, lib::Tab::languages);
+    const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    bool deutsch = false;
+    for (const kit::Item& item : list.items) {
+        const auto* row = std::get_if<kit::ListRowLook>(&item.look);
+        if (row == nullptr || row->title != "Deutsch")
+            continue;
+        bool german = false;
+        for (const std::string& line : row->lines)
+            german = german || line == "German";
+        deutsch = row->chip.has_value() && row->chip->text == "Built in" &&
+                  !row->chip->icon.has_value() && german;
+    }
+    OA_CHECK(deutsch);
+    const kit::Control* deutsch_row = fixture::named(list, "library.row.language-de");
+    OA_CHECK(deutsch_row != nullptr && deutsch_row->text == "Deutsch");
+
+    lib::select(library, lib::built_in_language_id("de"));
+    const kit::DisplayList details = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* use_now = fixture::named(details, "library.action.use-now");
+    OA_CHECK(use_now != nullptr && use_now->text == "USE NOW" && use_now->enabled);
+    if (use_now != nullptr)
+        OA_CHECK(
+            std::find(details.tab_order.begin(), details.tab_order.end(), use_now->id) !=
+            details.tab_order.end()
+        );
+    bool told = false;
+    for (const kit::Item& item : details.items)
+        told = told || (item.role == kit::Role::text && item.text == "Built into the game");
+    OA_CHECK(told);
+    OA_CHECK(fixture::named(details, "library.action.get") == nullptr);
+    OA_CHECK(fixture::named(details, "library.action.uninstall") == nullptr);
+
+    lib::select(library, {std::string(fixture::added), lib::Kind::language, "pl"});
+    const kit::DisplayList in_use = laid_out(library, {}, fixture::frames()[1].frame);
+    bool marked = false;
+    for (const kit::Item& item : in_use.items) {
+        const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+        marked = marked || (chip != nullptr && chip->text == "In use" && !chip->icon.has_value());
+    }
+    OA_CHECK(marked);
+    OA_CHECK(fixture::named(in_use, "library.action.use-now") == nullptr);
+
+    lib::select(library, {std::string(fixture::core), lib::Kind::language, "pt-BR"});
+    const kit::DisplayList listed = laid_out(library, {}, fixture::frames()[1].frame);
+    OA_CHECK(fixture::named(listed, "library.action.get") != nullptr);
+    OA_CHECK(fixture::named(listed, "library.action.use-now") == nullptr);
 }
 
 /// A row reads its entry's name, and a row's chip says its state.
@@ -1125,18 +1217,19 @@ void tab_follows_the_declared_order() {
         "library.list",
         "library.details",
         "library.close",
+        "library.close-x",
     };
     OA_CHECK(names_of(laid_out(library, {}, compact)) == compact_order);
     lib::open_details(library);
     lib::ScreenState page;
     page.details_page = true;
     const std::vector<std::string> page_order{
-        "library.back",
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
         "library.action",
-        "library.close",
+        "library.back",
+        "library.close-x",
     };
     OA_CHECK(names_of(laid_out(library, page, compact)) == page_order);
     lib::close_details(library);
@@ -1151,12 +1244,14 @@ void tab_follows_the_declared_order() {
         "library.action.open-folder",
         "library.action.homepage",
         "library.close",
+        "library.close-x",
     };
     OA_CHECK(regular.size() > regular_end.size() + 5);
     OA_CHECK(std::equal(regular_end.rbegin(), regular_end.rend(), regular.rbegin()));
     OA_CHECK(
-        regular.size() > 9 && regular[6] == "library.search" &&
-        regular[7] == "library.filter.all" && regular[8] == "library.filter.new"
+        regular.size() > 10 && regular[0] == "library.tab.active" &&
+        regular[6] == "library.search" && regular[7] == "library.filter.all" &&
+        regular[8] == "library.filter.new"
     );
 }
 
@@ -1539,8 +1634,9 @@ void unload_mod_asks_switch_off() {
     );
 }
 
-/// The Active tab's tiles take no press, and with more maps than fit they
-/// scroll by the wheel, a finger, the page keys and the right stick.
+/// The Active tab's mod and language take no press. With more maps than fit,
+/// the maps pane scrolls by the wheel, a finger, the page keys, the scroll
+/// bar and the right stick. The mod line does not.
 void active_tab_takes_nothing_and_scrolls() {
     const kit::Frame compact = fixture::frames()[0].frame;
     lib::Inputs inputs = fixture::fixture_inputs();
@@ -1558,7 +1654,8 @@ void active_tab_takes_nothing_and_scrolls() {
     OA_EXPECT_NONE(meeting_controls(list), "active, many maps");
     OA_EXPECT_NONE(name_problems(list), "active, many maps");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "active, many maps");
-    OA_CHECK(fixture::named(list, "library.active.map.43") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.43") == nullptr);
     const bool has_bar =
         std::any_of(list.items.begin(), list.items.end(), [](const kit::Item& item) {
             return item.role == kit::Role::scroll_bar;
@@ -1579,25 +1676,43 @@ void active_tab_takes_nothing_and_scrolls() {
         lib::library_pointer(library, state, list, lib::PointerKind::up, 1, on_line, 0);
     OA_CHECK(!pressed.action && !library.selected && library.tab == lib::Tab::active);
 
-    // The wheel scrolls the lines; so do the page keys, End and Home.
-    OA_CHECK(lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
-    OA_CHECK(state.details_scroll > 0);
+    // The wheel over the mod does not scroll. The wheel over a map does, and
+    // so do the page keys, End and Home.
+    const int32_t mod_top = mod_line->rect.y;
+    OA_CHECK(!lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
+    OA_CHECK(state.maps_scroll == 0);
+    const kit::Control* first_map = fixture::named(list, "library.active.map.1");
+    OA_CHECK(first_map != nullptr);
+    if (first_map == nullptr)
+        return;
+    const kit::Point on_map = centre_of(*first_map);
+    OA_CHECK(lib::library_wheel(library, state, list, on_map, -1.0F).redraw);
+    OA_CHECK(state.maps_scroll > 0);
     list = laid_out(library, state, compact);
+    const kit::Control* mod_after = fixture::named(list, "library.active.mod");
+    OA_CHECK(mod_after != nullptr && mod_after->rect.y == mod_top);
     static_cast<void>(lib::library_key(library, state, list, kit::Key::home));
-    OA_CHECK(state.details_scroll == 0);
+    OA_CHECK(state.maps_scroll == 0);
     list = laid_out(library, state, compact);
     static_cast<void>(lib::library_key(library, state, list, kit::Key::page_down));
-    OA_CHECK(state.details_scroll > 0);
+    OA_CHECK(state.maps_scroll > 0);
     list = laid_out(library, state, compact);
     static_cast<void>(lib::library_key(library, state, list, kit::Key::end));
-    const int32_t bottom = state.details_scroll;
+    const int32_t bottom = state.maps_scroll;
     list = laid_out(library, state, compact);
-    OA_CHECK(!lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
-    OA_CHECK(state.details_scroll == bottom);
+    OA_CHECK(fixture::named(list, "library.active.map.43") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+    const kit::Control* last_map = fixture::named(list, "library.active.map.43");
+    OA_CHECK(last_map != nullptr);
+    if (last_map == nullptr)
+        return;
+    OA_CHECK(!lib::library_wheel(library, state, list, centre_of(*last_map), -1.0F).redraw);
+    OA_CHECK(state.maps_scroll == bottom);
     OA_EXPECT_NONE(fixture::outside_window(list, {480, 324}), "active, scrolled");
-    // The right stick scrolls them too, and another tab starts at its top.
+    // The right stick scrolls them too. Leaving the tab does not clear the
+    // maps search, and the details scroll of the next tab starts at its top.
     OA_CHECK(lib::library_stick(library, state, list, 1.0F).redraw);
-    OA_CHECK(state.details_scroll < bottom);
+    OA_CHECK(state.maps_scroll < bottom);
     list = laid_out(library, state, compact);
     static_cast<void>(click(library, state, list, "library.tab.mods"));
     OA_CHECK(library.tab == lib::Tab::mods && state.details_scroll == 0);
@@ -1605,6 +1720,66 @@ void active_tab_takes_nothing_and_scrolls() {
 
 /// On Compact's details page the page keys and the arrows never change the
 /// entry it shows.
+/// Compact's details page has no breadcrumb. BACK returns to the list and
+/// keeps its tab, filter, search, scroll and row. The list's button is
+/// CLOSE. Escape follows the button. Regular and Large keep CLOSE.
+void compact_back_returns_to_the_same_list() {
+    const std::vector<fixture::NamedFrame> all = fixture::frames();
+    lib::Library library = with_ridge();
+    lib::set_filter(library, lib::Filter::installed);
+    lib::set_query(library, "ridge");
+    lib::select(library, fixture::ridge_id());
+    lib::ScreenState state;
+    state.search.text = library.query;
+    state.list_scroll = 28;
+    const lib::EntryId kept = *library.selected;
+    lib::open_details(library);
+    state.details_page = true;
+    const kit::Frame compact = all[0].frame;
+    kit::DisplayList page = laid_out(library, state, compact);
+    OA_CHECK(fixture::named(page, "library.close") == nullptr);
+    const kit::Control* back = fixture::named(page, "library.back");
+    OA_CHECK(back != nullptr && back->text == "BACK");
+    for (const kit::Item& item : page.items)
+        OA_CHECK(item.text.find("‹") == std::string::npos);
+    lib::ScreenResult result = click(library, state, page, "library.back");
+    OA_CHECK(!result.action && !library.details_open && !state.details_page);
+    OA_CHECK(library.tab == lib::Tab::mods);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::installed);
+    OA_CHECK(library.query == "ridge" && state.search.text == "ridge");
+    OA_CHECK(state.list_scroll == 28 && library.selected == kept);
+
+    kit::DisplayList list = laid_out(library, state, compact);
+    const kit::Control* close = fixture::named(list, "library.close");
+    OA_CHECK(close != nullptr && close->text == "CLOSE");
+    OA_CHECK(fixture::named(list, "library.back") == nullptr);
+    result = lib::library_key(library, state, list, kit::Key::escape);
+    OA_CHECK(result.action == lib::Action::close);
+    OA_CHECK(library.query == "ridge" && library.selected == kept);
+
+    lib::open_details(library);
+    state.details_page = true;
+    page = laid_out(library, state, compact);
+    result = lib::library_key(library, state, page, kit::Key::escape);
+    OA_CHECK(!result.action && !library.details_open && !state.details_page);
+    OA_CHECK(state.list_scroll == 28 && library.selected == kept && library.query == "ridge");
+
+    for (const fixture::NamedFrame& named : all) {
+        if (named.frame.size_class == kit::SizeClass::compact)
+            continue;
+        lib::Library wide = with_ridge();
+        lib::open_details(wide);
+        lib::ScreenState wide_state;
+        wide_state.details_page = true;
+        const kit::DisplayList laid = laid_out(wide, wide_state, named.frame);
+        const kit::Control* wide_close = fixture::named(laid, "library.close");
+        OA_CHECK(wide_close != nullptr && wide_close->text == "CLOSE");
+        OA_CHECK(fixture::named(laid, "library.back") == nullptr);
+        result = lib::library_key(wide, wide_state, laid, kit::Key::escape);
+        OA_CHECK(result.action == lib::Action::close && wide.details_open);
+    }
+}
+
 void details_page_keeps_its_entry() {
     const kit::Frame compact = fixture::frames()[0].frame;
     lib::Library library = with_ridge();
@@ -2882,11 +3057,271 @@ void from_link_opens_the_pack() {
     }
 }
 
+/// The title bar's close mark sits to the right of the refresh icon at
+/// every size class. The title and the version stop before it, a press
+/// asks for the same close as CLOSE, and the footer CLOSE stays.
+void the_title_bar_holds_a_close_mark() {
+    const kit::Metrics& compact = kit::compact_metrics;
+    const std::vector<fixture::NamedFrame> frames = fixture::frames();
+    for (std::size_t index = 0; index < 3; ++index) {
+        const fixture::NamedFrame& named = frames[index];
+        lib::Library library = with_ridge();
+        library.inputs.version_text = "v0.8.0-a-very-long-version";
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const kit::Control* close = fixture::named(list, "library.close-x");
+        const kit::Control* refresh = fixture::named(list, "library.refresh");
+        const kit::Control* footer = fixture::named(list, "library.close");
+        OA_CHECK(close != nullptr && refresh != nullptr && footer != nullptr);
+        if (close == nullptr || refresh == nullptr || footer == nullptr)
+            continue;
+        OA_CHECK(close->text == "Close");
+        OA_CHECK(close->rect.width == refresh->rect.width);
+        OA_CHECK(close->rect.height == refresh->rect.height);
+        OA_CHECK(close->rect.x == refresh->rect.x + refresh->rect.width + compact.header_gap);
+        OA_CHECK(close->rect.y == refresh->rect.y);
+        OA_CHECK(
+            close->rect.x + close->rect.width ==
+            named.frame.area.width - compact.edge - compact.padding
+        );
+        bool mark = false;
+        const kit::HeaderLook* header = nullptr;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::button && item.control == close->id) {
+                const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+                mark = look != nullptr && look->mark == kit::ButtonMark::close;
+            }
+            if (item.role == kit::Role::header)
+                header = std::get_if<kit::HeaderLook>(&item.look);
+        }
+        OA_CHECK(mark);
+        OA_CHECK(header != nullptr);
+        if (header != nullptr) {
+            const int32_t title_left = compact.padding + compact.mark_side + compact.header_gap;
+            const int32_t title_right = title_left + header->title_width;
+            const int32_t version_right =
+                named.frame.area.width - compact.edge - compact.padding - header->right_inset;
+            OA_CHECK(title_right <= close->rect.x);
+            OA_CHECK(version_right <= close->rect.x);
+        }
+        lib::Library pressed = library;
+        const lib::ScreenResult result =
+            click(pressed, state, list, "library.close-x", index == 0 ? 12 : 0);
+        OA_CHECK(result.action == lib::Action::close);
+        const lib::ScreenResult footer_close = click(pressed, state, list, "library.close");
+        OA_CHECK(footer_close.action == lib::Action::close);
+    }
+    lib::Library checking = with_ridge();
+    checking.inputs.can_check = true;
+    lib::ScreenState state;
+    const kit::DisplayList list = laid_out(checking, state, frames[1].frame);
+    const auto place = [&](std::string_view name) {
+        std::size_t at = 0;
+        for (const kit::ControlId id : list.tab_order) {
+            const kit::Control* control = kit::control_of(list, id);
+            if (control != nullptr && control->name == name)
+                return at;
+            ++at;
+        }
+        return list.tab_order.size();
+    };
+    const std::size_t refresh_at = place("library.refresh");
+    const std::size_t close_at = place("library.close-x");
+    OA_CHECK(refresh_at < close_at);
+    OA_CHECK(close_at + 1 == list.tab_order.size());
+}
+
+/// Returns the MAPS heading.
+///
+/// @param list the display list
+/// @return the heading; null when the tab does not show it
+const kit::Item* maps_heading(const kit::DisplayList& list) {
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::heading && item.text == "MAPS")
+            return &item;
+    return nullptr;
+}
+
+/// The maps pane fills the room under the MAPS heading at every size class,
+/// five hundred maps scroll, and the search filters by map and by pack.
+void active_maps_fill_scroll_and_filter() {
+    lib::Library library = with_ridge();
+    lib::set_tab(library, lib::Tab::active);
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const kit::Control* search = fixture::named(list, "library.active.search");
+        const kit::Control* mod = fixture::named(list, "library.active.mod");
+        const kit::Control* language = fixture::named(list, "library.active.language");
+        const kit::Control* map = fixture::named(list, "library.active.map.1");
+        const kit::Control* close = fixture::named(list, "library.close");
+        const kit::Item* heading = maps_heading(list);
+        OA_CHECK(search != nullptr && heading != nullptr && map != nullptr && close != nullptr);
+        OA_CHECK(mod != nullptr && language != nullptr);
+        if (search == nullptr || heading == nullptr || map == nullptr || close == nullptr ||
+            mod == nullptr || language == nullptr)
+            continue;
+        OA_CHECK(search->rect.x > heading->rect.x);
+        OA_CHECK(heading->rect.y >= search->rect.y);
+        OA_CHECK(heading->rect.y < search->rect.y + search->rect.height);
+        OA_CHECK(map->clip.y >= search->rect.y + search->rect.height);
+        OA_CHECK(mod->rect.y + mod->rect.height <= map->clip.y);
+        OA_CHECK(language->rect.y + language->rect.height <= map->clip.y);
+        const int32_t pane_bottom = map->clip.y + map->clip.height;
+        OA_CHECK(pane_bottom <= close->rect.y);
+        OA_CHECK(close->rect.y - pane_bottom <= 40);
+        OA_CHECK(text_item(list, "1 of 3") == nullptr);
+        OA_CHECK(text_item(list, "No installed map matches.") == nullptr);
+    }
+
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(library, state, regular);
+    state = focused_on(list, "library.active.search");
+    OA_CHECK(lib::library_command(library, state, list, lib::ScreenCommand::find).redraw);
+    OA_CHECK(state.interaction.focused == id_of(list, "library.active.search"));
+    OA_CHECK(lib::focused_field(state, list).has_value());
+    OA_CHECK(lib::library_text(library, state, list, "atoll").redraw);
+    list = laid_out(library, state, regular);
+    OA_CHECK(text_item(list, "1 of 3") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.2") == nullptr);
+    OA_CHECK(fixture::named(list, "library.active.mod") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.language") != nullptr);
+
+    state.maps_search = {};
+    state.maps_scroll = 0;
+    list = laid_out(library, state, regular);
+    state = focused_on(list, "library.active.search");
+    OA_CHECK(lib::library_text(library, state, list, "CORE").redraw);
+    list = laid_out(library, state, regular);
+    OA_CHECK(text_item(list, "2 of 3") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.2") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.3") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.mod") != nullptr);
+
+    state.maps_search = {};
+    list = laid_out(library, state, regular);
+    state = focused_on(list, "library.active.search");
+    OA_CHECK(lib::library_text(library, state, list, "river").redraw);
+    list = laid_out(library, state, regular);
+    OA_CHECK(text_item(list, "1 of 3") != nullptr);
+    OA_CHECK(
+        fixture::named(list, "library.active.map.3") != nullptr &&
+        fixture::named(list, "library.active.map.3")->text == "Twin Rivers · 2 players · 12x12"
+    );
+    OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+
+    state.maps_search = {};
+    list = laid_out(library, state, regular);
+    state = focused_on(list, "library.active.search");
+    OA_CHECK(lib::library_text(library, state, list, "zzz").redraw);
+    list = laid_out(library, state, regular);
+    OA_CHECK(text_item(list, "0 of 3") != nullptr);
+    OA_CHECK(text_item(list, "No installed map matches.") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+    OA_CHECK(fixture::named(list, "library.active.mod") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.language") != nullptr);
+    OA_CHECK(lib::library_key(library, state, list, kit::Key::escape).redraw);
+    OA_CHECK(state.maps_search.text.empty());
+    list = laid_out(library, state, regular);
+    OA_CHECK(text_item(list, "0 of 3") == nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.3") != nullptr);
+
+    state.maps_search.text = "river";
+    state.maps_search.caret = state.maps_search.text.size();
+    list = laid_out(library, state, regular);
+    static_cast<void>(click(library, state, list, "library.tab.mods"));
+    list = laid_out(library, state, regular);
+    static_cast<void>(click(library, state, list, "library.tab.active"));
+    OA_CHECK(state.maps_search.text == "river");
+    list = laid_out(library, state, regular);
+    OA_CHECK(fixture::named(list, "library.active.map.3") != nullptr);
+    OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+    OA_CHECK(text_item(list, "1 of 3") != nullptr);
+
+    lib::Inputs inputs = fixture::fixture_inputs();
+    lib::InstalledMaps bulk;
+    bulk.name = "Bulk Sheets";
+    for (int32_t index = 1; index <= 500; ++index)
+        bulk.maps.push_back({"Sheet " + std::to_string(index), 2, "8x8"});
+    inputs.map_packs.push_back(std::move(bulk));
+    lib::Library many;
+    lib::refresh(many, std::move(inputs));
+    lib::set_tab(many, lib::Tab::active);
+    const std::size_t count = lib::active_setup(many).maps.size();
+    OA_CHECK(count >= 500);
+    lib::ScreenState scrolled;
+    kit::DisplayList packed = laid_out(many, scrolled, regular);
+    const std::string last_name = "library.active.map." + std::to_string(count);
+    const kit::Control* mod_before = fixture::named(packed, "library.active.mod");
+    OA_CHECK(mod_before != nullptr);
+    OA_CHECK(fixture::named(packed, "library.active.map.1") != nullptr);
+    OA_CHECK(fixture::named(packed, last_name) == nullptr);
+    if (mod_before == nullptr)
+        return;
+    const int32_t mod_top = mod_before->rect.y;
+    const kit::Control* top_map = fixture::named(packed, "library.active.map.1");
+    OA_CHECK(top_map != nullptr);
+    if (top_map != nullptr) {
+        const kit::Point on_map = centre_of(*top_map);
+        static_cast<void>(
+            lib::library_pointer(many, scrolled, packed, lib::PointerKind::down, 1, on_map, 12)
+        );
+        static_cast<void>(lib::library_pointer(
+            many, scrolled, packed, lib::PointerKind::move, 0, {on_map.x, on_map.y - 40}, 12
+        ));
+        OA_CHECK(scrolled.maps_scroll > 0);
+        static_cast<void>(lib::library_pointer(
+            many, scrolled, packed, lib::PointerKind::up, 1, {on_map.x, on_map.y - 40}, 12
+        ));
+    }
+    scrolled.maps_scroll = 0;
+    packed = laid_out(many, scrolled, regular);
+    static_cast<void>(lib::library_key(many, scrolled, packed, kit::Key::end));
+    packed = laid_out(many, scrolled, regular);
+    OA_CHECK(fixture::named(packed, last_name) != nullptr);
+    OA_CHECK(fixture::named(packed, "library.active.map.1") == nullptr);
+    const kit::Control* mod_after = fixture::named(packed, "library.active.mod");
+    OA_CHECK(mod_after != nullptr && mod_after->rect.y == mod_top);
+    const kit::Item* bar = nullptr;
+    for (const kit::Item& item : packed.items)
+        if (item.role == kit::Role::scroll_bar)
+            bar = &item;
+    OA_CHECK(bar != nullptr);
+    if (bar != nullptr) {
+        scrolled.maps_scroll = 0;
+        packed = laid_out(many, scrolled, regular);
+        const kit::Item* rested = nullptr;
+        for (const kit::Item& item : packed.items)
+            if (item.role == kit::Role::scroll_bar)
+                rested = &item;
+        OA_CHECK(rested != nullptr);
+        if (rested != nullptr) {
+            const kit::Point on_bar{
+                rested->rect.x + rested->rect.width / 2,
+                rested->rect.y + rested->rect.height - 2,
+            };
+            static_cast<void>(
+                lib::library_pointer(many, scrolled, packed, lib::PointerKind::down, 1, on_bar, 0)
+            );
+            OA_CHECK(scrolled.maps_scroll > 0);
+            static_cast<void>(
+                lib::library_pointer(many, scrolled, packed, lib::PointerKind::up, 1, on_bar, 0)
+            );
+            OA_CHECK(!scrolled.maps_bar_held);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
     every_frame_holds_its_invariants();
     larger_classes_show_more();
+    built_in_languages_show_on_the_list();
     rows_name_their_entries();
     empty_and_offline_lists_say_why();
     an_own_mods_details_show_its_description();
@@ -2897,11 +3332,13 @@ int main() {
     list_keys_move_the_selection();
     tab_follows_the_declared_order();
     pressing_rows_selects_and_never_gets();
+    the_title_bar_holds_a_close_mark();
     row_icons_are_get_and_update();
     wheel_and_drag_scroll();
     typing_searches();
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
+    active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
     base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();
@@ -2911,6 +3348,7 @@ int main() {
     from_link_opens_the_pack();
     a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
+    compact_back_returns_to_the_same_list();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();
 }

@@ -14,6 +14,7 @@
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/library/library.hpp"
 #include "screen_controls.hpp"
+#include "visible.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -140,6 +141,32 @@ std::optional<PaneScroll> details_scroll_of(const kit::DisplayList& list) {
     return scroll;
 }
 
+/// Returns the Active tab's maps scroll as the display list shows it.
+///
+/// @param list the display list
+/// @return the scroll; none while no map tile shows
+std::optional<PaneScroll> maps_scroll_of(const kit::DisplayList& list) {
+    const kit::Control* inside = nullptr;
+    for (const kit::Control& control : list.controls)
+        if (control.group == controls::maps_group && control.clip.width > 0 &&
+            control.clip.height > 0) {
+            inside = &control;
+            break;
+        }
+    if (inside == nullptr)
+        return std::nullopt;
+    const kit::Rect pane = inside->clip;
+    const std::optional<controls::Extent> extent = controls::clipped_extent(list, pane, 0);
+    if (!extent)
+        return std::nullopt;
+    PaneScroll scroll;
+    scroll.view = pane;
+    scroll.step = details_step;
+    scroll.offset = std::max(pane.y - extent->top, int32_t{0});
+    scroll.limit = kit::ScrollArea::limit_for(extent->bottom - extent->top, pane.height);
+    return scroll;
+}
+
 /// Returns the offset nearest another that shows a part of a pane whole,
 /// or its top when it is taller than the view.
 ///
@@ -207,7 +234,25 @@ void show_in_details(ScreenState& state, const kit::DisplayList& list, kit::Cont
     );
 }
 
-/// Tells whether the Compact details page shows: its way back is in the list.
+/// Scrolls the Active tab's maps so a control in them shows whole.
+///
+/// @param[in,out] state the screen's state; its maps scroll changes
+/// @param list the display list
+/// @param id the control
+void show_in_maps(ScreenState& state, const kit::DisplayList& list, kit::ControlId id) {
+    const kit::Control* control = kit::control_of(list, id);
+    if (control == nullptr || control->group != controls::maps_group)
+        return;
+    const std::optional<PaneScroll> scroll = maps_scroll_of(list);
+    if (!scroll)
+        return;
+    const int32_t top = control->rect.y + scroll->offset - scroll->view.y;
+    state.maps_scroll = offset_showing(
+        scroll->offset, top, control->rect.height, scroll->view.height, scroll->limit
+    );
+}
+
+/// Tells whether the Compact details page shows: its BACK button is in the list.
 ///
 /// @param list the display list
 /// @return true while it shows
@@ -223,8 +268,8 @@ bool compact_list_shows(const kit::DisplayList& list) {
     return kit::control_of(list, controls::details) != nullptr;
 }
 
-/// Tells whether the Active tab shows: its mod's line is in the list. Its
-/// lines scroll as the details do.
+/// Tells whether the Active tab shows: its mod's line is in the list. The
+/// maps under it scroll on their own; the mod and the language stay put.
 ///
 /// @param list the display list
 /// @return true while it shows
@@ -241,13 +286,13 @@ bool registries_shows(const kit::DisplayList& list) {
     return kit::control_of(list, controls::registries_note) != nullptr;
 }
 
-/// Tells whether the page keys scroll the details: the details page, the
-/// Active tab or the Registries tab.
+/// Tells whether the page keys scroll the details: the details page or the
+/// Registries tab. The Active tab's page keys scroll its maps pane.
 ///
 /// @param list the display list
 /// @return true while they do
 bool body_scrolls(const kit::DisplayList& list) {
-    return page_shows(list) || active_shows(list) || registries_shows(list);
+    return page_shows(list) || registries_shows(list);
 }
 
 /// Returns the drop-down field a menu opens from.
@@ -339,6 +384,43 @@ void focus_search(ScreenState& state) {
     state.menu = MenuKind::none;
     state.interaction.focused = controls::search;
     state.interaction.focus_shown = true;
+}
+
+/// Gives the Active tab's maps search the focus.
+///
+/// @param[in,out] state the screen's state
+void focus_maps_search(ScreenState& state) {
+    state.menu = MenuKind::none;
+    state.interaction.focused = controls::active_search;
+    state.interaction.focus_shown = true;
+}
+
+/// Returns the first map link the pane shows, top to bottom and left to right.
+///
+/// @param list the display list
+/// @return the link; none while no link shows
+kit::ControlId first_map_link(const kit::DisplayList& list) {
+    const kit::Control* best = nullptr;
+    for (const kit::Control& control : list.controls) {
+        if (!controls::active_from_control(control.id) || !control.focusable || !control.enabled)
+            continue;
+        if (shown_area(control).height <= 0 || shown_area(control).width <= 0)
+            continue;
+        if (best == nullptr || control.rect.y < best->rect.y ||
+            (control.rect.y == best->rect.y && control.rect.x < best->rect.x))
+            best = &control;
+    }
+    return best == nullptr ? kit::no_control : best->id;
+}
+
+/// Cuts the maps search to max_query_bytes.
+///
+/// @param[in,out] field the field
+void cap_maps_search(kit::TextField& field) {
+    if (field.text.size() <= max_query_bytes)
+        return;
+    field.text.assign(capped_query(field.text));
+    field.caret = std::min(field.caret, field.text.size());
 }
 
 /// Returns the first enabled action of the selected entry.
@@ -732,6 +814,9 @@ ScreenResult activate(
     case controls::search:
         focus_search(state);
         return result;
+    case controls::active_search:
+        focus_maps_search(state);
+        return result;
     case controls::filter_menu:
         return toggle_menu(library, state, list, MenuKind::filter);
     case controls::tags_menu:
@@ -754,6 +839,7 @@ ScreenResult activate(
         result.action = Action::settings;
         return result;
     case controls::close:
+    case controls::close_x:
         result.action = Action::close;
         return result;
     case controls::active_unload:
@@ -823,19 +909,62 @@ menu_key(Library& library, ScreenState& state, const kit::DisplayList& list, kit
     }
 }
 
+/// Returns the Active tab's scroll bar, when that tab shows one.
+///
+/// @param list the display list
+/// @return the bar; none while the maps fit or another tab shows
+const kit::Item* maps_bar_item(const kit::DisplayList& list) {
+    if (!active_shows(list))
+        return nullptr;
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::scroll_bar)
+            return &item;
+    return nullptr;
+}
+
+/// Returns the maps pane's scroll area, as the bar and the tiles show it.
+///
+/// @param list the display list
+/// @return the area; none while the bar does not show
+std::optional<kit::ScrollArea> maps_bar_area(const kit::DisplayList& list) {
+    const std::optional<PaneScroll> scroll = maps_scroll_of(list);
+    const kit::Item* bar = maps_bar_item(list);
+    if (!scroll || bar == nullptr || scroll->limit <= 0)
+        return std::nullopt;
+    kit::ScrollArea area;
+    area.view = scroll->view;
+    area.well = bar->rect;
+    area.content_height = scroll->limit + scroll->view.height;
+    area.limit = scroll->limit;
+    area.offset = scroll->offset;
+    return area;
+}
+
 /// Returns the pane a point lies in.
+///
+/// On the Active tab only the maps pane and its scroll bar scroll. The mod
+/// and the language do not.
 ///
 /// @param library the model
 /// @param state the screen's state
 /// @param list the display list
 /// @param at the point
-/// @return the list, the details or none
+/// @return the list, the details, the maps or none
 Pane pane_at(
     const Library& library, const ScreenState& state, const kit::DisplayList& list, kit::Point at
 ) {
     if (const std::optional<PaneScroll> scroll = list_scroll_of(library, state, list);
         scroll && kit::contains(scroll->view, at))
         return Pane::list;
+    if (active_shows(list)) {
+        if (const std::optional<PaneScroll> scroll = maps_scroll_of(list);
+            scroll && kit::contains(scroll->view, at))
+            return Pane::maps;
+        if (const kit::Item* bar = maps_bar_item(list);
+            bar != nullptr && kit::contains(bar->rect, at))
+            return Pane::maps;
+        return Pane::none;
+    }
     if (const std::optional<PaneScroll> scroll = details_scroll_of(list);
         scroll && kit::contains(scroll->view, at))
         return Pane::details;
@@ -856,6 +985,8 @@ std::optional<PaneScroll> scroll_of(
         return list_scroll_of(library, state, list);
     if (pane == Pane::details)
         return details_scroll_of(list);
+    if (pane == Pane::maps)
+        return maps_scroll_of(list);
     return std::nullopt;
 }
 
@@ -869,6 +1000,8 @@ void scroll_to(ScreenState& state, Pane pane, int32_t offset) {
         state.list_scroll = offset;
     else if (pane == Pane::details)
         state.details_scroll = offset;
+    else if (pane == Pane::maps)
+        state.maps_scroll = offset;
 }
 
 /// Turns a pane by the wheel's notches.
@@ -889,7 +1022,9 @@ ScreenResult turn_pane(
     const std::optional<PaneScroll> scroll = scroll_of(library, state, list, pane);
     if (!scroll)
         return {};
-    kit::WheelCarry& carry = pane == Pane::list ? state.list_wheel : state.details_wheel;
+    kit::WheelCarry& carry = pane == Pane::list   ? state.list_wheel
+                             : pane == Pane::maps ? state.maps_wheel
+                                                  : state.details_wheel;
     const int32_t next =
         kit::wheel_offset(carry, notches, scroll->step, scroll->offset, scroll->limit);
     if (next == scroll->offset)
@@ -899,16 +1034,22 @@ ScreenResult turn_pane(
 }
 
 /// Returns the pane that holds the focus: the details while a control of
-/// theirs has it, on the details page and on the Active tab, else the list.
+/// theirs has it, the maps while one of theirs has it or the Active tab
+/// shows, else the list.
 ///
 /// @param state the screen's state
 /// @param list the display list
 /// @return the pane
 Pane focused_pane(const ScreenState& state, const kit::DisplayList& list) {
     const kit::Control* control = kit::control_of(list, state.interaction.focused);
-    if (state.interaction.focus_shown && control != nullptr &&
-        control->group == controls::details_group)
-        return Pane::details;
+    if (state.interaction.focus_shown && control != nullptr) {
+        if (control->group == controls::details_group)
+            return Pane::details;
+        if (control->group == controls::maps_group)
+            return Pane::maps;
+    }
+    if (active_shows(list))
+        return Pane::maps;
     return body_scrolls(list) ? Pane::details : Pane::list;
 }
 
@@ -916,9 +1057,12 @@ Pane focused_pane(const ScreenState& state, const kit::DisplayList& list) {
 
 std::optional<kit::Rect>
 focused_field(const ScreenState& state, const kit::DisplayList& list) noexcept {
-    if (!state.interaction.focus_shown || state.interaction.focused != controls::search)
+    if (!state.interaction.focus_shown)
         return std::nullopt;
-    const kit::Control* control = kit::control_of(list, controls::search);
+    const kit::ControlId id = state.interaction.focused;
+    if (id != controls::search && id != controls::active_search)
+        return std::nullopt;
+    const kit::Control* control = kit::control_of(list, id);
     if (control == nullptr)
         return std::nullopt;
     return control->rect;
@@ -936,6 +1080,18 @@ ScreenResult library_pointer(
     kit::Interaction& interaction = state.interaction;
     switch (kind) {
     case PointerKind::move: {
+        if (state.maps_bar_held) {
+            const std::optional<kit::ScrollArea> area = maps_bar_area(list);
+            if (!area)
+                return {};
+            const int32_t next = area->offset_at(
+                at.y - state.maps_bar_grab, kit::compact_metrics.least_thumb_height
+            );
+            if (next == area->offset)
+                return {};
+            scroll_to(state, Pane::maps, next);
+            return redrawn();
+        }
         if (state.drag.pane != Pane::none) {
             const int32_t across = at.x - state.drag.from.x;
             const int32_t along = at.y - state.drag.from.y;
@@ -979,12 +1135,34 @@ ScreenResult library_pointer(
         if (button != 1)
             return {};
         state.drag = {};
+        state.maps_bar_held = false;
         if (state.menu != MenuKind::none) {
             const kit::ControlId under =
                 finger_reach > 0 ? kit::reach(list, at, finger_reach).control : kit::hit(list, at);
             if (!menu_item_control(under) && under != field_of(state.menu)) {
                 // A press outside an open drop-down only closes it.
                 state.menu = MenuKind::none;
+                return redrawn();
+            }
+        }
+        if (const kit::Item* bar = maps_bar_item(list);
+            bar != nullptr && kit::contains(bar->rect, at)) {
+            if (const std::optional<kit::ScrollArea> area = maps_bar_area(list)) {
+                const kit::Rect thumb = area->thumb(kit::compact_metrics.least_thumb_height);
+                state.maps_bar_held = true;
+                if (kit::contains(thumb, at)) {
+                    state.maps_bar_grab = at.y - thumb.y;
+                } else {
+                    state.maps_bar_grab = thumb.height / 2;
+                    scroll_to(
+                        state,
+                        Pane::maps,
+                        area->offset_at(
+                            at.y - state.maps_bar_grab, kit::compact_metrics.least_thumb_height
+                        )
+                    );
+                }
+                interaction.pressed = kit::no_control;
                 return redrawn();
             }
         }
@@ -1006,6 +1184,12 @@ ScreenResult library_pointer(
     case PointerKind::up: {
         if (button != 1)
             return {};
+        if (state.maps_bar_held) {
+            state.maps_bar_held = false;
+            state.drag = {};
+            interaction.pressed = kit::no_control;
+            return redrawn();
+        }
         const bool dragged = state.drag.scrolling;
         state.drag = {};
         if (dragged) {
@@ -1027,10 +1211,14 @@ ScreenResult library_pointer(
 ScreenResult
 library_key(Library& library, ScreenState& state, const kit::DisplayList& list, kit::Key pressed) {
     kit::Interaction& interaction = state.interaction;
-    // A focus the screen no longer shows moves to the list, or to the first stop.
+    // A focus the screen no longer shows moves to the list, to the maps
+    // search when a map link scrolled away, or to the first stop.
     if (interaction.focus_shown && kit::control_of(list, interaction.focused) == nullptr) {
+        const bool map_link = controls::active_from_control(interaction.focused);
         if (kit::control_of(list, controls::list) != nullptr)
             interaction.focused = controls::list;
+        else if (map_link && kit::control_of(list, controls::active_search) != nullptr)
+            interaction.focused = controls::active_search;
         else
             interaction.focused = list.tab_order.empty() ? kit::no_control : list.tab_order.front();
     }
@@ -1040,11 +1228,13 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
     }
     const kit::ControlId focus = interaction.focus_shown ? interaction.focused : kit::no_control;
     const bool on_search = focus == controls::search;
+    const bool on_maps_search = focus == controls::active_search;
     const bool on_list = focus == controls::list;
     const bool on_drop_down = focus == controls::filter_menu || focus == controls::tags_menu ||
                               focus == controls::more_menu;
     // On the details page the page keys scroll its body, never the list it
-    // hides; on the Active and Registries tabs they scroll those lines.
+    // hides; on the Registries tab they scroll those cards. The Active tab's
+    // page keys scroll its maps pane.
     const bool in_details = body_scrolls(list) || (focus != kit::no_control && !on_list &&
                                                    focused_pane(state, list) == Pane::details);
 
@@ -1053,6 +1243,11 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         if (on_search && !state.search.text.empty()) {
             state.search = {};
             search_for_field(library, state, list);
+            return redrawn();
+        }
+        if (on_maps_search && !state.maps_search.text.empty()) {
+            state.maps_search = {};
+            state.maps_scroll = 0;
             return redrawn();
         }
         if (page_shows(list))
@@ -1067,6 +1262,14 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
             // The search is done: the focus goes to what it found.
             if (kit::control_of(list, controls::list) != nullptr)
                 interaction.focused = controls::list;
+            return redrawn();
+        }
+        if (on_maps_search) {
+            const kit::ControlId link = first_map_link(list);
+            if (link != kit::no_control) {
+                interaction.focused = link;
+                show_in_maps(state, list, link);
+            }
             return redrawn();
         }
         if (on_list || focus == kit::no_control)
@@ -1092,8 +1295,9 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         break;
     case kit::Key::left:
     case kit::Key::right:
-        if (on_search) {
-            if (kit::edit_text(state.search, pressed))
+        if (on_search || on_maps_search) {
+            kit::TextField& field = on_search ? state.search : state.maps_search;
+            if (kit::edit_text(field, pressed))
                 return redrawn();
             // At the text's end the arrow moves the focus on.
             const kit::ControlId next = kit::focus_toward(
@@ -1105,6 +1309,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
                 return {};
             interaction.focused = next;
             show_in_details(state, list, next);
+            show_in_maps(state, list, next);
             return redrawn();
         }
         break;
@@ -1114,11 +1319,28 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
             search_for_field(library, state, list);
             return redrawn();
         }
+        if (on_maps_search && kit::edit_text(state.maps_search, pressed)) {
+            cap_maps_search(state.maps_search);
+            state.maps_scroll = 0;
+            return redrawn();
+        }
         return {};
     case kit::Key::home:
     case kit::Key::end:
         if (on_search)
             return kit::edit_text(state.search, pressed) ? redrawn() : ScreenResult{};
+        if (on_maps_search)
+            return kit::edit_text(state.maps_search, pressed) ? redrawn() : ScreenResult{};
+        if (active_shows(list)) {
+            const std::optional<PaneScroll> scroll = maps_scroll_of(list);
+            if (!scroll)
+                return {};
+            const int32_t next = pressed == kit::Key::home ? 0 : scroll->limit;
+            if (next == scroll->offset)
+                return {};
+            state.maps_scroll = next;
+            return redrawn();
+        }
         if (in_details) {
             const std::optional<PaneScroll> scroll = details_scroll_of(list);
             if (!scroll)
@@ -1140,6 +1362,22 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         return {};
     case kit::Key::page_up:
     case kit::Key::page_down: {
+        if (active_shows(list)) {
+            const std::optional<PaneScroll> scroll = maps_scroll_of(list);
+            if (!scroll)
+                return {};
+            const int32_t page =
+                std::max(scroll->view.height - kit::compact_metrics.small_line, int32_t{1});
+            const int32_t next = std::clamp(
+                scroll->offset + (pressed == kit::Key::page_up ? -page : page),
+                int32_t{0},
+                scroll->limit
+            );
+            if (next == scroll->offset)
+                return {};
+            state.maps_scroll = next;
+            return redrawn();
+        }
         if (in_details) {
             const std::optional<PaneScroll> scroll = details_scroll_of(list);
             if (!scroll)
@@ -1178,6 +1416,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
         return {};
     case kit::KeyResult::redraw:
         show_in_details(state, list, interaction.focused);
+        show_in_maps(state, list, interaction.focused);
         return redrawn();
     case kit::KeyResult::to_control:
         return activate(library, state, list, outcome.control, pressed, std::nullopt);
@@ -1193,6 +1432,14 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
 ScreenResult library_text(
     Library& library, ScreenState& state, const kit::DisplayList& list, std::string_view utf8
 ) {
+    if (state.interaction.focus_shown && state.interaction.focused == controls::active_search) {
+        if (kit::control_of(list, controls::active_search) == nullptr ||
+            !kit::insert_text(state.maps_search, utf8))
+            return {};
+        cap_maps_search(state.maps_search);
+        state.maps_scroll = 0;
+        return redrawn();
+    }
     if (!focused_field(state, list) || !kit::insert_text(state.search, utf8))
         return {};
     search_for_field(library, state, list);
@@ -1236,7 +1483,10 @@ ScreenResult library_command(
             close_details(library);
             state.details_page = false;
         }
-        focus_search(state);
+        if (active_shows(list))
+            focus_maps_search(state);
+        else
+            focus_search(state);
         return redrawn();
     case ScreenCommand::next_tab:
     case ScreenCommand::previous_tab: {

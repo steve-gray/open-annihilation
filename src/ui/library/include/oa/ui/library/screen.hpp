@@ -35,11 +35,12 @@ enum class MenuKind : uint8_t {
     more,   ///< the Compact details page's actions after its first three (library.action)
 };
 
-/// One of the Library's two panes that scroll.
+/// One of the Library's panes that scroll.
 enum class Pane : uint8_t {
-    none, ///< neither
+    none, ///< none of them
     list, ///< the list of entries
     details, ///< the selected entry's details: the pane at Regular and Large, the page's body at Compact
+    maps, ///< the Active tab's maps, under the MAPS heading; the mod and the language stay put
 };
 
 /// A finger's press in a pane, which becomes a drag that scrolls the pane
@@ -68,6 +69,13 @@ struct ScreenState {
     /// The search field's text and caret. Its text is the model's query: the
     /// input keeps them the same.
     kit::TextField search{};
+    /// The Active tab's maps search, above that pane. It is not the catalogue's
+    /// query. Its text stays while the Library is open, on every tab.
+    kit::TextField maps_search{};
+    int32_t maps_scroll{};         ///< how far the Active tab's maps are scrolled, in points
+    kit::WheelCarry maps_wheel{};  ///< the wheel's turn those maps have not scrolled yet
+    bool maps_bar_held{};          ///< the pointer holds the maps pane's scroll bar
+    int32_t maps_bar_grab{};       ///< where on the thumb the pointer took hold, from its top
     MenuKind menu{MenuKind::none}; ///< the open drop-down
     int32_t menu_first{};          ///< the open drop-down's first item shown, from 0
     int32_t menu_marked{}; ///< the open drop-down's item the keys or the pointer mark, from 0
@@ -202,9 +210,9 @@ enum class ScreenCommand : uint8_t {
 );
 
 /// Lays out Compact's details page of the selected entry: its name and
-/// version in the header; the way back to the list, the status line, the
-/// byline, the summary, the short facts and the playing note; and the first
-/// three actions, MORE ▾ with the rest and CLOSE in the footer.
+/// version in the header; the status line, the byline, the summary, the
+/// short facts and the playing note; and the first three actions, MORE ▾
+/// with the rest and BACK in the footer. BACK returns to the list.
 ///
 /// @param library the model, with an entry selected
 /// @param state the hover, press, focus, scroll and open drop-down
@@ -304,7 +312,8 @@ entry_row_shown(const Library& library, const kit::DisplayList& list, const Entr
 [[nodiscard]] std::string badge_letters(std::string_view name);
 
 /// Returns the search field while it has the focus, over which a host keeps
-/// the system's text input started.
+/// the system's text input started. On the Active tab that field is the maps
+/// search; on the catalogue tabs it is the catalogue search.
 ///
 /// @param state the focus
 /// @param list the display list
@@ -398,8 +407,8 @@ ScreenResult library_command(
 );
 
 /// Takes the controller's right stick: it scrolls the pane that holds the
-/// focus, the details while the focus is on one of their controls and the
-/// list otherwise.
+/// focus, the details while the focus is on one of their controls, the Active
+/// tab's maps while that tab shows, and the list otherwise.
 ///
 /// @param[in,out] library the model
 /// @param[in,out] state the screen's state

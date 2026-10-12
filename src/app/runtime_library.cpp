@@ -1538,6 +1538,7 @@ library::Inputs Runtime::library_inputs() {
     // The language shown, and the first pack that holds it in the order its
     // words are looked up: the mod's, the player's, then the engine's.
     const oa::data::languages::Language& language = shown_language();
+    inputs.language.tag = std::string(language.tag);
     if (language.tag != oa::data::languages::english().tag)
         inputs.language.name = std::string(language.endonym);
     if (!language.english_name.empty() && language.english_name != language.endonym)
@@ -1979,6 +1980,33 @@ struct Runtime::LibraryScreen final : LayerScreen {
         runtime_.open_engine_settings_from_menu();
     }
 
+    /// Switches the game's language the way Settings › Language does, and
+    /// leaves the Library open in that language.
+    ///
+    /// @param entry the built-in language, or the installed language pack
+    void use_language_now(const library::Entry& entry) {
+        std::string tag;
+        if (library::is_built_in_language(entry.id))
+            tag = std::string(library::built_in_language_tag(entry.id));
+        else if (entry.id.kind == library::Kind::language && entry.installed != nullptr)
+            tag = entry.id.key;
+        else
+            return;
+        const oa::data::languages::Language* language = oa::data::languages::find_by_tag(tag);
+        if (language == nullptr || !oa::data::languages::playable(*language))
+            return;
+        auto chosen = runtime_.engine_settings();
+        const auto before = chosen;
+        chosen.language = std::string(language->tag);
+        if (language->needs == oa::data::languages::TextNeeds::modern_fonts)
+            chosen.modern_fonts = true;
+        runtime_.apply_engine_settings(chosen);
+        if (const std::optional<std::string> failure =
+                runtime_.save_engine_settings(before, chosen, false))
+            runtime_.status_ = *failure;
+        runtime_.library_host().rebuild(runtime_);
+    }
+
     /// Carries out one of the Library's actions.
     ///
     /// @param result what the input asked for
@@ -2052,6 +2080,10 @@ struct Runtime::LibraryScreen final : LayerScreen {
             return false;
         case library::Action::uninstall:
             runtime_.library_entry_action(action, id);
+            return false;
+        case library::Action::use_now:
+            if (entry != nullptr)
+                use_language_now(*entry);
             return false;
         }
         return false;

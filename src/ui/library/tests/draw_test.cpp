@@ -20,9 +20,11 @@
 // the tiles, the row and the details show those pictures and not a file
 // from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
+// library-active-many-regular.png,
 // library-updates-<class>.png, library-registries-<class>.png,
-// library-languages-compact.png, library-maps-one-large.png and
-// library-maps-several-large.png there.
+// library-languages-compact.png, library-languages-zh-compact.png,
+// library-maps-one-large.png and library-maps-several-large.png there.
+// languages-zh-compact is 简体中文 installed and in use, on its details page.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -131,6 +133,10 @@ struct Scene {
     bool previews{};
     std::string select_registry{}; ///< selected after the tab, when select_key is set
     std::string select_key{};
+    /// Extra installed maps, so the Active picture shows the maps pane scrolled.
+    bool many{};
+    /// On Languages, an installed pack of this key is the language in use.
+    std::string in_use_language{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -269,6 +275,45 @@ std::optional<lib::Badge> shipped_logo() {
     return badge;
 }
 
+/// Marks one language pack as the one in use, adding it when the fixture
+/// does not list it. Built for the picture of 简体中文 in use.
+///
+/// @param[in,out] library the scene's library
+/// @param key the pack's key, which is its tag
+void show_language_in_use(lib::Library& library, std::string_view key) {
+    for (lib::Installed& installed : library.inputs.installed)
+        if (installed.kind == lib::Kind::language)
+            installed.in_use = false;
+    bool listed = false;
+    for (const lib::Listing& listing : library.inputs.listings)
+        listed = listed || (listing.kind == lib::Kind::language && listing.key == key);
+    if (!listed) {
+        library.inputs.listings.push_back(
+            fixture::listing(
+                fixture::core, lib::Kind::language, key, "简体中文", "1.0", 2 * fixture::mib, "", {}
+            )
+        );
+    }
+    lib::Installed pack;
+    pack.kind = lib::Kind::language;
+    pack.key = std::string(key);
+    pack.folder = std::string(key);
+    pack.name = "简体中文";
+    pack.version = "1.0";
+    pack.revision = 4;
+    pack.registry = std::string(fixture::core);
+    pack.release = 4;
+    pack.in_use = true;
+    library.inputs.installed.push_back(std::move(pack));
+    library.inputs.language.tag = std::string(key);
+    library.inputs.language.name = "简体中文";
+    library.inputs.language.english = "Chinese (Simplified)";
+    library.inputs.language.pack = "简体中文";
+    library.inputs.language.version = "1.0";
+    library.inputs.language.revision = 4;
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Dresses the Registries pictures: the built-in card carries Core Prime's
 /// short name, title, description and author, and the added card a sample of
 /// its own. The fixture itself stays Fixture Core. Other tabs are not dressed.
@@ -377,6 +422,29 @@ void dress_map_previews(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Adds one installed pack of many maps, so the Active picture shows the maps
+/// pane filling the room under its heading, with its own scroll bar. The
+/// fixture's maps stay. This drawing only.
+///
+/// @param[in,out] library the scene's library
+void add_many_maps(lib::Library& library) {
+    const lib::MapPicture wash = solid_minimap(90, 110, 140);
+    lib::InstalledMaps pack;
+    pack.name = "Wide Atlas";
+    pack.maps.reserve(24);
+    for (int index = 1; index <= 24; ++index) {
+        lib::MapLine map;
+        map.name = "Atlas " + std::to_string(index);
+        map.players = 2;
+        map.size = "16x16";
+        map.description = "A wide sheet of the atlas.";
+        map.preview = wash;
+        pack.maps.push_back(std::move(map));
+    }
+    library.inputs.map_packs.push_back(std::move(pack));
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -388,12 +456,19 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_registries(library);
     else if (scene.tab == lib::Tab::languages)
         dress_languages(library);
+    if (!scene.in_use_language.empty())
+        show_language_in_use(library, scene.in_use_language);
     if (scene.previews)
         dress_map_previews(library);
+    if (scene.many)
+        add_many_maps(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
-    if (!scene.select_key.empty())
-        lib::select(library, {scene.select_registry, lib::Kind::map_pack, scene.select_key});
+    if (!scene.select_key.empty()) {
+        const lib::Kind kind =
+            scene.tab == lib::Tab::languages ? lib::Kind::language : lib::Kind::map_pack;
+        lib::select(library, {scene.select_registry, kind, scene.select_key});
+    }
     lib::ScreenState state;
     if (scene.details_page) {
         lib::open_details(library);
@@ -574,12 +649,29 @@ int main(int argc, char** argv) {
         {"active-compact", window_of(640, 480, 100), false, lib::Tab::active, true},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
+        {"active-many-regular",
+         window_of(1920, 1080, 200),
+         false,
+         lib::Tab::active,
+         true,
+         {},
+         {},
+         true},
         {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
         {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
         {"registries-compact", window_of(640, 480, 100), false, lib::Tab::registries},
         {"registries-regular", window_of(1920, 1080, 200), false, lib::Tab::registries},
         {"registries-large", window_of(2560, 1440, 200), false, lib::Tab::registries},
         {"languages-compact", window_of(640, 480, 100), false, lib::Tab::languages},
+        {"languages-zh-compact",
+         window_of(640, 480, 100),
+         true,
+         lib::Tab::languages,
+         false,
+         std::string(fixture::core),
+         "zh-Hans",
+         false,
+         "zh-Hans"},
         {"maps-one-large",
          window_of(2560, 1440, 200),
          false,

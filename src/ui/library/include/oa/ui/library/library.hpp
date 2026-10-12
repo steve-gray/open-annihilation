@@ -267,6 +267,9 @@ struct LanguageInUse {
     std::string english{};
     /// The pack's packaging revision; 0 when it names none.
     int64_t revision{};
+    /// Its BCP-47 tag, such as "en" or "zh-Hans". Empty when the inputs do
+    /// not name one. With `pack` and `name` empty as well, English is in use.
+    std::string tag{};
 };
 
 /// One installed map pack, as the Active tab lists its maps.
@@ -376,6 +379,42 @@ inline constexpr std::string_view base_game_key = "@base-game";
     return id.kind == Kind::mod && id.registry.empty() && id.key == base_game_key;
 }
 
+/// The start of a built-in language entry's key, then its BCP-47 tag.
+///
+/// A package key is lower-case kebab-case, so it cannot hold `@`. No
+/// package's id starts with this.
+inline constexpr std::string_view built_in_language_prefix = "@language:";
+
+/// Returns a built-in language entry's id: a language, no registry, and
+/// built_in_language_prefix followed by its tag.
+///
+/// @param tag the language's BCP-47 tag, such as "en" or "de"
+/// @return the id
+[[nodiscard]] inline EntryId built_in_language_id(std::string_view tag) {
+    return {{}, Kind::language, std::string(built_in_language_prefix) + std::string(tag)};
+}
+
+/// Tells whether an id is a language built into the game.
+///
+/// @param id the id
+/// @return true for a language, an empty registry and a key that starts
+///     with built_in_language_prefix and names a tag
+[[nodiscard]] inline bool is_built_in_language(const EntryId& id) {
+    return id.kind == Kind::language && id.registry.empty() &&
+           id.key.size() > built_in_language_prefix.size() &&
+           id.key.compare(0, built_in_language_prefix.size(), built_in_language_prefix) == 0;
+}
+
+/// Returns the BCP-47 tag a built-in language entry's id holds.
+///
+/// @param id the id
+/// @return the tag; empty when the id is not a built-in language
+[[nodiscard]] inline std::string_view built_in_language_tag(const EntryId& id) {
+    if (!is_built_in_language(id))
+        return {};
+    return std::string_view(id.key).substr(built_in_language_prefix.size());
+}
+
 /// One row of the Library.
 ///
 /// The pointers point into the owning Library's `inputs` and stay valid until
@@ -403,11 +442,12 @@ struct Entry {
     /// base game entry's points at Inputs::base_game_badge. Null otherwise,
     /// and valid until the next refresh.
     const Badge* badge{};
-    /// The name the base game entry shows, in the language shown. Empty for
+    /// The name the base game entry, or a built-in language, shows. Empty for
     /// a package, whose name comes from its listing or its installed copy.
     std::string shown_name{};
-    /// The summary the base game entry shows, in the language shown. Empty
-    /// for a package.
+    /// The summary the base game entry shows, or a built-in language's name
+    /// in English when that differs from its name in itself. Empty for a
+    /// package, and for English, whose two names are the same.
     std::string shown_summary{};
 };
 
@@ -573,7 +613,9 @@ void close_details(Library& library);
 /// @return the entry, or null when nothing is selected
 [[nodiscard]] const Entry* selected_entry(const Library& library);
 
-/// Returns the name a player sees for an entry: its listing's, else its installed package's.
+/// Returns the name a player sees for an entry: its listing's, else its
+/// installed package's. The base game and a built-in language use the name
+/// refresh stored for them.
 ///
 /// @param entry the entry
 /// @return the name
@@ -581,7 +623,8 @@ void close_details(Library& library);
 
 /// Returns the words the details show under an entry's name: its listing's
 /// summary, else, as for a mod of the player's own, its installed
-/// manifest's description.
+/// manifest's description. A built-in language's is its name in English
+/// when that differs from the name in itself.
 ///
 /// @param entry the entry
 /// @return the words; empty when neither gives any
@@ -600,8 +643,8 @@ void close_details(Library& library);
 /// Mods, Maps and Languages hold their kind and Updates every kind; All
 /// keeps them all, New the newest_count listings with the latest published
 /// day, Installed those installed, playing or with an update, and Updates
-/// those with an update. The Active tab holds none. The base game entry is
-/// never counted, on any tab or filter.
+/// those with an update. The Active tab holds none. The base game entry and
+/// the built-in languages are never counted, on any tab or filter.
 ///
 /// @param library the Library
 /// @param filter the filter
@@ -612,7 +655,8 @@ void close_details(Library& library);
 ///
 /// Mods, Maps and Languages count their kind. Updates counts the updates
 /// that can be installed (update_count). Active counts none. Registries
-/// counts the registries listed, not the packages.
+/// counts the registries listed, not the packages. The base game and the
+/// built-in languages are left out, as they are from the filters' counts.
 ///
 /// @param library the Library
 /// @param tab the tab
@@ -782,6 +826,9 @@ enum class Action : uint8_t {
     /// An installed package's: asks first, then removes its folder and the
     /// copy ROLL BACK keeps (uninstall.hpp).
     uninstall,
+    /// A built-in language, or an installed language pack, that is not the
+    /// one the game shows: switches to it as Settings › Language does.
+    use_now,
 };
 
 /// One button of an entry's details.
@@ -803,7 +850,10 @@ struct ActionButton {
 /// The base game entry is not a package: while no mod is played it offers
 /// nothing, and while one is it offers PLAY NOW alone, on and off by the
 /// same rule as SWITCH OFF, and never UPDATE, ROLL BACK, UNINSTALL or
-/// OPEN FOLDER.
+/// OPEN FOLDER. A built-in language offers USE NOW while it is not the one
+/// in use, and nothing while it is. An installed language pack that is not
+/// in use offers USE NOW where a mod offers PLAY NOW. A language that is
+/// listed and not installed keeps GET and has no USE NOW.
 ///
 /// @param library the Library
 /// @param entry one of its entries
@@ -863,7 +913,8 @@ struct Fact {
 /// update offered, Installed, Playing, or Not installed with its size. An
 /// update is "Revision 4 available" only for a revision above 0 of the
 /// version installed, "Version 4.9 available" for another version, and
-/// "Update available" when it keeps the version and names no revision.
+/// "Update available" when it keeps the version and names no revision. A
+/// built-in language says "Built into the game".
 ///
 /// @param library the Library
 /// @param entry one of its entries

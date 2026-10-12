@@ -50,6 +50,8 @@ inline constexpr std::string_view state_get = "GET";
 inline constexpr std::string_view state_installed = "INSTALLED";
 inline constexpr std::string_view state_update = "UPDATE";
 inline constexpr std::string_view state_playing = "PLAYING";
+/// The chip on the language the game is showing, in place of USE NOW.
+inline constexpr std::string_view chip_in_use = "In use";
 
 // Buttons.
 inline constexpr std::string_view action_get = "GET";
@@ -59,18 +61,24 @@ inline constexpr std::string_view action_cancel = "CANCEL";
 inline constexpr std::string_view action_retry = "RETRY";
 inline constexpr std::string_view action_roll_back = "ROLL BACK";
 inline constexpr std::string_view action_play_now = "PLAY NOW";
+/// On a built-in language, or an installed language pack, that is not the
+/// one the game shows. It switches as Settings › Language does.
+inline constexpr std::string_view action_use_now = "USE NOW";
 inline constexpr std::string_view action_switch_off = "SWITCH OFF";
 /// UNLOAD MOD on the Active tab. It asks what SWITCH OFF asks.
 inline constexpr std::string_view action_unload_mod = "UNLOAD MOD";
 inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
+/// BACK on Compact's details page. It returns to the list, which keeps its place.
 inline constexpr std::string_view action_back = "BACK";
 /// The header's refresh icon, and the same words while it is turning.
 inline constexpr std::string_view action_refresh = "Refresh";
 inline constexpr std::string_view action_refreshing = "Refreshing";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
+/// The header's close mark. The footer's CLOSE keeps its own word.
+inline constexpr std::string_view action_close_x = "Close";
 inline constexpr std::string_view action_uninstall = "UNINSTALL";
 
 // The Registries tab. The words are the ones Downloads' Registries part used.
@@ -322,6 +330,8 @@ inline constexpr std::string_view offline_mark = "offline";
 inline constexpr std::string_view search_mods = "Search mods, authors, tags";
 inline constexpr std::string_view search_maps = "Search maps, authors, tags";
 inline constexpr std::string_view search_languages = "Search languages";
+/// The Active tab's maps field, above the maps pane.
+inline constexpr std::string_view search_active_maps = "Search maps";
 inline constexpr std::string_view search_updates = "Search updates";
 /// A tag in Compact's filter drop-down.
 inline constexpr std::string_view filter_tag = "Tag: {tag} ({count})";
@@ -343,6 +353,8 @@ inline constexpr std::string_view mod_count_many = "{count} mods";
 inline constexpr std::string_view active_heading_mod = "MOD";
 inline constexpr std::string_view active_heading_language = "LANGUAGE";
 inline constexpr std::string_view active_heading_maps = "MAPS";
+/// Beside MAPS while the maps search holds text: how many tiles show, of every installed map.
+inline constexpr std::string_view active_maps_count = "{shown} of {all}";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
 /// The tile shown when no mod is played: the base game. Its badge is the
@@ -356,6 +368,8 @@ inline constexpr std::string_view active_language_built_in = "{language} · buil
 inline constexpr std::string_view active_coverage = "Coverage {percent}%";
 /// The language the game shows with no language chosen.
 inline constexpr std::string_view language_english = "English";
+/// A built-in language's details, under its name: it is not a package.
+inline constexpr std::string_view status_built_in_language = "Built into the game";
 /// How many players a map is for: one, and every other count.
 inline constexpr std::string_view active_players_one = "{count} player";
 inline constexpr std::string_view active_players_many = "{count} players";
@@ -366,6 +380,8 @@ inline constexpr std::string_view map_players_size = "{players} · {size}";
 /// The link on an Active map's tile that opens its pack on the Maps tab.
 inline constexpr std::string_view active_from_pack = "From {pack}";
 inline constexpr std::string_view active_no_maps = "No map packs are installed.";
+/// The maps pane while a search matches none of the maps that are installed.
+inline constexpr std::string_view active_no_map_match = "No installed map matches.";
 
 // A row: the version and size under the name at Compact.
 inline constexpr std::string_view row_version_size = "{version} · {size}";
@@ -382,8 +398,6 @@ inline constexpr std::string_view offline_list =
     "Showing the list from {age}. OA couldn't reach the registries.";
 
 // The details.
-/// The Compact details page's way back to the list, with the tab's name.
-inline constexpr std::string_view back_to_tab = "‹ {tab}";
 /// After a fact's value that is met.
 inline constexpr std::string_view fact_met = "✓";
 
