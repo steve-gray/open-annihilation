@@ -176,7 +176,6 @@ inline constexpr std::string_view interface_words[] = {
     words::engine_below_short,
     words::registry_key_built_in,
     words::byline,
-    words::byline_with_downloads,
     words::rules_changes_short,
     words::phase_checking,
     words::registry_unreachable,

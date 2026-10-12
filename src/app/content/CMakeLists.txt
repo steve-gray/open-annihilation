@@ -4,11 +4,11 @@
 # Registries in effect, their cached catalogues and the worker that refreshes
 # them, which installed packages a catalogue has a newer release of, the
 # player's edits to the registries, the download settings kept in
-# preferences, the download queue, the packages' badge pictures and the
-# download counts the Library shows. No SDL.
+# preferences, the download queue and the packages' badge pictures. No SDL.
+# The game does not read a registry's download counts.
 add_library(oa-app-content src/service.cpp src/worker.cpp src/refresh.cpp src/cache.cpp
   src/updates.cpp src/registries_edit.cpp src/settings.cpp src/download_api.cpp
-  src/download.cpp src/pictures.cpp src/counts.cpp)
+  src/download.cpp src/pictures.cpp)
 add_library(oa::app::content ALIAS oa-app-content)
 target_include_directories(oa-app-content PUBLIC include)
 target_include_directories(oa-app-content PRIVATE src)
@@ -23,8 +23,6 @@ set_property(SOURCE src/updates.cpp src/download_api.cpp APPEND PROPERTY COMPILE
   "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
 
 if(BUILD_TESTING)
-  file(TO_CMAKE_PATH "${PROJECT_SOURCE_DIR}/docs/registries/examples/counts.json" OA_COUNTS_EXAMPLE)
-
   add_executable(oa-app-content-refresh-rules-test tests/refresh_rules_test.cpp)
   target_link_libraries(oa-app-content-refresh-rules-test PRIVATE oa-app-content oa-test-support)
   add_test(NAME app-content-refresh-rules COMMAND oa-app-content-refresh-rules-test)
@@ -77,16 +75,6 @@ if(BUILD_TESTING)
   # The badge pictures against a local fixture: a good one, a wrong hash, a
   # file too large, one the server lacks, one the folder holds read with no
   # request, and none fetched while a match runs.
-  # Download counts: the specification's example, refusals, a fetch that names
-  # nobody, a saved table kept when the fetch fails, and when a fetch is due.
-  add_executable(oa-app-content-counts-test tests/counts_test.cpp)
-  target_link_libraries(oa-app-content-counts-test
-    PRIVATE oa-app-content oa-netgame-http-fixture oa-test-support)
-  target_compile_definitions(oa-app-content-counts-test PRIVATE
-    "OA_COUNTS_EXAMPLE=\"${OA_COUNTS_EXAMPLE}\"")
-  add_test(NAME app-content-counts COMMAND oa-app-content-counts-test)
-  set_tests_properties(app-content-counts PROPERTIES TIMEOUT 60)
-
   add_executable(oa-app-content-pictures-test tests/pictures_test.cpp)
   target_link_libraries(oa-app-content-pictures-test
     PRIVATE oa-app-content oa-app-mod-profile oa-netgame-http-fixture oa-formats-png
@@ -98,7 +86,7 @@ if(BUILD_TESTING)
     foreach(target oa-app-content-refresh-rules-test oa-app-content-settings-test
         oa-app-content-test oa-app-content-updates-test oa-app-content-registries-test
         oa-app-content-download-api-test oa-app-content-downloads-test
-        oa-app-content-counts-test oa-app-content-pictures-test)
+        oa-app-content-pictures-test)
       add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:${target}>"
           "-DDEST=$<TARGET_FILE_DIR:${target}>" -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")
