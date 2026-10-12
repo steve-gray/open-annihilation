@@ -83,7 +83,7 @@ inline constexpr std::string_view registry_off = "OFF";
 inline constexpr std::string_view registry_on = "ON";
 inline constexpr std::string_view registry_unreachable = "couldn't reach";
 inline constexpr std::string_view registry_not_reviewed = "not reviewed";
-/// REFRESH on a registry's row. The header's icon keeps action_refresh.
+/// REFRESH on a registry's card. The header's icon keeps action_refresh.
 inline constexpr std::string_view registry_refresh = "REFRESH";
 /// When a refresh last read the registry, with the age in its place.
 inline constexpr std::string_view registry_refreshed = "refreshed {age}";

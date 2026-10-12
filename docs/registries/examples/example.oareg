@@ -4,6 +4,8 @@
 registry: 1
 id: "example-mods"
 name: "Example Mods"
+title: "Example Mods - Sample packages"
+description: "A sample registry of mods, including the made-up mod Ridge."
 homepage: "https://example.org/mods"
 catalogue: "http://mods.example.org/oa/v1/catalogue.json"
 keys:

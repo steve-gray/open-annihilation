@@ -9,6 +9,7 @@
 #include "reach.hpp"
 #include "service_state.hpp"
 
+#include "oa/base/signing/ed25519.hpp"
 #include "oa/data/catalogue/check.hpp"
 #include "oa/formats/url.hpp"
 
@@ -58,7 +59,16 @@ struct FetchedCatalogue {
     base::sha256::Digest digest{};
     formats::url::Url served_from{};
     bool expired = false;
+    /// A reached catalogue failed its signature, and none verified.
+    bool signature_refused = false;
 };
+
+/// A signing key the player typed could not be read.
+constexpr std::string_view kSigningKeyUnreadable = "The signing key could not be read.";
+/// A typed key did not verify the catalogue.
+constexpr std::string_view kCatalogueNotSigned = "The catalogue isn't signed by this key.";
+/// The id stored for a typed key that the descriptor does not already name.
+constexpr std::string_view kPlayerKeyId = "player";
 
 /// Writes a refusal into `why` when the caller asked for one.
 ///
@@ -155,6 +165,54 @@ void append_unique(std::vector<formats::url::Url>& urls, const formats::url::Url
 ///
 /// @param errors one reason per source that was tried
 /// @return the reasons separated by a semicolon, or a short fallback
+/// Drops leading and trailing spaces and tabs from a signing key.
+///
+/// @param text the field's text
+/// @return the key, or empty when the field was blank
+std::string trimmed_signing_key(std::string_view text) {
+    std::size_t begin = 0;
+    while (begin < text.size() && (text[begin] == ' ' || text[begin] == '\t'))
+        ++begin;
+    std::size_t end = text.size();
+    while (end > begin && (text[end - 1] == ' ' || text[end - 1] == '\t'))
+        --end;
+    return std::string(text.substr(begin, end - begin));
+}
+
+/// Reports whether a catalogue verdict is a signature the typed key did not make.
+///
+/// @param verdict the verdict
+/// @return true for a missing, unreadable, unknown or mismatched signature
+bool signature_verdict(catalogue::Verdict verdict) noexcept {
+    return verdict == catalogue::Verdict::no_signature ||
+           verdict == catalogue::Verdict::bad_signature_file ||
+           verdict == catalogue::Verdict::unknown_key ||
+           verdict == catalogue::Verdict::bad_signature;
+}
+
+/// Replaces a descriptor's keys with the one public key the player typed.
+///
+/// The id stays the descriptor's when that key is already named there, so a
+/// signature file that names it still verifies. Any other key is stored as
+/// `player`. A built-in registry's pinned keys are not written.
+///
+/// @param[in,out] descriptor the descriptor that was read
+/// @param public_key the key the player typed
+void use_typed_key(registry::Descriptor& descriptor, const base::signing::PublicKey& public_key) {
+    std::string kept_id(kPlayerKeyId);
+    for (const registry::RegistryKey& listed : descriptor.keys) {
+        if (listed.key == public_key) {
+            kept_id = listed.id;
+            break;
+        }
+    }
+    registry::RegistryKey chosen;
+    chosen.id = std::move(kept_id);
+    chosen.key = public_key;
+    descriptor.keys.clear();
+    descriptor.keys.push_back(std::move(chosen));
+}
+
 std::string join_errors(const std::vector<std::string>& errors) {
     if (errors.empty())
         return "no usable catalogue";
@@ -364,6 +422,7 @@ FetchedCatalogue fetch_catalogue(
 ) {
     FetchedCatalogue fetched;
     std::vector<std::string> errors;
+    bool saw_signature_refusal = false;
     for (const formats::url::Url& source : sources) {
         if (tools.cancel != nullptr && tools.cancel->load()) {
             fetched.cancelled = true;
@@ -426,6 +485,8 @@ FetchedCatalogue fetch_catalogue(
         request.now = now;
         const catalogue::Checked checked = catalogue::check_catalogue(request);
         if (!checked.usable() || !checked.catalogue) {
+            if (signature_verdict(checked.verdict))
+                saw_signature_refusal = true;
             errors.push_back(catalogue::verdict_text(checked.verdict));
             continue;
         }
@@ -438,6 +499,7 @@ FetchedCatalogue fetch_catalogue(
         fetched.expired = checked.expired;
         return fetched;
     }
+    fetched.signature_refused = saw_signature_refusal;
     fetched.detail = join_errors(errors);
     return fetched;
 }
@@ -449,6 +511,8 @@ FetchedCatalogue fetch_catalogue(
 /// @param context the rules' lists, copied before the fetch
 /// @param descriptor the descriptor that was read
 /// @param url the address it was read from; empty for a file
+/// @param typed_key true when the player gave a signing key, so a signature
+///        failure says that key did not sign the catalogue
 /// @param tools the worker's client
 void finish_registry(
     ServiceState& state,
@@ -456,6 +520,7 @@ void finish_registry(
     const CheckContext& context,
     registry::Descriptor descriptor,
     std::string url,
+    bool typed_key,
     WorkerTools& tools
 ) {
     StoredCheck stored;
@@ -485,7 +550,10 @@ void finish_registry(
     }
     if (!fetched.ok || !fetched.catalogue) {
         stored.result.refusal = registry::Refusal::unreadable;
-        stored.result.detail = fetched.detail;
+        if (typed_key && fetched.signature_refused)
+            stored.result.detail = std::string(kCatalogueNotSigned);
+        else
+            stored.result.detail = fetched.detail;
         store_check(state, request, std::move(stored));
         return;
     }
@@ -506,10 +574,27 @@ void finish_registry(
 /// @param state the service
 /// @param request the check
 /// @param url the address the player gave
+/// @param signing_key a public key, or empty to keep the descriptor's keys
 /// @param tools the worker's client
 void complete_url_check(
-    ServiceState& state, uint64_t request, const std::string& url, WorkerTools& tools
+    ServiceState& state,
+    uint64_t request,
+    const std::string& url,
+    const std::string& signing_key,
+    WorkerTools& tools
 ) {
+    const std::string typed = trimmed_signing_key(signing_key);
+    std::optional<base::signing::PublicKey> typed_key;
+    if (!typed.empty()) {
+        typed_key = base::signing::parse_public_key(typed);
+        if (!typed_key) {
+            StoredCheck stored;
+            stored.result.refusal = registry::Refusal::unreadable;
+            stored.result.detail = std::string(kSigningKeyUnreadable);
+            store_check(state, request, std::move(stored));
+            return;
+        }
+    }
     const CheckContext context = copy_context(state);
     formats::url::UrlError error = formats::url::UrlError::none;
     const std::optional<formats::url::Url> parsed = formats::url::parse_http_url(url, &error);
@@ -562,8 +647,16 @@ void complete_url_check(
         store_check(state, request, std::move(stored));
         return;
     }
+    if (typed_key)
+        use_typed_key(descriptor, *typed_key);
     finish_registry(
-        state, request, context, std::move(descriptor), formats::url::url_text(*parsed), tools
+        state,
+        request,
+        context,
+        std::move(descriptor),
+        formats::url::url_text(*parsed),
+        typed_key.has_value(),
+        tools
     );
 }
 
@@ -587,7 +680,7 @@ void complete_file_check(
         store_check(state, request, std::move(stored));
         return;
     }
-    finish_registry(state, request, context, std::move(descriptor), {}, tools);
+    finish_registry(state, request, context, std::move(descriptor), {}, false, tools);
 }
 
 /// Checks one mirror against the registry's trusted keys.
@@ -922,14 +1015,19 @@ bool https_read_over_http() noexcept {
     return !netgame::http::tls_available();
 }
 
-uint64_t Service::check_registry_url(std::string url) {
+uint64_t Service::check_registry_url(std::string url, std::string signing_key) {
     ServiceState& state = *impl_;
     const uint64_t request = begin_check(state, false);
     if (request == 0)
         return 0;
-    run_check(*this, state, request, [&state, request, url = std::move(url)](WorkerTools& tools) {
-        complete_url_check(state, request, url, tools);
-    });
+    run_check(
+        *this,
+        state,
+        request,
+        [&state, request, url = std::move(url), signing_key = std::move(signing_key)](
+            WorkerTools& tools
+        ) { complete_url_check(state, request, url, signing_key, tools); }
+    );
     return request;
 }
 

@@ -4,7 +4,7 @@
 // The Library's layout at Compact, Regular and Large, made of the UI kit's
 // components: the window's face, header and footer, the tabs, the search,
 // the filters with their counts, the list and the details, the Active tab's
-// setup, and the Registries tab's rows, every control named for automation.
+// setup, and the Registries tab's cards, every control named for automation.
 // It reads the model and decides none of its rules.
 #include "oa/ui/library/screen.hpp"
 
@@ -2615,12 +2615,12 @@ void add_registry_switch(
     tab_stop(building, building.detail.back());
 }
 
-/// Appends the key icon: a quiet square the pointer and the keys can rest
-/// on, with the signing-key mark centred on it. Its text is the fingerprints,
-/// one a line. Pressing it asks for nothing.
+/// Appends the key icon: the kit's key glyph in the icon square, so the
+/// pointer and the keys can rest on it. Its text is the fingerprints, one a
+/// line. Pressing it asks for nothing.
 ///
 /// @param[in,out] building the layout
-/// @param rect the square
+/// @param rect the square, state_icon_side on each side
 /// @param id its control's number
 /// @param name its control's name
 /// @param fingerprints the fingerprints, one a line
@@ -2633,35 +2633,27 @@ void add_key_button(
     std::string fingerprints,
     const kit::Rect& clip
 ) {
-    kit::ButtonLook look;
-    look.style = kit::ButtonStyle::quiet;
+    kit::ChipLook look;
+    look.text = std::move(fingerprints);
+    look.state = kit::ChipState::get;
     look.hovered = hovered(building, id);
-    look.held = held(building, id);
-    look.enabled = true;
+    look.icon = kit::StateIcon::key;
     const std::size_t before = building.list.controls.size();
-    kit::add_button(building.list, rect, look, id, unique_name(building, std::move(name)));
+    kit::add_chip(building.list, rect, look, id, unique_name(building, std::move(name)));
     building.list.items.back().clip = clip;
     move_controls(building.list, before, building.detail);
     building.detail.back().clip = clip;
     building.detail.back().group = controls::details_group;
-    building.detail.back().text = std::move(fingerprints);
     tab_stop(building, building.detail.back());
-    // The signing-key mark is 7 by 7, the magnifier's size.
-    constexpr int32_t mark_side = 7;
-    kit::add_mark(
-        building.list,
-        {rect.x + (rect.width - mark_side) / 2, rect.y + (rect.height - mark_side) / 2},
-        kit::Mark::key,
-        kit::colour::text
-    );
-    building.list.items.back().clip = clip;
 }
 
-/// Appends the Registries tab's parts, scrolled up by an offset: one row
-/// for each registry (its avatar, name, address, refresh time, subtitle,
-/// key icon, REFRESH and switch; REMOVE and ADD MIRROR… for one the player
-/// added), then the refusal in amber and the note under the list. Each
-/// control is in the details' scroll area.
+/// Appends the Registries tab's parts, scrolled up by an offset: one card
+/// for each registry (its avatar, heading, address, refresh time, description,
+/// subtitle, key icon, REFRESH and switch; REMOVE and ADD MIRROR… for one the
+/// player added, and a Built in pill for one that ships with the game), then
+/// the refusal in amber and the note under the last card. Each control is in
+/// the details' scroll area. The heading is the registry's title, or its
+/// short name when it has no title.
 ///
 /// @param[in,out] building the layout
 /// @param view the area, which clips them
@@ -2680,12 +2672,74 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
     for (std::size_t index = 0; index < registries.size(); ++index) {
         const Registry& registry = registries[index];
         const std::string word = registry_word(registry.id);
-        const int32_t line = cursor + metrics.row_padding;
+        if (index > 0)
+            cursor += metrics.card_gap;
+        const int32_t card_top = cursor;
+        const int32_t inset = metrics.card_inset;
+        const int32_t inner_left = left + inset;
+        const int32_t inner_right = left + width - inset;
+        const int32_t band_top = card_top + inset;
         const int32_t side = metrics.list_row_badge;
-        add_item(building.list, kit::Role::rule, {left, cursor, width, metrics.hairline}, view)
-            .colour = kit::colour::rule;
+        const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
+        // The right cluster, from the switch inward: REFRESH, the refresh
+        // mark while this registry is being asked or its check is showing,
+        // and the key icon. The key, REFRESH and the switch share the band's
+        // top, so Tab reads them left to right and then the buttons below.
+        // A wrapped heading grows under that band.
+        const uint16_t check_ms =
+            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
+        const bool show_mark = registry.refreshing || check_ms > 0;
+        int32_t cluster = inner_right;
+        cluster -= metrics.switch_width;
+        const kit::Rect toggle{
+            cluster,
+            band_top,
+            metrics.switch_width,
+            metrics.regular_line,
+        };
+        cluster -= metrics.button_gap;
+        const std::string_view refresh_caption = shown(library.text, words::registry_refresh);
+        const int32_t refresh_width = button_width(building, refresh_caption);
+        cluster -= refresh_width;
+        const kit::Rect refresh_rect{cluster, band_top, refresh_width, metrics.button_height};
+        cluster -= metrics.button_gap;
+        kit::Rect turning_rect{};
+        if (show_mark) {
+            cluster -= metrics.button_height;
+            turning_rect = {cluster, band_top, metrics.button_height, metrics.button_height};
+            cluster -= metrics.button_gap;
+        }
+        cluster -= metrics.state_icon_side;
+        const kit::Rect key_rect{
+            cluster, band_top, metrics.state_icon_side, metrics.state_icon_side
+        };
+        const int32_t text_left = inner_left + side + metrics.list_row_gap;
+        const int32_t title_right = cluster - metrics.label_gap;
+        const int32_t title_width = title_right - text_left;
+        const std::string_view heading = registry.title.empty() ? std::string_view{registry.name}
+                                                                : std::string_view{registry.title};
+        std::vector<std::string> heading_lines;
+        if (title_width > 0)
+            heading_lines = wrapped(
+                building, kit::FontRole::regular, heading, std::max(title_width, int32_t{1}), 0
+            );
+        const int32_t heading_height =
+            static_cast<int32_t>(std::max(heading_lines.size(), std::size_t{1})) *
+            metrics.regular_line;
+        const int32_t header_height = std::max(title_band, std::max(heading_height, side));
+        const int32_t lines_width = std::max(inner_right - text_left, int32_t{0});
+        std::vector<std::string> description_lines;
+        if (!registry.description.empty() && lines_width > 0)
+            description_lines = wrapped(
+                building,
+                kit::FontRole::small,
+                registry.description,
+                std::max(lines_width, int32_t{1}),
+                0
+            );
 
-        const kit::Rect avatar{left, line + 1, side, side};
+        const std::size_t card_at = building.list.items.size();
+        const kit::Rect avatar{inner_left, band_top, side, side};
         add_item(building.list, kit::Role::fill, avatar, view).colour =
             registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
         add_text(
@@ -2697,69 +2751,18 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             kit::colour::on_accent,
             view
         );
-
-        const int32_t text_left = left + side + metrics.list_row_gap;
-        const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
-        // The right cluster, from the switch inward: REFRESH, the refresh
-        // mark while this registry is being asked or its check is showing,
-        // and the key icon.
-        const uint16_t check_ms =
-            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
-        const bool show_mark = registry.refreshing || check_ms > 0;
-        int32_t cluster = left + width;
-        cluster -= metrics.switch_width;
-        const kit::Rect toggle{
-            cluster,
-            line + (title_band - metrics.regular_line) / 2,
-            metrics.switch_width,
-            metrics.regular_line,
-        };
-        cluster -= metrics.button_gap;
-        const std::string_view refresh_caption = shown(library.text, words::registry_refresh);
-        const int32_t refresh_width = button_width(building, refresh_caption);
-        cluster -= refresh_width;
-        const kit::Rect refresh_rect{cluster, line, refresh_width, metrics.button_height};
-        cluster -= metrics.button_gap;
-        kit::Rect turning_rect{};
-        if (show_mark) {
-            cluster -= metrics.button_height;
-            turning_rect = {cluster, line, metrics.button_height, metrics.button_height};
-            cluster -= metrics.button_gap;
-        }
-        cluster -= metrics.button_height;
-        const kit::Rect key_rect{cluster, line, metrics.button_height, metrics.button_height};
-        const int32_t title_right = cluster - metrics.label_gap;
-        const int32_t title_width = std::max(title_right - text_left, int32_t{0});
-        int32_t chip_span = 0;
-        kit::ChipLook chip;
-        if (registry.built_in) {
-            chip.text = std::string(shown(library.text, words::registry_built_in));
-            chip.state = kit::ChipState::installed;
-            chip_span = kit::chip_width(*building.fonts, chip) + metrics.list_row_gap;
-        }
-        const int32_t name_room = std::max(title_width - chip_span, int32_t{0});
-        const std::string name = cut(building, kit::FontRole::regular, registry.name, name_room);
-        const int32_t name_width = width_of(building, kit::FontRole::regular, name);
-        const int32_t name_top = line + (title_band - metrics.regular_line) / 2;
-        add_text(
-            building,
-            kit::FontRole::regular,
-            name,
-            {text_left, name_top, std::max(name_width, int32_t{0}), metrics.regular_line},
-            kit::Align::left,
-            kit::colour::text,
-            view
-        );
-        if (registry.built_in && name_width + chip_span <= title_width) {
-            const int32_t chip_width = chip_span - metrics.list_row_gap;
-            const kit::Rect chip_rect{
-                text_left + name_width + metrics.list_row_gap,
-                name_top + (metrics.regular_line - metrics.chip_height) / 2,
-                chip_width,
-                metrics.chip_height,
-            };
-            kit::add_chip(building.list, chip_rect, chip, kit::no_control, {});
-            building.list.items.back().clip = view;
+        int32_t heading_top = band_top;
+        for (const std::string& heading_line : heading_lines) {
+            add_text(
+                building,
+                kit::FontRole::regular,
+                heading_line,
+                {text_left, heading_top, std::max(title_width, int32_t{0}), metrics.regular_line},
+                kit::Align::left,
+                kit::colour::text,
+                view
+            );
+            heading_top += metrics.regular_line;
         }
         std::string fingerprints;
         for (const SigningKey& signing_key : registry.keys) {
@@ -2807,9 +2810,8 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             view
         );
 
-        const int32_t lines_width = std::max(left + width - text_left, int32_t{0});
-        int32_t facts_top = line + title_band + metrics.hint_gap;
-        int32_t bottom = line + title_band;
+        int32_t facts_top = band_top + header_height + metrics.hint_gap;
+        int32_t bottom = band_top + header_height;
         const auto place_line = [&](std::string full, kit::ControlId id, std::string control_name) {
             if (full.empty() || lines_width <= 0)
                 return;
@@ -2845,6 +2847,22 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             controls::first_registry_refreshed + static_cast<kit::ControlId>(index),
             named("registry." + word + ".refreshed")
         );
+        if (!description_lines.empty()) {
+            for (const std::string& description_line : description_lines) {
+                add_text(
+                    building,
+                    kit::FontRole::small,
+                    description_line,
+                    {text_left, facts_top, lines_width, metrics.small_line},
+                    kit::Align::left,
+                    kit::colour::text,
+                    view
+                );
+                facts_top += metrics.small_line;
+            }
+            bottom = facts_top;
+            facts_top += metrics.hint_gap;
+        }
         const std::string subtitle = registry_subtitle(registry, library.text);
         if (!subtitle.empty() && lines_width > 0) {
             add_text(
@@ -2876,7 +2894,7 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             );
             const int32_t mirror_left = text_left + remove_width + metrics.button_gap;
             if (library.inputs.in_match) {
-                const int32_t lock_width = std::max(left + width - mirror_left, int32_t{0});
+                const int32_t lock_width = std::max(inner_right - mirror_left, int32_t{0});
                 if (lock_width > 0) {
                     kit::LockLook look;
                     look.text = std::string(shown(library.text, words::registry_game_lock));
@@ -2907,9 +2925,32 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
                 );
             }
             bottom = buttons_top + metrics.button_height;
+        } else {
+            kit::PillLook pill;
+            pill.text = std::string(shown(library.text, words::registry_built_in));
+            pill.state = kit::PillState::neutral;
+            const int32_t pill_w = kit::pill_width(*building.fonts, pill);
+            const int32_t pill_top = bottom + metrics.hint_gap;
+            const int32_t pill_right = toggle.x + toggle.width;
+            kit::add_pill(
+                building.list,
+                {pill_right - pill_w, pill_top, pill_w, kit::pill_height()},
+                pill,
+                kit::no_control,
+                {}
+            );
+            building.list.items.back().clip = view;
+            bottom = pill_top + kit::pill_height();
         }
-        bottom = std::max(bottom, avatar.y + avatar.height);
-        cursor = bottom + metrics.row_padding;
+        const kit::Rect card{left, card_top, width, bottom + inset - card_top};
+        const std::size_t drawn = building.list.items.size();
+        add_tile_face(building, card, view);
+        std::rotate(
+            building.list.items.begin() + static_cast<std::ptrdiff_t>(card_at),
+            building.list.items.begin() + static_cast<std::ptrdiff_t>(drawn),
+            building.list.items.end()
+        );
+        cursor = card.y + card.height;
     }
 
     cursor += metrics.label_gap;
@@ -2974,7 +3015,7 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
     return extent ? extent->bottom - first : 0;
 }
 
-/// Appends the Registries tab: its rows in an area that scrolls when they
+/// Appends the Registries tab: its cards in an area that scrolls when they
 /// are taller than it, with a column for the scroll bar at its right.
 ///
 /// @param[in,out] building the layout
