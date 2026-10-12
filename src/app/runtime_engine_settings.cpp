@@ -1141,7 +1141,13 @@ std::optional<std::string> Runtime::save_engine_settings(
     return EngineSettingsState::flush(*this);
 }
 
-void show_system_openers(settings::Dialog& dialog);
+std::optional<oa::platform::file_types::OpenerReport> show_system_openers(settings::Dialog& dialog);
+
+std::string kept_opener_hint_for(
+    oa::platform::file_types::TypeSet asked, oa::platform::file_types::TypeSet open
+);
+
+oa::platform::file_types::TypeSet file_type_set(const settings::EngineSettings& settings);
 
 settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind) {
     EngineSettingsState::take_live_settings(*this);
@@ -1274,7 +1280,19 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     // On macOS the four switches show what the system reports now, not the
     // stored preference. A start does not change an opener; only a switch
     // that moves, at OK, does.
-    show_system_openers(dialog);
+    if (const std::optional<oa::platform::file_types::OpenerReport> report =
+            show_system_openers(dialog)) {
+        if (state.file_type_asked_known && report->error.empty()) {
+            const oa::platform::file_types::TypeSet asked{
+                state.file_type_asked_oamod,
+                state.file_type_asked_oalang,
+                state.file_type_asked_oamap,
+                state.file_type_asked_oareg
+            };
+            state.file_type_kept_hint = kept_opener_hint_for(asked, report->open);
+        }
+        dialog.file_type_kept_hint = state.file_type_kept_hint;
+    }
     return dialog;
 }
 
@@ -1301,18 +1319,40 @@ oa::platform::file_types::TypeSet file_type_set(const settings::EngineSettings& 
     return enabled;
 }
 
+/// The sentence for types OK asked off that this copy still opens. Empty when
+/// none stayed.
+///
+/// @param asked what OK asked
+/// @param open what the system reports now
+/// @return the hint; empty when nothing stayed
+std::string kept_opener_hint_for(
+    const oa::platform::file_types::TypeSet asked, const oa::platform::file_types::TypeSet open
+) {
+    const std::vector<std::string> stayed =
+        oa::platform::file_types::extensions_still_opened(asked, open);
+    std::vector<std::string_view> dotted;
+    dotted.reserve(stayed.size());
+    for (const std::string& extension : stayed)
+        dotted.emplace_back(extension);
+    return settings::kept_opener_hint(dotted);
+}
+
 /// Sets the four switches from what the system reports, where a switch is the
 /// default opener. A question that fails leaves that switch as the dialog
-/// already shows it and is logged.
+/// already shows it and is logged. The hint under File Type Registration
+/// names a type this copy still opens that OK asked off, and clears when the
+/// read-back matches what was asked.
 ///
 /// @param dialog the dialog just opened
-void show_system_openers(settings::Dialog& dialog) {
+/// @return what the system reported; nullopt where a switch is not the opener
+std::optional<oa::platform::file_types::OpenerReport>
+show_system_openers(settings::Dialog& dialog) {
     namespace file_types = oa::platform::file_types;
     if (!file_types::default_opener_is_a_setting() || !dialog.file_type_switches)
-        return;
+        return std::nullopt;
     const file_types::Handler application = file_types::running_application();
     if (application.bundle_id.empty())
-        return;
+        return std::nullopt;
     const file_types::OpenerReport report = file_types::reported_openers(
         file_types::system_handler_calls(), application.bundle_id, file_type_set(dialog.chosen)
     );
@@ -1326,6 +1366,7 @@ void show_system_openers(settings::Dialog& dialog) {
     show(&settings::EngineSettings::file_type_oalang, report.open.language);
     show(&settings::EngineSettings::file_type_oamap, report.open.map);
     show(&settings::EngineSettings::file_type_oareg, report.open.registry);
+    return report;
 }
 
 /// On macOS, a check, a snapshot and any other run that is not someone
@@ -1352,7 +1393,8 @@ bool openers_follow_ok(const Options& options) {
 ///
 /// @param opened the settings the dialog opened with
 /// @param chosen the settings OK is keeping
-void apply_chosen_file_types(
+/// @return true when macOS was asked and this copy is an application
+bool apply_chosen_file_types(
     const settings::EngineSettings& opened, const settings::EngineSettings& chosen
 ) {
     namespace file_types = oa::platform::file_types;
@@ -1368,28 +1410,33 @@ void apply_chosen_file_types(
         add(file_types::map_extension, opened.file_type_oamap, chosen.file_type_oamap);
         add(file_types::registry_extension, opened.file_type_oareg, chosen.file_type_oareg);
         if (count == 0)
-            return;
-        log_file_type_change(
-            file_types::apply_opener_changes(
-                file_types::system_handler_calls(),
-                file_types::running_application(),
-                std::span<const file_types::OpenerChange>(changes.data(), count)
-            )
+            return false;
+        const file_types::Registration done = file_types::apply_opener_changes(
+            file_types::system_handler_calls(),
+            file_types::running_application(),
+            std::span<const file_types::OpenerChange>(changes.data(), count)
         );
-        return;
+        log_file_type_change(done);
+        // A run that is not an application never asked the system, so it
+        // does not claim the opener stayed.
+        bool skipped = !done.supported;
+        for (const std::string& line : done.lines)
+            skipped = skipped || line.rfind("skipped:", 0) == 0;
+        return !skipped;
     }
     const auto executable = file_types::running_executable();
     if (!executable)
-        return;
+        return false;
     const file_types::TypeSet enabled = file_type_set(chosen);
     const auto done = file_types::register_file_types(*executable, window_icon_png(), {}, enabled);
     log_file_type_change(done);
     if (!done.supported || !done.error.empty())
-        return;
+        return false;
     for (const auto& line : done.lines)
         if (line.rfind("skipped:", 0) == 0)
-            return;
+            return false;
     log_file_type_change(file_types::withdraw_file_types(enabled.complement()));
+    return false;
 }
 
 settings::Dialog* Runtime::engine_settings_dialog() {
@@ -1489,8 +1536,31 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         apply_engine_settings(chosen);
         // The registration follows the settings OK kept, at once. Cancel
         // never reaches here, and a switch moved before OK does not either.
-        if (file_types_changed && openers_follow_ok(options_))
-            apply_chosen_file_types(dialog->opened, chosen);
+        if (file_types_changed && openers_follow_ok(options_) &&
+            apply_chosen_file_types(dialog->opened, chosen)) {
+            state.file_type_asked_known = true;
+            state.file_type_asked_oamod = chosen.file_type_oamod;
+            state.file_type_asked_oamap = chosen.file_type_oamap;
+            state.file_type_asked_oalang = chosen.file_type_oalang;
+            state.file_type_asked_oareg = chosen.file_type_oareg;
+            const oa::platform::file_types::Handler application =
+                oa::platform::file_types::running_application();
+            const oa::platform::file_types::OpenerReport report =
+                oa::platform::file_types::reported_openers(
+                    oa::platform::file_types::system_handler_calls(),
+                    application.bundle_id,
+                    file_type_set(chosen)
+                );
+            if (report.error.empty()) {
+                const oa::platform::file_types::TypeSet asked{
+                    chosen.file_type_oamod,
+                    chosen.file_type_oalang,
+                    chosen.file_type_oamap,
+                    chosen.file_type_oareg
+                };
+                state.file_type_kept_hint = kept_opener_hint_for(asked, report.open);
+            }
+        }
         // Changed registered keys join the values write_settings keeps, and
         // their owners are told once the flush succeeds.
         const std::vector<settings::RegisteredWrite> registered =

@@ -530,6 +530,7 @@ inline constexpr std::string_view interface_words[] = {
     "a zoom keeps the ground under the pointer.",
     "add the game files again.",
     "after the next order or selection.",
+    "and",
     "and scales them down for smoother edges.",
     "anything until you say so.",
     "are drawn. Auto suits the window's height.",
@@ -555,6 +556,10 @@ inline constexpr std::string_view interface_words[] = {
     "just now",
     "kB",
     "list from {age}",
+    "macOS kept Open Annihilation as the opener of {types}. To choose another, select a {types} "
+    "file in Finder, then File › Get Info › Open with › Change All.",
+    "macOS kept Open Annihilation as the opener of {types}. To choose another, select one of them "
+    "in Finder, then File › Get Info › Open with › Change All.",
     "map's edges, however the view moves.",
     "mods",
     "ms",

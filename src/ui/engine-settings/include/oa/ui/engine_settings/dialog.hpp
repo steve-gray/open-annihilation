@@ -822,6 +822,11 @@ struct Dialog {
     /// it afterwards to draw the other layout. OK reads the settings either
     /// way.
     bool file_type_switches{file_types_switchable};
+    /// File Type Registration's hint when macOS kept this copy as the opener
+    /// of a type OK asked it to hand back. Empty shows the usual hint. The
+    /// host sets it for this run, and clears it when every switch matches
+    /// what was asked.
+    std::string file_type_kept_hint{};
     /// The Game files section's summary: "3.1c · Core Contingency · Battle Tactics · music · 1 mod".
     std::string game_files_summary{};
     /// Its sizes line: what the game files use and what is free on the device.
@@ -1385,5 +1390,14 @@ void draw_oa_mark(
     int32_t side,
     const oa::ui::frontend_renderer::RgbaPicture& icon
 );
+
+/// The sentence File Type Registration shows when macOS kept this copy as the
+/// opener of each extension in `dotted` (each with its dot, in switch order).
+/// One type names that type twice. Several name each type, then say to select
+/// one of them. Empty when `dotted` is empty.
+///
+/// @param dotted the extensions that stayed, each with its dot
+/// @return the sentence, in the language shown
+[[nodiscard]] std::string kept_opener_hint(std::span<const std::string_view> dotted);
 
 } // namespace oa::ui::engine_settings

@@ -320,6 +320,20 @@ OpenerReport reported_openers(
     return report;
 }
 
+std::vector<std::string> extensions_still_opened(const TypeSet asked, const TypeSet open) {
+    std::vector<std::string> stayed;
+    const auto add = [&](const bool asked_on, const bool now_on, const std::string_view extension) {
+        if (!asked_on && now_on)
+            stayed.emplace_back(std::string(".") + std::string(extension));
+    };
+    // The order Settings lists the switches.
+    add(asked.mod, open.mod, mod_extension);
+    add(asked.map, open.map, map_extension);
+    add(asked.language, open.language, language_extension);
+    add(asked.registry, open.registry, registry_extension);
+    return stayed;
+}
+
 Registration apply_opener_changes(
     const HandlerCalls& calls,
     const Handler& application,

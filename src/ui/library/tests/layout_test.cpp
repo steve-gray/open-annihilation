@@ -2669,16 +2669,18 @@ void map_previews_fit_their_boxes() {
     lib::set_tab(library, lib::Tab::updates);
     lib::set_filter(library, lib::Filter::all);
     lib::set_query(library, "desert pack");
+    const kit::DisplayList desert_update_rows = laid_out(library, {}, compact);
     const kit::ListRowLook* desert_updates =
-        row_look_named(laid_out(library, {}, compact), "library.row.example-mods.desert-pack");
+        row_look_named(desert_update_rows, "library.row.example-mods.desert-pack");
     OA_CHECK(desert_updates != nullptr);
     if (desert_updates != nullptr) {
         OA_CHECK(!renderer::picture_drawable(desert_updates->badge));
         OA_CHECK(desert_updates->badge_text == "DP");
     }
     lib::set_query(library, "core map");
+    const kit::DisplayList core_update_rows = laid_out(library, {}, compact);
     const kit::ListRowLook* core_updates =
-        row_look_named(laid_out(library, {}, compact), "library.row.fixture-core.core-maps");
+        row_look_named(core_update_rows, "library.row.fixture-core.core-maps");
     OA_CHECK(core_updates != nullptr && core_updates->badge.width == 16);
 
     const kit::Frame large = fixture::frames()[2].frame;

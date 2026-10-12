@@ -128,10 +128,11 @@ precedence = "override"
 SPDX-FileCopyrightText = "Contributor Covenant contributors <https://www.contributor-covenant.org>"
 SPDX-License-Identifier = "CC-BY-4.0"
 
-# The Open Annihilation branding: the icon and the settings icon, from the
-# Open Annihilation branding repository, the icons tools/make_icons.py
-# makes from the icon, which the builds put in the game, and the settings
-# icon at 256 pixels, which the game embeds for its settings buttons. All
+# The Open Annihilation branding: the icon, the settings icon and the mods
+# icon, from the Open Annihilation branding repository, the icons
+# tools/make_icons.py makes from the icon, which the builds put in the game,
+# and the settings and mods icons at 256 pixels, which the game embeds for
+# its settings and Library buttons. All
 # rights reserved: no licence to use, copy, modify or distribute them is
 # granted, under the project's licence or otherwise, without the holder's
 # prior written permission
@@ -140,6 +141,8 @@ SPDX-License-Identifier = "CC-BY-4.0"
 path = [
     "branding/open-annihilation-256.png",
     "branding/open-annihilation-icon.png",
+    "branding/open-annihilation-mods-256.png",
+    "branding/open-annihilation-mods-icon.png",
     "branding/open-annihilation-settings-256.png",
     "branding/open-annihilation-settings-icon.png",
     "branding/open-annihilation.icns",

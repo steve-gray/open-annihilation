@@ -97,6 +97,16 @@ struct Runtime::EngineSettingsState {
     /// The section the dialog showed when it last closed; it opens there,
     /// and on its first section, Controls, the first time.
     oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::controls};
+    /// What OK last asked of the four file-type switches, on a Mac. The
+    /// hint under File Type Registration names a type this copy still opens
+    /// that was asked off, until a later opening's read-back matches this.
+    bool file_type_asked_known{};
+    bool file_type_asked_oamod{};
+    bool file_type_asked_oamap{};
+    bool file_type_asked_oalang{};
+    bool file_type_asked_oareg{};
+    /// That hint, kept for this run. Empty once every switch matches.
+    std::string file_type_kept_hint{};
     std::optional<oa::ui::engine_settings::DialogFonts> fonts; ///< loaded on first use
     bool fonts_missing{}; ///< loading the fonts failed; they are not tried again
     /// The app icon, the plates alone: the window icon's visible part,

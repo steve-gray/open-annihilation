@@ -76,6 +76,14 @@ at the size that source produces rather than the empty well shown while a
 picture is still missing. Its catalogue is served by the test fixture, and
 its Maps folder, data folder and preferences stay in the build tree.
 
+`native-map-pack-lists` (`--check-map-pack-lists`) installs one map pack
+from the Library during the run and requires its fitting map in the
+skirmish list and the battle room's map list the next time each is shown,
+including when the skirmish list was already open. The pack's other map
+stays out of the base game's lists, then appears under a local mod when
+its files fit that mod and drops out again when they do not. Uninstalling
+the pack removes both maps. The check serves the pack itself.
+
 Every native check names its preferences file with `--preferences-file`, so
 that it never reads or writes the player's own, nor the renderer records
 the game keeps beside it, which with a named file live in memory for the
