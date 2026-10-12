@@ -224,7 +224,7 @@ grow to make room; at every size class the mark fits under the icon.
 When a mark shows, the row's read text gains " · Open Annihilation" or
 " · Cavedog Entertainment". Its automation name does not change.
 
-![Languages: the fixture's Portugues (Brasil), author OA team, installed from the built-in registry, with the OA badge under its check.](images/library/library-languages-compact.png)
+![Languages: the languages built into the game lead the list, each marked Built in, then the packs. Polski is the language in use. Portugues (Brasil), author OA team, is installed from the built-in registry, with the OA badge under its check.](images/library/library-languages-compact.png)
 
 A GET or UPDATE that cannot act has its icon dimmed and takes no press,
 and the details say why:
@@ -328,6 +328,8 @@ back button follow whichever of those is showing.
   **PLAY NOW** for an installed mod you are not playing, which switches to
   it, or **SWITCH OFF** in its place for the mod you are playing, which
   goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod));
+  **USE NOW** for a built-in language, or an installed language pack, that
+  is not the one the game is showing ([choosing a language](#choosing-a-language));
   **ROLL BACK** while an earlier copy is kept
   ([rolling back](#rolling-back)); **UNINSTALL** and **OPEN FOLDER** for an
   installed package ([uninstalling](#uninstalling)); and **HOMEPAGE**, which
@@ -390,6 +392,28 @@ no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
 question and follows that same path back to the base game. It is greyed in
 the same places, and resting on it shows the same note.
 
+## Choosing a language
+
+The Languages list starts with the languages built into the game, in the
+order Settings › Language lists them above its packs. Each row names the
+language in itself, and in English underneath when that name differs.
+English's two names are the same, so its row shows the one. The row is
+marked **Built in**. It has no size and no download count. All and
+Installed show these rows; New and Updates do not. The tab's count and
+the filters' counts leave them out, as Mods leaves out the base game.
+Search finds one by its name in itself, by its name in English, or by
+its tag. Its details say "Built into the game", and they never offer
+GET, UNINSTALL or OPEN FOLDER.
+
+**USE NOW**, on a built-in language or an installed language pack that is
+not the one the game is showing, switches to it in the same way as
+choosing it in Settings › Language: the choice is saved, and every screen
+is drawn again in that language. The Library stays open. The language in
+use is marked **In use**, in place of USE NOW. A language pack that is
+listed and not yet installed keeps **GET**, and offers USE NOW once it
+is installed. The Active tab's LANGUAGE card still names the language in
+use as it did.
+
 Both change the mod only from the main menu: the Library shows only there,
 and a game keeps the mod it started with. While `--mod-dir` or
 `--base-game` chose the run's mod, both are greyed and the details say "The
@@ -442,8 +466,9 @@ installed before. Then:
   catalogue has no row for is decided by the map's files. One that does
   not fit is left out of those two lists
   ([map packs](maps/README.md));
-- **a language pack** goes into your Languages folder, and Settings ›
-  Language offers it at once ([languages](languages.md)).
+- **a language pack** goes into your Languages folder. Its row offers
+  **USE NOW** at once, and Settings › Language offers it at once
+  ([languages](languages.md)).
 
 Whether a download asks you anything first depends on where it comes from
 and what you already have: [which downloads ask first](#which-downloads-ask-first).

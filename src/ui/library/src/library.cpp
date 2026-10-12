@@ -6,6 +6,7 @@
 // about the entries, and what the Active tab says of the player's setup.
 #include "oa/ui/library/library.hpp"
 
+#include "oa/data/languages.hpp"
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/ui/library/text.hpp"
 #include "oa/ui/library/uninstall.hpp"
@@ -17,6 +18,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -322,6 +324,87 @@ void ensure_base_game(Library& library) {
         place = library.entries.size() - 1;
     }
     settle_base_game(library, library.entries[*place]);
+}
+
+/// Tells whether a built-in language is the one the game shows.
+///
+/// A pack in use (`LanguageInUse::pack`) means none of them is. A tag names
+/// one directly. With no tag, an empty name is English, and any other name
+/// is that language's name in itself.
+///
+/// @param library the Library
+/// @param tag the language's BCP-47 tag
+/// @param endonym its name in itself
+/// @return true when that language is in use
+bool built_in_language_in_use(
+    const Library& library, std::string_view tag, std::string_view endonym
+) {
+    const LanguageInUse& shown = library.inputs.language;
+    if (!shown.pack.empty())
+        return false;
+    if (!shown.tag.empty())
+        return shown.tag == tag;
+    if (shown.name.empty())
+        return tag == data::languages::english().tag;
+    return shown.name == endonym;
+}
+
+/// Sets a built-in language entry: its name in itself and in English, in
+/// use or not, and with no package behind it.
+///
+/// @param library the Library
+/// @param language the language, one known_languages holds as built in
+/// @param[in,out] entry the entry
+void settle_built_in_language(
+    const Library& library, const data::languages::Language& language, Entry& entry
+) {
+    entry.listing = nullptr;
+    entry.installed = nullptr;
+    entry.update = nullptr;
+    entry.queued = nullptr;
+    entry.replaces_registry_name.clear();
+    entry.built_in = false;
+    entry.not_reviewed = false;
+    entry.registry_name.clear();
+    entry.blocked.clear();
+    entry.can_act = true;
+    entry.badge = nullptr;
+    entry.shown_name = std::string(language.endonym);
+    entry.shown_summary = language.english_name == language.endonym
+                              ? std::string{}
+                              : std::string(language.english_name);
+    entry.state = built_in_language_in_use(library, language.tag, language.endonym)
+                      ? State::playing
+                      : State::installed;
+}
+
+/// Makes sure each built-in, playable language has an entry, and settles it.
+///
+/// The list is the one Settings › Language shows above its packs:
+/// known_languages, kept where the source is built in and the language is
+/// playable. A package cannot take one of these ids.
+///
+/// @param[in,out] library the Library, its other entries already settled
+void ensure_built_in_languages(Library& library) {
+    const std::span<const data::languages::Language* const> languages =
+        data::languages::known_languages();
+    for (const data::languages::Language* language : languages) {
+        if (language == nullptr || language->source != data::languages::Source::built_in ||
+            !data::languages::playable(*language))
+            continue;
+        const EntryId id = built_in_language_id(language->tag);
+        std::optional<std::size_t> place;
+        for (std::size_t index = 0; index < library.entries.size(); ++index)
+            if (library.entries[index].id == id)
+                place = index;
+        if (!place) {
+            Entry added;
+            added.id = id;
+            library.entries.push_back(std::move(added));
+            place = library.entries.size() - 1;
+        }
+        settle_built_in_language(library, *language, library.entries[*place]);
+    }
 }
 
 /// Makes the selection one of the visible entries.
@@ -687,6 +770,7 @@ void refresh(Library& library, Inputs inputs) {
         }
     }
     ensure_base_game(library);
+    ensure_built_in_languages(library);
     recompute(library);
 }
 
@@ -770,6 +854,8 @@ const Entry* selected_entry(const Library& library) {
 }
 
 std::string_view entry_name(const Entry& entry) {
+    if (is_built_in_language(entry.id))
+        return entry.shown_name;
     if (is_base_game(entry.id))
         return entry.shown_name.empty() ? words::base_game_name
                                         : std::string_view(entry.shown_name);
@@ -781,6 +867,8 @@ std::string_view entry_name(const Entry& entry) {
 }
 
 std::string_view entry_summary(const Entry& entry) {
+    if (is_built_in_language(entry.id))
+        return entry.shown_summary;
     if (is_base_game(entry.id))
         return entry.shown_summary.empty() ? words::base_game_summary
                                            : std::string_view(entry.shown_summary);
@@ -808,7 +896,8 @@ std::size_t filter_count(const Library& library, Filter filter) {
     const std::vector<bool> kept = kept_by_filter(library, filter);
     std::size_t packages = 0;
     for (std::size_t index = 0; index < kept.size(); ++index)
-        if (kept[index] && !is_base_game(library.entries[index].id))
+        if (kept[index] && !is_base_game(library.entries[index].id) &&
+            !is_built_in_language(library.entries[index].id))
             ++packages;
     return packages;
 }
@@ -1001,6 +1090,13 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
             add(Action::play_now, can_switch(library));
         return buttons;
     }
+    // A built-in language is not a package. USE NOW switches to it; the one
+    // in use offers nothing, and neither is downloaded or uninstalled.
+    if (is_built_in_language(entry.id)) {
+        if (entry.state != State::playing)
+            add(Action::use_now, true);
+        return buttons;
+    }
     if (entry.state == State::get || entry.state == State::update) {
         if (item != nullptr && pending(item->phase))
             add(Action::cancel, true);
@@ -1014,6 +1110,8 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     // game then plays none.
     if (installed != nullptr && entry.id.kind == Kind::mod)
         add(installed->playing ? Action::switch_off : Action::play_now, can_switch(library));
+    if (installed != nullptr && entry.id.kind == Kind::language && !installed->in_use)
+        add(Action::use_now, true);
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
     if (installed != nullptr) {
@@ -1036,7 +1134,7 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
     const Installed* installed = entry.installed;
     std::vector<Fact> list;
     // The base game is not a package: its details are its summary alone.
-    if (is_base_game(entry.id))
+    if (is_base_game(entry.id) || is_built_in_language(entry.id))
         return list;
 
     // Which version is installed and which is newest, and who made it: each
@@ -1193,6 +1291,8 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
 
 std::string status_line(const Library& library, const Entry& entry) {
     const TextHooks& text = library.text;
+    if (is_built_in_language(entry.id))
+        return std::string(shown(text, words::status_built_in_language));
     if (entry.queued != nullptr && entry.queued->phase != Phase::installed)
         return queue_status(*entry.queued, text);
     if (!entry.can_act)

@@ -4,12 +4,14 @@
 // The Library's search, run on the player's machine: which entries a tab's
 // filter and a search keep and how they rank, and the order of the visible
 // list.
+#include "oa/data/languages.hpp"
 #include "visible.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -90,6 +92,19 @@ struct Fields {
 /// @return its fields; a package no registry lists has only its name
 Fields fields_of(const Entry& entry) {
     Fields fields;
+    if (is_built_in_language(entry.id)) {
+        std::string name(entry_name(entry));
+        const std::string_view english = entry_summary(entry);
+        if (!english.empty()) {
+            name.push_back(' ');
+            name.append(english);
+        }
+        fields.name = folded(name);
+        const std::string_view tag = built_in_language_tag(entry.id);
+        if (!tag.empty())
+            fields.tags.push_back(folded(tag));
+        return fields;
+    }
     fields.name = folded(entry_name(entry));
     if (entry.listing == nullptr)
         return fields;
@@ -261,6 +276,18 @@ bool shows_base_game(const Library& library, Filter filter) {
     return library.tab == Tab::mods && (filter == Filter::all || filter == Filter::installed);
 }
 
+/// Tells whether a built-in language shows under a filter.
+///
+/// It shows on Languages, under All and Installed, and under no other tab
+/// or filter. New never holds it: it is not a package a registry published.
+///
+/// @param library the Library
+/// @param filter the filter
+/// @return true when the list keeps it
+bool shows_built_in_language(const Library& library, Filter filter) {
+    return library.tab == Tab::languages && (filter == Filter::all || filter == Filter::installed);
+}
+
 /// Tells whether the tab's filter offers the tag that is stored.
 ///
 /// Counts never apply the tag, and the chip row lists only the tags of this
@@ -325,6 +352,8 @@ std::vector<bool> kept_by_filter(const Library& library, Filter filter) {
             const Entry& entry = library.entries[index];
             if (is_base_game(entry.id))
                 kept[index] = shows_base_game(library, filter);
+            else if (is_built_in_language(entry.id))
+                kept[index] = shows_built_in_language(library, filter);
             else
                 kept[index] = tab_holds(library.tab, entry.id.kind) && state_kept(filter, entry);
         }
@@ -335,7 +364,7 @@ std::vector<bool> kept_by_filter(const Library& library, Filter filter) {
     std::vector<Candidate> dated;
     for (std::size_t index = 0; index < library.entries.size(); ++index) {
         const Entry& entry = library.entries[index];
-        if (is_base_game(entry.id))
+        if (is_base_game(entry.id) || is_built_in_language(entry.id))
             continue;
         if (tab_holds(library.tab, entry.id.kind) && !published_day(entry).empty())
             dated.push_back({index, {}, Group::get, folded(entry_name(entry))});
@@ -384,6 +413,38 @@ void update_visible(Library& library) {
     });
     if (base_game != kept.end() && base_game != kept.begin())
         std::rotate(kept.begin(), base_game, base_game + 1);
+    // Built-in languages lead the Languages list, in the order Settings ›
+    // Language gives them, whenever the filter and the search keep them.
+    if (library.tab == Tab::languages) {
+        std::vector<std::string> order;
+        const std::span<const data::languages::Language* const> languages =
+            data::languages::known_languages();
+        for (const data::languages::Language* language : languages) {
+            if (language == nullptr || language->source != data::languages::Source::built_in ||
+                !data::languages::playable(*language))
+                continue;
+            order.push_back(std::string(built_in_language_prefix) + std::string(language->tag));
+        }
+        std::vector<Candidate> leading;
+        std::vector<bool> taken(kept.size(), false);
+        for (const std::string& key : order) {
+            for (std::size_t place = 0; place < kept.size(); ++place) {
+                if (taken[place])
+                    continue;
+                if (library.entries[kept[place].index].id.key == key) {
+                    leading.push_back(kept[place]);
+                    taken[place] = true;
+                    break;
+                }
+            }
+        }
+        if (!leading.empty()) {
+            for (std::size_t place = 0; place < kept.size(); ++place)
+                if (!taken[place])
+                    leading.push_back(kept[place]);
+            kept = std::move(leading);
+        }
+    }
     library.visible.clear();
     for (const Candidate& candidate : kept)
         library.visible.push_back(candidate.index);
@@ -400,7 +461,8 @@ std::size_t tab_count(const Library& library, Tab tab) {
         return update_count(library);
     std::size_t count = 0;
     for (const Entry& entry : library.entries)
-        if (tab_holds(tab, entry.id.kind) && !is_base_game(entry.id))
+        if (tab_holds(tab, entry.id.kind) && !is_base_game(entry.id) &&
+            !is_built_in_language(entry.id))
             ++count;
     return count;
 }
