@@ -1436,9 +1436,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         result.check_unit_page_memory || result.check_side_column || result.check_match_bars ||
         !result.check_unit_pages.empty() || result.check_kill_board ||
         !result.check_unit_language.empty() || result.check_language_switch ||
-        result.check_language_registry || result.check_language_notice ||
-        result.check_first_run || result.check_patrol_reclaim ||
-        result.check_reclaim_cursor || result.check_build_preview ||
+        result.check_language_registry || result.check_language_notice || result.check_first_run ||
+        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
         result.check_pointer_interfaces || result.check_megamap_clicks ||
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||
