@@ -67,13 +67,16 @@ struct ScreenState {
     /// model's details closes the page too.
     bool details_page{};
     Drag drag{}; ///< a finger's press in a pane
+    /// How far the header's refresh icon has turned, in eighths of a turn,
+    /// 0 to 7. The screen advances it while the registries are being asked.
+    uint8_t refresh_turn{};
 };
 
 /// What one input asked of the host.
 struct ScreenResult {
-    /// What the host is to do: an entry's action, UPDATE ALL, SETTINGS… or
-    /// CLOSE. None when the screen did all of it itself, as it does for
-    /// browsing, DETAILS and the way back from the details page.
+    /// What the host is to do: an entry's action, UPDATE ALL, the header's
+    /// refresh or CLOSE. None when the screen did all of it itself, as it
+    /// does for browsing, DETAILS and the way back from the details page.
     std::optional<Action> action{};
     EntryId entry{}; ///< the entry an entry's action is for; empty for the others
     /// The registry a Registries-tab action names: ADD MIRROR…, REMOVE or its switch.
@@ -102,6 +105,8 @@ enum class ScreenCommand : uint8_t {
     /// The controller's X: the selected entry's first action when it is GET,
     /// UPDATE, CANCEL or RETRY and enabled.
     first_action,
+    /// F5 and the header's refresh icon, when a registry can be asked.
+    refresh,
 };
 
 /// Returns the Library's window size for a frame: its size class's dialog
@@ -204,8 +209,9 @@ ScreenResult library_pointer(
 
 /// Takes a key, as the kit names it.
 ///
-/// Tab and Shift+Tab follow the declared order: the tabs, the search, the
-/// filters, the list, the details' actions and the footer's buttons. The
+/// Tab and Shift+Tab follow the declared order: the header's refresh icon
+/// when it can be pressed, then the tabs, the search, the filters, the
+/// list, the details' actions and the footer's buttons. The
 /// arrows move by where controls sit. On the list, Up and Down move the
 /// selection and keep the focus there, but at its first or last entry the
 /// focus leaves it; Page Up and Page Down move by the rows shown, and Home

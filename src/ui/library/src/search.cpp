@@ -368,4 +368,20 @@ void update_visible(Library& library) {
         library.visible.push_back(candidate.index);
 }
 
+std::size_t tab_count(const Library& library, Tab tab) {
+    if (tab == Tab::registries)
+        return library.inputs.registries.size();
+    if (tab == Tab::active)
+        return 0;
+    // Updates counts the updates that can be installed, as the OA button's
+    // dot and UPDATE ALL do, not every package its filters can show.
+    if (tab == Tab::updates)
+        return update_count(library);
+    std::size_t count = 0;
+    for (const Entry& entry : library.entries)
+        if (tab_holds(tab, entry.id.kind) && !is_base_game(entry.id))
+            ++count;
+    return count;
+}
+
 } // namespace oa::ui::library

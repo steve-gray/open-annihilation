@@ -119,7 +119,7 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
     draw_line(
         canvas, FontRole::regular, look.second, second, Align::left, colour::hint, look.tracking
     );
-    const int32_t content_right = look.width - edge - compact_metrics.padding;
+    const int32_t content_right = look.width - edge - compact_metrics.padding - look.right_inset;
     const Rect version{
         content_right - look.version_width, header_top, look.version_width, header_height
     };

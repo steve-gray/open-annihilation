@@ -238,7 +238,7 @@ struct Inputs {
     /// The command line chose this run's mod (--mod-dir or --base-game):
     /// PLAY NOW and SWITCH OFF are off, and a mod's details say why.
     bool mod_from_command_line{};
-    bool can_check{}; ///< a registry is on that CHECK NOW can ask for its list
+    bool can_check{}; ///< a registry is on that the refresh icon can ask for its list
     bool checking{};  ///< the registries are being asked for their lists now
     /// The mod being played; none when the game plays no mod. An installed
     /// mod marked playing is shown in its place.
@@ -510,6 +510,17 @@ void close_details(Library& library);
 /// @return how many entries it keeps
 [[nodiscard]] std::size_t filter_count(const Library& library, Filter filter);
 
+/// Counts what a tab lists under All, before the tag and the search, whichever tab is open.
+///
+/// Mods, Maps and Languages count their kind. Updates counts the updates
+/// that can be installed (update_count). Active counts none. Registries
+/// counts the registries listed, not the packages.
+///
+/// @param library the Library
+/// @param tab the tab
+/// @return how many
+[[nodiscard]] std::size_t tab_count(const Library& library, Tab tab);
+
 /// Names a filter with its count, as the filter column shows it.
 ///
 /// @param library the Library
@@ -517,7 +528,7 @@ void close_details(Library& library);
 /// @return such as "Installed (4)", through the pattern filter_with_count
 [[nodiscard]] std::string filter_caption(const Library& library, Filter filter);
 
-/// Counts the updates that can be installed: the number on the Updates tab and the OA button.
+/// Counts the updates that can be installed, as UPDATE ALL acts on them.
 ///
 /// @param library the Library
 /// @return how many UPDATE entries can act
@@ -612,7 +623,7 @@ enum class Action : uint8_t {
     homepage,
     details,
     back,
-    check_now, ///< the footer's: the registries are asked for their lists again
+    check_now, ///< the header's refresh icon: the registries are asked for their lists again
     settings,
     close,
     /// ADD REGISTRY… on the Registries tab. The host opens the add-registry question.
@@ -656,7 +667,7 @@ struct ActionButton {
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
 
-/// Tells whether the footer's CHECK NOW can be pressed: a registry is on
+/// Tells whether the header's refresh icon can be pressed: a registry is on
 /// that it can ask, none is being asked now, and no game is being played.
 ///
 /// @param library the Library

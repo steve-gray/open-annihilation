@@ -552,11 +552,13 @@ runtime goes).
   (`content::PictureCache`, with its own HTTP client and no install ID)
   for the rows the Library shows, never while a match runs. The host's
   destructor stops it and joins it within a second, a fetch included.
-- **The dot.** The main menu's OA button wears the kit's attention dot
-  (`kit::draw_oa_button`) while `library_update_count` is above 0: the
-  updates the Library's last model counts as installable, so the dot shows
-  from the first frame the cached catalogue offers one. With none the
-  button is drawn byte for byte as before.
+- **The dot and the count.** The main menu's OA button wears the kit's
+  attention dot (`kit::draw_oa_button`) while `library_update_count` is
+  above 0: the updates the Library's last model counts as installable, so
+  the dot shows from the first frame the cached catalogue offers one. Its
+  bottom-right badge is the number of mods that model lists (the Mods tab's
+  All), or a spinner while a fetch has not yet produced a list. With no
+  updates the button is that face and that badge.
 - **The actions.** OPEN FOLDER shows the package's folder
   (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
   both recorded in a run nobody watches. SETTINGS… opens Settings over the
@@ -600,10 +602,11 @@ runtime goes).
 - **The check.** `native-library` (`--check-library`,
   `runtime_library_check.cpp`) gives the Library a feed of made-up
   packages and no network, with its data and the player's folder in the
-  build tree, at 640x480 and 1920x1080: the button drawn as before with no
-  update, the Library opened on Active, its lines read and taking no
-  press, and closed, the dot and `oa.button`'s "Library · 2 updates" with
-  two, the Library on Active and its Updates tab on its two updates,
+  build tree, at 640x480 and 1920x1080: the button's count of the fixture's
+  four mods with no update (`oa.button` "Library · 4 mods"), the Library
+  opened on Active, its lines read and taking no press, and closed, the dot
+  and `oa.button`'s "Library · 4 mods · 2 updates" with two, the Library on
+  Active and its Updates tab on its two updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
   recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft
   restart, Settings over the Library and the Library over Settings, never

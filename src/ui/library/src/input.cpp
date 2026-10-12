@@ -661,7 +661,9 @@ ScreenResult activate(
         return open_page(library, state);
     case controls::back:
         return close_page(library, state);
-    case controls::check_now:
+    case controls::refresh:
+        if (!can_check_now(library))
+            return {};
         result.action = Action::check_now;
         return result;
     case controls::settings:
@@ -1169,6 +1171,14 @@ ScreenResult library_command(
         result.entry = entry->id;
         return result;
     }
+    case ScreenCommand::refresh:
+        if (!can_check_now(library))
+            return {};
+        {
+            ScreenResult asked;
+            asked.action = Action::check_now;
+            return asked;
+        }
     }
     return {};
 }

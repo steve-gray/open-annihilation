@@ -753,6 +753,34 @@ void add_search(
 
 // ---- Tabs ----
 
+/// Tells whether a tab draws its count.
+///
+/// @param look the tabs
+/// @param count the tab's count
+/// @return true when the count is drawn
+bool count_shown(const TabsLook& look, int32_t count) noexcept {
+    if (look.count_style == TabCountStyle::words)
+        return count >= 0;
+    return count > 0;
+}
+
+/// Returns the columns a drawn count takes after the caption.
+///
+/// @param fonts the fonts, or null to count a word-style count as no columns
+/// @param look the tabs
+/// @param count the count
+/// @return the width, in points; 0 when the count is not drawn
+int32_t shown_count_width(const Fonts* fonts, const TabsLook& look, int32_t count) {
+    if (!count_shown(look, count))
+        return 0;
+    if (look.count_style == TabCountStyle::words) {
+        if (fonts == nullptr)
+            return 0;
+        return text_width(*fonts, FontRole::small, std::to_string(count));
+    }
+    return count_width(fonts, count);
+}
+
 std::vector<Rect> tab_rects(const Fonts& fonts, const Rect& strip, const TabsLook& look) {
     std::vector<Rect> rects;
     rects.reserve(look.captions.size());
@@ -760,8 +788,9 @@ std::vector<Rect> tab_rects(const Fonts& fonts, const Rect& strip, const TabsLoo
     for (std::size_t index = 0; index < look.captions.size(); ++index) {
         int32_t width = 2 * kMetrics.tab_padding + caption_width(&fonts, look.captions[index]);
         const int32_t count = count_of(look, index);
-        if (count > 0)
-            width += kMetrics.tab_count_gap + count_width(&fonts, count);
+        const int32_t digits = shown_count_width(&fonts, look, count);
+        if (digits > 0)
+            width += kMetrics.tab_count_gap + digits;
         rects.push_back({left, strip.y, width, strip.height});
         left += width;
     }
@@ -792,7 +821,24 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look) {
             kMetrics.tab_tracking
         );
         const int32_t count = count_of(look, index);
-        if (count > 0) {
+        if (look.count_style == TabCountStyle::words) {
+            if (count >= 0) {
+                const std::string digits = std::to_string(count);
+                const int32_t digits_width = text_width(*canvas.fonts, FontRole::small, digits);
+                const Rect digits_box{
+                    tab.x + kMetrics.tab_padding + width + kMetrics.tab_count_gap,
+                    tab.y,
+                    digits_width,
+                    above_rule,
+                };
+                const bool amber =
+                    index < look.count_amber.size() && look.count_amber[index] != 0 && count > 0;
+                Colour ink = selected || hovered ? colour::text : colour::hint;
+                if (amber)
+                    ink = colour::lock;
+                line(canvas, FontRole::small, digits, digits_box, Align::left, ink);
+            }
+        } else if (count > 0) {
             const Rect pill{
                 tab.x + kMetrics.tab_padding + width + kMetrics.tab_count_gap,
                 tab.y + (above_rule - kMetrics.tab_count_height) / 2,
@@ -832,10 +878,15 @@ void add_tabs(
 
     const std::vector<Rect> rects = tab_rects(fonts, strip, look);
     for (std::size_t index = 0; index < rects.size(); ++index) {
-        std::string text = look.captions[index];
-        const int32_t count = count_of(look, index);
-        if (count > 0)
-            text += " " + std::to_string(count);
+        std::string text;
+        if (index < look.readings.size() && !look.readings[index].empty()) {
+            text = look.readings[index];
+        } else {
+            text = look.captions[index];
+            const int32_t count = count_of(look, index);
+            if (count > 0)
+                text += " " + std::to_string(count);
+        }
         add_control(
             list,
             rects[index],

@@ -34,6 +34,8 @@ inline constexpr std::string_view tab_updates_short = "Upd";
 inline constexpr std::string_view tab_registries = "Registries";
 /// Compact's short name, as Languages and Updates have.
 inline constexpr std::string_view tab_registries_short = "Reg";
+/// A tab and how many it lists under All, as the tab reads: "Mods 11".
+inline constexpr std::string_view tab_with_count = "{tab} {count}";
 inline constexpr std::string_view filter_all = "All";
 inline constexpr std::string_view filter_new = "New";
 inline constexpr std::string_view filter_installed = "Installed";
@@ -62,7 +64,9 @@ inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
 inline constexpr std::string_view action_back = "BACK";
-inline constexpr std::string_view action_check_now = "CHECK NOW";
+/// The header's refresh icon, and the same words while it is turning.
+inline constexpr std::string_view action_refresh = "Refresh";
+inline constexpr std::string_view action_refreshing = "Refreshing";
 inline constexpr std::string_view action_settings = "SETTINGS…";
 inline constexpr std::string_view action_close = "CLOSE";
 inline constexpr std::string_view action_uninstall = "UNINSTALL";
@@ -160,9 +164,8 @@ inline constexpr std::string_view age_just_now = "just now";
 inline constexpr std::string_view age_minutes = "{count} min ago";
 inline constexpr std::string_view age_hours = "{count} h ago";
 inline constexpr std::string_view age_days = "{count} days ago";
-inline constexpr std::string_view header_list_from = "list from {age}";
-inline constexpr std::string_view header_no_list = "no list yet";
-inline constexpr std::string_view header_offline = "{list} · offline";
+/// A registry row, when the last refresh found nothing usable and a list was kept.
+inline constexpr std::string_view registry_list_from = "list from {age}";
 
 // Versions.
 inline constexpr std::string_view version_with_revision = "{version} · rev {revision}";
@@ -303,8 +306,8 @@ inline constexpr std::string_view phase_installed = "installed";
 inline constexpr std::string_view title_library = "Library";
 /// The title's first words at Regular and Large; title_library follows them.
 inline constexpr std::string_view title_open_annihilation = "Open Annihilation";
-/// The header's right at Regular and Large: this build's version, then header_age_text.
-inline constexpr std::string_view header_version_list = "{version} · {list}";
+/// Beside the header's refresh icon when the last refresh could not reach a registry.
+inline constexpr std::string_view offline_mark = "offline";
 
 // The search and the filters.
 inline constexpr std::string_view search_mods = "Search mods, authors, tags";
@@ -322,6 +325,9 @@ inline constexpr std::string_view more_menu = "MORE";
 /// How many updates the Updates tab shows.
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
+/// How many mods the main menu's Library button says the Mods tab lists.
+inline constexpr std::string_view mod_count_one = "{count} mod";
+inline constexpr std::string_view mod_count_many = "{count} mods";
 
 // The Active tab: the mod being played, the language in use and the
 // installed maps, under one heading each.
@@ -482,13 +488,6 @@ filled(const TextHooks& text, std::string_view pattern, std::initializer_list<Pl
 /// @param text how texts are looked up
 /// @return the age, such as "4 min ago"
 [[nodiscard]] std::string age_text(int64_t seconds, const TextHooks& text = {});
-
-/// Writes the header's note on the package list: how old it is, and whether the last fetch failed.
-///
-/// @param inputs the inputs
-/// @param text how texts are looked up
-/// @return "list from 4 min ago", "no list yet", or either with " · offline"
-[[nodiscard]] std::string header_age_text(const Inputs& inputs, const TextHooks& text = {});
 
 /// Writes a rules hash's first four bytes as two groups of hexadecimal digits.
 ///

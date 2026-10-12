@@ -723,25 +723,32 @@ std::string_view library_word(void* /*context*/, std::string_view english) {
     return oa::data::languages::interface_text(english);
 }
 
-/// Returns the main menu's OA button's text for automation: "Library", or
-/// "Library · 1 update" and "Library · N updates" while updates wait, in
-/// the language shown.
+/// Returns the main menu's OA button's text for automation, in the language
+/// shown. While the mod count is final it is "Library · 1 mod" or
+/// "Library · N mods", and "Library · N mods · 1 update" or
+/// "Library · N mods · M updates" while updates wait. While the count is
+/// not final the mod count is left out: "Library", or "Library · 1 update"
+/// and "Library · N updates".
 ///
 /// @param updates the updates that wait (Runtime::library_update_count)
+/// @param mods_ready the mod count is the one the Mods tab's All will show
+/// @param mods that count
 /// @return the text
-std::string library_button_text(std::size_t updates) {
+std::string library_button_text(std::size_t updates, bool mods_ready, std::size_t mods) {
     namespace words = oa::ui::library::words;
     const oa::ui::library::TextHooks lookup{nullptr, library_word};
     std::string text(oa::ui::library::shown(lookup, words::title_library));
-    if (updates == 0)
-        return text;
-    const std::string count = std::to_string(updates);
-    text += " \u00B7 ";
-    text += oa::ui::library::filled(
-        lookup,
-        updates == 1 ? words::update_count_one : words::update_count_many,
-        {{"count", count}}
-    );
+    const auto join = [&](std::string_view pattern, std::string number) {
+        text += " \u00B7 ";
+        text += oa::ui::library::filled(lookup, pattern, {{"count", number}});
+    };
+    if (mods_ready)
+        join(mods == 1 ? words::mod_count_one : words::mod_count_many, std::to_string(mods));
+    if (updates != 0)
+        join(
+            updates == 1 ? words::update_count_one : words::update_count_many,
+            std::to_string(updates)
+        );
     return text;
 }
 
@@ -3571,9 +3578,10 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         controls.push_back(std::move(button));
     };
     // The OA button, on the main menu's picture or in the in-game menu's
-    // column. On the main menu it opens the Library, and says how many
-    // updates wait there; the Settings button beside it opens Settings. In
-    // the in-game menu the OA button opens Settings.
+    // column. On the main menu it opens the Library, and says how many mods
+    // it lists and how many updates wait; the Settings button beside it
+    // opens Settings. In the in-game menu the OA button opens Settings and
+    // its text stays empty.
     const std::string button_name = std::string(kAutomationPrefix) + "button";
     if (seen.match) {
         if (match_button_shown(runtime_))
@@ -3584,9 +3592,14 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
             );
     } else if (Runtime::EngineSettingsMenuHost::button_shown(runtime_)) {
         const auto square = Runtime::EngineSettingsMenuHost::button_rect(runtime_);
+        const kit::OaButtonMark library = Runtime::EngineSettingsMenuHost::library_mark(runtime_);
         add_button(
             button_name,
-            library_button_text(runtime_.library_update_count()),
+            library_button_text(
+                runtime_.library_update_count(),
+                library.corner == kit::OaButtonCorner::count,
+                library.count
+            ),
             {square.x, square.y, square.width, square.height}
         );
         const auto beside = Runtime::EngineSettingsMenuHost::settings_button_rect(runtime_);
