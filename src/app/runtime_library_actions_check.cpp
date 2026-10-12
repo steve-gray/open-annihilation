@@ -25,7 +25,7 @@
 // NOW leaving it and UPDATE queuing it, and one that keeps the rules is
 // queued at once; the built-in registry's whose rules change, or cannot be
 // known, are queued at once, their status lines and Rules facts saying so
-// before, and again each in turn, CHECK NOW offered once a registry can be
+// before, and again each in turn, the header's refresh icon offered once a registry can be
 // asked; and UPDATE ALL queues the built-in one at once and asks about the
 // added one only; then UNINSTALL: off for a map pack during a game, a notice
 // for the language pack in use and for the mod being played, each keeping
@@ -1270,23 +1270,34 @@ void Runtime::check_library_install() {
             "the Library does not say what Ember's update does"
         );
         {
-            // CHECK NOW is in the list's footer: Compact's details page goes
-            // back to the list first.
+            // The refresh icon is in the header. Compact's details page goes
+            // back to the list first. It stays disabled, and says so, while
+            // the registries are being asked.
             if (named("oa.library.back"))
                 click_named("oa.library.back");
-            const std::optional<AutomationControl> off = named("oa.library.check-now");
+            const std::optional<AutomationControl> off = named("oa.library.refresh");
             require(
-                off.has_value() && !off->enabled,
-                "the Library offers CHECK NOW with no registry to ask"
+                off.has_value() && !off->enabled && off->text == "Refresh",
+                "the Library offers refresh with no registry to ask"
             );
             fixture.inputs.can_check = true;
             ++fixture.generation;
             frames();
-            const std::optional<AutomationControl> on = named("oa.library.check-now");
+            const std::optional<AutomationControl> on = named("oa.library.refresh");
             require(
-                on.has_value() && on->enabled,
-                "the Library offers no CHECK NOW to ask the registries"
+                on.has_value() && on->enabled && on->text == "Refresh",
+                "the Library offers no refresh icon to ask the registries"
             );
+            fixture.inputs.checking = true;
+            ++fixture.generation;
+            frames();
+            const std::optional<AutomationControl> spinning = named("oa.library.refresh");
+            require(
+                spinning.has_value() && !spinning->enabled && spinning->text == "Refreshing",
+                "the refresh icon can be pressed, or does not say it is refreshing, while a "
+                "registry is being asked"
+            );
+            fixture.inputs.checking = false;
             fixture.inputs.can_check = false;
             ++fixture.generation;
             frames();

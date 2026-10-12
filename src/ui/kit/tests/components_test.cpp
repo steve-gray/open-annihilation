@@ -989,10 +989,36 @@ void a_menu_draws_a_divider_an_aside_and_a_greyed_row() {
     );
 }
 
+/// The refresh mark turns, stays visible while it is disabled and turning,
+/// and changes its face while the pointer is over it.
+void refresh_mark_turns() {
+    const auto draw = [](uint8_t turn, bool enabled, bool turning, bool hovered) {
+        kit::ButtonLook look;
+        look.mark = kit::ButtonMark::refresh;
+        look.style = kit::ButtonStyle::quiet;
+        look.enabled = enabled;
+        look.turning = turning;
+        look.turn = turn;
+        look.hovered = hovered;
+        renderer::Surface surface = black(40, 40);
+        kit::draw_button(canvas_on(surface), {8, 8, 17, 17}, look);
+        return surface;
+    };
+    const renderer::Surface rest = draw(0, true, false, false);
+    const renderer::Surface turned = draw(4, true, false, false);
+    OA_CHECK(rest.rgb != turned.rgb);
+    const renderer::Surface idle = draw(0, false, false, false);
+    const renderer::Surface spinning = draw(0, false, true, false);
+    OA_CHECK(idle.rgb != spinning.rgb);
+    const renderer::Surface hover = draw(0, true, false, true);
+    OA_CHECK(rest.rgb != hover.rgb);
+}
+
 } // namespace
 
 int main() {
     buttons_match_the_five_looks();
+    refresh_mark_turns();
     switch_levels_and_slider_match();
     choice_lock_and_scroll_match();
     a_menu_draws_a_divider_an_aside_and_a_greyed_row();
