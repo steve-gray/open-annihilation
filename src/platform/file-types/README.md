@@ -5,18 +5,21 @@ the user who runs it — a mod package (`.oamod`), a language pack
 (`.oalang`), a map pack (`.oamap`) and a registry file (`.oareg`) — with
 the game's icon on those files where the system takes one, so that opening
 one in the file manager starts the game with it. On Windows and Linux the
-game does this at run time, writing only what differs from what is there;
-macOS and iOS read it from the bundle's `Info.plist` instead
+game does this at run time, writing only what differs from what is there.
+macOS and iOS declare the types in the bundle's `Info.plist`
 ([src/app/Info.plist.in](../../app/Info.plist.in),
-[platforms/ios/Info.plist.in](../../../platforms/ios/Info.plist.in)), and
-nothing is done at run time there.
+[platforms/ios/Info.plist.in](../../../platforms/ios/Info.plist.in)). On
+macOS a switch in Settings chooses whether this copy is the default opener;
+a start never replaces a choice made in Finder. iOS does nothing at run
+time.
 
 `oa/platform/file_types.hpp` (namespace `oa::platform::file_types`):
 
 - `running_executable()` returns the program's path as the system would
   start it again: the module's file name on Windows, `/proc/self/exe` on
   Linux. It gives none on macOS and iOS, and none on Linux once the
-  executable was deleted or replaced since it started.
+  executable was deleted or replaced since it started. macOS names the
+  running bundle with `running_application()` instead.
 - `TypeSet` names which of the four a call acts on. Each is on unless the
   caller turns it off, so a call that passes none acts on all four.
   `complement()` is the types it does not hold.
@@ -39,13 +42,25 @@ nothing is done at run time there.
   it takes those types out of the package and the desktop entry and removes
   their mimetype icons, and removes the entry and the package once neither
   lists a type. The program's icon stays. A missing value is already
-  withdrawn. macOS and iOS withdraw nothing at run time.
+  withdrawn. macOS and iOS withdraw nothing at run time. On macOS the
+  switches call `apply_opener_changes`, which changes the default opener
+  and leaves the declaration.
 - The texts it writes: `desktop_entry`, `mime_package`,
   `desktop_exec_argument`, `open_command` and `default_icon`.
 - `file_types` names the four, each with its extension, MIME type, the name
   file managers show, its Windows program identifier and the MIME type it
   is a kind of (`application/zip` for the three packages, `text/plain` for
   `.oareg`).
+- `exported_content_types` names the same four as macOS does: the exported
+  type identifier, and the content type a switch that is off hands back to
+  (`public.zip-archive` for the three packages, `public.plain-text` for
+  `.oareg`).
+- `default_opener_is_a_setting()` is true on macOS. There the switches show
+  what `reported_openers` reads, and OK calls `apply_opener_changes` for
+  the switches that moved. `HandlerCalls` is the two questions that asks,
+  so a test can stand in for the system. `system_handler_calls()` is those
+  questions on macOS and nothing elsewhere. `running_application()` is this
+  copy when it is an application bundle.
 
 ## Windows
 
@@ -130,9 +145,39 @@ set removes the desktop entry and the MIME package the same way. The stamp
 rules are a write's: a file whose bytes change loses its stamp first, and
 a removed file loses it too.
 
+## macOS
+
+The bundle keeps the four declarations and their icons. A switch does not
+remove one. It chooses the default opener.
+
+| Switch | On | Off |
+|---|---|---|
+| `.oamod`, `.oalang`, `.oamap` | this copy opens that exported type | the default opener of `public.zip-archive` |
+| `.oareg` | this copy opens that exported type | the default opener of `public.plain-text` |
+
+On every macOS version both questions use
+`LSSetDefaultRoleHandlerForContentType` and
+`LSCopyDefaultRoleHandlerForContentType`. Those calls are deprecated and
+still answer at once; the deprecation warning is accepted only in
+`file_types_mac.mm`. After a change the opener is read back. A change that
+read does not show is logged (`the change did not take`) and is not
+counted as done. A switch shows on when the default opener's bundle
+identifier is this copy's. A question that fails is logged, that switch
+is left as it was, and the others are still asked.
+Nothing here runs at start: a choice made in Finder stays until a switch
+moves and OK is pressed. A copy that is not an application bundle asks
+nothing. iOS has no such questions, and System keeps the text row.
+
 ## Tests
 
-`platform-file-types` checks the texts on every system. Elsewhere than on
+`platform-file-types` checks the texts on every system, and the
+default-opener questions against a stand-in: a switch that is on asks for
+this copy and does not look up a zip or text opener, then reads the opener
+back; a switch that is off asks for that opener, sets it on the exported
+type and reads it back; a set the read does not show is logged and is not
+counted; a type that did not move is not asked, a failed question is
+reported and does not stop the others, and a system with no questions
+skips. Elsewhere than on
 Windows it registers into a scratch data folder, with three recording
 scripts standing in for the tools on a scratch `PATH`, given two minutes
 each so that a loaded machine never stops them: the five icon files, the
@@ -166,3 +211,7 @@ then removes the scratch key. `app-bundle-file-types`
   different folders take the files from each other at each start.
 - Nothing is removed when the game is removed; the installation pages say
   which keys and files to remove.
+- On macOS the declaration stays in the bundle after the game is removed,
+  until the bundle itself is removed. Off does not restore an opener that
+  was neither this copy nor the default opener of a zip or of plain text:
+  it hands the type to that default.

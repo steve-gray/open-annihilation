@@ -635,7 +635,9 @@ struct ActiveMap {
     /// Its minimap, which points into the Library's inputs until the next
     /// refresh; null while it has not been decoded.
     const MapPicture* preview{};
-    /// "From <pack>", the link that opens the pack on the Maps tab.
+    /// "From <pack>", the link under the description that opens the pack on
+    /// the Maps tab. Empty when the pack holds this map alone: the tile's
+    /// title is that link, and no From line is shown.
     std::string from{};
 };
 
@@ -692,7 +694,8 @@ struct ActiveSetup {
 /// every map of every installed pack, ordered by title and then by the
 /// pack's name, folded to lower case. A map's pack is the map-pack entry
 /// of the same key and registry, or, when the pack names no key, the
-/// entry whose name is the pack's.
+/// entry whose name is the pack's. A pack that holds one map leaves the
+/// From line empty; a pack of several names itself there.
 ///
 /// @param library the Library
 /// @return the setup

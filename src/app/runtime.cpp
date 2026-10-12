@@ -228,6 +228,8 @@ Runtime::Runtime(
             prepare_map_pack_lists_check();
         if (options_.check_first_run)
             prepare_first_run_check();
+        if (options_.check_library_map_previews)
+            prepare_library_map_preview_check();
     }
     start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
@@ -448,6 +450,11 @@ int Runtime::run() {
         }
         if (options_.check_library_install) {
             check_library_install();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_library_map_previews) {
+            check_library_map_previews();
             flush_preferences();
             return 0;
         }

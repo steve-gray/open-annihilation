@@ -1753,8 +1753,9 @@ bool turned_faces_fit(const CarouselGeometry& geometry, int32_t room) {
 
 /// First run, across the whole gallery, at the language card's real size.
 /// The carousel shows the centre card and two turned cards on each side.
-/// Compact keeps every row, so the choice-card states sit in the footer
-/// band, left of CLOSE, rather than shrinking the cards.
+/// Compact draws the sample cards at the carousel's fitted size, and
+/// smaller still when that would put a choice card over CLOSE. The card
+/// scales with that rectangle. What does not fit scrolls with the section.
 int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/) {
     const GalleryModel& model = *b.model;
     const Metrics& metrics = b.metrics != nullptr ? *b.metrics : kMetrics;
@@ -2102,12 +2103,25 @@ int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/
             const Rect overlap = intersect(coach_card, target);
             if (coach_card.width < 48 || coach_card.height < 40 ||
                 (overlap.width > 0 && overlap.height > 0)) {
-                const int32_t card_x = target.x + target.width + coach_gap;
+                // Stay inside the column. A narrow column cannot hold a
+                // 40-point card beside the target, and forcing that width
+                // runs the card out of the section.
+                const int32_t right = layer.x + layer.width - 4;
+                int32_t card_x = target.x + target.width + coach_gap;
+                int32_t card_w = right - card_x;
+                if (card_w < 40) {
+                    card_w = std::min(std::max(layer.width - 8, int32_t{1}), int32_t{48});
+                    card_x = right - card_w;
+                }
+                if (card_x < layer.x + 2)
+                    card_x = layer.x + 2;
+                if (card_x + card_w > right)
+                    card_w = std::max(right - card_x, int32_t{1});
                 coach_card = {
                     card_x,
                     layer.y + 4,
-                    std::max(layer.x + layer.width - card_x - 4, int32_t{40}),
-                    std::max(layer.height - 8, int32_t{40}),
+                    card_w,
+                    std::max(layer.height - 8, int32_t{1}),
                 };
             }
         }
@@ -2203,33 +2217,47 @@ int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/
 
     const bool compact = card_w <= compact_metrics.language_card_width;
     const int32_t choice_h = choice_card_height();
+    // Sample cards follow the carousel's fitted card, so a narrow window
+    // keeps the design's shape. On Compact the two working choice cards
+    // share the second row and must end inside the scroll view: a card
+    // that runs into the footer covers CLOSE.
+    int32_t sample_w = compact ? geometry.card_width : card_w;
+    int32_t sample_h = compact ? geometry.card_height : card_h;
+    if (compact) {
+        const int32_t view_bottom = b.view.y + b.view.height;
+        const int32_t room_for_card = view_bottom - at.y - row_height - 2 * choice_h;
+        if (room_for_card > 0 && sample_h > room_for_card) {
+            sample_w = std::max(sample_w * room_for_card / sample_h, int32_t{1});
+            sample_h = room_for_card;
+        }
+    }
     int32_t bottom = at.y + row_height;
     if (compact) {
         const int32_t row1 = at.y + row_height;
-        const int32_t row2 = row1 + card_h;
-        const int32_t row3 = row2 + card_h;
+        const int32_t row2 = row1 + sample_h;
+        const int32_t row3 = row2 + sample_h;
         const int32_t row4 = row3 + kSetupHeight;
-        const int32_t used_four = 4 * card_w + 3 * kGap;
+        const int32_t used_four = 4 * sample_w + 3 * kGap;
         const Rect calls{
-            at.x + used_four + kGap, row1, std::max(width - used_four - kGap, int32_t{1}), card_h
+            at.x + used_four + kGap, row1, std::max(width - used_four - kGap, int32_t{1}), sample_h
         };
         for (int32_t index = 0; index < 4; ++index)
             add_language(
                 static_cast<std::size_t>(index),
-                {at.x + index * (card_w + kGap), row1, card_w, card_h}
+                {at.x + index * (sample_w + kGap), row1, sample_w, sample_h}
             );
-        const int32_t used_three = 3 * card_w + 2 * kGap;
+        const int32_t used_three = 3 * sample_w + 2 * kGap;
         const int32_t pocket_x = at.x + used_three + kGap;
         const int32_t pocket_w = std::max(at.x + width - pocket_x, int32_t{1});
         for (int32_t index = 0; index < 3; ++index)
             add_language(
                 static_cast<std::size_t>(index + 4),
-                {at.x + index * (card_w + kGap), row2, card_w, card_h}
+                {at.x + index * (sample_w + kGap), row2, sample_w, sample_h}
             );
         add_working_choice(0, {pocket_x, row2, pocket_w, choice_h});
         add_working_choice(1, {pocket_x, row2 + choice_h, pocket_w, choice_h});
         const int32_t step_h = step_indicator_height();
-        add_step({pocket_x, row2 + card_h - step_h, pocket_w, step_h});
+        add_step({pocket_x, row2 + sample_h - step_h, pocket_w, step_h});
 
         // The setup header holds "Open Annihilation", the page word and the
         // step indicator on one line. The picture stays wide enough for its

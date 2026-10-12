@@ -37,12 +37,15 @@ void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink);
 /// of 24 units: the ring is 2 units wide with its outer edge a unit in, and
 /// every stroke is 2.5 units wide with round ends.
 ///
-/// The OA badge and the bone ignore `ink` and use their own colours, sampled
-/// the same way so a 2x drawing is finer than a doubled 1x drawing and 150%
-/// keeps a partial edge. The badge is a rounded plate (red 60, green 64,
-/// blue 56) with the letters in the lock colour. The bone is off-white
-/// (red 244, green 239, blue 224) with a dark outline (red 12, green 10,
-/// blue 8). Both are drawn as shapes, not from a picture.
+/// The OA badge and the bone ignore `ink`. When an app icon has been given
+/// (`set_open_annihilation_mark`), the badge is that picture, drawn through
+/// `draw_picture` from the copy kept for the mark's size, so a small mark
+/// is filtered down and not taken from the nearest pixel of the full icon.
+/// With no picture, the badge is a rounded plate (red 60, green 64, blue 56)
+/// with the letters in the lock colour, sampled so a 2x drawing is finer
+/// than a doubled 1x drawing and 150% keeps a partial edge. The bone is
+/// always that shape: off-white (red 244, green 239, blue 224) with a dark
+/// outline (red 12, green 10, blue 8).
 ///
 /// Pixels an icon does not cover are left as they are.
 ///
@@ -51,6 +54,25 @@ void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink);
 /// @param icon which icon
 /// @param ink the colour of a one-colour icon; ignored for the badge and the bone
 void draw_state_icon(const Canvas& canvas, const Rect& rect, StateIcon icon, Colour ink);
+
+/// The app icon drawn as the small maker's mark on a Library row or a
+/// registry card. The spans point at pixels kept elsewhere for as long as
+/// the mark is set. An empty full picture leaves the drawn plate.
+struct OpenAnnihilationMark {
+    oa::ui::frontend_renderer::RgbaPicture full{};     ///< the icon's visible part
+    oa::ui::frontend_renderer::RgbaPicture prepared{}; ///< that icon filtered down
+};
+
+/// Gives the kit the app icon it draws as the maker's mark. An empty mark
+/// puts the drawn plate back.
+///
+/// @param mark the pictures; their pixels must outlive the mark
+void set_open_annihilation_mark(OpenAnnihilationMark mark);
+
+/// Returns the mark set_open_annihilation_mark last gave, or an empty one.
+///
+/// @return the mark
+[[nodiscard]] const OpenAnnihilationMark& open_annihilation_mark() noexcept;
 
 /// Draws the keyboard focus outline: the accent, grown by the focus inset
 /// when around is set, and on the control's own edge otherwise.

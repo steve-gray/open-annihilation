@@ -32,10 +32,12 @@
 #include "screen_size.hpp"
 #include "oa/platform/file_types.hpp"
 #include "oa/platform/machine.hpp"
+#include "oa/platform/system.hpp"
 #include "oa/platform/render_probe.hpp"
 #include "oa/app/window_icon.hpp"
 #include "oa/sim/ground_orders/search_worker.hpp"
 #include "oa/ui/display_layout.hpp"
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/touch_hud.hpp"
@@ -58,6 +60,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -72,6 +75,7 @@
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
+namespace kit = oa::ui::kit;
 namespace render_probe = oa::platform::render_probe;
 
 static_assert(settings::base_path_search_nodes == oa::sim::ground_orders::search_tick_credit);
@@ -1137,6 +1141,8 @@ std::optional<std::string> Runtime::save_engine_settings(
     return EngineSettingsState::flush(*this);
 }
 
+void show_system_openers(settings::Dialog& dialog);
+
 settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind) {
     EngineSettingsState::take_live_settings(*this);
     auto& state = engine_settings_state();
@@ -1265,38 +1271,125 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
         }
         settings::set_registered_pages(dialog, pages, preference_values_);
     }
+    // On macOS the four switches show what the system reports now, not the
+    // stored preference. A start does not change an opener; only a switch
+    // that moves, at OK, does.
+    show_system_openers(dialog);
     return dialog;
 }
 
-/// Registers the file types `chosen` leaves on and withdraws the rest, where
-/// this system takes a registration at run time. A registration that skips
-/// or fails withdraws nothing.
+/// Writes what a file-type change did.
 ///
-/// @param chosen the settings OK is keeping
-void apply_chosen_file_types(const settings::EngineSettings& chosen) {
+/// @param result what the change did
+void log_file_type_change(const oa::platform::file_types::Registration& result) {
+    for (const auto& line : result.lines)
+        std::cerr << "open-annihilation: file types: " << line << '\n';
+    if (!result.error.empty())
+        std::cerr << "open-annihilation: file types: " << result.error << '\n';
+}
+
+/// The four switches as a set.
+///
+/// @param settings the settings that hold them
+/// @return which types are on
+oa::platform::file_types::TypeSet file_type_set(const settings::EngineSettings& settings) {
+    oa::platform::file_types::TypeSet enabled;
+    enabled.mod = settings.file_type_oamod;
+    enabled.language = settings.file_type_oalang;
+    enabled.map = settings.file_type_oamap;
+    enabled.registry = settings.file_type_oareg;
+    return enabled;
+}
+
+/// Sets the four switches from what the system reports, where a switch is the
+/// default opener. A question that fails leaves that switch as the dialog
+/// already shows it and is logged.
+///
+/// @param dialog the dialog just opened
+void show_system_openers(settings::Dialog& dialog) {
     namespace file_types = oa::platform::file_types;
+    if (!file_types::default_opener_is_a_setting() || !dialog.file_type_switches)
+        return;
+    const file_types::Handler application = file_types::running_application();
+    if (application.bundle_id.empty())
+        return;
+    const file_types::OpenerReport report = file_types::reported_openers(
+        file_types::system_handler_calls(), application.bundle_id, file_type_set(dialog.chosen)
+    );
+    if (!report.error.empty())
+        std::cerr << "open-annihilation: file types: " << report.error << '\n';
+    const auto show = [&dialog](bool settings::EngineSettings::* member, bool on) {
+        dialog.opened.*member = on;
+        dialog.chosen.*member = on;
+    };
+    show(&settings::EngineSettings::file_type_oamod, report.open.mod);
+    show(&settings::EngineSettings::file_type_oalang, report.open.language);
+    show(&settings::EngineSettings::file_type_oamap, report.open.map);
+    show(&settings::EngineSettings::file_type_oareg, report.open.registry);
+}
+
+/// On macOS, a check, a snapshot and any other run that is not someone
+/// playing must not change the opener a player chose in Finder.
+///
+/// @param options the run's command line
+/// @return false when this run must leave every opener as it is
+bool openers_follow_ok(const Options& options) {
+    namespace file_types = oa::platform::file_types;
+    if (!file_types::default_opener_is_a_setting())
+        return true;
+    if (options.headless_check || options.unattended || options.preferences_file)
+        return false;
+    if (const auto driver = oa::platform::environment_value("SDL_VIDEO_DRIVER");
+        driver && (*driver == "dummy" || *driver == "offscreen"))
+        return false;
+    return true;
+}
+
+/// Registers the file types `chosen` leaves on and withdraws the rest, where
+/// this system takes a registration at run time. On macOS, asks the system to
+/// change only the switches that moved. A registration that skips or fails
+/// withdraws nothing.
+///
+/// @param opened the settings the dialog opened with
+/// @param chosen the settings OK is keeping
+void apply_chosen_file_types(
+    const settings::EngineSettings& opened, const settings::EngineSettings& chosen
+) {
+    namespace file_types = oa::platform::file_types;
+    if (file_types::default_opener_is_a_setting()) {
+        std::array<file_types::OpenerChange, 4> changes{};
+        std::size_t count = 0;
+        const auto add = [&](std::string_view extension, bool was, bool now) {
+            if (was != now)
+                changes[count++] = file_types::OpenerChange{extension, now};
+        };
+        add(file_types::mod_extension, opened.file_type_oamod, chosen.file_type_oamod);
+        add(file_types::language_extension, opened.file_type_oalang, chosen.file_type_oalang);
+        add(file_types::map_extension, opened.file_type_oamap, chosen.file_type_oamap);
+        add(file_types::registry_extension, opened.file_type_oareg, chosen.file_type_oareg);
+        if (count == 0)
+            return;
+        log_file_type_change(
+            file_types::apply_opener_changes(
+                file_types::system_handler_calls(),
+                file_types::running_application(),
+                std::span<const file_types::OpenerChange>(changes.data(), count)
+            )
+        );
+        return;
+    }
     const auto executable = file_types::running_executable();
     if (!executable)
         return;
-    file_types::TypeSet enabled;
-    enabled.mod = chosen.file_type_oamod;
-    enabled.language = chosen.file_type_oalang;
-    enabled.map = chosen.file_type_oamap;
-    enabled.registry = chosen.file_type_oareg;
+    const file_types::TypeSet enabled = file_type_set(chosen);
     const auto done = file_types::register_file_types(*executable, window_icon_png(), {}, enabled);
-    const auto log = [](const file_types::Registration& result) {
-        for (const auto& line : result.lines)
-            std::cerr << "open-annihilation: file types: " << line << '\n';
-        if (!result.error.empty())
-            std::cerr << "open-annihilation: file types: " << result.error << '\n';
-    };
-    log(done);
+    log_file_type_change(done);
     if (!done.supported || !done.error.empty())
         return;
     for (const auto& line : done.lines)
         if (line.rfind("skipped:", 0) == 0)
             return;
-    log(file_types::withdraw_file_types(enabled.complement()));
+    log_file_type_change(file_types::withdraw_file_types(enabled.complement()));
 }
 
 settings::Dialog* Runtime::engine_settings_dialog() {
@@ -1396,8 +1489,8 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         apply_engine_settings(chosen);
         // The registration follows the settings OK kept, at once. Cancel
         // never reaches here, and a switch moved before OK does not either.
-        if (file_types_changed)
-            apply_chosen_file_types(chosen);
+        if (file_types_changed && openers_follow_ok(options_))
+            apply_chosen_file_types(dialog->opened, chosen);
         // Changed registered keys join the values write_settings keeps, and
         // their owners are told once the flush succeeds.
         const std::vector<settings::RegisteredWrite> registered =
@@ -1546,8 +1639,22 @@ oa::ui::frontend_renderer::RgbaPicture Runtime::engine_settings_icon() {
         if (!state.icon || state.icon->pixels.empty()) {
             state.icon.reset();
             state.icon_missing = true;
-            std::cerr << "open-annihilation: the settings' icon is missing"
+            std::cerr << "open-annihilation: the app icon is missing"
                       << (error.empty() ? std::string{} : ": " + error) << '\n';
+        } else if (!state.maker_mark_set) {
+            const WindowIcon& full = *state.icon;
+            if (full.width <= maker_mark_prepared_side && full.height <= maker_mark_prepared_side)
+                state.maker_mark = full;
+            else
+                state.maker_mark = area_scaled(full, maker_mark_prepared_side);
+            kit::OpenAnnihilationMark mark;
+            mark.full = {full.width, full.height, full.pixels};
+            if (state.maker_mark && !state.maker_mark->pixels.empty())
+                mark.prepared = {
+                    state.maker_mark->width, state.maker_mark->height, state.maker_mark->pixels
+                };
+            kit::set_open_annihilation_mark(mark);
+            state.maker_mark_set = true;
         }
     }
     if (!state.icon)

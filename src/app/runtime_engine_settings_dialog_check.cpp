@@ -39,6 +39,9 @@
 #include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -181,6 +184,33 @@ constexpr settings::ScreenSize kChosenScreenSize{1280, 720};
 void require(bool ok, std::string_view what) {
     if (!ok)
         throw std::runtime_error("engine settings check: " + std::string(what));
+}
+
+/// The four file-type switches, cleared, so a comparison can ignore them.
+///
+/// @param settings the settings
+/// @return the same settings with every file-type switch off
+settings::EngineSettings without_file_type_switches(settings::EngineSettings settings) {
+    settings.file_type_oamod = false;
+    settings.file_type_oamap = false;
+    settings.file_type_oalang = false;
+    settings.file_type_oareg = false;
+    return settings;
+}
+
+/// Reports whether two settings agree. On macOS the file-type switches show
+/// what the system reports, which an empty preferences file does not hold, and
+/// this check never moves them.
+///
+/// @param left one side
+/// @param right the other
+/// @return true when they agree
+bool same_settings(const settings::EngineSettings& left, const settings::EngineSettings& right) {
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+    return without_file_type_switches(left) == without_file_type_switches(right);
+#else
+    return left == right;
+#endif
 }
 
 /// Returns the name a section's snapshots carry.
@@ -527,7 +557,9 @@ void Runtime::check_engine_settings_dialog() {
     init::load_preferences(state_, skirmish_settings_, preferences_, *this);
     load_engine_settings();
     const auto defaults = settings::default_settings(EngineSettingsState::inputs(*this));
-    require(engine_settings() == defaults, "the settings did not start at their defaults");
+    require(
+        same_settings(engine_settings(), defaults), "the settings did not start at their defaults"
+    );
 
     // Where the OA layer's settings screen shows on the main menu's picture,
     // while it is open.
@@ -676,7 +708,7 @@ void Runtime::check_engine_settings_dialog() {
             "showing " + name + " changed the menu outside the dialog"
         );
         before = shown;
-        require(engine_settings() == defaults, "showing a section changed a setting");
+        require(same_settings(engine_settings(), defaults), "showing a section changed a setting");
     }
 
     // The wheel and the scroll keys reach the dialog. Given a section taller
@@ -739,7 +771,7 @@ void Runtime::check_engine_settings_dialog() {
         require(offset() == 0, "Home did not scroll back to the top");
         require(
             engine_settings_dialog()->focused == settings::no_control &&
-                engine_settings() == defaults,
+                same_settings(engine_settings(), defaults),
             "scrolling showed the focus or changed a setting"
         );
     }
@@ -785,7 +817,8 @@ void Runtime::check_engine_settings_dialog() {
         auto shown = chosen;
         shown.screen_size = shown_screen_size;
         require(
-            engine_settings_dialog()->chosen == shown && engine_settings() == chosen,
+            same_settings(engine_settings_dialog()->chosen, shown) &&
+                same_settings(engine_settings(), chosen),
             std::string(what) + " did not take effect at once"
         );
     };
@@ -1111,7 +1144,7 @@ void Runtime::check_engine_settings_dialog() {
         "OK did not close the dialog"
     );
     chosen.screen_size = kChosenScreenSize;
-    require(engine_settings() == chosen, "OK did not keep the settings chosen");
+    require(same_settings(engine_settings(), chosen), "OK did not keep the settings chosen");
     pump_window_events();
     {
         int output_width = 0;
@@ -1150,7 +1183,7 @@ void Runtime::check_engine_settings_dialog() {
     require(saved_general_number("SwitchAlt") == 1, "OK did not save SwitchAlt");
     dialog = open("again");
     require(
-        dialog->opened == chosen && dialog->page == settings::Page::developer,
+        same_settings(dialog->opened, chosen) && dialog->page == settings::Page::developer,
         "the dialog did not open again on the settings kept and the last section"
     );
 
@@ -1165,7 +1198,7 @@ void Runtime::check_engine_settings_dialog() {
     click(settings::cancel_control, "CANCEL", "Cancel");
     require(engine_settings_dialog() == nullptr, "Cancel did not close the dialog");
     require(
-        engine_settings() == chosen && frame_stats_shown_,
+        same_settings(engine_settings(), chosen) && frame_stats_shown_,
         "Cancel did not put back the settings the dialog opened with"
     );
     require(
@@ -1284,7 +1317,7 @@ void Runtime::check_engine_settings_dialog() {
         require(engine_settings_dialog() == nullptr, "Cancel did not close the language dialog");
         require(
             engine_settings().language == opened_language && shown_language().tag == "en" &&
-                engine_settings() == chosen,
+                same_settings(engine_settings(), chosen),
             "Cancel did not put the opened language back"
         );
         language_download_hook_ = nullptr;
@@ -1300,7 +1333,7 @@ void Runtime::check_engine_settings_dialog() {
     auto restored_now = defaults;
     restored_now.screen_size = chosen.screen_size;
     require(
-        engine_settings_dialog() != nullptr && engine_settings() == restored_now &&
+        engine_settings_dialog() != nullptr && same_settings(engine_settings(), restored_now) &&
             !frame_stats_shown_ &&
             unit_supersampling_ == oa::present::model::UnitSupersampling::off,
         "Restore defaults did not reset every setting at once"
@@ -1312,7 +1345,7 @@ void Runtime::check_engine_settings_dialog() {
     );
     tap(SDLK_ESCAPE);
     require(
-        engine_settings_dialog() == nullptr && engine_settings() == chosen,
+        engine_settings_dialog() == nullptr && same_settings(engine_settings(), chosen),
         "Escape after Restore defaults did not put the settings back"
     );
     require(
@@ -1323,7 +1356,7 @@ void Runtime::check_engine_settings_dialog() {
     click(settings::restore_control, "RESTORE DEFAULTS", "Restore defaults");
     tap(SDLK_RETURN);
     require(
-        engine_settings_dialog() == nullptr && engine_settings() == defaults,
+        engine_settings_dialog() == nullptr && same_settings(engine_settings(), defaults),
         "Enter after Restore defaults did not keep the defaults"
     );
     const auto restored = oa::platform::preferences::load(preference_path_);
@@ -1447,7 +1480,7 @@ void Runtime::check_engine_settings_dialog() {
         tap(SDLK_RETURN);
         require(
             engine_keys(oa::platform::preferences::load(preference_path_)).empty() &&
-                engine_settings() == defaults,
+                same_settings(engine_settings(), defaults),
             "Restore defaults and OK after Developer Mode left settings in the file"
         );
         engine_settings_state().last_developer_list.reset();
@@ -1544,7 +1577,7 @@ void Runtime::check_engine_settings_dialog() {
         );
         tap(SDLK_ESCAPE);
         require(
-            engine_settings_dialog() == nullptr && engine_settings() == defaults,
+            engine_settings_dialog() == nullptr && same_settings(engine_settings(), defaults),
             "Escape did not put Haptics back"
         );
     }
@@ -2033,7 +2066,7 @@ void Runtime::check_engine_settings_window_sizes() {
                     {0, 0, drawn_percent / 100},
                     *engine_settings_dialog(),
                     *engine_settings_fonts(),
-                    engine_settings_icon()
+                    EngineSettingsMenuHost::settings_icon(*this)
                 );
             } else {
                 const settings::Dialog& shown_dialog = *engine_settings_dialog();
@@ -2043,7 +2076,7 @@ void Runtime::check_engine_settings_window_sizes() {
                     drawn_percent,
                     engine_settings_fonts(),
                     oa_layer().smooth_fonts(),
-                    engine_settings_icon(),
+                    EngineSettingsMenuHost::settings_icon(*this),
                     [&shown_dialog](const oa::ui::kit::Canvas& canvas) {
                         settings::draw_dialog(canvas, shown_dialog);
                     }

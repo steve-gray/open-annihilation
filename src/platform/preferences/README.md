@@ -181,10 +181,12 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.file-types.oareg` | `on` or `off`, as the mod packages' key | on: this copy opens registry files |
 
 The four file-type keys are words, `on` and `off`, not the `0` and `1` of
-the other switches. Settings › System shows a switch for each on Windows
-and Linux, and OK registers or withdraws that type at once. On macOS and
-iOS the keys are still read at start, and the page shows a text row instead
-of the switches, because those systems take the types from the app.
+the other switches. Settings › System shows a switch for each on Windows,
+Linux and macOS, and OK registers, withdraws or changes the default opener
+of a type whose switch moved. On macOS the switch shows whether this copy
+is the default opener now, and a start does not replace a choice made in
+Finder. On iOS the page shows a text row instead of the switches, because
+there is no way to choose a default opener.
 
 The settings dialog's Select groups without Alt is the game's own
 `Total Annihilation|SwitchAlt`, which `+switchalt` also sets. `+stats`

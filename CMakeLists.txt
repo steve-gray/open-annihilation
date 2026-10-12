@@ -347,12 +347,6 @@ add_library(oa-app-renderer-state src/app/renderer_state.cpp)
 add_library(oa::app::renderer_state ALIAS oa-app-renderer-state)
 target_link_libraries(oa-app-renderer-state PUBLIC oa-app-renderer-records
   PRIVATE oa-platform-preferences oa-options)
-# The game's window icon: the Open Annihilation icon at 256 by 256 pixels
-# (branding/, made by tools/make_icons.py), embedded as a PNG file and
-# decoded when the window opens; the settings dialog's header and the main
-# menu's Library button draw it too. Beside it the settings icon, the logo
-# over a row of gears at the same size, which the main menu's Settings
-# button and the in-game menu's OA button draw.
 # A mod profile's display rules as the records and decisions of the modules
 # that carry them out (view_rules.hpp).
 add_library(oa-app-view-rules src/app/view_rules.cpp)
@@ -365,6 +359,14 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-view-rules-test PRIVATE oa-app-view-rules oa-test-support oa-options)
   add_test(NAME app-view-rules COMMAND oa-app-view-rules-test)
 endif()
+# The game's three icons at 256 by 256 pixels (branding/, made by
+# tools/make_icons.py), each embedded as a PNG file. The app icon is the
+# window icon, decoded when the window opens, and the badge of every OA
+# dialog and notice but Settings and the Library. The settings icon, the
+# plates over two gears, is what the Settings button, the in-game menu's
+# OA button and the Settings dialog's header draw. The mods icon, the
+# plates over drive bays, is what the Library button and the Library's
+# header draw.
 set(oa_window_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-256.png")
 set(oa_window_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/window_icon_png.cpp")
 add_custom_command(OUTPUT "${oa_window_icon_source}"
@@ -382,8 +384,17 @@ add_custom_command(OUTPUT "${oa_settings_icon_source}"
   DEPENDS "${oa_settings_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
   COMMENT "Embedding the settings icon"
   VERBATIM)
+set(oa_mods_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-mods-256.png")
+set(oa_mods_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/mods_icon_png.cpp")
+add_custom_command(OUTPUT "${oa_mods_icon_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_mods_icon_png}" "-DOUTPUT=${oa_mods_icon_source}"
+    -DFUNCTION=mods_icon_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_mods_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the mods icon"
+  VERBATIM)
 add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}"
-  "${oa_settings_icon_source}")
+  "${oa_settings_icon_source}" "${oa_mods_icon_source}")
 add_library(oa::app::window_icon ALIAS oa-app-window-icon)
 target_link_libraries(oa-app-window-icon PUBLIC oa-app-headers PRIVATE oa-formats-png oa-options)
 # The Full tier's fog of war on the card (full_fog.hpp): the fog grid's
@@ -1030,6 +1041,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
+  src/app/runtime_library_map_preview_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1651,12 +1663,16 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_map_browser_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED map-browser-clean)
-      # A two-map pack installed from the check's own registry while both
-      # lists already exist. One stem has a space, an apostrophe and
-      # parentheses and fits the base game; the other fits only another mod
-      # and is left out. The fitting map is played to its first frame and
-      # named in a saved game. Each run starts from a clean folder. No game
-      # file is committed: the check serves the pack itself.
+      # A two-map pack installed from the check's own registry after the
+      # skirmish list has been shown and the battle room's list has been
+      # read. One stem has a space, an apostrophe and parentheses and the
+      # catalogue records it as fitting the base game. The other map's files
+      # fit too, and the catalogue records that as false, so it is left out.
+      # A local mod with no origin then lists a map the table has no row for
+      # when its files fit, and leaves one out when they do not. Uninstalling
+      # removes both. The fitting map is played to its first frame and named
+      # in a saved game. Each run starts from a clean folder. No game file is
+      # committed: the check serves the pack itself.
       set(oa_map_pack_lists_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-pack-lists")
       file(MAKE_DIRECTORY "${oa_map_pack_lists_dir}")
       add_test(NAME map-pack-lists-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
@@ -1729,6 +1745,29 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-library PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_library_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The Library's Maps tab and the Active tab's map tiles, with three
+      # packs: one installed with a preview picture, one installed with only
+      # its terrain minimap, and one listed so its picture comes from the
+      # check's registry. Each picture is its own size, and none is the well
+      # drawn while a picture is missing.
+      set(oa_library_previews_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-map-previews")
+      file(MAKE_DIRECTORY "${oa_library_previews_dir}")
+      add_test(NAME library-map-previews-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_previews_dir}/Open Annihilation"
+        "${oa_library_previews_dir}/data"
+        "${oa_library_previews_dir}/library-map-previews.conf")
+      set_tests_properties(library-map-previews-clean PROPERTIES
+        FIXTURES_SETUP library-map-previews-clean)
+      add_test(NAME native-library-map-previews COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-map-previews
+        --preferences-file "${oa_library_previews_dir}/library-map-previews.conf"
+        --user-folder "${oa_library_previews_dir}/Open Annihilation"
+        --data-dir "${oa_library_previews_dir}/data")
+      set_tests_properties(native-library-map-previews PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_previews_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED library-map-previews-clean)
       # Made-up mod packages posted as the download queue posts them, from a
       # built-in registry and two added ones, installed while the Library
       # shows: the built-in one's with no question, the added ones' asking

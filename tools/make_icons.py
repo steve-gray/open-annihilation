@@ -2,10 +2,15 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Make the game's icons from the Open Annihilation icon, or check them.
+"""Make the game's icons from the three Open Annihilation icons, or check them.
 
-The icon, branding/open-annihilation-icon.png, is a 1024 by 1024 RGBA PNG.
-A run on macOS makes from it, beside it in branding/:
+Each source in branding/ is a 1024 by 1024 RGBA PNG with clear corners:
+
+  open-annihilation-icon.png           the app icon, the plates alone
+  open-annihilation-settings-icon.png  the plates over two gears
+  open-annihilation-mods-icon.png      the plates over drive bays
+
+A run on macOS makes from the app icon, beside it in branding/:
 
   open-annihilation.icns     the macOS application bundle's icon: every size
                              from 16 to 1024 pixels that macOS asks for
@@ -14,13 +19,18 @@ A run on macOS makes from it, beside it in branding/:
   open-annihilation-256.png  the window icon the game embeds and sets at
                              start-up, WINDOW_ICON_SIZE pixels square
 
-sips scales the icon and iconutil packs the .icns; both come with macOS, so
-making the icons needs macOS. The .ico is packed here. The files it makes
-are committed; run it again when the icon changes.
+and from the other two, at the same size:
 
---check changes nothing and needs only Python: it checks that the icon and
-the files made from it have the sizes above. The branding-icons test runs
-it.
+  open-annihilation-settings-256.png
+  open-annihilation-mods-256.png
+
+sips scales an icon and iconutil packs the .icns; both come with macOS, so
+making the icons needs macOS. The .ico is packed here. The files it makes
+are committed; run it again when an icon changes.
+
+--check changes nothing and needs only Python: it checks that the three
+icons and the files made from them have the sizes above, and that each
+source's corners are clear. The branding-icons test runs it.
 
 Exit status: 0 when the icons were made, or --check found them as they
 should be; 1 when --check finds a problem; 2 when a tool is missing or
@@ -32,14 +42,26 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BRANDING = ROOT / "branding"
 ICON = BRANDING / "open-annihilation-icon.png"
+SETTINGS_ICON = BRANDING / "open-annihilation-settings-icon.png"
+MODS_ICON = BRANDING / "open-annihilation-mods-icon.png"
 ICNS = BRANDING / "open-annihilation.icns"
 ICO = BRANDING / "open-annihilation.ico"
 WINDOW_ICON = BRANDING / "open-annihilation-256.png"
+SETTINGS_WINDOW_ICON = BRANDING / "open-annihilation-settings-256.png"
+MODS_WINDOW_ICON = BRANDING / "open-annihilation-mods-256.png"
+# The three sources, and the 256-pixel pictures made from them.
+SOURCE_ICONS = (ICON, SETTINGS_ICON, MODS_ICON)
+WINDOW_ICONS = (
+    (ICON, WINDOW_ICON),
+    (SETTINGS_ICON, SETTINGS_WINDOW_ICON),
+    (MODS_ICON, MODS_WINDOW_ICON),
+)
 # The icon's size, in pixels, square.
 ICON_SIZE = 1024
 WINDOW_ICON_SIZE = 256
@@ -176,19 +198,130 @@ def icns_sizes(data, what):
     return sizes
 
 
+def unfiltered_rows(raw, width, height):
+    """Undoes a PNG's row filters for an 8-bit RGBA image.
+
+    @param raw the inflated image, each row a filter byte then its pixels
+    @param width the image's width
+    @param height the image's height
+    @return the rows, or None when the image is not that form
+    """
+    bytes_per_pixel = 4
+    row_bytes = width * bytes_per_pixel
+    stride = 1 + row_bytes
+    if len(raw) < height * stride:
+        return None
+    rows = []
+    previous = bytearray(row_bytes)
+    at = 0
+    for _ in range(height):
+        kind = raw[at]
+        at += 1
+        row = bytearray(raw[at:at + row_bytes])
+        at += row_bytes
+        if kind == 1 or kind == 3 or kind == 4:
+            for index in range(row_bytes):
+                left = row[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                above = previous[index]
+                if kind == 1:
+                    predictor = left
+                elif kind == 3:
+                    predictor = (left + above) // 2
+                else:
+                    up_left = previous[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                    estimate = left + above - up_left
+                    left_distance = abs(estimate - left)
+                    above_distance = abs(estimate - above)
+                    diagonal = abs(estimate - up_left)
+                    if left_distance <= above_distance and left_distance <= diagonal:
+                        predictor = left
+                    elif above_distance <= diagonal:
+                        predictor = above
+                    else:
+                        predictor = up_left
+                row[index] = (row[index] + predictor) & 0xFF
+        elif kind == 2:
+            for index in range(row_bytes):
+                row[index] = (row[index] + previous[index]) & 0xFF
+        elif kind != 0:
+            return None
+        rows.append(row)
+        previous = row
+    return rows
+
+
+def corner_clear(data, what):
+    """Tells whether a PNG's four corner pixels are wholly transparent.
+
+    The icons' corners stay clear over every backdrop.
+
+    @param data the PNG file
+    @param what the file's name for messages
+    @return a problem, or None when the corners are clear
+    """
+    at = len(PNG_SIGNATURE)
+    compressed = []
+    while at + 8 <= len(data):
+        length, kind = struct.unpack_from(">I4s", data, at)
+        at += 8
+        if at + length + 4 > len(data):
+            return f"{what}: a corner could not be read"
+        chunk = data[at:at + length]
+        at += length + 4
+        if kind == b"IDAT":
+            compressed.append(chunk)
+        elif kind == b"IEND":
+            break
+    if not compressed:
+        return f"{what}: a corner could not be read"
+    try:
+        raw = zlib.decompress(b"".join(compressed))
+    except zlib.error:
+        return f"{what}: a corner could not be read"
+    width, height = png_size(data, what)
+    rows = unfiltered_rows(raw, width, height)
+    if rows is None:
+        return f"{what}: a corner could not be read"
+
+    def alpha_at(x, y):
+        return rows[y][x * 4 + 3]
+
+    corners = (
+        alpha_at(0, 0),
+        alpha_at(width - 1, 0),
+        alpha_at(0, height - 1),
+        alpha_at(width - 1, height - 1),
+    )
+    if any(value != 0 for value in corners):
+        return f"{what}: a corner is not clear"
+    return None
+
+
 def check():
-    """Checks the icon and the files made from it; returns the problems found."""
+    """Checks the three icons and the files made from them; returns the problems found."""
     problems = []
-    try:
-        if png_size(read_file(ICON), ICON.name) != (ICON_SIZE, ICON_SIZE):
-            problems.append(f"{ICON.name}: not {ICON_SIZE}x{ICON_SIZE}")
-    except IconError as error:
-        problems.append(str(error))
-    try:
-        if png_size(read_file(WINDOW_ICON), WINDOW_ICON.name) != (WINDOW_ICON_SIZE, WINDOW_ICON_SIZE):
-            problems.append(f"{WINDOW_ICON.name}: not {WINDOW_ICON_SIZE}x{WINDOW_ICON_SIZE}")
-    except IconError as error:
-        problems.append(str(error))
+    for path in SOURCE_ICONS:
+        try:
+            data = read_file(path)
+            if png_size(data, path.name) != (ICON_SIZE, ICON_SIZE):
+                problems.append(f"{path.name}: not {ICON_SIZE}x{ICON_SIZE}")
+            else:
+                problem = corner_clear(data, path.name)
+                if problem:
+                    problems.append(problem)
+        except IconError as error:
+            problems.append(str(error))
+    for _, path in WINDOW_ICONS:
+        try:
+            data = read_file(path)
+            if png_size(data, path.name) != (WINDOW_ICON_SIZE, WINDOW_ICON_SIZE):
+                problems.append(f"{path.name}: not {WINDOW_ICON_SIZE}x{WINDOW_ICON_SIZE}")
+            else:
+                problem = corner_clear(data, path.name)
+                if problem:
+                    problems.append(problem)
+        except IconError as error:
+            problems.append(str(error))
     try:
         sizes = tuple(sorted(ico_images(read_file(ICO), ICO.name)))
         if sizes != ICO_SIZES:
@@ -235,14 +368,15 @@ def ico_file(images):
 
 
 def make():
-    """Makes the .icns, the .ico and the window icon from the icon; returns the exit status."""
+    """Makes the .icns, the .ico and the three 256-pixel icons; returns the exit status."""
     for tool in ("sips", "iconutil"):
         if shutil.which(tool) is None:
             print(f"make_icons: {tool} is missing; the icons are made on macOS", file=sys.stderr)
             return 2
     try:
-        if png_size(read_file(ICON), ICON.name) != (ICON_SIZE, ICON_SIZE):
-            raise IconError(f"{ICON.name}: not {ICON_SIZE}x{ICON_SIZE}")
+        for path in SOURCE_ICONS:
+            if png_size(read_file(path), path.name) != (ICON_SIZE, ICON_SIZE):
+                raise IconError(f"{path.name}: not {ICON_SIZE}x{ICON_SIZE}")
     except IconError as error:
         print(f"make_icons: {error}", file=sys.stderr)
         return 1
@@ -265,6 +399,8 @@ def make():
                 images[size] = out.read_bytes()
             ICO.write_bytes(ico_file(images))
             WINDOW_ICON.write_bytes(images[WINDOW_ICON_SIZE])
+            scaled(SETTINGS_ICON, WINDOW_ICON_SIZE, SETTINGS_WINDOW_ICON)
+            scaled(MODS_ICON, WINDOW_ICON_SIZE, MODS_WINDOW_ICON)
         except subprocess.CalledProcessError as error:
             output = (error.stderr or b"").decode(errors="replace").strip()
             print(f"make_icons: {' '.join(error.cmd)} failed: {output}", file=sys.stderr)
@@ -273,7 +409,7 @@ def make():
     for problem in problems:
         print(f"make_icons: {problem}", file=sys.stderr)
     if not problems:
-        for path in (ICNS, ICO, WINDOW_ICON):
+        for path in (ICNS, ICO, WINDOW_ICON, SETTINGS_WINDOW_ICON, MODS_WINDOW_ICON):
             print(f"make_icons: wrote {path.relative_to(ROOT)}")
     return 1 if problems else 0
 

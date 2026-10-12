@@ -1055,7 +1055,7 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
 
     preview.cache.new_frame();
     oa::ui::map_previews::PreviewHost reader;
-    reader.context = &state;
+    reader.context = &preview;
     reader.read_map = preview_read_map;
     reader.read_file = preview_read_file;
     reader.online_bytes = preview_online_bytes;
@@ -1686,10 +1686,15 @@ struct Runtime::LibraryScreen final : LayerScreen {
         relayout();
     }
 
-    /// Draws the Library at the canvas's scale.
+    /// Draws the Library at the canvas's scale. The layer's canvas carries
+    /// the app icon; the Library's header draws the mods icon.
     ///
     /// @param canvas where it draws
-    void draw(const kit::Canvas& canvas) const override { library::draw_library(canvas, list_); }
+    void draw(const kit::Canvas& canvas) const override {
+        kit::Canvas drawn = canvas;
+        drawn.icon = Runtime::EngineSettingsMenuHost::mods_icon(runtime_);
+        library::draw_library(drawn, list_);
+    }
 
     /// Takes a pointer's move, press or release.
     ///
