@@ -365,8 +365,9 @@ installed before. Then:
 
 - **a mod** goes into your Mods folder, and **PLAY NOW** switches to it;
 - **a map pack** goes into your Maps folder, and its maps join the map
-  browser and the battle room's map list at once, and the skirmish list at
-  the next start, or as soon as you choose one in the map browser
+  browser at once. The ones that fit the mod you are playing join the
+  skirmish list and the battle room's map list at once. One that does not
+  fit is left out of those two lists
   ([map packs](maps/README.md));
 - **a language pack** goes into your Languages folder, and Settings ›
   Language offers it at once ([languages](languages.md)).

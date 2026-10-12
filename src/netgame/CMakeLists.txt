@@ -112,8 +112,6 @@ if(BUILD_TESTING)
   add_test(NAME net-condenser-golden COMMAND oa-netgame-condenser-golden-test)
   set_tests_properties(net-condenser-golden PROPERTIES TIMEOUT 30)
 
-  # The HTTP fixture is test-only. Its library and tool are not part of the game.
-  add_subdirectory(http-fixture)
 endif()
 
 if(WIN32)
@@ -126,6 +124,12 @@ if(WIN32)
       COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:${target}>"
         "-DDEST=$<TARGET_FILE_DIR:${target}>" -P "${PROJECT_SOURCE_DIR}/tools/copy_runtime.cmake")
   endforeach()
+endif()
+
+# The fixture's library serves --check-map-pack-lists. Its tool and test are
+# built only with the tests (http-fixture/CMakeLists.txt).
+if(BUILD_TESTING OR OA_SELF_CHECKS)
+  add_subdirectory(http-fixture)
 endif()
 
 # Fetches catalogues and packages over plain HTTP.

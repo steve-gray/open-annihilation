@@ -4,6 +4,8 @@
 // The content service and the download queue the runtime owns from start to quit.
 #include "oa/app/runtime.hpp"
 
+#include "map_packs.hpp"
+
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
@@ -15,6 +17,8 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -37,6 +41,23 @@ namespace {
 /// @param line the line, without a line end
 void content_log(void*, std::string_view line) {
     std::cerr << "open-annihilation: content: " << line << '\n';
+}
+
+/// Tells whether two texts are the same, ignoring ASCII case.
+///
+/// @param left one text
+/// @param right the other
+/// @return true when they match
+bool same_ascii(std::string_view left, std::string_view right) {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        const auto left_byte = static_cast<unsigned char>(left[index]);
+        const auto right_byte = static_cast<unsigned char>(right[index]);
+        if (std::tolower(left_byte) != std::tolower(right_byte))
+            return false;
+    }
+    return true;
 }
 
 /// The built-in registries folder beside the program, or empty.
@@ -193,6 +214,7 @@ void Runtime::start_content() {
     const std::shared_ptr<const content::Snapshot> snapshot = content_->service.snapshot();
     if (snapshot)
         content_->downloads->start(*snapshot);
+    note_pack_catalogue();
 }
 
 void Runtime::tick_content() {
@@ -241,6 +263,51 @@ void Runtime::tick_content() {
         still_offered.push_back(item.item);
     }
     content_->offered_refreshed = std::move(still_offered);
+    note_pack_catalogue();
+}
+
+std::optional<uint64_t> Runtime::content_catalogue_generation() const {
+    if (content_ == nullptr)
+        return std::nullopt;
+    const std::shared_ptr<const content::Snapshot> snapshot = content_->service.snapshot();
+    if (snapshot == nullptr)
+        return std::nullopt;
+    return snapshot->generation;
+}
+
+std::optional<bool> Runtime::catalogue_map_fits(const PackMap& map, std::string_view key) const {
+    if (content_ == nullptr)
+        return std::nullopt;
+    const std::shared_ptr<const content::Snapshot> snapshot = content_->service.snapshot();
+    if (snapshot == nullptr)
+        return std::nullopt;
+    const oa::data::catalogue::Package* package = nullptr;
+    for (const content::Entry& entry : snapshot->entries) {
+        if (entry.package == nullptr || entry.package->kind != oa::data::catalogue::Kind::oamap)
+            continue;
+        if (!same_ascii(entry.registry, map.registry) || !same_ascii(entry.package->id, map.id) ||
+            entry.package->release != map.release)
+            continue;
+        package = entry.package;
+        break;
+    }
+    if (package == nullptr)
+        return std::nullopt;
+    const oa::data::catalogue::MapEntry* found = nullptr;
+    for (const oa::data::catalogue::MapEntry& listed : package->maps) {
+        if (listed.map == map.name) {
+            found = &listed;
+            break;
+        }
+        if (found == nullptr && listed.stem == map.stem)
+            found = &listed;
+    }
+    if (found == nullptr || key.empty())
+        return false;
+    for (const auto& [game, fitting] : found->compatible)
+        if (game == key)
+            return fitting;
+    return false;
 }
 
 content::Service& Runtime::content_service() {

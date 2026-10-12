@@ -465,7 +465,14 @@ data::campaign::CampaignFiles map_files() {
 
 void load_maps() {
     auto& state = ui();
-    if (state.maps_loaded || state.ctx == nullptr || state.ctx->assets == nullptr)
+    if (state.maps_loaded)
+        return;
+    // A source that supplies both the base maps and the pack maps can build
+    // the list before a multiplayer screen has a context. The fallback scan
+    // of the installed maps still needs that context.
+    const bool sourced = g_map_source.base_count != nullptr && g_map_source.base_at != nullptr &&
+                         g_map_source.count != nullptr && g_map_source.at != nullptr;
+    if (!sourced && (state.ctx == nullptr || state.ctx->assets == nullptr))
         return;
     state.maps_loaded = true;
     const auto append =
@@ -4122,6 +4129,76 @@ bool multiplayer_offer_map(const char* name) noexcept {
             return false;
     }
     return mapselect_offer(state.lobby, state.mapselect, state.modal.panel, wanted);
+}
+
+void multiplayer_reload_maps() {
+    auto& state = ui();
+    if (!state.maps_loaded)
+        return;
+    const std::string selected =
+        state.map >= 0 && static_cast<std::size_t>(state.map) < state.maps.size()
+            ? state.maps[static_cast<std::size_t>(state.map)].name
+            : std::string();
+    std::string highlighted;
+    if (state.modal_kind == ModalKind::selmap && state.modal.loaded) {
+        if (const Control* list = panel_control(state.modal.panel, "MAPNAMES")) {
+            const int32_t row = list->list_selection;
+            if (row >= 0 && static_cast<std::size_t>(row) < state.mapselect.names.size())
+                highlighted = state.mapselect.names[static_cast<std::size_t>(row)];
+        }
+    }
+    state.maps.clear();
+    state.maps_loaded = false;
+    state.map = -1;
+    load_maps();
+    for (std::size_t index = 0; index < state.maps.size() && !selected.empty(); ++index)
+        if (state.maps[index].name == selected)
+            state.map = static_cast<int32_t>(index);
+    if (state.modal_kind != ModalKind::selmap || !state.modal.loaded)
+        return;
+    state.mapselect.names.clear();
+    state.mapselect.names.reserve(state.maps.size());
+    for (const MapInfo& info : state.maps)
+        state.mapselect.names.push_back(info.name);
+    panel_fill_list(state.modal.panel, "MAPNAMES", state.mapselect.names);
+    if (highlighted.empty())
+        return;
+    for (std::size_t row = 0; row < state.mapselect.names.size(); ++row) {
+        if (state.mapselect.names[row] != highlighted)
+            continue;
+        panel_select_list_row(state.modal.panel, "MAPNAMES", static_cast<int32_t>(row));
+        return;
+    }
+}
+
+int32_t multiplayer_map_count() {
+    load_maps();
+    const auto count = ui().maps.size();
+    if (count > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+        return std::numeric_limits<int32_t>::max();
+    return static_cast<int32_t>(count);
+}
+
+const char* multiplayer_map_at(int32_t index) {
+    load_maps();
+    const auto& maps = ui().maps;
+    if (index < 0 || static_cast<std::size_t>(index) >= maps.size())
+        return nullptr;
+    return maps[static_cast<std::size_t>(index)].name.c_str();
+}
+
+const char* multiplayer_pack_map_title(const char* name) {
+    if (name == nullptr || g_map_source.count == nullptr || g_map_source.at == nullptr)
+        return nullptr;
+    const int32_t count = g_map_source.count(g_map_source.context);
+    for (int32_t row = 0; row < count; ++row) {
+        LobbyPackMap pack{};
+        if (!g_map_source.at(g_map_source.context, row, &pack) || pack.name == nullptr)
+            continue;
+        if (std::strcmp(pack.name, name) == 0)
+            return pack.title;
+    }
+    return nullptr;
 }
 
 bool multiplayer_battle_room_map(BattleRoomMap* out) noexcept {

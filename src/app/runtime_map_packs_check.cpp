@@ -4,10 +4,10 @@
 // --check-map-packs: pack maps in the skirmish list, one mounted at a time.
 // The check writes two map packs into the player's own Maps folder: one whose
 // map fits the game, and one whose feature file defines a feature the game
-// already has. It requires both listed after every base map, the first
-// mounted alone while it is chosen and through a skirmish played on it, and
-// unmounted for a base map and when the match ends, and the second refused,
-// the map picker showing why and keeping the earlier map.
+// already has. It requires the first listed after every base map, the second
+// left out with one log line, the first mounted alone while it is chosen and
+// through a skirmish played on it, and unmounted for a base map and when the
+// match ends, and the second refused when it is chosen.
 
 #include "map_pack_check_packs.hpp"
 #include "map_packs.hpp"
@@ -19,7 +19,6 @@
 #include "oa/data/map_pack/manifest.hpp"
 #include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/tnt.hpp"
-#include "oa/ui/frontend_dialogs.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -386,8 +385,55 @@ void write_map_pack_check_packs(const fs::path& maps, std::string_view model) {
     write_pack(maps, kClashPack, model);
 }
 
+void write_map_pack_check_folder(
+    const fs::path& folder,
+    std::string_view id,
+    std::string_view pack_name,
+    std::span<const MapPackCheckMap> maps,
+    std::string_view model
+) {
+    std::error_code removed;
+    fs::remove_all(folder, removed);
+    require(!removed, "could not remove an earlier " + std::string(id));
+    const bool clashes = std::any_of(maps.begin(), maps.end(), [](const MapPackCheckMap& map) {
+        return map.clashes;
+    });
+    write_file(folder / std::string(kFeatureFile), feature_text(model, clashes));
+    const std::vector<uint8_t> tnt_bytes = terrain_bytes();
+    const std::string_view terrain_text(
+        reinterpret_cast<const char*>(tnt_bytes.data()), tnt_bytes.size()
+    );
+
+    pack::Manifest manifest{};
+    manifest.format = pack::format_version;
+    manifest.id = std::string(id);
+    manifest.name = std::string(pack_name);
+    manifest.version = "1.0";
+    manifest.description = "A map the map pack check writes.";
+    manifest.author.name = "unknown";
+    manifest.packaging.revision = 1;
+    manifest.packaging.date = "2026-10-11";
+    manifest.packaging.packager = "Open Annihilation";
+    manifest.requires_base = "ta-3.1c";
+    for (const MapPackCheckMap& map : maps) {
+        const std::string stem(map.stem);
+        const std::string ota = "maps/" + stem + ".ota";
+        const std::string terrain = "maps/" + stem + ".tnt";
+        write_file(folder / ota, scenario_text(stem));
+        write_file(folder / terrain, terrain_text);
+        pack::MapEntry entry{};
+        entry.stem = stem;
+        entry.title = std::string(map.title);
+        entry.description = "A small island the map pack check plays on.";
+        entry.size = "2x2";
+        entry.players = 2;
+        entry.files = {ota, terrain, std::string(kFeatureFile)};
+        manifest.maps.push_back(std::move(entry));
+    }
+    write_file(folder / std::string(pack::manifest_file), pack::write_manifest(manifest));
+}
+
 void Runtime::check_map_packs() {
-    namespace dialogs = oa::ui::frontend_dialogs;
     // The check writes into the Maps folder of a player's folder named for
     // this run alone, never into the player's own Documents.
     require(
@@ -424,11 +470,16 @@ void Runtime::check_map_packs() {
             eligible_map_names_.begin()
         );
     };
+    const auto lines = pack_map_omission_lines();
+    const bool omitted = std::any_of(lines.begin(), lines.end(), [](const std::string& line) {
+        return line.find(kClashPack.id) != std::string::npos &&
+               line.find("1 map does not fit ta-3.1c") != std::string::npos;
+    });
     require(
         base_maps > 0 && first_map_name_ == eligible_map_names_.front() &&
             listed_at(isle) >= base_maps && listed_at(isle) < eligible_map_names_.size() &&
-            listed_at(clash) >= base_maps && listed_at(clash) < eligible_map_names_.size(),
-        "the pack maps are not listed after every base map"
+            listed_at(clash) == eligible_map_names_.size() && omitted,
+        "the fitting map is not listed after every base map, or the clashing map is listed"
     );
     require(!assets_.pack_layer_mounted(), "a pack map is mounted before one is chosen");
     std::cout << "map pack check: " << base_maps << " base maps, then "
@@ -470,8 +521,9 @@ void Runtime::check_map_packs() {
     require(screen_ == Screen::skirmish, "Skirmish did not open its setup");
     exercise_click(skirmish::resource_name(skirmish::Button::select_map));
     require(
-        screen_ == Screen::map_selection && row_of(isle) < bound_map_names_.size(),
-        "the map picker does not list the pack map"
+        screen_ == Screen::map_selection && row_of(isle) < bound_map_names_.size() &&
+            row_of(clash) == bound_map_names_.size(),
+        "the map picker does not list the fitting map, or it lists the clashing map"
     );
 
     // Highlighting a base map reads its terrain once: the match parses it,
@@ -542,65 +594,8 @@ void Runtime::check_map_packs() {
         "the clashing pack map was not refused for its feature's name"
     );
     require(!assets_.pack_layer_mounted(), "the clashing pack map is mounted");
+    std::cout << "map pack check: left out " << clash << '\n';
 
-    // The picker shows the refused map's reason, and LOAD keeps the earlier map.
-    load(Screen::main_menu);
-    exercise_click(menu::resource_name(menu::Button::single_player));
-    exercise_click(entry::resource_name(entry::Button::skirmish));
-    const std::string earlier = skirmish_settings_.map_name;
-    require(earlier == isle && isle_mounted(), "the skirmish setup lost the pack map");
-    exercise_click(skirmish::resource_name(skirmish::Button::select_map));
-    require(screen_ == Screen::map_selection, "the map picker did not open");
-    const auto row = row_of(clash);
-    require(row < bound_map_names_.size(), "the map picker does not list the clashing map");
-    const auto first_pack_row = static_cast<std::size_t>(
-        std::find_if(
-            bound_map_names_.begin(),
-            bound_map_names_.end(),
-            [](const std::string& name) { return pack::split_pack_map_name(name).has_value(); }
-        ) -
-        bound_map_names_.begin()
-    );
-    require(
-        first_pack_row == base_maps &&
-            std::all_of(
-                bound_map_names_.begin() + static_cast<std::ptrdiff_t>(first_pack_row),
-                bound_map_names_.end(),
-                [](const std::string& name) { return pack::split_pack_map_name(name).has_value(); }
-            ),
-        "the map picker does not list the pack maps after every base map"
-    );
-    preview_map_index(row);
-    const std::string description = gadget_text(widget("DESCRIPTION"));
-    require(
-        description.starts_with("Doesn't fit ") && description.find(*refusal) != std::string::npos,
-        "the map picker does not say why the clashing map does not fit"
-    );
-    require(
-        shows_title(kClashPack.title) && (!map_picture_ || map_picture_->rgb.empty()),
-        "the map picker does not show the refused map's title without a picture"
-    );
-    std::cout << "map pack check: the picker says \"" << description << "\"\n";
-    exercise_click(map_modal::resource_name(map_modal::Button::load));
-    close_map_modal();
-    require(
-        screen_ == Screen::skirmish && skirmish_settings_.map_name == earlier && isle_mounted(),
-        "LOAD on the refused map did not keep the earlier map"
-    );
-    std::string message;
-    if (const auto* shown = dialogs::dialog_resources(); shown != nullptr)
-        for (const auto& gadget : shown->layout.gadgets)
-            message += gadget_text(&gadget) + " ";
-    require(
-        dialogs::dialog_kind() == dialogs::DialogKind::message_box &&
-            message.find("New names") != std::string::npos,
-        "LOAD on the refused map did not say why"
-    );
-    auto context = screen_context();
-    require(
-        dialogs::dialog_click(&context, "OK") && dialogs::dialog_count() == 0,
-        "OK did not close the refusal"
-    );
     load(Screen::main_menu);
     require(!assets_.pack_layer_mounted(), "the main menu shows a pack map's files");
     std::cout << "map pack check passed\n";

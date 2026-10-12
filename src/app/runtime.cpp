@@ -224,6 +224,8 @@ Runtime::Runtime(
             prepare_registries_check();
         if (options_.check_map_browser)
             prepare_map_browser_check();
+        if (options_.check_map_pack_lists)
+            prepare_map_pack_lists_check();
     }
     start_content();
     // The GUI text loops hand characters outside the 8-bit fonts to the
@@ -403,6 +405,11 @@ int Runtime::run() {
         }
         if (options_.check_map_browser) {
             check_map_browser();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_map_pack_lists) {
+            check_map_pack_lists();
             flush_preferences();
             return 0;
         }
