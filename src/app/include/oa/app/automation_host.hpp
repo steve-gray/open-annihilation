@@ -79,6 +79,12 @@ struct AutomationControl {
     int32_t rows{};                 ///< the rows a list shows at once
     int32_t row_height{};           ///< a list's row pitch in canvas pixels
     int32_t selected{-1};           ///< a list's selected row; -1 for none
+    /// A list's control that scrolls toward its start, one page of the rows
+    /// it shows. Empty when the list has none: every row fits, or it has no
+    /// scroll bar.
+    std::string scroll_up;
+    /// A list's control that scrolls toward its end, one page of the rows it shows.
+    std::string scroll_down;
     /// The control's place in the window is known exactly, in the window's
     /// own pixels (window_x to window_height), as for the controls of Open
     /// Annihilation's own screens, which are drawn in the window's pixels

@@ -385,6 +385,14 @@ ListPress panel_press_list(Panel& panel, int32_t index, int32_t y) noexcept {
     return press;
 }
 
+int32_t list_shown_rows(const Control& list, int32_t line_height) noexcept {
+    const int32_t pitch = list.list_item_height > 0 ? list.list_item_height : line_height;
+    if (pitch <= 0 || list.height <= 0)
+        return 1;
+    const int32_t rows = static_cast<int32_t>(list.height) / pitch;
+    return rows > 0 ? rows : 1;
+}
+
 bool panel_scroll_list(Panel& panel, int32_t index, int32_t rows) noexcept {
     if (index <= 0 || index >= panel.count)
         return false;
