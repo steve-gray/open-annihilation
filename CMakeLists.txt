@@ -255,6 +255,8 @@ add_subdirectory(src/ui/game-files)
 add_subdirectory(src/ui/folder-chooser)
 # The Library's model: packages to get and installed, search and queue lines.
 add_subdirectory(src/ui/library)
+# The first-run setup: language, online features and the OA buttons.
+add_subdirectory(src/ui/first-run)
 add_subdirectory(src/ui/screen-registry)
 add_subdirectory(src/sim/session)
 if(TARGET oa-media-intro-player)
@@ -989,6 +991,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_engine_settings_app_menu.cpp
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
+  src/app/runtime_first_run.cpp
   src/app/language_packs.cpp
   src/app/runtime_picture_captions.cpp
   src/app/runtime_renderer.cpp
@@ -1025,6 +1028,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_language_check.cpp src/app/runtime_language_switch_check.cpp
   src/app/runtime_language_registry_check.cpp
   src/app/runtime_language_notice_check.cpp
+  src/app/runtime_first_run_check.cpp
   src/app/runtime_side_column_check.cpp src/app/runtime_match_bars_check.cpp
   src/app/runtime_unit_pages_check.cpp src/app/runtime_frontend_controls_check.cpp
   src/app/runtime_briefing_narration_check.cpp src/app/runtime_build_site_check.cpp
@@ -1074,7 +1078,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
-  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser)
+  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).
@@ -1684,6 +1688,25 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_map_pack_lists_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED map-pack-lists-clean)
+      # The welcome setup over the main menu: Deutsch, a language pack that
+      # fails and then installs on Retry, Skip setup, both online choices,
+      # and Start playing. The pack is served by the check. Each run starts
+      # from a clean folder.
+      set(oa_first_run_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/first-run")
+      file(MAKE_DIRECTORY "${oa_first_run_dir}")
+      add_test(NAME first-run-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_first_run_dir}/Open Annihilation" "${oa_first_run_dir}/data"
+        "${oa_first_run_dir}/first-run.conf")
+      set_tests_properties(first-run-clean PROPERTIES FIXTURES_SETUP first-run-clean)
+      add_test(NAME native-first-run COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --first-run --check-first-run
+        --preferences-file "${oa_first_run_dir}/first-run.conf"
+        --user-folder "${oa_first_run_dir}/Open Annihilation"
+        --data-dir "${oa_first_run_dir}/data")
+      set_tests_properties(native-first-run PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_first_run_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED first-run-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three

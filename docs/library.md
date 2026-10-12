@@ -59,6 +59,11 @@ skirmish and battle room map lists have **MORE MAPS…** instead, which opens
 the map browser, and the battle room has **GET MAP**, which downloads the
 host's map without a detour ([map packs](maps/README.md)).
 
+The first time the main menu is reached, a welcome points out these two
+buttons, after a language and a choice about online features
+([the welcome setup](first-run.md)). Settings › System can show that
+welcome again.
+
 The settings have a button of their own on the main menu, the gears beside
 the OA button, which opens them with no Library under them
 ([settings](settings.md#opening-the-settings)). From the Library, **Cmd+,**

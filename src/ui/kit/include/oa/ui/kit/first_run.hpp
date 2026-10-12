@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace oa::ui::kit {
@@ -145,13 +146,15 @@ struct CarouselSlot {
 /// @param count how many cards
 /// @param centre_milli where the centre sits, in thousandths of an index
 /// @param reduced_motion true slides the cards flat
+/// @param wrap true joins the ring, so the first card's neighbours include the last
 /// @return the cards that show, far ones first
 [[nodiscard]] std::vector<CarouselSlot> carousel_places(
     const Rect& area,
     const CarouselGeometry& geometry,
     int32_t count,
     int32_t centre_milli,
-    bool reduced_motion
+    bool reduced_motion,
+    bool wrap = false
 );
 
 /// What a carousel was asked to do. Shoulders and a stick set the flags; the keys do not.
@@ -206,8 +209,9 @@ struct CarouselDrag {
 ///
 /// A swipe of carousel_swipe_threshold points or more moves one card: a
 /// finger that travels left selects the next card, and right the previous.
-/// A short press on a side card centres it, a short press on the centre card
-/// picks it, and a short press on an arrow moves one card.
+/// A short press on a side card centres it. A short press on the centre
+/// card, or on the card already selected while it is still on its way there,
+/// picks it. A short press on an arrow moves one card.
 ///
 /// @param[in,out] model the carousel
 /// @param places the cards as carousel_places laid them, kept alive by the caller
@@ -265,6 +269,17 @@ language_card_layout(Point at, const Metrics& metrics, bool progress) noexcept;
 /// @param rect the card
 /// @param look its words and state
 void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCardLook& look);
+
+/// Draws one centred line, large in the modern fonts and shrunk until it fits.
+///
+/// On the design's card the own name is about 27 points. A title uses 32 and
+/// shrinks the same way. In the game's bitmap fonts it uses the regular font.
+///
+/// @param canvas where it is drawn
+/// @param text the line
+/// @param box the box the line is centred in
+/// @param ink the colour
+void draw_prominent_line(const Canvas& canvas, std::string_view text, const Rect& box, Colour ink);
 
 /// Appends a language card: one item and, with a control number, one control
 /// of kind button that does not take steps.

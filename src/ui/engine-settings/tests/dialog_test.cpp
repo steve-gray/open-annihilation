@@ -599,38 +599,43 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::common_tweaks).size() == 2);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);
     CHECK(settings::page_settings(Page::common_tweaks)[1] == Setting::path_search);
-    // System: Your files, then the switches where the game registers file
-    // types at run time, or the text row where the app declares them.
+    // System: Your files, then Welcome setup, then the switches where the
+    // game registers file types at run time, or the text row where the app
+    // declares them.
     const auto system_rows = settings::page_settings(Page::system);
     CHECK(system_rows[0] == Setting::user_folder);
     if (settings::file_types_switchable) {
-        CHECK(system_rows.size() == 6);
-        CHECK(system_rows[1] == Setting::file_type_registration);
-        CHECK(system_rows[2] == Setting::file_type_oamod);
-        CHECK(system_rows[3] == Setting::file_type_oamap);
-        CHECK(system_rows[4] == Setting::file_type_oalang);
-        CHECK(system_rows[5] == Setting::file_type_oareg);
+        CHECK(system_rows.size() == 7);
+        CHECK(system_rows[1] == Setting::welcome_setup);
+        CHECK(system_rows[2] == Setting::file_type_registration);
+        CHECK(system_rows[3] == Setting::file_type_oamod);
+        CHECK(system_rows[4] == Setting::file_type_oamap);
+        CHECK(system_rows[5] == Setting::file_type_oalang);
+        CHECK(system_rows[6] == Setting::file_type_oareg);
     } else {
-        CHECK(system_rows.size() == 2);
-        CHECK(system_rows[1] == Setting::file_types_note);
+        CHECK(system_rows.size() == 3);
+        CHECK(system_rows[1] == Setting::welcome_setup);
+        CHECK(system_rows[2] == Setting::file_types_note);
     }
     // Either layout can be asked for, whichever this system shows by itself.
     settings::Dialog runtime = opened(Page::system);
     runtime.file_type_switches = true;
     const auto runtime_rows = geometry::open_rows(runtime).rows.rows;
-    CHECK(runtime_rows.size() == 6);
+    CHECK(runtime_rows.size() == 7);
     CHECK(runtime_rows[0].setting == Setting::user_folder);
-    CHECK(runtime_rows[1].setting == Setting::file_type_registration);
-    CHECK(runtime_rows[2].setting == Setting::file_type_oamod);
-    CHECK(runtime_rows[3].setting == Setting::file_type_oamap);
-    CHECK(runtime_rows[4].setting == Setting::file_type_oalang);
-    CHECK(runtime_rows[5].setting == Setting::file_type_oareg);
+    CHECK(runtime_rows[1].setting == Setting::welcome_setup);
+    CHECK(runtime_rows[2].setting == Setting::file_type_registration);
+    CHECK(runtime_rows[3].setting == Setting::file_type_oamod);
+    CHECK(runtime_rows[4].setting == Setting::file_type_oamap);
+    CHECK(runtime_rows[5].setting == Setting::file_type_oalang);
+    CHECK(runtime_rows[6].setting == Setting::file_type_oareg);
     settings::Dialog bundle = opened(Page::system);
     bundle.file_type_switches = false;
     const auto bundle_rows = geometry::open_rows(bundle).rows.rows;
-    CHECK(bundle_rows.size() == 2);
+    CHECK(bundle_rows.size() == 3);
     CHECK(bundle_rows[0].setting == Setting::user_folder);
-    CHECK(bundle_rows[1].setting == Setting::file_types_note);
+    CHECK(bundle_rows[1].setting == Setting::welcome_setup);
+    CHECK(bundle_rows[2].setting == Setting::file_types_note);
     CHECK(settings::page_settings(Page::language)[0] == Setting::language);
     CHECK(settings::page_settings(Page::graphics)[0] == Setting::max_frame_rate);
     CHECK(settings::page_settings(Page::graphics)[1] == Setting::anti_aliasing);
@@ -5509,7 +5514,7 @@ settings::Dialog your_files_dialog() {
 void your_files_shows_the_folder_and_opens_its_folders() {
     settings::Dialog dialog = your_files_dialog();
     const auto open = geometry::open_rows(dialog);
-    CHECK(open.rows.rows.size() == 2);
+    CHECK(open.rows.rows.size() == 3);
     const geometry::Row row = open.rows.rows[0];
     CHECK(row.setting == Setting::user_folder);
     CHECK(row.lock == Lock::none);

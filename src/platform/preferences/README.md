@@ -173,6 +173,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.text-size` | percent of the game fonts' sizes, 50 to 300 | 80 |
 | `open-annihilation.language` | `system`, or a language's BCP-47 tag (`en`, `de`, `es`, `fr`, `it`) | `system` with the player's own file, else `en` |
 | `open-annihilation.language-notice-dismissed` | comma-separated BCP-47 tags of languages the player chose Use English for, when the game asked about a language the operating system wanted that was not installed | none dismissed; each such language is still asked about |
+| `open-annihilation.first-run` | `done` when the welcome setup is finished or skipped; absent, or any other word, means it has not been finished. Show again erases the key | absent, so the welcome shows once |
 | `open-annihilation.content-updates` | `automatically`, `library` (only when the Library opens) or `never`; any other text reads as `automatically` | `automatically` |
 | `open-annihilation.file-types.oamod` | `on` or `off`. Only the word `off` turns the switch off; any other text reads as on. Not `0` and `1` | on: this copy opens mod packages |
 | `open-annihilation.file-types.oamap` | `on` or `off`, as the mod packages' key | on: this copy opens map packs |

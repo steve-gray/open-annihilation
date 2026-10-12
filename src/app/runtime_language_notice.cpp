@@ -709,6 +709,11 @@ void LanguageNoticeHost::close_for_run(Runtime& runtime) noexcept {
 }
 
 void LanguageNoticeHost::tell(Runtime& runtime) {
+    if (runtime.first_run_blocks_language_notice()) {
+        if (runtime.oa_layer_)
+            close_notice(runtime.oa_layer());
+        return;
+    }
     if (oa::app::command_line::launch_language(runtime.options_.launch) != nullptr) {
         if (runtime.oa_layer_)
             close_notice(runtime.oa_layer());

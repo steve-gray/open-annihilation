@@ -1353,6 +1353,8 @@ enum class Lock : uint8_t {
     /// Zoomed out units is Rendered: units are drawn the same at every
     /// zoom, so After zoom changes nothing.
     needs_dots,
+    /// The welcome setup is walked through again only from the main menu.
+    main_menu,
 };
 
 /// The game the dialog opens over.
@@ -1408,6 +1410,9 @@ struct Locks {
     /// After zoom: the dialog itself locks it needs_dots while it shows
     /// Zoomed out units Rendered.
     Lock zoomed_out_after{};
+    /// Welcome setup: locked while a game is running. SHOW AGAIN is chosen
+    /// from the main menu.
+    Lock welcome_setup{};
 };
 
 /// Returns the locks a game state puts on the settings.

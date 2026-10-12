@@ -266,6 +266,8 @@ kit::RowView row_view(
     return shown;
 }
 
+void fit_locked_welcome(Rows& rows, kit::PlacedRows* placed);
+
 Rows place_section(
     const Dialog& dialog,
     Page page,
@@ -324,7 +326,104 @@ Rows place_section(
     }
     if (placed != nullptr)
         *placed = std::move(kit_rows);
+    // Welcome setup's lock sentence is wider than the kit's lock, and at
+    // Compact the label line cannot also hold the label and SHOW AGAIN in
+    // the game's fonts. Widen that one locked row; the kit's metrics stay.
+    fit_locked_welcome(rows, placed);
     return rows;
+}
+
+/// Gives a locked Welcome setup row room for its label and its lock sentence
+/// in the game's fonts. The kit's lock is 148 columns, so the sentence has
+/// 140, and Compact leaves the label 69: the game's regular face needs 96
+/// for "Welcome setup" and its small face 159 for the sentence. The lock
+/// grows to the sentence at the kit's estimate of 7 a character. SHOW AGAIN
+/// stays on the label line where the line is wide enough, and drops under it
+/// where it is not, still drawn and still not pressable. Later rows move
+/// down with it. The kit's placement, which the display list is built from,
+/// moves with the rows the layout draws. An unlocked row is left as placed.
+///
+/// @param[in,out] rows the section's rows
+/// @param[in,out] placed the kit's placement of the same rows; may be null
+void fit_locked_welcome(Rows& rows, kit::PlacedRows* placed) {
+    std::size_t found = rows.rows.size();
+    for (std::size_t at = 0; at < rows.rows.size(); ++at) {
+        if (rows.rows[at].setting == Setting::welcome_setup && rows.rows[at].lock != Lock::none) {
+            found = at;
+            break;
+        }
+    }
+    if (found == rows.rows.size())
+        return;
+    Row& row = rows.rows[found];
+    if (row.label.width <= 0 || row.lock_area.height <= 0 || row.control_area.width <= 0)
+        return;
+    // The game's regular face of this label is wider than the kit's 7.
+    constexpr int32_t label_character = 8;
+    const int32_t label_need =
+        static_cast<int32_t>(oa::ui::kit::character_count("Welcome setup")) * label_character;
+    const int32_t sentence =
+        static_cast<int32_t>(oa::ui::kit::character_count(lock_text(Lock::main_menu))) *
+        oa::ui::kit::estimated_character_width;
+    const int32_t lock_columns =
+        std::max(row.lock_area.width, sentence + padlock_width + padlock_gap);
+    const int32_t right = row.control_area.x + row.control_area.width;
+    const int32_t room = right - row.label.x;
+    const int32_t button = row.control_area.width;
+    if (lock_columns + label_gap >= room)
+        return;
+    const bool button_fits = label_need + label_gap + lock_columns + label_gap + button <= room;
+    int32_t drop = 0;
+    row.lock_area.width = lock_columns;
+    if (button_fits) {
+        row.lock_area.x = row.control_area.x - label_gap - lock_columns;
+    } else {
+        row.lock_area.x = right - lock_columns;
+        drop = hint_gap + row.control_area.height;
+        row.control_area.x = right - button;
+        row.control_area.y += drop;
+        for (std::size_t hint = 0; hint < row.hint_lines; ++hint)
+            row.hints[hint].y += drop;
+        row.height += drop;
+        rows.bottom += drop;
+        for (std::size_t after = found + 1; after < rows.rows.size(); ++after) {
+            Row& later = rows.rows[after];
+            later.top += drop;
+            later.label.y += drop;
+            later.lock_area.y += drop;
+            for (std::size_t hint = 0; hint < later.hint_lines; ++hint)
+                later.hints[hint].y += drop;
+            later.control_area.y += drop;
+            later.value.y += drop;
+        }
+    }
+    row.label.width = row.lock_area.x - label_gap - row.label.x;
+    if (placed == nullptr || found >= placed->rows.size())
+        return;
+    kit::PlacedRow& kit_row = placed->rows[found];
+    kit_row.lock_area.x = row.lock_area.x;
+    kit_row.lock_area.width = row.lock_area.width;
+    kit_row.label.width = row.label.width;
+    kit_row.control_area.x = row.control_area.x;
+    kit_row.control_area.y = row.control_area.y;
+    kit_row.height = row.height;
+    if (kit_row.value.y == row.label.y && kit_row.value.x == row.label.x)
+        kit_row.value.width = row.label.width;
+    for (std::size_t hint = 0; hint < kit_row.hints.size() && hint < row.hint_lines; ++hint)
+        kit_row.hints[hint].y = row.hints[hint].y;
+    if (drop == 0)
+        return;
+    placed->bottom += drop;
+    for (std::size_t after = found + 1; after < placed->rows.size(); ++after) {
+        kit::PlacedRow& shifted = placed->rows[after];
+        shifted.top += drop;
+        shifted.label.y += drop;
+        shifted.lock_area.y += drop;
+        for (kit::Rect& hint_box : shifted.hints)
+            hint_box.y += drop;
+        shifted.control_area.y += drop;
+        shifted.value.y += drop;
+    }
 }
 
 Rows place_rows(
@@ -661,6 +760,8 @@ std::string_view lock_text(Lock lock) noexcept {
         return "Set by the language";
     case Lock::needs_dots:
         return "Needs Dots";
+    case Lock::main_menu:
+        return "Choose from the main menu.";
     }
     return {};
 }
@@ -1260,12 +1361,12 @@ DialogAction open_folder(Dialog& dialog, FolderButton button) noexcept {
 /// Takes what a row's button asks for: MANAGE… the Game files screen, a
 /// button of Your files its folder, MORE IN THE LIBRARY… the Library's
 /// Languages, REGISTRIES IN THE LIBRARY… the Library's Registries, SHOW
-/// the UI kit gallery.
+/// the UI kit gallery, SHOW AGAIN the welcome setup at the next main menu.
 ///
 /// @param[in,out] dialog the dialog
 /// @param action the button's action (manage_game_files_action,
-///     first_folder_action and its place, open_library_action or
-///     show_gallery_action)
+///     first_folder_action and its place, open_library_action,
+///     show_gallery_action or show_welcome_action)
 /// @return what it asks of the host
 DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
     static_assert(
@@ -1288,6 +1389,24 @@ DialogAction row_action(Dialog& dialog, kit::ActionId action) noexcept {
                  layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
         "SHOW asks for an action no other row's button asks for"
     );
+    static_assert(
+        layout::show_welcome_action != downloads::reset_install_id_action &&
+            layout::show_welcome_action != downloads::empty_downloads_action &&
+            layout::show_welcome_action != downloads::manage_registries_action &&
+            layout::show_welcome_action != layout::manage_game_files_action &&
+            layout::show_welcome_action != layout::open_library_action &&
+            layout::show_welcome_action != layout::show_gallery_action &&
+            (layout::show_welcome_action < layout::first_folder_action ||
+             layout::show_welcome_action >=
+                 layout::first_folder_action + static_cast<kit::ActionId>(folder_button_count)),
+        "SHOW AGAIN asks for an action no other row's button asks for"
+    );
+    if (action == layout::show_welcome_action) {
+        // The preference stays until OK. Cancel drops the dialog, and the
+        // flag with it.
+        dialog.welcome_again = true;
+        return DialogAction::changed;
+    }
     if (action == layout::show_gallery_action)
         return DialogAction::show_gallery;
     if (action == downloads::reset_install_id_action)

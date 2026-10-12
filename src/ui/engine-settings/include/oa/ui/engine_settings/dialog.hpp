@@ -285,6 +285,10 @@ enum class Setting : uint8_t {
     /// File types: the text row iOS shows in place of the switches.
     /// It changes no setting.
     file_types_note,
+    /// Welcome setup: SHOW AGAIN walks through the language, online features
+    /// and the OA buttons again. It changes no setting. During a game the
+    /// button is locked, and the choice is made from the main menu.
+    welcome_setup,
 };
 
 /// Returns the settings a section shows, top to bottom.
@@ -896,6 +900,9 @@ struct Dialog {
     /// The part of a source pixel the wheel has turned over the section list
     /// and not yet scrolled.
     float nav_wheel_rows{};
+    /// SHOW AGAIN was pressed. OK forgets that the welcome setup is done, so
+    /// it shows at the next main menu. Cancel leaves the preference.
+    bool welcome_again{};
 };
 
 /// Returns every standard hack as Developer Mode shows it: as the profile

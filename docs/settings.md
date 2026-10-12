@@ -646,6 +646,12 @@ of the game's file types this copy opens.
   ([macOS](installation/macos.md#where-it-keeps-its-files),
   [Windows](installation/windows.md#where-it-keeps-its-files),
   [Linux](installation/linux.md#where-it-keeps-its-files)).
+- **Welcome setup** walks through the language, online features and the OA
+  buttons again. **SHOW AGAIN**, then **OK**, clears
+  `open-annihilation.first-run`, and the welcome shows at the next main
+  menu. **Cancel** leaves it as it was. During a game the row is locked
+  and says "Choose from the main menu." The welcome itself is
+  [the first-run setup](first-run.md).
 - **File Type Registration**, on Windows, Linux and macOS. Four switches:
   - **Mod packages (.oamod)**
   - **Map packs (.oamap)**

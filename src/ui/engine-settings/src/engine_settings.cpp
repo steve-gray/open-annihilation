@@ -1152,6 +1152,9 @@ Locks settings_locks(const GameState& state) noexcept {
                                                                     : Lock::none;
     // The language changes only what players read, so no game locks it.
     locks.language = state.language_from_command_line ? Lock::command_line : Lock::none;
+    // SHOW AGAIN starts the welcome setup at the next main menu, so a game
+    // locks the button until the player is back there.
+    locks.welcome_setup = state.in_game ? Lock::main_menu : Lock::none;
     return locks;
 }
 

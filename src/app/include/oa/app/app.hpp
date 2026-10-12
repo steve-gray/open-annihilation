@@ -465,6 +465,12 @@ struct Options {
     // Shows the notice for a language that is only available, over the main
     // menu, and checks Use English records the answer.
     bool check_language_notice = false;
+    // Shows the first-run setup even when the preference says it is done,
+    // and in a run that would otherwise leave it closed.
+    bool first_run = false;
+    // Walks the first-run setup over the main menu: a built-in language, a
+    // pack that fails and then retries, Skip setup, and both online choices.
+    bool check_first_run = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;

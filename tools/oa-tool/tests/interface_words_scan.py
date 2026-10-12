@@ -563,6 +563,7 @@ def module_of(rel: str) -> str | None:
     if "/tests/" in f"/{rel}" or rel.endswith("interface_words.hpp"):
         return None
     order = (
+        ("src/ui/first-run/", "first-run"),
         ("src/ui/library/", "library"),
         ("src/ui/engine-settings/", "engine-settings"),
         ("src/ui/map-browser/", "map-browser"),
@@ -653,6 +654,13 @@ MODULES = (
         "src/ui/library/include/oa/ui/library/interface_words.hpp",
         "the Library",
         True,
+    ),
+    (
+        "first-run",
+        "oa::ui::first_run",
+        "src/ui/first-run/include/oa/ui/first_run/interface_words.hpp",
+        "the first-run setup",
+        False,
     ),
     (
         "engine-settings",

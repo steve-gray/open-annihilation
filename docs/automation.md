@@ -24,6 +24,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [A map list's names](#a-map-lists-names)
 - [A list that does not fit](#a-list-that-does-not-fit)
 - [In a battle room](#in-a-battle-room)
+- [The welcome setup](#the-welcome-setup)
 - [Checks](#checks)
 
 ## Turning it on
@@ -379,6 +380,47 @@ on, as it ends with ` DEV MODE` while Developer Mode is:
 [Engine: OpenAnnihilation v0.7.2 REMOTED]
 [Engine: OpenAnnihilation v0.7.2 DEV MODE REMOTED]
 ```
+
+## The welcome setup
+
+The welcome at the first main menu is the screen `first-run`. Its controls
+are listed as `oa.first-run.<step>.<control>`, with `<step>` one of
+`language`, `online` and `buttons`:
+
+| Control | Name |
+|---|---|
+| Skip setup | `oa.first-run.language.skip`, `oa.first-run.online.skip`, `oa.first-run.buttons.skip` |
+| Back | `oa.first-run.language.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
+| Next | `oa.first-run.language.next`, `oa.first-run.online.next` |
+| A language card | `oa.first-run.language.card.<tag>`, the tag in lower case and anything else a hyphen (`de`, `en-xa`) |
+| The carousel's arrows | `oa.first-run.language.previous`, `oa.first-run.language.next-card` |
+| Cancel download, Retry | `oa.first-run.language.cancel`, `oa.first-run.language.retry` |
+| Turn on online features, Not now | `oa.first-run.online.on`, `oa.first-run.online.not-now` |
+| Start playing | `oa.first-run.buttons.start` |
+
+`--first-run` shows the welcome even when it is already done, and even in
+a run that would otherwise hide it (a headless check, `--preferences-file`,
+a benchmark, a stage run, `--fark`, an unattended run). Without it, those
+runs do not show the welcome, and neither does a run whose preference
+`open-annihilation.first-run` is `done`.
+
+A stage file opens one step with a line of its own, and does not show the
+welcome otherwise:
+
+```
+first-run language
+first-run online
+first-run buttons
+```
+
+The log answers `stage: first-run language` (or `online`, or `buttons`).
+On its own the welcome logs `first-run: showing step language` when that
+step opens, and `first-run: not showing:` with `done`, `headless check`,
+`preferences file`, `benchmark`, `stage`, `fark` or `unattended` when it
+stays hidden.
+
+Settings › System › Welcome setup is `oa.settings.first-run`. SHOW AGAIN
+waits for OK; during a game the row is locked.
 
 ## Checks
 

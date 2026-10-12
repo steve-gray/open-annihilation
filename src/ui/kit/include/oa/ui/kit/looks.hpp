@@ -439,6 +439,9 @@ struct CarouselLook {
     int32_t centre_milli{};            ///< where the centre sits, in thousandths of a card index
     bool reduced_motion{false};        ///< slides flat: no turn, no shrink and no fall
     std::vector<CarouselCard> cards{}; ///< the cards, in order from the left of the ring
+    /// The ring joins. The card before the first is the last, so two cards
+    /// stand on each side of a selection at either end. Off, the row is a line.
+    bool wrap{false};
 };
 
 /// A step indicator: a letter-spaced name and number, and one segment a step.

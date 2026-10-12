@@ -44,7 +44,7 @@ using Stepper = kit::Stepper<SettingsModel>;
 using Hint = std::array<std::string_view, 2>;
 
 /// The number of settings: Setting's enumerators.
-constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::file_types_note) + 1;
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::welcome_setup) + 1;
 
 // ---------------------------------------------------------------------------
 // The sections' rows.
@@ -195,19 +195,21 @@ constexpr std::array<Setting, 3> kModChatRows{
 /// Downloads builds its rows from the host's offer, not from settings.
 constexpr std::array<Setting, 0> kDownloadsRows{};
 /// System where the game registers file types at run time: Your files, then
-/// the group's heading and one switch for each type.
-constexpr std::array<Setting, 6> kSystemRuntimeRows{
+/// Welcome setup, then the group's heading and one switch for each type.
+constexpr std::array<Setting, 7> kSystemRuntimeRows{
     Setting::user_folder,
+    Setting::welcome_setup,
     Setting::file_type_registration,
     Setting::file_type_oamod,
     Setting::file_type_oamap,
     Setting::file_type_oalang,
     Setting::file_type_oareg,
 };
-/// System where the app's bundle declares the types: Your files, then the
-/// text row in place of the switches.
-constexpr std::array<Setting, 2> kSystemBundleRows{
+/// System where the app's bundle declares the types: Your files, then
+/// Welcome setup, then the text row in place of the switches.
+constexpr std::array<Setting, 3> kSystemBundleRows{
     Setting::user_folder,
+    Setting::welcome_setup,
     Setting::file_types_note,
 };
 /// System's rows for this system. A dialog may show the other layout
@@ -1797,6 +1799,50 @@ std::size_t kit_gallery_hint_count(const SettingsModel& model) {
     return kit_gallery_hint_lines(model).size();
 }
 
+/// Welcome setup's hint, in English.
+constexpr std::string_view welcome_setup_hint_text =
+    "Walk through the language, online features and the OA buttons again.";
+/// The most lines Welcome setup's hint takes.
+constexpr std::size_t welcome_setup_hint_most_lines = 2;
+
+/// Returns Welcome setup's hint as shown, broken into lines between words
+/// as wide as the dialog's class lets a line be.
+std::vector<std::string> welcome_setup_hint_lines(const SettingsModel& model) {
+    std::vector<std::string> broken = break_lines(
+        shown_text(welcome_setup_hint_text), line_characters(model), welcome_setup_hint_most_lines
+    );
+    if (broken.empty())
+        broken.emplace_back();
+    return broken;
+}
+
+/// Returns a line of Welcome setup's hint.
+std::string welcome_setup_hint(const SettingsModel& model, std::size_t line) {
+    const std::vector<std::string> broken = welcome_setup_hint_lines(model);
+    return line < broken.size() ? broken[line] : std::string{};
+}
+
+/// Returns how many lines Welcome setup's hint takes: one at Regular and
+/// Large, two at Compact.
+std::size_t welcome_setup_hint_count(const SettingsModel& model) {
+    return welcome_setup_hint_lines(model).size();
+}
+
+/// The Welcome setup row: SHOW AGAIN walks through the first-run setup again
+/// at the next main menu, once OK is pressed. It keeps no setting.
+constexpr Spec welcome_setup_row() noexcept {
+    const Spec spec = kit::value_and_button<SettingsModel>(
+        "first-run",
+        "Welcome setup",
+        nullptr,
+        "SHOW AGAIN",
+        "",
+        show_welcome_action,
+        {welcome_setup_hint_text, {}}
+    );
+    return changing(spec, &welcome_setup_hint, &welcome_setup_hint_count);
+}
+
 /// The UI kit gallery row: SHOW opens the gallery of every part of Open
 /// Annihilation's own screens. It keeps no setting.
 constexpr Spec kit_gallery_row() noexcept {
@@ -2285,6 +2331,9 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = engine_switch<&E::file_type_oareg>("file-type-oareg", "Registry files (.oareg)", {})},
     {.setting = S::file_types_note,
      .spec = file_types_note_row()},
+    {.setting = S::welcome_setup,
+     .spec = welcome_setup_row(),
+     .lock = &Locks::welcome_setup},
 }};
 // clang-format on
 
@@ -2366,6 +2415,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "file-type-oalang",
     "file-type-oareg",
     "file-types",
+    "first-run",
 };
 
 /// Tells whether every row stands at its setting's place and is named by

@@ -427,6 +427,17 @@ void carousel_place_is_a_function_of_time() {
             "a press on a side card does not centre it"
         );
         expect(pressed.selected == 0, "a side card centred a different card");
+        expect(
+            kit::carousel_pointer(pressed, turned, {}, {}, drag, kit::PointerPhase::down, at) ==
+                kit::CarouselEvent::none,
+            "a second press answers before the finger comes up"
+        );
+        expect(
+            kit::carousel_pointer(pressed, turned, {}, {}, drag, kit::PointerPhase::up, at) ==
+                kit::CarouselEvent::picked,
+            "a second press on the card just centred does not pick it"
+        );
+        expect(pressed.selected == 0, "picking the card just centred moved away from it");
     }
     {
         kit::CarouselModel swiped{5, 2, 2000, kit::carousel_move_ms};
