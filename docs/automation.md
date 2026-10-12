@@ -264,8 +264,7 @@ included.
 map zoom out to the whole map, from the main menu:
 
 1. click `oa.settings-button`, which opens Settings, and wait until
-   `oa.settings.ok` is listed (or click `oa.button`, which opens the
-   Library, then its `oa.library.settings`);
+   `oa.settings.ok` is listed;
 2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
    (its `checked` turns true);
 3. click `oa.settings.max-zoom-out`, then
