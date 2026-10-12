@@ -1945,6 +1945,10 @@ void check_pack_maps(Driver& d) {
         names->list_selection == pack_row && probe.prepares == 1,
         "choosing the pack map mounts its files"
     );
+    expect(
+        mp::panel_text(*modal, "MAPNAME") == "Isle of Ashes",
+        "the map list names the pack map by the title its OTA gives"
+    );
     const bool read_on_choice =
         std::any_of(lookups.begin(), lookups.end(), [](const std::string& path) {
             return path.find(PackProbe::kName) != std::string::npos;
@@ -1957,6 +1961,11 @@ void check_pack_maps(Driver& d) {
     );
     click_map_row(d, *names, pack_row, ox, oy);
     expect(d.click("LOAD"), "LOAD chooses the pack map");
+    d.frame();
+    expect(
+        mp::panel_text(mp::multiplayer_panel(), "MAPNAME") == "Isle of Ashes",
+        "the battle room names the pack map by the title its OTA gives"
+    );
     const auto& chosen = mp::local_info(mp::multiplayer_lobby());
     const auto length = ::strnlen(chosen.map_name, sizeof chosen.map_name);
     expect(
