@@ -30,9 +30,16 @@ The carousel lists the built-in languages in the order the game keeps them
 (English, Deutsch, Español, Français, Italiano), then language packs that
 are already installed, then each language pack Core Prime lists when
 downloads are on and that catalogue can be read. A pack that is not
-installed yet wears **Get** and its size. Choosing a built-in language, or
-an installed one the game can show, switches at once and the screen is
-drawn again in that language. The carousel is a ring: left from the
+installed yet wears **Get** and its size. While a built-in language, or a pack already installed, sits in the
+middle, this step speaks that language before it is chosen: the title,
+"Choose your language.", the note and the offline lines under the
+carousel, a download's status, the step line, and **Skip setup**,
+**Back** and **Next**. Turning to a language the game cannot read yet
+puts those words back in the language in use, and nothing is downloaded
+just to preview one. The other two steps stay in the language in use
+until the player chooses. Choosing a built-in language, or
+an installed one the game can show, switches at once and the whole game
+is drawn again in that language. The carousel is a ring: left from the
 first card goes to the last, and right from the last goes to the first,
 one card either way. A single click on a side card brings it to the
 centre. A double-click on any card centres it and chooses it. Choosing a

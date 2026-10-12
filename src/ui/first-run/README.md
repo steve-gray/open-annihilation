@@ -18,6 +18,7 @@ A `Session` holds the `Model` (the step, the language cards, the online-features
 - The coach marks never cover either OA button. A short side flips the card.
 - The picture well draws the Library's Active tab from a fixed Ridge sample. No picture file is shipped.
 - Every word the player reads is in `interface_words.hpp`.
+- On the language step, a built-in or installed language in the middle shows that step's words in itself. A pack that is not installed yet leaves them in the language in use, and nothing is downloaded to preview it. The other steps stay in the language in use until the player chooses.
 
 ## Tests
 

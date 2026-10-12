@@ -354,6 +354,24 @@ void installed_language_answers_interface_text() {
     languages::set_interface_language(nullptr, languages::english());
 }
 
+/// A named language is read from the installed catalogue. The language the
+/// interface shows is left as it was, and without a catalogue the word is English.
+void named_language_reads_one_text() {
+    clear_pack_languages();
+    languages::InterfaceText catalogue;
+    OA_CHECK(catalogue.add(kCatalogue));
+    const auto& french = *languages::find_by_tag("fr");
+    const auto& german = *languages::find_by_tag("de");
+    languages::set_interface_language(&catalogue, french);
+    OA_CHECK(languages::interface_text_in("Mouse wheel zoom", german) == "Mausrad-Zoom");
+    OA_CHECK(languages::interface_text_in("Font shadow", german) == "Font shadow");
+    OA_CHECK(&languages::interface_language() == &french);
+    OA_CHECK(languages::interface_text("Mouse wheel zoom") == "Zoom \xC3\xA0 la molette");
+    languages::set_interface_language(nullptr, languages::english());
+    OA_CHECK(languages::interface_text_in("Mouse wheel zoom", german) == "Mouse wheel zoom");
+    OA_CHECK(&languages::interface_language() == &languages::english());
+}
+
 /// Copies text into a zero-filled character field, keeping its last byte zero.
 ///
 /// @param field the field
@@ -748,6 +766,7 @@ int main() {
     catalogue_translates_by_english_text();
     malformed_catalogues_add_nothing();
     installed_language_answers_interface_text();
+    named_language_reads_one_text();
     data_words_follow_the_chain();
     unit_texts_fall_back_to_the_types_own();
     installed_unit_texts_answer_the_interface();
