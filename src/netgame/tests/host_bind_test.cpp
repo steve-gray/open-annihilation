@@ -54,7 +54,8 @@ struct StderrCapture {
         const int from = fileno(stderr);
         const int into = fileno(file);
         saved = dup(from);
-        if (saved < 0 || dup2(into, from) != 0) {
+        // POSIX dup2 returns the descriptor it made, not 0.
+        if (saved < 0 || dup2(into, from) < 0) {
 #endif
             if (saved >= 0) {
 #ifdef _WIN32
