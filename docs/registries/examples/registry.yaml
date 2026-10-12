@@ -4,6 +4,8 @@
 registry: 1
 id: "example-maps"
 name: "Example Maps"
+title: "Example Maps - Sample packages"
+description: "A sample registry of maps, including the made-up set Ridge."
 homepage: "https://example.org/"
 catalogue: "http://maps.example.org/oa/v1/catalogue.json"
 mirrors:

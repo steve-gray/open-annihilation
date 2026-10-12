@@ -41,12 +41,14 @@ not know is refused.
 of the descriptor, so one added from a file and every one while offline
 still work. Required: `id`, `name`, `catalogue`, `trusted-keys`,
 `downloads`, `added`, `enabled`. Optional, and empty when absent: `url`,
-`homepage`, `mirrors`, `player-mirrors`.
+`homepage`, `mirrors`, `player-mirrors`, `title`, `description`.
 
 | Key | Required | Rule |
 |---|---|---|
 | `id` | yes | kebab-case, 1 to 32 bytes: words of a-z and 0-9 joined by single hyphens |
-| `name` | yes | 1 to 64 bytes of UTF-8, no control character |
+| `name` | yes | 1 to 64 bytes of UTF-8, no control character. The short name |
+| `title` | no | the card's heading, 1 to 96 characters (Unicode scalar values). Absent: the card heads with `name` |
+| `description` | no | a paragraph on the card, 1 to 400 characters, counted the same way |
 | `url` | no | where the descriptor was read; http or https; absent when it came from a file |
 | `homepage` | no | http or https, opened only in a browser |
 | `catalogue` | yes | http, no query |
@@ -73,6 +75,8 @@ kebab-case, as `id` is.
 registries:
   - id: "example-maps"
     name: "Example Maps"
+    title: "Example Maps - Sample packages"
+    description: "A sample registry of maps, including the made-up set Ridge."
     url: "http://maps.example.org/oa/registry.yaml"
     homepage: "http://maps.example.org/"
     catalogue: "http://maps.example.org/oa/v1/catalogue.json"
