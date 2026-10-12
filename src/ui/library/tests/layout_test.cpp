@@ -2563,7 +2563,7 @@ widest_picture(const kit::DisplayList& list, uint8_t red, uint8_t green, uint8_t
 /// A one-map pack wears its minimap, fitted, on Maps and on Updates. A pack
 /// of several keeps its badge, or the first map's minimap on the Maps tab
 /// when it has none. The details show one large picture or a grid. A
-/// minimap that has not arrived yet is a dashed placeholder, then the picture.
+/// minimap that has not arrived yet keeps the row's letters, then the picture.
 void map_previews_fit_their_boxes() {
     const lib::MapPicture red = solid_minimap(255, 0, 0);
     const lib::MapPicture blue = solid_minimap(0, 0, 255);
@@ -2612,7 +2612,7 @@ void map_previews_fit_their_boxes() {
     OA_CHECK(placeholder != nullptr);
     if (placeholder != nullptr) {
         OA_CHECK(!renderer::picture_drawable(placeholder->badge));
-        OA_CHECK(placeholder->badge_text.empty());
+        OA_CHECK(placeholder->badge_text == "SP");
     }
 
     for (lib::Listing& listing : library.inputs.listings) {

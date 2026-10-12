@@ -11,13 +11,13 @@
 #include "oa/netgame/http/client.hpp"
 #include "oa/platform/files.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <map>
 #include <optional>
 #include <set>
 #include <span>
@@ -49,6 +49,12 @@ struct PictureEntry {
     PictureState state{PictureState::waiting}; ///< where it stands
     ModBadge badge{};                          ///< the decoded picture, once ready
     std::vector<uint8_t> bytes{};              ///< the checked file, once ready
+};
+
+/// One picture in the order it was asked for.
+struct PictureRecord {
+    PictureKey key{};     ///< the registry and the address
+    PictureEntry entry{}; ///< where it stands, and the picture once ready
 };
 
 /// What reading or fetching one picture came to.
@@ -95,6 +101,30 @@ bool checked_badge(
     return badge.width > 0 && badge.height > 0 && !badge.pixels.empty();
 }
 
+/// Returns the picture asked for under a key, or the end.
+///
+/// @param entries the pictures asked for and not taken
+/// @param key the registry and the address
+/// @return the picture; the end when it was not asked for
+std::vector<PictureRecord>::iterator
+find_record(std::vector<PictureRecord>& entries, const PictureKey& key) {
+    return std::find_if(entries.begin(), entries.end(), [&](const PictureRecord& record) {
+        return record.key == key;
+    });
+}
+
+/// Returns the picture asked for under a key, or the end.
+///
+/// @param entries the pictures asked for and not taken
+/// @param key the registry and the address
+/// @return the picture; the end when it was not asked for
+std::vector<PictureRecord>::const_iterator
+find_record(const std::vector<PictureRecord>& entries, const PictureKey& key) {
+    return std::find_if(entries.begin(), entries.end(), [&](const PictureRecord& record) {
+        return record.key == key;
+    });
+}
+
 } // namespace
 
 std::optional<base::sha256::Digest> picture_digest(std::string_view url) noexcept {
@@ -107,12 +137,13 @@ std::optional<base::sha256::Digest> picture_digest(std::string_view url) noexcep
 }
 
 struct PictureCache::State {
-    std::filesystem::path folder{};               ///< where the pictures are kept; empty for none
-    const std::atomic<bool>* cancel{};            ///< set when the worker stops; may be null
-    mutable base::threads::Mutex mutex{};         ///< guards entries, refused and generation
-    std::map<PictureKey, PictureEntry> entries{}; ///< the pictures asked for and not taken
-    std::set<PictureKey> refused{};               ///< the pictures never asked for again
-    std::atomic<uint64_t> generation{0};          ///< moves on as a picture becomes ready
+    std::filesystem::path folder{};       ///< where the pictures are kept; empty for none
+    const std::atomic<bool>* cancel{};    ///< set when the worker stops; may be null
+    mutable base::threads::Mutex mutex{}; ///< guards entries, refused and generation
+    /// The pictures asked for and not taken, in the order they are fetched.
+    std::vector<PictureRecord> entries{};
+    std::set<PictureKey> refused{};      ///< the pictures never asked for again
+    std::atomic<uint64_t> generation{0}; ///< moves on as a picture becomes ready
 
     /// Reads or fetches one picture.
     ///
@@ -170,18 +201,36 @@ PictureCache::~PictureCache() = default;
 void PictureCache::request(std::string_view registry, std::string_view url) {
     PictureKey key{std::string(registry), std::string(url)};
     base::threads::LockGuard guard(state_->mutex);
-    if (state_->refused.count(key) != 0 || state_->entries.count(key) != 0)
+    if (state_->refused.count(key) != 0 ||
+        find_record(state_->entries, key) != state_->entries.end())
         return;
-    state_->entries.emplace(std::move(key), PictureEntry{});
+    state_->entries.push_back(PictureRecord{std::move(key), {}});
+}
+
+void PictureCache::prefer(std::string_view registry, std::string_view url) {
+    PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    if (state_->refused.count(key) != 0)
+        return;
+    const auto found = find_record(state_->entries, key);
+    if (found == state_->entries.end()) {
+        state_->entries.insert(state_->entries.begin(), PictureRecord{std::move(key), {}});
+        return;
+    }
+    if (found->entry.state != PictureState::waiting || found == state_->entries.begin())
+        return;
+    PictureRecord record = std::move(*found);
+    state_->entries.erase(found);
+    state_->entries.insert(state_->entries.begin(), std::move(record));
 }
 
 std::optional<ModBadge> PictureCache::take(std::string_view registry, std::string_view url) {
     const PictureKey key{std::string(registry), std::string(url)};
     base::threads::LockGuard guard(state_->mutex);
-    const auto found = state_->entries.find(key);
-    if (found == state_->entries.end() || found->second.state != PictureState::ready)
+    const auto found = find_record(state_->entries, key);
+    if (found == state_->entries.end() || found->entry.state != PictureState::ready)
         return std::nullopt;
-    ModBadge badge = std::move(found->second.badge);
+    ModBadge badge = std::move(found->entry.badge);
     state_->entries.erase(found);
     return badge;
 }
@@ -190,10 +239,10 @@ std::optional<std::vector<uint8_t>>
 PictureCache::take_bytes(std::string_view registry, std::string_view url) {
     const PictureKey key{std::string(registry), std::string(url)};
     base::threads::LockGuard guard(state_->mutex);
-    const auto found = state_->entries.find(key);
-    if (found == state_->entries.end() || found->second.state != PictureState::ready)
+    const auto found = find_record(state_->entries, key);
+    if (found == state_->entries.end() || found->entry.state != PictureState::ready)
         return std::nullopt;
-    std::vector<uint8_t> bytes = std::move(found->second.bytes);
+    std::vector<uint8_t> bytes = std::move(found->entry.bytes);
     state_->entries.erase(found);
     return bytes;
 }
@@ -204,6 +253,15 @@ bool PictureCache::refused(std::string_view registry, std::string_view url) cons
     return state_->refused.count(key) != 0;
 }
 
+bool PictureCache::asked(std::string_view registry, std::string_view url) const {
+    const PictureKey key{std::string(registry), std::string(url)};
+    base::threads::LockGuard guard(state_->mutex);
+    if (state_->refused.count(key) != 0)
+        return true;
+    const std::vector<PictureRecord>& entries = state_->entries;
+    return find_record(entries, key) != entries.end();
+}
+
 void PictureCache::drop_all() {
     base::threads::LockGuard guard(state_->mutex);
     state_->entries.clear();
@@ -211,8 +269,8 @@ void PictureCache::drop_all() {
 
 bool PictureCache::waiting() const {
     base::threads::LockGuard guard(state_->mutex);
-    for (const auto& [key, entry] : state_->entries)
-        if (entry.state == PictureState::waiting)
+    for (const PictureRecord& record : state_->entries)
+        if (record.entry.state == PictureState::waiting)
             return true;
     return false;
 }
@@ -229,12 +287,12 @@ void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running
         {
             base::threads::LockGuard guard(state_->mutex);
             auto next = state_->entries.begin();
-            while (next != state_->entries.end() && next->second.state != PictureState::waiting)
+            while (next != state_->entries.end() && next->entry.state != PictureState::waiting)
                 ++next;
             if (next == state_->entries.end())
                 return;
-            next->second.state = PictureState::fetching;
-            key = next->first;
+            next->entry.state = PictureState::fetching;
+            key = next->key;
         }
         ModBadge badge;
         std::vector<uint8_t> bytes;
@@ -242,13 +300,13 @@ void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running
         base::threads::LockGuard guard(state_->mutex);
         // drop_all may have forgotten the picture meanwhile; what was
         // fetched stays in the folder.
-        const auto found = state_->entries.find(key);
+        const auto found = find_record(state_->entries, key);
         switch (obtained) {
         case Obtained::ready:
             if (found != state_->entries.end()) {
-                found->second.state = PictureState::ready;
-                found->second.badge = std::move(badge);
-                found->second.bytes = std::move(bytes);
+                found->entry.state = PictureState::ready;
+                found->entry.badge = std::move(badge);
+                found->entry.bytes = std::move(bytes);
                 state_->generation.fetch_add(1);
             }
             break;
@@ -259,8 +317,8 @@ void PictureCache::fetch_waiting(netgame::http::Client& http, bool match_running
             break;
         case Obtained::held:
         case Obtained::cancelled:
-            if (found != state_->entries.end() && found->second.state == PictureState::fetching)
-                found->second.state = PictureState::waiting;
+            if (found != state_->entries.end() && found->entry.state == PictureState::fetching)
+                found->entry.state = PictureState::waiting;
             return;
         }
     }
