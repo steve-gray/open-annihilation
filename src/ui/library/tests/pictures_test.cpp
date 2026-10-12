@@ -472,9 +472,158 @@ void rows_in_view_are_asked_once_and_a_picture_redraws() {
     }
 }
 
+/// Tells whether a text item draws these letters.
+///
+/// @param list the display list
+/// @param letters the letters
+/// @return true when one item does
+bool draws_text(const kit::DisplayList& list, std::string_view letters) {
+    for (const kit::Item& item : list.items) {
+        if (item.role == kit::Role::text && item.text == letters)
+            return true;
+    }
+    return false;
+}
+
+/// Tells whether a picture is drawn in a square of the badge's side.
+///
+/// @param list the display list
+/// @param side the square's side, in points
+/// @return how many such pictures
+int badge_pictures(const kit::DisplayList& list, int32_t side) {
+    int count = 0;
+    for (const kit::Item& item : list.items) {
+        if (item.role == kit::Role::picture && item.rect.width == side && item.rect.height == side)
+            ++count;
+    }
+    return count;
+}
+
+/// A fixture registry's icon is asked for once and then drawn. Core Prime's
+/// card draws the logo it was given and is not asked for, even when an
+/// address is set beside that logo.
+void registry_icon_is_fetched_once_and_drawn() {
+    lib::Inputs inputs;
+    lib::Registry shipped;
+    shipped.id = std::string(fixture::core);
+    shipped.name = "Core Prime";
+    shipped.built_in = true;
+    shipped.shipped_logo = true;
+    shipped.icon = fixture::gradient_badge();
+    shipped.icon_url = "http://downloads.coreprime.net/v1/i/should-not-fetch.png";
+    lib::Registry waiting;
+    waiting.id = "example-maps";
+    waiting.name = "Example Maps";
+    waiting.icon_url = "http://maps.example.org/v1/i/"
+                       "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png";
+    inputs.registries = {std::move(shipped), std::move(waiting)};
+    lib::Listing pack = fixture::listing(
+        fixture::core, lib::Kind::mod, "ridge", "Ridge", "1.0", fixture::mib, "A mod.", {}
+    );
+    inputs.listings.push_back(std::move(pack));
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::registries);
+    const kit::Frame frame = fixture::frames()[0].frame;
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const kit::DisplayList waiting_list = laid_out(library, {}, frame);
+    OA_CHECK(!draws_text(waiting_list, "CP"));
+    OA_CHECK(draws_text(waiting_list, "EM"));
+    OA_CHECK(badge_pictures(waiting_list, metrics.list_row_badge) == 1);
+
+    struct Asked {
+        std::vector<std::string> ids;
+    } asked;
+
+    const auto known = [](void* context, const lib::Registry& registry) {
+        const auto* record = static_cast<const Asked*>(context);
+        return std::find(record->ids.begin(), record->ids.end(), registry.id) != record->ids.end();
+    };
+    const auto request = [](void* context, const lib::Registry& registry) {
+        auto* record = static_cast<Asked*>(context);
+        record->ids.push_back(registry.id);
+    };
+    lib::RegistryPictureSource source;
+    source.context = &asked;
+    source.known = known;
+    source.request = request;
+    lib::request_registry_icons(library, source);
+    OA_CHECK(asked.ids.size() == 1);
+    if (!asked.ids.empty())
+        OA_CHECK(asked.ids[0] == "example-maps");
+    lib::request_registry_icons(library, source);
+    OA_CHECK(asked.ids.size() == 1);
+
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id == "example-maps")
+            registry.icon = fixture::gradient_badge();
+    }
+    const kit::DisplayList drawn = laid_out(library, {}, frame);
+    OA_CHECK(!draws_text(drawn, "EM"));
+    OA_CHECK(!draws_text(drawn, "CP"));
+    OA_CHECK(badge_pictures(drawn, metrics.list_row_badge) == 2);
+
+    // The From line uses the same picture once it is held, and asks once.
+    lib::set_tab(library, lib::Tab::mods);
+    lib::EntryId selected;
+    selected.registry = std::string(fixture::core);
+    selected.kind = lib::Kind::mod;
+    selected.key = "ridge";
+    lib::select(library, selected);
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id == fixture::core) {
+            registry.shipped_logo = false;
+            registry.icon.reset();
+            registry.icon_url =
+                "http://downloads.coreprime.net/v1/i/"
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png";
+        }
+    }
+    Asked from_asked;
+    source.context = &from_asked;
+    const kit::Frame regular = fixture::frames()[1].frame;
+    const kit::DisplayList details = laid_out(library, {}, regular);
+    const kit::Control* from = fixture::named(details, "library.from");
+    OA_CHECK(from != nullptr);
+    lib::request_registry_icons(library, source);
+    OA_CHECK(from_asked.ids.size() == 1);
+    if (!from_asked.ids.empty())
+        OA_CHECK(from_asked.ids[0] == fixture::core);
+    lib::request_registry_icons(library, source);
+    OA_CHECK(from_asked.ids.size() == 1);
+    bool beside = false;
+    if (from != nullptr) {
+        for (const kit::Item& item : details.items) {
+            if (item.role == kit::Role::picture && item.rect.y == from->rect.y &&
+                item.rect.x < from->rect.x)
+                beside = true;
+        }
+    }
+    OA_CHECK(!beside);
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id == fixture::core)
+            registry.icon = fixture::gradient_badge();
+    }
+    const kit::DisplayList with_from = laid_out(library, {}, regular);
+    const kit::Control* from_icon = fixture::named(with_from, "library.from");
+    OA_CHECK(from_icon != nullptr);
+    beside = false;
+    if (from_icon != nullptr) {
+        for (const kit::Item& item : with_from.items) {
+            if (item.role == kit::Role::picture && item.rect.y == from_icon->rect.y &&
+                item.rect.x < from_icon->rect.x)
+                beside = true;
+        }
+    }
+    OA_CHECK(beside);
+    lib::request_registry_icons(library, source);
+    OA_CHECK(from_asked.ids.size() == 1);
+}
+
 } // namespace
 
 int main() {
     rows_in_view_are_asked_once_and_a_picture_redraws();
+    registry_icon_is_fetched_once_and_drawn();
     return oa::test::check_exit_status();
 }

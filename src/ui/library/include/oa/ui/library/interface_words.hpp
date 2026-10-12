@@ -35,6 +35,7 @@ inline constexpr std::string_view interface_words[] = {
     words::action_refresh,
     words::action_refreshing,
     words::action_close,
+    words::action_close_x,
     words::status_checking,
     words::queue_checking,
     words::registry_game_lock,
@@ -115,6 +116,9 @@ inline constexpr std::string_view interface_words[] = {
     words::needs_engine,
     words::uninstall_failed_busy,
     words::action_play_now,
+    words::action_use_now,
+    words::chip_in_use,
+    words::status_built_in_language,
     words::state_playing,
     words::status_playing,
     words::registry_remove,
@@ -271,7 +275,6 @@ inline constexpr std::string_view interface_words[] = {
     words::row_version_size,
     words::engine_at_least_short,
     words::one_decimal,
-    words::back_to_tab,
     words::fact_met,
 };
 

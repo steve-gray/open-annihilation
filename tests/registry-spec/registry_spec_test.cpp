@@ -177,6 +177,9 @@ void check_catalogue(const std::filesystem::path& examples) {
         std::fprintf(stderr, "%s\n", problem.c_str());
     OA_CHECK(loaded.problems.empty());
     OA_CHECK(loaded.registry == "example-maps");
+    OA_CHECK(
+        loaded.icon == "/v1/i/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png"
+    );
     OA_CHECK(loaded.packages.size() == 3);
     if (loaded.packages.size() == 3) {
         OA_CHECK(loaded.packages[0].kind == catalogue::Kind::oamod);

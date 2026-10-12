@@ -22,8 +22,9 @@
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
 // library-active-many-regular.png,
 // library-updates-<class>.png, library-registries-<class>.png,
-// library-languages-compact.png, library-maps-one-large.png and
-// library-maps-several-large.png there.
+// library-languages-compact.png, library-languages-zh-compact.png,
+// library-maps-one-large.png and library-maps-several-large.png there.
+// languages-zh-compact is 简体中文 installed and in use, on its details page.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -48,6 +49,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -133,6 +135,8 @@ struct Scene {
     std::string select_key{};
     /// Extra installed maps, so the Active picture shows the maps pane scrolled.
     bool many{};
+    /// On Languages, an installed pack of this key is the language in use.
+    std::string in_use_language{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -167,6 +171,149 @@ void dress_languages(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Walks up from a directory until a relative path is a file.
+///
+/// @param start where the walk begins
+/// @param relative the file sought under each directory
+/// @return the file; empty when none of the directories holds it
+std::filesystem::path
+climb_for(std::filesystem::path start, const std::filesystem::path& relative) {
+    std::error_code ignored;
+    for (int32_t step = 0; step < 12 && !start.empty(); ++step) {
+        const std::filesystem::path candidate = start / relative;
+        if (std::filesystem::is_regular_file(candidate, ignored))
+            return candidate;
+        const std::filesystem::path parent = start.parent_path();
+        if (parent == start)
+            break;
+        start = parent;
+    }
+    return {};
+}
+
+/// The app icon, cropped to the pixels that show, for Core Prime's card.
+///
+/// The file is the plates the window icon is made from. Empty when it cannot
+/// be read, and the card then keeps its lettermark.
+///
+/// @return the picture
+std::optional<lib::Badge> shipped_logo() {
+    const std::filesystem::path relative =
+        std::filesystem::path("branding") / "open-annihilation-256.png";
+    std::error_code ignored;
+    std::filesystem::path file = climb_for(std::filesystem::current_path(ignored), relative);
+    if (file.empty())
+        file = climb_for(text_font::bundled_font_directory(), relative);
+    if (file.empty()) {
+        std::fprintf(stderr, "registries picture: the app icon was not found\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    std::ifstream input(file, std::ios::binary);
+    input.seekg(0, std::ios::end);
+    const std::streamoff length = input.tellg();
+    if (!input || length <= 0) {
+        std::fprintf(stderr, "registries picture: the app icon could not be read\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    input.seekg(0, std::ios::beg);
+    std::vector<uint8_t> bytes(static_cast<std::size_t>(length));
+    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(length));
+    if (!input) {
+        std::fprintf(stderr, "registries picture: the app icon could not be read\n");
+        ++oa::test::failed_checks();
+        return std::nullopt;
+    }
+    namespace png = oa::formats::png;
+    if (!png::has_signature(bytes))
+        return std::nullopt;
+    png::Messages messages;
+    png::Info info;
+    if (!png::read_info(bytes, messages, &info))
+        return std::nullopt;
+    const png::Header& header = info.header;
+    if (header.color_type != png::ColorType::rgb_alpha || header.bit_depth != 8 ||
+        header.width == 0 || header.height == 0)
+        return std::nullopt;
+    const std::size_t stride = png::row_bytes(header, {});
+    if (stride == 0 || header.height > std::numeric_limits<std::size_t>::max() / stride)
+        return std::nullopt;
+    std::vector<uint8_t> pixels(stride * header.height);
+    const png::Progress progress = png::read_image(bytes, info, {}, messages, pixels);
+    if (progress == png::Progress::none)
+        return std::nullopt;
+    const std::size_t row_bytes = std::size_t{header.width} * 4U;
+    if (pixels.size() / row_bytes < header.height)
+        return std::nullopt;
+    uint32_t left = header.width;
+    uint32_t top = header.height;
+    uint32_t right = 0;
+    uint32_t bottom = 0;
+    for (uint32_t y = 0; y < header.height; ++y) {
+        for (uint32_t x = 0; x < header.width; ++x) {
+            if (pixels[y * row_bytes + std::size_t{x} * 4U + 3U] == 0)
+                continue;
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + 1);
+            bottom = std::max(bottom, y + 1);
+        }
+    }
+    if (left >= right || top >= bottom)
+        return std::nullopt;
+    lib::Badge badge;
+    badge.width = right - left;
+    badge.height = bottom - top;
+    const std::size_t part_row = std::size_t{badge.width} * 4U;
+    badge.rgba.reserve(part_row * badge.height);
+    for (uint32_t y = top; y < bottom; ++y) {
+        const auto first =
+            pixels.begin() + static_cast<std::ptrdiff_t>(y * row_bytes + std::size_t{left} * 4U);
+        badge.rgba.insert(badge.rgba.end(), first, first + static_cast<std::ptrdiff_t>(part_row));
+    }
+    return badge;
+}
+
+/// Marks one language pack as the one in use, adding it when the fixture
+/// does not list it. Built for the picture of 简体中文 in use.
+///
+/// @param[in,out] library the scene's library
+/// @param key the pack's key, which is its tag
+void show_language_in_use(lib::Library& library, std::string_view key) {
+    for (lib::Installed& installed : library.inputs.installed)
+        if (installed.kind == lib::Kind::language)
+            installed.in_use = false;
+    bool listed = false;
+    for (const lib::Listing& listing : library.inputs.listings)
+        listed = listed || (listing.kind == lib::Kind::language && listing.key == key);
+    if (!listed) {
+        library.inputs.listings.push_back(
+            fixture::listing(
+                fixture::core, lib::Kind::language, key, "简体中文", "1.0", 2 * fixture::mib, "", {}
+            )
+        );
+    }
+    lib::Installed pack;
+    pack.kind = lib::Kind::language;
+    pack.key = std::string(key);
+    pack.folder = std::string(key);
+    pack.name = "简体中文";
+    pack.version = "1.0";
+    pack.revision = 4;
+    pack.registry = std::string(fixture::core);
+    pack.release = 4;
+    pack.in_use = true;
+    library.inputs.installed.push_back(std::move(pack));
+    library.inputs.language.tag = std::string(key);
+    library.inputs.language.name = "简体中文";
+    library.inputs.language.english = "Chinese (Simplified)";
+    library.inputs.language.pack = "简体中文";
+    library.inputs.language.version = "1.0";
+    library.inputs.language.revision = 4;
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Dresses the Registries pictures: the built-in card carries Core Prime's
 /// short name, title, description and author, and the added card a sample of
 /// its own. The fixture itself stays Fixture Core. Other tabs are not dressed.
@@ -189,6 +336,9 @@ void dress_registries(lib::Library& library) {
             signing_key.fingerprint = "21fe · 31df · a154 · a261";
             signing_key.public_key = "ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=";
             registry.keys = {std::move(signing_key)};
+            registry.shipped_logo = true;
+            if (std::optional<lib::Badge> logo = shipped_logo())
+                registry.icon = std::move(*logo);
         } else if (registry.id == fixture::added) {
             registry.title = "Example Mods - Sample packages";
             registry.description = "A sample registry of mods, including the made-up mod Ridge.";
@@ -306,14 +456,19 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_registries(library);
     else if (scene.tab == lib::Tab::languages)
         dress_languages(library);
+    if (!scene.in_use_language.empty())
+        show_language_in_use(library, scene.in_use_language);
     if (scene.previews)
         dress_map_previews(library);
     if (scene.many)
         add_many_maps(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
-    if (!scene.select_key.empty())
-        lib::select(library, {scene.select_registry, lib::Kind::map_pack, scene.select_key});
+    if (!scene.select_key.empty()) {
+        const lib::Kind kind =
+            scene.tab == lib::Tab::languages ? lib::Kind::language : lib::Kind::map_pack;
+        lib::select(library, {scene.select_registry, kind, scene.select_key});
+    }
     lib::ScreenState state;
     if (scene.details_page) {
         lib::open_details(library);
@@ -508,6 +663,15 @@ int main(int argc, char** argv) {
         {"registries-regular", window_of(1920, 1080, 200), false, lib::Tab::registries},
         {"registries-large", window_of(2560, 1440, 200), false, lib::Tab::registries},
         {"languages-compact", window_of(640, 480, 100), false, lib::Tab::languages},
+        {"languages-zh-compact",
+         window_of(640, 480, 100),
+         true,
+         lib::Tab::languages,
+         false,
+         std::string(fixture::core),
+         "zh-Hans",
+         false,
+         "zh-Hans"},
         {"maps-one-large",
          window_of(2560, 1440, 200),
          false,

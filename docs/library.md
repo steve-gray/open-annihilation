@@ -68,14 +68,15 @@ The settings have a button of their own on the main menu, the gears beside
 the OA button, which opens them with no Library under them
 ([settings](settings.md#opening-the-settings)). From the Library, **Cmd+,**
 on macOS and **Ctrl+,** elsewhere opens them over the Library. The header's
-top right holds a refresh icon. Pressing it, or F5, asks the registries
+top right holds a refresh icon, and a close mark to its right. Pressing
+the refresh icon, or F5, asks the registries
 for their lists at once ([updates](#updates)). While they are being asked
 the icon turns, one full turn every 1.6 seconds, and it cannot be pressed
 again until they answer. When the refresh has read a list, the icon shows
 a check for 0.8 seconds and then the arrow again. A refresh that fails goes
 straight back to the arrow; the offline line says why. Pressing it during
-the check asks again at once. **CLOSE**,
-or Escape, goes back to the main menu.
+the check asks again at once. The close mark does what **CLOSE** does.
+**CLOSE**, or Escape, goes back to the main menu.
 The Library shows only on the main menu: it closes when the menu gives way
 to another screen, and in a game the in-game menu's button, which shows the
 gears too, opens the settings, not the Library.
@@ -223,7 +224,7 @@ grow to make room; at every size class the mark fits under the icon.
 When a mark shows, the row's read text gains " · Open Annihilation" or
 " · Cavedog Entertainment". Its automation name does not change.
 
-![Languages: the fixture's Portugues (Brasil), author OA team, installed from the built-in registry, with the OA badge under its check.](images/library/library-languages-compact.png)
+![Languages: the languages built into the game lead the list, each marked Built in, then the packs. Polski is the language in use. Portugues (Brasil), author OA team, is installed from the built-in registry, with the OA badge under its check.](images/library/library-languages-compact.png)
 
 A GET or UPDATE that cannot act has its icon dimmed and takes no press,
 and the details say why:
@@ -273,8 +274,10 @@ on in Settings › Downloads."
 ## The details
 
 Choosing a row shows its details: beside the list in the Regular and Large
-layouts, or as a page of its own in Compact, with "‹ Mods" (or the tab's
-name) back to the list.
+layouts, or as a page of its own in Compact. On that page the footer's
+right button is **BACK**. It returns to the same tab, filter, search,
+scroll and row. The list's button stays **CLOSE**. Escape and the pad's
+back button follow whichever of those is showing.
 
 - **A status line**: "Not installed · 41.0 MB", "Installed", "Playing",
   "Revision 4 available · 3.2 MB to download" or "Version 4.9 available ·
@@ -321,7 +324,8 @@ name) back to the list.
   - **From**: the registry, "Your own copy" for a package you installed from
     a file that no registry lists, or, in amber, "*registry* · Not reviewed
     by the OA team" for one from a registry you added
-    ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)).
+    ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)). When the
+    registry's icon is already held, it is drawn beside that name.
 
   A fact with nothing to say is left out. These hold alike for mods, map
   packs and language packs.
@@ -330,6 +334,8 @@ name) back to the list.
   **PLAY NOW** for an installed mod you are not playing, which switches to
   it, or **SWITCH OFF** in its place for the mod you are playing, which
   goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod));
+  **USE NOW** for a built-in language, or an installed language pack, that
+  is not the one the game is showing ([choosing a language](#choosing-a-language));
   **ROLL BACK** while an earlier copy is kept
   ([rolling back](#rolling-back)); **UNINSTALL** and **OPEN FOLDER** for an
   installed package ([uninstalling](#uninstalling)); and **HOMEPAGE**, which
@@ -392,6 +398,28 @@ no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
 question and follows that same path back to the base game. It is greyed in
 the same places, and resting on it shows the same note.
 
+## Choosing a language
+
+The Languages list starts with the languages built into the game, in the
+order Settings › Language lists them above its packs. Each row names the
+language in itself, and in English underneath when that name differs.
+English's two names are the same, so its row shows the one. The row is
+marked **Built in**. It has no size and no download count. All and
+Installed show these rows; New and Updates do not. The tab's count and
+the filters' counts leave them out, as Mods leaves out the base game.
+Search finds one by its name in itself, by its name in English, or by
+its tag. Its details say "Built into the game", and they never offer
+GET, UNINSTALL or OPEN FOLDER.
+
+**USE NOW**, on a built-in language or an installed language pack that is
+not the one the game is showing, switches to it in the same way as
+choosing it in Settings › Language: the choice is saved, and every screen
+is drawn again in that language. The Library stays open. The language in
+use is marked **In use**, in place of USE NOW. A language pack that is
+listed and not yet installed keeps **GET**, and offers USE NOW once it
+is installed. The Active tab's LANGUAGE card still names the language in
+use as it did.
+
 Both change the mod only from the main menu: the Library shows only there,
 and a game keeps the mod it started with. While `--mod-dir` or
 `--base-game` chose the run's mod, both are greyed and the details say "The
@@ -444,8 +472,9 @@ installed before. Then:
   catalogue has no row for is decided by the map's files. One that does
   not fit is left out of those two lists
   ([map packs](maps/README.md));
-- **a language pack** goes into your Languages folder, and Settings ›
-  Language offers it at once ([languages](languages.md)).
+- **a language pack** goes into your Languages folder. Its row offers
+  **USE NOW** at once, and Settings › Language offers it at once
+  ([languages](languages.md)).
 
 Whether a download asks you anything first depends on where it comes from
 and what you already have: [which downloads ask first](#which-downloads-ask-first).
@@ -524,8 +553,11 @@ or **REMOVE** is pressed.
 
 Each card shows:
 
-- an avatar, the short name's initials in a square: the first letters of
-  its first three words, or of a name of one word its first two letters;
+- an avatar, the registry's own icon when its catalogue names one, in the
+  square the initials otherwise fill. The initials stay while that picture
+  is missing or still on its way: the first letters of its first three
+  words, or of a name of one word its first two letters. Core Prime shows
+  the logo the game ships, from the game's own files, with nothing fetched;
 - the heading, which is the registry's title when it has one ("Core Prime
   - Official Open Annihilation Packages") and its short name when it does
   not;

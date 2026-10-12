@@ -252,7 +252,7 @@ void show_in_maps(ScreenState& state, const kit::DisplayList& list, kit::Control
     );
 }
 
-/// Tells whether the Compact details page shows: its way back is in the list.
+/// Tells whether the Compact details page shows: its BACK button is in the list.
 ///
 /// @param list the display list
 /// @return true while it shows
@@ -852,6 +852,7 @@ ScreenResult activate(
         result.action = Action::settings;
         return result;
     case controls::close:
+    case controls::close_x:
         result.action = Action::close;
         return result;
     case controls::active_unload:

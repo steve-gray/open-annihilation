@@ -75,7 +75,7 @@ bool same_descriptor(const registry::Descriptor& left, const registry::Descripto
         left.catalogue != right.catalogue || left.mode != right.mode ||
         left.install_id != right.install_id || left.homepage != right.homepage ||
         left.api != right.api || left.mirrors != right.mirrors ||
-        left.keys.size() != right.keys.size())
+        left.shipped_logo != right.shipped_logo || left.keys.size() != right.keys.size())
         return false;
     for (std::size_t index = 0; index < left.keys.size(); ++index) {
         if (left.keys[index].id != right.keys[index].id ||
@@ -162,6 +162,23 @@ void missing_required_keys_are_refused() {
 
 void registry_version_must_be_one() {
     refuse("registry: 2\nid: example-maps\nname: Example Maps\n" + direct_tail(), "registry");
+}
+
+void shipped_logo_reads_and_round_trips() {
+    const std::string yaml =
+        "registry: 1\nid: example-maps\nname: Example Maps\nicon: oa\n" + direct_tail();
+    registry::Descriptor out;
+    std::string error;
+    OA_CHECK(registry::read_descriptor(bytes_of(yaml), out, &error));
+    OA_CHECK(out.shipped_logo);
+    const std::string written = registry::descriptor_text(out);
+    OA_CHECK(written.find("icon:") != std::string::npos);
+    registry::Descriptor again;
+    OA_CHECK(registry::read_descriptor(bytes_of(written), again, &error));
+    OA_CHECK(again.shipped_logo);
+    OA_CHECK(same_descriptor(out, again));
+    refuse("registry: 1\nid: example-maps\nname: Example Maps\nicon: cp\n" + direct_tail(), "icon");
+    refuse("registry: 1\nid: example-maps\nname: Example Maps\nicon: 1\n" + direct_tail(), "icon");
 }
 
 void unknown_key_is_refused() {
@@ -829,6 +846,7 @@ int main() {
     address_includes_a_port();
     missing_required_keys_are_refused();
     registry_version_must_be_one();
+    shipped_logo_reads_and_round_trips();
     unknown_key_is_refused();
     title_and_description_read_and_round_trip();
     bad_id_and_name_are_refused();

@@ -69,6 +69,12 @@ bool read_mapping(
         } else if (key == "author") {
             if (!take_name(entry, read.author, error, field_path(where, "author")))
                 return false;
+        } else if (key == "icon") {
+            if (entry.kind != oamod::NodeKind::string || entry.text != "oa") {
+                error = field_path(where, "icon") + " must be oa";
+                return false;
+            }
+            read.shipped_logo = true;
         } else if (key == "homepage") {
             formats::url::Url homepage;
             if (!take_web_url(entry, homepage, error, field_path(where, "homepage")))
@@ -186,6 +192,11 @@ std::string descriptor_text(const Descriptor& descriptor) {
     if (!descriptor.author.empty()) {
         out += "author: ";
         append_quoted(out, descriptor.author);
+        out.push_back('\n');
+    }
+    if (descriptor.shipped_logo) {
+        out += "icon: ";
+        append_quoted(out, "oa");
         out.push_back('\n');
     }
     if (descriptor.homepage) {

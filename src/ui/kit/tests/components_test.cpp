@@ -1165,6 +1165,26 @@ void refresh_mark_turns() {
     OA_CHECK(!shows_accent(rest));
 }
 
+/// The close mark is an × on the refresh mark's square face. Hover changes
+/// the face. The × is not the refresh arrow.
+void close_mark_draws_a_cross() {
+    const auto draw = [](kit::ButtonMark mark, bool hovered) {
+        kit::ButtonLook look;
+        look.mark = mark;
+        look.style = kit::ButtonStyle::quiet;
+        look.hovered = hovered;
+        renderer::Surface surface = black(40, 40);
+        kit::draw_button(canvas_on(surface), {8, 8, 17, 17}, look);
+        return surface;
+    };
+    const renderer::Surface rest = draw(kit::ButtonMark::close, false);
+    const renderer::Surface hover = draw(kit::ButtonMark::close, true);
+    const renderer::Surface refresh = draw(kit::ButtonMark::refresh, false);
+    OA_CHECK(rest.rgb != hover.rgb);
+    OA_CHECK(rest.rgb != refresh.rgb);
+    OA_CHECK(rest.rgb != black(40, 40).rgb);
+}
+
 /// The eighth after 0.8 seconds is one place, whether the clock was stepped
 /// at 30, 60 or 120 frames a second. The place is the time, not the count of
 /// steps. 0.8 seconds is half of one turn, the fourth eighth.
@@ -1205,6 +1225,7 @@ void refresh_turn_follows_time() {
 int main() {
     buttons_match_the_five_looks();
     refresh_mark_turns();
+    close_mark_draws_a_cross();
     refresh_turn_follows_time();
     switch_levels_and_slider_match();
     choice_lock_and_scroll_match();

@@ -210,9 +210,9 @@ enum class ScreenCommand : uint8_t {
 );
 
 /// Lays out Compact's details page of the selected entry: its name and
-/// version in the header; the way back to the list, the status line, the
-/// byline, the summary, the short facts and the playing note; and the first
-/// three actions, MORE ▾ with the rest and CLOSE in the footer.
+/// version in the header; the status line, the byline, the summary, the
+/// short facts and the playing note; and the first three actions, MORE ▾
+/// with the rest and BACK in the footer. BACK returns to the list.
 ///
 /// @param library the model, with an entry selected
 /// @param state the hover, press, focus, scroll and open drop-down
@@ -268,6 +268,30 @@ picture_places(const Library& library, const kit::DisplayList& list);
 void request_visible_pictures(
     const Library& library, const kit::DisplayList& list, const PictureSource& source
 );
+
+/// What the Registries tab, and a selected entry's From line, ask for a
+/// registry's icon. The same rules as a badge: one ask, and a picture
+/// already held is not asked for again.
+struct RegistryPictureSource {
+    void* context{}; ///< passed back to each function
+    /// Tells whether this registry's icon was already asked for, is held or
+    /// was refused. Null asks whenever the registry names an address and
+    /// has no picture yet. A shipped logo is never offered.
+    bool (*known)(void* context, const Registry& registry){};
+    /// Asks for one registry's icon.
+    void (*request)(void* context, const Registry& registry){};
+};
+
+/// Asks the source for each registry icon the screen is showing.
+///
+/// On the Registries tab, every registry that names an address and has no
+/// picture yet. On any tab, the selected entry's registry, for its From
+/// line. A shipped logo is never asked for. A registry is offered once in
+/// one call. Nothing is asked when request is null.
+///
+/// @param library the model
+/// @param source where the icons are asked for
+void request_registry_icons(const Library& library, const RegistryPictureSource& source);
 
 /// Tells whether an entry's row is on the list the screen shows, or is the
 /// selected entry.

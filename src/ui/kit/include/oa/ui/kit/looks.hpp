@@ -49,6 +49,7 @@ enum class ButtonStyle : uint8_t {
 enum class ButtonMark : uint8_t {
     none,    ///< the caption
     refresh, ///< a circular arrow, crisp at the button's size
+    close,   ///< an ×, crisp at the button's size, in the text colour
 };
 
 /// A button's caption and which of its looks to draw.

@@ -122,8 +122,9 @@ struct Catalogue {
     std::string downloads;                   ///< an informational http address; empty when absent
     std::vector<registry::RegistryKey> keys; ///< the registry's current keys; empty when absent
     std::vector<formats::url::Url> mirrors;  ///< other copies of this catalogue, at most 8
-    std::vector<Package> packages;           ///< the entries that passed their rules
-    std::vector<std::string> problems;       ///< why entries were skipped, at most max_problems
+    std::string icon; ///< a picture reference ending `.png`; empty when the catalogue names none
+    std::vector<Package> packages;     ///< the entries that passed their rules
+    std::vector<std::string> problems; ///< why entries were skipped, at most max_problems
 };
 
 /// Reads a catalogue's structure and its entries.

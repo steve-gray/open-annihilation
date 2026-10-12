@@ -149,6 +149,8 @@ std::string_view action_word(Action action) {
         return "refresh-registry";
     case Action::uninstall:
         return "uninstall";
+    case Action::use_now:
+        return "use-now";
     }
     return "action";
 }
@@ -609,6 +611,24 @@ kit::StateIcon icon_of(State state) {
 /// @return the chip
 kit::ChipLook entry_chip(const Library& library, const Entry& entry) {
     kit::ChipLook chip;
+    // A built-in language shows its words, not a download icon. The one in
+    // use says so in place of USE NOW.
+    if (is_built_in_language(entry.id)) {
+        const bool in_use = entry.state == State::playing;
+        chip.text = std::string(
+            shown(library.text, in_use ? words::chip_in_use : words::registry_built_in)
+        );
+        chip.state = in_use ? kit::ChipState::playing : kit::ChipState::installed;
+        return chip;
+    }
+    // An installed language pack in use says so too, unless an update is
+    // waiting: that arrow stays, and USE NOW is still withheld.
+    if (entry.id.kind == Kind::language && entry.installed != nullptr && entry.installed->in_use &&
+        entry.state != State::get && entry.state != State::update) {
+        chip.text = std::string(shown(library.text, words::chip_in_use));
+        chip.state = kit::ChipState::playing;
+        return chip;
+    }
     chip.text = std::string(state_text(entry.state, library.text));
     chip.state = chip_state_of(entry.state);
     chip.disabled = !entry.can_act;
@@ -653,6 +673,16 @@ oa::ui::frontend_renderer::RgbaPicture picture_of(const Badge* badge) {
     picture.height = badge->height;
     picture.pixels = std::span<const uint8_t>(badge->rgba);
     return picture;
+}
+
+/// Returns a registry's icon, when the app has one.
+///
+/// @param registry the registry
+/// @return the picture, which points into the icon; empty without one
+oa::ui::frontend_renderer::RgbaPicture registry_picture(const Registry& registry) {
+    if (!registry.icon)
+        return {};
+    return picture_of(&*registry.icon);
 }
 
 /// Returns an entry's badge picture: its own, else its listing's, else its
@@ -726,12 +756,17 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     const std::string size = entry_size(library, entry);
     if (form == RowForm::compact) {
         std::string line = version;
-        if (!version.empty() && !size.empty())
+        if (is_built_in_language(entry.id)) {
+            const std::string_view english = entry_summary(entry);
+            if (!english.empty())
+                line = std::string(english);
+        } else if (!version.empty() && !size.empty()) {
             line = filled(
                 library.text, words::row_version_size, {{"version", version}, {"size", size}}
             );
-        else if (version.empty())
+        } else if (version.empty()) {
             line = size;
+        }
         if (entry.not_reviewed && !entry.registry_name.empty())
             line = filled(
                 library.text,
@@ -744,7 +779,7 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.by = byline(entry, library.text);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
-    else if (is_base_game(entry.id)) {
+    else if (is_base_game(entry.id) || is_built_in_language(entry.id)) {
         const std::string_view about = entry_summary(entry);
         if (!about.empty())
             look.lines.push_back(std::string(about));
@@ -766,7 +801,8 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
 
 /// Appends the header: the OA mark, the title and its second word, and the
 /// version at the right. right_inset keeps columns clear inside the padding
-/// for the refresh icon and, when the last refresh failed, the offline mark.
+/// for the refresh icon, the close mark and, when the last refresh failed,
+/// the offline mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -822,14 +858,41 @@ void add_header(
         std::move(look);
 }
 
-/// Returns the columns the header keeps clear for the refresh icon, and for
-/// the offline mark when the last refresh could not reach a registry.
+/// Returns the header's close mark, the right-hand square.
+///
+/// @param window the window
+/// @return the button
+kit::Rect header_close_rect(const Window& window) {
+    const kit::Metrics& compact = kit::compact_metrics;
+    const int32_t side = compact.button_height;
+    return {
+        window.width - compact.edge - compact.padding - side,
+        compact.edge + (compact.header_height - side) / 2,
+        side,
+        side,
+    };
+}
+
+/// Returns the header's refresh icon, the same square, one gap left of the
+/// close mark.
+///
+/// @param window the window
+/// @return the button
+kit::Rect header_refresh_rect(const Window& window) {
+    const kit::Rect close = header_close_rect(window);
+    const int32_t gap = kit::compact_metrics.header_gap;
+    return {close.x - gap - close.width, close.y, close.width, close.height};
+}
+
+/// Returns the columns the header keeps clear for the refresh icon, the
+/// close mark and, when the last refresh could not reach a registry, the
+/// offline mark.
 ///
 /// @param building the layout
 /// @return the columns, inside the header's padding
 int32_t header_reserve(const Building& building) {
     const kit::Metrics& compact = kit::compact_metrics;
-    int32_t reserve = compact.button_height + compact.header_gap;
+    int32_t reserve = 2 * (compact.button_height + compact.header_gap);
     if (building.library->inputs.offline) {
         const std::string_view mark = shown(building.library->text, words::offline_mark);
         reserve += width_of(building, kit::FontRole::small, mark) + compact.header_gap;
@@ -858,14 +921,7 @@ uint16_t registry_check_ms(const ScreenState& state, std::string_view id) noexce
 /// @param window the window
 void add_refresh_button(Building& building, const Window& window) {
     const Library& library = *building.library;
-    const kit::Metrics& compact = kit::compact_metrics;
-    const int32_t side = compact.button_height;
-    const kit::Rect rect{
-        window.width - compact.edge - compact.padding - side,
-        compact.edge + (compact.header_height - side) / 2,
-        side,
-        side,
-    };
+    const kit::Rect rect = header_refresh_rect(window);
     const bool turning = library.inputs.checking;
     kit::ButtonLook look;
     look.style = kit::ButtonStyle::quiet;
@@ -887,6 +943,29 @@ void add_refresh_button(Building& building, const Window& window) {
     tab_stop(building, building.top.back());
 }
 
+/// Appends the header's close mark, the same square as the refresh icon and
+/// one gap to its right. Pressing it asks for the same close as CLOSE.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_close_button(Building& building, const Window& window) {
+    const Library& library = *building.library;
+    const kit::Rect rect = header_close_rect(window);
+    kit::ButtonLook look;
+    look.style = kit::ButtonStyle::quiet;
+    look.hovered = hovered(building, controls::close_x);
+    look.held = held(building, controls::close_x);
+    look.mark = kit::ButtonMark::close;
+    const std::size_t before = building.list.controls.size();
+    kit::add_button(
+        building.list, rect, look, controls::close_x, unique_name(building, named("close-x"))
+    );
+    move_controls(building.list, before, building.top);
+    building.top.back().text = std::string(shown(library.text, words::action_close_x));
+    // Tab's order gains it in finish, after every other stop, so it stays
+    // last in the title bar (the refresh icon, when it takes focus, is earlier).
+}
+
 /// Appends the word "offline" in the lock colour, immediately left of the
 /// refresh icon, when the last refresh could not reach a registry.
 ///
@@ -899,8 +978,7 @@ void add_offline_mark(Building& building, const Window& window) {
     const kit::Metrics& compact = kit::compact_metrics;
     const std::string mark(shown(library.text, words::offline_mark));
     const int32_t mark_width = width_of(building, kit::FontRole::small, mark);
-    const int32_t side = compact.button_height;
-    const int32_t icon_left = window.width - compact.edge - compact.padding - side;
+    const int32_t icon_left = header_refresh_rect(window).x;
     const kit::Rect box{
         icon_left - compact.header_gap - mark_width,
         compact.edge,
@@ -910,7 +988,7 @@ void add_offline_mark(Building& building, const Window& window) {
     add_text(building, kit::FontRole::small, mark, box, kit::Align::right, kit::colour::lock, {});
 }
 
-/// Appends the header, the offline mark and the refresh icon.
+/// Appends the header, the offline mark, the refresh icon and the close mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -927,6 +1005,7 @@ void add_library_header(
     add_header(building, window, title, second, version, header_reserve(building));
     add_offline_mark(building, window);
     add_refresh_button(building, window);
+    add_close_button(building, window);
 }
 
 /// Returns a tab's title, with its count in brackets after every tab but Active.
@@ -2184,8 +2263,34 @@ int32_t add_facts(
         const bool whole = rules_fact(library, fact) || from_fact(library, fact);
         const bool good = fact.mark == Mark::good;
         const int32_t room = good ? value_width - met_width - space_width : value_width;
+        int32_t text_left = value_left;
+        int32_t text_room = room;
+        // The From line draws the registry's icon beside the name once the
+        // picture is here. While it is missing, the line stays text.
+        if (from_fact(library, fact)) {
+            const Registry* from_registry = nullptr;
+            for (const Registry& candidate : library.inputs.registries) {
+                if (candidate.id == entry.id.registry) {
+                    from_registry = &candidate;
+                    break;
+                }
+            }
+            const oa::ui::frontend_renderer::RgbaPicture from_picture =
+                from_registry != nullptr ? registry_picture(*from_registry)
+                                         : oa::ui::frontend_renderer::RgbaPicture{};
+            if (oa::ui::frontend_renderer::picture_drawable(from_picture)) {
+                const int32_t mark_side = metrics.small_line;
+                add_item(
+                    building.list, kit::Role::picture, {value_left, top, mark_side, mark_side}, clip
+                )
+                    .look = kit::PictureLook{from_picture};
+                const int32_t shift = mark_side + metrics.list_row_gap;
+                text_left += shift;
+                text_room = text_room > shift ? text_room - shift : 0;
+            }
+        }
         const std::vector<std::string> lines =
-            wrapped(building, kit::FontRole::small, value, room, whole ? 0 : most_lines);
+            wrapped(building, kit::FontRole::small, value, text_room, whole ? 0 : most_lines);
         add_text(
             building,
             kit::FontRole::small,
@@ -2202,7 +2307,7 @@ int32_t add_facts(
                 building,
                 kit::FontRole::small,
                 line,
-                {value_left, line_top, room, metrics.small_line},
+                {text_left, line_top, text_room, metrics.small_line},
                 kit::Align::left,
                 ink,
                 clip
@@ -2217,7 +2322,7 @@ int32_t add_facts(
                 building,
                 kit::FontRole::small,
                 std::string(met),
-                {value_left + last_width + space_width, met_top, met_width, metrics.small_line},
+                {text_left + last_width + space_width, met_top, met_width, metrics.small_line},
                 kit::Align::left,
                 kit::colour::accent,
                 clip
@@ -2225,7 +2330,8 @@ int32_t add_facts(
         }
         const int32_t lines_height =
             std::max(static_cast<int32_t>(lines.size()), int32_t{1}) * metrics.small_line;
-        const kit::Rect value_box{value_left, top, value_width, lines_height};
+        const int32_t box_width = std::max(value_left + value_width - text_left, int32_t{0});
+        const kit::Rect value_box{text_left, top, box_width, lines_height};
         if (rules_fact(library, fact))
             add_label(
                 building.detail,
@@ -3873,17 +3979,25 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
 
         const std::size_t card_at = building.list.items.size();
         const kit::Rect avatar{inner_left, band_top, side, side};
-        add_item(building.list, kit::Role::fill, avatar, view).colour =
-            registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
-        add_text(
-            building,
-            kit::FontRole::small,
-            cut(building, kit::FontRole::small, registry_initials(registry.name), side),
-            avatar,
-            kit::Align::centre,
-            kit::colour::on_accent,
-            view
-        );
+        // The icon takes the lettermark's square. The lettermark stays while
+        // the picture is missing or still on its way.
+        const oa::ui::frontend_renderer::RgbaPicture avatar_picture = registry_picture(registry);
+        if (oa::ui::frontend_renderer::picture_drawable(avatar_picture)) {
+            add_item(building.list, kit::Role::picture, avatar, view).look =
+                kit::PictureLook{avatar_picture};
+        } else {
+            add_item(building.list, kit::Role::fill, avatar, view).colour =
+                registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
+            add_text(
+                building,
+                kit::FontRole::small,
+                cut(building, kit::FontRole::small, registry_initials(registry.name), side),
+                avatar,
+                kit::Align::centre,
+                kit::colour::on_accent,
+                view
+            );
+        }
         int32_t heading_top = band_top;
         for (const std::string& heading_line : heading_lines) {
             add_text(
@@ -4653,6 +4767,9 @@ kit::DisplayList finish(Building& building, const Window& window) {
     add_open_menu(building, window.footer_rule);
     add_unload_note(building, window);
     add_key_tooltip(building, window);
+    for (const kit::Control& control : building.top)
+        if (control.id == controls::close_x)
+            tab_stop(building, control);
     kit::DisplayList list = std::move(building.list);
     list.controls.clear();
     for (auto* group :
@@ -4978,30 +5095,6 @@ kit::DisplayList details_page_layout(
         const int32_t first = view.y - offset;
         const std::size_t first_item = into.list.items.size();
         int32_t top = first;
-        kit::LinkLook link;
-        link.caption =
-            cut(into,
-                kit::FontRole::small,
-                filled(
-                    library.text,
-                    words::back_to_tab,
-                    {{"tab", std::string(tab_text(library.tab, false, library.text))}}
-                ),
-                width);
-        link.hovered =
-            hovered(into, controls::back) || into.state->interaction.pressed == controls::back;
-        const kit::Rect link_rect{
-            view.x, top, kit::link_width(*into.fonts, link), metrics.small_line
-        };
-        const std::size_t before = into.list.controls.size();
-        kit::add_link(into.list, link_rect, link, controls::back, unique_name(into, named("back")));
-        into.list.items.back().clip = view;
-        move_controls(into.list, before, into.detail);
-        into.detail.back().clip = view;
-        into.detail.back().group = controls::details_group;
-        tab_stop(into, into.detail.back());
-        top += metrics.small_line + metrics.paragraph_gap;
-
         const std::string status =
             cut(into, kit::FontRole::small, status_line(library, *entry), width);
         const kit::Rect status_box{view.x, top, width, metrics.small_line};
@@ -5080,7 +5173,8 @@ kit::DisplayList details_page_layout(
             kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), false};
     }
 
-    // The footer: the first three actions, MORE ▾ with the rest, and CLOSE.
+    // The footer: the first three actions, MORE ▾ with the rest, and BACK.
+    // BACK does what the old breadcrumb did: the list, with its place kept.
     add_item(
         building.list,
         kit::Role::footer_band,
@@ -5125,17 +5219,17 @@ kit::DisplayList details_page_layout(
             named("action")
         );
     }
-    const std::string_view close_caption = action_text(Action::close, library.text);
-    const int32_t close_width = button_width(building, close_caption);
+    const std::string_view back_caption = action_text(Action::back, library.text);
+    const int32_t back_width = button_width(building, back_caption);
     add_button(
         building,
         building.footer,
-        {window.right - close_width, window.button_top, close_width, metrics.button_height},
-        close_caption,
+        {window.right - back_width, window.button_top, back_width, metrics.button_height},
+        back_caption,
         true,
         true,
-        controls::close,
-        named("close"),
+        controls::back,
+        named("back"),
         {},
         -1
     );
@@ -5343,6 +5437,32 @@ std::vector<std::size_t> picture_places(const Library& library, const kit::Displ
     for (std::size_t place = begin; place < end; ++place)
         add(place);
     return places;
+}
+
+void request_registry_icons(const Library& library, const RegistryPictureSource& source) {
+    if (source.request == nullptr)
+        return;
+    std::vector<std::string> offered;
+    const auto consider = [&](const Registry& registry) {
+        if (registry.shipped_logo || registry.icon_url.empty() || registry.icon)
+            return;
+        if (std::find(offered.begin(), offered.end(), registry.id) != offered.end())
+            return;
+        if (source.known != nullptr && source.known(source.context, registry))
+            return;
+        offered.push_back(registry.id);
+        source.request(source.context, registry);
+    };
+    if (library.tab == Tab::registries) {
+        for (const Registry& registry : library.inputs.registries)
+            consider(registry);
+    }
+    if (library.selected) {
+        for (const Registry& registry : library.inputs.registries) {
+            if (registry.id == library.selected->registry)
+                consider(registry);
+        }
+    }
 }
 
 void request_visible_pictures(

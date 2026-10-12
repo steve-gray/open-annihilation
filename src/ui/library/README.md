@@ -311,9 +311,12 @@ app removes the folder (`Runtime::library_uninstall`,
     Compact's footer holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
     search and no filters, one card for each registry, one under another
-    with `card_gap`. A card has its avatar (the initials,
-    `registry_initials`, from the short name, on the accent for a built-in
-    registry and on `colour::switch_idle` for one the player added), its
+    with `card_gap`. A card has its avatar in the `list_row_badge` square:
+    the registry's icon when `Registry::icon` has pixels, otherwise the
+    initials (`registry_initials`, from the short name, on the accent for a
+    built-in registry and on `colour::switch_idle` for one the player
+    added). The initials stay while the picture is missing. A registry with
+    `shipped_logo` draws the logo the game ships and is never fetched. Its
     heading (the title, or the short name when the title is empty), its
     address, when it was last read (`registry_refresh_line`: "refreshed 5
     min ago", "never refreshed", or "couldn't reach · 2 h ago"), its
@@ -363,11 +366,12 @@ app removes the folder (`Runtime::library_uninstall`,
     main button). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
-    (`details_page_layout`): its name and version in the header, the way
-    back ("‹ Mods"), the status line, the byline, the summary in at most
-    three lines, the package's tags as inactive pills under it, the short facts in label and value columns, the playing
-    note, and in the footer the first three actions, MORE ▾ holding the
-    rest, and CLOSE;
+    (`details_page_layout`): its name and version in the header, the status
+    line, the byline, the summary in at most three lines, the package's tags
+    as inactive pills under it, the short facts in label and value columns,
+    the playing note, and in the footer the first three actions, MORE ▾
+    holding the rest, and BACK. BACK returns to the list and keeps its tab,
+    filter, search, scroll and row. The list page's button stays CLOSE;
   - **Regular** shows "Open Annihilation Library" and "v0.8.0", the same
     refresh icon, the tabs with their All counts and a 240-point search, a row of pills (All, New,
     Installed and Updates with their counts, and the tags while they fit,
@@ -404,8 +408,8 @@ app removes the folder (`Runtime::library_uninstall`,
     tag pills and actions, the footer's buttons (on Active, the tabs and the footer's
     buttons alone; on Registries, the tabs, each registry's key icon,
     REFRESH, switch, REMOVE and ADD MIRROR…, ADD REGISTRY…, and the
-    footer's buttons); on Compact's details page, the way back, the tag
-    pills, the actions, MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
+    footer's buttons); on Compact's details page, the tag pills, the
+    actions, MORE and BACK. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
@@ -654,7 +658,8 @@ pressed as UPDATE and GET, and listed disabled and passing the press to
 the row while blocked or queued), an action's button, the refresh icon greyed
 until a registry can be asked and then asking, and saying "Refreshing" while
 one is being asked, the labels taking no
-press, the wheel and a finger's drag, typing and Backspace, the
+press, the header's close mark to the right of refresh asking what CLOSE
+asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 pill, and a press outside the drop-down, the tag pills, MORE ▾, and the
 Active tab with forty more maps: the mod and the language take no press
@@ -681,12 +686,15 @@ cut description and a From link. A one-map pack shows its minimap on the
 Maps row and large in the details, and a several-map pack with no badge
 shows the first map on the row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
-name, on that copy only. That author is Open Annihilation, so the card
-shows the app icon under its key, the plates filtered down, or the drawn
-plate when no icon has been given. The Languages picture, on that drawing
+name, on that copy only, and gives it the app icon as its avatar. That
+author is Open Annihilation, so the card shows the app icon under its key,
+the plates filtered down, or the drawn plate when no icon has been given.
+The Languages picture, on that drawing
 only, sets the fixture language pack Portugues (Brasil) to author
 "OA team" and adds an installed copy, so the row shows that mark
-under its check.
+under its check. The built-in languages lead that list, each marked
+Built in. `library-languages-zh-compact.png` is the same window with
+简体中文 installed and in use, on its details page.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
@@ -694,7 +702,7 @@ under its check.
 `library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
-`library-registries-large.png`, `library-languages-compact.png`,
+`library-registries-large.png`, `library-languages-compact.png`, `library-languages-zh-compact.png`,
 `library-maps-one-large.png` and `library-maps-several-large.png`
 for review.
 

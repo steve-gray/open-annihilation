@@ -9,6 +9,7 @@
 // Active tab's setup, the selection across refreshes, the buttons, the facts
 // with the sample numbers, the status lines, the bylines, the playing note,
 // the queue lines and every text.
+#include "oa/data/languages.hpp"
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/library/library.hpp"
@@ -221,6 +222,21 @@ at(const lib::Library& library, std::string_view registry, Kind kind, std::strin
     return lib::find_entry(library, {std::string(registry), kind, std::string(key)});
 }
 
+/// The built-in languages, in the order Settings › Language lists them,
+/// written as visible_keys writes a row.
+///
+/// @return the keys
+std::vector<std::string> built_in_language_rows() {
+    std::vector<std::string> keys;
+    for (const oa::data::languages::Language* language : oa::data::languages::known_languages()) {
+        if (language == nullptr || language->source != oa::data::languages::Source::built_in ||
+            !oa::data::languages::playable(*language))
+            continue;
+        keys.push_back(lib::built_in_language_id(language->tag).key + "@");
+    }
+    return keys;
+}
+
 /// The keys of the visible entries, in order.
 ///
 /// @param library the Library
@@ -295,8 +311,8 @@ void test_state_matrix() {
     inputs.updates.push_back(update(core, Kind::mod, "get-mod"));
     const lib::Library library = built(std::move(inputs));
 
-    // The packages, and the base game entry refresh always adds.
-    OA_CHECK(library.entries.size() == 9);
+    // The packages, the base game, and the built-in languages refresh adds.
+    OA_CHECK(library.entries.size() == 9 + built_in_language_rows().size());
     const lib::Entry* get = at(library, core, Kind::mod, "get-mod");
     OA_CHECK(get != nullptr && get->state == State::get && get->listing != nullptr);
     OA_CHECK(get != nullptr && get->installed == nullptr && get->update == nullptr && get->can_act);
@@ -598,7 +614,9 @@ void test_tabs_filters_tags() {
     lib::set_tab(library, lib::Tab::maps);
     OA_CHECK(visible_keys(library) == Keys({"example-pack@example-maps"}));
     lib::set_tab(library, lib::Tab::languages);
-    OA_CHECK(visible_keys(library) == Keys({"xx@fixture-core"}));
+    Keys language_rows = built_in_language_rows();
+    language_rows.push_back("xx@fixture-core");
+    OA_CHECK(visible_keys(library) == language_rows);
 
     lib::set_tab(library, lib::Tab::mods);
     lib::set_filter(library, lib::Filter::installed);
@@ -2108,6 +2126,148 @@ void test_base_game() {
     OA_CHECK(translated.visible.empty());
 }
 
+void test_built_in_languages() {
+    using Buttons = std::vector<std::pair<Action, bool>>;
+    // Settings › Language's built-in order, then the packs. English is in
+    // use when the inputs name no language. Counts stay counts of packages.
+    const std::vector<std::string> built_in = built_in_language_rows();
+    OA_CHECK(
+        built_in ==
+        std::vector<std::string>(
+            {"@language:en@", "@language:de@", "@language:es@", "@language:fr@", "@language:it@"}
+        )
+    );
+    lib::Inputs inputs = base_inputs();
+    inputs.listings.push_back(listing(core, Kind::language, "zh-Hans", "简体中文"));
+    inputs.listings.push_back(listing(core, Kind::language, "xx", "Fixture Language"));
+    lib::Installed hans = installed(core, Kind::language, "zh-Hans", "简体中文");
+    inputs.installed.push_back(hans);
+    lib::Library library = built(inputs);
+    lib::set_tab(library, lib::Tab::languages);
+
+    using Keys = std::vector<std::string>;
+    Keys all_rows = built_in;
+    all_rows.push_back("zh-Hans@fixture-core");
+    all_rows.push_back("xx@fixture-core");
+    OA_CHECK(visible_keys(library) == all_rows);
+    OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 2);
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 2);
+    OA_CHECK(lib::filter_count(library, lib::Filter::installed) == 1);
+    OA_CHECK(lib::filter_count(library, lib::Filter::newest) == 0);
+    OA_CHECK(lib::filter_count(library, lib::Filter::updates) == 0);
+
+    const lib::Entry* english = lib::find_entry(library, lib::built_in_language_id("en"));
+    const lib::Entry* german = lib::find_entry(library, lib::built_in_language_id("de"));
+    OA_CHECK(english != nullptr && german != nullptr);
+    if (english != nullptr) {
+        OA_CHECK(english->state == State::playing);
+        OA_CHECK_TEXT(lib::entry_name(*english), "English");
+        OA_CHECK(lib::entry_summary(*english).empty());
+        OA_CHECK_TEXT(lib::status_line(library, *english), "Built into the game");
+        OA_CHECK(lib::facts(library, *english).empty());
+        OA_CHECK(actions_of(library, *english).empty());
+    }
+    if (german != nullptr) {
+        OA_CHECK(german->state == State::installed);
+        OA_CHECK_TEXT(lib::entry_name(*german), "Deutsch");
+        OA_CHECK_TEXT(lib::entry_summary(*german), "German");
+        OA_CHECK_TEXT(lib::status_line(library, *german), "Built into the game");
+        OA_CHECK(lib::facts(library, *german).empty());
+        OA_CHECK(actions_of(library, *german) == Buttons({{Action::use_now, true}}));
+        OA_CHECK_TEXT(lib::entry_actions(library, *german).front().text, "USE NOW");
+    }
+
+    // New and Updates do not list them. Mods does not either.
+    lib::set_filter(library, lib::Filter::newest);
+    OA_CHECK(library.visible.empty());
+    lib::set_filter(library, lib::Filter::updates);
+    OA_CHECK(library.visible.empty());
+    lib::set_filter(library, lib::Filter::installed);
+    Keys installed_rows = built_in;
+    installed_rows.push_back("zh-Hans@fixture-core");
+    OA_CHECK(visible_keys(library) == installed_rows);
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::all);
+    OA_CHECK(visible_keys(library) == Keys({"zh-Hans@fixture-core", "xx@fixture-core"}));
+    lib::set_tab(library, lib::Tab::mods);
+    OA_CHECK(visible_keys(library) == Keys({"@base-game@"}));
+
+    // Search finds a built-in language by either name and by its tag.
+    lib::set_tab(library, lib::Tab::languages);
+    lib::set_filter(library, lib::Filter::all);
+    lib::set_query(library, "german");
+    OA_CHECK(visible_keys(library) == Keys({"@language:de@"}));
+    lib::set_query(library, "deutsch");
+    OA_CHECK(visible_keys(library) == Keys({"@language:de@"}));
+    lib::set_query(library, "de");
+    OA_CHECK(visible_keys(library) == Keys({"@language:de@"}));
+    lib::set_query(library, "");
+
+    // Choosing Deutsch marks it in use and offers USE NOW on English.
+    inputs.language.tag = "de";
+    inputs.language.name = "Deutsch";
+    inputs.language.english = "German";
+    lib::refresh(library, inputs);
+    lib::set_tab(library, lib::Tab::languages);
+    english = lib::find_entry(library, lib::built_in_language_id("en"));
+    german = lib::find_entry(library, lib::built_in_language_id("de"));
+    OA_CHECK(english != nullptr && english->state == State::installed);
+    OA_CHECK(german != nullptr && german->state == State::playing);
+    if (english != nullptr)
+        OA_CHECK(actions_of(library, *english) == Buttons({{Action::use_now, true}}));
+    if (german != nullptr)
+        OA_CHECK(actions_of(library, *german).empty());
+    OA_CHECK(visible_keys(library).front() == "@language:en@");
+
+    // An installed pack offers USE NOW until it is the one in use. One that
+    // is only listed keeps GET. After an install, USE NOW is there at once.
+    const lib::Entry* pack = at(library, core, Kind::language, "zh-Hans");
+    const lib::Entry* listed = at(library, core, Kind::language, "xx");
+    OA_CHECK(pack != nullptr && listed != nullptr);
+    if (pack != nullptr)
+        OA_CHECK(
+            actions_of(library, *pack) ==
+            Buttons(
+                {{Action::use_now, true}, {Action::uninstall, true}, {Action::open_folder, true}}
+            )
+        );
+    if (listed != nullptr)
+        OA_CHECK(actions_of(library, *listed) == Buttons({{Action::get, true}}));
+    inputs.installed.back().in_use = true;
+    inputs.language.tag = "zh-Hans";
+    inputs.language.pack = "简体中文";
+    inputs.language.name = "简体中文";
+    lib::refresh(library, inputs);
+    lib::set_tab(library, lib::Tab::languages);
+    pack = at(library, core, Kind::language, "zh-Hans");
+    german = lib::find_entry(library, lib::built_in_language_id("de"));
+    OA_CHECK(pack != nullptr && german != nullptr && german->state == State::installed);
+    if (pack != nullptr) {
+        OA_CHECK(
+            actions_of(library, *pack) ==
+            Buttons({{Action::uninstall, true}, {Action::open_folder, true}})
+        );
+    }
+    if (german != nullptr)
+        OA_CHECK(actions_of(library, *german) == Buttons({{Action::use_now, true}}));
+
+    lib::Inputs gained = library.inputs;
+    gained.installed.push_back(installed(core, Kind::language, "xx", "Fixture Language"));
+    lib::refresh(library, std::move(gained));
+    lib::set_tab(library, lib::Tab::languages);
+    listed = at(library, core, Kind::language, "xx");
+    OA_CHECK(listed != nullptr && listed->state == State::installed);
+    if (listed != nullptr)
+        OA_CHECK(
+            actions_of(library, *listed) ==
+            Buttons(
+                {{Action::use_now, true}, {Action::uninstall, true}, {Action::open_folder, true}}
+            )
+        );
+    OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 2);
+    OA_CHECK_TEXT(lib::action_text(Action::use_now), "USE NOW");
+}
+
 void test_tab_counts() {
     // A tab's count is its All count, before the search and the tag, and it
     // does not follow the tab that is open. Registries counts its rows.
@@ -2215,7 +2375,9 @@ void test_tabs_list_what_their_counts_hold() {
     lib::set_tab(library, lib::Tab::languages);
     OA_CHECK(library.tag == "balance");
     OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 1);
-    OA_CHECK(visible_keys(library) == Keys({"zh-hans@fixture-core"}));
+    Keys language_rows = built_in_language_rows();
+    language_rows.push_back("zh-hans@fixture-core");
+    OA_CHECK(visible_keys(library) == language_rows);
     language = at(library, core, Kind::language, "zh-hans");
     OA_CHECK(language != nullptr && language->state == State::installed);
     lib::set_tab(library, lib::Tab::maps);
@@ -2312,6 +2474,7 @@ int main() {
     test_switch_off();
     test_base_game();
     test_check_now();
+    test_built_in_languages();
     test_tab_counts();
     test_tabs_list_what_their_counts_hold();
     test_own_mod_description();

@@ -594,14 +594,39 @@ void tab_follows_the_dialogs_focus_order() {
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
         tab_order(controls) ==
-        (std::vector<int32_t>{15, 16, 17, 18, 19, 11, 12, 13, 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 7})
+        (std::vector<int32_t>{15, 16, 17, 18, 19, 11, 12, 13, 0, 1,
+                              2,  3,  4,  5,  6,  8,  9,  10, 7, settings::close_x_control})
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;
     graphics.page = settings::Page::graphics;
-    OA_CHECK(tab_order(graphics) == (std::vector<int32_t>{15, 16, 17, 18, 19, 20, 21, 22,
-                                                          11, 12, 13, 0,  1,  2,  3,  4,
-                                                          5,  6,  8,  9,  10, 7}));
+    OA_CHECK(
+        tab_order(graphics) == (std::vector<int32_t>{
+                                   15,
+                                   16,
+                                   17,
+                                   18,
+                                   19,
+                                   20,
+                                   21,
+                                   22,
+                                   11,
+                                   12,
+                                   13,
+                                   0,
+                                   1,
+                                   2,
+                                   3,
+                                   4,
+                                   5,
+                                   6,
+                                   8,
+                                   9,
+                                   10,
+                                   7,
+                                   settings::close_x_control
+                               })
+    );
     // Developer with its first area open: its rows, UI kit gallery's SHOW
     // last of them, its list's headers, Show Active Only and Restore profile
     // values, then the rest.
@@ -609,11 +634,57 @@ void tab_follows_the_dialogs_focus_order() {
     developer.page = settings::Page::developer;
     developer.chosen.developer_mode = true;
     developer.developer.areas_open[0] = 1;
-    OA_CHECK(tab_order(developer) == (std::vector<int32_t>{15, 16, 17, 20, 21, 22, 23, 24, 25, 26,
-                                                           27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-                                                           37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
-                                                           18, 19, 11, 12, 13, 0,  1,  2,  3,  4,
-                                                           5,  6,  8,  9,  10, 7}));
+    OA_CHECK(
+        tab_order(developer) == (std::vector<int32_t>{
+                                    15,
+                                    16,
+                                    17,
+                                    20,
+                                    21,
+                                    22,
+                                    23,
+                                    24,
+                                    25,
+                                    26,
+                                    27,
+                                    28,
+                                    29,
+                                    30,
+                                    31,
+                                    32,
+                                    33,
+                                    34,
+                                    35,
+                                    36,
+                                    37,
+                                    38,
+                                    39,
+                                    40,
+                                    41,
+                                    42,
+                                    43,
+                                    44,
+                                    45,
+                                    46,
+                                    18,
+                                    19,
+                                    11,
+                                    12,
+                                    13,
+                                    0,
+                                    1,
+                                    2,
+                                    3,
+                                    4,
+                                    5,
+                                    6,
+                                    8,
+                                    9,
+                                    10,
+                                    7,
+                                    settings::close_x_control
+                                })
+    );
 }
 
 } // namespace

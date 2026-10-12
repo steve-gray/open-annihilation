@@ -283,6 +283,8 @@ const char* refusal_text(Refusal refusal) noexcept {
         return "This mirror is already listed.";
     case Refusal::no_keys:
         return "The trusted keys cannot be empty.";
+    case Refusal::shipped_logo:
+        return "An added registry cannot use the Open Annihilation logo.";
     }
     return "The registry was refused.";
 }
@@ -331,6 +333,8 @@ Refusal check_new_registry(const Descriptor& descriptor, const AddContext& conte
     }
     if (context.player != nullptr && context.player->registries.size() >= max_added_registries)
         return Refusal::too_many_registries;
+    if (descriptor.shipped_logo)
+        return Refusal::shipped_logo;
     return Refusal::none;
 }
 

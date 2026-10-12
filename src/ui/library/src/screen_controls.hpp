@@ -35,7 +35,7 @@ inline constexpr kit::ControlId update_all = 30;
 inline constexpr kit::ControlId list = 40;
 /// Compact's DETAILS.
 inline constexpr kit::ControlId details = 50;
-/// The Compact details page's way back to the list.
+/// BACK on Compact's details page. It returns to the list.
 inline constexpr kit::ControlId back = 51;
 /// The shortcut still asks for Settings. The footer does not place this control.
 inline constexpr kit::ControlId settings = 52;
@@ -43,6 +43,9 @@ inline constexpr kit::ControlId settings = 52;
 inline constexpr kit::ControlId close = 53;
 /// The header's refresh icon.
 inline constexpr kit::ControlId refresh = 54;
+/// The header's close mark, to the right of the refresh icon. It asks for
+/// the same close as the footer's CLOSE.
+inline constexpr kit::ControlId close_x = 55;
 /// The status line's label.
 inline constexpr kit::ControlId status = 60;
 /// The first queue line's label.

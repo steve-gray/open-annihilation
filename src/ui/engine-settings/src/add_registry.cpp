@@ -12,6 +12,7 @@
 
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/formats/url.hpp"
+#include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/library/text.hpp"
 #include "oa/ui/kit/components.hpp"
@@ -291,10 +292,11 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
         for (const std::string& part : kit::wrap(text, line_width, small))
             text_line(part, colour, label);
     };
-    const auto heading_line = [&](std::string text, Label label) {
+    const auto heading_line = [&](std::string text, Label label, int32_t inset) {
+        const int32_t width = std::max(line_width - inset, int32_t{0});
         Line line;
-        line.text = kit::fit(text, line_width, small);
-        line.rect = {metrics.padding, row, line_width, metrics.small_line};
+        line.text = kit::fit(text, width, small);
+        line.rect = {metrics.padding + inset, row, width, metrics.small_line};
         line.heading = true;
         lines.push_back({std::move(line), label});
         row += metrics.small_line;
@@ -322,7 +324,7 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
     const FieldGeometry fields = field_geometry(window);
     const bool mirror = window.mode == AddRegistry::Mode::mirror;
     if (mirror) {
-        heading_line(filled("Mirror of {name}", "name", window.mirror_of), Label::name);
+        heading_line(filled("Mirror of {name}", "name", window.mirror_of), Label::name, 0);
         row += metrics.paragraph_gap;
     }
     if (window.mode == AddRegistry::Mode::from_file) {
@@ -358,7 +360,15 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
     case AddRegistry::Phase::ready: {
         const ProbeView& shown = window.shown;
         if (!mirror) {
-            heading_line(shown.name, Label::name);
+            // The icon sits in the name's line, at that line's height. The
+            // name stays put while the picture has not arrived.
+            int32_t name_inset = 0;
+            oa::ui::frontend_renderer::RgbaPicture icon_picture{
+                shown.icon_width, shown.icon_height, shown.icon_rgba
+            };
+            if (oa::ui::frontend_renderer::picture_drawable(icon_picture))
+                name_inset = metrics.small_line + metrics.list_row_gap;
+            heading_line(shown.name, Label::name, name_inset);
             row += kNameGap;
         }
         std::string key_label;
@@ -677,6 +687,21 @@ kit::DisplayList add_registry_list(const AddRegistry& window, const kit::Fonts* 
             item.colour = line.colour;
         }
         list.items.push_back(std::move(item));
+        if (labelled.label == Label::name && window.phase == AddRegistry::Phase::ready &&
+            window.mode != AddRegistry::Mode::mirror) {
+            const oa::ui::frontend_renderer::RgbaPicture icon_picture{
+                window.shown.icon_width, window.shown.icon_height, window.shown.icon_rgba
+            };
+            if (oa::ui::frontend_renderer::picture_drawable(icon_picture)) {
+                kit::Item picture;
+                picture.role = kit::Role::picture;
+                picture.rect = {
+                    metrics.padding, line.rect.y, metrics.small_line, metrics.small_line
+                };
+                picture.look = kit::PictureLook{icon_picture};
+                list.items.push_back(std::move(picture));
+            }
+        }
     }
 
     kit::Item footer;

@@ -67,6 +67,7 @@ struct Building {
     std::vector<kit::Control> scroll;     ///< the scroll bar
     std::vector<kit::Control> footer;     ///< Restore defaults, Cancel and OK
     std::vector<kit::Control> nav;        ///< the sections' entries
+    std::vector<kit::Control> header;     ///< the title bar's close mark
     /// The open section's controls Tab stops on, in the declared order: its
     /// rows that take a change, then on Developer its list's rows that take
     /// input, Show Active Only and Restore profile values while it is
@@ -235,10 +236,17 @@ kit::HeaderLook dialog_header(const Dialog& dialog) {
     header.tracking = layout::heading_tracking;
     header.second = std::string(layout::shown_text(layout::title_suffix_text));
     header.second_width = layout::title_suffix_width;
-    header.version = std::string(layout::shown_text(dialog.version));
-    header.version_width = layout::version_width;
-    if (dialog.locks.shared_game)
+    header.right_inset = oa::ui::kit::compact_metrics.button_height + layout::header_gap;
+    // The close mark keeps the header's right. While a shared game is still
+    // running, that note is the line the player needs, and the version gives
+    // way so the note is not cut.
+    if (dialog.locks.shared_game) {
         header.note = std::string(layout::shown_text(layout::shared_game_text));
+        header.version_width = 0;
+    } else {
+        header.version = std::string(layout::shown_text(dialog.version));
+        header.version_width = layout::version_width;
+    }
     return header;
 }
 
@@ -749,6 +757,31 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     );
 }
 
+/// Adds the title bar's close mark, at the top right. It asks for the same
+/// close as Cancel.
+///
+/// @param[in,out] building the list
+/// @param dialog the dialog
+void add_header_close(Building& building, const Dialog& dialog) {
+    const SourceRect rect = layout::header_close_button(layout::sizes_of(dialog));
+    const bool held = dialog.pressed == close_x_control && dialog.hovered == close_x_control;
+    const bool hovered = dialog.hovered == close_x_control;
+    const std::string caption(layout::shown_text(layout::close_x_text));
+    kit::ButtonLook look;
+    look.caption = caption;
+    look.style = kit::ButtonStyle::quiet;
+    look.hovered = hovered;
+    look.held = held;
+    look.mark = kit::ButtonMark::close;
+    button(building.list, rect, look, close_x_control, {});
+    if (dialog.focused == close_x_control)
+        focus_ring(building.list, rect, true, {});
+    kit::Control added =
+        control_of(close_x_control, rect, named("close-x"), kit::ControlKind::button);
+    added.text = caption;
+    building.header.push_back(std::move(added));
+}
+
 /// Adds Restore defaults, Cancel and OK.
 ///
 /// @param[in,out] building the list
@@ -870,6 +903,7 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     fill(building.list, whole, kit::colour::panel, {});
     item(building.list, kit::Role::header, {0, 0, sized.dialog_width, header_rule_row + 1}, {})
         .look = dialog_header(dialog);
+    add_header_close(building, dialog);
     if (registered_nav(dialog))
         add_registered_nav(building, dialog);
     else
@@ -898,7 +932,10 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     // Tab: the open section's controls, the footer's buttons left to right,
     // then the sections' entries in the list's order.
     list.tab_order = std::move(building.section_tab);
-    for (const auto* group : {&building.footer, &building.nav})
+    // Tab still reaches the rows, the footer and the list first. The close
+    // mark is the title bar's only stop, so it is last in that order, and
+    // last overall.
+    for (const auto* group : {&building.footer, &building.nav, &building.header})
         for (const kit::Control& control : *group)
             list.tab_order.push_back(control.id);
     for (auto* group :
@@ -907,6 +944,7 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
           &building.footer_own,
           &building.rows,
           &building.scroll,
+          &building.header,
           &building.footer,
           &building.nav})
         for (kit::Control& control : *group)

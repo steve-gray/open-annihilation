@@ -7,7 +7,8 @@
 // part lies inside the window; no two controls meet, nor their press areas;
 // every action of the selected entry is a control (Compact: on its details
 // page, MORE's open); UPDATE ALL is one on the Updates tab, over its list
-// beside the same filters as Mods, and CLOSE always is; the header's
+// beside the same filters as Mods, and CLOSE on the list; Compact's details
+// page has BACK instead, and no breadcrumb. The header's
 // refresh icon is present and SETTINGS is not a footer button; Tab
 // follows the declared order and the arrows reach every control that takes
 // the focus; the names are step 8's and unique; every text fits, and the
@@ -204,7 +205,7 @@ int declared_place(std::string_view name) {
         return 2;
     if (name == "library.action.update-all" || name == "library.list")
         return 3;
-    if (name == "library.action" || starts(name, "library.action.") || name == "library.back" ||
+    if (name == "library.action" || starts(name, "library.action.") ||
         name == "library.active.unload" || name == "library.active.search" ||
         starts(name, "library.active.from.") || starts(name, "library.detail.tag."))
         return 4;
@@ -212,8 +213,11 @@ int declared_place(std::string_view name) {
         return 5;
     if (name == "library.refresh")
         return 0;
-    if (name == "library.add-registry" || name == "library.details" || name == "library.close")
+    if (name == "library.add-registry" || name == "library.details" || name == "library.close" ||
+        name == "library.back")
         return 6;
+    if (name == "library.close-x")
+        return 7;
     return -1;
 }
 
@@ -290,7 +294,7 @@ bool designed_name(const std::string& name) {
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
-        "details|back|refresh|close|status|queue|note|from|rules|"
+        "details|back|refresh|close-x|close|status|queue|note|from|rules|"
         "active\\.(mod|language|unload|search|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
@@ -449,6 +453,8 @@ std::string_view word_of(lib::Action action) {
         return "open-folder";
     case lib::Action::homepage:
         return "homepage";
+    case lib::Action::use_now:
+        return "use-now";
     default:
         return "other";
     }
@@ -558,14 +564,17 @@ void check_frame(const fixture::NamedFrame& named) {
         lib::ScreenState page_state;
         page_state.details_page = true;
         const kit::DisplayList page = laid_out(library, page_state, frame);
-        OA_CHECK(fixture::named(page, "library.back") != nullptr);
+        const kit::Control* back = fixture::named(page, "library.back");
+        OA_CHECK(back != nullptr && back->text == "BACK");
+        OA_CHECK(fixture::named(page, "library.close") == nullptr);
+        for (const kit::Control& control : page.controls)
+            OA_CHECK(control.text.find("‹") == std::string::npos);
         OA_EXPECT_NONE(fixture::outside_window(page, window), named.name + " details page");
         OA_EXPECT_NONE(meeting_controls(page), named.name + " details page");
         OA_EXPECT_NONE(order_problems(page), named.name + " details page");
         OA_EXPECT_NONE(name_problems(page), named.name + " details page");
         OA_EXPECT_NONE(fixture::texts_not_fitting(page, fonts()), named.name + " details page");
         OA_EXPECT_NONE(whole_fact_problems(library, page, false), named.name + " details page");
-        OA_CHECK(fixture::named(page, "library.close") != nullptr);
         OA_CHECK(fixture::named(page, "library.status") != nullptr);
         OA_CHECK(fixture::named(page, "library.note") != nullptr);
         for (std::size_t index = 0; index < 3; ++index)
@@ -657,6 +666,7 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(
             stop != nullptr &&
             (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
+             stop->name == "library.close-x" || stop->name == "library.refresh" ||
              stop->name == "library.active.unload" || stop->name == "library.active.search" ||
              starts(stop->name, "library.active.from."))
         );
@@ -821,9 +831,12 @@ void larger_classes_show_more() {
     OA_CHECK(all_entry != nullptr && all_entry->kind == kit::ControlKind::tab);
     OA_CHECK(fixture::named(regular, "library.filter.all") != nullptr);
     OA_CHECK(fixture::named(compact, "library.filter") != nullptr);
-    // Compact's tabs take their short names; Active is the first.
-    const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
-    OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
+    // Compact's tabs take their short names. Active is the first stop; the
+    // close mark is last, after the footer.
+    const kit::Control* first_stop = kit::control_of(compact, compact.tab_order.front());
+    OA_CHECK(first_stop != nullptr && first_stop->name == "library.tab.active");
+    const kit::Control* last_stop = kit::control_of(compact, compact.tab_order.back());
+    OA_CHECK(last_stop != nullptr && last_stop->name == "library.close-x");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
     OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
@@ -831,6 +844,60 @@ void larger_classes_show_more() {
         updates != nullptr &&
         updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
     );
+}
+
+/// Languages lists each built-in language ahead of the packs. A built-in
+/// row's chip says "Built in", and the language in use says "In use".
+/// USE NOW is in the tab order; a pack that is not installed has GET only.
+void built_in_languages_show_on_the_list() {
+    lib::Library library = fixture::fixture_library();
+    lib::set_tab(library, lib::Tab::languages);
+    const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    bool deutsch = false;
+    for (const kit::Item& item : list.items) {
+        const auto* row = std::get_if<kit::ListRowLook>(&item.look);
+        if (row == nullptr || row->title != "Deutsch")
+            continue;
+        bool german = false;
+        for (const std::string& line : row->lines)
+            german = german || line == "German";
+        deutsch = row->chip.has_value() && row->chip->text == "Built in" &&
+                  !row->chip->icon.has_value() && german;
+    }
+    OA_CHECK(deutsch);
+    const kit::Control* deutsch_row = fixture::named(list, "library.row.language-de");
+    OA_CHECK(deutsch_row != nullptr && deutsch_row->text == "Deutsch");
+
+    lib::select(library, lib::built_in_language_id("de"));
+    const kit::DisplayList details = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* use_now = fixture::named(details, "library.action.use-now");
+    OA_CHECK(use_now != nullptr && use_now->text == "USE NOW" && use_now->enabled);
+    if (use_now != nullptr)
+        OA_CHECK(
+            std::find(details.tab_order.begin(), details.tab_order.end(), use_now->id) !=
+            details.tab_order.end()
+        );
+    bool told = false;
+    for (const kit::Item& item : details.items)
+        told = told || (item.role == kit::Role::text && item.text == "Built into the game");
+    OA_CHECK(told);
+    OA_CHECK(fixture::named(details, "library.action.get") == nullptr);
+    OA_CHECK(fixture::named(details, "library.action.uninstall") == nullptr);
+
+    lib::select(library, {std::string(fixture::added), lib::Kind::language, "pl"});
+    const kit::DisplayList in_use = laid_out(library, {}, fixture::frames()[1].frame);
+    bool marked = false;
+    for (const kit::Item& item : in_use.items) {
+        const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+        marked = marked || (chip != nullptr && chip->text == "In use" && !chip->icon.has_value());
+    }
+    OA_CHECK(marked);
+    OA_CHECK(fixture::named(in_use, "library.action.use-now") == nullptr);
+
+    lib::select(library, {std::string(fixture::core), lib::Kind::language, "pt-BR"});
+    const kit::DisplayList listed = laid_out(library, {}, fixture::frames()[1].frame);
+    OA_CHECK(fixture::named(listed, "library.action.get") != nullptr);
+    OA_CHECK(fixture::named(listed, "library.action.use-now") == nullptr);
 }
 
 /// A row reads its entry's name, and a row's chip says its state.
@@ -1150,19 +1217,20 @@ void tab_follows_the_declared_order() {
         "library.list",
         "library.details",
         "library.close",
+        "library.close-x",
     };
     OA_CHECK(names_of(laid_out(library, {}, compact)) == compact_order);
     lib::open_details(library);
     lib::ScreenState page;
     page.details_page = true;
     const std::vector<std::string> page_order{
-        "library.back",
         "library.detail.tag.balance",
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
         "library.action",
-        "library.close",
+        "library.back",
+        "library.close-x",
     };
     OA_CHECK(names_of(laid_out(library, page, compact)) == page_order);
     lib::close_details(library);
@@ -1178,12 +1246,14 @@ void tab_follows_the_declared_order() {
         "library.action.open-folder",
         "library.action.homepage",
         "library.close",
+        "library.close-x",
     };
     OA_CHECK(regular.size() > regular_end.size() + 5);
     OA_CHECK(std::equal(regular_end.rbegin(), regular_end.rend(), regular.rbegin()));
     OA_CHECK(
-        regular.size() > 9 && regular[6] == "library.search" &&
-        regular[7] == "library.filter.all" && regular[8] == "library.filter.new"
+        regular.size() > 10 && regular[0] == "library.tab.active" &&
+        regular[6] == "library.search" && regular[7] == "library.filter.all" &&
+        regular[8] == "library.filter.new"
     );
 }
 
@@ -1724,6 +1794,66 @@ void active_tab_takes_nothing_and_scrolls() {
 
 /// On Compact's details page the page keys and the arrows never change the
 /// entry it shows.
+/// Compact's details page has no breadcrumb. BACK returns to the list and
+/// keeps its tab, filter, search, scroll and row. The list's button is
+/// CLOSE. Escape follows the button. Regular and Large keep CLOSE.
+void compact_back_returns_to_the_same_list() {
+    const std::vector<fixture::NamedFrame> all = fixture::frames();
+    lib::Library library = with_ridge();
+    lib::set_filter(library, lib::Filter::installed);
+    lib::set_query(library, "ridge");
+    lib::select(library, fixture::ridge_id());
+    lib::ScreenState state;
+    state.search.text = library.query;
+    state.list_scroll = 28;
+    const lib::EntryId kept = *library.selected;
+    lib::open_details(library);
+    state.details_page = true;
+    const kit::Frame compact = all[0].frame;
+    kit::DisplayList page = laid_out(library, state, compact);
+    OA_CHECK(fixture::named(page, "library.close") == nullptr);
+    const kit::Control* back = fixture::named(page, "library.back");
+    OA_CHECK(back != nullptr && back->text == "BACK");
+    for (const kit::Item& item : page.items)
+        OA_CHECK(item.text.find("‹") == std::string::npos);
+    lib::ScreenResult result = click(library, state, page, "library.back");
+    OA_CHECK(!result.action && !library.details_open && !state.details_page);
+    OA_CHECK(library.tab == lib::Tab::mods);
+    OA_CHECK(lib::shown_filter(library) == lib::Filter::installed);
+    OA_CHECK(library.query == "ridge" && state.search.text == "ridge");
+    OA_CHECK(state.list_scroll == 28 && library.selected == kept);
+
+    kit::DisplayList list = laid_out(library, state, compact);
+    const kit::Control* close = fixture::named(list, "library.close");
+    OA_CHECK(close != nullptr && close->text == "CLOSE");
+    OA_CHECK(fixture::named(list, "library.back") == nullptr);
+    result = lib::library_key(library, state, list, kit::Key::escape);
+    OA_CHECK(result.action == lib::Action::close);
+    OA_CHECK(library.query == "ridge" && library.selected == kept);
+
+    lib::open_details(library);
+    state.details_page = true;
+    page = laid_out(library, state, compact);
+    result = lib::library_key(library, state, page, kit::Key::escape);
+    OA_CHECK(!result.action && !library.details_open && !state.details_page);
+    OA_CHECK(state.list_scroll == 28 && library.selected == kept && library.query == "ridge");
+
+    for (const fixture::NamedFrame& named : all) {
+        if (named.frame.size_class == kit::SizeClass::compact)
+            continue;
+        lib::Library wide = with_ridge();
+        lib::open_details(wide);
+        lib::ScreenState wide_state;
+        wide_state.details_page = true;
+        const kit::DisplayList laid = laid_out(wide, wide_state, named.frame);
+        const kit::Control* wide_close = fixture::named(laid, "library.close");
+        OA_CHECK(wide_close != nullptr && wide_close->text == "CLOSE");
+        OA_CHECK(fixture::named(laid, "library.back") == nullptr);
+        result = lib::library_key(wide, wide_state, laid, kit::Key::escape);
+        OA_CHECK(result.action == lib::Action::close && wide.details_open);
+    }
+}
+
 void details_page_keeps_its_entry() {
     const kit::Frame compact = fixture::frames()[0].frame;
     lib::Library library = with_ridge();
@@ -3001,6 +3131,80 @@ void from_link_opens_the_pack() {
     }
 }
 
+/// The title bar's close mark sits to the right of the refresh icon at
+/// every size class. The title and the version stop before it, a press
+/// asks for the same close as CLOSE, and the footer CLOSE stays.
+void the_title_bar_holds_a_close_mark() {
+    const kit::Metrics& compact = kit::compact_metrics;
+    const std::vector<fixture::NamedFrame> frames = fixture::frames();
+    for (std::size_t index = 0; index < 3; ++index) {
+        const fixture::NamedFrame& named = frames[index];
+        lib::Library library = with_ridge();
+        library.inputs.version_text = "v0.8.0-a-very-long-version";
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const kit::Control* close = fixture::named(list, "library.close-x");
+        const kit::Control* refresh = fixture::named(list, "library.refresh");
+        const kit::Control* footer = fixture::named(list, "library.close");
+        OA_CHECK(close != nullptr && refresh != nullptr && footer != nullptr);
+        if (close == nullptr || refresh == nullptr || footer == nullptr)
+            continue;
+        OA_CHECK(close->text == "Close");
+        OA_CHECK(close->rect.width == refresh->rect.width);
+        OA_CHECK(close->rect.height == refresh->rect.height);
+        OA_CHECK(close->rect.x == refresh->rect.x + refresh->rect.width + compact.header_gap);
+        OA_CHECK(close->rect.y == refresh->rect.y);
+        OA_CHECK(
+            close->rect.x + close->rect.width ==
+            named.frame.area.width - compact.edge - compact.padding
+        );
+        bool mark = false;
+        const kit::HeaderLook* header = nullptr;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::button && item.control == close->id) {
+                const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+                mark = look != nullptr && look->mark == kit::ButtonMark::close;
+            }
+            if (item.role == kit::Role::header)
+                header = std::get_if<kit::HeaderLook>(&item.look);
+        }
+        OA_CHECK(mark);
+        OA_CHECK(header != nullptr);
+        if (header != nullptr) {
+            const int32_t title_left = compact.padding + compact.mark_side + compact.header_gap;
+            const int32_t title_right = title_left + header->title_width;
+            const int32_t version_right =
+                named.frame.area.width - compact.edge - compact.padding - header->right_inset;
+            OA_CHECK(title_right <= close->rect.x);
+            OA_CHECK(version_right <= close->rect.x);
+        }
+        lib::Library pressed = library;
+        const lib::ScreenResult result =
+            click(pressed, state, list, "library.close-x", index == 0 ? 12 : 0);
+        OA_CHECK(result.action == lib::Action::close);
+        const lib::ScreenResult footer_close = click(pressed, state, list, "library.close");
+        OA_CHECK(footer_close.action == lib::Action::close);
+    }
+    lib::Library checking = with_ridge();
+    checking.inputs.can_check = true;
+    lib::ScreenState state;
+    const kit::DisplayList list = laid_out(checking, state, frames[1].frame);
+    const auto place = [&](std::string_view name) {
+        std::size_t at = 0;
+        for (const kit::ControlId id : list.tab_order) {
+            const kit::Control* control = kit::control_of(list, id);
+            if (control != nullptr && control->name == name)
+                return at;
+            ++at;
+        }
+        return list.tab_order.size();
+    };
+    const std::size_t refresh_at = place("library.refresh");
+    const std::size_t close_at = place("library.close-x");
+    OA_CHECK(refresh_at < close_at);
+    OA_CHECK(close_at + 1 == list.tab_order.size());
+}
+
 /// Returns the MAPS heading.
 ///
 /// @param list the display list
@@ -3191,6 +3395,7 @@ void active_maps_fill_scroll_and_filter() {
 int main() {
     every_frame_holds_its_invariants();
     larger_classes_show_more();
+    built_in_languages_show_on_the_list();
     rows_name_their_entries();
     empty_and_offline_lists_say_why();
     an_own_mods_details_show_its_description();
@@ -3201,6 +3406,7 @@ int main() {
     list_keys_move_the_selection();
     tab_follows_the_declared_order();
     pressing_rows_selects_and_never_gets();
+    the_title_bar_holds_a_close_mark();
     row_icons_are_get_and_update();
     wheel_and_drag_scroll();
     typing_searches();
@@ -3216,6 +3422,7 @@ int main() {
     from_link_opens_the_pack();
     a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
+    compact_back_returns_to_the_same_list();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();
 }

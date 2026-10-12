@@ -231,17 +231,23 @@ void test_button() {
                 {{Action::play_now, true}, {Action::uninstall, true}, {Action::open_folder, true}}
             )
         );
-    for (const auto& [kind, key] :
-         {std::pair{Kind::map_pack, std::string_view{"archipelago"}},
-          std::pair{Kind::language, std::string_view{"pt-BR"}}}) {
-        const lib::Entry* entry = at(library, core, kind, key);
-        OA_CHECK(entry != nullptr);
-        if (entry != nullptr)
-            OA_CHECK(
-                actions_of(library, *entry) ==
-                Buttons({{Action::uninstall, true}, {Action::open_folder, true}})
-            );
-    }
+    const lib::Entry* maps = at(library, core, Kind::map_pack, "archipelago");
+    OA_CHECK(maps != nullptr);
+    if (maps != nullptr)
+        OA_CHECK(
+            actions_of(library, *maps) ==
+            Buttons({{Action::uninstall, true}, {Action::open_folder, true}})
+        );
+    // A language pack that is installed and not in use offers USE NOW first.
+    const lib::Entry* portuguese = at(library, core, Kind::language, "pt-BR");
+    OA_CHECK(portuguese != nullptr);
+    if (portuguese != nullptr)
+        OA_CHECK(
+            actions_of(library, *portuguese) ==
+            Buttons(
+                {{Action::use_now, true}, {Action::uninstall, true}, {Action::open_folder, true}}
+            )
+        );
     // A package that is not installed has none.
     const lib::Entry* lattice = at(library, core, Kind::mod, "lattice");
     OA_CHECK(lattice != nullptr);
