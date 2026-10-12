@@ -91,7 +91,7 @@ is separate from these three, and is recognised where it is today.
 ## For a mod author
 
 A mod names the id of each base game it runs on and each expansion it
-needs, from the ids on this page. A mod such as Ridge that needs Core
+needs, from the ids on this page. A mod that needs Core
 Contingency names `totala` and `core-contingency`: the campaign comes with
 Core Contingency, so the mod does not name the campaign as well unless it
 uses the campaign's own files. The same ids are what a map pack names when
