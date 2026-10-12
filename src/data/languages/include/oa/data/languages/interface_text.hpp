@@ -16,9 +16,9 @@
 //         de = ...;
 //         }
 //
-// No translation ships yet, so every language shows the interface in
-// English; adding one is adding a catalogue file, with no change to the
-// code.
+// The engine ships languages/interface.tdf beside the game's fonts, with
+// these words in German, French, Spanish and Italian. A pack's
+// interface.tdf has the same shape and is added to this same catalogue.
 #pragma once
 
 #include "oa/data/languages.hpp"

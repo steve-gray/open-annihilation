@@ -431,6 +431,17 @@ and each key a language's tag:
 	}
 ```
 
+The engine ships `languages/interface.tdf` in that folder, with these
+words in German (`de`), French (`fr`), Spanish (`es`) and Italian (`it`),
+so those languages show Open Annihilation's own screens without a
+download. The file is read with the other catalogue files, before any
+pack, by the same catalogue a pack's `interface.tdf` is added to. A later
+file replaces a text. The four languages address the player informally
+(German du, French tu, Spanish tú, Italian tu), as games in those
+languages usually do. The names Open Annihilation, OA, Core Prime, Total
+Annihilation and Cavedog Entertainment are left as written. A native
+speaker should still review each language.
+
 The Simplified Chinese pack's `interface.tdf` translates them for
 `zh-Hans`; the player's packs replace a packager's words, and a mod's
 replace both. The engine ships no packs. These are the words: the dialog's
