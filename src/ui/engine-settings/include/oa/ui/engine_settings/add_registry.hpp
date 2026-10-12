@@ -44,6 +44,9 @@ inline constexpr oa::ui::kit::ControlId add_registry_address_control = 6;
 inline constexpr oa::ui::kit::ControlId add_registry_key_control = 7;
 /// The refusal: a label named add-registry.refusal.
 inline constexpr oa::ui::kit::ControlId add_registry_refusal_control = 8;
+/// The signing-key field, under the address, for an address add. Named
+/// add-registry.key-field. An .oareg file and a mirror show no field.
+inline constexpr oa::ui::kit::ControlId add_registry_key_field_control = 9;
 
 /// The most key fingerprints the window lists; the rest are counted.
 inline constexpr std::size_t shown_fingerprints = 3;
@@ -83,9 +86,14 @@ struct AddRegistry {
         refused,  ///< the check or the change was refused, and why
     };
 
-    Mode mode{Mode::by_url};     ///< how the registry came
-    std::string url;             ///< the address field's text: the player's own, never looked up
-    std::size_t caret{};         ///< the caret, in bytes from the field's start
+    Mode mode{Mode::by_url}; ///< how the registry came
+    std::string url;         ///< the address field's text: the player's own, never looked up
+    std::size_t caret{};     ///< the caret, in bytes from the address field's start
+    /// The signing key the player typed, for an address add. Empty keeps the
+    /// descriptor's keys. A full public key is `ed25519:` and 43 base64
+    /// characters and `=`.
+    std::string signing_key;
+    std::size_t key_caret{};     ///< the caret, in bytes from the signing-key field's start
     std::string file_name;       ///< the .oareg file's name, for Mode::from_file
     std::string mirror_of;       ///< the name of the registry a mirror is for, for Mode::mirror
     Phase phase{Phase::editing}; ///< where it stands
@@ -133,7 +141,10 @@ add_registry_height(const AddRegistry& window, const oa::ui::kit::Fonts* fonts =
 /// heading reads "Mirror of {name}". The address field (add-registry.url),
 /// with "http://…" while it is empty, shows for an address or a mirror and
 /// takes typing while editing or refused; a file shows "From {file}" in its
-/// place. Editing offers CANCEL and CHECK. Checking says "Checking
+/// place. An address add also shows a "Signing key" line and a field
+/// (add-registry.key-field), with "ed25519:…" while it is empty, under the
+/// address. A file and a mirror show no signing-key field. Editing offers
+/// CANCEL and CHECK. Checking says "Checking
 /// {address}…" over CANCEL. Ready to add a registry: its name in the
 /// heading role, then Address, Packages ("{n} · {kinds}"), Key (each
 /// fingerprint, at most three, then "+N more"), or for an unsigned registry
@@ -150,9 +161,9 @@ add_registry_height(const AddRegistry& window, const oa::ui::kit::Fonts* fonts =
 [[nodiscard]] oa::ui::kit::DisplayList
 add_registry_list(const AddRegistry& window, const oa::ui::kit::Fonts* fonts = nullptr);
 
-/// Puts the focus where its phase starts it, and shows it: on the field
-/// while it takes typing, otherwise on CANCEL, so that trusting a registry
-/// is never what Enter or a pad's A does first.
+/// Puts the focus where its phase starts it, and shows it: on the address
+/// field while it takes typing, otherwise on CANCEL, so that trusting a
+/// registry is never what Enter or a pad's A does first.
 ///
 /// @param[in,out] window the window
 void add_registry_settle(AddRegistry& window) noexcept;
@@ -164,27 +175,32 @@ void add_registry_settle(AddRegistry& window) noexcept;
 /// @return true while it does
 [[nodiscard]] bool add_registry_editable(const AddRegistry& window) noexcept;
 
-/// Returns the field while it takes typing and has the focus, over which
-/// the host keeps the system's text input started.
+/// Returns the focused field while it takes typing and the focus is shown,
+/// over which the host keeps the system's text input started. That is the
+/// signing-key field when it has the focus, otherwise the address field.
 ///
 /// @param window the window
 /// @return the field's rectangle, in points; none otherwise
 [[nodiscard]] std::optional<oa::ui::kit::Rect>
 add_registry_field(const AddRegistry& window) noexcept;
 
-/// Takes typed or pasted text into the field at its caret: only the text
-/// before its first line break, and no more than leaves the field within
-/// oa::formats::url::max_url_bytes, cut at a character's start. A refused
-/// address goes back to editing once the player changes it.
+/// Takes typed or pasted text into the focused field at its caret: the
+/// signing-key field when it has the focus, otherwise the address. Only the
+/// text before its first line break is kept. The address holds at most
+/// oa::formats::url::max_url_bytes and the signing key at most 128 bytes,
+/// cut at a character's start. A refused address goes back to editing once
+/// the player changes either field.
 ///
 /// @param[in,out] window the window
 /// @param utf8 the text, in UTF-8
 /// @return redraw when the field changed; none while it takes no typing
 [[nodiscard]] AddRegistryAction add_registry_text(AddRegistry& window, std::string_view utf8);
 
-/// Takes a key. Escape is CANCEL. On the field, Enter is CHECK, Space
-/// starts typing, and Backspace, Delete, Left, Right, Home and End edit it.
-/// Enter and Space press a focused button. Tab and the arrows move the focus.
+/// Takes a key. Escape is CANCEL. Enter is CHECK while a field takes
+/// typing. On the address field or the signing-key field, Space starts
+/// typing, and Backspace, Delete, Left, Right, Home and End edit that
+/// field. Enter and Space press a focused button. Tab and the arrows move
+/// the focus.
 ///
 /// @param[in,out] window the window
 /// @param pressed the key

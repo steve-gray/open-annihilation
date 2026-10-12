@@ -34,6 +34,22 @@ bool continuation(unsigned char byte) noexcept {
     return (byte & 0xc0) == 0x80;
 }
 
+/// Counts Unicode scalar values: every byte that does not continue a sequence.
+///
+/// Call this only after control_character has accepted the text, so each run
+/// of continuation bytes belongs to one scalar.
+///
+/// @param text UTF-8 with no control character and no bad sequence
+/// @return the number of scalar values
+std::size_t scalar_count(std::string_view text) noexcept {
+    std::size_t count = 0;
+    for (unsigned char byte : text) {
+        if (!continuation(byte))
+            ++count;
+    }
+    return count;
+}
+
 std::string join_index(std::string_view where, std::size_t index) {
     return std::string(where) + "[" + std::to_string(index) + "]";
 }
@@ -50,7 +66,8 @@ bool take_string(
 }
 
 bool same_descriptor(const Descriptor& left, const Descriptor& right) {
-    if (left.id != right.id || left.name != right.name || left.catalogue != right.catalogue ||
+    if (left.id != right.id || left.name != right.name || left.title != right.title ||
+        left.description != right.description || left.catalogue != right.catalogue ||
         left.mode != right.mode || left.install_id != right.install_id ||
         left.homepage != right.homepage || left.api != right.api || left.mirrors != right.mirrors ||
         left.keys.size() != right.keys.size())
@@ -172,6 +189,25 @@ bool take_name(
         return false;
     if (text.empty() || text.size() > max_name_bytes || control_character(text)) {
         error = std::string(where) + " must be 1 to 64 bytes with no control character";
+        return false;
+    }
+    out = std::move(text);
+    return true;
+}
+
+bool take_limited_text(
+    const oamod::Node& node,
+    std::string& out,
+    std::string& error,
+    std::string_view where,
+    std::size_t most
+) {
+    std::string text;
+    if (!take_string(node, text, error, where))
+        return false;
+    if (text.empty() || control_character(text) || scalar_count(text) > most) {
+        error = std::string(where) + " must be 1 to " + std::to_string(most) +
+                " characters with no control character";
         return false;
     }
     out = std::move(text);

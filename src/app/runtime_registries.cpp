@@ -19,6 +19,7 @@
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/base/signing/ed25519.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/trust.hpp"
 #include "oa/formats/url.hpp"
@@ -91,6 +92,25 @@ constexpr std::array<RefusalSentence, 11> kRefusalSentences{{
 constexpr std::string_view kNeedsHttps = "This registry needs HTTPS, which this system cannot use";
 /// Any other address the address reader refuses, before any check.
 constexpr std::string_view kNotAddressSentence = "That isn't a web address OA can read.";
+/// A signing key that is not `ed25519:` and 44 characters of base64.
+constexpr std::string_view kSigningKeyUnreadable = "The signing key could not be read.";
+/// A typed key that did not verify the catalogue.
+constexpr std::string_view kCatalogueNotSigned = "The catalogue isn't signed by this key.";
+
+/// Drops leading and trailing spaces and tabs from a signing key.
+///
+/// @param text the field's text
+/// @return the key, or empty when the field was blank
+std::string trimmed_signing_key(std::string_view text) {
+    std::size_t begin = 0;
+    while (begin < text.size() && (text[begin] == ' ' || text[begin] == '\t'))
+        ++begin;
+    std::size_t end = text.size();
+    while (end > begin && (text[end - 1] == ' ' || text[end - 1] == '\t'))
+        --end;
+    return std::string(text.substr(begin, end - begin));
+}
+
 /// Every other refusal: unreadable, and what no row above names. {address}
 /// is the address checked, or the file's name, and {detail} what the
 /// content service found: the reader's reason, the catalogue's verdict or
@@ -457,10 +477,16 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
         }
         fallback_address_ = url::host_header(*parsed);
         content::Service& service = runtime_.content_service();
-        const uint64_t request = model_.mode == settings::AddRegistry::Mode::mirror
-                                     ? service.check_mirror(registry_id_, url::url_text(*parsed))
-                                     : service.check_registry_url(url::url_text(*parsed));
-        ask(request, fallback_address_);
+        if (model_.mode == settings::AddRegistry::Mode::mirror) {
+            ask(service.check_mirror(registry_id_, url::url_text(*parsed)), fallback_address_);
+            return;
+        }
+        const std::string signing_key = trimmed_signing_key(model_.signing_key);
+        if (!signing_key.empty() && !base::signing::parse_public_key(signing_key)) {
+            refuse(std::string(kSigningKeyUnreadable));
+            return;
+        }
+        ask(service.check_registry_url(url::url_text(*parsed), signing_key), fallback_address_);
     }
 
   private:
@@ -528,6 +554,10 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
     void show_check(const content::RegistryCheck& check) {
         if (check.detail == kNeedsHttps) {
             refuse(std::string(kNeedsHttps));
+            return;
+        }
+        if (check.detail == kSigningKeyUnreadable || check.detail == kCatalogueNotSigned) {
+            refuse(std::string(check.detail));
             return;
         }
         if (check.refusal != registry::Refusal::none) {

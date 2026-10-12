@@ -46,9 +46,11 @@ struct SigningKey {
 /// descriptor is in the package's registries folder). It is the only thing
 /// the model reads to decide whether a registry is built in.
 struct Registry {
-    std::string id{};   ///< the registry's id
-    std::string name{}; ///< the name a player sees
-    bool built_in{};    ///< shipped with Open Annihilation; its downloads never ask
+    std::string id{};          ///< the registry's id
+    std::string name{};        ///< the short name: notes, "From", and downloads off
+    std::string title{};       ///< the card's heading; name when empty
+    std::string description{}; ///< the paragraph under the address and refresh lines
+    bool built_in{};           ///< shipped with Open Annihilation; its downloads never ask
     /// False when the registry needs an install ID and the player turned it off.
     bool downloads_on{true};
     /// Why downloads are off, in the player's words; empty when they are on.

@@ -51,6 +51,22 @@ void append_quoted(std::string& out, std::string_view text);
     const formats::oamod::Node& node, std::string& out, std::string& error, std::string_view where
 );
 
+/// Reads a title or a description: 1 to most Unicode scalar values, no control character.
+///
+/// @param node the field's node
+/// @param[out] out the text; unchanged on failure
+/// @param[out] error why it was refused
+/// @param where the field's path, for the refusal
+/// @param most the most characters
+/// @return true when the text was read
+[[nodiscard]] bool take_limited_text(
+    const formats::oamod::Node& node,
+    std::string& out,
+    std::string& error,
+    std::string_view where,
+    std::size_t most
+);
+
 /// Reads a registry id.
 ///
 /// @param node the field's node

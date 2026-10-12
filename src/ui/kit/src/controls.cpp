@@ -1176,8 +1176,10 @@ void draw_hover_card(const Canvas& canvas, const Rect& rect, const HoverCardLook
         }
         int32_t aside_width = 0;
         if (!look.aside.empty()) {
+            // The wider of the two measures, as a list row's aside is, so
+            // "built in" is not cut when the canvas's measure is the narrower.
             aside_width = std::min(
-                measured(canvas, FontRole::small, look.aside), std::max(right - pen, int32_t{0})
+                whole_width(canvas, FontRole::small, look.aside), std::max(right - pen, int32_t{0})
             );
             cut_line(
                 canvas,

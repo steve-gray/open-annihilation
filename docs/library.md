@@ -445,56 +445,66 @@ mid-campaign above all.
 ## The Registries tab
 
 **Registries** is the last tab. It lists every registry the packages come
-from, with no search and no filters. Turning one off, or removing one,
-changes the other tabs at once: its packages leave the lists as soon as
-the switch or **REMOVE** is pressed.
+from, each on its own card, one under another with a gap between them,
+with no search and no filters. Turning one off, or removing one, changes
+the other tabs at once: its packages leave the lists as soon as the switch
+or **REMOVE** is pressed.
 
-Each row shows:
+Each card shows:
 
-- an avatar, the name's initials in a square: the first letters of its
-  first three words, or of a name of one word its first two letters;
-- the name, and a **Built in** chip when the registry ships with the game;
+- an avatar, the short name's initials in a square: the first letters of
+  its first three words, or of a name of one word its first two letters;
+- the heading, which is the registry's title when it has one ("Core Prime
+  - Official Open Annihilation Packages") and its short name when it does
+  not;
+- a key icon, whole, in the title band at the card's right. Resting on it,
+  or moving the keys or the pad onto it, shows the keys its signatures are
+  checked against: each key's fingerprint ("7001 · af50 · b971 · 5bb4")
+  and its full public key (`ed25519:…`), and "built in" or "added by you",
+  wide enough or wrapped so those words show whole. A registry that names
+  no key says "No signing key". Pressing the icon asks for nothing;
+- **REFRESH**, a standard button beside the switch. It asks that registry
+  for its catalogue and its download counts. It is greyed while the
+  registry is off or already being asked, and while it is being asked the
+  refresh icon beside it turns, one full turn every 1.6 seconds. When that
+  ask reads a catalogue the icon shows a check for 0.8 seconds, then the
+  arrow; an ask that finds nothing goes straight back to the arrow.
+  Pressing **REFRESH** during the check asks again at once;
+- an Off/On switch, the same switch Settings draws;
 - the address it was added from, or its catalogue's address when it was
   not added from one;
 - when it was last read: "refreshed 5 min ago", "never refreshed" before
   the first refresh, or "couldn't reach · 2 h ago" when the last refresh
   found nothing usable;
+- the description, when the registry has one, as a paragraph under the
+  address and the refresh line;
 - a subtitle. A built-in registry's says how many packages it lists
   ("1 package"). One you added says how many packages and "not reviewed"
   ("31 packages · not reviewed"), then how many mirrors you added
-  (" · 2 mirrors");
-- a key icon. Resting on it, or moving the keys or the pad onto it, shows
-  the keys its signatures are checked against: each key's fingerprint
-  ("7001 · af50 · b971 · 5bb4") and its full public key (`ed25519:…`), and
-  "built in" or "added by you". A registry that names no key says "No
-  signing key". Pressing the icon asks for nothing;
-- **REFRESH**, beside the switch. It asks that registry for its catalogue
-  and its download counts. It is greyed while the registry is off or
-  already being asked, and while it is being asked the refresh icon beside
-  it turns, one full turn every 1.6 seconds. When that ask reads a
-  catalogue the icon shows a check for 0.8 seconds, then the arrow; an ask
-  that finds nothing goes straight back to the arrow. Pressing **REFRESH**
-  during the check asks again at once;
-- an Off/On switch.
+  (" · 2 mirrors").
 
-A registry you added also has **REMOVE** and **ADD MIRROR…** under the
-subtitle. **REMOVE** forgets the registry at once and leaves what you
-installed from it in place. Core Prime's registry can be turned off and
-never removed, and it has no **ADD MIRROR…**: its mirrors come only from
-its own catalogue. Turning a registry on fetches its list at once.
+A registry that ships with the game has a **Built in** pill at the card's
+right, under the key icon, **REFRESH** and the switch. It is the same
+neutral pill the Active tab uses, so it does not look like an installed
+chip.
 
-Under the list a note says "Content from registries other than Core Prime
-isn't reviewed by the OA team. OA still checks every package before using
-it.", naming every built-in registry ("Core Prime and North", "Core Prime,
-North and West"), or, when none is built in, "Content from these
-registries isn't reviewed by the OA team. …". When a change is refused,
-the reason stands over the note ("OA could not change the registries:
-…").
+A registry you added also has **REMOVE** and **ADD MIRROR…**, standard
+buttons, under the subtitle. **REMOVE** forgets the registry at once and
+leaves what you installed from it in place. Core Prime's registry can be
+turned off and never removed, and it has no **ADD MIRROR…**: its mirrors
+come only from its own catalogue. Turning a registry on fetches its list
+at once.
 
-**ADD REGISTRY…** sits at the top right of the tab, above the list. The
-footer holds **CLOSE**. It opens the same Add registry window as opening
-an `.oareg` file: the address or "From *file*", the fingerprints of the
-keys, and "Not reviewed by the OA team"
+Under the last card a note says "Content from registries other than Core
+Prime isn't reviewed by the OA team. OA still checks every package before
+using it.", naming every built-in registry by its short name ("Core Prime
+and North", "Core Prime, North and West"), or, when none is built in,
+"Content from these registries isn't reviewed by the OA team. …". When a
+change is refused, the reason stands over the note ("OA could not change
+the registries: …").
+
+**ADD REGISTRY…** sits at the top right of the tab, above the cards. The
+footer holds **CLOSE**. It opens the Add registry window
 ([adding a registry](downloads.md#adding-a-registry)). An address may be
 `http` or `https`. Where this system has no TLS, `https` is read as
 `http`, and Settings › Downloads says so. **CLOSE** leaves a switch or a
@@ -502,9 +512,15 @@ removal as it was stored. During a game the padlock and "Choose from the
 main menu." stand where **ADD REGISTRY…** was, and **ADD MIRROR…** is
 locked the same way; the switches, **REFRESH** and **REMOVE** stay.
 
-The rows and the note scroll together when they are taller than the
+The cards and the note scroll together when they are taller than the
 window. Settings › Downloads, on the main menu, has **REGISTRIES IN THE
 LIBRARY…**, which opens the Library on this tab.
+
+![The Registries tab at Compact: Core Prime's card, with its title, description, key icon, REFRESH, switch and Built in pill.](images/library/library-registries-compact.png)
+
+![The Registries tab at Regular: the same cards, one under another.](images/library/library-registries-regular.png)
+
+![The Registries tab at Large: the same cards, with the note under the last.](images/library/library-registries-large.png)
 
 ## Which downloads ask first
 

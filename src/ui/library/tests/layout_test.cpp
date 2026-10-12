@@ -1599,12 +1599,22 @@ bool row_refresh_turning(const kit::DisplayList& list) {
 }
 
 /// The Registries tab lists every registry. ADD REGISTRY… sits at the top
-/// right, above the list. Each row shows its refresh time, a key icon and
+/// right, above the cards. Each card shows its refresh time, a key icon and
 /// REFRESH beside the switch; REMOVE and ADD MIRROR… only for one the player
-/// added. It has no search.
+/// added, and a neutral Built in pill under those controls for one that ships
+/// with the game. It has no search. The heading is the title, and the note
+/// keeps the short name.
 void registries_tab_lists_every_registry() {
     lib::Library library = with_ridge();
     lib::set_tab(library, lib::Tab::registries);
+    const std::string core_title = "Fixture Core - Sample packages";
+    const std::string core_description = "A sample registry, including the made-up mod Ridge.";
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id != fixture::core)
+            continue;
+        registry.title = core_title;
+        registry.description = core_description;
+    }
     for (const fixture::NamedFrame& named : fixture::frames()) {
         const kit::DisplayList list = laid_out(library, {}, named.frame);
         const kit::Point window = lib::window_size(named.frame);
@@ -1644,6 +1654,60 @@ void registries_tab_lists_every_registry() {
             !fixture::has_room(kit::intersect(core_key->rect, core_refresh->rect)) &&
             !fixture::has_room(kit::intersect(core_refresh->rect, core_row->rect))
         );
+        OA_CHECK(shows_pill(list, "Built in"));
+        OA_CHECK(!shows_chip(list, "Built in"));
+        OA_CHECK(text_item(list, core_title) != nullptr);
+        OA_CHECK(text_item(list, core_description) != nullptr);
+        OA_CHECK(
+            core_key != nullptr && core_key->rect.width == metrics.state_icon_side &&
+            core_key->rect.height == metrics.state_icon_side
+        );
+        const kit::Item* built_in_pill = nullptr;
+        int built_in_pills = 0;
+        bool key_icon = false;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::pill && item.text == "Built in") {
+                built_in_pill = &item;
+                ++built_in_pills;
+            }
+            if (core_key != nullptr && item.role == kit::Role::chip &&
+                item.control == core_key->id) {
+                const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+                key_icon = chip != nullptr && chip->icon == kit::StateIcon::key;
+            }
+        }
+        OA_CHECK(built_in_pills == 1);
+        OA_CHECK(key_icon);
+        OA_CHECK(built_in_pill != nullptr && core_row != nullptr);
+        if (built_in_pill != nullptr && core_row != nullptr) {
+            const auto* pill_look = std::get_if<kit::PillLook>(&built_in_pill->look);
+            OA_CHECK(pill_look != nullptr && pill_look->state == kit::PillState::neutral);
+            OA_CHECK(built_in_pill->rect.y >= core_row->rect.y + core_row->rect.height);
+            OA_CHECK(
+                built_in_pill->rect.x + built_in_pill->rect.width ==
+                core_row->rect.x + core_row->rect.width
+            );
+        }
+        std::vector<kit::Rect> cards;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::outline && item.colour == kit::colour::control_border &&
+                item.rect.width > metrics.list_row_badge)
+                cards.push_back(item.rect);
+        }
+        std::sort(cards.begin(), cards.end(), [](const kit::Rect& left, const kit::Rect& right) {
+            return left.y < right.y;
+        });
+        OA_CHECK(cards.size() == library.inputs.registries.size());
+        for (std::size_t card_index = 1; card_index < cards.size(); ++card_index)
+            OA_CHECK(
+                cards[card_index].y ==
+                cards[card_index - 1].y + cards[card_index - 1].height + metrics.card_gap
+            );
+        const kit::Control* note = fixture::named(list, "library.registries.note");
+        OA_CHECK(note != nullptr && note->text.find("Fixture Core") != std::string::npos);
+        OA_CHECK(note != nullptr && note->text.find(core_title) == std::string::npos);
+        if (note != nullptr && !cards.empty())
+            OA_CHECK(note->rect.y >= cards.back().y + cards.back().height);
         const kit::Control* added_key = fixture::named(list, "library.registry.example-mods.key");
         const kit::Control* added_refresh =
             fixture::named(list, "library.registry.example-mods.refresh");

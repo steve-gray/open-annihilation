@@ -70,7 +70,8 @@ void refuse(std::string_view yaml, std::string_view needle) {
 }
 
 bool same_descriptor(const registry::Descriptor& left, const registry::Descriptor& right) {
-    if (left.id != right.id || left.name != right.name || left.catalogue != right.catalogue ||
+    if (left.id != right.id || left.name != right.name || left.title != right.title ||
+        left.description != right.description || left.catalogue != right.catalogue ||
         left.mode != right.mode || left.install_id != right.install_id ||
         left.homepage != right.homepage || left.api != right.api || left.mirrors != right.mirrors ||
         left.keys.size() != right.keys.size())
@@ -170,6 +171,166 @@ void unknown_key_is_refused() {
         "registry: 1\nid: example-maps\nname: Example Maps\n" + direct_tail() + "  extra: 1\n",
         "extra"
     );
+}
+
+bool same_player(const registry::PlayerRegistries& left, const registry::PlayerRegistries& right);
+
+/// A heading and a paragraph round-trip, and a present one past its limit is refused.
+void title_and_description_read_and_round_trip() {
+    const std::string title = "Example Maps - Sample packages";
+    const std::string description = "A sample registry of maps, including the made-up set Ridge.";
+    const std::string yaml = "registry: 1\n"
+                             "id: example-maps\n"
+                             "name: Example Maps\n"
+                             "title: \"" +
+                             title +
+                             "\"\n"
+                             "description: \"" +
+                             description + "\"\n" + direct_tail();
+    registry::Descriptor out;
+    std::string error;
+    OA_CHECK(registry::read_descriptor(bytes_of(yaml), out, &error));
+    OA_CHECK(out.name == "Example Maps");
+    OA_CHECK(out.title == title);
+    OA_CHECK(out.description == description);
+    const std::string written = registry::descriptor_text(out);
+    OA_CHECK(written.find("title:") != std::string::npos);
+    OA_CHECK(written.find("description:") != std::string::npos);
+    registry::Descriptor again;
+    OA_CHECK(registry::read_descriptor(bytes_of(written), again, &error));
+    OA_CHECK(same_descriptor(out, again));
+
+    registry::Descriptor bare;
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of("registry: 1\nid: example-maps\nname: Example Maps\n" + direct_tail()),
+            bare,
+            &error
+        )
+    );
+    OA_CHECK(bare.title.empty());
+    OA_CHECK(bare.description.empty());
+    const std::string bare_text = registry::descriptor_text(bare);
+    OA_CHECK(bare_text.find("title:") == std::string::npos);
+    OA_CHECK(bare_text.find("description:") == std::string::npos);
+
+    const std::string title_96(96, 'a');
+    const std::string title_97(97, 'a');
+    const std::string description_400(400, 'b');
+    const std::string description_401(401, 'b');
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of(
+                "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"" + title_96 + "\"\n" +
+                direct_tail()
+            ),
+            out,
+            &error
+        )
+    );
+    OA_CHECK(out.title == title_96);
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"" + title_97 + "\"\n" +
+            direct_tail(),
+        "1 to 96"
+    );
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of(
+                "registry: 1\nid: example-maps\nname: Example Maps\ndescription: \"" +
+                description_400 + "\"\n" + direct_tail()
+            ),
+            out,
+            &error
+        )
+    );
+    OA_CHECK(out.description == description_400);
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ndescription: \"" + description_401 +
+            "\"\n" + direct_tail(),
+        "1 to 400"
+    );
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"\"\n" + direct_tail(), "title"
+    );
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ndescription: \"\"\n" + direct_tail(),
+        "description"
+    );
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"a\\nb\"\n" + direct_tail(),
+        "title"
+    );
+
+    const std::string acute = "\xc3\xa9";
+    std::string accents_96;
+    accents_96.reserve(96 * acute.size());
+    for (int index = 0; index < 96; ++index)
+        accents_96 += acute;
+    const std::string accents_97 = accents_96 + acute;
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of(
+                "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"" + accents_96 +
+                "\"\n" + direct_tail()
+            ),
+            out,
+            &error
+        )
+    );
+    OA_CHECK(out.title == accents_96);
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"" + accents_97 + "\"\n" +
+            direct_tail(),
+        "1 to 96"
+    );
+
+    registry::PlayerRegistries player;
+    const std::string player_yaml = "registries:\n"
+                                    "  - id: example-maps\n"
+                                    "    name: Example Maps\n"
+                                    "    title: \"" +
+                                    title +
+                                    "\"\n"
+                                    "    description: \"" +
+                                    description +
+                                    "\"\n"
+                                    "    catalogue: http://maps.example.org/oa/v1/catalogue.json\n"
+                                    "    trusted-keys: []\n"
+                                    "    downloads: {mode: direct}\n"
+                                    "    added: \"2026-11-03\"\n"
+                                    "    enabled: true\n";
+    OA_CHECK(registry::read_player_registries(bytes_of(player_yaml), player, &error));
+    OA_CHECK(player.registries.size() == 1);
+    if (!player.registries.empty()) {
+        OA_CHECK(player.registries[0].descriptor.name == "Example Maps");
+        OA_CHECK(player.registries[0].descriptor.title == title);
+        OA_CHECK(player.registries[0].descriptor.description == description);
+    }
+    const std::string written_player = registry::player_registries_text(player);
+    OA_CHECK(written_player.find("title:") != std::string::npos);
+    OA_CHECK(written_player.find("description:") != std::string::npos);
+    registry::PlayerRegistries player_again;
+    OA_CHECK(registry::read_player_registries(bytes_of(written_player), player_again, &error));
+    OA_CHECK(same_player(player, player_again));
+
+    registry::PlayerRegistries kept;
+    kept.disabled.push_back("keep");
+    OA_CHECK(!registry::read_player_registries(
+        bytes_of(
+            "registries:\n  - id: example-maps\n    name: Example Maps\n"
+            "    title: \"" +
+            title_97 +
+            "\"\n"
+            "    catalogue: http://maps.example.org/oa/v1/catalogue.json\n"
+            "    trusted-keys: []\n    downloads: {mode: direct}\n"
+            "    added: \"2026-11-03\"\n    enabled: true\n"
+        ),
+        kept,
+        &error
+    ));
+    OA_CHECK(error.find("1 to 96") != std::string::npos);
+    OA_CHECK(kept.disabled.size() == 1);
 }
 
 void bad_id_and_name_are_refused() {
@@ -633,6 +794,7 @@ int main() {
     missing_required_keys_are_refused();
     registry_version_must_be_one();
     unknown_key_is_refused();
+    title_and_description_read_and_round_trip();
     bad_id_and_name_are_refused();
     catalogue_rules_are_refused();
     download_rules_are_refused_and_defaulted();
