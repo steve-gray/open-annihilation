@@ -514,7 +514,7 @@ float Runtime::most_match_zoom() const noexcept {
 
 void Runtime::step_match_zoom() {
     // Each frame of a match: a match that turns out to be shared or a replay
-    // goes back to the base path credit (Common Tweaks' pathfinding setting).
+    // goes back to the base path credit (Engine Limits' pathfinding setting).
     EngineSettingsState::hold_path_credit(*this, current_extension_state());
     // The director sets the zoom of every frame itself, off the wall clock.
     if (director_mode())

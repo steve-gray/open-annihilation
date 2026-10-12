@@ -58,8 +58,8 @@ constexpr std::array<Setting, 5> kControlsRows{
     Setting::view_past_map_edge,
     Setting::switch_alt,
 };
-/// Common Tweaks' rows: the unit limit, then pathfinding.
-constexpr std::array<Setting, 2> kCommonTweaksRows{
+/// Engine Limits' rows: the unit limit, then pathfinding.
+constexpr std::array<Setting, 2> kEngineLimitsRows{
     Setting::unit_limit,
     Setting::path_search,
 };
@@ -219,7 +219,7 @@ constexpr std::span<const Setting> kSystemRows = file_types_switchable
 /// What each section shows, in Page's order.
 constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kControlsRows,
-    kCommonTweaksRows,
+    kEngineLimitsRows,
     kLanguageRows,
     kGraphicsRows,
     kUserInterfaceRows,
@@ -239,7 +239,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
 /// Each section's name, as its list entry shows it, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageNames{
     "Controls",
-    "Common Tweaks",
+    "Engine Limits",
     "Language & Text",
     "Graphics",
     "User Interface",
@@ -259,7 +259,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
 /// Each section's heading, in capitals, in Page's order.
 constexpr std::array<std::string_view, page_count> kPageHeadings{
     "CONTROLS",
-    "COMMON TWEAKS",
+    "ENGINE LIMITS",
     "LANGUAGE & TEXT",
     "GRAPHICS",
     "USER INTERFACE",
@@ -276,11 +276,11 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "SNAP & CHAT",
     "",
 };
-/// Each section's name in kebab case, Page's enumerator with '_' as '-',
-/// in Page's order.
+/// Each section's automation word, in kebab case, in Page's order.
+/// Engine Limits' word is engine-limits; its enumerator stays common_tweaks.
 constexpr std::array<std::string_view, page_count> kPageWords{
     "controls",
-    "common-tweaks",
+    "engine-limits",
     "language",
     "graphics",
     "user-interface",

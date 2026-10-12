@@ -24,6 +24,8 @@ constexpr std::size_t kIdMost = 48;
 constexpr std::string_view kEngineSectionWords[] = {
     "mods",
     "controls",
+    "engine-limits",
+    // The section's word before it was engine-limits. A page may not take it.
     "common-tweaks",
     "language",
     "graphics",

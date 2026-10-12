@@ -137,7 +137,7 @@ void copy_row(Setting setting, const SettingsModel& to, const SettingsModel& fro
 );
 
 /// Returns a section's name in kebab case, as its entry's control is named:
-/// common-tweaks for Page::common_tweaks.
+/// engine-limits for Page::common_tweaks.
 ///
 /// @param page the section
 /// @return the name

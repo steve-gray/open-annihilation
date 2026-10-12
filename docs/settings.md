@@ -25,7 +25,7 @@ before Downloads joined it.
 - [Opening the settings](#opening-the-settings)
 - [OK, Cancel and Restore defaults](#ok-cancel-and-restore-defaults)
 - [Controls](#controls)
-- [Common Tweaks](#common-tweaks)
+- [Engine Limits](#engine-limits)
 - [Language & Text](#language)
 - [Graphics](#graphics)
 - [User Interface](#user-interface)
@@ -54,7 +54,7 @@ A game played alone stays paused while the settings are open. A
 multiplayer game keeps running, and the dialog's header says so in amber:
 "Shared game - still running".
 
-The column on the left lists the sections: Controls, Common Tweaks,
+The column on the left lists the sections: Controls, Engine Limits,
 Language & Text, Graphics and User Interface, then Touch while the game
 has touch controls, Controller once a gamepad has been used, and Game
 files in the main menu on an iPhone or an iPad, then Downloads, then
@@ -177,9 +177,9 @@ Each of these takes effect at once.
   alone, as most strategy games do. It is 3.1c's own SwitchAlt option, so
   the console's `+switchalt` changes it too.
 
-## Common Tweaks
+## Engine Limits
 
-![The Common Tweaks section: Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/common-tweaks.png)
+![The Engine Limits section: Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/engine-limits.png)
 
 - **Unit limit**, 50 to 1500 units per player in steps of 50 (a mod may
   allow more). By default it is the unit limit your Total Annihilation

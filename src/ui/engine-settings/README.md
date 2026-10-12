@@ -21,7 +21,7 @@ the locks a running game puts on them (`settings_locks`).
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
-| Common Tweaks | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
+| Engine Limits | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
 | Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
 | | Use modern fonts for game text; On, locked, while a language drawn only in them is chosen | Off, On | On with the player's own preferences file; Off with `--preferences-file` | `open-annihilation.modern-fonts` |
@@ -413,7 +413,7 @@ edge and hairline rules, and one green accent for what is selected:
 - the header: the Open Annihilation icon, 20 by 20 source pixels, "OPEN
   ANNIHILATION SETTINGS" and the version, with "Shared game - still
   running" in amber while a shared game keeps running;
-- the sections down the left (Controls, Common Tweaks, Language & Text,
+- the sections down the left (Controls, Engine Limits, Language & Text,
   Graphics, User Interface, Touch while the game has touch controls,
   Controller once a gamepad has sent input, and Game files where the host
   lists it, then Downloads, then System),
@@ -444,7 +444,7 @@ the Text size slider, by 129, User Interface, with its three switches, Menu
 scaling's strip and Interface size's drop-down, by 88, Touch, with its
 three strips, the Hold delay slider and two switches, by 121, and Controls,
 with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge
-and Select groups without Alt, by 84; Common Tweaks fits, its two sliders
+and Select groups without Alt, by 84; Engine Limits fits, its two sliders
 in 151 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the
@@ -832,7 +832,7 @@ The names: a registered page's entry is `settings.nav.<id>`, its id as
 registered (`settings.nav.check.page`), and its rows `settings.<id>.<row>`
 (`settings.check.page.toggle`, whose halves are `.off` and `.on`). The
 engine's section entries are `settings.nav.<page>` (`controls`,
-`common-tweaks`, `language`, `graphics`, `user-interface`, `touch`, `controller`,
+`engine-limits`, `language`, `graphics`, `user-interface`, `touch`, `controller`,
 `developer`, `game-files`, `mod-keys`, `mod-patrol`, `mod-guard`,
 `mod-tools`, `mod-chat`); `settings.restore-defaults`, `settings.cancel`,
 `settings.ok` and `settings.scroll-bar`; each row `settings.<row>`, its
@@ -1238,7 +1238,7 @@ installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
 and System holding Your files, then File Type Registration's switches
 where the game registers file types at run time or the File types text row
-where the app declares them, and Common Tweaks holding the unit limit and
+where the app declares them, and Engine Limits holding the unit limit and
 pathfinding;
 Language's drop-down, four switches and Text size slider,
 their place in the list, their texts, clicks, drags and keys on them, the

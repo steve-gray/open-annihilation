@@ -148,7 +148,7 @@ both work whatever the system's language for non-Unicode programs, on
 Windows XP too ([typing.md](../typing.md#saved-games-and-recordings-named-in-any-script)).
 
 The game makes each folder the first time it needs it. In the settings
-(**Ctrl+,**), **Common Tweaks** shows the folder under
+(**Ctrl+,**), **System** shows the folder under
 **Your files**, whose buttons open Saves, Screenshots and Mods in Explorer.
 
 Your settings, the log files (in `logs`) and the unpacked demo stay in

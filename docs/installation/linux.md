@@ -189,7 +189,7 @@ Your saved games, screenshots, films, recordings and mods are in the
 | `Mods` | mods you add, each in a folder of its own, which the Library lists besides the game folder's `mods` folder ([mods](../mods/README.md#installing-a-mod)) |
 
 The game makes each folder the first time it needs it. In the settings
-(**Ctrl+,**), **Common Tweaks** shows the folder under
+(**Ctrl+,**), **System** shows the folder under
 **Your files**, whose buttons open Saves, Screenshots and Mods in your file
 manager.
 

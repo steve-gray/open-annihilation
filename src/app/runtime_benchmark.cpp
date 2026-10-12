@@ -476,6 +476,9 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
                         page = listed;
             if (!page && rest == "Language")
                 page = settings::Page::language;
+            // Older stage files still name this section common-tweaks (Common Tweaks).
+            if (!page && rest == "common-tweaks")
+                page = settings::Page::common_tweaks;
             if (!page)
                 throw std::runtime_error(where + ": the settings have no section " + rest);
             engine_settings_state().last_page = *page;

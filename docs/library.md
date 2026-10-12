@@ -322,9 +322,9 @@ Both change the mod only from the main menu: the Library shows only there,
 and a game keeps the mod it started with. While `--mod-dir` or
 `--base-game` chose the run's mod, both are greyed and the details say "The
 command line chose this run's mod." **OPEN FOLDER** shows a mod's folder,
-and **MODS** under Your files in Settings › Common Tweaks your Mods folder,
+and **MODS** under Your files in Settings › System your Mods folder,
 where a mod's folder goes to be listed
-([settings](settings.md#common-tweaks)).
+([settings](settings.md#system)).
 
 ## Keys and controllers
 

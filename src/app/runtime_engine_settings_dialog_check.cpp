@@ -787,7 +787,7 @@ void Runtime::check_engine_settings_dialog() {
             std::string(what) + " did not take effect at once"
         );
     };
-    click(settings::page_control(settings::Page::common_tweaks), {}, "Common Tweaks' entry");
+    click(settings::page_control(settings::Page::common_tweaks), {}, "Engine Limits' entry");
     focus(settings::first_row_control + 1, "Pathfinding cycles");
     tap(SDLK_RIGHT);
     chosen.path_search_nodes = kChosenPathNodes;
@@ -840,7 +840,7 @@ void Runtime::check_engine_settings_dialog() {
     chosen.escape_opens_menu = true;
     expect("Escape opens the game menu On");
 
-    click(settings::page_control(settings::Page::common_tweaks), {}, "Common Tweaks' entry");
+    click(settings::page_control(settings::Page::common_tweaks), {}, "Engine Limits' entry");
     focus(settings::first_row_control, "Unit limit");
     tap(SDLK_RIGHT);
     chosen.unit_limit = kChosenUnitLimit;
