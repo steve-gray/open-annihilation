@@ -76,6 +76,12 @@ if(BUILD_TESTING)
   add_test(NAME net-socket-search COMMAND oa-netgame-socket-search-test)
   set_tests_properties(net-socket-search PROPERTIES TIMEOUT 30)
 
+  # A refused enumeration port names itself, and the system's reason, on standard error.
+  add_executable(oa-netgame-host-bind-test tests/host_bind_test.cpp)
+  target_link_libraries(oa-netgame-host-bind-test PRIVATE oa-netgame)
+  add_test(NAME net-host-bind COMMAND oa-netgame-host-bind-test)
+  set_tests_properties(net-host-bind PROPERTIES TIMEOUT 30)
+
   add_executable(oa-netgame-stream-socket-test tests/stream_socket_test.cpp)
   target_link_libraries(oa-netgame-stream-socket-test PRIVATE oa-netgame oa-test-support)
   add_test(NAME net-stream-socket COMMAND oa-netgame-stream-socket-test)
@@ -117,7 +123,7 @@ endif()
 if(WIN32)
   set(oa_netgame_executables oa-netgame-tool oa-netgame-dplay-peer)
   if(BUILD_TESTING)
-    list(APPEND oa_netgame_executables oa-netgame-test oa-netgame-stream-socket-test)
+    list(APPEND oa_netgame_executables oa-netgame-test oa-netgame-stream-socket-test oa-netgame-host-bind-test)
   endif()
   foreach(target IN LISTS oa_netgame_executables)
     add_custom_command(TARGET ${target} POST_BUILD

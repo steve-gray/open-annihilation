@@ -22,6 +22,10 @@
 #else
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #endif
 using socket_len = int;
 using native_socket = SOCKET;
@@ -320,9 +324,86 @@ Address from_sockaddr(const sockaddr_in& s) {
     return a;
 }
 
-// Bind to the first free port of [first, last]; first == 0 binds an
-// ephemeral port. Returns the bound port or 0.
-uint16_t bind_range(intptr_t fd, const uint8_t ip[4], uint16_t first, uint16_t last) {
+/// The last port a bind refused, and the system code captured at that bind.
+struct BindMiss {
+    uint16_t port{};
+    int code{};
+    bool failed{};
+};
+
+/// The system code from the socket call that just returned.
+///
+/// @return the code, unchanged until the next socket call
+int last_socket_error() {
+#ifdef _WIN32
+    return WSAGetLastError();
+#else
+    return errno;
+#endif
+}
+
+/// Writes the system's text for a socket failure, as one line with no trailing break.
+///
+/// @param code the code last_socket_error returned
+/// @param[out] out receives the text and a zero byte
+/// @param size the bytes `out` holds
+void system_socket_reason(int code, char* out, std::size_t size) {
+    if (size == 0)
+        return;
+    out[0] = '\0';
+#ifdef _WIN32
+#if defined(OA_WINDOWS_95)
+    // Windows 95's socket headers name the code; the message table is not
+    // linked with that socket library.
+    if (code == WSAEADDRINUSE)
+        std::snprintf(out, size, "Address already in use");
+    else
+        std::snprintf(out, size, "system error %d", code);
+#else
+    char text[160];
+    const DWORD written = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        static_cast<DWORD>(code),
+        0,
+        text,
+        static_cast<DWORD>(sizeof text),
+        nullptr
+    );
+    std::size_t length = written;
+    if (length >= sizeof text)
+        length = sizeof text - 1;
+    while (length > 0 && (text[length - 1] == '\r' || text[length - 1] == '\n' ||
+                          text[length - 1] == ' ' || text[length - 1] == '\t'))
+        --length;
+    text[length] = '\0';
+    if (length == 0)
+        std::snprintf(out, size, "system error %d", code);
+    else
+        std::snprintf(out, size, "%s", text);
+#endif
+#else
+    const char* text = std::strerror(code);
+    if (text == nullptr || text[0] == '\0')
+        std::snprintf(out, size, "system error %d", code);
+    else
+        std::snprintf(out, size, "%s", text);
+#endif
+}
+
+/// Binds the first free port of [first, last]. A first of 0 binds a port the system chooses.
+///
+/// @param fd socket to bind
+/// @param ip address to bind
+/// @param first first port of the range; 0 asks the system for one
+/// @param last last port of the range
+/// @param[out] miss the last port the system refused, and its code, when none bound
+/// @return the bound port, or 0 when none bound
+uint16_t
+bind_range(intptr_t fd, const uint8_t ip[4], uint16_t first, uint16_t last, BindMiss* miss) {
+    miss->failed = false;
+    miss->port = 0;
+    miss->code = 0;
     if (first == 0)
         last = 0;
     for (uint32_t port = first; port <= last; ++port) {
@@ -333,12 +414,52 @@ uint16_t bind_range(intptr_t fd, const uint8_t ip[4], uint16_t first, uint16_t l
         if (bind(native(fd), reinterpret_cast<const sockaddr*>(&s), sizeof s) == 0) {
             sockaddr_in bound{};
             socket_len len = sizeof bound;
-            if (getsockname(native(fd), reinterpret_cast<sockaddr*>(&bound), &len) != 0)
+            if (getsockname(native(fd), reinterpret_cast<sockaddr*>(&bound), &len) != 0) {
+                miss->failed = true;
+                miss->port = static_cast<uint16_t>(port);
+                miss->code = last_socket_error();
                 return 0;
+            }
             return ntohs(bound.sin_port);
         }
+        miss->failed = true;
+        miss->port = static_cast<uint16_t>(port);
+        miss->code = last_socket_error();
     }
     return 0;
+}
+
+/// Writes one standard-error line naming the ports a host could not bind, and the same words in its error.
+///
+/// @param[in,out] h host whose error text is set
+/// @param step which socket was being bound: enumeration, stream or datagram
+/// @param first first port of the range that was tried; 0 asks the system for one
+/// @param last last port of the range that was tried
+/// @param miss the last refusal, or a miss that never failed when the range was empty
+void report_refused_bind(
+    Host* h, const char* step, uint16_t first, uint16_t last, const BindMiss& miss
+) {
+    char reason[128];
+    if (!miss.failed)
+        std::snprintf(reason, sizeof reason, "no port in the range");
+    else
+        system_socket_reason(miss.code, reason, sizeof reason);
+    if (first == 0 || first == last) {
+        const unsigned shown =
+            miss.failed ? static_cast<unsigned>(miss.port) : static_cast<unsigned>(first);
+        std::snprintf(h->error, sizeof h->error, "%s port %u: %s", step, shown, reason);
+    } else {
+        std::snprintf(
+            h->error,
+            sizeof h->error,
+            "%s ports %u-%u: %s",
+            step,
+            static_cast<unsigned>(first),
+            static_cast<unsigned>(last),
+            reason
+        );
+    }
+    std::fprintf(stderr, "multiplayer: hosting failed while binding the %s\n", h->error);
 }
 
 int send_flags() {
@@ -351,6 +472,7 @@ int send_flags() {
 
 void fail(Host* h, const char* what) {
     std::snprintf(h->error, sizeof h->error, "%s", what);
+    std::fprintf(stderr, "multiplayer: hosting failed while %s\n", h->error);
 }
 
 // Buffers are left as they are: the struct is too large to copy.
@@ -820,29 +942,54 @@ bool host_open(Host* h, const HostConfig& config) noexcept {
     h->error[0] = '\0';
     h->clock_origin = clock_ms();
     if (!platform_startup()) {
-        fail(h, "socket subsystem failed to start");
+        fail(h, "starting the socket subsystem");
         return false;
     }
     h->listener = open_socket(SOCK_STREAM);
     h->datagram = open_socket(SOCK_DGRAM);
     if (!socket_valid(h->listener) || !socket_valid(h->datagram)) {
-        fail(h, "cannot create sockets");
+        fail(h, "creating sockets");
         host_close(h);
         return false;
     }
-    const uint16_t stream_port =
-        bind_range(h->listener, config.bind_ip, config.stream_port_first, config.stream_port_last);
-    if (stream_port == 0 || listen(native(h->listener), accept_backlog) != 0) {
-        fail(h, "no free stream port in the configured range");
+    BindMiss stream_miss{};
+    const uint16_t stream_port = bind_range(
+        h->listener, config.bind_ip, config.stream_port_first, config.stream_port_last, &stream_miss
+    );
+    if (stream_port == 0) {
+        report_refused_bind(
+            h, "stream", config.stream_port_first, config.stream_port_last, stream_miss
+        );
+        host_close(h);
+        return false;
+    }
+    if (listen(native(h->listener), accept_backlog) != 0) {
+        char reason[128];
+        system_socket_reason(last_socket_error(), reason, sizeof reason);
+        std::snprintf(
+            h->error,
+            sizeof h->error,
+            "stream port %u: %s",
+            static_cast<unsigned>(stream_port),
+            reason
+        );
+        std::fprintf(stderr, "multiplayer: hosting failed while listening on the %s\n", h->error);
         host_close(h);
         return false;
     }
     set_option(h->datagram, SOL_SOCKET, SO_BROADCAST, 1);
+    BindMiss datagram_miss{};
     const uint16_t datagram_port = bind_range(
-        h->datagram, config.bind_ip, config.datagram_port_first, config.datagram_port_last
+        h->datagram,
+        config.bind_ip,
+        config.datagram_port_first,
+        config.datagram_port_last,
+        &datagram_miss
     );
     if (datagram_port == 0) {
-        fail(h, "no free datagram port in the configured range");
+        report_refused_bind(
+            h, "datagram", config.datagram_port_first, config.datagram_port_last, datagram_miss
+        );
         host_close(h);
         return false;
     }
@@ -871,14 +1018,17 @@ bool host_listen_enumeration(Host* h) noexcept {
         return true;
     h->enumeration = open_socket(SOCK_DGRAM);
     if (!socket_valid(h->enumeration)) {
-        fail(h, "cannot create the enumeration socket");
+        fail(h, "creating the enumeration socket");
         return false;
     }
-    set_option(h->enumeration, SOL_SOCKET, SO_REUSEADDR, 1);
-    h->enum_port_bound =
-        bind_range(h->enumeration, h->config.bind_ip, h->config.enum_port, h->config.enum_port);
+    // One game holds the enumeration port. Another host on this machine is
+    // refused, and the refusal names the port and the system's reason.
+    BindMiss miss{};
+    h->enum_port_bound = bind_range(
+        h->enumeration, h->config.bind_ip, h->config.enum_port, h->config.enum_port, &miss
+    );
     if (h->enum_port_bound == 0) {
-        fail(h, "enumeration port is in use");
+        report_refused_bind(h, "enumeration", h->config.enum_port, h->config.enum_port, miss);
         close_socket(&h->enumeration);
         return false;
     }
