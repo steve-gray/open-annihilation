@@ -3363,8 +3363,10 @@ void add_key_tooltip(Building& building, const Window& window) {
     kit::add_hover_card(building.list, card, look);
 }
 
-/// Appends UNLOAD MOD's hint when the pointer or the keys rest on it and
-/// the details' note has something to say. The card is SWITCH OFF's note.
+/// Appends UNLOAD MOD's hint when the pointer or the keys rest on it.
+/// The card is playing_note for the mod being played: the same words
+/// SWITCH OFF shows under that mod. The Active tab selects nothing, so
+/// the selected entry's note is empty here.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -3372,7 +3374,17 @@ void add_unload_note(Building& building, const Window& window) {
     const kit::ControlId tip = controls::active_unload;
     if (!hovered(building, tip) && !focused(building, tip))
         return;
-    const std::string note = playing_note(*building.library);
+    const Entry* played = nullptr;
+    for (const Entry& candidate : building.library->entries) {
+        if (candidate.id.kind == Kind::mod && candidate.installed != nullptr &&
+            candidate.installed->playing) {
+            played = &candidate;
+            break;
+        }
+    }
+    if (played == nullptr)
+        return;
+    const std::string note = playing_note(*building.library, *played);
     if (note.empty())
         return;
     const kit::Control* button = nullptr;

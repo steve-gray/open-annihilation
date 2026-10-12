@@ -1463,6 +1463,10 @@ void unload_mod_asks_switch_off() {
     static_cast<void>(
         lib::library_pointer(library, state, list, lib::PointerKind::move, 1, centre_of(*chosen), 0)
     );
+    // A disabled button is skipped by hit. Resting on UNLOAD MOD still
+    // makes it the pointer's control, which is what shows its card, as a
+    // rest on the disabled SWITCH OFF is what its note belongs to.
+    OA_CHECK(state.interaction.hovered == chosen->id);
     list = laid_out(library, state, regular);
     OA_CHECK(
         hover_card_words(list).find("The command line chose this run's mod.") != std::string::npos
