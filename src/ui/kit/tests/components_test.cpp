@@ -656,8 +656,9 @@ void oa_button_wears_the_count() {
             painted(scale, mark_of(kit::OaButtonCorner::count, 7, 0));
         const renderer::Surface many_face =
             painted(scale, mark_of(kit::OaButtonCorner::count, 123, 0));
+        // Every count above 999 reads "999+" and draws alike.
         const renderer::Surface capped_face =
-            painted(scale, mark_of(kit::OaButtonCorner::count, 999, 0));
+            painted(scale, mark_of(kit::OaButtonCorner::count, 10000, 0));
         const renderer::Surface over = painted(scale, mark_of(kit::OaButtonCorner::count, 1000, 0));
         const kit::Rect seven_pixels{
             seven.x * scale, seven.y * scale, seven.width * scale, seven.height * scale
