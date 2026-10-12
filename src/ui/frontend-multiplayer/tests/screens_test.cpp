@@ -1735,11 +1735,18 @@ void check_pack_map_page(Driver& d) {
 
         static void release(void*) {}
 
-        static int32_t base_count(void*) { return 36; }
+        // One real installed map, so the battle room has a map file selected.
+        // Select Map stays closed when the selected map has no file. It sorts
+        // ahead of the generated names, and the pack map stays past the page.
+        static int32_t base_count(void*) { return 37; }
 
         static bool base_at(void*, int32_t index, mp::LobbyPackMap* out) {
-            if (out == nullptr || index < 0 || index >= 36)
+            if (out == nullptr || index < 0 || index >= 37)
                 return false;
+            if (index == 0) {
+                *out = {BoundBaseMaps::kReal, "A shore", "12 x 12", 16};
+                return true;
+            }
             static char names[36][4]{};
             static bool filled = false;
             if (!filled) {
@@ -1751,7 +1758,7 @@ void check_pack_map_page(Driver& d) {
                 }
                 filled = true;
             }
-            *out = {names[index], "A plain", "8x8", 8};
+            *out = {names[index - 1], "A plain", "8x8", 8};
             return true;
         }
 
