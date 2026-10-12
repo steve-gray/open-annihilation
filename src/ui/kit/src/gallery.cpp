@@ -1114,6 +1114,30 @@ int32_t chips_section(Builder& b, Point at, int32_t width, std::string_view word
     return top - at.y;
 }
 
+/// Pills: one of each state, display only. Playing is filled; neutral is the
+/// muted ground; installed, update and problem outline that ground.
+int32_t pills_section(Builder& b, Point at, int32_t width, std::string_view /*word*/) {
+    const std::array<PillLook, 5> kinds{{
+        {"Playing", PillState::playing},
+        {"Built in", PillState::neutral},
+        {"Installed", PillState::installed},
+        {"Update", PillState::update},
+        {"Problem", PillState::problem},
+    }};
+    int32_t x = at.x;
+    int32_t y = at.y;
+    for (const PillLook& look : kinds) {
+        const int32_t across = pill_width(*b.fonts, look);
+        if (x > at.x && x + across > at.x + width) {
+            x = at.x;
+            y += pill_height() + kMetrics.chip_gap;
+        }
+        add_pill(b.list, {x, y, across, pill_height()}, look, no_control, {});
+        x += across + kMetrics.chip_gap;
+    }
+    return y + pill_height() - at.y;
+}
+
 /// Progress: a bar waiting, part done and done, each with its share.
 int32_t progress_section(Builder& b, Point at, int32_t width, std::string_view /*word*/) {
     constexpr int32_t kShareWidth = 40;
@@ -1596,6 +1620,7 @@ constexpr auto kSections = std::to_array<Section>({
     {"SLIDER", "slider", &slider_section},
     {"SEARCH FIELD", "search-field", &search_field},
     {"CHIPS", "chips", &chips_section},
+    {"PILLS", "pills", &pills_section},
     {"PROGRESS", "progress", &progress_section},
     {"NAV LIST", "nav-list", &nav_list},
     {"LIST ROWS", "list-rows", &list_rows},

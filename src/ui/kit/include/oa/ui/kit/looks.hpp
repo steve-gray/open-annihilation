@@ -60,10 +60,15 @@ struct ButtonLook {
     bool enabled{true};                    ///< false draws the plain look's disabled face
     ButtonMark mark{ButtonMark::none};     ///< a mark in place of the caption
     /// How far a refresh arrow has turned, in eighths of a turn, 0 to 7.
+    /// One eighth is refresh_revolution_ms / 8 milliseconds.
     uint8_t turn{};
     /// The refresh arrow is turning: it stays in the text colour while the
-    /// button is disabled, so the turn can be seen.
+    /// button is disabled, so the turn can be seen. A new turn clears the check.
     bool turning{};
+    /// How long a finished refresh has shown its check, in milliseconds.
+    /// Zero is the arrow. The kit eases the arrow into the check over
+    /// refresh_ease_ms and holds the check until refresh_check_ms.
+    uint16_t check_ms{};
 };
 
 /// An Off/On switch. The captions are already looked up.
@@ -229,6 +234,23 @@ struct ChipLook {
     std::optional<StateIcon> icon{};
 };
 
+/// What a pill says, which chooses its colours. A pill is a word on a fully
+/// rounded ground, not a chip: chips stay rectangular.
+enum class PillState : uint8_t {
+    playing,   ///< accent ground, on_accent text
+    neutral,   ///< a muted ground, text colour: built in
+    installed, ///< the accent, as a chip's installed state
+    update,    ///< the lock colour, as a chip's update state
+    problem,   ///< the danger colour, as a chip's problem state
+};
+
+/// A pill: a short text on a fully rounded ground about chip_height high.
+/// The text is drawn as given, already looked up.
+struct PillLook {
+    std::string text{};                  ///< the words
+    PillState state{PillState::neutral}; ///< which colours
+};
+
 /// A row of a list, in its full or its short form, which its rectangle's
 /// height chooses. Every text is already looked up.
 struct ListRowLook {
@@ -377,6 +399,7 @@ using Look = std::variant<
     HoverCardLook,
     LinkLook,
     ProgressLook,
-    PictureLook>;
+    PictureLook,
+    PillLook>;
 
 } // namespace oa::ui::kit

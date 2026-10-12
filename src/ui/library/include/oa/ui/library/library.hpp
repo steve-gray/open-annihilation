@@ -720,6 +720,14 @@ struct ActionButton {
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
 
+/// Tells whether PLAY NOW and SWITCH OFF can act, and so whether the Active
+/// tab's UNLOAD MOD can: not during a game, and not while the command line
+/// chose this run's mod.
+///
+/// @param library the Library
+/// @return true when the switch can be asked for
+[[nodiscard]] bool can_switch(const Library& library) noexcept;
+
 /// Tells whether the header's refresh icon can be pressed: a registry is on
 /// that it can ask, none is being asked now, and no game is being played.
 ///
@@ -782,12 +790,22 @@ struct Fact {
 ///         listing names neither a person nor a count
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
-/// Says how an update of the selected mod meets the mod being played, and,
-/// on an installed mod while the command line chose this run's mod, that it
-/// did, before anything else.
+/// Says how an update of one mod meets the mod being played, and, on an
+/// installed mod while the command line chose this run's mod, that it did,
+/// before anything else.
 ///
 /// @param library the Library
+/// @param entry the entry the note is about
 /// @return the note; empty when it has none
+[[nodiscard]] std::string playing_note(const Library& library, const Entry& entry);
+
+/// Says how an update of the selected mod meets the mod being played, and,
+/// on an installed mod while the command line chose this run's mod, that it
+/// did, before anything else. The Active tab selects nothing, so a note
+/// about the mod being played uses the form that takes that entry.
+///
+/// @param library the Library
+/// @return the note; empty when nothing is selected, or when it has none
 [[nodiscard]] std::string playing_note(const Library& library);
 
 /// The download queue as the footer shows it.

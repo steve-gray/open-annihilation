@@ -126,7 +126,9 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   dark pill, or a spinner of eight places in that pill while the count is
   not final. The spinner is worked out at the canvas's own pixels, each
   pixel's share counted from 16 samples in integers, and drawn through
-  `blend_coverage`. `turn` names which place is lit. The badge does not
+  `blend_coverage`. `turn` names which place is lit. One full turn is
+  `refresh_revolution_ms` (1.6 seconds), the same period as a refresh mark,
+  measured in time. The badge does not
   move when the button is pressed, and a button too small to hold it draws
   none. Without the dot and without a corner mark the button is drawn
   exactly as before.
@@ -150,6 +152,14 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     row's. A row's aside is as wide as its widest entry by the canvas's
     measure and by the game's fonts', so a version such as "4.8 · rev 3"
     is never cut on either form;
+  - a pill (`PillLook`, `pill_width`, `pill_height`, `draw_pill`,
+    `add_pill`): a small-font word on a fully rounded ground
+    `chip_height` (12) points high. Playing fills the accent and writes
+    `on_accent`; neutral fills a muted ground (`control_hover`) and writes
+    the text colour, for "Built in"; installed, update and problem fill
+    that same muted ground and outline the word in the colour the chip of
+    that state uses. The ends are stepped at 1x on the crisp form and
+    smooth at 150%. A chip stays a rectangle;
   - a text field, and with the magnifier the search field, its text moved
     so its caret shows;
   - tabs with a count, `tab_rects`;
@@ -298,7 +308,9 @@ takes ([docs/extensions/ui-kit.md](../../../docs/extensions/ui-kit.md#the-galler
   header saying `v1.2.3`, never the build's version), Tabs, Buttons (the
   four looks, a link), Toggle, Level strip, Drop-down (one shown open with
   an aside), Slider, Search field (and a plain text field), Chips (every
-  state), Progress, Nav list, List rows, Scroll list, Card grid, Hover card,
+  state), Pills (playing, neutral, installed, update and problem, each a
+  word on a rounded ground and none taking a press), Progress, Nav list,
+  List rows, Scroll list, Card grid, Hover card,
   Section, label and hint, Lock, Notice, Question and OA mark (the OA
   button with and without its dot, the mark alone, the icon and every
   one-bit mark). They flow into the shortest column: one at Compact, two
@@ -571,7 +583,9 @@ first release that carries version 15, keeps 15 and updates the engine's
 own followers and test extensions in the same change; from 0.8.0 on, any
 change to a kit header raises the version.
 
-The gallery shows chips with their words only: a chip with a state icon
+The gallery's stored pictures were taken before the pill samples, so they
+do not show the PILLS section. The gallery shows chips with their words
+only: a chip with a state icon
 is drawn by the same chip role, and showing it there would move the
 gallery's golden frames, so the icons are reviewed in the Library's
 pictures (`oa-ui-library-draw-test --frames`) until the gallery takes a

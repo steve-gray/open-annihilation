@@ -111,7 +111,7 @@ constexpr std::array<settings::Page, 1> kLockedPages{settings::Page::common_twea
 
 /// Common Tweaks' rows a game locks: the unit limit and the pathfinding cycles.
 constexpr std::array<int32_t, 2> kLockedRows{
-    settings::first_row_control + 1, settings::first_row_control + 2
+    settings::first_row_control, settings::first_row_control + 1
 };
 
 /// The keys of the made-up mods that stand in the Library for the mods

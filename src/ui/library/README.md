@@ -140,7 +140,8 @@ translator finds them together. Every word passes through `Library::text`
 - `can_check_now` says whether the header's refresh icon can be pressed: a
   registry is on that it can ask (`Inputs::can_check`), none is being asked
   (`Inputs::checking`), and no game is being played. While one is being
-  asked the icon turns and its text is "Refreshing".
+  asked the icon turns and its text is "Refreshing". The check after a
+  list was read does not disable it.
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
@@ -255,18 +256,28 @@ app removes the folder (`Runtime::library_uninstall`,
   960 by 600 points, never larger than the frame), from its top left corner:
   - **The Active tab**, at every class, shows under the tabs, with no
     search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
-    The mod tile has a large badge, the name, the version and revision,
-    the author and Playing, or Base Game with the 3.1c look and
-    "No mod: the game as it was made". The language tile has the pack's
-    badge or a language mark, the name in itself and in English, the
-    version and revision and the coverage, or Built in. Each map pack is
-    a tile with its badge, its name and its maps (name, players, size).
-    Compact stacks the tiles; Regular and Large put the mod and the
-    language side by side; Large puts the map packs in two columns when
-    more than one is installed. The mod and language labels cover the
-    tile, and each map's label covers its line. They scroll as the
-    details do when they are taller than the window, and take no press.
-    Compact's footer holds no DETAILS there;
+    The mod tile has a large badge, the name, the version and revision
+    and the author, with Playing as a pill on the title's line at the top
+    right, or Base Game with the 3.1c look and "No mod: the game as it was
+    made" and no pill. While a mod is played, UNLOAD MOD
+    (`library.active.unload`, kind `button`, text "UNLOAD MOD") sits at the
+    mod tile's bottom right. It is accent while it can act and plain while
+    disabled, by the same rule as SWITCH OFF, and a press asks for
+    `Action::switch_off` of the mod being played. The language tile has the
+    pack's badge or a language mark, the name in itself and in English,
+    the version and revision and the coverage, or Built in as a neutral
+    pill on the title's line. Each map pack is a tile with its badge, its
+    name and its maps (name, players, size). Badge, title and lines start
+    at the top of the tile, with the same padding above them and below the
+    last line or the button. Compact stacks the tiles; Regular and Large
+    put the mod and the language side by side, the titles on one line and
+    the tiles the same height; Large puts the map packs in two columns of
+    equal height when more than one is installed. The mod label stops
+    above UNLOAD MOD, the language label covers its tile, and each map's
+    label covers its line. They scroll as the details do when they are
+    taller than the window. The labels take no press; UNLOAD MOD does, and
+    Tab and the arrows reach it while it is enabled. Compact's footer
+    holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
     search and no filters, one row for each registry: its avatar (the
     initials, `registry_initials`, on the accent for a built-in registry
@@ -282,7 +293,9 @@ app removes the folder (`Runtime::library_uninstall`,
     sits beside the switch and asks the host to refresh that registry
     (`Action::refresh_registry`); it is greyed while the registry is off
     or already being asked, and the refresh mark beside it turns while it
-    is. REMOVE and ADD MIRROR… sit under the subtitle for one the player
+    is. When the ask reads a catalogue the mark shows a check
+    (`ButtonLook::check_ms`) and then the arrow; a failed ask leaves the
+    arrow. REMOVE and ADD MIRROR… sit under the subtitle for one the player
     added. A note under the list (`registry_note`) names the built-in
     registries, and a refusal (`Inputs::registries_notice`) stands over it
     in the lock colour. The rows and the note scroll as the details do.
@@ -427,10 +440,12 @@ app removes the folder (`Runtime::library_uninstall`,
   - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
     or "No mod: the game as it was made"), `library.active.language`
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
-    ("Ridgeline · 4 players · 16x16"). The mod and language labels are the
-    part of the tile that shows, and a map's is the part of its line that
-    shows, empty while that part is scrolled out; at most 4,000 maps are
-    named.
+    ("Ridgeline · 4 players · 16x16"), and while a mod is played the button
+    `library.active.unload` ("UNLOAD MOD"), disabled during a game and
+    while the command line chose the mod. The mod label is the part of the
+    tile above that button, the language label the part of its tile that
+    shows, and a map's the part of its line that shows, empty while that
+    part is scrolled out; at most 4,000 maps are named.
 - `focused_field(state, list)` gives the search field while it has the
   focus, over which a host keeps the system's text input started.
 
@@ -466,7 +481,8 @@ stay valid until the model's next refresh.
 - The layout decides no rule of the model: which entries show, in which
   order, their states, what blocks them, their actions, the filters'
   counts and what the Active tab says are the model's.
-- Nothing on the Active tab takes a press, a key or Tab.
+- On the Active tab only UNLOAD MOD takes a press, a key or Tab, and only
+  while a mod is played and SWITCH OFF would act. The labels do not.
 - Every action Regular offers is reachable at Compact: on the list page, or
   on the details page, its first three as buttons and the rest in MORE ▾.
 - No two controls meet, but the list and the rows it holds and each row
@@ -549,15 +565,19 @@ press areas meet; that every action of the selected entry is a control
 (at Compact on its details page, MORE ▾ open), UPDATE ALL over the list
 on the Updates tab beside the Mods tab's filters, the refresh icon and CLOSE;
 that the Active tab is first, has no search, filter, list or DETAILS,
-reads its mod, language and maps as labels and keeps only the tabs and
-the footer in Tab's order; that the Registries tab lists each registry's
+reads its mod, language and maps as labels, shows Playing and Built in
+as pills, and while a mod is played puts UNLOAD MOD in Tab's order with
+the tabs and the footer (absent on the base-game tile, and out of that
+order while disabled); that the Registries tab lists each registry's
 switch, key icon and REFRESH, its address and refresh time, REMOVE and
 ADD MIRROR… only for one the player added, and ADD REGISTRY… at the top
 right above the list, with no search or DETAILS; that resting on the key
 icon or focusing it shows that registry's fingerprints and public keys,
 and pressing it asks for nothing; that REFRESH asks for that registry and
 is greyed, with the refresh mark turning beside it, while the registry is
-off or already being asked; that a switch's halves, Space, REMOVE, ADD
+off or already being asked; that a refresh which reads a list shows the
+check and then the arrow, and one which fails shows the arrow; that a
+switch's halves, Space, REMOVE, ADD
 MIRROR… and ADD REGISTRY… ask for those actions, with ADD REGISTRY… and
 ADD MIRROR… absent during a match; that
 Tab follows the declared order and the
@@ -578,7 +598,8 @@ one is being asked, the labels taking no
 press, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
-Active tab with forty more maps: its lines taking no press and scrolling
+Active tab with forty more maps: its lines taking no press, UNLOAD MOD
+asking what SWITCH OFF asks and greyed during a game, and the tiles scrolling
 by the wheel, the page keys, Home, End and the right stick.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts

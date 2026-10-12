@@ -12,7 +12,8 @@
 // follows the declared order and the arrows reach every control that takes
 // the focus; the names are step 8's and unique; every text fits, and the
 // Rules fact is shown whole. The Active tab is first, has no search and no
-// filters, and its tiles take nothing. Then the keys, the controller's
+// filters, and its tiles are top-aligned, with UNLOAD MOD on the mod tile.
+// Then the keys, the controller's
 // buttons, the pointer, a finger, the wheel and typing, each changing the
 // model as the screen promises, no press on a row getting anything, and a
 // row's download arrow and up-arrow pressed as GET and UPDATE.
@@ -25,6 +26,7 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/screen.hpp"
 #include "oa/ui/library/text.hpp"
 #include "screen_fixture.hpp"
@@ -200,7 +202,8 @@ int declared_place(std::string_view name) {
         return 2;
     if (name == "library.action.update-all" || name == "library.list")
         return 3;
-    if (name == "library.action" || starts(name, "library.action.") || name == "library.back")
+    if (name == "library.action" || starts(name, "library.action.") || name == "library.back" ||
+        name == "library.active.unload")
         return 4;
     if (starts(name, "library.registry."))
         return 5;
@@ -285,7 +288,7 @@ bool designed_name(const std::string& name) {
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
         "details|back|refresh|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|map\\.[1-9][0-9]*)|"
+        "active\\.(mod|language|unload|map\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -330,7 +333,7 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
             problems.push_back(std::string(name) + " takes a press, a key or Tab");
     }
     for (const kit::Control& control : list.controls)
-        if (starts(control.name, "library.active.") &&
+        if (control.name != "library.active.unload" && starts(control.name, "library.active.") &&
             (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
             problems.push_back(control.name + " takes a press, a key or Tab");
     return problems;
@@ -471,6 +474,18 @@ bool shows_chip(const kit::DisplayList& list, std::string_view text) {
     return false;
 }
 
+/// Tells whether a layout shows a pill with these words.
+///
+/// @param list the display list
+/// @param text the pill's words
+/// @return true when one does
+bool shows_pill(const kit::DisplayList& list, std::string_view text) {
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::pill && item.text == text)
+            return true;
+    return false;
+}
+
 /// Large or the details page at Compact, and the Updates tab.
 ///
 /// @param named the frame
@@ -586,8 +601,8 @@ void check_frame(const fixture::NamedFrame& named) {
         updates_tab->text == (compact ? "Upd " : "Updates ") + updates_count
     );
 
-    // The Active tab: first, no search, no filters and no list; its lines
-    // are labels, and Tab reaches only the tabs and the footer's buttons.
+    // The Active tab: first, no search, no filters and no list. Its lines
+    // are labels. Tab reaches the tabs, UNLOAD MOD and the footer's buttons.
     lib::Library active = with_ridge();
     lib::set_tab(active, lib::Tab::active);
     const kit::DisplayList active_list = laid_out(active, state, frame);
@@ -611,7 +626,9 @@ void check_frame(const fixture::NamedFrame& named) {
     for (const kit::ControlId id : active_list.tab_order) {
         const kit::Control* stop = kit::control_of(active_list, id);
         OA_CHECK(
-            stop != nullptr && (starts(stop->name, "library.tab.") || stop->name == "library.close")
+            stop != nullptr &&
+            (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
+             stop->name == "library.active.unload")
         );
     }
     const kit::Control* mod_line = fixture::named(active_list, "library.active.mod");
@@ -628,12 +645,10 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(!mod_line->enabled && !mod_line->focusable);
         bool face = false;
         bool border = false;
-        const auto same_rect = [](const kit::Rect& left, const kit::Rect& right) {
-            return left.x == right.x && left.y == right.y && left.width == right.width &&
-                   left.height == right.height;
-        };
+        // The label stops above UNLOAD MOD, so the tile is at least as tall.
         for (const kit::Item& item : active_list.items) {
-            if (!same_rect(item.rect, mod_line->rect))
+            if (item.rect.x != mod_line->rect.x || item.rect.y != mod_line->rect.y ||
+                item.rect.width != mod_line->rect.width || item.rect.height < mod_line->rect.height)
                 continue;
             if (item.role == kit::Role::fill && item.colour == kit::colour::list_selected)
                 face = true;
@@ -642,7 +657,18 @@ void check_frame(const fixture::NamedFrame& named) {
         }
         OA_CHECK(face && border);
     }
-    OA_CHECK(shows_chip(active_list, "Playing"));
+    OA_CHECK(shows_pill(active_list, "Playing"));
+    OA_CHECK(!shows_chip(active_list, "Playing"));
+    const kit::Control* unload = fixture::named(active_list, "library.active.unload");
+    OA_CHECK(unload != nullptr && unload->enabled && unload->text == "UNLOAD MOD");
+    if (mod_line != nullptr && unload != nullptr)
+        OA_CHECK(unload->rect.y >= mod_line->rect.y + mod_line->rect.height);
+    const kit::Item* mod_title = text_item(active_list, "Highland");
+    const kit::Item* language_title = text_item(active_list, "Polski");
+    if (mod_title != nullptr && mod_line != nullptr)
+        OA_CHECK(mod_title->rect.y == mod_line->rect.y + kit::compact_metrics.card_inset);
+    if (!compact && mod_title != nullptr && language_title != nullptr)
+        OA_CHECK(mod_title->rect.y == language_title->rect.y);
     OA_CHECK(text_item(active_list, "by the Highland team") != nullptr);
     OA_CHECK(text_item(active_list, "0.4.0 (rev 1)") != nullptr);
     OA_CHECK(text_item(active_list, "Polish") != nullptr);
@@ -1371,11 +1397,80 @@ void active_base_game_is_a_tile() {
         OA_CHECK(text_item(list, "Base Game") != nullptr);
         OA_CHECK(text_item(list, "Total Annihilation 3.1c") != nullptr);
         OA_CHECK(text_item(list, "3.1") != nullptr);
+        OA_CHECK(!shows_pill(list, "Playing"));
         OA_CHECK(!shows_chip(list, "Playing"));
-        OA_CHECK(shows_chip(list, "Built in"));
+        OA_CHECK(!shows_chip(list, "Built in"));
+        OA_CHECK(shows_pill(list, "Built in"));
+        OA_CHECK(fixture::named(list, "library.active.unload") == nullptr);
+        const kit::Item* base_title = text_item(list, "Base Game");
+        if (mod != nullptr && base_title != nullptr)
+            OA_CHECK(base_title->rect.y == mod->rect.y + kit::compact_metrics.card_inset);
         OA_CHECK(text_item(list, "No map packs are installed.") != nullptr);
         OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
     }
+}
+
+std::string hover_card_words(const kit::DisplayList& list);
+
+/// UNLOAD MOD asks for SWITCH OFF of the mod being played, which is the
+/// question the host asks before it plays no mod, and it is off during a game.
+void unload_mod_asks_switch_off() {
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Library library = with_ridge();
+    lib::set_tab(library, lib::Tab::active);
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(library, state, regular);
+    const kit::Control* unload = fixture::named(list, "library.active.unload");
+    OA_CHECK(unload != nullptr && unload->enabled);
+    if (unload == nullptr)
+        return;
+    const lib::EntryId highland{std::string(fixture::core), lib::Kind::mod, "highland"};
+    const lib::ScreenResult pressed = click(library, state, list, "library.active.unload");
+    OA_CHECK(pressed.action == lib::Action::switch_off && pressed.entry == highland);
+    OA_CHECK(pressed.entry != fixture::ridge_id());
+    state.interaction.focus_shown = true;
+    state.interaction.focused = unload->id;
+    const lib::ScreenResult keyed = lib::library_key(library, state, list, kit::Key::enter);
+    OA_CHECK(keyed.action == lib::Action::switch_off && keyed.entry == highland);
+    const kit::Question asked = lib::switch_off_question();
+    OA_CHECK(asked.title == "SWITCH MOD");
+    OA_CHECK(asked.buttons.size() == 2 && asked.buttons[1].id == lib::switch_button_id);
+
+    library.inputs.in_match = true;
+    list = laid_out(library, state, regular);
+    const kit::Control* during = fixture::named(list, "library.active.unload");
+    OA_CHECK(during != nullptr && !during->enabled);
+    if (during != nullptr) {
+        OA_CHECK(
+            std::find(list.tab_order.begin(), list.tab_order.end(), during->id) ==
+            list.tab_order.end()
+        );
+    }
+    const lib::ScreenResult blocked = click(library, state, list, "library.active.unload");
+    OA_CHECK(!blocked.action);
+
+    library.inputs.in_match = false;
+    library.inputs.mod_from_command_line = true;
+    lib::select(library, highland);
+    state = {};
+    list = laid_out(library, state, regular);
+    const kit::Control* chosen = fixture::named(list, "library.active.unload");
+    OA_CHECK(chosen != nullptr && !chosen->enabled);
+    if (chosen == nullptr)
+        return;
+    const lib::ScreenResult refused = click(library, state, list, "library.active.unload");
+    OA_CHECK(!refused.action);
+    static_cast<void>(
+        lib::library_pointer(library, state, list, lib::PointerKind::move, 1, centre_of(*chosen), 0)
+    );
+    // A disabled button is skipped by hit. Resting on UNLOAD MOD still
+    // makes it the pointer's control, which is what shows its card, as a
+    // rest on the disabled SWITCH OFF is what its note belongs to.
+    OA_CHECK(state.interaction.hovered == chosen->id);
+    list = laid_out(library, state, regular);
+    OA_CHECK(
+        hover_card_words(list).find("The command line chose this run's mod.") != std::string::npos
+    );
 }
 
 /// The Active tab's tiles take no press, and with more maps than fit they
@@ -1718,6 +1813,145 @@ void registries_tab_lists_every_registry() {
     OA_CHECK(fixture::named(list, "library.registry.example-mods.remove") != nullptr);
 }
 
+/// Returns the header refresh icon's look.
+///
+/// @param list the display list
+/// @return the look; none when the icon is absent
+const kit::ButtonLook* header_refresh_look(const kit::DisplayList& list) {
+    const kit::Control* control = fixture::named(list, "library.refresh");
+    if (control == nullptr)
+        return nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::button || item.control != control->id)
+            continue;
+        return std::get_if<kit::ButtonLook>(&item.look);
+    }
+    return nullptr;
+}
+
+/// Returns the refresh mark drawn beside a registry's REFRESH, which is not
+/// itself a control.
+///
+/// @param list the display list
+/// @return the mark; none when that registry shows the arrow with no mark
+const kit::ButtonLook* row_refresh_look(const kit::DisplayList& list) {
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::button || item.control != kit::no_control)
+            continue;
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        if (look != nullptr && look->mark == kit::ButtonMark::refresh)
+            return look;
+    }
+    return nullptr;
+}
+
+/// A refresh that reads a list shows the check, on the header and beside
+/// REFRESH, then the arrow. One that fails shows the arrow at once. Another
+/// press while the check shows starts a refresh again. The eighth after
+/// 0.8 seconds of turning is the same at 30, 60 and 120 frames a second,
+/// and a tick during the held check does not ask for another frame.
+void a_finished_refresh_shows_the_check_then_the_arrow() {
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Library library = with_ridge();
+    lib::set_tab(library, lib::Tab::registries);
+    library.inputs.can_check = true;
+    const lib::RegistryPulse busy{fixture::core, true, false};
+    const lib::RegistryPulse read{fixture::core, false, false};
+    const lib::RegistryPulse missed{fixture::core, false, true};
+    const auto apply = [](lib::Library& model, bool checking, bool refreshing) {
+        model.inputs.checking = checking;
+        for (lib::Registry& registry : model.inputs.registries)
+            if (registry.id == fixture::core)
+                registry.refreshing = refreshing;
+    };
+    const auto eighth_after = [](uint32_t frame_ms) {
+        lib::ScreenState spun;
+        const lib::RegistryPulse turning{fixture::core, true, false};
+        const std::span<const lib::RegistryPulse> one{&turning, 1};
+        uint32_t elapsed = 0;
+        while (elapsed < 800u) {
+            const uint32_t step_ms = frame_ms < 800u - elapsed ? frame_ms : 800u - elapsed;
+            static_cast<void>(lib::step_refresh_marks(spun, true, one, step_ms));
+            elapsed += step_ms;
+        }
+        return spun.refresh_turn;
+    };
+    OA_CHECK(eighth_after(1000u / 30u) == eighth_after(1000u / 60u));
+    OA_CHECK(eighth_after(1000u / 60u) == eighth_after(1000u / 120u));
+    OA_CHECK(eighth_after(1000u / 120u) == kit::refresh_eighth(800));
+
+    lib::ScreenState state;
+    const std::span<const lib::RegistryPulse> spinning{&busy, 1};
+    const std::span<const lib::RegistryPulse> finished{&read, 1};
+    OA_CHECK(lib::step_refresh_marks(state, true, spinning, 0));
+    apply(library, true, true);
+    const kit::DisplayList turning_list = laid_out(library, state, regular);
+    const kit::ButtonLook* turning_header = header_refresh_look(turning_list);
+    const kit::ButtonLook* turning_row = row_refresh_look(turning_list);
+    OA_CHECK(turning_header != nullptr && turning_header->turning && turning_header->check_ms == 0);
+    OA_CHECK(turning_row != nullptr && turning_row->turning && turning_row->check_ms == 0);
+
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 0));
+    OA_CHECK(state.refresh_check_ms > 0);
+    apply(library, false, false);
+    const kit::DisplayList checked = laid_out(library, state, regular);
+    const kit::ButtonLook* checked_header = header_refresh_look(checked);
+    const kit::ButtonLook* checked_row = row_refresh_look(checked);
+    OA_CHECK(
+        checked_header != nullptr && !checked_header->turning &&
+        checked_header->check_ms == state.refresh_check_ms
+    );
+    OA_CHECK(checked_row != nullptr && !checked_row->turning && checked_row->check_ms > 0);
+    const kit::Control* refresh = fixture::named(checked, "library.refresh");
+    const kit::Control* row_button =
+        fixture::named(checked, "library.registry.fixture-core.refresh");
+    OA_CHECK(refresh != nullptr && refresh->enabled);
+    OA_CHECK(row_button != nullptr && row_button->enabled);
+    lib::ScreenState header_press = state;
+    const lib::ScreenResult again = click(library, header_press, checked, "library.refresh");
+    OA_CHECK(again.action == lib::Action::check_now);
+    lib::ScreenState row_press = state;
+    const lib::ScreenResult row_again =
+        click(library, row_press, checked, "library.registry.fixture-core.refresh");
+    OA_CHECK(
+        row_again.action == lib::Action::refresh_registry && row_again.registry == fixture::core
+    );
+
+    // Into the held check the picture stays, so the step asks for no frame.
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 200));
+    OA_CHECK(state.refresh_check_ms > 0);
+    OA_CHECK(!lib::step_refresh_marks(state, false, finished, 200));
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 800));
+    OA_CHECK(state.refresh_check_ms == 0);
+    const kit::DisplayList rested = laid_out(library, state, regular);
+    const kit::ButtonLook* rested_header = header_refresh_look(rested);
+    OA_CHECK(rested_header != nullptr && !rested_header->turning && rested_header->check_ms == 0);
+    OA_CHECK(row_refresh_look(rested) == nullptr);
+
+    // A press during the check starts the refresh again and the check goes.
+    lib::ScreenState during;
+    static_cast<void>(lib::step_refresh_marks(during, true, spinning, 0));
+    static_cast<void>(lib::step_refresh_marks(during, false, finished, 200));
+    OA_CHECK(during.refresh_check_ms > 0);
+    OA_CHECK(lib::step_refresh_marks(during, true, spinning, 0));
+    OA_CHECK(during.refresh_check_ms == 0);
+    bool row_cleared = true;
+    for (const lib::ScreenState::RegistryMark& mark : during.registry_marks)
+        if (mark.check_ms != 0)
+            row_cleared = false;
+    OA_CHECK(row_cleared);
+
+    lib::ScreenState failed;
+    const std::span<const lib::RegistryPulse> broken{&missed, 1};
+    static_cast<void>(lib::step_refresh_marks(failed, true, spinning, 0));
+    static_cast<void>(lib::step_refresh_marks(failed, false, broken, 16));
+    OA_CHECK(failed.refresh_check_ms == 0);
+    const kit::DisplayList failed_list = laid_out(library, failed, regular);
+    const kit::ButtonLook* failed_header = header_refresh_look(failed_list);
+    OA_CHECK(failed_header != nullptr && !failed_header->turning && failed_header->check_ms == 0);
+    OA_CHECK(row_refresh_look(failed_list) == nullptr);
+}
+
 /// MORE ▾ on Compact's details page holds the actions after the first
 /// three, and choosing one asks for it.
 void more_holds_the_rest() {
@@ -1756,7 +1990,9 @@ int main() {
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
     active_base_game_is_a_tile();
+    unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();
+    a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();

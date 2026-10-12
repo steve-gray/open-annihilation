@@ -880,6 +880,10 @@ ActiveSetup active_setup(const Library& library) {
     return setup;
 }
 
+bool can_switch(const Library& library) noexcept {
+    return !library.inputs.in_match && !library.inputs.mod_from_command_line;
+}
+
 std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry) {
     const TextHooks& text = library.text;
     const bool in_match = library.inputs.in_match;
@@ -891,10 +895,8 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     // The base game is not a package. While it is played it offers nothing;
     // while a mod is, PLAY NOW follows SWITCH OFF's rule and does its work.
     if (is_base_game(entry.id)) {
-        if (entry.state != State::playing) {
-            const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
-            add(Action::play_now, can_switch);
-        }
+        if (entry.state != State::playing)
+            add(Action::play_now, can_switch(library));
         return buttons;
     }
     if (entry.state == State::get || entry.state == State::update) {
@@ -908,9 +910,8 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const Installed* installed = entry.installed;
     // The mod being played switches off where another mod plays now: the
     // game then plays none.
-    const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
     if (installed != nullptr && entry.id.kind == Kind::mod)
-        add(installed->playing ? Action::switch_off : Action::play_now, can_switch);
+        add(installed->playing ? Action::switch_off : Action::play_now, can_switch(library));
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
     if (installed != nullptr) {
@@ -1146,20 +1147,19 @@ std::string byline(const Entry& entry, const TextHooks& text) {
     return filled(text, words::byline_with_downloads, {{"author", author}, {"downloads", counts}});
 }
 
-std::string playing_note(const Library& library) {
+std::string playing_note(const Library& library, const Entry& entry) {
     const TextHooks& text = library.text;
-    const Entry* entry = selected_entry(library);
-    if (entry == nullptr || entry->id.kind != Kind::mod)
+    if (entry.id.kind != Kind::mod)
         return {};
     // PLAY NOW on the base game is off for the same reason SWITCH OFF is,
     // and the note says so in the same words. While it is the one played
     // it offers nothing, so it has no note.
-    if (is_base_game(entry->id)) {
-        if (entry->state == State::playing || !library.inputs.mod_from_command_line)
+    if (is_base_game(entry.id)) {
+        if (entry.state == State::playing || !library.inputs.mod_from_command_line)
             return {};
         return std::string(shown(text, words::note_command_line));
     }
-    if (entry->installed == nullptr)
+    if (entry.installed == nullptr)
         return {};
     // While the command line chose the mod, PLAY NOW and SWITCH OFF are off,
     // and the note says why first.
@@ -1171,14 +1171,14 @@ std::string playing_note(const Library& library) {
             return chosen.empty() ? note : chosen;
         return chosen + " " + note;
     };
-    const std::string name(entry_name(*entry));
-    if (entry->installed->playing) {
-        const bool held = entry->queued != nullptr && entry->queued->phase == Phase::held;
-        if (entry->update != nullptr || held)
+    const std::string name(entry_name(entry));
+    if (entry.installed->playing) {
+        const bool held = entry.queued != nullptr && entry.queued->phase == Phase::held;
+        if (entry.update != nullptr || held)
             return after_chosen(filled(text, words::note_finishes, {{"name", name}}));
         return after_chosen({});
     }
-    if (entry->update == nullptr)
+    if (entry.update == nullptr)
         return after_chosen({});
     for (const Installed& installed : library.inputs.installed) {
         if (installed.kind == Kind::mod && installed.playing)
@@ -1187,6 +1187,13 @@ std::string playing_note(const Library& library) {
             ));
     }
     return after_chosen({});
+}
+
+std::string playing_note(const Library& library) {
+    const Entry* entry = selected_entry(library);
+    if (entry == nullptr)
+        return {};
+    return playing_note(library, *entry);
 }
 
 QueueLines queue_lines(const Library& library) {

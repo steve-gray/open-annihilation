@@ -88,9 +88,14 @@ Open Annihilation's own settings open with **Ctrl+,**, or from
 bottom right of the main menu opens. See [Settings](../settings.md), and
 [the Library](../library.md) for mods, maps and languages to download.
 
-Each start makes this copy of the game the opener of `.oamod` files for
-your Windows account, with the game's icon on them: double-click one to
-install the mod it holds ([mods](../mods/README.md#installing-a-oamod-file)).
+Each start registers this copy of the game, for your Windows account, as
+the opener of the file types left on in [Settings › System](../settings.md#system):
+mod packages (`.oamod`), map packs (`.oamap`), language packs (`.oalang`)
+and registry files (`.oareg`). All four are on until you turn one off.
+Turning one off and pressing OK withdraws that type at once; turning one
+on registers it at once. Neither waits for a restart. The game's icon is
+put on the types it opens. Double-click a `.oamod` file to install the mod
+it holds ([mods](../mods/README.md#installing-a-oamod-file)).
 Opened while the game runs, the file goes to the running game. A file
 sync, such as OneDrive's of Documents, or a virus scanner can hold a new
 mod's files for a few seconds, and the install waits for them.

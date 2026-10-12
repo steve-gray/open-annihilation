@@ -180,6 +180,13 @@ struct CampaignEnv {
     int32_t player_count{}; // skirmish/multiplayer schema match; 0 = any
     // The schema type each difficulty's preference order names (ai.difficulty-names).
     match_rules::AiDifficultyNames difficulty_names{};
+    /// The installed pack's name for a map, the words players see.
+    ///
+    /// Called only after that map's file has loaded. Null, or an empty
+    /// answer, when this caller has no index or the index has no entry for
+    /// the map. The text stays valid through the call that asks for it.
+    const char* (*pack_index_name)(void* context, const char* map_name){};
+    void* pack_index_context{}; ///< passed to pack_index_name
 };
 
 // Game.session_record entries a mission's GlobalHeader sets when the map loads.
@@ -301,8 +308,14 @@ bool campaign_load_mission_info(CampaignFile* file, const CampaignEnv* env, cons
 
 /// Selects a mission for the current session kind.
 ///
-/// Campaigns select by mission display name; skirmish and multiplayer sessions load the
-/// named map and keep a localised display name when the language is not English.
+/// Campaigns select by mission display name. Skirmish and multiplayer sessions
+/// load the named map. A map of the base game keeps its file name as the name
+/// players see, translated when the language is not English. A pack map is
+/// named stem@id; its OTA is read at that name. Players see the name its
+/// installed pack gives it (CampaignEnv::pack_index_name). The OTA's
+/// missionname is used only when the index has no entry, and another
+/// language's own key still comes first. A pack map that gives no title, or
+/// whose file is not there, keeps the name the battle room carries.
 ///
 /// @param[in,out] file campaign object
 /// @param env file services, game block, difficulty and player count
@@ -357,7 +370,10 @@ bool campaign_mission_file(
 /// @param file campaign object
 /// @return the size; zero while no map is bound, so a nonzero size means a map is selected
 [[nodiscard]] int32_t campaign_mission_file_size(const CampaignFile* file) noexcept;
-/// Returns the bound map's display name, translated when a translation exists.
+/// Returns the name players see for the bound map.
+///
+/// A map of the base game shows its file name, translated when a translation
+/// exists. A pack map shows the title its OTA gives.
 ///
 /// @param file campaign object
 /// @return the name

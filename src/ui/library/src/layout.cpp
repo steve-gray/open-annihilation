@@ -814,10 +814,22 @@ int32_t header_reserve(const Building& building) {
     return reserve;
 }
 
+/// Returns how long a registry's refresh mark has been showing its check.
+///
+/// @param state the marks
+/// @param id the registry
+/// @return the milliseconds; 0 while it shows the arrow or is turning
+uint16_t registry_check_ms(const ScreenState& state, std::string_view id) noexcept {
+    for (const ScreenState::RegistryMark& mark : state.registry_marks)
+        if (mark.id == id)
+            return mark.check_ms;
+    return 0;
+}
+
 /// Appends the header's refresh icon, at the top right, the same square at
 /// every size class. Its words are "Refresh", or "Refreshing" while the
 /// registries are being asked. It can be pressed only when a registry can
-/// be asked.
+/// be asked, including while the check shows.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -840,6 +852,7 @@ void add_refresh_button(Building& building, const Window& window) {
     look.mark = kit::ButtonMark::refresh;
     look.turn = building.state->refresh_turn;
     look.turning = turning;
+    look.check_ms = turning ? uint16_t{0} : building.state->refresh_check_ms;
     const std::size_t before = building.list.controls.size();
     kit::add_button(
         building.list, rect, look, controls::refresh, unique_name(building, named("refresh"))
@@ -1909,17 +1922,23 @@ int32_t tile_lines_height(const kit::Metrics& metrics, const std::vector<TileLin
     return height;
 }
 
-/// Returns an identity tile's height: the badge or the lines, whichever is
-/// taller, and the card's inset above and below.
+/// Returns an identity tile's height. The badge and the lines start at the
+/// top inset. A tile with UNLOAD MOD keeps the button under both, with the
+/// button gap between and the card's inset below the button. One without a
+/// button keeps that inset below the badge or the last line.
 ///
 /// @param metrics the class's metrics
 /// @param badge the badge's side
 /// @param lines the lines beside the badge
+/// @param unload the tile holds UNLOAD MOD
 /// @return the height, in points
 int32_t identity_tile_height(
-    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines
+    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines, bool unload
 ) {
-    return std::max(badge, tile_lines_height(metrics, lines)) + 2 * metrics.card_inset;
+    int32_t stack = std::max(badge, tile_lines_height(metrics, lines));
+    if (unload)
+        stack += metrics.button_gap + metrics.button_height;
+    return stack + 2 * metrics.card_inset;
 }
 
 /// Appends a tile's lines. The first line keeps room at its right for a
@@ -1964,52 +1983,54 @@ void place_tile_lines(
     }
 }
 
-/// Appends a chip that takes no press, at the right of a line, when it fits.
+/// Appends a pill that takes no press, at the right of a line, when it fits.
 ///
 /// @param[in,out] building the layout
 /// @param line the line it sits on
-/// @param words_shown the chip's words
-/// @param state the chip's colours
+/// @param words_shown the pill's words
+/// @param state the pill's colours
 /// @param clip what drawing may touch
-/// @return the chip's width, or 0 when it does not fit
-int32_t add_idle_chip(
+/// @return the pill's width, or 0 when it does not fit
+int32_t add_idle_pill(
     Building& building,
     const kit::Rect& line,
     const std::string& words_shown,
-    kit::ChipState state,
+    kit::PillState state,
     const kit::Rect& clip
 ) {
     if (words_shown.empty() || line.width <= 0 || line.height <= 0)
         return 0;
-    kit::ChipLook look;
+    kit::PillLook look;
     look.text = words_shown;
     look.state = state;
-    const int32_t chip_width = kit::chip_width(*building.fonts, look);
-    const int32_t chip_height = building.metrics->chip_height;
-    if (chip_width > line.width || chip_height > line.height)
+    const int32_t width = kit::pill_width(*building.fonts, look);
+    const int32_t height = kit::pill_height();
+    if (width > line.width || height > line.height)
         return 0;
-    const kit::Rect chip{
-        line.x + line.width - chip_width,
-        line.y + (line.height - chip_height) / 2,
-        chip_width,
-        chip_height,
+    const kit::Rect pill{
+        line.x + line.width - width,
+        line.y + (line.height - height) / 2,
+        width,
+        height,
     };
-    kit::add_chip(building.list, chip, look, kit::no_control, {});
+    kit::add_pill(building.list, pill, look, kit::no_control, {});
     building.list.items.back().clip = clip;
-    return chip_width;
+    return width;
 }
 
-/// Appends an identity tile: a badge, lines beside it and a chip on the
-/// first line. Its label is the part of the tile that shows, and it takes
-/// no press.
+/// Appends an identity tile: a badge and lines from the top inset, a pill
+/// at the right of the title's line, and UNLOAD MOD at the bottom right
+/// while a mod is played. The label is the tile above that button, so the
+/// two do not meet, and the label takes no press.
 ///
 /// @param[in,out] building the layout
 /// @param tile the tile
 /// @param badge the badge; null for the letters
 /// @param letters the name the letters are taken from
 /// @param lines the lines beside the badge
-/// @param chip the chip's words; empty for none
-/// @param chip_state the chip's colours
+/// @param pill the pill's words; empty for none
+/// @param pill_state the pill's colours
+/// @param unload the tile holds UNLOAD MOD
 /// @param id the label's number
 /// @param name the label's name
 /// @param read the label's text
@@ -2020,13 +2041,15 @@ void add_identity_tile(
     const Badge* badge,
     std::string_view letters,
     const std::vector<TileLine>& lines,
-    const std::string& chip,
-    kit::ChipState chip_state,
+    const std::string& pill,
+    kit::PillState pill_state,
+    bool unload,
     kit::ControlId id,
     std::string name,
     std::string read,
     const kit::Rect& clip
 ) {
+    const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
     const int32_t inset = metrics.card_inset;
     const int32_t side =
@@ -2040,21 +2063,47 @@ void add_identity_tile(
         );
     const int32_t text_left = inner_left + side + metrics.list_row_gap;
     const int32_t text_width = std::max(tile.x + tile.width - inset - text_left, int32_t{0});
-    const int32_t text_height = tile_lines_height(metrics, lines);
-    const int32_t text_top = inner_top + std::max((side - text_height) / 2, int32_t{0});
+    const int32_t text_top = inner_top;
     const int32_t title_height =
         lines.empty() ? metrics.regular_line : tile_line_height(metrics, lines.front().font);
-    const int32_t chip_width = add_idle_chip(
-        building, {text_left, text_top, text_width, title_height}, chip, chip_state, clip
+    const int32_t pill_width = add_idle_pill(
+        building, {text_left, text_top, text_width, title_height}, pill, pill_state, clip
     );
     const int32_t first_room =
-        chip_width > 0 ? std::max(text_width - chip_width - metrics.list_row_gap, int32_t{0})
+        pill_width > 0 ? std::max(text_width - pill_width - metrics.list_row_gap, int32_t{0})
                        : text_width;
     place_tile_lines(building, lines, text_left, text_top, text_width, first_room, clip);
+    kit::Rect label = tile;
+    if (unload) {
+        const std::string caption(shown(library.text, words::action_unload_mod));
+        const int32_t across =
+            std::min(button_width(building, caption), std::max(tile.width - 2 * inset, int32_t{0}));
+        const kit::Rect button{
+            tile.x + tile.width - inset - across,
+            tile.y + tile.height - inset - metrics.button_height,
+            across,
+            metrics.button_height,
+        };
+        if (across > 0 && button.y >= tile.y) {
+            add_button(
+                building,
+                building.detail,
+                button,
+                caption,
+                true,
+                can_switch(library),
+                controls::active_unload,
+                named("active.unload"),
+                clip,
+                controls::details_group
+            );
+            label.height = std::max(button.y - tile.y, int32_t{0});
+        }
+    }
     add_label(
         building.detail,
         id,
-        kit::intersect(tile, clip),
+        kit::intersect(label, clip),
         std::move(name),
         std::move(read),
         clip,
@@ -2080,8 +2129,9 @@ struct IdentityTile {
     const Badge* badge{};
     std::string letters{};
     std::vector<TileLine> lines{};
-    std::string chip{};
-    kit::ChipState chip_state{kit::ChipState::playing};
+    std::string pill{};
+    kit::PillState pill_state{kit::PillState::neutral};
+    bool unload{}; ///< UNLOAD MOD, on the mod tile while a mod is played
     kit::ControlId id{};
     std::string name{};
     std::string read{};
@@ -2098,7 +2148,6 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
     tile.id = controls::active_mod;
     tile.name = unique_name(building, named("active.mod"));
     tile.read = setup.mod_line;
-    tile.chip_state = kit::ChipState::playing;
     if (setup.mod_name.empty()) {
         tile.letters = std::string(base_badge_name);
         if (!setup.base_title.empty())
@@ -2122,7 +2171,9 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
             tile.lines.push_back(
                 TileLine{setup.mod_author, kit::FontRole::small, kit::colour::list_text}
             );
-        tile.chip = setup.mod_state;
+        tile.pill = setup.mod_state;
+        tile.pill_state = kit::PillState::playing;
+        tile.unload = true;
     }
     return tile;
 }
@@ -2139,8 +2190,8 @@ IdentityTile language_tile(Building& building, const ActiveSetup& setup) {
     tile.id = controls::active_language;
     tile.name = unique_name(building, named("active.language"));
     tile.read = setup.language_line;
-    tile.chip = setup.language_note;
-    tile.chip_state = kit::ChipState::installed;
+    tile.pill = setup.language_note;
+    tile.pill_state = kit::PillState::neutral;
     if (!setup.language_name.empty())
         tile.lines.push_back(
             TileLine{setup.language_name, kit::FontRole::regular, kit::colour::text}
@@ -2170,7 +2221,7 @@ IdentityTile language_tile(Building& building, const ActiveSetup& setup) {
 /// @param tile the tile
 /// @return the height, in points
 int32_t identity_height(const kit::Metrics& metrics, const IdentityTile& tile) {
-    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines);
+    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines, tile.unload);
 }
 
 /// Appends an identity tile.
@@ -2188,8 +2239,9 @@ void place_identity(
         tile.badge,
         tile.letters,
         tile.lines,
-        tile.chip,
-        tile.chip_state,
+        tile.pill,
+        tile.pill_state,
+        tile.unload,
         tile.id,
         tile.name,
         tile.read,
@@ -2232,10 +2284,7 @@ void add_pack_tile(
                 building,
                 kit::FontRole::regular,
                 drawn,
-                {text_left,
-                 inner_top + (header - metrics.regular_line) / 2,
-                 text_width,
-                 metrics.regular_line},
+                {text_left, inner_top, text_width, metrics.regular_line},
                 kit::Align::left,
                 kit::colour::text,
                 clip
@@ -2387,12 +2436,8 @@ int32_t add_map_tiles(
         for (std::size_t place = 0; place < row_count; ++place) {
             const ActivePack& pack = setup.packs[index + place];
             const int32_t across = tile_width(index + place);
-            const int32_t side = std::min(
-                active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
-            );
-            const int32_t height = pack_tile_height(metrics, side, pack.maps.size());
             add_pack_tile(
-                building, pack, {tile_left(index + place), top, across, height}, number, clip
+                building, pack, {tile_left(index + place), top, across, row_height}, number, clip
             );
         }
         index += row_count;
@@ -2433,8 +2478,9 @@ int32_t add_active_heading(
 /// in use, side by side from Regular on; then one tile per installed map
 /// pack, in two columns at Large when more than one pack is installed.
 /// The mod's and the language's labels are the part of the tile that
-/// shows, and each map's is the part of its line that shows, empty while
-/// that part is scrolled out of the area. None takes a press, a key or Tab.
+/// shows, the mod's ending above UNLOAD MOD, and each map's is the part of
+/// its line that shows, empty while that part is scrolled out of the area.
+/// The labels take no press. UNLOAD MOD does, while a mod is played.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
@@ -2654,8 +2700,12 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
 
         const int32_t text_left = left + side + metrics.list_row_gap;
         const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
-        // The right cluster, from the switch inward: REFRESH, the turning
-        // mark while this registry is being asked, and the key icon.
+        // The right cluster, from the switch inward: REFRESH, the refresh
+        // mark while this registry is being asked or its check is showing,
+        // and the key icon.
+        const uint16_t check_ms =
+            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
+        const bool show_mark = registry.refreshing || check_ms > 0;
         int32_t cluster = left + width;
         cluster -= metrics.switch_width;
         const kit::Rect toggle{
@@ -2671,7 +2721,7 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
         const kit::Rect refresh_rect{cluster, line, refresh_width, metrics.button_height};
         cluster -= metrics.button_gap;
         kit::Rect turning_rect{};
-        if (registry.refreshing) {
+        if (show_mark) {
             cluster -= metrics.button_height;
             turning_rect = {cluster, line, metrics.button_height, metrics.button_height};
             cluster -= metrics.button_gap;
@@ -2725,13 +2775,14 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             std::move(fingerprints),
             view
         );
-        if (registry.refreshing) {
+        if (show_mark) {
             kit::ButtonLook spinning;
             spinning.style = kit::ButtonStyle::quiet;
             spinning.enabled = false;
             spinning.mark = kit::ButtonMark::refresh;
             spinning.turn = building.state->refresh_turn;
-            spinning.turning = true;
+            spinning.turning = registry.refreshing;
+            spinning.check_ms = check_ms;
             kit::Item& spun = add_item(building.list, kit::Role::button, turning_rect, view);
             spun.look = spinning;
         }
@@ -3330,6 +3381,54 @@ void add_key_tooltip(Building& building, const Window& window) {
     kit::add_hover_card(building.list, card, look);
 }
 
+/// Appends UNLOAD MOD's hint when the pointer or the keys rest on it.
+/// The card is playing_note for the mod being played: the same words
+/// SWITCH OFF shows under that mod. The Active tab selects nothing, so
+/// the selected entry's note is empty here.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_unload_note(Building& building, const Window& window) {
+    const kit::ControlId tip = controls::active_unload;
+    if (!hovered(building, tip) && !focused(building, tip))
+        return;
+    const Entry* played = nullptr;
+    for (const Entry& candidate : building.library->entries) {
+        if (candidate.id.kind == Kind::mod && candidate.installed != nullptr &&
+            candidate.installed->playing) {
+            played = &candidate;
+            break;
+        }
+    }
+    if (played == nullptr)
+        return;
+    const std::string note = playing_note(*building.library, *played);
+    if (note.empty())
+        return;
+    const kit::Control* button = nullptr;
+    for (const kit::Control& control : building.detail)
+        if (control.id == tip)
+            button = &control;
+    if (button == nullptr)
+        return;
+    const kit::Rect seen = button->clip.width > 0 && button->clip.height > 0
+                               ? kit::intersect(button->rect, button->clip)
+                               : button->rect;
+    if (seen.width <= 0 || seen.height <= 0)
+        return;
+    const int32_t padding = kit::compact_metrics.hover_card_padding;
+    const int32_t inner = std::max(window.width - 2 * padding, int32_t{1});
+    kit::HoverCardLook look;
+    append_fitted(building, look.block, note, inner);
+    const kit::Point size = kit::hover_card_size(*building.fonts, look);
+    const kit::Rect frame{0, 0, window.width, window.height};
+    const kit::Rect card = kit::hover_card_rect(seen, frame, size);
+    const int32_t anchor_mid = seen.x + seen.width / 2;
+    look.arrow_at = std::clamp(anchor_mid - card.x, int32_t{0}, std::max(card.width, int32_t{0}));
+    look.arrow = card.y >= seen.y + seen.height ? kit::Side::top : kit::Side::bottom;
+    kit::add_hover_card(building.list, card, look);
+}
+
 /// Finishes a layout: the window's edge, the focus ring, the open menu over
 /// everything, the key tooltip, and the controls in the order a press tries them.
 ///
@@ -3341,6 +3440,7 @@ kit::DisplayList finish(Building& building, const Window& window) {
         kit::colour::edge_light;
     add_focus_ring(building);
     add_open_menu(building, window.footer_rule);
+    add_unload_note(building, window);
     add_key_tooltip(building, window);
     kit::DisplayList list = std::move(building.list);
     list.controls.clear();
@@ -3824,6 +3924,148 @@ kit::DisplayList details_page_layout(
         -1
     );
     return finish(building, window);
+}
+
+namespace {
+
+/// What one refresh mark draws, enough to tell a later step from this one.
+struct MarkShot {
+    bool turning{};
+    uint8_t turn{};
+    uint8_t ease{};
+    bool operator==(const MarkShot&) const = default;
+};
+
+/// Returns the picture a mark draws: the turning arrow, or the check's ease.
+///
+/// @param turning the arrow is turning
+/// @param turn the shared eighth, used while it turns
+/// @param check_ms how long the check has shown; 0 while it has not
+/// @return the picture
+MarkShot mark_shot(bool turning, uint8_t turn, uint16_t check_ms) noexcept {
+    MarkShot shot;
+    shot.turning = turning;
+    shot.turn = turning ? turn : uint8_t{0};
+    shot.ease =
+        turning ? uint8_t{0} : (check_ms == 0 ? uint8_t{0} : kit::refresh_check_ease(check_ms));
+    return shot;
+}
+
+/// Returns a registry's mark, or none when this step has not kept one.
+///
+/// @param state the marks
+/// @param id the registry
+/// @return the mark; none when the registry has no row
+const ScreenState::RegistryMark* mark_of(const ScreenState& state, std::string_view id) noexcept {
+    for (const ScreenState::RegistryMark& mark : state.registry_marks)
+        if (mark.id == id)
+            return &mark;
+    return nullptr;
+}
+
+/// Moves a check forward, or starts one.
+///
+/// A start with no time yet still counts as begun. A check that has already
+/// lasted kit::refresh_check_ms is over, and the arrow shows.
+///
+/// @param shown how long it has shown; 0 while it has not
+/// @param begin true starts it from nothing
+/// @param elapsed_ms the milliseconds to add
+/// @return the milliseconds still to show; 0 when the arrow is back
+uint16_t advance_check(uint16_t shown, bool begin, uint32_t elapsed_ms) noexcept {
+    if (!begin && shown == 0)
+        return 0;
+    const uint32_t next =
+        begin ? (elapsed_ms == 0 ? 1u : elapsed_ms) : static_cast<uint32_t>(shown) + elapsed_ms;
+    if (next >= kit::refresh_check_ms)
+        return 0;
+    return static_cast<uint16_t>(next);
+}
+
+} // namespace
+
+bool step_refresh_marks(
+    ScreenState& state,
+    bool checking,
+    std::span<const RegistryPulse> registries,
+    uint32_t elapsed_ms
+) {
+    const MarkShot header_before =
+        mark_shot(state.refresh_was_checking, state.refresh_turn, state.refresh_check_ms);
+    std::vector<MarkShot> rows_before;
+    rows_before.reserve(registries.size());
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool turning = held != nullptr && held->was_refreshing;
+        const uint16_t shown = held != nullptr ? held->check_ms : uint16_t{0};
+        rows_before.push_back(mark_shot(turning, state.refresh_turn, shown));
+    }
+
+    bool any_refreshing = checking;
+    for (const RegistryPulse& pulse : registries)
+        any_refreshing = any_refreshing || pulse.refreshing;
+    if (any_refreshing) {
+        if (!state.refresh_spinning)
+            state.refresh_spin_ms = 0;
+        state.refresh_spin_ms += elapsed_ms;
+        state.refresh_turn = kit::refresh_eighth(state.refresh_spin_ms);
+    } else {
+        state.refresh_spin_ms = 0;
+        state.refresh_turn = 0;
+    }
+    state.refresh_spinning = any_refreshing;
+
+    if (checking && !state.refresh_was_checking)
+        state.refresh_read_list = false;
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool was_refreshing = held != nullptr && held->was_refreshing;
+        if (was_refreshing && !pulse.refreshing && !pulse.failed &&
+            (checking || state.refresh_was_checking))
+            state.refresh_read_list = true;
+    }
+
+    if (checking)
+        state.refresh_check_ms = 0;
+    else if (state.refresh_was_checking) {
+        state.refresh_check_ms =
+            state.refresh_read_list ? advance_check(0, true, elapsed_ms) : uint16_t{0};
+        state.refresh_read_list = false;
+    } else {
+        state.refresh_check_ms = advance_check(state.refresh_check_ms, false, elapsed_ms);
+    }
+    state.refresh_was_checking = checking;
+
+    std::vector<ScreenState::RegistryMark> next_marks;
+    next_marks.reserve(registries.size());
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool was_refreshing = held != nullptr && held->was_refreshing;
+        const uint16_t previous = held != nullptr ? held->check_ms : uint16_t{0};
+        ScreenState::RegistryMark row;
+        row.id = std::string(pulse.id);
+        row.was_refreshing = pulse.refreshing;
+        if (pulse.refreshing)
+            row.check_ms = 0;
+        else if (was_refreshing)
+            row.check_ms = pulse.failed ? uint16_t{0} : advance_check(0, true, elapsed_ms);
+        else
+            row.check_ms = advance_check(previous, false, elapsed_ms);
+        if (row.was_refreshing || row.check_ms > 0)
+            next_marks.push_back(std::move(row));
+    }
+    state.registry_marks = std::move(next_marks);
+
+    if (mark_shot(checking, state.refresh_turn, state.refresh_check_ms) != header_before)
+        return true;
+    for (std::size_t row = 0; row < registries.size(); ++row) {
+        const ScreenState::RegistryMark* held = mark_of(state, registries[row].id);
+        const bool turning = held != nullptr && held->was_refreshing;
+        const uint16_t shown = held != nullptr ? held->check_ms : uint16_t{0};
+        if (mark_shot(turning, state.refresh_turn, shown) != rows_before[row])
+            return true;
+    }
+    return false;
 }
 
 } // namespace oa::ui::library

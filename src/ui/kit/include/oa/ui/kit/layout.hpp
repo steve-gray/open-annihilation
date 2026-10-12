@@ -461,6 +461,7 @@ enum class Role : uint8_t {
     progress_busy,  ///< a busy bar: the track striped, with no fraction
     backdrop,       ///< the dimming behind a sheet; no press reaches a part under it
     sheet,          ///< a sheet over a backdrop: a panel with a shadow
+    pill,           ///< a pill; the item's PillLook
 };
 
 /// Every role, in the order Role declares them. A role appended to Role is
@@ -495,6 +496,7 @@ inline constexpr std::array all_roles{
     Role::button_danger, Role::progress_track,
     Role::progress_fill, Role::progress_busy,
     Role::backdrop,      Role::sheet,
+    Role::pill,
 };
 
 /// Tells whether the kit's canvas draws a role (paint, in either form): it
@@ -540,6 +542,7 @@ inline constexpr std::array all_roles{
     case Role::hover_card:
     case Role::link:
     case Role::progress:
+    case Role::pill:
         return true;
     case Role::header_bar:
     case Role::badge:
@@ -575,9 +578,9 @@ inline constexpr std::array all_roles{
 }
 
 // The last role is named here: a role appended to Role is appended to
-// all_roles and named here in sheet's place.
+// all_roles and named here in pill's place.
 static_assert(
-    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::sheet) + 1,
+    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::pill) + 1,
     "all_roles names every role of Role once, in its order"
 );
 

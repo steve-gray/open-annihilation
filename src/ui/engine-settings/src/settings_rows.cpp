@@ -26,6 +26,9 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace oa::ui::engine_settings {
 
@@ -41,7 +44,7 @@ using Stepper = kit::Stepper<SettingsModel>;
 using Hint = std::array<std::string_view, 2>;
 
 /// The number of settings: Setting's enumerators.
-constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::kit_gallery) + 1;
+constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::file_types_note) + 1;
 
 // ---------------------------------------------------------------------------
 // The sections' rows.
@@ -55,9 +58,8 @@ constexpr std::array<Setting, 5> kControlsRows{
     Setting::view_past_map_edge,
     Setting::switch_alt,
 };
-/// Common Tweaks' rows: the player's own folder first.
-constexpr std::array<Setting, 3> kCommonTweaksRows{
-    Setting::user_folder,
+/// Common Tweaks' rows: the unit limit, then pathfinding.
+constexpr std::array<Setting, 2> kCommonTweaksRows{
     Setting::unit_limit,
     Setting::path_search,
 };
@@ -192,6 +194,27 @@ constexpr std::array<Setting, 3> kModChatRows{
 };
 /// Downloads builds its rows from the host's offer, not from settings.
 constexpr std::array<Setting, 0> kDownloadsRows{};
+/// System where the game registers file types at run time: Your files, then
+/// the group's heading and one switch for each type.
+constexpr std::array<Setting, 6> kSystemRuntimeRows{
+    Setting::user_folder,
+    Setting::file_type_registration,
+    Setting::file_type_oamod,
+    Setting::file_type_oamap,
+    Setting::file_type_oalang,
+    Setting::file_type_oareg,
+};
+/// System where the app's bundle declares the types: Your files, then the
+/// text row in place of the switches.
+constexpr std::array<Setting, 2> kSystemBundleRows{
+    Setting::user_folder,
+    Setting::file_types_note,
+};
+/// System's rows for this system. A dialog may show the other layout
+/// (Dialog::file_type_switches); section_settings reads that.
+constexpr std::span<const Setting> kSystemRows = file_types_switchable
+                                                     ? std::span<const Setting>{kSystemRuntimeRows}
+                                                     : std::span<const Setting>{kSystemBundleRows};
 
 /// What each section shows, in Page's order.
 constexpr std::array<std::span<const Setting>, page_count> kPageRows{
@@ -205,6 +228,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kDeveloperRows,
     kGameFilesRows,
     kDownloadsRows,
+    kSystemRows,
     kModKeysRows,
     kModPatrolRows,
     kModGuardRows,
@@ -224,6 +248,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Developer",
     "Game files",
     "Downloads",
+    "System",
     "Keys",
     "Patrolling",
     "Guarding",
@@ -243,6 +268,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "DEVELOPER",
     "GAME FILES",
     "DOWNLOADS",
+    "SYSTEM",
     "MOD KEYS",
     "PATROLLING BUILDERS",
     "GUARDING BUILDERS",
@@ -263,6 +289,7 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "developer",
     "game-files",
     "downloads",
+    "system",
     "mod-keys",
     "mod-patrol",
     "mod-guard",
@@ -1785,6 +1812,70 @@ constexpr Spec kit_gallery_row() noexcept {
     return changing(spec, &kit_gallery_hint, &kit_gallery_hint_count);
 }
 
+/// File Type Registration's heading: what a switch does, on two lines that
+/// fit a Compact hint.
+constexpr std::string_view file_type_heading_lead = "Open these files with the game";
+constexpr std::string_view file_type_heading_rest = "from your file manager.";
+/// The text row's first line, on every system that shows it.
+constexpr std::string_view file_types_taken_text =
+    "The system takes these file types from the app.";
+/// The text row's Finder lines. iOS has no Finder, so it shows neither.
+constexpr std::string_view file_types_finder_lead = "Finder's Get Info › Open with";
+constexpr std::string_view file_types_finder_rest = "chooses another opener.";
+
+/// The File Type Registration heading. It keeps no setting.
+constexpr Spec file_type_heading_row() noexcept {
+    Spec spec =
+        kit::text<SettingsModel>("file-type-registration", "File Type Registration", nullptr);
+    spec.hint = {file_type_heading_lead, file_type_heading_rest};
+    return spec;
+}
+
+/// The Finder sentence, as two catalog lines joined where a hint line holds it.
+std::string file_types_finder_sentence() {
+    return std::string(shown_text(file_types_finder_lead)) + " " +
+           std::string(shown_text(file_types_finder_rest));
+}
+
+/// Tells whether the Finder sentence fits one hint line at the dialog's class.
+bool file_types_finder_fits(const SettingsModel& model) {
+    return kit::character_count(file_types_finder_sentence()) <= line_characters(model);
+}
+
+/// Returns a line of the File types text row. The system's sentence is
+/// always the first. On a Mac the Finder sentence follows, on one line
+/// where it fits and on its two catalog lines at Compact. iOS has no Finder.
+std::string file_types_note_hint(const SettingsModel& model, std::size_t line) {
+    if (line == 0)
+        return std::string(shown_text(file_types_taken_text));
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    return {};
+#else
+    if (file_types_finder_fits(model))
+        return line == 1 ? file_types_finder_sentence() : std::string{};
+    if (line == 1)
+        return std::string(shown_text(file_types_finder_lead));
+    if (line == 2)
+        return std::string(shown_text(file_types_finder_rest));
+    return {};
+#endif
+}
+
+/// Returns how many lines the File types text row takes.
+std::size_t file_types_note_hint_count(const SettingsModel& model) {
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    return 1;
+#else
+    return file_types_finder_fits(model) ? 2 : 3;
+#endif
+}
+
+/// The File types text row, in place of the switches. It keeps no setting.
+constexpr Spec file_types_note_row() noexcept {
+    const Spec spec = kit::text<SettingsModel>("file-types", "File types", nullptr);
+    return changing(spec, &file_types_note_hint, &file_types_note_hint_count);
+}
+
 /// The Your files row: the player's own folder and its three folders' buttons.
 constexpr Spec user_folder_row() noexcept {
     Spec spec = kit::buttons<SettingsModel>(
@@ -2159,6 +2250,18 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = more_in_library_row()},
     {.setting = S::kit_gallery,
      .spec = kit_gallery_row()},
+    {.setting = S::file_type_registration,
+     .spec = file_type_heading_row()},
+    {.setting = S::file_type_oamod,
+     .spec = engine_switch<&E::file_type_oamod>("file-type-oamod", "Mod packages (.oamod)", {})},
+    {.setting = S::file_type_oamap,
+     .spec = engine_switch<&E::file_type_oamap>("file-type-oamap", "Map packs (.oamap)", {})},
+    {.setting = S::file_type_oalang,
+     .spec = engine_switch<&E::file_type_oalang>("file-type-oalang", "Language packs (.oalang)", {})},
+    {.setting = S::file_type_oareg,
+     .spec = engine_switch<&E::file_type_oareg>("file-type-oareg", "Registry files (.oareg)", {})},
+    {.setting = S::file_types_note,
+     .spec = file_types_note_row()},
 }};
 // clang-format on
 
@@ -2234,6 +2337,12 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "interface-size",
     "more-in-library",
     "kit-gallery",
+    "file-type-registration",
+    "file-type-oamod",
+    "file-type-oamap",
+    "file-type-oalang",
+    "file-type-oareg",
+    "file-types",
 };
 
 /// Tells whether every row stands at its setting's place and is named by
@@ -2305,6 +2414,7 @@ Dialog offering(
     dialog.acceleration = acceleration;
     dialog.steam_input = context.steam_input;
     dialog.steam_deck_panel_hz = context.steam_deck_panel_hz;
+    dialog.file_type_switches = context.file_type_switches;
     return dialog;
 }
 
@@ -2477,6 +2587,9 @@ std::string_view page_heading(Page page) noexcept {
 std::span<const Setting>
 section_settings(Page page, const SectionHooks* section, const RowContext& context) {
     if (section == nullptr || section->settings == nullptr) {
+        if (page == Page::system)
+            return context.file_type_switches ? std::span<const Setting>(kSystemRuntimeRows)
+                                              : std::span<const Setting>(kSystemBundleRows);
         if (page == Page::controller && context.steam_input)
             return std::span<const Setting>(kSteamInputControllerRows);
         if (page == Page::language && context.library_link)

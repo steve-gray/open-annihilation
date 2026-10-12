@@ -45,7 +45,7 @@ struct EnginePageList {
 
 /// Returns the engine's sections a dialog lists, in the list's order: the
 /// five that every dialog lists, then Touch, Controller and Game files where
-/// each is listed, then Downloads, then Developer.
+/// each is listed, then Downloads, then System, then Developer.
 ///
 /// @param touch the dialog lists Touch
 /// @param controller the dialog lists Controller
@@ -68,6 +68,7 @@ constexpr EnginePageList engine_page_list(bool touch, bool controller, bool game
     if (game_files)
         add(Page::game_files);
     add(Page::downloads);
+    add(Page::system);
     add(Page::developer);
     return list;
 }
@@ -94,7 +95,7 @@ constexpr std::array<EnginePageList, 8> kEnginePageLists{
     engine_page_list(false, true, true),
     engine_page_list(true, true, true),
 };
-static_assert(kEnginePageLists.front().count == 7, "seven sections without the optional three");
+static_assert(kEnginePageLists.front().count == 8, "eight sections without the optional three");
 static_assert(
     kEnginePageLists.back().count == most_listed_pages,
     "the longest list holds the most sections a dialog lists"
@@ -103,20 +104,23 @@ static_assert(
 constexpr std::array<Page, 1> kLanguageTextPages{Page::language};
 
 /// Tells whether the sections before Downloads keep their places in the list
-/// with Touch and Controller, and every engine list ends Downloads, Developer.
+/// with Touch and Controller, and every engine list ends Downloads, System,
+/// Developer.
 ///
 /// @return true when those numbers hold
 constexpr bool entries_follow_the_list() noexcept {
     const EnginePageList& list = kEnginePageLists[engine_page_list_index(true, true, false)];
-    if (list.count < 2)
+    if (list.count < 3)
         return false;
-    for (std::size_t index = 0; index + 2 < list.count; ++index)
+    for (std::size_t index = 0; index + 3 < list.count; ++index)
         if (page_control(list.pages[index]) != static_cast<int32_t>(index))
             return false;
-    if (page_control(Page::downloads) != 9 || page_control(Page::developer) != 7)
+    if (page_control(Page::downloads) != 9 || page_control(Page::system) != 10 ||
+        page_control(Page::developer) != 7)
         return false;
     for (const EnginePageList& listed : kEnginePageLists) {
-        if (listed.count < 2 || listed.pages[listed.count - 2] != Page::downloads ||
+        if (listed.count < 3 || listed.pages[listed.count - 3] != Page::downloads ||
+            listed.pages[listed.count - 2] != Page::system ||
             listed.pages[listed.count - 1] != Page::developer)
             return false;
     }
@@ -125,7 +129,7 @@ constexpr bool entries_follow_the_list() noexcept {
 
 static_assert(
     entries_follow_the_list(),
-    "entries before Downloads keep their places, and Downloads then Developer end every list"
+    "entries before Downloads keep their places, and Downloads, System, Developer end every list"
 );
 static_assert(
     page_control(Page::game_files) == page_control(Page::developer) + 1,
@@ -229,7 +233,8 @@ RowContext row_context(const Dialog& dialog) noexcept {
     return RowContext{
         dialog.steam_input,
         dialog.steam_deck_panel_hz,
-        dialog.library_link && dialog.kind == DialogKind::engine
+        dialog.library_link && dialog.kind == DialogKind::engine,
+        dialog.file_type_switches
     };
 }
 
@@ -335,6 +340,7 @@ Rows place_rows(
     shown.steam_input = context.steam_input;
     shown.steam_deck_panel_hz = context.steam_deck_panel_hz;
     shown.library_link = context.library_link;
+    shown.file_type_switches = context.file_type_switches;
     Rows placed = place_section(shown, page, locks, section, &estimated_width);
     scroll_rows(placed, scroll);
     return placed;
@@ -1182,7 +1188,8 @@ DialogAction restore_defaults(Dialog& dialog) {
         restored.game_files_backed_up = before.game_files_backed_up;
     for (const Page page :
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
-        const auto settings = layout::section_settings(page, dialog.section_hooks);
+        const auto settings =
+            layout::section_settings(page, dialog.section_hooks, geometry::row_context(dialog));
         for (const Setting setting : settings) {
             if (layout::section_lock(dialog.locks, setting, dialog.section_hooks) != Lock::none)
                 layout::copy_row(setting, {&restored, &dialog}, layout::reading(before, dialog));

@@ -65,7 +65,11 @@ the OA button, which opens them with no Library under them
 on macOS and **Ctrl+,** elsewhere opens them over the Library. The header's
 top right holds a refresh icon. Pressing it, or F5, asks the registries
 for their lists at once ([updates](#updates)). While they are being asked
-the icon turns, and it cannot be pressed again until they answer. **CLOSE**,
+the icon turns, one full turn every 1.6 seconds, and it cannot be pressed
+again until they answer. When the refresh has read a list, the icon shows
+a check for 0.8 seconds and then the arrow again. A refresh that fails goes
+straight back to the arrow; the offline line says why. Pressing it during
+the check asks again at once. **CLOSE**,
 or Escape, goes back to the main menu.
 The Library shows only on the main menu: it closes when the menu gives way
 to another screen, and in a game the in-game menu's button, which shows the
@@ -83,27 +87,48 @@ filters.
 **Active**, the first tab, shows what you are using now, as tiles:
 
 - **MOD**: a tile for the mod you are playing. Its badge is large, and the
-  tile names the mod, its version and revision ("4.8 (rev 3)"), who made it
-  ("by the Ridge team") and **Playing**. When you are playing no mod, the
+  tile names the mod, its version and revision ("4.8 (rev 3)") and who made
+  it ("by the Ridge team"). **Playing** is a rounded pill at the top right,
+  on the title's line. **UNLOAD MOD** sits at the bottom right. It asks the
+  same **SWITCH MOD** question as **SWITCH OFF** and, on **SWITCH**, goes
+  back to the game as 3.1c plays it
+  ([choosing a mod](#choosing-a-mod)). It is greyed during a game and while
+  the command line chose the run's mod; resting on it then shows "The
+  command line chose this run's mod." When you are playing no mod, the
   tile is **Base Game**, with the 3.1c look ("Total Annihilation 3.1c") and
-  "No mod: the game as it was made".
+  "No mod: the game as it was made", and it has no pill and no button.
 - **LANGUAGE**: a tile for the language the game is showing. It carries the
   pack's badge, or a language mark, the language's name in itself and in
   English, the pack's version and revision, and how much of the game the
   pack covers ("Coverage 92%"). When the game is showing a language it
-  holds itself, the tile says **Built in**.
+  holds itself, **Built in** is a rounded pill at the top right, on the
+  title's line, in a muted ground so it does not look like an installed
+  chip.
 - **MAPS**: one tile for each map pack you have installed, with the pack's
   badge and its name, and its maps under that: each map's name, how many
   players it is for and its size ("Ridgeline · 4 players · 16x16"). When
   you have no map pack, the tile says "No map packs are installed."
 
+The badge, the title and the lines start at the top of each tile, with the
+same small padding above them and below the last line or, on the mod tile,
+below **UNLOAD MOD**. Side by side, the mod and the language share a title
+line and the same height, and so do map packs in one row. Extra room stays
+under the shorter tile's lines.
+
 On a small window the tiles stand in one column. On a larger window the
 mod and the language stand side by side, and on the largest the map packs
-stand in two columns when you have more than one. Nothing on these tiles
-can be chosen or pressed, and the tab has no search and no filters. When
-the tiles are taller than the window they scroll with the mouse wheel, a
+stand in two columns when you have more than one. The tab has no search
+and no filters. The mod and language labels and each map line take no
+press; **UNLOAD MOD** does, and Tab and the arrows reach it. When the
+tiles are taller than the window they scroll with the mouse wheel, a
 finger, Page Up and Page Down, Home and End, and a controller's right
 stick. The other tabs are where packages are got, updated and played.
+
+![The Active tab at Compact: Highland's tile with a Playing pill and UNLOAD MOD, and the language tile top-aligned beside the maps.](images/library/library-active-compact.png)
+
+![The Active tab at Regular: the mod and the language side by side, titles on one line, Playing as a pill and UNLOAD MOD at the mod tile's bottom right.](images/library/library-active-regular.png)
+
+![The Active tab at Large: the same tiles, with the map packs in two columns of equal height.](images/library/library-active-large.png)
 
 ## Tabs and states
 
@@ -293,6 +318,10 @@ no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
   **SWITCH** (Y) reloads the game with no mod; **CANCEL** (Escape)
   leaves everything as it was.
 
+**UNLOAD MOD**, on the Active tab while a mod is played, asks that same
+question and follows that same path back to the base game. It is greyed in
+the same places, and resting on it shows the same note.
+
 Both change the mod only from the main menu: the Library shows only there,
 and a game keeps the mod it started with. While `--mod-dir` or
 `--base-game` chose the run's mod, both are greyed and the details say "The
@@ -308,7 +337,7 @@ where a mod's folder goes to be listed
 | Tab, Shift+Tab | the next and previous control |
 | arrow keys | move by where controls are; on the list, Up and Down choose the row |
 | Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
-| Enter, Space | on a row: open its details page in Compact, or go to its first button |
+| Enter, Space | on a row: open its details page in Compact, or go to its first button; on UNLOAD MOD: ask SWITCH MOD |
 | Cmd+F (Ctrl+F elsewhere), or `/` | the search |
 | F5 | the header's refresh icon, when a registry can be asked |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |
@@ -436,7 +465,10 @@ Each row shows:
 - **REFRESH**, beside the switch. It asks that registry for its catalogue
   and its download counts. It is greyed while the registry is off or
   already being asked, and while it is being asked the refresh icon beside
-  it turns;
+  it turns, one full turn every 1.6 seconds. When that ask reads a
+  catalogue the icon shows a check for 0.8 seconds, then the arrow; an ask
+  that finds nothing goes straight back to the arrow. Pressing **REFRESH**
+  during the check asks again at once;
 - an Off/On switch.
 
 A registry you added also has **REMOVE** and **ADD MIRROR…** under the
