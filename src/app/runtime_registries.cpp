@@ -69,7 +69,7 @@ struct RefusalSentence {
 
 /// The sentence for each refusal the window explains on its own. Every
 /// other refusal says what the content service found (kOtherSentence).
-constexpr std::array<RefusalSentence, 11> kRefusalSentences{{
+constexpr std::array<RefusalSentence, 12> kRefusalSentences{{
     {registry::Refusal::built_in_id, "{name} is built in, so it can't be added again."},
     {registry::Refusal::built_in_name, "{name} is built in, so it can't be added again."},
     {registry::Refusal::built_in_key,
@@ -87,6 +87,7 @@ constexpr std::array<RefusalSentence, 11> kRefusalSentences{{
     {registry::Refusal::built_in_mirror, "Mirrors of {name} come only from its own catalogue."},
     {registry::Refusal::mirror_listed, "{name} already lists that mirror."},
     {registry::Refusal::bad_mirror, "That isn't a web address OA can read."},
+    {registry::Refusal::shipped_logo, "{name} can't use the Open Annihilation logo."},
 }};
 /// An https address this system read as http, when that host served no http.
 constexpr std::string_view kNeedsHttps = "This registry needs HTTPS, which this system cannot use";
@@ -432,6 +433,24 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
     LayerAnswer tick() override {
         if (runtime_.screen_ == Screen::match)
             return LayerAnswer::close;
+        if (model_.phase == settings::AddRegistry::Phase::ready && !model_.shown.icon_url.empty() &&
+            model_.shown.icon_rgba.empty()) {
+            // The same picture cache as a badge. Nothing is fetched for the
+            // logo the game ships: that address is never stored here.
+            if (std::optional<oa::ui::library::Badge> picture =
+                    runtime_.library_host().cached_picture(
+                        model_.shown.icon_registry, model_.shown.icon_url
+                    )) {
+                model_.shown.icon_width = picture->width;
+                model_.shown.icon_height = picture->height;
+                model_.shown.icon_rgba = std::move(picture->rgba);
+                ++revision_;
+                return LayerAnswer::redraw;
+            }
+            runtime_.library_host().ask_cached_picture(
+                model_.shown.icon_registry, model_.shown.icon_url
+            );
+        }
         if (model_.phase != settings::AddRegistry::Phase::checking || request_ == 0)
             return LayerAnswer::none;
         const std::optional<content::RegistryCheck> answered =
@@ -579,8 +598,23 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
             shown.fingerprints = check.fingerprints;
             shown.downloads = downloads_text(*check.descriptor);
             shown.is_signed = check.descriptor->is_signed();
+            // A catalogue icon, resolved against the host that served the
+            // catalogue. The logo the game ships is never copied here: an
+            // added descriptor that names it is refused before this preview.
+            if (!check.descriptor->shipped_logo && check.catalogue &&
+                !check.catalogue->icon.empty() && check.served_from) {
+                if (const std::optional<url::Url> resolved =
+                        url::resolve_reference(*check.served_from, check.catalogue->icon)) {
+                    shown.icon_url = url::url_text(*resolved);
+                    shown.icon_registry = check.descriptor->id;
+                }
+            }
         }
         model_.shown = std::move(shown);
+        if (!model_.shown.icon_url.empty())
+            runtime_.library_host().ask_cached_picture(
+                model_.shown.icon_registry, model_.shown.icon_url
+            );
         model_.phase = settings::AddRegistry::Phase::ready;
         settings::add_registry_settle(model_);
         ++revision_;

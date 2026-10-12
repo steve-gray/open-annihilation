@@ -652,6 +652,16 @@ oa::ui::frontend_renderer::RgbaPicture picture_of(const Badge* badge) {
     return picture;
 }
 
+/// Returns a registry's icon, when the app has one.
+///
+/// @param registry the registry
+/// @return the picture, which points into the icon; empty without one
+oa::ui::frontend_renderer::RgbaPicture registry_picture(const Registry& registry) {
+    if (!registry.icon)
+        return {};
+    return picture_of(&*registry.icon);
+}
+
 /// Returns an entry's badge picture: its own, else its listing's, else its
 /// installed copy's.
 ///
@@ -2179,8 +2189,34 @@ int32_t add_facts(
         const bool whole = rules_fact(library, fact) || from_fact(library, fact);
         const bool good = fact.mark == Mark::good;
         const int32_t room = good ? value_width - met_width - space_width : value_width;
+        int32_t text_left = value_left;
+        int32_t text_room = room;
+        // The From line draws the registry's icon beside the name once the
+        // picture is here. While it is missing, the line stays text.
+        if (from_fact(library, fact)) {
+            const Registry* from_registry = nullptr;
+            for (const Registry& candidate : library.inputs.registries) {
+                if (candidate.id == entry.id.registry) {
+                    from_registry = &candidate;
+                    break;
+                }
+            }
+            const oa::ui::frontend_renderer::RgbaPicture from_picture =
+                from_registry != nullptr ? registry_picture(*from_registry)
+                                         : oa::ui::frontend_renderer::RgbaPicture{};
+            if (oa::ui::frontend_renderer::picture_drawable(from_picture)) {
+                const int32_t mark_side = metrics.small_line;
+                add_item(
+                    building.list, kit::Role::picture, {value_left, top, mark_side, mark_side}, clip
+                )
+                    .look = kit::PictureLook{from_picture};
+                const int32_t shift = mark_side + metrics.list_row_gap;
+                text_left += shift;
+                text_room = text_room > shift ? text_room - shift : 0;
+            }
+        }
         const std::vector<std::string> lines =
-            wrapped(building, kit::FontRole::small, value, room, whole ? 0 : most_lines);
+            wrapped(building, kit::FontRole::small, value, text_room, whole ? 0 : most_lines);
         add_text(
             building,
             kit::FontRole::small,
@@ -2197,7 +2233,7 @@ int32_t add_facts(
                 building,
                 kit::FontRole::small,
                 line,
-                {value_left, line_top, room, metrics.small_line},
+                {text_left, line_top, text_room, metrics.small_line},
                 kit::Align::left,
                 ink,
                 clip
@@ -2212,7 +2248,7 @@ int32_t add_facts(
                 building,
                 kit::FontRole::small,
                 std::string(met),
-                {value_left + last_width + space_width, met_top, met_width, metrics.small_line},
+                {text_left + last_width + space_width, met_top, met_width, metrics.small_line},
                 kit::Align::left,
                 kit::colour::accent,
                 clip
@@ -2220,7 +2256,8 @@ int32_t add_facts(
         }
         const int32_t lines_height =
             std::max(static_cast<int32_t>(lines.size()), int32_t{1}) * metrics.small_line;
-        const kit::Rect value_box{value_left, top, value_width, lines_height};
+        const int32_t box_width = std::max(value_left + value_width - text_left, int32_t{0});
+        const kit::Rect value_box{text_left, top, box_width, lines_height};
         if (rules_fact(library, fact))
             add_label(
                 building.detail,
@@ -3426,17 +3463,25 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
 
         const std::size_t card_at = building.list.items.size();
         const kit::Rect avatar{inner_left, band_top, side, side};
-        add_item(building.list, kit::Role::fill, avatar, view).colour =
-            registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
-        add_text(
-            building,
-            kit::FontRole::small,
-            cut(building, kit::FontRole::small, registry_initials(registry.name), side),
-            avatar,
-            kit::Align::centre,
-            kit::colour::on_accent,
-            view
-        );
+        // The icon takes the lettermark's square. The lettermark stays while
+        // the picture is missing or still on its way.
+        const oa::ui::frontend_renderer::RgbaPicture avatar_picture = registry_picture(registry);
+        if (oa::ui::frontend_renderer::picture_drawable(avatar_picture)) {
+            add_item(building.list, kit::Role::picture, avatar, view).look =
+                kit::PictureLook{avatar_picture};
+        } else {
+            add_item(building.list, kit::Role::fill, avatar, view).colour =
+                registry.built_in ? kit::colour::accent : kit::colour::switch_idle;
+            add_text(
+                building,
+                kit::FontRole::small,
+                cut(building, kit::FontRole::small, registry_initials(registry.name), side),
+                avatar,
+                kit::Align::centre,
+                kit::colour::on_accent,
+                view
+            );
+        }
         int32_t heading_top = band_top;
         for (const std::string& heading_line : heading_lines) {
             add_text(
@@ -4891,6 +4936,32 @@ std::vector<std::size_t> picture_places(const Library& library, const kit::Displ
     for (std::size_t place = begin; place < end; ++place)
         add(place);
     return places;
+}
+
+void request_registry_icons(const Library& library, const RegistryPictureSource& source) {
+    if (source.request == nullptr)
+        return;
+    std::vector<std::string> offered;
+    const auto consider = [&](const Registry& registry) {
+        if (registry.shipped_logo || registry.icon_url.empty() || registry.icon)
+            return;
+        if (std::find(offered.begin(), offered.end(), registry.id) != offered.end())
+            return;
+        if (source.known != nullptr && source.known(source.context, registry))
+            return;
+        offered.push_back(registry.id);
+        source.request(source.context, registry);
+    };
+    if (library.tab == Tab::registries) {
+        for (const Registry& registry : library.inputs.registries)
+            consider(registry);
+    }
+    if (library.selected) {
+        for (const Registry& registry : library.inputs.registries) {
+            if (registry.id == library.selected->registry)
+                consider(registry);
+        }
+    }
 }
 
 void request_visible_pictures(

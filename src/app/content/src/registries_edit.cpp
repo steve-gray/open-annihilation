@@ -560,6 +560,7 @@ void finish_registry(
     stored.result.refusal = registry::Refusal::none;
     stored.result.catalogue = fetched.catalogue;
     set_counts(stored.result, *fetched.catalogue);
+    stored.result.served_from = fetched.served_from;
     stored.catalogue_bytes = fetched.bytes;
     stored.signature = fetched.signature;
     stored.digest = fetched.digest;
@@ -743,6 +744,7 @@ void complete_mirror_check(
     stored.result.refusal = registry::Refusal::none;
     stored.result.catalogue = fetched.catalogue;
     set_counts(stored.result, *fetched.catalogue);
+    stored.result.served_from = fetched.served_from;
     stored.catalogue_bytes = fetched.bytes;
     stored.signature = fetched.signature;
     stored.digest = fetched.digest;

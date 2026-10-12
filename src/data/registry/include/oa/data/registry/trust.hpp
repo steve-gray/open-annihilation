@@ -68,6 +68,7 @@ enum class Refusal : uint8_t {
     bad_mirror,                    ///< the mirror is not an http or https address with no query
     mirror_listed,                 ///< the registry already lists this mirror
     no_keys,                       ///< the trusted keys would be empty
+    shipped_logo,                  ///< an added registry names the logo the game ships
 };
 
 /// The sentence a log or the downloads screen shows for a refusal.
@@ -92,9 +93,10 @@ struct AddContext {
 /// homepage that is or lies under a built-in registry's host, an id already
 /// added, an unsigned registry while Developer mode is off, an unsigned
 /// registry whose catalogue, mirror or API host is not exactly 127.0.0.1,
-/// and a player who already has max_added_registries. A homepage is not
-/// part of the loopback check. Rules that need the player's list apply
-/// when player is set.
+/// a player who already has max_added_registries, and a descriptor that
+/// names the logo the game ships (`icon: oa`). A homepage is not part of
+/// the loopback check. Rules that need the player's list apply when player
+/// is set.
 ///
 /// @param descriptor the descriptor to add
 /// @param context the built-in registries, the player's list and Developer mode

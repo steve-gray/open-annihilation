@@ -302,7 +302,8 @@ name) back to the list.
   - **From**: the registry, "Your own copy" for a package you installed from
     a file that no registry lists, or, in amber, "*registry* · Not reviewed
     by the OA team" for one from a registry you added
-    ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)).
+    ([not reviewed](downloads.md#not-reviewed-by-the-oa-team)). When the
+    registry's icon is already held, it is drawn beside that name.
 
   A fact with nothing to say is left out. These hold alike for mods, map
   packs and language packs.
@@ -504,8 +505,11 @@ or **REMOVE** is pressed.
 
 Each card shows:
 
-- an avatar, the short name's initials in a square: the first letters of
-  its first three words, or of a name of one word its first two letters;
+- an avatar, the registry's own icon when its catalogue names one, in the
+  square the initials otherwise fill. The initials stay while that picture
+  is missing or still on its way: the first letters of its first three
+  words, or of a name of one word its first two letters. Core Prime shows
+  the logo the game ships, from the game's own files, with nothing fetched;
 - the heading, which is the registry's title when it has one ("Core Prime
   - Official Open Annihilation Packages") and its short name when it does
   not;

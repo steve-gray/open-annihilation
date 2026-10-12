@@ -111,7 +111,8 @@ built-in folder it is given. The file's name inside the player's folder is
   through the platform's file replace, so a failure leaves the previous
   file in place.
 - Nothing a descriptor holds can name a built-in registry's id, name, keys
-  or hosts. A mirror cannot be added to a built-in registry.
+  or hosts. A mirror cannot be added to a built-in registry. An added
+  descriptor cannot name the logo the game ships (`icon: oa`).
 - An unsigned registry is only for Developer mode, and only when every
   catalogue, mirror and API host is exactly `127.0.0.1`. A homepage is not
   part of that check.

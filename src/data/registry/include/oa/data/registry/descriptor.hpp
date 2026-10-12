@@ -74,6 +74,10 @@ struct Descriptor {
     DownloadMode mode = DownloadMode::direct;     ///< how packages are downloaded
     std::optional<formats::url::Url> api{};       ///< the download API; tokens only
     InstallIdUse install_id = InstallIdUse::none; ///< whether downloads send an install id
+    /// True when the descriptor names `icon: oa`. A built-in registry then
+    /// shows the logo the game ships, and a catalogue icon does not replace
+    /// it. An added descriptor that names it is refused.
+    bool shipped_logo = false;
 
     /// Reports whether the registry names a signing key.
     ///

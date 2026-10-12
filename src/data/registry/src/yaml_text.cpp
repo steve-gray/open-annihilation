@@ -71,7 +71,7 @@ bool same_descriptor(const Descriptor& left, const Descriptor& right) {
         left.catalogue != right.catalogue || left.mode != right.mode ||
         left.install_id != right.install_id || left.homepage != right.homepage ||
         left.api != right.api || left.mirrors != right.mirrors ||
-        left.keys.size() != right.keys.size())
+        left.shipped_logo != right.shipped_logo || left.keys.size() != right.keys.size())
         return false;
     for (std::size_t index = 0; index < left.keys.size(); ++index) {
         if (left.keys[index].id != right.keys[index].id ||

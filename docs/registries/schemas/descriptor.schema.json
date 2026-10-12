@@ -28,6 +28,10 @@
       "maxLength": 64,
       "description": "Who publishes the registry, 1 to 64 bytes with no control character. A built-in registry shows a maker's mark from this name."
     },
+    "icon": {
+      "enum": ["oa"],
+      "description": "Only a built-in descriptor may name this. The card shows the logo the game ships. An added .oareg that names it is refused."
+    },
     "homepage": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "catalogue": { "type": "string", "minLength": 1, "maxLength": 2048 },
     "mirrors": {

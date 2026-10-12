@@ -110,7 +110,9 @@ no signing key typed, it checks the signature with the descriptor's keys.
 With one typed, it checks the signature with that key alone. The **Add
 registry** window shows what you are about to trust:
 
-- the registry's name;
+- the registry's name, with its icon beside the name once that picture
+  has arrived. The logo the game ships is never shown for a registry a
+  player adds;
 - **Address**: the host its catalogue comes from;
 - **Packages**: how many it lists and of which kinds, as "31 · maps";
 - **Signing key**, or **Signing keys**: the fingerprint of each key that signs its
@@ -132,7 +134,9 @@ already trust, and OA takes them without asking.
 
 The window refuses, and says why, a registry that would pass for a built-in
 one ("*name* is built in, so it can't be added again.", or "This registry
-uses Core Prime's keys or address, so OA refuses it."), one already added
+uses Core Prime's keys or address, so OA refuses it."), one that names the
+logo the game ships ("*name* can't use the Open Annihilation logo."), one
+already added
 ("*name* is already added. To give it another address, use ADD MIRROR… on
 its row."), an unsigned one outside a builder's own machine
 ([below](#a-registry-you-are-building)), more than 64 added registries, and

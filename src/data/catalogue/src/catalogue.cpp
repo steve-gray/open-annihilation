@@ -813,6 +813,14 @@ bool read_catalogue(std::span<const uint8_t> bytes, Catalogue& out, std::string*
         if (!read_mirrors(*mirrors, loaded.mirrors, mirror_error))
             return refuse(error, std::move(mirror_error));
     }
+    if (const json::Json* icon = root->find("icon")) {
+        const std::string* text = icon->string();
+        const bool png =
+            text && text->size() >= 4 && text->compare(text->size() - 4, 4, ".png") == 0;
+        if (!text || !valid_reference(*text) || !png)
+            return refuse(error, "icon is not a picture reference");
+        loaded.icon = *text;
+    }
     const json::Json* packages = root->find("packages");
     if (!packages || packages->type() != json::JsonType::array)
         return refuse(error, "packages is missing");

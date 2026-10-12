@@ -306,9 +306,12 @@ app removes the folder (`Runtime::library_uninstall`,
     Compact's footer holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
     search and no filters, one card for each registry, one under another
-    with `card_gap`. A card has its avatar (the initials,
-    `registry_initials`, from the short name, on the accent for a built-in
-    registry and on `colour::switch_idle` for one the player added), its
+    with `card_gap`. A card has its avatar in the `list_row_badge` square:
+    the registry's icon when `Registry::icon` has pixels, otherwise the
+    initials (`registry_initials`, from the short name, on the accent for a
+    built-in registry and on `colour::switch_idle` for one the player
+    added). The initials stay while the picture is missing. A registry with
+    `shipped_logo` draws the logo the game ships and is never fetched. Its
     heading (the title, or the short name when the title is empty), its
     address, when it was last read (`registry_refresh_line`: "refreshed 5
     min ago", "never refreshed", or "couldn't reach · 2 h ago"), its
@@ -669,9 +672,10 @@ link, a one-map pack shows its minimap on the row and large in the
 details, and a several-map pack with no badge shows the first map on the
 row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
-name, on that copy only. That author is Open Annihilation, so the card
-shows the app icon under its key, the plates filtered down, or the drawn
-plate when no icon has been given. The Languages picture, on that drawing
+name, on that copy only, and gives it the app icon as its avatar. That
+author is Open Annihilation, so the card shows the app icon under its key,
+the plates filtered down, or the drawn plate when no icon has been given.
+The Languages picture, on that drawing
 only, sets the fixture language pack Portugues (Brasil) to author
 "OA team" and adds an installed copy, so the row shows that mark
 under its check.

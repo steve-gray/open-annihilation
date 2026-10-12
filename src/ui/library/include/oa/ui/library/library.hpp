@@ -40,6 +40,14 @@ struct SigningKey {
     std::string public_key{};
 };
 
+/// A package's badge picture, 8-bit RGBA, rows top to bottom. A registry's
+/// icon uses the same picture.
+struct Badge {
+    std::vector<uint8_t> rgba{}; ///< width * height * 4 bytes
+    uint32_t width{};            ///< in pixels, at most 64
+    uint32_t height{};           ///< in pixels, at most 64
+};
+
 /// A registry the Library lists packages from.
 ///
 /// `built_in` is true when the registry ships with Open Annihilation (its
@@ -71,9 +79,18 @@ struct Registry {
     /// The keys its signatures are checked against, in the descriptor's order.
     std::vector<SigningKey> keys{};
     /// The descriptor's author. A built-in registry shows a maker's mark
-    /// when this is Open Annihilation or Cavedog Entertainment. Last so
-    /// existing positional aggregates keep compiling with it empty.
+    /// when this is Open Annihilation or Cavedog Entertainment.
     std::string author{};
+    /// The registry's icon, when the app has it. The lettermark shows while
+    /// this is empty. A display list's picture points into these pixels,
+    /// which stay until the next refresh, as a badge's do.
+    std::optional<Badge> icon{};
+    /// The catalogue picture's address. Empty when the catalogue names none,
+    /// and for the logo the game ships, which is never fetched.
+    std::string icon_url{};
+    /// True when the card shows the logo the game ships. A catalogue icon
+    /// does not replace it, and a picture request skips this registry.
+    bool shipped_logo{};
 };
 
 /// A map's minimap, 8-bit RGBA, rows top to bottom. It keeps its own shape:
@@ -97,13 +114,6 @@ struct MapLine {
     /// The minimap, when the app has decoded it. Points stay valid until the
     /// next refresh, as a badge's do.
     std::optional<MapPicture> preview{};
-};
-
-/// A package's badge picture, 8-bit RGBA, rows top to bottom.
-struct Badge {
-    std::vector<uint8_t> rgba{}; ///< width * height * 4 bytes
-    uint32_t width{};            ///< in pixels, at most 64
-    uint32_t height{};           ///< in pixels, at most 64
 };
 
 /// One package a registry's catalogue lists.
