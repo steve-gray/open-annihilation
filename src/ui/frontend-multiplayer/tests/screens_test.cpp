@@ -1508,6 +1508,7 @@ struct PackProbe {
     bool mount = false;
     bool refuse = false;
     const char* reason = "too many features";
+    const char* index_title = nullptr;
     int prepares = 0;
     int releases = 0;
 
@@ -1515,10 +1516,11 @@ struct PackProbe {
 
     static int32_t count(void*) { return 1; }
 
-    static bool at(void*, int32_t index, mp::LobbyPackMap* out) {
+    static bool at(void* context, int32_t index, mp::LobbyPackMap* out) {
         if (index != 0 || out == nullptr)
             return false;
-        *out = {kName, "A ring of cinders", "16x16", 16};
+        const auto* self = static_cast<const PackProbe*>(context);
+        *out = {kName, "A ring of cinders", "16x16", 16, self->index_title};
         return true;
     }
 
@@ -1971,6 +1973,34 @@ void check_pack_maps(Driver& d) {
             chosen.map_hash != 0,
         "LOAD writes the pack map's whole name, terminated, and its hash"
     );
+
+    // The index's name and the map file's title are different words. The
+    // battle room shows the index's.
+    probe.index_title = "Cinder Atoll";
+    mp::multiplayer_bind_map_source(probe.source());
+    mp::multiplayer_reset();
+    if (!host_battleroom(d, "Atoll", "Host"))
+        return;
+    expect(d.click("MAP"), "MAP opens on the pack map again");
+    modal = mp::multiplayer_modal();
+    names = modal != nullptr ? mp::panel_control(*modal, "MAPNAMES") : nullptr;
+    if (names == nullptr)
+        return;
+    pack_row = -1;
+    for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row)
+        if (names->items[static_cast<std::size_t>(row)] == PackProbe::kName)
+            pack_row = row;
+    if (pack_row < 0)
+        return;
+    const auto [ax, ay] = dialog_offset(map_art, modal->controls[0]);
+    click_map_row(d, *names, pack_row, ax, ay);
+    expect(d.click("LOAD"), "LOAD chooses the pack map by its index name");
+    d.frame();
+    expect(
+        mp::panel_text(mp::multiplayer_panel(), "MAPNAME") == "Cinder Atoll",
+        "the battle room names the pack map by the name its index gives, not the map file's title"
+    );
+    probe.index_title = nullptr;
 
     probe.mount = false;
     probe.refuse = true;
