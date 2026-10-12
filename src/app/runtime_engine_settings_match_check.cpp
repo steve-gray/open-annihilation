@@ -1172,6 +1172,31 @@ void Runtime::check_engine_settings_in_match() {
                 started.shown.height == 648,
             "Auto at the start of a 2103x1181 game is not Compact at 200%, dialog 960x648"
         );
+        // The modern fonts are Off with the check's named preferences file, so
+        // the lines above are whole steps. On, 1181 lines is 150% and the room
+        // beside the column is Regular. Off again, the whole-step scale returns.
+        engine_settings_state().current.modern_fonts = true;
+        require(oa_layer().smooth_fonts() != nullptr, "the modern fonts did not open");
+        const auto fractional = read_dialog();
+        require(
+            fractional.size_class == kit::SizeClass::regular && fractional.scale_percent == 150 &&
+                fractional.shown.width == 1080 && fractional.shown.height == 729,
+            "Auto with the modern fonts On at the start of a 2103x1181 game is not Regular at "
+            "150%, dialog 1080x729"
+        );
+        std::cout << "engine settings check: Interface size Auto with the modern fonts On is "
+                  << size_class_name(fractional.size_class) << " at " << fractional.scale_percent
+                  << "%, dialog " << fractional.shown.width << 'x' << fractional.shown.height
+                  << '\n';
+        engine_settings_state().current.modern_fonts = false;
+        const auto whole_again = read_dialog();
+        require(
+            whole_again.size_class == started.size_class &&
+                whole_again.scale_percent == started.scale_percent &&
+                whole_again.shown.width == started.shown.width &&
+                whole_again.shown.height == started.shown.height,
+            "Auto with the modern fonts Off is not Compact at 200% again"
+        );
         // A different size, reported and not yet handled: the scale after
         // following the window equals the scale once the resize is handled.
         constexpr int kAwayWidth = 1280;

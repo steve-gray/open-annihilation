@@ -47,7 +47,8 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
 - `layout.hpp`: points, the Auto scale and the three size classes,
   `layer_viewport` (the scale an Interface size gives a canvas, held to
   what fits Compact's dialog: a whole step, or 150%,
-  `fractional_scale_percent`, where Compact fits at one and a half), `metrics_of` (a class's metrics, which a screen takes its window's sizes
+  `fractional_scale_percent`, where Compact fits at one and a half; Auto
+  passes 0, or `auto_with_fraction_percent` while 150% is offered), `metrics_of` (a class's metrics, which a screen takes its window's sizes
   from), `to_canvas` (points as canvas pixels, each edge rounded to the
   nearest pixel on its own), rows, columns, grids, splits and scroll
   areas, and the display list, whose `Role`s are listed in `all_roles`, in
