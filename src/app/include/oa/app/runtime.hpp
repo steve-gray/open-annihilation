@@ -4054,6 +4054,9 @@ class Runtime final : public menu::Host,
     /// @return the index
     [[nodiscard]] MapPacks& map_packs() const;
 
+    /// The name an installed pack gives a map, for a campaign load.
+    friend const char* pack_index_title(void* context, const char* map_name);
+
     /// The pack map whose files the store shows, the game's names, each
     /// pack map's fit and the reasons maps were refused
     /// (runtime_pack_maps.cpp).

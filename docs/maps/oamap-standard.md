@@ -139,7 +139,10 @@ A map has three names.
   catalogue, so two packs do not share one.
 - The **name** the battle room and a saved game carry is the stem, `@`, then
   the id: `isle_of_ashes@archipelago`. The pack's own files keep the plain
-  stem. Players mostly see the title, "Isle of Ashes".
+  stem. Players see the title the index gives, this map's `name`. The title
+  written in the map file is shown only when the index has no entry for the
+  stem, and another language's own key in that file still comes first. A
+  player who does not have the map yet sees the joined name.
 
 An id and a stem never contain `@`, so the name always splits back at its
 last `@`. `a@b@archipelago` does not split: `a@b` is not a stem.

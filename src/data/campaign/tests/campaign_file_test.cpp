@@ -645,9 +645,24 @@ void camps_count_tests() {
 }
 
 // A pack map is named stem@id. Its OTA is the file at that name, the path the
-// mounted layer shows, and the name players see is the OTA's missionname. A
-// map of the base game keeps its file name even when the OTA's missionname
-// differs. A stem that is also a base map is not the pack map's file.
+// mounted layer shows. With no index entry, the name players see is the OTA's
+// missionname. The index's name wins over that, and another language's own
+// key wins over both. A map of the base game keeps its file name even when
+// the OTA's missionname differs. A stem that is also a base map is not the
+// pack map's file.
+struct IndexName {
+    const char* map{};
+    const char* title{};
+};
+
+const char* index_name(void* context, const char* map_name) {
+    const auto* named = static_cast<const IndexName*>(context);
+    if (named == nullptr || map_name == nullptr || named->map == nullptr ||
+        std::strcmp(map_name, named->map) != 0)
+        return nullptr;
+    return named->title;
+}
+
 void pack_map_title_tests() {
     using namespace oa::data::campaign;
     const char* pack_ota = R"([GlobalHeader]
@@ -766,6 +781,43 @@ missionname=Not This;
         campaign_select_mission(file, &env, "bare@oa-test-isles") &&
             std::strcmp(campaign_localized_name(file), "bare@oa-test-isles") == 0,
         "a pack map whose OTA gives no title keeps the name the battle room carries"
+    );
+
+    IndexName indexed{"isle_one@oa-test-isles", "Comet Catcher"};
+    env.pack_index_name = index_name;
+    env.pack_index_context = &indexed;
+    expect(
+        campaign_select_mission(file, &env, "isle_one@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "Comet Catcher") == 0 &&
+            std::strcmp(campaign_mission_name(file), "isle_one@oa-test-isles") == 0,
+        "an installed pack map shows the name its index gives, not the OTA's missionname"
+    );
+    translated.pack_index_name = index_name;
+    translated.pack_index_context = &indexed;
+    expect(
+        campaign_select_mission(file, &translated, "isle_one@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "Insel Eins") == 0,
+        "another language's own title still wins over the index"
+    );
+    IndexName bare{"bare@oa-test-isles", "Bare Title"};
+    env.pack_index_context = &bare;
+    expect(
+        campaign_select_mission(file, &env, "bare@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "Bare Title") == 0,
+        "the index's name is shown when the OTA gives none"
+    );
+    IndexName missing{"missing@oa-test-isles", "Should Not Show"};
+    env.pack_index_context = &missing;
+    expect(
+        !campaign_select_mission(file, &env, "missing@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "missing@oa-test-isles") == 0,
+        "a map that is not there keeps its name even when an index would name it"
+    );
+    env.pack_index_name = nullptr;
+    expect(campaign_select_mission(file, &env, "TwoWays"), "a base map loads with an index bound");
+    expect(
+        std::strcmp(campaign_localized_name(file), "TwoWays") == 0,
+        "a base map is unchanged by an index"
     );
 
     campaign_file_free(file);
