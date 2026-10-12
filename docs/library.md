@@ -95,8 +95,12 @@ filters.
   ([choosing a mod](#choosing-a-mod)). It is greyed during a game and while
   the command line chose the run's mod; resting on it then shows "The
   command line chose this run's mod." When you are playing no mod, the
-  tile is **Base Game**, with the 3.1c look ("Total Annihilation 3.1c") and
-  "No mod: the game as it was made", and it has no pill and no button.
+  tile is **Base Game**. Its badge is Total Annihilation's own icon, taken
+  from the program in the game folder that describes itself as Total
+  Annihilation, and drawn centred in the square. When that program is
+  missing or its icon cannot be read, the letters "3.1c" stay. The tile reads "Total
+  Annihilation 3.1c" and "No mod: the game as it was made", and it has no
+  pill and no button.
 - **LANGUAGE**: a tile for the language the game is showing. It carries the
   pack's badge, or a language mark, the language's name in itself and in
   English, the pack's version and revision, and how much of the game the
@@ -135,10 +139,10 @@ stick. The other tabs are where packages are got, updated and played.
 The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
 and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout). Each
 tab after Active shows how many it lists under All, before a search or a
-tag: "Mods 11", "Maps 2", "Languages 2", "Updates 2", "Registries 2", and
-the short names keep the count ("Upd 2"). Updates counts the updates you
-can install, as the OA button's dot does, and its digits stay amber while
-the count is above 0.
+tag, in brackets after its title and in that title's own font and colour:
+"Mods (11)", "Maps (2)", "Languages (2)", "Updates (2)", "Registries (2)".
+The short names keep the brackets ("Upd (2)"). Active has no count.
+Updates counts the updates you can install, as the OA button's dot does.
 Registries counts the registries listed. Registries is last, and it is
 where registries are added, checked and turned off
 ([the Registries tab](#the-registries-tab)).
@@ -282,7 +286,9 @@ count, on its row; Compact shows them under the status line.
 
 The Mods list starts with **Base Game (Disable Mods)**, above every mod,
 under All and Installed, and whenever a search matches its name. Its
-details say "Total Annihilation 3.1c as it was made, with no mod". It is
+badge is the same icon as the Active tab's base-game tile, or the letters
+"3.1c" when that icon cannot be read. Its details say "Total Annihilation
+3.1c as it was made, with no mod". It is
 not a mod: All, New, Installed and Updates leave it out of their counts,
 New never lists it, and Active, Updates and Registries do not list it. It
 has no update, and its details never offer UPDATE, ROLL BACK, UNINSTALL or

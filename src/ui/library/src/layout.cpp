@@ -251,6 +251,7 @@ struct Building {
     const kit::Fonts* fonts{};     ///< the fonts texts are measured in
     const kit::Metrics* metrics{}; ///< the class's metrics
     kit::SizeClass size_class{};   ///< the class
+    int32_t scale_percent{100};    ///< the frame's scale, in percent; the base badge is sized to it
     kit::DisplayList list{}; ///< the items, in drawing order; its controls are moved to the groups
     std::vector<kit::Control> menu{};    ///< an open drop-down's items, tried first
     std::vector<kit::Control> top{};     ///< the tabs, the search and the filters
@@ -788,17 +789,6 @@ void add_header(
         std::move(look);
 }
 
-/// Returns a count as a tab's number, never past what a 32-bit count holds.
-///
-/// @param count the count
-/// @return the number the tab shows
-int32_t counted_as_int(std::size_t count) noexcept {
-    constexpr std::size_t most = 1000000000;
-    if (count > most)
-        return static_cast<int32_t>(most);
-    return static_cast<int32_t>(count);
-}
-
 /// Returns the columns the header keeps clear for the refresh icon, and for
 /// the offline mark when the last refresh could not reach a registry.
 ///
@@ -906,9 +896,28 @@ void add_library_header(
     add_refresh_button(building, window);
 }
 
-/// Appends the strip of tabs. Each tab after Active shows its All count,
-/// before the search and the tag, through one pattern. Updates' digits are
-/// amber while that count is above 0.
+/// Returns a tab's title, with its count in brackets after every tab but Active.
+///
+/// @param library the model
+/// @param tab the tab
+/// @param short_name the short title
+/// @return the title, such as "Mods (13)" or "Active"
+std::string tab_caption(const Library& library, Tab tab, bool short_name) {
+    const std::string title(tab_text(tab, short_name, library.text));
+    if (tab == Tab::active)
+        return title;
+    return filled(
+        library.text,
+        words::tab_with_count,
+        {{"tab", title}, {"count", std::to_string(tab_count(library, tab))}}
+    );
+}
+
+/// Appends the strip of tabs. Each tab after Active shows its count in
+/// brackets after its title, in that title's font and colour. Active has
+/// no count. A strip too narrow for the full titles takes the short names,
+/// with the counts the same way. The counts the kit would draw beside a
+/// caption stay unset, so the brackets are the only digits.
 ///
 /// @param[in,out] building the layout
 /// @param strip the strip
@@ -922,10 +931,8 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
         kit::TabsLook full;
         full.count_style = kit::TabCountStyle::words;
         for (const Tab tab : tab_order) {
-            full.captions.emplace_back(tab_text(tab, false, library.text));
-            full.counts.push_back(
-                tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab))
-            );
+            full.captions.push_back(tab_caption(library, tab, false));
+            full.counts.push_back(-1);
         }
         const std::vector<kit::Rect> rects = kit::tab_rects(*building.fonts, strip, full);
         compact = !rects.empty() && rects.back().x + rects.back().width > strip.x + strip.width;
@@ -936,21 +943,14 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
     std::array<std::string, tab_order.size()> names{};
     for (std::size_t index = 0; index < tab_order.size(); ++index) {
         const Tab tab = tab_order[index];
-        const std::string caption(tab_text(tab, compact, library.text));
+        const std::string caption = tab_caption(library, tab, compact);
         look.captions.push_back(caption);
-        const int32_t count =
-            tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab));
-        look.counts.push_back(count);
-        if (count < 0) {
+        look.counts.push_back(-1);
+        look.count_amber.push_back(0);
+        if (tab == Tab::active)
             look.readings.emplace_back();
-            look.count_amber.push_back(0);
-        } else {
-            const std::string number = std::to_string(count);
-            look.readings.push_back(
-                filled(library.text, words::tab_with_count, {{"tab", caption}, {"count", number}})
-            );
-            look.count_amber.push_back(tab == Tab::updates && count > 0 ? uint8_t{1} : uint8_t{0});
-        }
+        else
+            look.readings.push_back(caption);
         if (tab == library.tab)
             look.selected = index;
         ids[index] = controls::tab_control(tab);
@@ -1356,6 +1356,160 @@ std::string empty_words(const Library& library) {
     return std::string(shown(library.text, words::empty_tab));
 }
 
+/// The most bytes one scaled base-game badge may take. A larger square keeps
+/// the icon as it was read, and the kit scales that.
+constexpr uint64_t most_scaled_badge_bytes = 8U * 1024U * 1024U;
+
+/// Returns the square a list row's badge is drawn in. The kit's row uses
+/// Compact's inset and badge side at every size class.
+///
+/// @param row the row
+/// @return the square, inside the row
+kit::Rect row_badge_square(const kit::Rect& row) noexcept {
+    const kit::Metrics& metrics = kit::compact_metrics;
+    const int32_t inset = metrics.list_row_inset;
+    const int32_t side =
+        std::max(std::min(row.height - 2 * inset, metrics.list_row_badge), int32_t{0});
+    return {row.x + inset, row.y + (row.height - side) / 2, side, side};
+}
+
+/// Tells whether a badge is the base game's icon.
+///
+/// @param library the model
+/// @param badge the badge; may be null
+/// @return true when it is Inputs::base_game_badge
+bool base_badge(const Library& library, const Badge* badge) noexcept {
+    return library.inputs.base_game_badge.has_value() && badge == &*library.inputs.base_game_badge;
+}
+
+/// Tells whether a picture is the base game's icon, still at the size it was read.
+///
+/// @param library the model
+/// @param picture the picture
+/// @return true when its pixels are Inputs::base_game_badge
+bool base_picture(
+    const Library& library, const oa::ui::frontend_renderer::RgbaPicture& picture
+) noexcept {
+    if (!library.inputs.base_game_badge)
+        return false;
+    const Badge& badge = *library.inputs.base_game_badge;
+    return picture.width == badge.width && picture.height == badge.height &&
+           picture.pixels.data() == badge.rgba.data();
+}
+
+/// Returns how many surface pixels a badge square covers at this layout's scale.
+/// A whole scale is that many times the square; any other scale rounds each
+/// edge on its own, as the canvas does. The Library's canvas starts at the origin.
+///
+/// @param building the layout
+/// @param rect the badge's square, in points
+/// @return the pixels; empty when the square covers none
+kit::Point badge_pixel_size(const Building& building, const kit::Rect& rect) noexcept {
+    if (rect.width <= 0 || rect.height <= 0)
+        return {};
+    const kit::Rect drawn = kit::to_canvas(rect, building.scale_percent);
+    if (drawn.width <= 0 || drawn.height <= 0)
+        return {};
+    return {drawn.width, drawn.height};
+}
+
+/// Scales an icon to a pixel square, nearest-neighbour, whole pixels, and
+/// centres it. A scale of one or more copies each source pixel into a block;
+/// a smaller scale keeps the icon's shape and samples one source pixel for
+/// each drawn pixel. The square around it is clear.
+///
+/// @param picture the icon
+/// @param dest_columns the square's columns
+/// @param dest_rows the square's rows
+/// @return the square, dest_columns by dest_rows, or empty when it would be too large
+std::vector<uint8_t> scale_nearest(
+    const oa::ui::frontend_renderer::RgbaPicture& picture, uint32_t dest_columns, uint32_t dest_rows
+) {
+    if (dest_columns == 0 || dest_rows == 0 || dest_rows > most_scaled_badge_bytes / 4U ||
+        uint64_t{dest_columns} > most_scaled_badge_bytes / 4U / dest_rows)
+        return {};
+    std::vector<uint8_t> scaled(static_cast<std::size_t>(dest_columns) * dest_rows * 4U, 0);
+    const uint32_t source_columns = picture.width;
+    const uint32_t source_rows = picture.height;
+    if (source_columns == 0 || source_rows == 0)
+        return scaled;
+    uint32_t drawn_columns = dest_columns;
+    uint32_t drawn_rows = dest_rows;
+    uint32_t block = 0;
+    if (dest_columns / source_columns >= 1U && dest_rows / source_rows >= 1U) {
+        block = std::min(dest_columns / source_columns, dest_rows / source_rows);
+        drawn_columns = source_columns * block;
+        drawn_rows = source_rows * block;
+    } else if (uint64_t{source_columns} * dest_rows >= uint64_t{source_rows} * dest_columns) {
+        drawn_columns = dest_columns;
+        drawn_rows = static_cast<uint32_t>(uint64_t{dest_columns} * source_rows / source_columns);
+    } else {
+        drawn_rows = dest_rows;
+        drawn_columns = static_cast<uint32_t>(uint64_t{dest_rows} * source_columns / source_rows);
+    }
+    if (drawn_columns == 0)
+        drawn_columns = 1;
+    if (drawn_rows == 0)
+        drawn_rows = 1;
+    if (drawn_columns > dest_columns)
+        drawn_columns = dest_columns;
+    if (drawn_rows > dest_rows)
+        drawn_rows = dest_rows;
+    const uint32_t origin_column = (dest_columns - drawn_columns) / 2U;
+    const uint32_t origin_row = (dest_rows - drawn_rows) / 2U;
+    const uint8_t* source = picture.pixels.data();
+    for (uint32_t row = 0; row < drawn_rows; ++row) {
+        uint32_t source_row = block >= 1U ? row / block : row * source_rows / drawn_rows;
+        if (source_row >= source_rows)
+            source_row = source_rows - 1U;
+        for (uint32_t column = 0; column < drawn_columns; ++column) {
+            uint32_t source_column =
+                block >= 1U ? column / block : column * source_columns / drawn_columns;
+            if (source_column >= source_columns)
+                source_column = source_columns - 1U;
+            const uint8_t* from =
+                source + (static_cast<std::size_t>(source_row) * source_columns + source_column) *
+                             oa::ui::frontend_renderer::picture_pixel_bytes;
+            uint8_t* to =
+                scaled.data() + (static_cast<std::size_t>(origin_row + row) * dest_columns +
+                                 origin_column + column) *
+                                    oa::ui::frontend_renderer::picture_pixel_bytes;
+            to[0] = from[0];
+            to[1] = from[1];
+            to[2] = from[2];
+            to[3] = from[3];
+        }
+    }
+    return scaled;
+}
+
+/// Returns the base game's icon scaled to the pixels of a badge square.
+/// The pixels live on the Library until the next layout.
+///
+/// @param building the layout
+/// @param picture the icon, at the size it was read
+/// @param rect the badge's square, in points
+/// @return the scaled picture, or `picture` when this square is not drawn
+oa::ui::frontend_renderer::RgbaPicture fitted_base_picture(
+    Building& building, const oa::ui::frontend_renderer::RgbaPicture& picture, const kit::Rect& rect
+) {
+    const kit::Point pixels = badge_pixel_size(building, rect);
+    if (pixels.x <= 0 || pixels.y <= 0)
+        return picture;
+    const auto columns = static_cast<uint32_t>(pixels.x);
+    const auto rows = static_cast<uint32_t>(pixels.y);
+    std::vector<uint8_t> scaled = scale_nearest(picture, columns, rows);
+    if (scaled.empty())
+        return picture;
+    std::vector<uint8_t>& kept =
+        building.library->scaled_badge_pixels.emplace_back(std::move(scaled));
+    oa::ui::frontend_renderer::RgbaPicture fitted;
+    fitted.width = columns;
+    fitted.height = rows;
+    fitted.pixels = kept;
+    return fitted;
+}
+
 /// Appends the list pane: the note on a list the last fetch could not
 /// bring up to date, the rows that show, an empty list's words, the scroll
 /// bar and the list's own control.
@@ -1415,6 +1569,9 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         look.selected = library.selected.has_value() && *library.selected == entry.id;
         look.hovered = hovered(building, id);
         const kit::Rect rect{view.x, top, rows_width, height};
+        if (base_badge(library, entry.badge) &&
+            oa::ui::frontend_renderer::picture_drawable(look.badge))
+            look.badge = fitted_base_picture(building, look.badge, row_badge_square(rect));
         if (look.chip && (entry.state == State::get || entry.state == State::update)) {
             // The download arrow and the up-arrow are GET and UPDATE: a
             // control of their own, tried before the row, named after it.
@@ -1480,8 +1637,11 @@ void add_badge_of(
     const kit::Rect& rect,
     const kit::Rect& clip
 ) {
-    if (oa::ui::frontend_renderer::picture_drawable(picture)) {
-        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{picture};
+    oa::ui::frontend_renderer::RgbaPicture drawn = picture;
+    if (base_picture(*building.library, picture))
+        drawn = fitted_base_picture(building, picture, rect);
+    if (oa::ui::frontend_renderer::picture_drawable(drawn)) {
+        add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{drawn};
         add_item(building.list, kit::Role::outline, rect, clip).colour =
             kit::colour::control_border;
         return;
@@ -3324,6 +3484,8 @@ Building start(
     building.fonts = &fonts;
     building.metrics = &kit::metrics_of(frame.size_class);
     building.size_class = frame.size_class;
+    building.scale_percent = frame.scale_percent > 0 ? frame.scale_percent : 100;
+    library.scaled_badge_pixels.clear();
     const kit::Point size = window_size(frame);
     add_item(building.list, kit::Role::fill, {0, 0, size.x, size.y}, {}).colour =
         kit::colour::panel;

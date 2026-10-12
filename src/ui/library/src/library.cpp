@@ -795,6 +795,8 @@ ActiveSetup active_setup(const Library& library) {
         setup.base_title = std::string(shown(text, words::active_base_game));
         setup.base_look = std::string(shown(text, words::base_supported));
         setup.mod_line = shown(text, words::active_no_mod);
+        if (inputs.base_game_badge)
+            setup.mod_badge = &*inputs.base_game_badge;
     } else if (setup.mod_version.empty()) {
         setup.mod_line = setup.mod_name;
     } else {

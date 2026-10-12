@@ -258,8 +258,12 @@ app removes the folder (`Runtime::library_uninstall`,
     search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
     The mod tile has a large badge, the name, the version and revision
     and the author, with Playing as a pill on the title's line at the top
-    right, or Base Game with the 3.1c look and "No mod: the game as it was
-    made" and no pill. While a mod is played, UNLOAD MOD
+    right, or Base Game with Total Annihilation's icon, from the program in
+    the game folder that describes itself as Total Annihilation,
+    nearest-neighbour and centred in the badge square (the letters "3.1c"
+    when that program is missing or its icon cannot be read) and "No mod:
+    the game as it was made" and no pill.
+    While a mod is played, UNLOAD MOD
     (`library.active.unload`, kind `button`, text "UNLOAD MOD") sits at the
     mod tile's bottom right. It is accent while it can act and plain while
     disabled, by the same rule as SWITCH OFF, and a press asks for
@@ -316,9 +320,9 @@ app removes the folder (`Runtime::library_uninstall`,
   - **Compact** shows a list page: the header (the OA mark, "Library", this
     build's version, and a refresh icon at the top right; "offline" in the
     lock colour beside it when the last refresh could not reach a registry),
-    the tabs with short names and their All counts ("Active", "Mods 11",
-    "Maps 2", "Lang 2", "Upd 15", "Reg 2"; Updates' digits are amber while
-    its count is above 0), the search field and the filter
+    the tabs with short names and their All counts in brackets ("Active",
+    "Mods (11)", "Maps (2)", "Lang (2)", "Upd (15)", "Reg (2)"), the search
+    field and the filter
     drop-down (All, New, Installed and Updates with their counts, "All
     (11)", then "Tag: balance (3)" for each tag of the tab), on the
     Updates tab "{n} updates" and UPDATE ALL on a line over the list, the
@@ -406,8 +410,9 @@ app removes the folder (`Runtime::library_uninstall`,
 - Every control is named for automation (the OA layer lists each as `oa.`
   and its name):
   - `library.tab.active`, `library.tab.mods`, `library.tab.maps`,
-    `library.tab.languages`, `library.tab.updates` (their text holds the
-    count: "Updates 2"), `library.tab.registries`; `library.search`;
+    `library.tab.languages`, `library.tab.updates` (every tab after Active
+    reads its title and its count in brackets: "Updates (2)"; Active stays
+    "Active"), `library.tab.registries`; `library.search`;
   - on the Registries tab `library.registry.<id>` (its halves `.off` and
     `.on`), `.key` (its text the fingerprints, one a line) and `.refresh`,
     and for a registry the player added `.remove` and `.add-mirror`; the
