@@ -447,10 +447,13 @@ void test_version_description() {
 
     const std::vector<uint8_t> editor = described("TAE");
     const std::vector<uint8_t> second = described("Total Annihilation");
+    // The span must name storage that outlives the call. A temporary
+    // program would be freed before only_described read it.
+    const std::vector<uint8_t> broken_program = program_with_version(broken);
     const std::span<const uint8_t> one[] = {game};
     const std::span<const uint8_t> none[] = {editor, no_version};
     const std::span<const uint8_t> two[] = {game, editor, second};
-    const std::span<const uint8_t> skipped[] = {program_with_version(broken), game};
+    const std::span<const uint8_t> skipped[] = {broken_program, game};
     OA_CHECK(only_described(one, "Total Annihilation") == 0U);
     OA_CHECK(!only_described(none, "Total Annihilation").has_value());
     OA_CHECK(!only_described(two, "Total Annihilation").has_value());
