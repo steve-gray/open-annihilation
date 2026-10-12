@@ -39,8 +39,8 @@ settings and exactly what a download sends and records.
 
 The Library opens on the main menu, from:
 
-- **the OA button**, the Open Annihilation logo at the bottom right of the
-  main menu, a 48-pixel square left of the **Settings** button and its
+- **the OA button**, the plates over drive bays at the bottom right of
+  the main menu, a 48-pixel square left of the **Settings** button and its
   gears (the same size, a quarter of a side apart, 12 pixels in from the
   frame). It opens on the [Active](#the-active-tab) tab. Its bottom-right
   corner shows how many mods the Mods tab lists under All (every mod the
@@ -186,8 +186,9 @@ they are `oa.library.row.<registry>.<key>.get` and `.update`
 
 Under that icon, the same size and centred on it, a package from a
 built-in registry may show who made it. Open Annihilation's own packages
-show a small OA badge. Cavedog's show a bone, off-white with a dark
-outline. The name is the catalogue's `author`, or, when that listing
+show a small copy of the app icon, the plates alone, filtered down from
+a copy kept for that size. Cavedog's show a bone, off-white with a dark
+outline, drawn as a shape. The name is the catalogue's `author`, or, when that listing
 names none, the installed manifest's `author.name`: "OpenAnnihilation",
 "Open Annihilation" or "OA team" for the badge, and "Cavedog
 Entertainment" for the bone, ignoring case and space at either end.
@@ -741,7 +742,8 @@ played and reloads the game at once
 Nothing needs a registry to play: everything installed works with no
 network, and the game starts and plays without reaching any server. The
 Library keeps the last list each registry gave it. The header shows the
-title and this build's version. When a registry could not be reached, the
+mods icon, the plates over drive bays, then the title and this build's
+version. When a registry could not be reached, the
 word "offline" stands in amber beside the refresh icon, and a line over
 the list says, in amber, "Showing the list from 2 h ago. OA couldn't reach
 the registries." The list stays usable however old it is.

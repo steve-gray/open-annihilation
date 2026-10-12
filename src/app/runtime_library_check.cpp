@@ -681,7 +681,10 @@ void Runtime::check_library() {
 
     const auto* fonts = engine_settings_fonts();
     require(fonts != nullptr, "the dialog's fonts did not load");
-    const auto icon = engine_settings_icon();
+    const auto icon = EngineSettingsMenuHost::mods_icon(*this);
+    require(
+        oa::ui::frontend_renderer::picture_drawable(icon), "the Library button has no icon to show"
+    );
     bool running = true;
     const auto window_of = [this](int width, int height) {
         require(

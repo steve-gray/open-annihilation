@@ -832,14 +832,18 @@ struct Runtime::SettingsScreen final : LayerScreen {
         ++revision_;
     }
 
-    /// Draws the dialog with the dialog's fonts and icon, at the canvas's scale.
+    /// Draws the dialog with the dialog's fonts and the settings icon, at
+    /// the canvas's scale. The layer's canvas carries the app icon; this
+    /// screen replaces it, on the main menu and in a match.
     ///
     /// @param canvas where it draws
     void draw(const kit::Canvas& canvas) const override {
         const auto* dialog = runtime_.engine_settings_dialog();
         if (dialog == nullptr || !kit::can_draw(canvas) || canvas.fonts == nullptr)
             return;
-        settings::draw_dialog(canvas, *dialog);
+        kit::Canvas drawn = canvas;
+        drawn.icon = Runtime::EngineSettingsMenuHost::settings_icon(runtime_);
+        settings::draw_dialog(drawn, *dialog);
     }
 
     /// Takes a pointer's move, press or release: a finger's press takes the

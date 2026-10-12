@@ -111,13 +111,13 @@ when the button sets one, `button_glyph_gap_em` of the label's size left of
 the label. A row's size is a text box exactly as wide as its text,
 so right-aligned texts need no other rule.
 
-The OA mark is the Open Annihilation icon, as the settings dialog shows it:
-the badge is a box with no text that the app fills with the icon, and OA ·
-Aa is a button whose glyph is `Glyph::oa` (the icon, 20 points on the
-tablet and 18 on the phone) beside "Aa". The app
-draws the icon at the screen's own density, and without it the OA mark the
-settings dialog's OA button shows: green "OA" letters in a green outlined
-square.
+The OA mark is the app icon, the plates alone. The badge is a box with no
+text that the app fills with that icon, and OA · Aa is a button whose glyph
+is `Glyph::oa` (the icon, 20 points on the tablet and 18 on the phone)
+beside "Aa". The app draws the icon at the screen's own density, filtered
+down, and without it the OA mark the OA button shows at rest: green "OA"
+letters in a green outlined square. The Settings dialog's header is the
+gears, not this icon.
 
 ## Sizes
 

@@ -22,21 +22,27 @@ target's `OA_GAME_FILES_DIR` property names it for build commands. The
 out-of-memory report goes to `ErrorLog.txt` beside the application: beside
 the executable, or beside the bundle, never inside it.
 
-The game carries the Open Annihilation icon in three forms, which
-`tools/make_icons.py` makes on macOS from `branding/open-annihilation-icon.png`
-and which are committed beside it: the bundle's `open-annihilation.icns`,
-which its Info.plist names; `open-annihilation.ico`, which
-`open-annihilation.rc.in` compiles into `open-annihilation.exe` with the
-version information that names it Open Annihilation; and
-`open-annihilation-256.png`, which the build embeds (`window_icon.hpp`) and
-start-up gives the window with `SDL_SetWindowIcon`; a failure there is
-reported, and the game starts without it. The settings icon,
-`open-annihilation-settings-icon.png`, is embedded the same way at 256
-pixels (`open-annihilation-settings-256.png`, made from it with
-`sips -z 256 256`; `settings_icon_png`) for the buttons that open Settings.
-The branding is not under the project's licence (`COPYRIGHT`).
-`branding-icons` checks the icons' sizes, and `app-window-icon` that the
-embedded ones decode.
+The game carries three icons. `tools/make_icons.py` makes them on macOS
+from the 1024-pixel pictures in `branding/` and the results are committed
+beside those pictures. The app icon, the plates alone
+(`open-annihilation-icon.png`), becomes the bundle's
+`open-annihilation.icns`, which its Info.plist names;
+`open-annihilation.ico`, which `open-annihilation.rc.in` compiles into
+`open-annihilation.exe` with the version information that names it Open
+Annihilation; and `open-annihilation-256.png`, which the build embeds
+(`window_icon_png`) and start-up gives the window with `SDL_SetWindowIcon`.
+A failure there is reported, and the game starts without it. That icon is
+also the badge of every OA dialog and notice but Settings and the Library,
+and the small maker's mark. The settings icon, the plates over two gears
+(`open-annihilation-settings-icon.png`), is embedded at 256 pixels
+(`open-annihilation-settings-256.png`; `settings_icon_png`) for the buttons
+that open Settings and for the Settings dialog's header. The mods icon, the
+plates over drive bays (`open-annihilation-mods-icon.png`), is embedded the
+same way (`open-annihilation-mods-256.png`; `mods_icon_png`) for the Library
+button and the Library's header. The branding is not under the project's
+licence (`COPYRIGHT`). `branding-icons` checks the icons' sizes and that
+their corners are clear, and `app-window-icon` that the embedded ones
+decode.
 
 Start-up makes the window's renderer by walking SDL's render drivers one
 at a time, in SDL's own order (`render_host.hpp`): the first that starts is
@@ -2074,7 +2080,8 @@ hosts them on the OA layer.
   under the extensions' overlays, drawn into the main menu's picture: the
   Settings button in the corner, showing the settings icon
   (`EngineSettingsMenuHost::settings_icon`), and the OA button a quarter of
-  a button's side left of it, which opens the Library
+  a button's side left of it, showing the mods icon
+  (`EngineSettingsMenuHost::mods_icon`), which opens the Library
   ([The Library](#the-library)) and wears a dot while updates wait there.
   The dialog is centred over the darkened menu and takes every input while
   it shows. The Settings button, Cmd+, on macOS or Ctrl+, elsewhere, the
@@ -4113,12 +4120,12 @@ open-annihilation: map pack <pack>: its maps may be mounted again
 The host's presence card says whether this machine has the host's pack
 (`PackState`): installed when a pack of its key has the record's SHA-256,
 another release when one has another, missing when none has its key.
-In the battle room the OA badge is that logo, drawn by the OA layer at the
+In the battle room the OA badge is the app icon, drawn by the OA layer at the
 window's own pixels in the CD rectangle, with the rules dot crisp on it. A
 run without a renderer keeps the badge the 640 by 480 frame draws. The card
 lists the platform and architecture on a Platform line under Engine, leaving
 out a field the record leaves empty and the line when both are, and the mark
-by its title is the same logo.
+by its title is the same icon.
 
 ## The automation endpoint
 

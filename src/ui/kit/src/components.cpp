@@ -31,6 +31,21 @@ namespace renderer = oa::ui::frontend_renderer;
 
 namespace {
 
+/// The app icon the maker's mark draws, or empty so the badge stays a plate.
+OpenAnnihilationMark installed_oa_mark{};
+
+} // namespace
+
+void set_open_annihilation_mark(OpenAnnihilationMark mark) {
+    installed_oa_mark = mark;
+}
+
+const OpenAnnihilationMark& open_annihilation_mark() noexcept {
+    return installed_oa_mark;
+}
+
+namespace {
+
 /// The OA letters, 9 by 7, row by row.
 constexpr std::array<uint8_t, 9 * 7> kSmallMarkBits{
     0, 1, 1, 0, 0, 0, 1, 1, 0, //
@@ -1093,11 +1108,32 @@ std::vector<uint8_t> sample_maker(int32_t columns, int32_t rows, Covers covers) 
 }
 
 /// Draws the OA badge or the bone in their own colours. `ink` is not used.
+/// The badge is the app icon when one has been given, from the copy kept
+/// for a mark this small, and the drawn plate otherwise.
 ///
 /// @param canvas where it is drawn
 /// @param rect the rectangle, in points
 /// @param icon oa or bone
 void draw_maker_icon(const Canvas& canvas, const Rect& rect, StateIcon icon) {
+    const OpenAnnihilationMark& mark = open_annihilation_mark();
+    if (icon == StateIcon::oa && renderer::picture_drawable(mark.full)) {
+        const int32_t side = std::min(rect.width, rect.height);
+        if (side <= 0)
+            return;
+        const Rect square{
+            rect.x + (rect.width - side) / 2,
+            rect.y + (rect.height - side) / 2,
+            side,
+            side,
+        };
+        const Point covered = covered_pixels(canvas, square);
+        const bool prepared_fits = renderer::picture_drawable(mark.prepared) && covered.x > 0 &&
+                                   covered.y > 0 &&
+                                   covered.x <= static_cast<int32_t>(mark.prepared.width) &&
+                                   covered.y <= static_cast<int32_t>(mark.prepared.height);
+        draw_picture(canvas, square, prepared_fits ? mark.prepared : mark.full);
+        return;
+    }
     const Point pixels = covered_pixels(canvas, rect);
     if (pixels.x <= 0 || pixels.y <= 0 || pixels.x > kMostIconPixels || pixels.y > kMostIconPixels)
         return;

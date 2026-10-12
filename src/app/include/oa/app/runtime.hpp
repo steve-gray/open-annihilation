@@ -3835,9 +3835,10 @@ class Runtime final : public menu::Host,
     /// @return the fonts; null when the game's files lack them
     [[nodiscard]] const oa::ui::engine_settings::DialogFonts* engine_settings_fonts();
 
-    /// Returns the Open Annihilation icon the settings dialog's header and
-    /// the main menu's OA button draw: the window icon's visible part,
-    /// decoded on first use.
+    /// Returns the app icon, the plates alone: the window icon's visible
+    /// part, decoded on first use. Notices, prompts, the Game files screen
+    /// and every OA header but Settings and the Library draw it, and the
+    /// first successful decode gives the kit the small maker's mark.
     ///
     /// @return the icon's pixels, which last as long as the runtime; an
     ///         empty picture, which draws the OA mark, when it cannot be decoded
