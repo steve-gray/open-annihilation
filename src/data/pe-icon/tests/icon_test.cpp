@@ -9,6 +9,7 @@
 #include "oa/data/pe_icon.hpp"
 #include "oa/test/check.hpp"
 #include "oa/test/game_data.hpp"
+#include "oa/test/pe_image.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -16,8 +17,10 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -347,54 +350,159 @@ void test_every_prefix() {
     OA_CHECK(!read_program_icon({}));
 }
 
-bool same_word(std::string_view text, std::string_view word) {
-    if (text.size() != word.size())
-        return false;
-    for (std::size_t index = 0; index < text.size(); ++index) {
-        const auto left = static_cast<unsigned char>(text[index]);
-        const auto right = static_cast<unsigned char>(word[index]);
-        if (std::tolower(left) != std::tolower(right))
-            return false;
+void append_utf16(std::vector<uint8_t>& bytes, std::string_view text) {
+    for (const char letter : text) {
+        bytes.push_back(static_cast<uint8_t>(letter));
+        bytes.push_back(0);
     }
-    return true;
+    bytes.push_back(0);
+    bytes.push_back(0);
 }
 
-/// The installed game's program, matched by its stem and its extension apart.
-std::optional<std::filesystem::path> program_file(const std::filesystem::path& folder) {
-    std::error_code error;
-    for (std::filesystem::directory_iterator entry{folder, error}, end; !error && entry != end;
-         entry.increment(error)) {
-        std::error_code kind;
-        if (!entry->is_regular_file(kind) || kind)
-            continue;
-        const std::filesystem::path path = entry->path();
-        std::string extension = path.extension().string();
-        if (!extension.empty() && extension.front() == '.')
-            extension.erase(extension.begin());
-        if (same_word(path.stem().string(), "totala") && same_word(extension, "exe"))
-            return path;
+void pad4(std::vector<uint8_t>& bytes) {
+    while ((bytes.size() % 4U) != 0)
+        bytes.push_back(0);
+}
+
+/// One version block: a key, an optional text value, and its children.
+std::vector<uint8_t> version_block(
+    std::string_view key, std::string_view value, std::vector<uint8_t> children, bool root
+) {
+    std::vector<uint8_t> block(6, 0);
+    append_utf16(block, key);
+    pad4(block);
+    const auto words = static_cast<uint16_t>(value.size() + (value.empty() && !root ? 0U : 1U));
+    if (root) {
+        block.resize(block.size() + 52, 0);
+    } else if (!value.empty()) {
+        append_utf16(block, value);
+        pad4(block);
     }
-    return std::nullopt;
+    block.insert(block.end(), children.begin(), children.end());
+    store_le16(block, 0, static_cast<uint16_t>(block.size()));
+    store_le16(block, 2, root ? 52 : (value.empty() ? 0 : words));
+    store_le16(block, 4, root ? 0 : 1);
+    return block;
+}
+
+/// A version resource whose one string table holds `pairs`.
+std::vector<uint8_t>
+version_resource(const std::vector<std::pair<std::string, std::string>>& pairs) {
+    std::vector<uint8_t> strings;
+    for (const auto& [key, value] : pairs) {
+        const std::vector<uint8_t> block = version_block(key, value, {}, false);
+        strings.insert(strings.end(), block.begin(), block.end());
+    }
+    const std::vector<uint8_t> table = version_block("040904E4", {}, std::move(strings), false);
+    const std::vector<uint8_t> info = version_block("StringFileInfo", {}, table, false);
+    return version_block("VS_VERSION_INFO", {}, info, true);
+}
+
+std::vector<uint8_t> program_with_version(std::vector<uint8_t> version) {
+    return oa::test::pe_image::build({{"", 1, 0, std::move(version), 16}}).bytes;
+}
+
+std::vector<uint8_t> described(std::string_view description) {
+    return program_with_version(version_resource({{"FileDescription", std::string(description)}}));
+}
+
+void test_version_description() {
+    using oa::data::pe_icon::file_description;
+    using oa::data::pe_icon::only_described;
+    using oa::data::pe_icon::VersionText;
+    const std::vector<uint8_t> game = described("Total Annihilation");
+    const oa::data::pe_icon::FileDescription matched = file_description(game);
+    OA_CHECK(matched.text == VersionText::present && matched.value == "Total Annihilation");
+    const oa::data::pe_icon::FileDescription other = file_description(described("TAE"));
+    OA_CHECK(other.text == VersionText::present && other.value == "TAE");
+    const std::vector<uint8_t> no_version = oa::test::pe_image::build({}).bytes;
+    OA_CHECK(file_description(no_version).text == VersionText::absent);
+
+    // The whole key, so the match is not the "File" inside another name.
+    const auto key = std::vector<uint8_t>{
+        'F', 0,   'i', 0,   'l', 0,   'e', 0,   'D', 0,   'e', 0,   's', 0,   'c',
+        0,   'r', 0,   'i', 0,   'p', 0,   't', 0,   'i', 0,   'o', 0,   'n', 0,
+    };
+    const auto corrupt = [&](std::vector<uint8_t> resource, std::size_t field, uint16_t value) {
+        const auto place = std::search(resource.begin(), resource.end(), key.begin(), key.end());
+        OA_CHECK(place != resource.end());
+        if (place == resource.end())
+            return resource;
+        const auto at = static_cast<std::size_t>(place - resource.begin());
+        OA_CHECK(at >= 6);
+        // The block's length is six bytes before its key, and its value
+        // length is four bytes before it.
+        store_le16(resource, at - field, value);
+        return resource;
+    };
+    const std::vector<uint8_t> broken =
+        corrupt(version_resource({{"FileDescription", "Total Annihilation"}}), 6, 0);
+    OA_CHECK(file_description(program_with_version(broken)).text == VersionText::malformed);
+    const std::vector<uint8_t> huge =
+        corrupt(version_resource({{"FileDescription", "Total Annihilation"}}), 4, 0xffff);
+    OA_CHECK(file_description(program_with_version(huge)).text == VersionText::malformed);
+    const std::vector<uint8_t> icon_only =
+        oa::test::pe_image::build({{"", 1, 0, std::vector<uint8_t>{1, 2, 3, 4}, 3}}).bytes;
+    OA_CHECK(file_description(icon_only).text == VersionText::absent);
+
+    const std::vector<uint8_t> editor = described("TAE");
+    const std::vector<uint8_t> second = described("Total Annihilation");
+    const std::span<const uint8_t> one[] = {game};
+    const std::span<const uint8_t> none[] = {editor, no_version};
+    const std::span<const uint8_t> two[] = {game, editor, second};
+    const std::span<const uint8_t> skipped[] = {program_with_version(broken), game};
+    OA_CHECK(only_described(one, "Total Annihilation") == 0U);
+    OA_CHECK(!only_described(none, "Total Annihilation").has_value());
+    OA_CHECK(!only_described(two, "Total Annihilation").has_value());
+    OA_CHECK(only_described(skipped, "Total Annihilation") == 1U);
+}
+
+/// Reads one regular program file in `folder`.
+std::optional<std::vector<uint8_t>> read_program(const std::filesystem::path& path) {
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error || size == 0 || size > oa::data::pe_icon::most_file_bytes)
+        return std::nullopt;
+    std::ifstream input{path, std::ios::binary};
+    if (!input)
+        return std::nullopt;
+    std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
+    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (input.gcount() != static_cast<std::streamsize>(bytes.size()))
+        return std::nullopt;
+    return bytes;
 }
 
 void test_installed_game() {
     const std::filesystem::path folder = oa::test::require_game_directory("a program icon");
-    const std::optional<std::filesystem::path> program = program_file(folder);
+    std::vector<std::vector<uint8_t>> files;
+    std::size_t looked = 0;
+    std::error_code error;
+    for (std::filesystem::directory_iterator entry{folder, error}, end;
+         !error && entry != end && looked < 32;
+         entry.increment(error)) {
+        std::error_code kind;
+        if (!entry->is_regular_file(kind) || kind)
+            continue;
+        std::string extension = entry->path().extension().string();
+        for (char& letter : extension)
+            letter = static_cast<char>(std::tolower(static_cast<unsigned char>(letter)));
+        if (extension != ".exe")
+            continue;
+        ++looked;
+        if (std::optional<std::vector<uint8_t>> bytes = read_program(entry->path()))
+            files.push_back(std::move(*bytes));
+    }
+    std::vector<std::span<const uint8_t>> views;
+    views.reserve(files.size());
+    for (const std::vector<uint8_t>& file : files)
+        views.emplace_back(file);
+    const std::optional<std::size_t> program =
+        oa::data::pe_icon::only_described(views, "Total Annihilation");
     OA_CHECK(program.has_value());
     if (!program)
         return;
-    std::ifstream input{*program, std::ios::binary};
-    OA_CHECK(static_cast<bool>(input));
-    input.seekg(0, std::ios::end);
-    const auto length = input.tellg();
-    input.seekg(0, std::ios::beg);
-    OA_CHECK(length > 0);
-    if (length <= 0)
-        return;
-    std::vector<uint8_t> bytes(static_cast<std::size_t>(length));
-    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    OA_CHECK(input.gcount() == static_cast<std::streamsize>(bytes.size()));
-    const std::optional<Icon> icon = read_program_icon(bytes);
+    const std::optional<Icon> icon = read_program_icon(views[*program]);
     OA_CHECK(icon.has_value());
     if (!icon)
         return;
@@ -423,6 +531,7 @@ int main(int argc, char** argv) {
         test_directory_loop();
         test_mask();
         test_every_prefix();
+        test_version_description();
     }
     return oa::test::check_exit_status();
 }

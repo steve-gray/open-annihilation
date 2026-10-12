@@ -64,6 +64,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -242,38 +243,27 @@ std::string ascii_lowered(std::string_view text) {
     return lowered;
 }
 
-/// The program file's name, compared as a stem and an extension apart.
-constexpr std::string_view program_stem = "totala";
-constexpr std::string_view program_suffix = "exe";
+/// A program file's extension, including the dot, compared without regard to case.
+constexpr std::string_view program_extension = ".exe";
+/// The description the game's own program gives of itself.
+constexpr std::string_view game_description = "Total Annihilation";
+/// The most program files in the game folder that are looked at.
+constexpr std::size_t most_program_files = 32;
 
-/// Finds the game folder's program file, compared without regard to case.
+/// Reports whether a file's extension is that of a program, without regard to case.
 ///
-/// @param folder the game folder
-/// @return the file; nothing when the folder has none
-std::optional<fs::path> program_file(const fs::path& folder) {
-    std::error_code error;
-    for (fs::directory_iterator entry{folder, error}, end; !error && entry != end;
-         entry.increment(error)) {
-        std::error_code kind;
-        if (!entry->is_regular_file(kind) || kind)
-            continue;
-        const fs::path name = entry->path().filename();
-        const std::string stem = ascii_lowered(path_to_utf8(name.stem()));
-        std::string extension = ascii_lowered(path_to_utf8(name.extension()));
-        if (!extension.empty() && extension.front() == '.')
-            extension.erase(extension.begin());
-        if (stem == program_stem && extension == program_suffix)
-            return entry->path();
-    }
-    return std::nullopt;
+/// @param extension the extension, including its dot, as the path gives it
+/// @return true when it is a program's extension
+bool is_program_extension(std::string_view extension) {
+    return ascii_lowered(extension) == program_extension;
 }
 
-/// Reads a program file's icon. A file longer than the reader accepts is
-/// left unread. Nothing here is written anywhere.
+/// Reads a program file. A file longer than the icon reader accepts, or one
+/// that cannot be read, is left out.
 ///
-/// @param file the program file
-/// @return the icon; nothing when it cannot be read
-std::optional<library::Badge> icon_of_program(const fs::path& file) {
+/// @param file the file
+/// @return its bytes; nothing when it is skipped
+std::optional<std::vector<uint8_t>> program_bytes(const fs::path& file) {
     std::error_code error;
     const auto size = fs::file_size(file, error);
     if (error || size > oa::data::pe_icon::most_file_bytes)
@@ -287,6 +277,14 @@ std::optional<library::Badge> icon_of_program(const fs::path& file) {
         if (input.gcount() != static_cast<std::streamsize>(size))
             return std::nullopt;
     }
+    return bytes;
+}
+
+/// Reads a program file's icon. Nothing here is written anywhere.
+///
+/// @param bytes the file
+/// @return the icon; nothing when it cannot be read
+std::optional<library::Badge> icon_of_program(std::span<const uint8_t> bytes) {
     const std::optional<oa::data::pe_icon::Icon> icon = oa::data::pe_icon::read_program_icon(bytes);
     const uint64_t pixel_bytes = icon ? uint64_t{icon->width} * icon->height * 4U : 0U;
     if (!icon || icon->width == 0 || icon->height == 0 || icon->rgba.size() != pixel_bytes)
@@ -296,9 +294,12 @@ std::optional<library::Badge> icon_of_program(const fs::path& file) {
 
 /// Returns the base game's icon from the game folder in use.
 ///
-/// The folder is read once. A folder with no icon is remembered too, and
-/// one line is logged the time it is first found to have none. The icon
-/// stays in memory.
+/// The program is the one regular file directly in the folder, among at most
+/// 32 whose extension is a program's, whose FileDescription is exactly
+/// "Total Annihilation". A file longer than the reader accepts is skipped.
+/// None, or more than one, leaves the letters. The folder is read once. A
+/// folder with no icon is remembered too, and one line is logged the time it
+/// is first found to have none. The icon stays in memory.
 ///
 /// @param folder the game folder
 /// @return the icon; nothing when it cannot be read, and the badge then shows its letters
@@ -316,9 +317,29 @@ std::optional<library::Badge> base_game_icon(const fs::path& folder) {
     static Held held;
     if (held.ready && held.key == key)
         return held.badge;
+
+    std::vector<std::vector<uint8_t>> files;
+    std::size_t looked = 0;
+    for (fs::directory_iterator entry{folder, error}, end;
+         !error && entry != end && looked < most_program_files;
+         entry.increment(error)) {
+        std::error_code kind;
+        if (!entry->is_regular_file(kind) || kind)
+            continue;
+        if (!is_program_extension(path_to_utf8(entry->path().extension())))
+            continue;
+        ++looked;
+        if (std::optional<std::vector<uint8_t>> bytes = program_bytes(entry->path()))
+            files.push_back(std::move(*bytes));
+    }
+    std::vector<std::span<const uint8_t>> views;
+    views.reserve(files.size());
+    for (const std::vector<uint8_t>& file : files)
+        views.emplace_back(file);
     std::optional<library::Badge> badge;
-    if (const std::optional<fs::path> program = program_file(folder))
-        badge = icon_of_program(*program);
+    if (const std::optional<std::size_t> program =
+            oa::data::pe_icon::only_described(views, game_description))
+        badge = icon_of_program(views[*program]);
     held.key = key;
     held.badge = badge;
     held.ready = true;

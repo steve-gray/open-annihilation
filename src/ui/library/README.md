@@ -258,9 +258,11 @@ app removes the folder (`Runtime::library_uninstall`,
     search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
     The mod tile has a large badge, the name, the version and revision
     and the author, with Playing as a pill on the title's line at the top
-    right, or Base Game with Total Annihilation's icon, nearest-neighbour
-    and centred in the badge square (the letters "3.1c" when that icon
-    cannot be read) and "No mod: the game as it was made" and no pill.
+    right, or Base Game with Total Annihilation's icon, from the program in
+    the game folder that describes itself as Total Annihilation,
+    nearest-neighbour and centred in the badge square (the letters "3.1c"
+    when that program is missing or its icon cannot be read) and "No mod:
+    the game as it was made" and no pill.
     While a mod is played, UNLOAD MOD
     (`library.active.unload`, kind `button`, text "UNLOAD MOD") sits at the
     mod tile's bottom right. It is accent while it can act and plain while

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,10 +21,12 @@ namespace oa::test::pe_image {
 
 /// One resource to place in an image.
 struct Resource {
-    std::string type_name; ///< ASCII
+    std::string type_name; ///< ASCII; unused when type_id is set
     uint32_t id{};
     uint32_t language{};
     std::vector<uint8_t> data;
+    /// When set, the type is this number rather than type_name.
+    std::optional<uint32_t> type_id{};
 };
 
 /// A built image and the file offsets of the structures tests corrupt.
@@ -100,22 +103,30 @@ inline void put32(std::vector<uint8_t>& bytes, size_t offset, uint32_t value) {
 /// the 32-bit one, or the 64-bit one when `wide` is set, with sixteen data
 /// directories. The resource directory holds the root table, then each
 /// type's table followed by its ids' tables, then the data entries, the type
-/// names and the data, each resource's data 4-byte aligned.
+/// names and the data, each resource's data 4-byte aligned. Named types come
+/// before numbered ones.
 ///
 /// @param resources what to carry; resources of one type share its table
 /// @param wide true for the 64-bit optional header
 /// @return the image and where its parts lie
 [[nodiscard]] inline Image build(const std::vector<Resource>& resources, bool wide = false) {
-    // type name -> id -> language -> index into `resources`
-    std::map<std::string, std::map<uint32_t, std::map<uint32_t, size_t>>> tree;
-    for (size_t index = 0; index < resources.size(); ++index)
-        tree[resources[index].type_name][resources[index].id][resources[index].language] = index;
+    // Named types, then numbered types. Each maps id to language to an index
+    // into `resources`.
+    using Ids = std::map<uint32_t, std::map<uint32_t, size_t>>;
+    std::map<std::string, Ids> named;
+    std::map<uint32_t, Ids> numbered;
+    for (size_t index = 0; index < resources.size(); ++index) {
+        const Resource& resource = resources[index];
+        Ids& ids = resource.type_id ? numbered[*resource.type_id] : named[resource.type_name];
+        ids[resource.id][resource.language] = index;
+    }
 
     constexpr size_t table_size = 16;
     constexpr size_t entry_size = 8;
     constexpr size_t data_entry_size = 16;
     // Offsets within the resource section.
-    std::vector<uint8_t> section(table_size + tree.size() * entry_size);
+    const size_t type_count = named.size() + numbered.size();
+    std::vector<uint8_t> section(table_size + type_count * entry_size);
     std::vector<size_t> data_entries(resources.size());
     std::vector<size_t> language_tables(resources.size());
     std::vector<size_t> type_tables(resources.size());
@@ -126,35 +137,44 @@ inline void put32(std::vector<uint8_t>& bytes, size_t offset, uint32_t value) {
     };
 
     std::vector<PendingName> names;
-    put16(section, 12, static_cast<uint32_t>(tree.size()));
+    put16(section, 12, static_cast<uint32_t>(named.size()));
+    put16(section, 14, static_cast<uint32_t>(numbered.size()));
     size_t type_index = 0;
-    for (const auto& [type_name, ids] : tree) {
-        const size_t type_table = section.size();
-        const size_t root_entry = table_size + type_index++ * entry_size;
-        names.push_back({root_entry, type_name});
-        put32(section, root_entry + 4, 0x80000000u | static_cast<uint32_t>(type_table));
-        section.resize(type_table + table_size + ids.size() * entry_size);
-        put16(section, type_table + 14, static_cast<uint32_t>(ids.size()));
-        size_t id_index = 0;
-        for (const auto& [id, languages] : ids) {
-            const size_t language_table = section.size();
-            const size_t id_entry = type_table + table_size + id_index++ * entry_size;
-            put32(section, id_entry, id);
-            put32(section, id_entry + 4, 0x80000000u | static_cast<uint32_t>(language_table));
-            section.resize(language_table + table_size + languages.size() * entry_size);
-            put16(section, language_table + 14, static_cast<uint32_t>(languages.size()));
-            size_t language_index = 0;
-            for (const auto& [language, resource] : languages) {
-                const size_t language_entry =
-                    language_table + table_size + language_index++ * entry_size;
-                put32(section, language_entry, language);
-                type_tables[resource] = type_table;
-                language_tables[resource] = language_table;
-                // The data entry's offset is filled in below.
-                data_entries[resource] = language_entry;
+    const auto add_type =
+        [&](Ids& ids, const std::optional<std::string>& type_name, uint32_t type_id) {
+            const size_t type_table = section.size();
+            const size_t root_entry = table_size + type_index++ * entry_size;
+            if (type_name)
+                names.push_back({root_entry, *type_name});
+            else
+                put32(section, root_entry, type_id);
+            put32(section, root_entry + 4, 0x80000000u | static_cast<uint32_t>(type_table));
+            section.resize(type_table + table_size + ids.size() * entry_size);
+            put16(section, type_table + 14, static_cast<uint32_t>(ids.size()));
+            size_t id_index = 0;
+            for (const auto& [id, languages] : ids) {
+                const size_t language_table = section.size();
+                const size_t id_entry = type_table + table_size + id_index++ * entry_size;
+                put32(section, id_entry, id);
+                put32(section, id_entry + 4, 0x80000000u | static_cast<uint32_t>(language_table));
+                section.resize(language_table + table_size + languages.size() * entry_size);
+                put16(section, language_table + 14, static_cast<uint32_t>(languages.size()));
+                size_t language_index = 0;
+                for (const auto& [language, resource] : languages) {
+                    const size_t language_entry =
+                        language_table + table_size + language_index++ * entry_size;
+                    put32(section, language_entry, language);
+                    type_tables[resource] = type_table;
+                    language_tables[resource] = language_table;
+                    // The data entry's offset is filled in below.
+                    data_entries[resource] = language_entry;
+                }
             }
-        }
-    }
+        };
+    for (auto& [type_name, ids] : named)
+        add_type(ids, type_name, 0);
+    for (auto& [type_id, ids] : numbered)
+        add_type(ids, std::nullopt, type_id);
     for (size_t resource = 0; resource < resources.size(); ++resource) {
         const size_t entry = section.size();
         section.resize(entry + data_entry_size);
@@ -265,9 +285,16 @@ inline void put32(std::vector<uint8_t>& bytes, size_t offset, uint32_t value) {
         image.language_table = resource_offset + language_tables[0];
         image.data_entry = resource_offset + data_entries[0];
         image.data = resource_offset + data_offsets[0];
-        const auto first_type =
-            static_cast<size_t>(std::distance(tree.begin(), tree.find(resources[0].type_name)));
-        image.type_name = resource_offset + name_strings[first_type];
+        if (!resources[0].type_id) {
+            size_t which = 0;
+            for (const PendingName& pending : names) {
+                if (pending.name == resources[0].type_name)
+                    break;
+                ++which;
+            }
+            if (which < name_strings.size())
+                image.type_name = resource_offset + name_strings[which];
+        }
     }
     return image;
 }

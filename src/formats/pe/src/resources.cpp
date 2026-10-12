@@ -129,14 +129,30 @@ struct Section {
     return true;
 }
 
-} // namespace
+// How one directory level is chosen.
+struct LevelQuery {
+    enum class Kind : uint8_t { named, numbered, first_numbered };
+    Kind kind{Kind::numbered};
+    std::string_view name{};
+    uint32_t number{};
+};
 
-ResourceLookup find_resource(std::span<const uint8_t> image, const ResourceKey& key) noexcept {
-    ResourceLookup result;
+// A walk's data range, and the number chosen at each level.
+struct Walked {
+    ResourceLookup lookup{};
+    std::array<uint32_t, resource_levels> numbers{};
+};
+
+// Walks the three directory levels `levels` names.
+[[nodiscard]] Walked walk_resource(
+    std::span<const uint8_t> image, const std::array<LevelQuery, resource_levels>& levels
+) noexcept {
+    Walked walked;
+    ResourceLookup& result = walked.lookup;
     const auto fail = [&result](Error error, uint64_t offset) {
         result.error = error;
         result.error_offset = offset;
-        return result;
+        return Walked{result, {}};
     };
     const uint64_t size = image.size();
     if (size < dos_header_size)
@@ -218,15 +234,20 @@ ResourceLookup find_resource(std::span<const uint8_t> image, const ResourceKey& 
         const uint64_t entries = table + directory_table_size;
         if (!fits(resource_size, entries, (named + ids) * directory_entry_size))
             return fail(Error::truncated_resource_directory, *resource_offset + table);
-        // The type is found among the named entries, the id and the
-        // language among the id entries.
-        const uint64_t first = level == 0 ? 0 : named;
-        const uint64_t last = level == 0 ? named : named + ids;
+        // A named type is found among the named entries. A numbered type,
+        // id or language is found among the id entries; the first of those
+        // is the first id entry.
+        const LevelQuery& query = levels[level];
+        const bool by_name = query.kind == LevelQuery::Kind::named;
+        const uint64_t first = by_name ? 0 : named;
+        const uint64_t last = by_name ? named : named + ids;
+        const uint64_t stop =
+            query.kind == LevelQuery::Kind::first_numbered ? std::min(last, first + 1) : last;
         std::optional<uint64_t> found;
-        for (uint64_t index = first; index < last && !found; ++index) {
+        for (uint64_t index = first; index < stop && !found; ++index) {
             const uint64_t entry = entries + index * directory_entry_size;
             const uint32_t name = load_le32(resources.data() + entry);
-            if (level == 0) {
+            if (by_name) {
                 if ((name & name_is_string) == 0)
                     continue;
                 const uint64_t string = name & ~name_is_string;
@@ -235,12 +256,14 @@ ResourceLookup find_resource(std::span<const uint8_t> image, const ResourceKey& 
                 const uint16_t length = load_le16(resources.data() + string);
                 if (!fits(resource_size, string + name_length_size, length * name_unit_size))
                     return fail(Error::truncated_resource_name, *resource_offset + string);
-                if (name_matches(resources, string, length, key.type_name))
+                if (name_matches(resources, string, length, query.name))
                     found = entry;
             } else if (
-                (name & name_is_string) == 0 && name == (level == 1 ? key.id : key.language)
+                (name & name_is_string) == 0 &&
+                (query.kind == LevelQuery::Kind::first_numbered || name == query.number)
             ) {
                 found = entry;
+                walked.numbers[level] = name;
             }
         }
         if (!found) {
@@ -271,6 +294,46 @@ ResourceLookup find_resource(std::span<const uint8_t> image, const ResourceKey& 
         if (!data_offset)
             return fail(Error::data_outside_sections, *resource_offset + next);
         result.range = {*data_offset, data_size};
+    }
+    return walked;
+}
+
+} // namespace
+
+ResourceLookup find_resource(std::span<const uint8_t> image, const ResourceKey& key) noexcept {
+    const std::array<LevelQuery, resource_levels> levels{{
+        {LevelQuery::Kind::named, key.type_name, 0},
+        {LevelQuery::Kind::numbered, {}, key.id},
+        {LevelQuery::Kind::numbered, {}, key.language},
+    }};
+    return walk_resource(image, levels).lookup;
+}
+
+ResourceLookup find_resource(std::span<const uint8_t> image, const NumericResource& key) noexcept {
+    const std::array<LevelQuery, resource_levels> levels{{
+        {LevelQuery::Kind::numbered, {}, key.type},
+        {LevelQuery::Kind::numbered, {}, key.id},
+        {key.language_given ? LevelQuery::Kind::numbered : LevelQuery::Kind::first_numbered,
+         {},
+         key.language},
+    }};
+    return walk_resource(image, levels).lookup;
+}
+
+FirstResource first_resource(std::span<const uint8_t> image, uint32_t type) noexcept {
+    const std::array<LevelQuery, resource_levels> levels{{
+        {LevelQuery::Kind::numbered, {}, type},
+        {LevelQuery::Kind::first_numbered, {}, 0},
+        {LevelQuery::Kind::first_numbered, {}, 0},
+    }};
+    const Walked walked = walk_resource(image, levels);
+    FirstResource result;
+    result.range = walked.lookup.range;
+    result.error = walked.lookup.error;
+    result.error_offset = walked.lookup.error_offset;
+    if (result.error == Error::none) {
+        result.id = walked.numbers[1];
+        result.language = walked.numbers[2];
     }
     return result;
 }

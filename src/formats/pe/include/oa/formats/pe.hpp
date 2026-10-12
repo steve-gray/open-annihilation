@@ -55,10 +55,33 @@ struct ResourceKey {
     uint32_t language{};
 };
 
+/// Names one resource by number: its type, its id and its language.
+struct NumericResource {
+    /// A resource type's number, such as 3 for an icon image, 14 for an icon
+    /// group or 16 for version information.
+    uint32_t type{};
+    uint32_t id{};
+    /// When false, the first language entry is used.
+    bool language_given{false};
+    /// Used when language_given is set.
+    uint32_t language{};
+};
+
 /// A range of bytes in the image file.
 struct FileRange {
     uint64_t offset{};
     uint64_t size{};
+};
+
+/// The first id of a numeric type, and the first language of that id.
+struct FirstResource {
+    /// Where that language's data lies; empty unless the lookup succeeded.
+    FileRange range{};
+    uint32_t id{};
+    uint32_t language{};
+    Error error{};
+    /// File offset of the field or structure that stopped the lookup.
+    uint64_t error_offset{};
 };
 
 /// The outcome of a resource lookup.
@@ -86,6 +109,29 @@ struct ResourceLookup {
 ///     where it was found
 [[nodiscard]] ResourceLookup
 find_resource(std::span<const uint8_t> image, const ResourceKey& key) noexcept;
+
+/// Finds where a resource's data lies when its type, id and language are numbers.
+///
+/// The walk is the one `find_resource` makes for a named type. The type is
+/// matched among the id entries, not the named ones. When `key.language_given`
+/// is false, the first language entry is taken.
+///
+/// @param image the whole file
+/// @param key the resource to find
+/// @return the data's range in `image`, or the error and the file offset
+///     where it was found
+[[nodiscard]] ResourceLookup
+find_resource(std::span<const uint8_t> image, const NumericResource& key) noexcept;
+
+/// Finds the first id of a numeric type and the first language of that id.
+///
+/// Named entries are skipped. The data is that language's.
+///
+/// @param image the whole file
+/// @param type the resource type's number
+/// @return the id, the language and the data's range, or the error and the
+///     file offset where it was found
+[[nodiscard]] FirstResource first_resource(std::span<const uint8_t> image, uint32_t type) noexcept;
 
 /// Describes a lookup error in words.
 ///

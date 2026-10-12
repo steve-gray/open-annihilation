@@ -95,9 +95,10 @@ filters.
   ([choosing a mod](#choosing-a-mod)). It is greyed during a game and while
   the command line chose the run's mod; resting on it then shows "The
   command line chose this run's mod." When you are playing no mod, the
-  tile is **Base Game**. Its badge is Total Annihilation's own icon, read
-  from the game folder and drawn centred in the square. When that icon
-  cannot be read, the letters "3.1c" stay. The tile reads "Total
+  tile is **Base Game**. Its badge is Total Annihilation's own icon, taken
+  from the program in the game folder that describes itself as Total
+  Annihilation, and drawn centred in the square. When that program is
+  missing or its icon cannot be read, the letters "3.1c" stay. The tile reads "Total
   Annihilation 3.1c" and "No mod: the game as it was made", and it has no
   pill and no button.
 - **LANGUAGE**: a tile for the language the game is showing. It carries the
