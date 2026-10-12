@@ -48,17 +48,18 @@ namespace renderer = oa::ui::frontend_renderer;
 
 /// Each role's name, in the order of the kit's list, for the messages.
 constexpr std::array<std::string_view, kit::all_roles.size()> kRoleNames{
-    "fill",           "blend",         "outline",       "bevel",       "rule",
-    "text",           "picture",       "mark",          "button",      "toggle",
-    "levels",         "slider",        "choice",        "choice_menu", "lock",
-    "scroll_bar",     "focus_ring",    "oa_button",     "oa_mark",     "header",
-    "footer_band",    "nav",           "heading",       "row_frame",   "locked_fade",
-    "list_row",       "chip",          "field",         "tabs",        "card",
-    "hover_card",     "link",          "progress",      "header_bar",  "badge",
-    "header_text",    "version",       "title",         "panel",       "icon",
-    "banner",         "row",           "divider",       "button_main", "button_danger",
-    "progress_track", "progress_fill", "progress_busy", "backdrop",    "sheet",
-    "pill",
+    "fill",           "blend",         "outline",       "bevel",          "rule",
+    "text",           "picture",       "mark",          "button",         "toggle",
+    "levels",         "slider",        "choice",        "choice_menu",    "lock",
+    "scroll_bar",     "focus_ring",    "oa_button",     "oa_mark",        "header",
+    "footer_band",    "nav",           "heading",       "row_frame",      "locked_fade",
+    "list_row",       "chip",          "field",         "tabs",           "card",
+    "hover_card",     "link",          "progress",      "header_bar",     "badge",
+    "header_text",    "version",       "title",         "panel",          "icon",
+    "banner",         "row",           "divider",       "button_main",    "button_danger",
+    "progress_track", "progress_fill", "progress_busy", "backdrop",       "sheet",
+    "pill",           "language_card", "carousel",      "step_indicator", "setup_chrome",
+    "choice_card",    "coach_mark",    "spotlight",     "picture_well",   "call_to_action",
 };
 
 /// Returns a role's name.
@@ -226,6 +227,31 @@ std::vector<std::string> texts_of(const kit::Item& part) {
                 for (const kit::HoverCardRow& row : look.rows)
                     texts.insert(texts.end(), {row.label, row.value});
                 texts.insert(texts.end(), look.block.begin(), look.block.end());
+            } else if constexpr (std::is_same_v<Look, kit::LanguageCardLook>) {
+                texts.insert(
+                    texts.end(),
+                    {look.letters, look.own_name, look.english_name, look.facts, look.pill}
+                );
+            } else if constexpr (std::is_same_v<Look, kit::CarouselLook>) {
+                for (const kit::CarouselCard& card : look.cards)
+                    texts.insert(
+                        texts.end(),
+                        {card.letters, card.own_name, card.english_name, card.facts, card.pill}
+                    );
+            } else if constexpr (std::is_same_v<Look, kit::StepLook>) {
+                texts.push_back(look.name);
+            } else if constexpr (std::is_same_v<Look, kit::SetupChromeLook>) {
+                texts.insert(
+                    texts.end(), {look.page, look.step_name, look.skip, look.back, look.next}
+                );
+            } else if constexpr (std::is_same_v<Look, kit::ChoiceCardLook>) {
+                texts.insert(texts.end(), {look.title, look.hint});
+            } else if constexpr (std::is_same_v<Look, kit::CoachMarkLook>) {
+                texts.insert(texts.end(), {look.title, look.body});
+            } else if constexpr (std::is_same_v<Look, kit::PictureWellLook>) {
+                texts.push_back(look.caption);
+            } else if constexpr (std::is_same_v<Look, kit::CallToActionLook>) {
+                texts.push_back(look.caption);
             }
         },
         part.look

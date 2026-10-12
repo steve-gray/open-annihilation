@@ -93,6 +93,7 @@ void every_token_keeps_its_value() {
     OA_CHECK(kit::hud_colour::greyed_opacity == 0.4F);
 
     OA_CHECK(kit::menu_backdrop_opacity == 159);
+    OA_CHECK(kit::spotlight_opacity == 189);
     OA_CHECK(kit::ingame_backdrop_opacity == 128);
     OA_CHECK(kit::locked_fade == 115);
     OA_CHECK(kit::selected_tint == 15);
@@ -186,6 +187,15 @@ void compact_metrics_of_the_new_controls() {
     OA_CHECK(kit::compact_metrics.card_inset == 4);
     OA_CHECK(kit::compact_metrics.hover_card_padding == 6);
     OA_CHECK(kit::compact_metrics.hover_card_arrow == 5);
+    OA_CHECK(kit::compact_metrics.language_card_width == 120);
+    OA_CHECK(kit::compact_metrics.language_card_height == 104);
+    OA_CHECK(kit::compact_metrics.carousel_step == 118);
+    OA_CHECK(kit::regular_metrics.language_card_width == 160);
+    OA_CHECK(kit::regular_metrics.language_card_height == 128);
+    OA_CHECK(kit::regular_metrics.carousel_step == 177);
+    OA_CHECK(kit::large_metrics.language_card_width == 200);
+    OA_CHECK(kit::large_metrics.language_card_height == 148);
+    OA_CHECK(kit::large_metrics.carousel_step == 236);
 }
 
 /// Checks the Compact sizes of a settings section's rows against the
@@ -271,6 +281,9 @@ void the_classes_differ_only_in_the_tables_sizes() {
         same.notice_width = kit::compact_metrics.notice_width;
         same.greatest_notice_height = kit::compact_metrics.greatest_notice_height;
         same.least_notice_height = kit::compact_metrics.least_notice_height;
+        same.language_card_width = kit::compact_metrics.language_card_width;
+        same.language_card_height = kit::compact_metrics.language_card_height;
+        same.carousel_step = kit::compact_metrics.carousel_step;
         OA_CHECK(same == kit::compact_metrics);
         // Among them the sizes the design names as the same in every class.
         OA_CHECK(metrics->row_padding == 8);

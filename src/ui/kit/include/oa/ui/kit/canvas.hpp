@@ -253,4 +253,117 @@ void blend_coverage(
     const Canvas& canvas, const Rect& rect, std::span<const uint8_t> coverage, Colour ink
 );
 
+/// How a rectangle is drawn on after it has been laid out flat: turned about
+/// its vertical axis, and covered by an opacity.
+struct Perspective {
+    /// Degrees about the vertical axis. Positive shortens the right edge and
+    /// negative the left, both edges staying centred on the rectangle's
+    /// height. 0 leaves the rectangle flat.
+    float degrees{0.F};
+    /// How much of each destination pixel the drawing covers, from 0 to 1.
+    float opacity{1.F};
+};
+
+/// Claims the thread's offscreen buffer. A claim that finds the buffer
+/// already claimed fails, so a drawing that calls perspective_blit cannot
+/// nest another one.
+///
+/// @return true when this call holds the buffer
+[[nodiscard]] bool claim_offscreen() noexcept;
+
+/// Gives the thread's offscreen buffer back after claim_offscreen.
+void release_offscreen() noexcept;
+
+/// Prepares the reused offscreen buffer and returns a canvas that draws into
+/// it, at the destination's scale, with its origin at the buffer's top left.
+///
+/// The buffer is kept for the thread and grown when a larger drawing asks,
+/// and cleared each time. A later call replaces what an earlier one drew.
+/// The canvas is empty when the destination cannot draw or the size is empty.
+/// Call claim_offscreen first: this does not claim the buffer itself.
+///
+/// @param dest the canvas the drawing will be copied onto
+/// @param width the drawing's width, in points
+/// @param height the drawing's height, in points
+/// @return a canvas over the buffer
+[[nodiscard]] Canvas begin_offscreen(const Canvas& dest, int32_t width, int32_t height);
+
+/// Copies the offscreen buffer onto a rectangle as a trapezoid.
+///
+/// One vertical edge keeps the rectangle's height and the other is shorter
+/// by the cosine of the angle, so the drawing looks turned about its
+/// vertical axis. On the crisp form each destination pixel copies the one
+/// nearest source pixel. On the smooth form each destination pixel blends
+/// the source pixels around its sample. The sample runs from the source's
+/// first pixel at the trapezoid's first pixel toward one past the last
+/// pixel at the far edge, so a sample between two pixels mixes them by the
+/// distance. The copy is clipped to the destination and blended by the
+/// opacity. Nothing is drawn when the buffer was not begun for this size.
+///
+/// @param dest where it is drawn
+/// @param source_width the drawing's width, in points, as begun
+/// @param source_height the drawing's height, in points, as begun
+/// @param place the rectangle the trapezoid fills, in points
+/// @param how the turn and the opacity
+void warp_offscreen(
+    const Canvas& dest,
+    int32_t source_width,
+    int32_t source_height,
+    const Rect& place,
+    Perspective how
+);
+
+/// Draws a laid-out rectangle into the reused offscreen buffer, then onto
+/// the canvas as a trapezoid.
+///
+/// draw is called with a canvas whose origin is the drawing's top left and
+/// whose size is drawn's width and height. It must cover that rectangle and
+/// must not call perspective_blit or scale_blit: the buffer is the one
+/// buffer, and a nested call draws nothing. The first call of a size takes
+/// the buffer; a later call of the same or a smaller size does not allocate.
+///
+/// @param dest where the trapezoid is drawn
+/// @param drawn the drawing's size, in points; its place is ignored
+/// @param place the rectangle the trapezoid fills, in points
+/// @param how the turn and the opacity
+/// @param draw draws the rectangle into the offscreen canvas
+template <class Draw>
+void perspective_blit(
+    const Canvas& dest, const Rect& drawn, const Rect& place, Perspective how, Draw&& draw
+) {
+    if (drawn.width <= 0 || drawn.height <= 0 || place.width <= 0 || place.height <= 0)
+        return;
+    if (how.opacity <= 0.F)
+        return;
+    if (!claim_offscreen())
+        return;
+
+    struct Release {
+        ~Release() { release_offscreen(); }
+    } release;
+
+    static_cast<void>(release);
+    Canvas offscreen = begin_offscreen(dest, drawn.width, drawn.height);
+    if (!can_draw(offscreen))
+        return;
+    draw(offscreen);
+    warp_offscreen(dest, drawn.width, drawn.height, place, how);
+}
+
+/// Draws a laid-out rectangle into the reused offscreen buffer, then scaled
+/// into a rectangle. The crisp form copies the nearest source pixel. The
+/// smooth form blends the source pixels around the sample, as
+/// perspective_blit does.
+///
+/// The same buffer and the same rule against nesting as perspective_blit.
+///
+/// @param dest where it is drawn
+/// @param drawn the drawing's size, in points; its place is ignored
+/// @param place the rectangle it is scaled into, in points
+/// @param draw draws the rectangle into the offscreen canvas
+template <class Draw>
+void scale_blit(const Canvas& dest, const Rect& drawn, const Rect& place, Draw&& draw) {
+    perspective_blit(dest, drawn, place, Perspective{}, static_cast<Draw&&>(draw));
+}
+
 } // namespace oa::ui::kit
