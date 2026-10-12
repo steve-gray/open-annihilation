@@ -8,11 +8,13 @@
 // window: the two drawings are byte for byte the same, the margin keeps its
 // colour, and every pixel of the window is drawn. In the game's fonts every
 // text fits and every part lies in the window. The same holds for the
-// Active tab at Compact, Regular and Large, and the Updates tab at Compact and
-// Large. The characters the game's fonts lack are drawn in the modern fonts
+// Active tab at Compact, Regular and Large, the Updates tab at Compact and
+// Large, and the Registries tab at Compact, Regular and Large. The Registries
+// pictures dress the fixture's built-in registry as Core Prime on that copy
+// only. The characters the game's fonts lack are drawn in the modern fonts
 // beside the test, as the game draws them. Given --frames DIR, it writes
-// library-<class>.png, library-details-compact.png, library-active-<class>.png
-// and library-updates-<class>.png there.
+// library-<class>.png, library-details-compact.png, library-active-<class>.png,
+// library-updates-<class>.png and library-registries-<class>.png there.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -125,6 +127,37 @@ struct Drawing {
     kit::Point window{};         ///< the window's size, in points
 };
 
+/// Dresses the Registries pictures: the built-in card carries Core Prime's
+/// short name, title and description, and the added card a sample of its own.
+/// The fixture itself stays Fixture Core. Other tabs are not dressed.
+///
+/// @param[in,out] library the scene's library
+void dress_registries(lib::Library& library) {
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id == fixture::core) {
+            registry.name = "Core Prime";
+            registry.title = "Core Prime - Official Open Annihilation Packages";
+            registry.description =
+                "The CorePrime.net registry provides packages and content curated by the Open "
+                "Annihilation team, and checked for compatibility, as well as official releases "
+                "from some leading mods.";
+            registry.address = "http://downloads.coreprime.net/v1/catalogue.json";
+            registry.packages = 1;
+            registry.checked_ago = 300;
+            lib::SigningKey signing_key;
+            signing_key.fingerprint = "21fe · 31df · a154 · a261";
+            signing_key.public_key = "ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=";
+            registry.keys = {std::move(signing_key)};
+        } else if (registry.id == fixture::added) {
+            registry.title = "Example Mods - Sample packages";
+            registry.description = "A sample registry of mods, including the made-up mod Ridge.";
+            registry.address = "https://mods.example.org/oa/registry.yaml";
+            registry.packages = 31;
+            registry.checked_ago = 2 * 60 * 60;
+        }
+    }
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -132,6 +165,8 @@ struct Drawing {
 /// @return the drawing
 Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
     lib::Library library = fixture::fixture_library();
+    if (scene.tab == lib::Tab::registries)
+        dress_registries(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
     lib::ScreenState state;
@@ -316,6 +351,9 @@ int main(int argc, char** argv) {
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active},
         {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
         {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
+        {"registries-compact", window_of(640, 480, 100), false, lib::Tab::registries},
+        {"registries-regular", window_of(1920, 1080, 200), false, lib::Tab::registries},
+        {"registries-large", window_of(2560, 1440, 200), false, lib::Tab::registries},
     };
     for (const Scene& scene : scenes) {
         const Drawing first = draw_scene(scene, fonts);

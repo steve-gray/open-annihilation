@@ -33,6 +33,12 @@ inline constexpr std::size_t max_registry_keys = 8;
 /// The most catalogue mirrors one descriptor names.
 inline constexpr std::size_t max_registry_mirrors = 8;
 
+/// The most characters of a card heading. A character is one Unicode scalar value.
+inline constexpr std::size_t max_title_characters = 96;
+
+/// The most characters of a card description. A character is one Unicode scalar value.
+inline constexpr std::size_t max_description_characters = 400;
+
 /// How a registry's packages are downloaded.
 enum class DownloadMode : uint8_t {
     direct, ///< the catalogue's own address, checked by its digest
@@ -53,8 +59,11 @@ struct RegistryKey {
 
 /// One registry: its catalogue, its keys and how its packages are fetched.
 struct Descriptor {
-    std::string id{};                            ///< kebab-case, 1 to 32 bytes
-    std::string name{};                          ///< the name a player sees, 1 to 64 bytes
+    std::string id{};    ///< kebab-case, 1 to 32 bytes
+    std::string name{};  ///< the short name a player sees, 1 to 64 bytes
+    std::string title{}; ///< the card's heading; name when empty; at most 96 characters
+    std::string
+        description{}; ///< a paragraph on the card; empty when absent; at most 400 characters
     std::optional<formats::url::Url> homepage{}; ///< a page opened in a browser; absent when unset
     formats::url::Url catalogue{};               ///< the catalogue, http, with no query
     std::vector<formats::url::Url> mirrors{};    ///< other copies of the catalogue, at most 8
@@ -92,8 +101,12 @@ struct Descriptor {
 /// Reads a registry descriptor.
 ///
 /// registry must be 1. id, name, catalogue and downloads are required.
-/// homepage, mirrors and keys are optional; absent mirrors and keys read as
-/// empty, and empty keys are an unsigned registry. A catalogue, mirror or
+/// homepage, mirrors, keys, title and description are optional. Absent
+/// mirrors and keys read as empty, and empty keys are an unsigned registry.
+/// An absent title or description reads as empty: the card then heads with
+/// name and shows no paragraph. A present title is 1 to 96 characters and a
+/// present description is 1 to 400. A character is one Unicode scalar value;
+/// name stays a byte count. A catalogue, mirror or
 /// download API is an http or https address with no query. A homepage is an
 /// http or https address. downloads.mode is direct or tokens. direct refuses an API
 /// and refuses install-id required, and defaults install-id to none. tokens

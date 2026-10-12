@@ -375,7 +375,8 @@ void coverage_lands_on_the_canvass_own_pixels() {
     for (const kit::StateIcon icon :
          {kit::StateIcon::circled_check,
           kit::StateIcon::circled_up_arrow,
-          kit::StateIcon::download_arrow}) {
+          kit::StateIcon::download_arrow,
+          kit::StateIcon::key}) {
         Smooth drawn(40, 40, kOneAndAHalf);
         kit::draw_state_icon(drawn.canvas, {2, 2, 14, 14}, icon, kInk);
         // 2 * 1.5 = 3 to 16 * 1.5 = 24: 21 pixels square.

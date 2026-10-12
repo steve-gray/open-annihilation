@@ -791,6 +791,121 @@ void test_malformed_file() {
     OA_CHECK(file_bytes(registries_file(scratch)) == before);
 }
 
+/// A typed signing key replaces the descriptor's keys, and only when the
+/// catalogue verifies with that key. A key that cannot be read is refused
+/// before any fetch. A built-in registry's public key is still refused.
+void test_typed_signing_key() {
+    g_now = kEpoch;
+    const TestKey builtin_key("core-2026", 0x41);
+    const TestKey listed("ridge-2026", 0x42);
+    const TestKey player_key("player", 0x43);
+    const TestKey other("other-2026", 0x44);
+    fixture::Server server;
+    if (!listening(server))
+        return;
+    Scratch scratch("m27-key");
+    install_builtin(scratch, builtin_key);
+
+    const std::string listed_catalogue = server.url("/v1/listed.json");
+    const registry::Descriptor listed_descriptor = serve_registry(
+        server,
+        listed,
+        "ridge-listed",
+        "Ridge Listed",
+        "/oa/listed.yaml",
+        listed_catalogue,
+        "/v1/listed.json",
+        nullptr
+    );
+    const std::string player_catalogue = server.url("/v1/player.json");
+    registry::Descriptor player_descriptor =
+        descriptor_for("ridge-player", "Ridge Player", player_catalogue, &listed);
+    serve_descriptor(server, "/oa/player.yaml", player_descriptor);
+    serve_document(
+        server, "/v1/player.json", sign_json(catalogue_json("ridge-player", 1), player_key)
+    );
+
+    content::Service service(options_for(scratch));
+    service.start();
+    const std::string listed_url = server.url("/oa/listed.yaml");
+    const std::vector<fixture::LoggedRequest> before = server.requests();
+
+    const uint64_t malformed = service.check_registry_url(listed_url, "not-a-key");
+    const std::optional<content::RegistryCheck> bad_key = await(service, malformed);
+    expect_refusal(bad_key, registry::Refusal::unreadable);
+    OA_CHECK(bad_key && bad_key->detail == "The signing key could not be read.");
+    const std::vector<fixture::LoggedRequest> after_malformed = server.requests();
+    OA_CHECK(after_malformed.size() == before.size());
+    OA_CHECK(count_target(server, "/oa/listed.yaml") == 0);
+
+    const std::string builtin_text(signing::public_key_text(builtin_key.key.key).view());
+    const uint64_t pinned = service.check_registry_url(listed_url, builtin_text);
+    const std::optional<content::RegistryCheck> pinned_check = await(service, pinned);
+    expect_refusal(pinned_check, registry::Refusal::built_in_key);
+    const auto pinned_snapshot = service.snapshot();
+    OA_CHECK(pinned_snapshot && find_view(*pinned_snapshot, "ridge-listed") == nullptr);
+
+    const std::string other_text(signing::public_key_text(other.key.key).view());
+    const uint64_t wrong = service.check_registry_url(listed_url, other_text);
+    const std::optional<content::RegistryCheck> refused = await(service, wrong);
+    expect_refusal(refused, registry::Refusal::unreadable);
+    OA_CHECK(refused && refused->detail == "The catalogue isn't signed by this key.");
+    std::string why = "not stored";
+    OA_CHECK(service.add_checked_registry(wrong, &why) == registry::Refusal::unreadable);
+    OA_CHECK(why == "The catalogue isn't signed by this key.");
+    const auto refused_snapshot = service.snapshot();
+    OA_CHECK(refused_snapshot && find_view(*refused_snapshot, "ridge-listed") == nullptr);
+
+    const std::string listed_text(signing::public_key_text(listed.key.key).view());
+    const uint64_t kept = service.check_registry_url(listed_url, "  " + listed_text + "\t");
+    const std::optional<content::RegistryCheck> kept_check = await(service, kept);
+    expect_refusal(kept_check, registry::Refusal::none);
+    if (!kept_check || kept_check->refusal != registry::Refusal::none)
+        return;
+    OA_CHECK(kept_check->descriptor && kept_check->descriptor->keys.size() == 1);
+    OA_CHECK(kept_check->descriptor && kept_check->descriptor->keys[0].id == listed.key.id);
+    OA_CHECK(kept_check->descriptor && kept_check->descriptor->keys[0].key == listed.key.key);
+    OA_CHECK(kept_check->fingerprints == registry::key_fingerprints(*kept_check->descriptor));
+    OA_CHECK(service.add_checked_registry(kept, &why) == registry::Refusal::none);
+
+    const std::string player_text(signing::public_key_text(player_key.key.key).view());
+    const uint64_t good = service.check_registry_url(server.url("/oa/player.yaml"), player_text);
+    const std::optional<content::RegistryCheck> accepted = await(service, good);
+    expect_refusal(accepted, registry::Refusal::none);
+    if (!accepted || accepted->refusal != registry::Refusal::none)
+        return;
+    OA_CHECK(accepted->descriptor && accepted->descriptor->keys.size() == 1);
+    OA_CHECK(accepted->descriptor && accepted->descriptor->keys[0].id == "player");
+    OA_CHECK(accepted->descriptor && accepted->descriptor->keys[0].key == player_key.key.key);
+    OA_CHECK(accepted->descriptor && accepted->descriptor->keys[0].key != listed.key.key);
+    OA_CHECK(accepted->fingerprints == registry::key_fingerprints(*accepted->descriptor));
+    OA_CHECK(accepted->fingerprints != registry::key_fingerprints(player_descriptor));
+    OA_CHECK(service.add_checked_registry(good, &why) == registry::Refusal::none);
+
+    const registry::PlayerRegistries player = load_player(scratch);
+    OA_CHECK(player.registries.size() == 2);
+    const registry::Descriptor* stored_listed = nullptr;
+    const registry::Descriptor* stored_player = nullptr;
+    for (const registry::AddedRegistry& added : player.registries) {
+        if (added.descriptor.id == "ridge-listed")
+            stored_listed = &added.descriptor;
+        if (added.descriptor.id == "ridge-player")
+            stored_player = &added.descriptor;
+    }
+    OA_CHECK(stored_listed != nullptr && stored_listed->keys.size() == 1);
+    OA_CHECK(
+        stored_listed && stored_listed->keys.size() == 1 &&
+        stored_listed->keys[0].id == listed.key.id && stored_listed->keys[0].key == listed.key.key
+    );
+    OA_CHECK(stored_player != nullptr && stored_player->keys.size() == 1);
+    OA_CHECK(
+        stored_player && stored_player->keys.size() == 1 && stored_player->keys[0].id == "player" &&
+        stored_player->keys[0].key == player_key.key.key
+    );
+    OA_CHECK(listed_descriptor.keys.size() == 1);
+    OA_CHECK(listed_descriptor.keys[0].key == listed.key.key);
+}
+
 } // namespace
 
 int main() {
@@ -800,5 +915,6 @@ int main() {
     test_remove_and_enable();
     test_mirror();
     test_malformed_file();
+    test_typed_signing_key();
     return oa::test::check_exit_status();
 }

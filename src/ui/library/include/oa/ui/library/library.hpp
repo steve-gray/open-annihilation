@@ -15,6 +15,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -45,9 +46,11 @@ struct SigningKey {
 /// descriptor is in the package's registries folder). It is the only thing
 /// the model reads to decide whether a registry is built in.
 struct Registry {
-    std::string id{};   ///< the registry's id
-    std::string name{}; ///< the name a player sees
-    bool built_in{};    ///< shipped with Open Annihilation; its downloads never ask
+    std::string id{};          ///< the registry's id
+    std::string name{};        ///< the short name: notes, "From", and downloads off
+    std::string title{};       ///< the card's heading; name when empty
+    std::string description{}; ///< the paragraph under the address and refresh lines
+    bool built_in{};           ///< shipped with Open Annihilation; its downloads never ask
     /// False when the registry needs an install ID and the player turned it off.
     bool downloads_on{true};
     /// Why downloads are off, in the player's words; empty when they are on.
@@ -266,9 +269,9 @@ struct Inputs {
     /// Why the last change of a registry was refused, in the player's words.
     /// The Registries tab shows it in amber; empty for none.
     std::string registries_notice{};
-    /// The base game entry's badge: the Open Annihilation logo, or the 3.1c
-    /// logo. Empty shows the entry's letters. The entry's `badge` points here
-    /// until the next refresh.
+    /// The base game entry's badge: Total Annihilation's icon from the game
+    /// folder in use. Empty shows the entry's letters. The entry's `badge`
+    /// points here until the next refresh.
     std::optional<Badge> base_game_badge{};
 };
 
@@ -402,6 +405,9 @@ struct Library {
     std::optional<EntryId> selected{};  ///< one of the visible entries; none when none shows
     bool details_open{};                ///< the selected entry's details page is open
     TextHooks text{};                   ///< how texts are looked up; empty for English
+    /// The base game's badge, scaled for the squares of the last layout.
+    /// Those pictures point here until the next layout, which clears this.
+    mutable std::deque<std::vector<uint8_t>> scaled_badge_pixels{};
 };
 
 /// The longest search kept, in bytes.
@@ -588,7 +594,7 @@ struct ActiveSetup {
     /// "Playing" while a mod is played; empty for the base game.
     std::string mod_state{};
     /// Its badge, which points into the Library's inputs until the next
-    /// refresh; null without one, and for the base game.
+    /// refresh. The base game's is Inputs::base_game_badge; null without one.
     const Badge* mod_badge{};
     /// The base game's title when no mod is played ("Base Game"); empty when one is.
     std::string base_title{};

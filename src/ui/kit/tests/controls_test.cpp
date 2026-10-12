@@ -400,7 +400,8 @@ bool black_outside(const renderer::Surface& surface, const kit::Rect& inside) {
 void state_icons_are_drawn_at_their_own_pixels() {
     using Icon = kit::StateIcon;
     const kit::Colour ink = kit::colour::accent;
-    for (const Icon icon : {Icon::circled_check, Icon::circled_up_arrow, Icon::download_arrow}) {
+    for (const Icon icon :
+         {Icon::circled_check, Icon::circled_up_arrow, Icon::download_arrow, Icon::key}) {
         renderer::Surface one = black(30, 30);
         kit::draw_state_icon(canvas_on(one), {3, 3, 14, 14}, icon, ink);
         OA_CHECK(black_outside(one, {3, 3, 14, 14}));
@@ -427,7 +428,7 @@ void state_icons_are_drawn_at_their_own_pixels() {
         if (icon == Icon::download_arrow) {
             expect(two, 6 + 2, 6 + 13, kBlack);
             expect(two, 6 + 13, 6 + 10, ink);
-        } else {
+        } else if (icon == Icon::circled_check || icon == Icon::circled_up_arrow) {
             expect(two, 6 + 2, 6 + 13, ink);
         }
     }
