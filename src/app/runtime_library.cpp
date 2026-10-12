@@ -18,7 +18,6 @@
 #include "oa_layer.hpp"
 #include "package_paths.hpp"
 
-#include "oa/app/content/counts.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/pictures.hpp"
 #include "oa/app/content/service.hpp"
@@ -424,87 +423,10 @@ void search_updates(
     ++work.searches;
 }
 
-/// Brings one snapshot's download counts up to date.
-///
-/// A registry that hands out keys is read from the counts folder the first
-/// time, then fetched when its catalogue check is newer than the check its
-/// counts were last fetched for. A failed fetch keeps the counts already
-/// read and is logged once for that registry this run. A registry whose
-/// packages come straight from the catalogue is left alone.
-///
-/// @param work the worker
-/// @param client the worker's client
-/// @param snapshot the catalogues just published
-void fetch_download_counts(
-    LibraryWork& work, netgame::http::Client& client, const content::Snapshot& snapshot
-) {
-    std::filesystem::path folder;
-    {
-        base::threads::LockGuard guard(work.mutex);
-        folder = work.counts_folder;
-    }
-    for (const content::RegistryView& registry : snapshot.registries) {
-        const data::registry::Descriptor& descriptor = registry.registry.descriptor;
-        if (descriptor.mode != data::registry::DownloadMode::tokens || !descriptor.api)
-            continue;
-        const std::string& id = descriptor.id;
-        LibraryCounts held;
-        {
-            base::threads::LockGuard guard(work.mutex);
-            const auto found = work.counts.find(id);
-            if (found != work.counts.end())
-                held = found->second;
-        }
-        const bool was_loaded = held.loaded;
-        if (!held.loaded && !folder.empty()) {
-            std::string why;
-            if (std::optional<content::CountsTable> loaded =
-                    content::load_counts(folder, id, &why)) {
-                held.table = std::move(*loaded);
-                held.have = true;
-            }
-            held.loaded = true;
-        }
-        const bool due = content::counts_due(registry, held.fetched_for);
-        if (due) {
-            std::string why;
-            if (std::optional<content::CountsTable> fetched =
-                    content::fetch_counts(client, *descriptor.api, &why)) {
-                if (!folder.empty()) {
-                    std::string save_why;
-                    if (!content::save_counts(folder, id, *fetched, &save_why) && !held.logged) {
-                        std::cerr << "open-annihilation: library: download counts for " << id
-                                  << " could not be kept: " << save_why << '\n';
-                        held.logged = true;
-                    }
-                }
-                held.table = std::move(*fetched);
-                held.have = true;
-            } else if (!held.logged) {
-                std::cerr << "open-annihilation: library: download counts for " << id
-                          << " could not be read: " << why << '\n';
-                held.logged = true;
-            }
-            held.fetched_for = registry.checked;
-        }
-        if (was_loaded && !due)
-            continue;
-        {
-            base::threads::LockGuard guard(work.mutex);
-            LibraryCounts& stored = work.counts[id];
-            const bool changed =
-                held.have && (!stored.have || stored.table.generated != held.table.generated ||
-                              stored.table.by_kind_and_key != held.table.by_kind_and_key);
-            stored = std::move(held);
-            if (changed)
-                ++work.counts_generation;
-        }
-    }
-}
-
-/// The Library's worker: waits for a search, for pictures or for counts, and
-/// does each, until the host stops it. Its HTTP client is its own, and
-/// carries no install ID.
+/// The Library's worker: waits for a search or for pictures, and does each,
+/// until the host stops it. Its HTTP client is its own, and carries no
+/// install ID. It does not read a registry's download counts, and it does
+/// not open `<data>/content/counts`.
 ///
 /// @param argument the worker's state (LibraryWork)
 void library_worker(void* argument) {
@@ -513,21 +435,17 @@ void library_worker(void* argument) {
     for (;;) {
         bool search = false;
         bool pictures = false;
-        bool counts = false;
         bool match = false;
         std::shared_ptr<const content::Snapshot> snapshot;
         std::filesystem::path folder;
         {
             base::threads::LockGuard guard(work.mutex);
-            while (!work.stop && !work.updates_due && !work.counts_due &&
-                   !(work.pictures_due && !work.match_running))
+            while (!work.stop && !work.updates_due && !(work.pictures_due && !work.match_running))
                 work.wake.wait(work.mutex);
             if (work.stop)
                 return;
             search = work.updates_due;
             work.updates_due = false;
-            counts = work.counts_due;
-            work.counts_due = false;
             snapshot = work.snapshot;
             folder = work.user_folder;
             match = work.match_running;
@@ -537,8 +455,6 @@ void library_worker(void* argument) {
         }
         if (search && snapshot)
             search_updates(work, *snapshot, folder);
-        if (counts && snapshot)
-            fetch_download_counts(work, client, *snapshot);
         if (pictures && work.pictures) {
             try {
                 work.pictures->fetch_waiting(client, match);
@@ -788,7 +704,6 @@ void Runtime::LibraryHost::look_again(Runtime& runtime) {
         work.snapshot = std::move(snapshot);
         work.user_folder = runtime.user_folder_;
         work.updates_due = true;
-        work.counts_due = true;
     }
     if (ensure_worker())
         work.wake.notify_all();
@@ -919,8 +834,8 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
             return;
     }
     // Rows are asked by their control, not by the text they draw: a maker's
-    // mark and a download count ride on that text, and matching it left
-    // every marked row unasked. The selected row is first. What waits is
+    // mark rides on that text, and matching it left every marked row
+    // unasked. The selected row is first. What waits is
     // forgotten as the Library closes.
     library::PictureSource source;
     source.context = this;
@@ -1102,10 +1017,8 @@ Runtime::LibraryHost& Runtime::library_host() {
         // The pictures are kept beside the cached catalogues.
         const std::filesystem::path content_folder = content_service().content_folder();
         std::filesystem::path pictures_folder;
-        if (!content_folder.empty()) {
+        if (!content_folder.empty())
             pictures_folder = content_folder / std::string(content::pictures_folder_name);
-            host.work.counts_folder = content_folder / std::string(content::counts_folder_name);
-        }
         host.work.pictures =
             std::make_unique<content::PictureCache>(pictures_folder, &host.work.cancel);
     }
@@ -1174,16 +1087,14 @@ bool Runtime::LibraryHost::own_built_in(void* context, std::string_view registry
 uint64_t Runtime::library_feed_generation() {
     LibraryHost& host = library_host();
     uint64_t searches = 0;
-    uint64_t counts_seen = 0;
     {
         base::threads::LockGuard guard(host.work.mutex);
         searches = host.work.searches;
-        counts_seen = host.work.counts_generation;
     }
     const uint64_t pictures = host.work.pictures ? host.work.pictures->generation() : 0;
     const uint64_t minimaps = host.previews ? host.previews->generation : 0;
     return content_service().generation() + content_downloads().generation() + searches + pictures +
-           minimaps + counts_seen + engine_settings_state().offered_generation;
+           minimaps + engine_settings_state().offered_generation;
 }
 
 library::Inputs Runtime::library_inputs() {
@@ -1243,14 +1154,6 @@ library::Inputs Runtime::library_inputs() {
                 inputs.checking = inputs.checking || view.refreshing;
             }
         }
-        std::map<std::string, content::CountsTable> download_counts;
-        {
-            base::threads::LockGuard guard(host.work.mutex);
-            for (const auto& held : host.work.counts) {
-                if (held.second.have)
-                    download_counts.emplace(held.first, held.second.table);
-            }
-        }
         host.picture_urls.clear();
         for (const content::Entry& entry : snapshot->entries) {
             if (entry.package == nullptr)
@@ -1308,20 +1211,6 @@ library::Inputs Runtime::library_inputs() {
                     }
                 }
                 listing.maps.push_back(std::move(line));
-            }
-            // A count is shown only when this registry hands out keys and its
-            // last counts name this package. It changes nothing but the byline.
-            if (view != nullptr &&
-                view->registry.descriptor.mode == data::registry::DownloadMode::tokens &&
-                view->registry.descriptor.api) {
-                const auto table = download_counts.find(entry.registry);
-                if (table != download_counts.end()) {
-                    const auto count = table->second.by_kind_and_key.find(
-                        {data::catalogue::kind_name(package.kind), package.id}
-                    );
-                    if (count != table->second.by_kind_and_key.end())
-                        listing.downloads = count->second;
-                }
             }
             // The badge, resolved against the host that served the
             // catalogue: shown once the worker has read and checked it.
@@ -2063,8 +1952,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
             runtime_.change_library_registry(result.registry, result.registry_on);
             return false;
         case library::Action::refresh_registry:
-            // One registry: its catalogue, then its download counts once that
-            // catalogue is newer than the counts last fetched for it.
+            // One registry: its catalogue. The game does not ask for download counts.
             runtime_.content_service().refresh(content::RefreshReason::check_now, result.registry);
             return false;
         case library::Action::uninstall:

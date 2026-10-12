@@ -297,8 +297,8 @@ const kit::ListRowLook* row_look_named(const kit::DisplayList& list, std::string
 
 /// Returns the Library: the base game and thirty-nine built-in mods.
 ///
-/// Each mod names Open Annihilation as its author and a download count, so
-/// its row's text carries the maker's mark and its byline the count.
+/// Each mod names Open Annihilation as its author, so its row's text
+/// carries the maker's mark and its byline names that author.
 ///
 /// @return the Library, on Mods, with pack 30 selected
 lib::Library forty_rows() {
@@ -318,7 +318,6 @@ lib::Library forty_rows() {
             fixture::core, lib::Kind::mod, key, name, "1.0", fixture::mib, "A pack.", {}
         );
         pack.author = "Open Annihilation";
-        pack.downloads = 1200;
         inputs.listings.push_back(std::move(pack));
     }
     lib::Library library;
@@ -356,7 +355,7 @@ void rows_in_view_are_asked_once_and_a_picture_redraws() {
     OA_CHECK(at_top.size() < library.visible.size());
     OA_CHECK(shown_origin(library, at_top).has_value());
 
-    // A shown mod's text carries the maker's mark, and its byline the count,
+    // A shown mod's text carries the maker's mark, and its byline the author,
     // which is what a match on the drawn text used to miss.
     const ShownRow* marked = nullptr;
     for (const ShownRow& row : at_top) {
@@ -371,7 +370,8 @@ void rows_in_view_are_asked_once_and_a_picture_redraws() {
         if (control != nullptr && look != nullptr) {
             OA_CHECK(control->text.find("Open Annihilation") != std::string::npos);
             OA_CHECK(control->text.find(" · ") != std::string::npos);
-            OA_CHECK(look->by.find("download") != std::string::npos);
+            OA_CHECK(look->by.find("by Open Annihilation") != std::string::npos);
+            OA_CHECK(look->by.find("download") == std::string::npos);
             OA_CHECK(look->maker == kit::MakerMark::open_annihilation);
             OA_CHECK(!renderer::picture_drawable(look->badge));
             OA_CHECK(!look->badge_text.empty());

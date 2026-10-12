@@ -130,7 +130,6 @@ struct Listing {
     uint64_t size{};                     ///< the package's size, in bytes
     std::optional<double> coverage{};    ///< a language pack's coverage, 0 to 1
     std::vector<MapLine> maps{};         ///< a map pack's maps
-    std::optional<uint64_t> downloads{}; ///< how many times it was downloaded, when known
     std::optional<Badge> badge{};        ///< the badge, when the app has it
     /// The day this release was published, `YYYY-MM-DD` as the catalogue
     /// writes it; empty when the catalogue names none.
@@ -768,7 +767,7 @@ enum class Action : uint8_t {
     /// `ScreenResult::registry_on` is the half that was chosen.
     set_registry,
     /// REFRESH on one registry's row. `ScreenResult::registry` names it.
-    /// The host asks that registry for its catalogue and its download counts.
+    /// The host asks that registry for its catalogue.
     refresh_registry,
     /// An installed package's: asks first, then removes its folder and the
     /// copy ROLL BACK keeps (uninstall.hpp).
@@ -861,14 +860,12 @@ struct Fact {
 /// @return the line
 [[nodiscard]] std::string status_line(const Library& library, const Entry& entry);
 
-/// Names who made an entry's package, and how many times it was downloaded
-/// when the registry has a count: "by" its author, else its publisher, then
-/// " · 12,400 downloads". The count alone when the listing names no one.
+/// Names who made an entry's package: "by" its author, else its publisher.
 ///
 /// @param entry the entry
 /// @param text how texts are looked up
 /// @return the line; empty for the player's own packages, and when the
-///         listing names neither a person nor a count
+///         listing names no one
 [[nodiscard]] std::string byline(const Entry& entry, const TextHooks& text = {});
 
 /// Says how an update of one mod meets the mod being played, and, on an

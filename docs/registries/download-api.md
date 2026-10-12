@@ -167,6 +167,11 @@ because a 409 means a result is already stored.
 
 ## Counts
 
+Open Annihilation does not read Counts. The endpoint stays so a registry
+owner can publish how many times each package was downloaded. The game
+shows no count and keeps no copy of the reply. An old file under
+`<data>/content/counts` is left where it is.
+
 `GET <api>/counts` returns `200` with `Cache-Control: public, max-age=300`:
 
 | Member | Rule |

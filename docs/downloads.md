@@ -264,7 +264,7 @@ waiting, running or paused, and during a game.
 
 Open Annihilation reports nothing about how you play. For content it makes
 only these requests: it fetches registries' catalogues, their signatures,
-packages' pictures and download counts, and packages; and from a registry
+packages' pictures and packages; and from a registry
 that uses download keys it asks for a key before each package, reports how
 the download ended, and, while a check that you are a person waits, asks
 whether it is passed.
@@ -300,7 +300,7 @@ reports how, and sends:
 
 A key that runs out before the download ends is asked for again, with the
 same fields. Nothing else goes with a download. The catalogue, its
-signature, the pictures and the download counts are fetched with no
+signature and the pictures are fetched with no
 install ID and nothing about you. A registry that downloads directly
 ("direct") gets no key request and no result: it sees only the package
 fetched.
@@ -409,7 +409,7 @@ Library, comes from Core Prime's registry, and so with its install ID.
   in `Registries.yaml` in your own Open Annihilation folder, beside `Mods`
   ([the installation guides](installation/macos.md#where-it-keeps-its-files)
   say where that is). OA writes it as you add, remove or switch registries.
-- **The lists OA fetched**, the pictures, the download counts and the
+- **The lists OA fetched**, the pictures and the
   downloaded files are in the game's data folder, under `content`: on macOS
   `~/Library/Application Support/net.coreprime.open-annihilation`, on
   Windows `CorePrime\Open Annihilation` in your local application data, and

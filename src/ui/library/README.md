@@ -135,10 +135,8 @@ translator finds them together. Every word passes through `Library::text`
     update asks no question that would say it. From says "Not reviewed by
     the OA team" for an added registry;
   - the byline names the author, or the publisher when there is no author.
-    When the listing carries a download count it continues
-    " · 12,400 downloads". With no author and no publisher the count is
-    the whole line ("1 download"). A listing with no count shows nothing
-    more. The count does not change an entry's state, order or search rank;
+    A listing that names neither shows nothing more. The byline does not
+    change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
     Ridge."), after "The command line chose this run's mod." on every
     installed mod while the command line chose it;
@@ -156,8 +154,7 @@ translator finds them together. Every word passes through `Library::text`
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
-  "188 MB"), download counts (`downloads_text`: "1 download",
-  "12,400 downloads"), download progress, ages, rules hashes
+  "188 MB"), download progress, ages, rules hashes
   ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), a release as
   the facts give it (`release_text`: "4.8 (rev 3)"), engine
   requirements, what an update changes from and to (`change_texts`:
@@ -280,24 +277,29 @@ app removes the folder (`Runtime::library_uninstall`,
     `Action::switch_off` of the mod being played. The language tile has the
     pack's badge or a language mark, the name in itself and in English,
     the version and revision and the coverage, or Built in as a neutral
-    pill on the title's line. Each installed map is a tile with its minimap,
-    its title, its players and size, its description cut to one line, and
-    a link `library.active.from.<n>` that opens the Maps tab with that pack
+    pill on the title's line. Each installed map on a small window is one
+    line: its name, its players and its size ("Twin Rivers · 2 players ·
+    12x12"). On a larger window each map is a tile with its minimap, its
+    title, its players and size, its description cut to one line, and a
+    link `library.active.from.<n>` that opens the Maps tab with that pack
     selected and its row in view. A pack of several maps keeps the link on
-    a From line ("From Core Map Pack"). A pack of one map leaves that line
-    out and the title is the link, its text the title, drawn in the accent
-    and lighter while hovered. A minimap is
+    a From line ("From Core Map Pack") under the tile's lines, and at the
+    right of the one line on a small window. A pack of one map leaves that
+    line out and the title is the link, its text the title, drawn in the
+    accent and lighter while hovered. A minimap is
     fitted in its square, centred, and the letterbox is the list's well
     colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
-    last line or the button. Compact stacks the tiles; Regular and Large
-    put the mod and the language side by side, the titles on one line and
-    the tiles the same height; Large puts the maps in two columns of
-    equal height when more than one is installed. The mod label stops
-    above UNLOAD MOD, the language label covers its tile, and each map's
-    label covers its title line, or the players-and-size line when the
-    title is the link, so it does not meet the link. They scroll
-    as the details do when they are taller than the window. The labels take
+    last line or the button. Compact stacks the mod and the language and
+    lists the maps on one line each; Regular and Large put the mod and the
+    language side by side, the titles on one line and the tiles the same
+    height; Large puts the maps in two columns of equal height when more
+    than one is installed. The mod label stops above UNLOAD MOD, the
+    language label covers its tile, and each map's label covers its title
+    line, or the players-and-size line when the title is the link, and on
+    a small window the part of the line after the title when that title is
+    the link, so it does not meet the link. The maps pane scrolls on its
+    own when the maps are taller than the room under the heading. The labels take
     no press. UNLOAD MOD does, while it is enabled, and so does a map's
     link while its line shows; Tab and the arrows reach both. A pack of one map
     wears that map's minimap on every row and in the details. A pack of
@@ -361,11 +363,12 @@ app removes the folder (`Runtime::library_uninstall`,
     main button). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
-    (`details_page_layout`): its name and version in the header, the way
-    back ("‹ Mods"), the status line, the byline, the summary in at most
-    three lines, the short facts in label and value columns, the playing
-    note, and in the footer the first three actions, MORE ▾ holding the
-    rest, and CLOSE;
+    (`details_page_layout`): its name and version in the header, the status
+    line, the byline, the summary in at most three lines, the short facts
+    in label and value columns, the playing note, and in the footer the
+    first three actions, MORE ▾ holding the rest, and BACK. BACK returns
+    to the list and keeps its tab, filter, search, scroll and row. The
+    list page's button stays CLOSE;
   - **Regular** shows "Open Annihilation Library" and "v0.8.0", the same
     refresh icon, the tabs with their All counts and a 240-point search, a row of chips (All, New,
     Installed and Updates with their counts, and the tags while they fit,
@@ -401,8 +404,8 @@ app removes the folder (`Runtime::library_uninstall`,
     actions, the footer's buttons (on Active, the tabs and the footer's
     buttons alone; on Registries, the tabs, each registry's key icon,
     REFRESH, switch, REMOVE and ADD MIRROR…, ADD REGISTRY…, and the
-    footer's buttons); on Compact's details page, the way back, the actions,
-    MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
+    footer's buttons); on Compact's details page, the actions, MORE and
+    BACK. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
@@ -575,7 +578,7 @@ Latest and Author among them, a revision of 0 left out, a version left
 out, a fact with nothing to say left out and the manifest's author
 standing in; the Rules fact for an unchanged, changed and unknown rules
 hash in both lengths; status lines, "Update available" for an update
-that names no revision, bylines with and without a download count, and
+that names no revision, bylines with a maker and with none, and
 the playing note; the queue lines, after an update that changed the
 rules and one that kept them; `change_texts` for a new revision, a new
 version and a side that names no revision; every text function,
@@ -654,24 +657,29 @@ press, the header's close mark to the right of refresh asking what CLOSE
 asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
-Active tab with forty more maps: its lines taking no press, UNLOAD MOD
-asking what SWITCH OFF asks and greyed during a game, and the tiles scrolling
-by the wheel, the page keys, Home, End and the right stick.
+Active tab with forty more maps: the mod and the language take no press
+and stay put, UNLOAD MOD asking what SWITCH OFF asks and greyed during a
+game, the maps pane scrolling by the wheel, a finger, its scroll bar, the
+page keys, Home, End and the right stick, and the maps search filtering
+by map name and by pack name, counting the tiles that match and saying
+when nothing matches.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact, Regular and Large, the Updates tab at
-Compact and Large, the Registries tab at Compact, Regular and Large,
+page, the Active tab at Compact, Regular and Large and with many maps at
+Regular, the Updates tab at Compact and Large, the Registries tab at
+Compact, Regular and Large,
 Languages at Compact, and the Maps tab at Large for one map and for
 several: each twice, byte for byte the same, with nothing
 drawn outside the window and every pixel of it drawn, every part inside
 it and every text fitting. The Active and Maps pictures dress the
 fixture's maps with made-up minimaps and a long description, on that
-drawing only, so the tiles show a minimap, a cut description and a From
-link, a one-map pack shows its minimap on the row and large in the
-details, and a several-map pack with no badge shows the first map on the
-row and a grid in the details. The Registries pictures dress the fixture's
+drawing only. Compact lists each map on one line, the pack link at the
+right when the pack holds several. Regular and Large show a minimap, a
+cut description and a From link. A one-map pack shows its minimap on the
+Maps row and large in the details, and a several-map pack with no badge
+shows the first map on the row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
 name, on that copy only. That author is Open Annihilation, so the card
 shows the app icon under its key, the plates filtered down, or the drawn
@@ -683,6 +691,7 @@ under its check.
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
 `library-active-regular.png`, `library-active-large.png`,
+`library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
 `library-registries-large.png`, `library-languages-compact.png`,
@@ -704,5 +713,7 @@ for review.
   it presses a row that does not show.
 - Large shows as many tags in its filter pane as fit, and TAGS ▾ holds the
   rest; the filter pane does not scroll.
-- The scroll bars show where the panes are scrolled but take no press: the
-  wheel, the keys, the right stick and a finger scroll them.
+- The list's and the details' scroll bars show where those panes are
+  scrolled but take no press: the wheel, the keys, the right stick and a
+  finger scroll them. The Active tab's maps bar does take a press, and
+  dragging it scrolls the maps.
