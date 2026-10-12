@@ -204,9 +204,7 @@ add_subdirectory(src/data/map-pack)
 add_subdirectory(src/data/map-fit)
 add_subdirectory(src/data/pe-icon)
 add_subdirectory(src/formats/zip)
-# LZMA is added from src/formats/CMakeLists.txt. The other format modules
-# stay on their own lines above and below.
-add_subdirectory(src/formats)
+add_subdirectory(src/formats/lzma)
 add_subdirectory(src/sim/sprite-animation)
 add_subdirectory(src/formats/tnt)
 add_subdirectory(src/formats/ota)
