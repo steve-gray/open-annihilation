@@ -40,11 +40,17 @@ settings and exactly what a download sends and records.
 The Library opens on the main menu, from:
 
 - **the OA button**, the Open Annihilation logo at the bottom right of the
-  main menu, left of the **Settings** button and its gears. It opens on the
-  [Active](#the-active-tab) tab. While updates you can install wait, the
-  button wears an amber dot in its top right corner, from the moment OA
-  finds them: you need not open the Library to learn of them, and its
-  **Updates** tab lists them;
+  main menu, a 48-pixel square left of the **Settings** button and its
+  gears (the same size, a quarter of a side apart, 12 pixels in from the
+  frame). It opens on the [Active](#the-active-tab) tab. Its bottom-right
+  corner shows how many mods the Mods tab lists under All (every mod the
+  registries list, plus your own, without the Base Game entry): `7`, `123`,
+  or `999+` above 999. While the catalogues are still being read and that
+  number is not final, a small spinner turns there instead, and stops once
+  the list is in. While updates you can install wait, the button also wears
+  an amber dot in its top right corner, from the moment OA finds them: you
+  need not open the Library to learn of them, and its **Updates** tab lists
+  them;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
   Languages, over the settings, which stay open under it.
 

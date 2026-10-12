@@ -319,6 +319,9 @@ inline constexpr std::string_view more_menu = "MORE";
 /// How many updates the Updates tab shows.
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
+/// How many mods the main menu's Library button says the Mods tab lists.
+inline constexpr std::string_view mod_count_one = "{count} mod";
+inline constexpr std::string_view mod_count_many = "{count} mods";
 
 // The Active tab: the mod being played, the language in use and the
 // installed maps, under one heading each.

@@ -8437,8 +8437,7 @@ void the_oa_button_shows_the_icon_or_the_mark() {
     };
     constexpr renderer::Rgb kHover{0x20, 0x24, 0x1c};
 
-    // At rest the icon fills the button but for 3 pixels all round: 26 of
-    // the main menu's 32, 18 of the in-game column's 24.
+    // At rest the icon fills the button but for 3 pixels all round.
     for (const int32_t side : {settings::menu_button_side, settings::ingame_button_side}) {
         const Canvas idle = button(side, settings::ButtonLook::idle, icon.picture());
         const int32_t middle = side / 2;
@@ -8466,17 +8465,23 @@ void the_oa_button_shows_the_icon_or_the_mark() {
         CHECK(held.at(4, 4) == kBand && held.at(9, 4) == kIconColor);
     }
 
-    // Twice as large, the icon is drawn at the surface's own resolution.
+    // Twice as large, the icon is drawn at the surface's own resolution:
+    // the same 3-pixel inset, in surface pixels.
     const Canvas large =
         button(settings::menu_button_side, settings::ButtonLook::idle, icon.picture(), 2);
-    const auto large_row = columns_of(large, 32, kIconColor);
-    CHECK(large_row.size() == 52 && large_row.front() == 6 && large_row.back() == 57);
+    const int32_t icon_run = (settings::menu_button_side - 6) * 2;
+    const auto large_row = columns_of(large, settings::menu_button_side, kIconColor);
+    CHECK(large_row.size() == static_cast<std::size_t>(icon_run));
+    CHECK(!large_row.empty() && large_row.front() == 6 && large_row.back() == 6 + icon_run - 1);
 
-    // Without the icon, a green OA mark in a green outlined square, 20 of
-    // the main menu button's 32 pixels a side.
+    // Without the icon, a green OA mark in a green outlined square, 20/32
+    // of the button's side.
+    const int32_t square_side = settings::menu_button_side * 20 / 32;
+    const int32_t square_at = (settings::menu_button_side - square_side) / 2;
     const Canvas marked = button(settings::menu_button_side, settings::ButtonLook::idle, kNoIcon);
-    CHECK(marked.at(6, 6) == kAccent && marked.at(25, 25) == kAccent);
-    CHECK(marked.at(5, 6) == kPanel);
+    CHECK(marked.at(square_at, square_at) == kAccent);
+    CHECK(marked.at(square_at + square_side - 1, square_at + square_side - 1) == kAccent);
+    CHECK(marked.at(square_at - 1, square_at) == kPanel);
     CHECK(columns_of(marked, 16, kIconColor).empty());
     const auto short_pixels = std::vector<uint8_t>(icon.pixels.begin(), icon.pixels.end() - 1);
     const Canvas broken = button(
@@ -8505,9 +8510,12 @@ void the_oa_mark_alone_shows_the_icon_or_the_button_mark() {
     CHECK(columns_of(sharp, 40, kIconColor).size() == 78);
     // Without the icon, the OA button's mark at rest: the green outlined
     // square 20/32 of the side, the rest left as it was.
+    const int32_t square_side = settings::menu_button_side * 20 / 32;
+    const int32_t square_at = (settings::menu_button_side - square_side) / 2;
     const Canvas marked = mark(settings::menu_button_side, kNoIcon);
-    CHECK(marked.at(6, 6) == kAccent && marked.at(25, 25) == kAccent);
-    CHECK(marked.at(5, 6) == (renderer::Rgb{0, 0, 0}));
+    CHECK(marked.at(square_at, square_at) == kAccent);
+    CHECK(marked.at(square_at + square_side - 1, square_at + square_side - 1) == kAccent);
+    CHECK(marked.at(square_at - 1, square_at) == (renderer::Rgb{0, 0, 0}));
     CHECK(marked.at(0, 0) == (renderer::Rgb{0, 0, 0}));
     Canvas button = blank(settings::menu_button_side, settings::menu_button_side);
     settings::draw_oa_button(

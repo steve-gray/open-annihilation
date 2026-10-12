@@ -11,6 +11,7 @@
 
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
+#include "library_host.hpp"
 #include "oa_layer.hpp"
 
 #include "oa/app/runtime.hpp"
@@ -19,6 +20,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/looks.hpp"
+#include "oa/ui/library/library.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -47,6 +49,9 @@ constexpr int32_t kButtonGap = settings::menu_button_side / 4;
 /// The button overlay's z: under the extensions' overlays, which draw over
 /// the button and see input before it.
 constexpr int16_t kButtonOverlayZ = -100;
+/// How long one place of the Library button's spinner stays lit, in
+/// frame-clock units. Eight places make one turn.
+constexpr uint32_t kSpinnerTicksPerPlace = 4;
 /// The sound Settings plays as it opens on the main menu.
 constexpr std::string_view kOpenSound = "Options";
 
@@ -196,15 +201,40 @@ int Runtime::EngineSettingsMenuHost::button_event(ScreenContext* context, void*)
     }
 }
 
+kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime) {
+    LibraryHost& shown = runtime.library_host();
+    if (!shown.refreshed)
+        shown.rebuild(runtime);
+    std::size_t mods = 0;
+    for (const oa::ui::library::Entry& entry : shown.model.entries) {
+        if (entry.id.kind == oa::ui::library::Kind::mod)
+            ++mods;
+    }
+    kit::OaButtonMark mark;
+    mark.dot = runtime.library_update_count() > 0;
+    // A fetch that has not yet produced a list has no number to show. Once
+    // a list is in, a later fetch keeps that number: the spinner stops.
+    const bool arriving = shown.model.inputs.checking && shown.model.inputs.list_age_seconds < 0;
+    if (!shown.refreshed || arriving) {
+        mark.corner = kit::OaButtonCorner::spinner;
+        mark.turn = runtime.frontend_tick() / kSpinnerTicksPerPlace;
+        return mark;
+    }
+    mark.corner = kit::OaButtonCorner::count;
+    mark.count = mods;
+    return mark;
+}
+
 void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*) {
     auto& runtime = *static_cast<Runtime*>(context->host);
     if (!button_shown(runtime) || context->surface == nullptr)
         return;
+    const kit::OaButtonMark library_badge = library_mark(runtime);
     const auto& host = runtime.engine_settings_menu_host();
     const bool covered = runtime.oa_layer().modal_shown(false);
     const auto rect = button_rect(runtime);
-    // The dot shows while the Library has updates that can be installed;
-    // without it the button is drawn as it always was.
+    // The dot stays in the top right while updates can be installed. The
+    // bottom right is the mod count, or the spinner while it is not final.
     kit::draw_oa_button(
         {context->surface,
          {rect.x, rect.y, 1},
@@ -214,9 +244,9 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         static_cast<kit::OaButtonState>(
             button_look(host.button_hovered, host.button_pressed, covered)
         ),
-        runtime.library_update_count() > 0
+        library_badge
     );
-    // The Settings button never wears the dot.
+    // The Settings button wears neither the dot nor the mod count.
     const auto beside = settings_button_rect(runtime);
     kit::draw_oa_button(
         {context->surface,

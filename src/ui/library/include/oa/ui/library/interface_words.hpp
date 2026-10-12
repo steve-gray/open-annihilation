@@ -207,6 +207,8 @@ inline constexpr std::string_view interface_words[] = {
     words::active_players_many,
     words::update_count_one,
     words::update_count_many,
+    words::mod_count_one,
+    words::mod_count_many,
     words::question_all_many,
     words::progress,
     words::size_download_short,
