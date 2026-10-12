@@ -836,6 +836,14 @@ void test_active_setup() {
     inputs.language = {"Deutsch", "Deutsch (Fixture)", "1.2"};
     inputs.map_packs.push_back({"zeta pack", {{"Last Map", 1, "8x8"}}});
     inputs.map_packs.push_back({"Alpha Pack", {{"Ridgeline", 4, "16x16"}, {"Twin", 2, "12x12"}}});
+    lib::MapPicture minimap;
+    minimap.width = 8;
+    minimap.height = 2;
+    minimap.rgba.assign(8U * 2U * 4U, 0);
+    minimap.rgba[0] = 255;
+    minimap.rgba[3] = 255;
+    inputs.map_packs[0].maps[0].preview = std::move(minimap);
+    inputs.map_packs[0].maps[0].description = "The last island.";
     lib::Installed alpha = installed(core, Kind::map_pack, "alpha", "Alpha Pack");
     alpha.badge = lib::Badge{std::vector<uint8_t>(4, 0xff), 1, 1};
     inputs.installed.push_back(std::move(alpha));
@@ -852,20 +860,29 @@ void test_active_setup() {
     OA_CHECK_TEXT(setup.mod_line, "Ridge 4.8 · rev 3");
     OA_CHECK(setup.mod_badge != nullptr && setup.mod_badge->width == 4);
     OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
-    OA_CHECK(setup.packs.size() == 2);
-    if (setup.packs.size() == 2) {
-        OA_CHECK_TEXT(setup.packs[0].name, "Alpha Pack");
-        OA_CHECK_TEXT(setup.packs[1].name, "zeta pack");
-        OA_CHECK(setup.packs[0].maps.size() == 2);
-        if (setup.packs[0].maps.size() == 2) {
-            OA_CHECK_TEXT(setup.packs[0].maps[0].players, "4 players");
-            OA_CHECK_TEXT(setup.packs[0].maps[0].line, "Ridgeline · 4 players · 16x16");
-            OA_CHECK_TEXT(setup.packs[0].maps[1].name, "Twin");
-        }
-        if (!setup.packs[1].maps.empty())
-            OA_CHECK_TEXT(setup.packs[1].maps[0].line, "Last Map · 1 player · 8x8");
-        OA_CHECK(setup.packs[0].badge != nullptr && setup.packs[0].badge->width == 1);
-        OA_CHECK(setup.packs[1].badge == nullptr);
+    // Folded title, then folded pack: Last Map, Ridgeline, Twin.
+    OA_CHECK(setup.maps.size() == 3);
+    if (setup.maps.size() == 3) {
+        OA_CHECK_TEXT(setup.maps[0].name, "Last Map");
+        OA_CHECK_TEXT(setup.maps[0].pack_name, "zeta pack");
+        OA_CHECK_TEXT(setup.maps[0].players, "1 player");
+        OA_CHECK_TEXT(setup.maps[0].line, "Last Map · 1 player · 8x8");
+        OA_CHECK_TEXT(setup.maps[0].from, "From zeta pack");
+        OA_CHECK_TEXT(setup.maps[0].description, "The last island.");
+        OA_CHECK(setup.maps[0].preview != nullptr && setup.maps[0].preview->width == 8);
+        OA_CHECK(setup.maps[0].pack_id.key.empty());
+        OA_CHECK_TEXT(setup.maps[1].name, "Ridgeline");
+        OA_CHECK_TEXT(setup.maps[1].pack_name, "Alpha Pack");
+        OA_CHECK_TEXT(setup.maps[1].players, "4 players");
+        OA_CHECK_TEXT(setup.maps[1].line, "Ridgeline · 4 players · 16x16");
+        OA_CHECK_TEXT(setup.maps[1].from, "From Alpha Pack");
+        OA_CHECK(setup.maps[1].preview == nullptr);
+        OA_CHECK(setup.maps[1].pack_id.kind == Kind::map_pack);
+        OA_CHECK(setup.maps[1].pack_id.key == "alpha");
+        OA_CHECK(setup.maps[1].pack_id.registry == core);
+        OA_CHECK_TEXT(setup.maps[2].name, "Twin");
+        OA_CHECK_TEXT(setup.maps[2].pack_name, "Alpha Pack");
+        OA_CHECK(setup.maps[2].pack_id.key == "alpha");
     }
 
     // Without one, the mod the app says is played; a pack without a version is named alone.
@@ -904,7 +921,7 @@ void test_active_setup() {
     OA_CHECK_TEXT(setup.language_note, "Built in");
     OA_CHECK(setup.language_english.empty() && setup.language_version.empty());
     OA_CHECK_TEXT(setup.language_line, "Français · built in");
-    OA_CHECK(setup.packs.empty());
+    OA_CHECK(setup.maps.empty());
     inputs.language = {};
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);

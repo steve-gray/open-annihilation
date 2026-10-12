@@ -40,6 +40,12 @@ namespace oa::app {
 /// The name the Library has on the OA layer.
 inline constexpr std::string_view library_screen_name = "library";
 
+/// Minimaps the Library has decoded. Defined in runtime_library.cpp: this
+/// header stays free of the preview cache, which the rest of the app does
+/// not include. The host holds them because the Library's inputs are built
+/// here and the screen asks for the rows it shows.
+struct MapPreviewState;
+
 /// Where the Library's inputs come from, and where its downloads go. The
 /// runtime fills it from the content service, the Library's worker and the
 /// download queue (queue_download); --check-library fills it with fixtures
@@ -159,6 +165,9 @@ struct Runtime::LibraryHost {
     /// The pictures taken from the worker, by address: they stay while the
     /// host lives.
     std::map<std::string, oa::ui::library::Badge> badges{};
+    /// Minimaps decoded for the rows on screen. Null until the host is made.
+    /// The type lives in runtime_library.cpp.
+    std::unique_ptr<MapPreviewState> previews{};
     /// Each listing's picture's address, by registry and key, as the last
     /// inputs resolved it.
     std::map<std::pair<std::string, std::string>, std::string> picture_urls{};
@@ -187,10 +196,21 @@ struct Runtime::LibraryHost {
     /// Asks for the pictures of the entries the Library's list shows, and of
     /// the entry whose details show, that it does not hold yet, and wakes the
     /// worker while any waits. The runtime's own feed only; nothing while a
-    /// match runs.
+    /// match runs. A map pack's catalogue preview is asked for the same way.
     ///
     /// @param list the display list the Library shows
     void request_pictures(const oa::ui::kit::DisplayList& list);
+
+    /// Decodes a few minimaps for the rows this list shows, into `previews`.
+    ///
+    /// An installed map uses its preview picture, or its terrain file's
+    /// minimap. A catalogue picture uses bytes the worker has already handed
+    /// over. One terrain file is decoded per call, or a few pictures when
+    /// none is waiting, so a frame does not decode every map.
+    ///
+    /// @param runtime the runtime, whose game palette colours a terrain minimap
+    /// @param list the display list the Library shows
+    void pump_map_previews(Runtime& runtime, const oa::ui::kit::DisplayList& list);
 
     /// The runtime's own feed: the Library's inputs (Runtime::library_inputs).
     ///

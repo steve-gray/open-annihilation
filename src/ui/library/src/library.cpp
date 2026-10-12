@@ -57,21 +57,6 @@ const Badge* badge_of(const Entry& entry) {
     return nullptr;
 }
 
-/// Returns an installed map pack's badge, matched by the name the player sees.
-///
-/// @param library the Library
-/// @param name the pack's name
-/// @return the badge; null when no installed pack of that name has one
-const Badge* pack_badge(const Library& library, std::string_view name) {
-    for (const Entry& entry : library.entries) {
-        if (entry.id.kind != Kind::map_pack || entry_name(entry) != name)
-            continue;
-        if (const Badge* badge = badge_of(entry))
-            return badge;
-    }
-    return nullptr;
-}
-
 /// Returns who made an entry, as the details name an author.
 ///
 /// @param entry the entry
@@ -912,8 +897,24 @@ ActiveSetup active_setup(const Library& library) {
     }
 
     for (const InstalledMaps& pack : inputs.map_packs) {
-        ActivePack shown_pack;
-        shown_pack.name = pack.name;
+        EntryId pack_id;
+        if (!pack.key.empty()) {
+            for (const Entry& entry : library.entries) {
+                if (entry.id.kind == Kind::map_pack && entry.id.key == pack.key &&
+                    entry.id.registry == pack.registry) {
+                    pack_id = entry.id;
+                    break;
+                }
+            }
+        }
+        if (pack_id.key.empty()) {
+            for (const Entry& entry : library.entries) {
+                if (entry.id.kind == Kind::map_pack && entry_name(entry) == pack.name) {
+                    pack_id = entry.id;
+                    break;
+                }
+            }
+        }
         for (const MapLine& map : pack.maps) {
             ActiveMap line;
             line.name = map.name;
@@ -923,24 +924,29 @@ ActiveSetup active_setup(const Library& library) {
                 {{"count", std::to_string(map.players)}}
             );
             line.size = map.size;
+            line.description = map.description;
             line.line = filled(
                 text,
                 words::active_map,
                 {{"map", line.name}, {"players", line.players}, {"size", line.size}}
             );
-            shown_pack.maps.push_back(std::move(line));
+            line.pack_name = pack.name;
+            line.pack_id = pack_id;
+            if (map.preview && !map.preview->rgba.empty())
+                line.preview = &*map.preview;
+            line.from = filled(text, words::active_from_pack, {{"pack", pack.name}});
+            setup.maps.push_back(std::move(line));
         }
-        setup.packs.push_back(std::move(shown_pack));
     }
     std::stable_sort(
-        setup.packs.begin(),
-        setup.packs.end(),
-        [](const ActivePack& left, const ActivePack& right) {
-            return folded(left.name) < folded(right.name);
+        setup.maps.begin(), setup.maps.end(), [](const ActiveMap& left, const ActiveMap& right) {
+            const std::string left_name = folded(left.name);
+            const std::string right_name = folded(right.name);
+            if (left_name != right_name)
+                return left_name < right_name;
+            return folded(left.pack_name) < folded(right.pack_name);
         }
     );
-    for (ActivePack& pack : setup.packs)
-        pack.badge = pack_badge(library, pack.name);
     return setup;
 }
 

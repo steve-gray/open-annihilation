@@ -101,9 +101,11 @@ translator finds them together. Every word passes through `Library::text`
   in itself and in English, its pack, version, revision and coverage
   (`Inputs::language`: "Polski 1.0", "Coverage 92%") or the language the
   game holds itself ("English · built in", "Built in"); and each installed
-  map pack (`Inputs::map_packs`) by name, with its badge when an installed
-  pack of that name has one, and its maps' names, players ("4 players")
-  and sizes.
+  map (`Inputs::map_packs`), ordered by folded title and then folded pack
+  name, with its players ("4 players"), size, description, minimap when
+  one has been decoded, and the link "From Alpha Pack". The pack's entry
+  is the map-pack entry of the same key and registry, or, when the pack
+  names no key, the entry of the pack's name.
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
@@ -270,18 +272,29 @@ app removes the folder (`Runtime::library_uninstall`,
     `Action::switch_off` of the mod being played. The language tile has the
     pack's badge or a language mark, the name in itself and in English,
     the version and revision and the coverage, or Built in as a neutral
-    pill on the title's line. Each map pack is a tile with its badge, its
-    name and its maps (name, players, size). Badge, title and lines start
+    pill on the title's line. Each installed map is a tile with its minimap,
+    its title, its players and size, its description cut to one line, and
+    a link `library.active.from.<n>` ("From Core Map Pack") that opens the
+    Maps tab with that pack selected and its row in view. A minimap is
+    fitted in its square, centred, and the letterbox is the list's well
+    colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
     last line or the button. Compact stacks the tiles; Regular and Large
     put the mod and the language side by side, the titles on one line and
-    the tiles the same height; Large puts the map packs in two columns of
+    the tiles the same height; Large puts the maps in two columns of
     equal height when more than one is installed. The mod label stops
     above UNLOAD MOD, the language label covers its tile, and each map's
-    label covers its line. They scroll as the details do when they are
-    taller than the window. The labels take no press; UNLOAD MOD does, and
-    Tab and the arrows reach it while it is enabled. Compact's footer
-    holds no DETAILS there;
+    label covers its title line, so it does not meet the link. They scroll
+    as the details do when they are taller than the window. The labels take
+    no press. UNLOAD MOD does, while it is enabled, and so does a From link
+    while its line shows; Tab and the arrows reach both. A pack of one map
+    wears that map's minimap on every row and in the details. A pack of
+    several keeps its badge or its letters, and on the Maps tab a pack
+    with no badge shows the first map's minimap. The details show one
+    large minimap, or a grid, with each map's name, players, size and
+    description. While a minimap has not been decoded the square is the
+    well colour with an outline, and a row shows a dashed square.
+    Compact's footer holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
     search and no filters, one card for each registry, one under another
     with `card_gap`. A card has its avatar (the initials,
@@ -451,12 +464,14 @@ app removes the folder (`Runtime::library_uninstall`,
   - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
     or "No mod: the game as it was made"), `library.active.language`
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
-    ("Ridgeline · 4 players · 16x16"), and while a mod is played the button
-    `library.active.unload` ("UNLOAD MOD"), disabled during a game and
-    while the command line chose the mod. The mod label is the part of the
-    tile above that button, the language label the part of its tile that
-    shows, and a map's the part of its line that shows, empty while that
-    part is scrolled out; at most 4,000 maps are named.
+    ("Ridgeline · 4 players · 16x16"), the link `library.active.from.<n>`
+    ("From Core Map Pack") for the same map, and while a mod is played the
+    button `library.active.unload` ("UNLOAD MOD"), disabled during a game
+    and while the command line chose the mod. The mod label is the part of
+    the tile above that button, the language label the part of its tile that
+    shows, and a map's the part of its title line that shows, empty while
+    that part is scrolled out. The From link is left out while its line is
+    scrolled out of the area. At most 4,000 maps are named.
 - `focused_field(state, list)` gives the search field while it has the
   focus, over which a host keeps the system's text input started.
 
@@ -492,8 +507,9 @@ stay valid until the model's next refresh.
 - The layout decides no rule of the model: which entries show, in which
   order, their states, what blocks them, their actions, the filters'
   counts and what the Active tab says are the model's.
-- On the Active tab only UNLOAD MOD takes a press, a key or Tab, and only
-  while a mod is played and SWITCH OFF would act. The labels do not.
+- On the Active tab UNLOAD MOD takes a press, a key or Tab only while a
+  mod is played and SWITCH OFF would act, and each map's From link does
+  while its line shows. The labels do not.
 - Every action Regular offers is reachable at Compact: on the list page, or
   on the details page, its first three as buttons and the rest in MORE ▾.
 - No two controls meet, but the list and the rows it holds and each row
@@ -530,7 +546,9 @@ registry; the Library opening on Active; tabs, each tab's own filter, the
 Updates tab's filters across every kind, and tags with their counts; the
 filters' counts unmoved by the tag and the search; New's ten newest by
 day, ties by name, never an undated listing, on Mods, Maps and Updates;
-the Active tab's mod, language and map packs in each case; the order with
+the Active tab's mod, language and maps in each case, ordered by folded
+title and then pack, with the From link and the minimap when one is set;
+the order with
 no search; the update count; the selection across refreshes and browsing;
 the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
@@ -577,9 +595,17 @@ press areas meet; that every action of the selected entry is a control
 on the Updates tab beside the Mods tab's filters, the refresh icon and CLOSE;
 that the Active tab is first, has no search, filter, list or DETAILS,
 reads its mod, language and maps as labels, shows Playing and Built in
-as pills, and while a mod is played puts UNLOAD MOD in Tab's order with
-the tabs and the footer (absent on the base-game tile, and out of that
-order while disabled); that the Registries tab lists each registry on a card, its heading the
+as pills, lists each installed map rather than each pack, and while a mod
+is played puts UNLOAD MOD in Tab's order with the tabs, each visible From
+link and the footer (absent on the base-game tile, and out of that
+order while disabled); that a one-map pack's row and details wear that
+map's minimap, fitted to the square with the well colour in the
+letterbox, that a several-map pack keeps its badge, that a several-map
+pack with no badge shows the first map's minimap on the Maps tab and its
+letters on Updates, that the details show one large picture or a grid
+with each map's name, players, size and description, that a minimap not
+yet decoded is a placeholder and then the picture, and that a From link
+opens Maps with that pack selected and its row in view; that the Registries tab lists each registry on a card, its heading the
 title, its switch, key icon and REFRESH, its address, refresh time and
 description, a neutral Built in pill under those controls for one that
 ships with the game, REMOVE and ADD MIRROR… only for one the player
@@ -619,10 +645,16 @@ by the wheel, the page keys, Home, End and the right stick.
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
 page, the Active tab at Compact, Regular and Large, the Updates tab at
-Compact and Large, the Registries tab at Compact, Regular and Large, and
-Languages at Compact: each twice, byte for byte the same, with nothing
+Compact and Large, the Registries tab at Compact, Regular and Large,
+Languages at Compact, and the Maps tab at Large for one map and for
+several: each twice, byte for byte the same, with nothing
 drawn outside the window and every pixel of it drawn, every part inside
-it and every text fitting. The Registries pictures dress the fixture's
+it and every text fitting. The Active and Maps pictures dress the
+fixture's maps with made-up minimaps and a long description, on that
+drawing only, so the tiles show a minimap, a cut description and a From
+link, a one-map pack shows its minimap on the row and large in the
+details, and a several-map pack with no badge shows the first map on the
+row and a grid in the details. The Registries pictures dress the fixture's
 built-in registry as Core Prime, title, description, author and short
 name, on that copy only. That author is Open Annihilation, so the card
 shows the OA mark under its key. The Languages picture, on that drawing
@@ -635,7 +667,8 @@ under its check.
 `library-active-regular.png`, `library-active-large.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
-`library-registries-large.png` and `library-languages-compact.png`
+`library-registries-large.png`, `library-languages-compact.png`,
+`library-maps-one-large.png` and `library-maps-several-large.png`
 for review.
 
 ## Limitations

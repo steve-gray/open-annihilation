@@ -76,11 +76,27 @@ struct Registry {
     std::string author{};
 };
 
-/// One map of a map pack, as its catalogue entry lists it.
+/// A map's minimap, 8-bit RGBA, rows top to bottom. It keeps its own shape:
+/// the screen fits it into a box and does not stretch it. Wider than a badge.
+struct MapPicture {
+    std::vector<uint8_t> rgba{}; ///< width * height * 4 bytes
+    uint32_t width{};            ///< in pixels
+    uint32_t height{};           ///< in pixels
+};
+
+/// One map of a map pack, as its catalogue entry or its manifest lists it.
 struct MapLine {
     std::string name{}; ///< the title a player sees
     int32_t players{};  ///< how many players it is for
     std::string size{}; ///< its size as the catalogue writes it, such as "16x16"
+    /// The manifest's description; empty when the catalogue lists the map,
+    /// which names none, and when the manifest leaves it unwritten.
+    std::string description{};
+    std::string stem{};        ///< the map's file name without its extension
+    std::string preview_url{}; ///< the catalogue picture's address; empty for none
+    /// The minimap, when the app has decoded it. Points stay valid until the
+    /// next refresh, as a badge's do.
+    std::optional<MapPicture> preview{};
 };
 
 /// A package's badge picture, 8-bit RGBA, rows top to bottom.
@@ -242,10 +258,14 @@ struct LanguageInUse {
     int64_t revision{};
 };
 
-/// One installed map pack, as the Active tab lists it.
+/// One installed map pack, as the Active tab lists its maps.
 struct InstalledMaps {
     std::string name{};          ///< the pack's name
     std::vector<MapLine> maps{}; ///< its maps, as its manifest lists them
+    /// The package key; empty when the pack is not a package the Library can select.
+    std::string key{};
+    /// Where it came from; empty for the player's own, and when `key` is empty.
+    std::string registry{};
 };
 
 /// Everything the Library is built from.
@@ -598,22 +618,25 @@ void close_details(Library& library);
 /// @return how many visible entries have an update
 [[nodiscard]] std::size_t updates_shown(const Library& library);
 
-/// One map of an installed map pack, as the Active tab lists it.
+/// One installed map, as the Active tab lists it on its own tile.
 struct ActiveMap {
     std::string name{};    ///< its title
     std::string players{}; ///< how many players it is for, in words, such as "4 players"
     std::string size{};    ///< its size as written, such as "16x16"
-    /// The three as one line, as automation reads it: "Ridgeline · 4 players · 16x16".
+    /// The manifest's description; empty when it was left unwritten.
+    std::string description{};
+    /// The title, players and size as one line, as automation reads it:
+    /// "Ridgeline · 4 players · 16x16".
     std::string line{};
-};
-
-/// One installed map pack, as the Active tab lists it.
-struct ActivePack {
-    std::string name{};            ///< its name
-    std::vector<ActiveMap> maps{}; ///< its maps, in the order the inputs give them
-    /// Its badge, which points into the Library's inputs until the next
-    /// refresh; null without one.
-    const Badge* badge{};
+    std::string pack_name{}; ///< the pack it belongs to
+    /// The pack's entry, when the Maps tab can select it. The key is empty
+    /// when no entry has that pack.
+    EntryId pack_id{};
+    /// Its minimap, which points into the Library's inputs until the next
+    /// refresh; null while it has not been decoded.
+    const MapPicture* preview{};
+    /// "From <pack>", the link that opens the pack on the Maps tab.
+    std::string from{};
 };
 
 /// What the Active tab shows of the player's setup.
@@ -654,7 +677,9 @@ struct ActiveSetup {
     const Badge* language_badge{};
     /// The language's line: the pack and its version, "Deutsch 1.2", or "English · built in".
     std::string language_line{};
-    std::vector<ActivePack> packs{}; ///< the installed map packs, by name
+    /// The installed maps, ordered by title and then by pack, both folded
+    /// to lower case. One tile each, not one tile per pack.
+    std::vector<ActiveMap> maps{};
 };
 
 /// Describes the Active tab.
@@ -663,9 +688,11 @@ struct ActiveSetup {
 /// badge and author when a registry lists it, else Inputs::playing_mod,
 /// else the base game. The language is the pack that holds the language
 /// shown, with its name in itself and in English, its version, revision
-/// and coverage, else the language the game holds itself. The map packs
-/// are ordered by name, folded to lower case, each with its badge when an
-/// installed pack of that name has one, and its maps in the order given.
+/// and coverage, else the language the game holds itself. The maps are
+/// every map of every installed pack, ordered by title and then by the
+/// pack's name, folded to lower case. A map's pack is the map-pack entry
+/// of the same key and registry, or, when the pack names no key, the
+/// entry whose name is the pack's.
 ///
 /// @param library the Library
 /// @return the setup
