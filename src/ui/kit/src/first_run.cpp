@@ -711,18 +711,26 @@ std::vector<CarouselSlot> carousel_places(
         const int32_t fall = reduced_motion ? 0 : carousel_fall(distance);
         int32_t face_w = std::max(geometry.card_width * shrink / 1000, int32_t{1});
         int32_t face_h = std::max(geometry.card_height * shrink / 1000, int32_t{1});
-        if (face_w > area.width)
-            face_w = area.width;
-        if (face_h > area.height)
-            face_h = area.height;
+        // Reduced motion keeps every card at full size and centred on the
+        // band, even when the card is taller than the band. Clamping it
+        // into the band would shrink it and drop it, which flat motion
+        // does not do. A turned card still stays inside the band.
+        if (!reduced_motion) {
+            if (face_w > area.width)
+                face_w = area.width;
+            if (face_h > area.height)
+                face_h = area.height;
+        }
         const int32_t shift =
             static_cast<int32_t>((static_cast<int64_t>(delta) * geometry.step) / 1000);
         const int32_t left = mid + shift - face_w / 2;
         int32_t top = area.y + (area.height - face_h) / 2 + fall;
-        if (top < area.y)
-            top = area.y;
-        if (top + face_h > area.y + area.height)
-            top = area.y + area.height - face_h;
+        if (!reduced_motion) {
+            if (top < area.y)
+                top = area.y;
+            if (top + face_h > area.y + area.height)
+                top = area.y + area.height - face_h;
+        }
         CarouselSlot slot;
         slot.index = index;
         slot.face = {left, top, face_w, face_h};

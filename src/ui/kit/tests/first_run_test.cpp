@@ -790,12 +790,15 @@ void every_component_at_every_class_and_scale(text_font::FontStack* modern) {
 } // namespace
 
 /// Rows in the own-name band whose red is above the panel.
-int name_rows(const renderer::Surface& surface, int32_t top, int32_t bottom) {
+int name_rows(
+    const renderer::Surface& surface, int32_t left, int32_t right, int32_t top, int32_t bottom
+) {
     int rows = 0;
     for (int32_t y = top; y < bottom; ++y) {
         bool bright = false;
-        for (uint32_t x = 0; x < surface.width; ++x) {
-            const std::size_t at = (static_cast<std::size_t>(y) * surface.width + x) * 3;
+        for (int32_t x = left; x < right; ++x) {
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * surface.width + static_cast<std::size_t>(x)) * 3;
             if (surface.rgb[at] > 40)
                 bright = true;
         }
@@ -828,12 +831,17 @@ void own_name_shrinks_to_fit_and_the_active_card_has_a_ring() {
     const renderer::Surface short_name = draw("W", kit::LanguageAvailability::built_in);
     const renderer::Surface long_name =
         draw(std::string(80, 'W'), kit::LanguageAvailability::built_in);
-    const int short_rows = name_rows(short_name, name_top, name_top + name_h);
-    const int long_rows = name_rows(long_name, name_top, name_top + name_h);
+    // The card's border is bright on every row, so the count stays in the
+    // text. A shrunk line is shorter than one grown to the box.
+    const int32_t side = 18 * card_w / 232;
+    const int32_t text_left = origin + side;
+    const int32_t text_right = origin + card_w - side;
+    const int short_rows =
+        name_rows(short_name, text_left, text_right, name_top, name_top + name_h);
+    const int long_rows = name_rows(long_name, text_left, text_right, name_top, name_top + name_h);
     expect(short_rows > 0, "a short own name drew nothing");
     expect(long_rows > 0 && long_rows < short_rows, "a long own name was cut instead of shrunk");
 
-    const int32_t side = 18 * card_w / 232;
     const int32_t badge_x = origin + side + (card_w - 2 * side - badge) / 2;
     const int32_t badge_y = origin + pad_top;
     expect(

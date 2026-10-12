@@ -756,8 +756,9 @@ bone is always the drawn bone. These pictures are
 the gallery's own, as its check,
 `native-kit-gallery`, takes them on the main menu with `--snapshot`. First
 run spans the content width at every class. The compact picture is the
-top of that section: the carousel, a row of language cards, and the
-choice cards at the foot of the window. The regular and large pictures
+top of that section: the carousel, two rows of language cards, the choice
+cards and Start playing, with CLOSE clear at the bottom right. The regular
+and large pictures
 show the carousel, the first row of language cards, the picture well and
 the coach mark. The rest of First run, and the sections under it, are
 below the window. The language-card pills are on the cards themselves.
@@ -765,7 +766,7 @@ below the window. The language-card pills are on the cards themselves.
 Compact at 1x, on a 640x480 window: one column, scrolling between the
 header and the footer.
 
-![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then First run. The carousel shows five tall cards, the centre one facing with an accent border, a large badge and a large name, and two turned cards on each side. Under it, language cards for Built in, Get · 3.4 MB, Downloading… and Active. A further row begins at the bottom, beside the choice cards "Ridge pack" and "Not now". "Start playing" is cut off at the right. The setup window, the picture well and the coach mark are below the window.](../images/ui-kit/gallery-compact.png)
+![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then First run. The carousel shows five tall cards, the centre one facing with an accent border, a large badge and a large name, and two turned cards on each side. Under it, language cards for Built in, Get · 3.4 MB, Downloading… and Active, and five "Start playing" buttons. A second row shows Offline, Checking… and Couldn't download beside the choice cards "Ridge pack" and "Not now". CLOSE is at the bottom right, clear of the cards. The setup window, the picture well and the coach mark are below the window.](../images/ui-kit/gallery-compact.png)
 
 Regular at 2x, on a 1920x1080 window: two columns.
 
