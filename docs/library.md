@@ -255,8 +255,9 @@ with how many have it. A filter's count is of the whole tab: the tag and
 the search you choose do not change it. **New** holds the ten packages the
 registries published last, newest first, by the day each release came out;
 a package whose registry gives no day is never among them. The filters are
-chips over the list in the Regular layout, with a TAGS menu for the tags
-that do not fit, a column of their own in Large, and one drop-down in
+pills over the list in the Regular layout, an active one in the accent
+ground and an inactive one in the muted ground, with a TAGS menu for the
+tags that do not fit, a column of their own in Large, and one drop-down in
 Compact. Choosing the tag already chosen clears it.
 
 Each tab keeps its own filter: choosing Installed on Mods leaves Maps and
@@ -284,6 +285,10 @@ name) back to the list.
   ([above](#tabs-and-states)).
 - **The summary**: the registry's, or for a mod of your own its
   `oamod.yaml`'s description.
+- **The tags**, under the summary: the package's tags as inactive pills
+  on a wrapping row. Pressing one chooses that tag, as its pill in the
+  filter row does, and pressing the chosen tag clears it. A package with
+  no tags has no row.
 - **The map previews**, for a map pack: one large picture when the pack
   holds one map, and a grid of pictures when it holds several. Each
   picture is that map's minimap, fitted the same way as the row, and under

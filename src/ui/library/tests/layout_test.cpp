@@ -206,7 +206,7 @@ int declared_place(std::string_view name) {
         return 3;
     if (name == "library.action" || starts(name, "library.action.") || name == "library.back" ||
         name == "library.active.unload" || name == "library.active.search" ||
-        starts(name, "library.active.from."))
+        starts(name, "library.active.from.") || starts(name, "library.detail.tag."))
         return 4;
     if (starts(name, "library.registry."))
         return 5;
@@ -286,7 +286,7 @@ bool designed_name(const std::string& name) {
     static const std::regex pattern(
         "library\\.(tab\\.(active|mods|maps|languages|updates|registries)|search|filter|"
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
-        "+|"
+        "+|detail\\.tag\\.[a-z0-9-]+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
@@ -1157,6 +1157,7 @@ void tab_follows_the_declared_order() {
     page.details_page = true;
     const std::vector<std::string> page_order{
         "library.back",
+        "library.detail.tag.balance",
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
@@ -1169,6 +1170,7 @@ void tab_follows_the_declared_order() {
         names_of(laid_out(library, {}, fixture::frames()[1].frame));
     const std::vector<std::string> regular_end{
         "library.list",
+        "library.detail.tag.balance",
         "library.action.update",
         "library.action.play-now",
         "library.action.roll-back",
@@ -1408,8 +1410,26 @@ void typing_searches() {
     OA_CHECK(library.query == "f");
 }
 
+/// Returns the pill a named control draws, or null.
+///
+/// @param list the display list
+/// @param name the control's name
+/// @return the pill; null when that control draws none
+const kit::PillLook* pill_named(const kit::DisplayList& list, std::string_view name) {
+    const kit::Control* control = fixture::named(list, name);
+    if (control == nullptr)
+        return nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.control != control->id || item.role != kit::Role::pill)
+            continue;
+        return std::get_if<kit::PillLook>(&item.look);
+    }
+    return nullptr;
+}
+
 /// Compact's filter drop-down opens, lists the filters and the tab's tags,
-/// and its items show them; Regular's tag chips turn a tag on and off.
+/// and its items show them. Regular's filter and tag pills keep their
+/// counts and turn a tag on and off, and a tag under the description does too.
 void filters_and_tags() {
     const std::vector<fixture::NamedFrame> all = fixture::frames();
     lib::Library library = with_ridge();
@@ -1446,7 +1466,54 @@ void filters_and_tags() {
     lib::Library wide = with_ridge();
     lib::ScreenState wide_state;
     kit::DisplayList wide_list = laid_out(wide, wide_state, all[1].frame);
+    const kit::Control* all_pill = fixture::named(wide_list, "library.filter.all");
+    const kit::PillLook* all_look = pill_named(wide_list, "library.filter.all");
+    OA_CHECK(all_pill != nullptr && all_pill->checked && all_pill->text == "All (11)");
+    OA_CHECK(all_look != nullptr && all_look->state == kit::PillState::active);
+    const kit::Control* new_pill = fixture::named(wide_list, "library.filter.new");
+    const kit::PillLook* new_look = pill_named(wide_list, "library.filter.new");
+    OA_CHECK(new_pill != nullptr && !new_pill->checked && new_pill->text == "New (3)");
+    OA_CHECK(new_look != nullptr && new_look->state == kit::PillState::inactive);
+    const kit::Control* updates_pill = fixture::named(wide_list, "library.filter.updates");
+    OA_CHECK(
+        updates_pill != nullptr && !updates_pill->checked &&
+        updates_pill->text == lib::filter_caption(wide, lib::Filter::updates)
+    );
+    const kit::Control* balance = fixture::named(wide_list, "library.tag.balance");
+    const kit::PillLook* balance_look = pill_named(wide_list, "library.tag.balance");
+    OA_CHECK(balance != nullptr && !balance->checked && balance->text == "balance");
+    OA_CHECK(balance_look != nullptr && balance_look->state == kit::PillState::inactive);
+    const kit::PillLook* detail_look = pill_named(wide_list, "library.detail.tag.balance");
+    OA_CHECK(detail_look != nullptr && detail_look->state == kit::PillState::inactive);
+    OA_CHECK(all_pill != nullptr && all_pill->kind == kit::ControlKind::button);
+    if (all_pill != nullptr && balance != nullptr) {
+        wide_state.interaction.focus_shown = true;
+        wide_state.interaction.focused = all_pill->id;
+        wide_state.interaction.hovered = balance->id;
+        wide_list = laid_out(wide, wide_state, all[1].frame);
+        const kit::PillLook* focused_all = pill_named(wide_list, "library.filter.all");
+        const kit::PillLook* hovered_tag = pill_named(wide_list, "library.tag.balance");
+        OA_CHECK(focused_all != nullptr && focused_all->focused);
+        OA_CHECK(hovered_tag != nullptr && hovered_tag->hovered);
+        bool ring = false;
+        for (const kit::Item& item : wide_list.items)
+            ring = ring || item.role == kit::Role::focus_ring;
+        OA_CHECK(!ring);
+        wide_state.interaction = {};
+    }
+    wide_list = laid_out(wide, wide_state, all[1].frame);
     static_cast<void>(click(wide, wide_state, wide_list, "library.tag.balance"));
+    OA_CHECK(wide.tag == "balance");
+    wide_list = laid_out(wide, wide_state, all[1].frame);
+    const kit::Control* balance_on = fixture::named(wide_list, "library.tag.balance");
+    const kit::PillLook* balance_on_look = pill_named(wide_list, "library.tag.balance");
+    OA_CHECK(balance_on != nullptr && balance_on->checked);
+    OA_CHECK(balance_on_look != nullptr && balance_on_look->state == kit::PillState::active);
+    OA_CHECK(pill_named(wide_list, "library.detail.tag.balance") != nullptr);
+    static_cast<void>(click(wide, wide_state, wide_list, "library.detail.tag.balance"));
+    OA_CHECK(wide.tag.empty());
+    wide_list = laid_out(wide, wide_state, all[1].frame);
+    static_cast<void>(click(wide, wide_state, wide_list, "library.detail.tag.balance"));
     OA_CHECK(wide.tag == "balance");
     wide_list = laid_out(wide, wide_state, all[1].frame);
     static_cast<void>(click(wide, wide_state, wide_list, "library.tag.balance"));
@@ -1455,6 +1522,13 @@ void filters_and_tags() {
     static_cast<void>(click(wide, wide_state, wide_list, "library.filter.updates"));
     OA_CHECK(lib::shown_filter(wide) == lib::Filter::updates);
     wide_list = laid_out(wide, wide_state, all[1].frame);
+    const kit::Control* updates_on = fixture::named(wide_list, "library.filter.updates");
+    const kit::PillLook* updates_on_look = pill_named(wide_list, "library.filter.updates");
+    OA_CHECK(
+        updates_on != nullptr && updates_on->checked &&
+        updates_on->text == lib::filter_caption(wide, lib::Filter::updates)
+    );
+    OA_CHECK(updates_on_look != nullptr && updates_on_look->state == kit::PillState::active);
     static_cast<void>(click(wide, wide_state, wide_list, "library.filter.new"));
     OA_CHECK(lib::shown_filter(wide) == lib::Filter::newest);
     OA_CHECK(

@@ -365,23 +365,24 @@ app removes the folder (`Runtime::library_uninstall`,
     it shows the selected entry's details page instead
     (`details_page_layout`): its name and version in the header, the way
     back ("‹ Mods"), the status line, the byline, the summary in at most
-    three lines, the short facts in label and value columns, the playing
+    three lines, the package's tags as inactive pills under it, the short facts in label and value columns, the playing
     note, and in the footer the first three actions, MORE ▾ holding the
     rest, and CLOSE;
   - **Regular** shows "Open Annihilation Library" and "v0.8.0", the same
-    refresh icon, the tabs with their All counts and a 240-point search, a row of chips (All, New,
+    refresh icon, the tabs with their All counts and a 240-point search, a row of pills (All, New,
     Installed and Updates with their counts, and the tags while they fit,
+    the chosen one in the accent ground and the others in the muted ground,
     TAGS ▾ holding the rest; on Updates, "{n} updates" and UPDATE ALL on a
     line over the list), a 420-point list of
     36-point rows (the name and byline, the summary, the version over the
     size, the state's icon), the details (a 40-point badge beside the
-    name, its state's icon and the status line, the summary in at most six lines, the long facts, the
+    name, its state's icon and the status line, the summary in at most six lines, the package's tags as inactive pills under it, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
     lines and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
     pane (a nav list of All, New, Installed and Updates with their counts,
     the heading TAGS and the tab's tags with their counts) in place of the
-    chips, a 400-point list of rows of three lines (the tags as chips under
+    pills, a 400-point list of rows of three lines (the tags as chips under
     the summary), on Updates under "{n} updates" and UPDATE ALL, and the
     details.
 
@@ -400,11 +401,11 @@ app removes the folder (`Runtime::library_uninstall`,
   entry it is for, and whether to draw again):
   - **Keys** (`kit::Key`): Tab and Shift+Tab follow the declared order: the
     tabs, the search, the filters, UPDATE ALL and the list, the details'
-    actions, the footer's buttons (on Active, the tabs and the footer's
+    tag pills and actions, the footer's buttons (on Active, the tabs and the footer's
     buttons alone; on Registries, the tabs, each registry's key icon,
     REFRESH, switch, REMOVE and ADD MIRROR…, ADD REGISTRY…, and the
-    footer's buttons); on Compact's details page, the way back, the actions,
-    MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
+    footer's buttons); on Compact's details page, the way back, the tag
+    pills, the actions, MORE and CLOSE. The arrows move by where controls sit (`kit::key`). On
     the list, Up and Down move the selection and keep the focus there, and
     past its first or last entry the focus leaves it, as it leaves a kit
     scroll area; Page Up and Page Down move by the rows shown, Home and End
@@ -449,12 +450,13 @@ app removes the folder (`Runtime::library_uninstall`,
     `library.registries.note` and `library.registries.notice`;
   - `library.filter` (Compact's drop-down, whose items, while it is open,
     are `library.filter.all`, `.new`, `.installed`, `.updates` and
-    `.tag-<tag>`), or the chips or nav entries `library.filter.all`,
+    `.tag-<tag>`), or the pills or nav entries `library.filter.all`,
     `library.filter.new`, `library.filter.installed` and
     `library.filter.updates`, their text the filter and its count ("All
-    (11)"); the tags' chips or nav entries `library.tag.<tag>`, and
+    (11)"); the tags' pills or nav entries `library.tag.<tag>`, and
     `library.tags` (TAGS ▾, its items `library.tags.<tag>` while it is
-    open);
+    open); a tag under the description is `library.detail.tag.<tag>`, an
+    inactive pill, and pressing it chooses that tag as the filter row does;
   - `library.list` (the list, kind `list`, no text), and one control for
     each row that shows, kind `list_item`, its text the entry's name:
     `library.row.<registry>.<key>`, or `library.row.<key>` for a package of
@@ -654,7 +656,7 @@ until a registry can be asked and then asking, and saying "Refreshing" while
 one is being asked, the labels taking no
 press, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
-chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
+pill, and a press outside the drop-down, the tag pills, MORE ▾, and the
 Active tab with forty more maps: the mod and the language take no press
 and stay put, UNLOAD MOD asking what SWITCH OFF asks and greyed during a
 game, the maps pane scrolling by the wheel, a finger, its scroll bar, the

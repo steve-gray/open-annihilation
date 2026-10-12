@@ -1159,15 +1159,19 @@ int32_t chips_section(Builder& b, Point at, int32_t width, std::string_view word
     return top - at.y;
 }
 
-/// Pills: one of each state, display only. Playing is filled; neutral is the
-/// muted ground; installed, update and problem outline that ground.
+/// Pills: one of each state, display only, then a selectable pill in each
+/// state. Playing and active are filled; neutral and inactive are the muted
+/// ground; installed, update and problem outline that ground. Hover, focus
+/// and disabled are drawn on the pill, so a sample has no separate ring.
 int32_t pills_section(Builder& b, Point at, int32_t width, std::string_view /*word*/) {
-    const std::array<PillLook, 5> kinds{{
+    const std::array<PillLook, 7> kinds{{
         {"Playing", PillState::playing},
         {"Built in", PillState::neutral},
         {"Installed", PillState::installed},
         {"Update", PillState::update},
         {"Problem", PillState::problem},
+        {"Active", PillState::active},
+        {"Inactive", PillState::inactive},
     }};
     int32_t x = at.x;
     int32_t y = at.y;
@@ -1180,7 +1184,26 @@ int32_t pills_section(Builder& b, Point at, int32_t width, std::string_view /*wo
         add_pill(b.list, {x, y, across, pill_height()}, look, no_control, {});
         x += across + kMetrics.chip_gap;
     }
-    return y + pill_height() - at.y;
+    PillLook sample{"Filter", PillState::inactive};
+    const int32_t states = add_states(
+        b.list,
+        {at.x, y + pill_height() + kLineGap},
+        width,
+        {pill_width(*b.fonts, sample), pill_height()},
+        kSelectableStates,
+        [&](const Rect& rect, Sample shown) {
+            PillLook drawn = sample;
+            drawn.hovered = looks_hovered(shown);
+            drawn.focused = shown == Sample::focused;
+            drawn.disabled = shown == Sample::disabled;
+            if (shown == Sample::selected)
+                drawn.state = PillState::active;
+            add_fixed(b.list, rect, {}, shown, false, [&] {
+                add_pill(b.list, rect, drawn, no_control, {});
+            });
+        }
+    );
+    return y + pill_height() + kLineGap + states - at.y;
 }
 
 /// Progress: a bar waiting, part done and done, each with its share.

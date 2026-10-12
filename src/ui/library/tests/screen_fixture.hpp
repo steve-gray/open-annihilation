@@ -548,6 +548,12 @@ texts_not_fitting(const kit::DisplayList& list, const kit::Fonts& fonts) {
                     kit::chip_width(fonts, *look) <= item.rect.width, "chip \"" + look->text + "\""
                 );
             break;
+        case kit::Role::pill:
+            if (const auto* look = std::get_if<kit::PillLook>(&item.look))
+                check(
+                    kit::pill_width(fonts, *look) <= item.rect.width, "pill \"" + look->text + "\""
+                );
+            break;
         case kit::Role::link:
             if (const auto* look = std::get_if<kit::LinkLook>(&item.look))
                 check(

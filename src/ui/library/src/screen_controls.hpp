@@ -86,6 +86,12 @@ inline constexpr std::size_t most_active_maps = 4000;
 /// The Active tab's From link: this and the map's place among the tiles,
 /// from 0. Past the Registries-tab controls, so a link is never a row.
 inline constexpr kit::ControlId first_active_from = 9000000;
+/// A package's tag in the details: this and the tag's place in that
+/// package's tags. Past the Active tab's From links, and not a filter-row
+/// tag, which stays in [first_tag, first_menu_item).
+inline constexpr kit::ControlId first_detail_tag = 11000000;
+/// The most tags one package's details name.
+inline constexpr std::size_t most_detail_tags = 256;
 
 /// Tells whether a control is an Active tab From link.
 ///
@@ -94,6 +100,15 @@ inline constexpr kit::ControlId first_active_from = 9000000;
 [[nodiscard]] constexpr bool active_from_control(kit::ControlId id) noexcept {
     return id >= first_active_from &&
            id < first_active_from + static_cast<kit::ControlId>(most_active_maps);
+}
+
+/// Tells whether a control is a tag in the details pane.
+///
+/// @param id the control
+/// @return true for a tag the selected package's details name
+[[nodiscard]] constexpr bool detail_tag_control(kit::ControlId id) noexcept {
+    return id >= first_detail_tag &&
+           id < first_detail_tag + static_cast<kit::ControlId>(most_detail_tags);
 }
 
 /// A row: this and the entry's place in the model's visible entries, below first_row_icon.
