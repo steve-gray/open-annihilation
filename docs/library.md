@@ -170,9 +170,8 @@ badge or its letters, except on the Maps tab, where a pack with no badge
 shows the first map's minimap. The minimap keeps its shape in the square:
 it is centred, and the rest of the square is the list's well colour. While the
 picture has not arrived the square is an empty dashed outline. The
-Regular and Large rows add who made it and its summary, with its download
-count where the registry keeps one ("by the Ridge team · 12,400
-downloads"), and Large adds its tags. A Compact row names the registry
+Regular and Large rows add who made it and its summary
+("by the Ridge team"), and Large adds its tags. A Compact row names the registry
 after the size when the package comes from one you added. The version
 always shows whole, revision and all, at every layout.
 
@@ -521,7 +520,7 @@ Each card shows:
   wide enough or wrapped so those words show whole. A registry that names
   no key says "No signing key". Pressing the icon asks for nothing;
 - **REFRESH**, a standard button beside the switch. It asks that registry
-  for its catalogue and its download counts. It is greyed while the
+  for its catalogue. It is greyed while the
   registry is off or already being asked, and while it is being asked the
   refresh icon beside it turns, one full turn every 1.6 seconds. When that
   ask reads a catalogue the icon shows a check for 0.8 seconds, then the

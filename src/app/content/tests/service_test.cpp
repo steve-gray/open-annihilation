@@ -1399,6 +1399,59 @@ void test_worker_and_listener() {
     expect_count(server, good_path, 2);
 }
 
+/// A tokens registry's catalogue refresh does not ask for download counts,
+/// and an old counts file under the data folder is left as it was.
+void test_tokens_refresh_does_not_read_counts() {
+    g_now = kEpoch;
+    fixture::Server server;
+    if (!listening(server))
+        return;
+    const TestKey key("release-2026", 0x39);
+    CatalogueSpec spec;
+    spec.registry = "ridge";
+    const SignedBytes document = sign_json(catalogue_json(spec), key);
+    const std::string path = "/v1/catalogue.json";
+    serve_document(server, path, document);
+    const std::vector<uint8_t> counts_body{'{', '}'};
+    server.serve_bytes("/api/v1/counts", counts_body, "application/json");
+    Scratch scratch("m39-no-counts");
+    registry::Descriptor descriptor = descriptor_for("ridge", "Ridge", server.url(path), &key);
+    descriptor.mode = registry::DownloadMode::tokens;
+    const auto api = url::parse_http_url(server.url("/api/v1"));
+    OA_CHECK(api.has_value());
+    if (!api)
+        return;
+    descriptor.api = *api;
+    install_builtin(scratch, "ridge.yaml", descriptor);
+    const fs::path counts_file = scratch.data() / "content" / "counts" / "ridge.json";
+    std::error_code make_error;
+    fs::create_directories(counts_file.parent_path(), make_error);
+    OA_CHECK(!make_error);
+    const std::string kept = "{\"kept\":true}\n";
+    OA_CHECK(write_text(counts_file, kept));
+    const fs::file_time_type before = write_time(counts_file);
+    Logs logs;
+    content::Service service(options_for(scratch, logs));
+    service.start();
+    OA_CHECK(wait_job(service));
+    const auto snapshot = service.snapshot();
+    OA_CHECK(snapshot != nullptr);
+    if (snapshot == nullptr)
+        return;
+    const content::RegistryView* view =
+        expect_status(*snapshot, "ridge", content::RegistryStatus::fresh);
+    OA_CHECK(view != nullptr);
+    expect_count(server, path, 1);
+    for (const fixture::LoggedRequest& request : server.requests()) {
+        if (request.target.find("/counts") != std::string::npos)
+            std::fprintf(stderr, "counts path was served: %s\n", request.target.c_str());
+        OA_CHECK(request.target.find("/counts") == std::string::npos);
+    }
+    const std::vector<uint8_t> after = file_bytes(counts_file);
+    OA_CHECK(std::string(after.begin(), after.end()) == kept);
+    OA_CHECK(write_time(counts_file) == before);
+}
+
 void test_destructor() {
     g_now = kEpoch;
     fixture::Server server;
@@ -1462,6 +1515,7 @@ int main() {
     test_gzip();
     test_generation();
     test_worker_and_listener();
+    test_tokens_refresh_does_not_read_counts();
     test_destructor();
     return oa::test::check_exit_status();
 }

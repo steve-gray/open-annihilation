@@ -135,10 +135,8 @@ translator finds them together. Every word passes through `Library::text`
     update asks no question that would say it. From says "Not reviewed by
     the OA team" for an added registry;
   - the byline names the author, or the publisher when there is no author.
-    When the listing carries a download count it continues
-    " · 12,400 downloads". With no author and no publisher the count is
-    the whole line ("1 download"). A listing with no count shows nothing
-    more. The count does not change an entry's state, order or search rank;
+    A listing that names neither shows nothing more. The byline does not
+    change an entry's state, order or search rank;
   - the note on updating the mod being played ("Finishes when you leave
     Ridge."), after "The command line chose this run's mod." on every
     installed mod while the command line chose it;
@@ -156,8 +154,7 @@ translator finds them together. Every word passes through `Library::text`
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
-  "188 MB"), download counts (`downloads_text`: "1 download",
-  "12,400 downloads"), download progress, ages, rules hashes
+  "188 MB"), download progress, ages, rules hashes
   ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), a release as
   the facts give it (`release_text`: "4.8 (rev 3)"), engine
   requirements, what an update changes from and to (`change_texts`:
@@ -575,7 +572,7 @@ Latest and Author among them, a revision of 0 left out, a version left
 out, a fact with nothing to say left out and the manifest's author
 standing in; the Rules fact for an unchanged, changed and unknown rules
 hash in both lengths; status lines, "Update available" for an update
-that names no revision, bylines with and without a download count, and
+that names no revision, bylines with a maker and with none, and
 the playing note; the queue lines, after an update that changed the
 rules and one that kept them; `change_texts` for a new revision, a new
 version and a side that names no revision; every text function,

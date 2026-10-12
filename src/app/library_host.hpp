@@ -6,12 +6,10 @@
 // come from (LibraryFeed), the pictures it has taken, the updates it keeps
 // for the queue, and its worker (LibraryWork), which finds the installed
 // packages and their updates and reads and fetches the badge pictures off
-// the main thread, and fetches download counts when a catalogue check moves
-// on. The Library itself is a screen of the OA layer
+// the main thread. The Library itself is a screen of the OA layer
 // (Runtime::LibraryScreen, named library).
 #pragma once
 
-#include "oa/app/content/counts.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/pictures.hpp"
 #include "oa/app/content/service.hpp"
@@ -81,21 +79,11 @@ struct LibraryFeed {
     bool (*built_in)(void* context, std::string_view registry){};
 };
 
-/// One registry's download counts, and which catalogue check they were fetched for.
-struct LibraryCounts {
-    std::optional<int64_t> fetched_for{}; ///< the check the last fetch was for; empty when none
-    content::CountsTable table{};         ///< the last counts read, from a fetch or the folder
-    bool have{};                          ///< `table` was read
-    bool loaded{};                        ///< the counts folder was read for this registry
-    bool logged{};                        ///< a failed fetch was logged this run
-};
-
 /// The Library's worker: one thread of its own, started at its first job and
 /// joined as the host goes, which finds the installed packages and the
 /// updates the catalogues offer for them after a catalogue refresh or an
-/// install, reads and fetches the badge pictures asked for, and fetches
-/// download counts when a catalogue check moves on. What it found is kept
-/// under its lock for the main thread to read.
+/// install, and reads and fetches the badge pictures asked for. What it
+/// found is kept under its lock for the main thread to read.
 struct LibraryWork {
     base::threads::Mutex mutex{};            ///< guards every member below but cancel and pictures
     base::threads::ConditionVariable wake{}; ///< signalled when a job is due or the worker stops
@@ -115,14 +103,8 @@ struct LibraryWork {
     std::vector<content::Update> updates{};   ///< the updates the catalogues offer for them
     std::vector<ModBadge> installed_badges{}; ///< each installed mod's own picture; empty for none
     uint64_t searches{};                      ///< counts the searches done
-    /// Download counts by registry id. The worker fills them; the main thread reads them.
-    std::map<std::string, LibraryCounts> counts{};
-    uint64_t counts_generation{}; ///< moves on when a registry's counts change
-    bool counts_due{};            ///< the worker should bring the snapshot's counts up to date
-    /// `<data>/content/counts`; empty when there is no data folder. Set before the worker starts.
-    std::filesystem::path counts_folder{};
-    bool pictures_due{};  ///< pictures wait to be read or fetched
-    bool match_running{}; ///< a match runs: nothing is fetched
+    bool pictures_due{};                      ///< pictures wait to be read or fetched
+    bool match_running{};                     ///< a match runs: nothing is fetched
     /// The pictures asked for, read and fetched; its own lock guards it.
     std::unique_ptr<content::PictureCache> pictures{};
 };

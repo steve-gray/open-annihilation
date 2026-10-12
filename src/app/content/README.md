@@ -77,25 +77,9 @@ downloaded files, and keeps the packages' badge pictures the Library shows.
   remembers one registry's install ID. `report_install` records what the
   installer did with a file the queue handed over.
 
-`oa/app/content/counts.hpp`, same namespace:
-
-- `parse_counts` reads `GET <api>/counts` as the registry specification
-  writes it: shape `counts` 1, a UTC `generated`, and `packages` of
-  `kind`, `id` and `downloads`. A package of a kind the catalogue does
-  not know is left out. A document over 1 MiB, a `counts` other than 1,
-  a `generated` that is not a UTC time, or a download count that is not
-  a whole number from 0 up, is refused.
-- `fetch_counts` is that GET, with `/counts` added to the API's path,
-  a 15 second limit and a 1 MiB limit. The request adds no header and
-  no query. `counts_due` is true for a registry that hands out download
-  keys, names an API, and whose catalogue check is newer than the check
-  its counts were last fetched for. It is never true for a registry
-  whose packages are fetched from the catalogue's own address.
-- `save_counts` and `load_counts` keep the last good table at
-  `<data>/content/counts/<registry id>.json`. The Library's worker
-  reads that file at the first look and fetches when `counts_due` says
-  so. A failed fetch leaves the last table in place and logs once for
-  that registry.
+The game does not read `GET <api>/counts`. An old
+`<data>/content/counts` file is left where it is: nothing reads it and
+nothing writes it.
 
 `oa/app/content/pictures.hpp`, same namespace:
 
@@ -139,9 +123,9 @@ caller passes (`open-annihilation.install-id.<registry id>`,
 `open-annihilation.content-updates`). Downloaded files are
 `<data>/content/downloads/`. Badge pictures are
 `<data>/content/pictures/<sha256>.png`, each written whole through a file
-beside it renamed over it. Download counts are
-`<data>/content/counts/<registry id>.json`, one file per registry, replaced
-whole. A failed fetch does not remove that file.
+beside it renamed over it. A file left at
+`<data>/content/counts/<registry id>.json` from an earlier version is
+not read and not replaced.
 
 ## Updates
 
