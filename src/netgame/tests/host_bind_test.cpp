@@ -42,7 +42,13 @@ struct StderrCapture {
     ///
     /// @return false when the file or the diversion could not be made
     bool begin() {
+#ifdef _MSC_VER
+        // This compiler deprecates tmpfile; tmpfile_s makes the same unnamed file.
+        if (tmpfile_s(&file) != 0)
+            file = nullptr;
+#else
         file = std::tmpfile();
+#endif
         if (file == nullptr)
             return false;
 #ifdef _WIN32

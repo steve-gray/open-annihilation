@@ -84,9 +84,15 @@ message(STATUS "Text fonts: FreeType ${OA_FREETYPE_VERSION}, fonts from ${OA_TEX
 # this is a custom target and it runs whenever a program that needs the
 # folder is built. A wiped fonts folder is filled again on the next build,
 # and a changed font is copied then too.
+#
+# Two directory texts can still name one folder: in a multi-config build
+# several programs are written into <build>/<config>. The staging rules
+# therefore take turns in one Ninja job pool, so no rule empties a folder
+# another is copying into. The programs themselves still build in parallel.
 #   oa_copy_text_fonts(<target> <directory>)
 # The directory may be a generator expression, such as the game's
 # OA_GAME_FILES_DIR.
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS oa_text_fonts=1)
 function(oa_copy_text_fonts target directory)
   string(SHA256 oa_font_dir_key "${directory}")
   string(SUBSTRING "${oa_font_dir_key}" 0 32 oa_font_dir_key)
@@ -102,6 +108,7 @@ function(oa_copy_text_fonts target directory)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${sources} "${directory}/fonts"
       DEPENDS ${sources}
       COMMENT "Staging text fonts"
+      JOB_POOL oa_text_fonts
       VERBATIM)
   endif()
   add_dependencies(${target} ${oa_font_stage_target})
