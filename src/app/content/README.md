@@ -30,7 +30,9 @@ downloaded files, and keeps the packages' badge pictures the Library shows.
   A check fetches on the worker: the descriptor (an address is fetched,
   a file is the bytes the caller already has), every refusal rule, then
   the catalogue and its signature. The catalogue has to verify with the
-  keys about to be trusted. A file has no address.
+  keys about to be trusted. A signing key the player typed replaces the
+  descriptor's keys, and the catalogue must verify with that key alone.
+  A file has no address.
 - `add_checked_registry` stores a check that was accepted, with the
   service clock's date, and writes that catalogue into the cache.
   `remove_registry` removes an added registry and that registry's cache

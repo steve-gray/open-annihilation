@@ -1044,8 +1044,11 @@ content service found, and the window shows:
 - editing: the title Add registry (Add mirror and the heading "Mirror of
   {name}" for a mirror), the address field (`add-registry.url`,
   "http://…" while it is empty; a file shows "From {file}" in its place),
-  CANCEL and CHECK (`add-registry.cancel`, `add-registry.check`);
-- checking: "Checking {address}…" and CANCEL;
+  and, for an address add only, a Signing key field under it
+  (`add-registry.key-field`, "ed25519:…" while it is empty, at most 128
+  bytes). A mirror and an `.oareg` file show no Signing key field. CANCEL
+  and CHECK (`add-registry.cancel`, `add-registry.check`);
+- checking: "Checking {address}…" and CANCEL, with both fields disabled;
 - ready, adding a registry: its name in the heading role
   (`add-registry.name`), Address (`add-registry.address`), Packages
   ("{n} · {kinds}", the kinds as mods, maps and languages), Key or Keys
@@ -1058,23 +1061,27 @@ content service found, and the window shows:
 - ready, adding a mirror: Address, "Checked against the keys you trust for
   {name}" and those keys (at most three), CANCEL and ADD MIRROR
   (`add-registry.add`);
-- refused: the refusal in amber (`add-registry.refusal`), the field
+- refused: the refusal in amber (`add-registry.refusal`), the fields
   editable again with CANCEL and CHECK, or a file's "From {file}" with
   CANCEL alone.
 
 The name, the address, the keys and the refusal are labels: areas neither
-enabled nor focusable, their text what they show. The focus starts on the
-field while it takes typing and on CANCEL otherwise, so that Enter or a
-pad's A never trusts a registry first. On the field Enter is CHECK, Space
-(a pad's A) and a press start the system's text input
+enabled nor focusable, their text what they show. `add-registry.key` stays
+the fingerprint label. The focus starts on the address field while it
+takes typing and on CANCEL otherwise, so that Enter or a pad's A never
+trusts a registry first. Tab reaches the Signing key field after the
+address, then the buttons. On either field Enter is CHECK, Space (a pad's
+A) and a press start the system's text input
 (`AddRegistryAction::start_typing`), and Backspace, Delete, Left, Right,
-Home and End edit it; Escape is CANCEL. Typed or pasted text is taken up
-to its first line break and only while the field stays within
-`oa::formats::url::max_url_bytes`, cut at a character's start; editing a
-refused address goes back to editing (`add_registry_list`,
-`add_registry_settle`, `add_registry_field`, `add_registry_text`,
-`add_registry_key`, `add_registry_pointer_*`, `add_registry_finger_down`,
-`draw_add_registry`).
+Home and End edit the focused field; Escape is CANCEL. Typed or pasted
+text is taken up to its first line break. The address stays within
+`oa::formats::url::max_url_bytes` and the signing key within 128 bytes,
+each cut at a character's start. An empty signing key leaves the
+descriptor's keys. A key the player typed replaces them, and the catalogue
+must verify with that key alone. Editing a refused address or signing key
+goes back to editing (`add_registry_list`, `add_registry_settle`,
+`add_registry_field`, `add_registry_text`, `add_registry_key`,
+`add_registry_pointer_*`, `add_registry_finger_down`, `draw_add_registry`).
 
 `challenge.hpp` is the download check in the same look. At Compact, Regular
 and Large it is that class's notice wide, 400, 520 or 600 points, and as
@@ -1113,14 +1120,17 @@ part, including the focus ring, lies inside the window at Compact, Regular
 and Large, with each control named once.
 
 `ui-engine-settings-registries` holds the Add registry window: its words,
-field and buttons in every mode and phase, the keys over three and the
-unsigned line, the focus starting on CANCEL once ready, Enter and Space
-on CANCEL never adding, typing and a paste cut at its line break and at
-2,048 bytes, a refused address going back to editing, the pointer, and
-every part inside the window at every class. The registries list is the
-Library's (`ui-library` and `ui-library-layout`). Downloads' link, on the
-main menu, is `settings.registries-in-library` and opens the Library on
-Registries (`ui-engine-settings-downloads`).
+fields and buttons in every mode and phase, the Signing key field present
+and enabled for an address add, disabled while checking, and absent for a
+file and a mirror, the keys over three and the unsigned line, the focus
+starting on CANCEL once ready, Enter and Space on CANCEL never adding,
+typing and a paste cut at its line break and at 2,048 bytes for the
+address and 128 for the signing key, a refused address or signing key
+going back to editing, the pointer, and every part inside the window at
+every class. The registries list is the Library's (`ui-library` and
+`ui-library-layout`). Downloads' link, on the main menu, is
+`settings.registries-in-library` and opens the Library on Registries
+(`ui-engine-settings-downloads`).
 
 `ui-engine-settings-rows` holds every setting's row, written out as
 literals, to the table: its kind, label, hint lines without and with the
