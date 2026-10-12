@@ -8,17 +8,21 @@
 // and what came of it told; a change
 // to the mod played waits for the run to end. A catalogue map pack, and a
 // catalogue language pack, ask nothing and show nothing, including while
-// Settings or a notice show; in a run nobody watches a language pack still
-// installs, and a map pack while the map browser is the top screen or GET
-// MAP shows over the battle room. A mod the player
-// chose in the Library also starts while the Library shows: a built-in
-// registry's asks nothing, an added registry's asks only before it replaces
-// another registry's copy or goes beside a folder of the player's own, and
-// while the Library shows its questions show over it and the rest in its
-// queue; its update to the mod being played waits until the player leaves
-// that mod. PLAY NOW switches to the mod installed, SWITCH OFF in the
-// Library to no mod, and ROLL BACK in the Library swaps a mod folder with
-// the version its .backup keeps.
+// Settings or a notice show and once the main menu has settled; in a run
+// nobody watches a language pack still installs, and a map pack while the
+// map browser is the top screen or GET MAP shows over the battle room. A
+// package whose origin is a catalogue never shows the notice that it was
+// installed or updated: the Library's row already says so. A file the
+// player opened still does, with OPEN FOLDER and OK. A failure is still
+// told. A mod the player chose in the Library also starts while the Library
+// shows: a built-in registry's asks nothing, an added registry's asks only
+// before it replaces another registry's copy or goes beside a folder of the
+// player's own, and while the Library shows its questions show over it and
+// the rest in its queue; its update to the mod being played waits until the
+// player leaves that mod, and is not told in a notice once it is made.
+// PLAY NOW switches to the mod installed, SWITCH OFF in the Library to no
+// mod, and ROLL BACK in the Library swaps a mod folder with the version
+// its .backup keeps.
 
 #include "engine_settings_state.hpp"
 #include "library_host.hpp"
@@ -515,23 +519,30 @@ void Runtime::tell_mod_installs() {
                 state.told_folder = folder;
                 state.play_folder = folder;
                 package_changed(kind, folder);
+                // A catalogue install is not told: the Library's row shows
+                // it. A file the player opened still is.
                 if (!state.finish_quietly(*this)) {
-                    state.stage = ModInstallState::Stage::telling;
-                    const bool play_now = package_offers_play(kind);
-                    state.show(
-                        *this,
-                        state.change == install::Change::install
-                            ? install::installed_prompt(kind, state.incoming, folder, play_now)
-                            : install::updated_prompt(
-                                  kind,
-                                  state.change,
-                                  state.incoming,
-                                  state.expected,
-                                  folder,
-                                  result,
-                                  play_now
-                              )
-                    );
+                    if (state.origin.kind == install::OriginKind::catalogue) {
+                        state.hide(*this);
+                        state.stage = ModInstallState::Stage::idle;
+                    } else {
+                        state.stage = ModInstallState::Stage::telling;
+                        const bool play_now = package_offers_play(kind);
+                        state.show(
+                            *this,
+                            state.change == install::Change::install
+                                ? install::installed_prompt(kind, state.incoming, folder, play_now)
+                                : install::updated_prompt(
+                                      kind,
+                                      state.change,
+                                      state.incoming,
+                                      state.expected,
+                                      folder,
+                                      result,
+                                      play_now
+                                  )
+                        );
+                    }
                 }
             }
             state.finish_package();
@@ -1114,6 +1125,10 @@ void Runtime::tell_mod_installs() {
             problem.refusal = outcome->result.refusal;
             problem.detail = outcome->result.detail;
             state.show(*this, install::refused_prompt(*kind, told, problem, true));
+        } else if (outcome->change.origin.kind == install::OriginKind::catalogue) {
+            // The Library's row shows a catalogue install that waited. A
+            // roll back carries no catalogue origin, so it is still told.
+            state.stage = ModInstallState::Stage::idle;
         } else {
             state.show(
                 *this,
@@ -1135,6 +1150,13 @@ void Runtime::tell_mod_installs() {
         state.next_handoff_ms = now + kHandoffPollMs;
         take_handed_mod_files();
     }
+    // A catalogue language pack, and a catalogue map pack that asks nothing,
+    // install here with nothing shown, as they do off this menu. A map pack
+    // whose plan asks is put back for the take below, which shows the question.
+    if (take_catalogue_language())
+        return;
+    if (take_catalogue_map())
+        return;
     // A catalogue map pack that needed a question waited for this menu.
     state.catalogue_question.clear();
     state.quiet = false;
