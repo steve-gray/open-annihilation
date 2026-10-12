@@ -24,6 +24,9 @@ Every document in the repository, by what you want to do.
   Downloads and Developer does, its default, when it takes effect and when
   to change it; the command-line options that set them for one run, and
   where they are kept.
+- [first-run.md](first-run.md): the welcome at the first main menu, which
+  chooses a language, explains online features and points out the Library
+  and Settings buttons.
 - [library.md](library.md): the Library, where mods, map packs and
   language packs are found, installed, updated and rolled back from inside
   the game: opening it, its tabs and states, search and filters, the

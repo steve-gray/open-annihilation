@@ -124,7 +124,9 @@ The **OA** button at the bottom right of the main menu opens the Library,
 where mods, map packs and languages are found, installed, updated and
 rolled back without leaving the game: see [docs/library.md](docs/library.md),
 and [docs/downloads.md](docs/downloads.md) for registries and exactly what
-a download sends and records.
+a download sends and records. The first time that menu is reached, a short
+welcome chooses a language, explains online features and points out the
+two buttons: see [docs/first-run.md](docs/first-run.md).
 
 ## Mods
 
