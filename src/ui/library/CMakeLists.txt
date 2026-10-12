@@ -9,7 +9,7 @@
 # the questions about the mod the game plays: SWITCH OFF's, PLAY NOW's
 # refusal and ROLL BACK's (mod_questions.hpp), and UNINSTALL's rules, its
 # question and its notices (uninstall.hpp).
-add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp src/counts.cpp
+add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp
   src/update_question.cpp src/mod_questions.cpp src/uninstall.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).

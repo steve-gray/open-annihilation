@@ -963,7 +963,10 @@ void test_order_without_search() {
     other.id = "another";
     other.name = "Another";
     inputs.registries.push_back(other);
-    // Blocked GET, GET, installed, playing and update, named so names alone would order them otherwise.
+    // Blocked GET, GET, installed, playing and update, named so names alone
+    // would order them otherwise. The order is the group, then the name,
+    // then the registry. Nothing about how often a package was fetched
+    // enters it.
     lib::Listing blocked = listing(core, Kind::mod, "aa-blocked", "Aa Blocked");
     blocked.requires_engine = ">= 1.0.0";
     inputs.listings.push_back(blocked);
@@ -1535,18 +1538,18 @@ void test_status_lines_and_bylines() {
     if (own != nullptr)
         OA_CHECK_TEXT(lib::byline(*own), "");
 
-    lib::Listing counted = listing(core, Kind::mod, "counted", "Counted");
-    counted.downloads = 12400;
-    inputs.listings.push_back(counted);
-    lib::Listing counted_only = listing(core, Kind::mod, "counted-only", "Counted Only");
-    counted_only.author.clear();
-    counted_only.downloads = 1;
-    inputs.listings.push_back(counted_only);
+    lib::Listing named = listing(core, Kind::mod, "named", "Named");
+    named.author = "Fixture Author";
+    inputs.listings.push_back(named);
+    lib::Listing unnamed = listing(core, Kind::mod, "unnamed", "Unnamed");
+    unnamed.author.clear();
+    unnamed.publisher.clear();
+    inputs.listings.push_back(unnamed);
     lib::refresh(library, inputs);
-    if (const lib::Entry* with_count = at(library, core, Kind::mod, "counted"))
-        OA_CHECK_TEXT(lib::byline(*with_count), "by Fixture Author · 12,400 downloads");
-    if (const lib::Entry* count_only = at(library, core, Kind::mod, "counted-only"))
-        OA_CHECK_TEXT(lib::byline(*count_only), "1 download");
+    if (const lib::Entry* with_maker = at(library, core, Kind::mod, "named"))
+        OA_CHECK_TEXT(lib::byline(*with_maker), "by Fixture Author");
+    if (const lib::Entry* no_maker = at(library, core, Kind::mod, "unnamed"))
+        OA_CHECK_TEXT(lib::byline(*no_maker), "");
 
     inputs.updates[0].to_version = "4.9";
     lib::refresh(library, inputs);
@@ -1746,13 +1749,6 @@ void test_change_texts() {
 }
 
 void test_texts() {
-    OA_CHECK_TEXT(lib::downloads_text(0), "0 downloads");
-    OA_CHECK_TEXT(lib::downloads_text(1), "1 download");
-    OA_CHECK_TEXT(lib::downloads_text(999), "999 downloads");
-    OA_CHECK_TEXT(lib::downloads_text(1000), "1,000 downloads");
-    OA_CHECK_TEXT(lib::downloads_text(12400), "12,400 downloads");
-    OA_CHECK_TEXT(lib::downloads_text(1234567), "1,234,567 downloads");
-
     OA_CHECK_TEXT(lib::size_text(0), "1 KB");
     OA_CHECK_TEXT(lib::size_text(1), "1 KB");
     OA_CHECK_TEXT(lib::size_text(1535), "1 KB");
