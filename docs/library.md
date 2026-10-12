@@ -80,22 +80,30 @@ filters.
 
 ## The Active tab
 
-**Active**, the first tab, shows what you are using now, top to bottom:
+**Active**, the first tab, shows what you are using now, as tiles:
 
-- **MOD**: the mod you are playing, with its badge, name and version
-  ("Ridge 4.8 · rev 3"), or "No mod is played";
-- **LANGUAGE**: the language pack the game's words come from, with its
-  version ("Deutsch 1.2"), or the language the game holds itself
-  ("English · built in");
-- **MAPS**: each map pack you have installed, by name, with its maps under
-  it: each map's name, how many players it is for and its size ("Ridgeline
-  · 4 players · 16x16"), or "No map packs are installed."
+- **MOD**: a tile for the mod you are playing. Its badge is large, and the
+  tile names the mod, its version and revision ("4.8 (rev 3)"), who made it
+  ("by the Ridge team") and **Playing**. When you are playing no mod, the
+  tile is **Base Game**, with the 3.1c look ("Total Annihilation 3.1c") and
+  "No mod: the game as it was made".
+- **LANGUAGE**: a tile for the language the game is showing. It carries the
+  pack's badge, or a language mark, the language's name in itself and in
+  English, the pack's version and revision, and how much of the game the
+  pack covers ("Coverage 92%"). When the game is showing a language it
+  holds itself, the tile says **Built in**.
+- **MAPS**: one tile for each map pack you have installed, with the pack's
+  badge and its name, and its maps under that: each map's name, how many
+  players it is for and its size ("Ridgeline · 4 players · 16x16"). When
+  you have no map pack, the tile says "No map packs are installed."
 
-It is a list to read: nothing on it can be chosen or pressed, and it has no
-search and no filters. When it is longer than the window it scrolls with
-the mouse wheel, a finger, Page Up and Page Down, Home and End, and a
-controller's right stick. The other tabs are where packages are got,
-updated and played.
+On a small window the tiles stand in one column. On a larger window the
+mod and the language stand side by side, and on the largest the map packs
+stand in two columns when you have more than one. Nothing on these tiles
+can be chosen or pressed, and the tab has no search and no filters. When
+the tiles are taller than the window they scroll with the mouse wheel, a
+finger, Page Up and Page Down, Home and End, and a controller's right
+stick. The other tabs are where packages are got, updated and played.
 
 ## Tabs and states
 

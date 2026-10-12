@@ -336,9 +336,14 @@ inline constexpr std::string_view active_heading_language = "LANGUAGE";
 inline constexpr std::string_view active_heading_maps = "MAPS";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
-inline constexpr std::string_view active_no_mod = "No mod is played";
+/// The tile shown when no mod is played: the base game, in the 3.1c look.
+inline constexpr std::string_view active_base_game = "Base Game";
+/// The line on that tile.
+inline constexpr std::string_view active_no_mod = "No mod: the game as it was made";
 /// A language no pack holds, which the game shows from its own words.
 inline constexpr std::string_view active_language_built_in = "{language} · built in";
+/// A language pack's coverage, as its tile states it.
+inline constexpr std::string_view active_coverage = "Coverage {percent}%";
 /// The language the game shows with no language chosen.
 inline constexpr std::string_view language_english = "English";
 /// How many players a map is for: one, and every other count.

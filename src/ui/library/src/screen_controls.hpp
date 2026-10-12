@@ -53,9 +53,9 @@ inline constexpr kit::ControlId note = 62;
 inline constexpr kit::ControlId from = 63;
 /// The Rules fact's label.
 inline constexpr kit::ControlId rules = 64;
-/// The Active tab's line on the mod being played.
+/// The Active tab's tile for the mod being played, or for the base game.
 inline constexpr kit::ControlId active_mod = 65;
-/// The Active tab's line on the language in use.
+/// The Active tab's tile for the language in use.
 inline constexpr kit::ControlId active_language = 66;
 /// ADD REGISTRY… on the Registries tab. 70–72 are free between the Active
 /// lines (66) and the action buttons (100).
@@ -71,8 +71,8 @@ inline constexpr kit::ControlId first_tag = 1000;
 /// An open drop-down's item: this and the item's place among its items,
 /// below first_active_map.
 inline constexpr kit::ControlId first_menu_item = 3000;
-/// The Active tab's line on a map: this and the map's place among the
-/// lines, from 0, below first_row.
+/// The Active tab's line on a map, inside its pack's tile: this and the
+/// map's place among the lines, from 0, below first_row.
 inline constexpr kit::ControlId first_active_map = 6000;
 /// The most maps whose lines are labels; the lines after them are drawn
 /// but not named.
