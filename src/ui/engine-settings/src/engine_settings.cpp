@@ -178,6 +178,25 @@ std::string switch_text(bool on) {
     return on ? "1" : "0";
 }
 
+/// Tells whether a file-type switch is on. Only the word off turns it off;
+/// a missing key, "on", and any other text leave it on.
+///
+/// @param values the preferences
+/// @param key the switch's key
+/// @return false when the key's text is off
+bool file_type_on(const oa::platform::preferences::Values& values, std::string_view key) {
+    const auto found = values.find(std::string{key});
+    return found == values.end() || found->second != "off";
+}
+
+/// The stored text of a file-type switch.
+///
+/// @param on the switch's state
+/// @return "on" or "off"
+std::string file_type_text(bool on) {
+    return on ? "on" : "off";
+}
+
 /// Returns the level of hardware acceleration a stored value reads as.
 ///
 /// @param text the stored value
@@ -631,6 +650,10 @@ EngineSettings read_settings(
             settings.hack_overrides = mod_profile::read_overrides(found->second);
     // Unknown text leaves the default read_settings started from.
     read_word(values, key::content_check, content_check_words, settings.content_check);
+    settings.file_type_oamod = file_type_on(values, key::file_type_oamod);
+    settings.file_type_oamap = file_type_on(values, key::file_type_oamap);
+    settings.file_type_oalang = file_type_on(values, key::file_type_oalang);
+    settings.file_type_oareg = file_type_on(values, key::file_type_oareg);
     return settings;
 }
 
@@ -1005,6 +1028,20 @@ void write_settings(
         defaults.content_check,
         restored
     );
+    const auto store_file_type = [&](std::string_view key, bool EngineSettings::* member) {
+        store(
+            values,
+            key,
+            file_type_text(chosen.*member),
+            chosen.*member != opened.*member,
+            chosen.*member == defaults.*member,
+            restored
+        );
+    };
+    store_file_type(key::file_type_oamod, &EngineSettings::file_type_oamod);
+    store_file_type(key::file_type_oamap, &EngineSettings::file_type_oamap);
+    store_file_type(key::file_type_oalang, &EngineSettings::file_type_oalang);
+    store_file_type(key::file_type_oareg, &EngineSettings::file_type_oareg);
     // Restore defaults keeps the overrides: Restore profile values clears them.
     if (!profile_id.empty() && chosen.hack_overrides != opened.hack_overrides) {
         if (chosen.hack_overrides.empty())

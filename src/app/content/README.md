@@ -32,7 +32,11 @@ downloaded files, and keeps the packages' badge pictures the Library shows.
   the catalogue and its signature. The catalogue has to verify with the
   keys about to be trusted. A signing key the player typed replaces the
   descriptor's keys, and the catalogue must verify with that key alone.
-  A file has no address.
+  A file has no address. A fetch stops at its connect limit while the
+  address is opened, its idle limit while a byte is waited for, and its
+  whole-fetch limit. One check that has not ended holds the next only
+  until that bound. An address that cannot be opened ends on the connect
+  limit, which is shorter than the whole-fetch limit.
 - `add_checked_registry` stores a check that was accepted, with the
   service clock's date, and writes that catalogue into the cache.
   `remove_registry` removes an added registry and that registry's cache
@@ -185,7 +189,9 @@ start. The cache only ever holds bytes the catalogue check accepted. An
 unreadable `Registries.yaml` is never written. A registry is added only
 after its catalogue has verified with the keys being trusted, and a
 mirror only after its catalogue has verified with the keys already
-trusted for that registry.
+trusted for that registry. A registry check is bounded by the same
+connect, idle and whole-fetch limits as its fetch, so one address cannot
+hold every later check for longer than those limits.
 
 `list_installed` and `find_updates` only read. `adopt_match` is the one
 write, and it writes only through the installer's origin record, which

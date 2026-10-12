@@ -130,7 +130,7 @@ std::string_view page_slug(Page page) {
     case Page::controls:
         return "controls";
     case Page::common_tweaks:
-        return "common-tweaks";
+        return "engine-limits";
     case Page::language:
         return "language";
     case Page::graphics:
@@ -147,6 +147,8 @@ std::string_view page_slug(Page page) {
         return "game-files";
     case Page::downloads:
         return "downloads";
+    case Page::system:
+        return "system";
     case Page::mod_keys:
         return "mod-keys";
     case Page::mod_patrol:
@@ -320,10 +322,21 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
 
         for (const Page page :
              settings::dialog_pages(settings::DialogKind::engine, true, true, true)) {
+            // System's rows differ by whether this system can register file
+            // types. Both layouts are pinned, so the table is the same
+            // everywhere.
+            if (page == Page::system)
+                continue;
             add(pictures,
                 std::string("dialog/") + std::string(page_slug(page)),
                 drawn_dialog(engine_dialog(page), fonts, no_icon, 1));
         }
+        Dialog system_bundle = engine_dialog(Page::system);
+        system_bundle.file_type_switches = false;
+        add(pictures, "dialog/system-bundle", drawn_dialog(system_bundle, fonts, no_icon, 1));
+        Dialog system_runtime = engine_dialog(Page::system);
+        system_runtime.file_type_switches = true;
+        add(pictures, "dialog/system-runtime", drawn_dialog(system_runtime, fonts, no_icon, 1));
 
         Dialog graphics_end = engine_dialog(Page::graphics);
         show_scroll_end(graphics_end);
@@ -362,7 +375,7 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
         add(pictures, "dialog/controls-focus", drawn_dialog(controls, fonts, no_icon, 1));
 
         add(pictures,
-            "dialog/common-tweaks-locked",
+            "dialog/engine-limits-locked",
             drawn_dialog(engine_dialog(Page::common_tweaks, game), fonts, no_icon, 1));
         add(pictures,
             "dialog/graphics-locked",
@@ -389,7 +402,8 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
             problem("developer mode is not on with its first area open");
         add(pictures, "dialog/developer-open", drawn_dialog(developer, fonts, no_icon, 1));
 
-        Dialog files = engine_dialog(Page::common_tweaks);
+        Dialog files = engine_dialog(Page::system);
+        files.file_type_switches = false;
         files.user_folder = "/Users/player/My Games/Total Annihilation";
         static_cast<void>(settings::set_folder_notice(files, "The folder could not be opened."));
         add(pictures, "dialog/files-notice", drawn_dialog(files, fonts, no_icon, 1));

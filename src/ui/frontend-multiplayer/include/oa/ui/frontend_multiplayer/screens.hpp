@@ -157,6 +157,9 @@ struct LobbyPackMap {
     const char* description{}; ///< one line about the map; empty when unwritten
     const char* size{};        ///< the map's width and height, as the list shows it
     int32_t memory_mb{};       ///< memory the map needs, in MB
+    /// The name the pack's index gives the map, the words players see.
+    /// Null when this row is a base map, or the index has no entry.
+    const char* title{};
 };
 
 /// Where the battle room reads installed pack maps and the base maps' summaries,

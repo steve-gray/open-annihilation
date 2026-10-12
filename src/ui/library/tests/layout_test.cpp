@@ -1877,6 +1877,145 @@ void registries_tab_lists_every_registry() {
     OA_CHECK(fixture::named(list, "library.registry.example-mods.remove") != nullptr);
 }
 
+/// Returns the header refresh icon's look.
+///
+/// @param list the display list
+/// @return the look; none when the icon is absent
+const kit::ButtonLook* header_refresh_look(const kit::DisplayList& list) {
+    const kit::Control* control = fixture::named(list, "library.refresh");
+    if (control == nullptr)
+        return nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::button || item.control != control->id)
+            continue;
+        return std::get_if<kit::ButtonLook>(&item.look);
+    }
+    return nullptr;
+}
+
+/// Returns the refresh mark drawn beside a registry's REFRESH, which is not
+/// itself a control.
+///
+/// @param list the display list
+/// @return the mark; none when that registry shows the arrow with no mark
+const kit::ButtonLook* row_refresh_look(const kit::DisplayList& list) {
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::button || item.control != kit::no_control)
+            continue;
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        if (look != nullptr && look->mark == kit::ButtonMark::refresh)
+            return look;
+    }
+    return nullptr;
+}
+
+/// A refresh that reads a list shows the check, on the header and beside
+/// REFRESH, then the arrow. One that fails shows the arrow at once. Another
+/// press while the check shows starts a refresh again. The eighth after
+/// 0.8 seconds of turning is the same at 30, 60 and 120 frames a second,
+/// and a tick during the held check does not ask for another frame.
+void a_finished_refresh_shows_the_check_then_the_arrow() {
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Library library = with_ridge();
+    lib::set_tab(library, lib::Tab::registries);
+    library.inputs.can_check = true;
+    const lib::RegistryPulse busy{fixture::core, true, false};
+    const lib::RegistryPulse read{fixture::core, false, false};
+    const lib::RegistryPulse missed{fixture::core, false, true};
+    const auto apply = [](lib::Library& model, bool checking, bool refreshing) {
+        model.inputs.checking = checking;
+        for (lib::Registry& registry : model.inputs.registries)
+            if (registry.id == fixture::core)
+                registry.refreshing = refreshing;
+    };
+    const auto eighth_after = [](uint32_t frame_ms) {
+        lib::ScreenState spun;
+        const lib::RegistryPulse turning{fixture::core, true, false};
+        const std::span<const lib::RegistryPulse> one{&turning, 1};
+        uint32_t elapsed = 0;
+        while (elapsed < 800u) {
+            const uint32_t step_ms = frame_ms < 800u - elapsed ? frame_ms : 800u - elapsed;
+            static_cast<void>(lib::step_refresh_marks(spun, true, one, step_ms));
+            elapsed += step_ms;
+        }
+        return spun.refresh_turn;
+    };
+    OA_CHECK(eighth_after(1000u / 30u) == eighth_after(1000u / 60u));
+    OA_CHECK(eighth_after(1000u / 60u) == eighth_after(1000u / 120u));
+    OA_CHECK(eighth_after(1000u / 120u) == kit::refresh_eighth(800));
+
+    lib::ScreenState state;
+    const std::span<const lib::RegistryPulse> spinning{&busy, 1};
+    const std::span<const lib::RegistryPulse> finished{&read, 1};
+    OA_CHECK(lib::step_refresh_marks(state, true, spinning, 0));
+    apply(library, true, true);
+    const kit::DisplayList turning_list = laid_out(library, state, regular);
+    const kit::ButtonLook* turning_header = header_refresh_look(turning_list);
+    const kit::ButtonLook* turning_row = row_refresh_look(turning_list);
+    OA_CHECK(turning_header != nullptr && turning_header->turning && turning_header->check_ms == 0);
+    OA_CHECK(turning_row != nullptr && turning_row->turning && turning_row->check_ms == 0);
+
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 0));
+    OA_CHECK(state.refresh_check_ms > 0);
+    apply(library, false, false);
+    const kit::DisplayList checked = laid_out(library, state, regular);
+    const kit::ButtonLook* checked_header = header_refresh_look(checked);
+    const kit::ButtonLook* checked_row = row_refresh_look(checked);
+    OA_CHECK(
+        checked_header != nullptr && !checked_header->turning &&
+        checked_header->check_ms == state.refresh_check_ms
+    );
+    OA_CHECK(checked_row != nullptr && !checked_row->turning && checked_row->check_ms > 0);
+    const kit::Control* refresh = fixture::named(checked, "library.refresh");
+    const kit::Control* row_button =
+        fixture::named(checked, "library.registry.fixture-core.refresh");
+    OA_CHECK(refresh != nullptr && refresh->enabled);
+    OA_CHECK(row_button != nullptr && row_button->enabled);
+    lib::ScreenState header_press = state;
+    const lib::ScreenResult again = click(library, header_press, checked, "library.refresh");
+    OA_CHECK(again.action == lib::Action::check_now);
+    lib::ScreenState row_press = state;
+    const lib::ScreenResult row_again =
+        click(library, row_press, checked, "library.registry.fixture-core.refresh");
+    OA_CHECK(
+        row_again.action == lib::Action::refresh_registry && row_again.registry == fixture::core
+    );
+
+    // Into the held check the picture stays, so the step asks for no frame.
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 200));
+    OA_CHECK(state.refresh_check_ms > 0);
+    OA_CHECK(!lib::step_refresh_marks(state, false, finished, 200));
+    OA_CHECK(lib::step_refresh_marks(state, false, finished, 800));
+    OA_CHECK(state.refresh_check_ms == 0);
+    const kit::DisplayList rested = laid_out(library, state, regular);
+    const kit::ButtonLook* rested_header = header_refresh_look(rested);
+    OA_CHECK(rested_header != nullptr && !rested_header->turning && rested_header->check_ms == 0);
+    OA_CHECK(row_refresh_look(rested) == nullptr);
+
+    // A press during the check starts the refresh again and the check goes.
+    lib::ScreenState during;
+    static_cast<void>(lib::step_refresh_marks(during, true, spinning, 0));
+    static_cast<void>(lib::step_refresh_marks(during, false, finished, 200));
+    OA_CHECK(during.refresh_check_ms > 0);
+    OA_CHECK(lib::step_refresh_marks(during, true, spinning, 0));
+    OA_CHECK(during.refresh_check_ms == 0);
+    bool row_cleared = true;
+    for (const lib::ScreenState::RegistryMark& mark : during.registry_marks)
+        if (mark.check_ms != 0)
+            row_cleared = false;
+    OA_CHECK(row_cleared);
+
+    lib::ScreenState failed;
+    const std::span<const lib::RegistryPulse> broken{&missed, 1};
+    static_cast<void>(lib::step_refresh_marks(failed, true, spinning, 0));
+    static_cast<void>(lib::step_refresh_marks(failed, false, broken, 16));
+    OA_CHECK(failed.refresh_check_ms == 0);
+    const kit::DisplayList failed_list = laid_out(library, failed, regular);
+    const kit::ButtonLook* failed_header = header_refresh_look(failed_list);
+    OA_CHECK(failed_header != nullptr && !failed_header->turning && failed_header->check_ms == 0);
+    OA_CHECK(row_refresh_look(failed_list) == nullptr);
+}
+
 /// MORE ▾ on Compact's details page holds the actions after the first
 /// three, and choosing one asks for it.
 void more_holds_the_rest() {
@@ -1917,6 +2056,7 @@ int main() {
     active_base_game_is_a_tile();
     unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();
+    a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
     details_page_keeps_its_entry();
     return oa::test::check_exit_status();

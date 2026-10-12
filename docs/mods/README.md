@@ -38,7 +38,7 @@ a folder or a file installs as follows:
    ([choosing a mod](#choosing-a-mod)). The game reloads its data for the
    mod and returns to the main menu playing it.
 
-**MODS** in the **Your files** row under **Common Tweaks** in the settings
+**MODS** in the **Your files** row under **System** in the settings
 opens the Mods folder in the file manager, making it the first time, and a
 mod's **OPEN FOLDER** in the Library opens the mod's own folder.
 
@@ -217,7 +217,7 @@ folder's name and "N/A", and its details say "No oamod.yaml present"; it
 plays with the game's own rules. The mod being played is marked PLAYING.
 
 To play a mod folder kept elsewhere, put it in the Mods folder. **MODS**
-under Your files in Settings › Common Tweaks opens your Mods folder in the
+under Your files in Settings › System opens your Mods folder in the
 system's file manager.
 
 - **PLAY NOW**, on a mod you are not playing, remembers the new mod and

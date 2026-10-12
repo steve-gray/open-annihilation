@@ -18,7 +18,7 @@ Every document in the repository, by what you want to do.
   - [iPhone and iPad](installation/ios.md), built on your own Mac
 - [settings.md](settings.md): Open Annihilation's own settings, with a
   picture of each section: opening them, OK, Cancel and Restore defaults,
-  and what every setting in Mods, Controls, Common Tweaks, Language & Text,
+  and what every setting in Mods, Controls, Engine Limits, Language & Text,
   Graphics, User Interface (Menu scaling, Window frame, HUD scaling,
   Interface size and Escape opens the game menu), Touch, Controller, Game files,
   Downloads and Developer does, its default, when it takes effect and when

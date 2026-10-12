@@ -44,7 +44,7 @@ same. `--` ends options. A command takes its options through
 | `asset-extract ROOT ENTRY OUTPUT [ARCHIVE...]` | Writes ENTRY from loose files under ROOT, or from the named archives, and prints where it was read. A loose file wins. |
 | `preview ARCHIVE PCX_ENTRY OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX image from an archive as a PPM file, or a PNG file when the path ends in `.png`, and prints its size. |
 | `decode-pcx INPUT.pcx OUTPUT.ppm\|OUTPUT.png` | Decodes a PCX file the same way. |
-| `pack FOLDER [--out FILE] [--force] [--game-dir DIR]` | Packs FOLDER as a `.oamod`, a `.oalang` or a `.oamap`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--game-dir` is the game's data; map packs need the game's palette for previews. `--force` replaces an existing file. |
+| `pack FOLDER [--out FILE] [--force] [--game-dir DIR]` | Packs FOLDER as a `.oamod`, a `.oalang` or a `.oamap`. The manifest is first, then every other file in byte order of its path. A file whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. The same files give the same bytes. `--game-dir` is the game's data; map packs need the game's palette for previews. `--force` replaces an existing file. A map's `players` is the largest whole number in its OTA `numplayers` when every number is from 2 to 10, and otherwise the most start positions of a Network schema. The folder's `oamap.yaml` may leave `maps` out, or set a map's `name`, `description` or `players`. `size`, `preview` and `files` are computed. |
 | `check FILE [--game-dir DIR] [--mod FOLDER[=KEY]]... [--accept-unimplemented-hacks] [--json]` | Runs the checks an install runs before it writes, and reports the facts a catalogue lists. A map pack needs `--game-dir` and may name each further target with `--mod`. `--json` prints one JSON object, and a map pack adds `maps`. Otherwise each fact is a `key: value` line, a map pack then prints one line per map and target, and the last line is `result: ok` or `result: refused`. Exit 0 when the package would be installed, 1 when it would be refused or a map does not fit `ta-3.1c`. A mod that does not fit leaves that exit code unchanged. |
 | `catalogue keygen --id ID --out FILE [--passphrase-file FILE]` | Makes a new Ed25519 key, seals its seed with a passphrase and writes FILE. The file is created only when that name is new, and on macOS and Linux its mode is 0600. The passphrase is read from the terminal with echo off, twice, and has to be at least 12 bytes. `--passphrase-file` reads the file's first line instead. Prints `key:`, `public: ed25519:` and `fingerprint:`. |
 | `catalogue public KEY_FILE` | Prints the same three lines. The passphrase is not used. |
@@ -135,7 +135,11 @@ pack's folder.
 
 `tools-oa-tool-pack-map` (`oa-tool-pack-map-test`) packs two maps into a
 `.oamap`, checks the index, the preview and the refusals, and leaves
-`pack-map-source` and `pack-map-game` in its working folder.
+`pack-map-source` and `pack-map-game` in its working folder. It also checks
+that `numplayers` sets `players`, that a missing or malformed `numplayers`
+falls back to the start positions, that a folder's `name`, `description`
+and `players` replace the computed values, and that an unknown stem is
+refused. Two packs of one folder have the same bytes.
 
 `tools-oa-tool-check` (`oa-tool-check-test`) checks a made-up mod package,
 its refusals, and a language manifest read on its own. Its argument is the

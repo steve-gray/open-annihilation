@@ -1297,32 +1297,38 @@ struct Runtime::LibraryScreen final : LayerScreen {
         return runtime_.library_->state.interaction;
     }
 
-    /// Follows the model as the host rebuilds it, turns the header's refresh
-    /// icon while the registries are being asked, and closes off the main menu.
+    /// Follows the model as the host rebuilds it, turns the refresh marks
+    /// while a refresh runs, holds a mark's check after a list was read, and
+    /// closes off the main menu.
     ///
-    /// @return close off the main menu; redraw when the model moved or the
-    ///     icon turned; otherwise none
+    /// The turn and the check follow the time since the previous tick, not
+    /// the frame count. A tick whose marks would draw the same picture does
+    /// not lay the screen out again.
+    ///
+    /// @return close off the main menu; redraw when the model moved or a
+    ///     mark changed; otherwise none
     LayerAnswer tick() override {
         if (runtime_.screen_ != Screen::main_menu)
             return LayerAnswer::close;
-        bool spun = false;
+        bool moved = false;
         if (runtime_.library_) {
             LibraryHost& host = *runtime_.library_;
-            if (host.model.inputs.checking) {
-                ++refresh_step_;
-                if (refresh_step_ >= 4) {
-                    refresh_step_ = 0;
-                    host.state.refresh_turn =
-                        static_cast<uint8_t>((host.state.refresh_turn + 1u) & 7u);
-                    spun = true;
-                }
-            } else if (refresh_step_ != 0 || host.state.refresh_turn != 0) {
-                refresh_step_ = 0;
-                host.state.refresh_turn = 0;
-                spun = true;
-            }
+            const auto now = static_cast<uint32_t>(SDL_GetTicks());
+            uint32_t elapsed = 0;
+            if (refresh_clock_started_)
+                elapsed = now - refresh_clock_ms_;
+            refresh_clock_ms_ = now;
+            refresh_clock_started_ = true;
+            const std::vector<library::Registry>& registries = host.model.inputs.registries;
+            std::vector<library::RegistryPulse> pulses;
+            pulses.reserve(registries.size());
+            for (const library::Registry& registry : registries)
+                pulses.push_back({registry.id, registry.refreshing, registry.unreachable});
+            moved = library::step_refresh_marks(
+                host.state, host.model.inputs.checking, pulses, elapsed
+            );
         }
-        if (!runtime_.library_ || (runtime_.library_->model_revision == seen_model_ && !spun))
+        if (!runtime_.library_ || (runtime_.library_->model_revision == seen_model_ && !moved))
             return LayerAnswer::none;
         relayout();
         return LayerAnswer::redraw;
@@ -1533,13 +1539,14 @@ struct Runtime::LibraryScreen final : LayerScreen {
         return false;
     }
 
-    Runtime& runtime_;        ///< the runtime whose Library it shows
-    kit::DisplayList list_{}; ///< what it draws and where its controls are
-    kit::Frame frame_{};      ///< the frame it was laid out for
-    bool laid_out_{};         ///< frame_ was set by lay_out
-    uint64_t seen_model_{};   ///< the host's model revision the list was laid out from
-    uint64_t revision_{};     ///< counts its layouts
-    uint8_t refresh_step_{};  ///< frames since the refresh icon last turned
+    Runtime& runtime_;             ///< the runtime whose Library it shows
+    kit::DisplayList list_{};      ///< what it draws and where its controls are
+    kit::Frame frame_{};           ///< the frame it was laid out for
+    bool laid_out_{};              ///< frame_ was set by lay_out
+    uint64_t seen_model_{};        ///< the host's model revision the list was laid out from
+    uint64_t revision_{};          ///< counts its layouts
+    uint32_t refresh_clock_ms_{};  ///< the previous tick's time, in milliseconds
+    bool refresh_clock_started_{}; ///< refresh_clock_ms_ has been set
 };
 
 // ---------------------------------------------------------------------------------------------

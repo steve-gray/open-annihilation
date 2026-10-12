@@ -65,7 +65,11 @@ the OA button, which opens them with no Library under them
 on macOS and **Ctrl+,** elsewhere opens them over the Library. The header's
 top right holds a refresh icon. Pressing it, or F5, asks the registries
 for their lists at once ([updates](#updates)). While they are being asked
-the icon turns, and it cannot be pressed again until they answer. **CLOSE**,
+the icon turns, one full turn every 1.6 seconds, and it cannot be pressed
+again until they answer. When the refresh has read a list, the icon shows
+a check for 0.8 seconds and then the arrow again. A refresh that fails goes
+straight back to the arrow; the offline line says why. Pressing it during
+the check asks again at once. **CLOSE**,
 or Escape, goes back to the main menu.
 The Library shows only on the main menu: it closes when the menu gives way
 to another screen, and in a game the in-game menu's button, which shows the
@@ -322,9 +326,9 @@ Both change the mod only from the main menu: the Library shows only there,
 and a game keeps the mod it started with. While `--mod-dir` or
 `--base-game` chose the run's mod, both are greyed and the details say "The
 command line chose this run's mod." **OPEN FOLDER** shows a mod's folder,
-and **MODS** under Your files in Settings › Common Tweaks your Mods folder,
+and **MODS** under Your files in Settings › System your Mods folder,
 where a mod's folder goes to be listed
-([settings](settings.md#common-tweaks)).
+([settings](settings.md#system)).
 
 ## Keys and controllers
 
@@ -456,7 +460,10 @@ Each card shows:
 - **REFRESH**, a standard button beside the switch. It asks that registry
   for its catalogue and its download counts. It is greyed while the
   registry is off or already being asked, and while it is being asked the
-  refresh icon beside it turns;
+  refresh icon beside it turns, one full turn every 1.6 seconds. When that
+  ask reads a catalogue the icon shows a check for 0.8 seconds, then the
+  arrow; an ask that finds nothing goes straight back to the arrow.
+  Pressing **REFRESH** during the check asks again at once;
 - an Off/On switch, the same switch Settings draws;
 - the address it was added from, or its catalogue's address when it was
   not added from one;

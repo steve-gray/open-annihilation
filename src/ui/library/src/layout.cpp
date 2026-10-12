@@ -814,10 +814,22 @@ int32_t header_reserve(const Building& building) {
     return reserve;
 }
 
+/// Returns how long a registry's refresh mark has been showing its check.
+///
+/// @param state the marks
+/// @param id the registry
+/// @return the milliseconds; 0 while it shows the arrow or is turning
+uint16_t registry_check_ms(const ScreenState& state, std::string_view id) noexcept {
+    for (const ScreenState::RegistryMark& mark : state.registry_marks)
+        if (mark.id == id)
+            return mark.check_ms;
+    return 0;
+}
+
 /// Appends the header's refresh icon, at the top right, the same square at
 /// every size class. Its words are "Refresh", or "Refreshing" while the
 /// registries are being asked. It can be pressed only when a registry can
-/// be asked.
+/// be asked, including while the check shows.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -840,6 +852,7 @@ void add_refresh_button(Building& building, const Window& window) {
     look.mark = kit::ButtonMark::refresh;
     look.turn = building.state->refresh_turn;
     look.turning = turning;
+    look.check_ms = turning ? uint16_t{0} : building.state->refresh_check_ms;
     const std::size_t before = building.list.controls.size();
     kit::add_button(
         building.list, rect, look, controls::refresh, unique_name(building, named("refresh"))
@@ -2668,14 +2681,19 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
         const int32_t band_top = card_top + inset;
         const int32_t side = metrics.list_row_badge;
         const int32_t title_band = std::max(metrics.regular_line, metrics.button_height);
-        // The right cluster, from the switch inward: REFRESH, the turning
-        // mark while this registry is being asked, and the key icon. The
-        // cluster stays in the title band; a wrapped heading grows below it.
+        // The right cluster, from the switch inward: REFRESH, the refresh
+        // mark while this registry is being asked or its check is showing,
+        // and the key icon. The key, REFRESH and the switch share the band's
+        // top, so Tab reads them left to right and then the buttons below.
+        // A wrapped heading grows under that band.
+        const uint16_t check_ms =
+            registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
+        const bool show_mark = registry.refreshing || check_ms > 0;
         int32_t cluster = inner_right;
         cluster -= metrics.switch_width;
         const kit::Rect toggle{
             cluster,
-            band_top + (title_band - metrics.regular_line) / 2,
+            band_top,
             metrics.switch_width,
             metrics.regular_line,
         };
@@ -2686,17 +2704,14 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
         const kit::Rect refresh_rect{cluster, band_top, refresh_width, metrics.button_height};
         cluster -= metrics.button_gap;
         kit::Rect turning_rect{};
-        if (registry.refreshing) {
+        if (show_mark) {
             cluster -= metrics.button_height;
             turning_rect = {cluster, band_top, metrics.button_height, metrics.button_height};
             cluster -= metrics.button_gap;
         }
         cluster -= metrics.state_icon_side;
         const kit::Rect key_rect{
-            cluster,
-            band_top + (title_band - metrics.state_icon_side) / 2,
-            metrics.state_icon_side,
-            metrics.state_icon_side,
+            cluster, band_top, metrics.state_icon_side, metrics.state_icon_side
         };
         const int32_t text_left = inner_left + side + metrics.list_row_gap;
         const int32_t title_right = cluster - metrics.label_gap;
@@ -2763,13 +2778,14 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             std::move(fingerprints),
             view
         );
-        if (registry.refreshing) {
+        if (show_mark) {
             kit::ButtonLook spinning;
             spinning.style = kit::ButtonStyle::quiet;
             spinning.enabled = false;
             spinning.mark = kit::ButtonMark::refresh;
             spinning.turn = building.state->refresh_turn;
-            spinning.turning = true;
+            spinning.turning = registry.refreshing;
+            spinning.check_ms = check_ms;
             kit::Item& spun = add_item(building.list, kit::Role::button, turning_rect, view);
             spun.look = spinning;
         }
@@ -3949,6 +3965,148 @@ kit::DisplayList details_page_layout(
         -1
     );
     return finish(building, window);
+}
+
+namespace {
+
+/// What one refresh mark draws, enough to tell a later step from this one.
+struct MarkShot {
+    bool turning{};
+    uint8_t turn{};
+    uint8_t ease{};
+    bool operator==(const MarkShot&) const = default;
+};
+
+/// Returns the picture a mark draws: the turning arrow, or the check's ease.
+///
+/// @param turning the arrow is turning
+/// @param turn the shared eighth, used while it turns
+/// @param check_ms how long the check has shown; 0 while it has not
+/// @return the picture
+MarkShot mark_shot(bool turning, uint8_t turn, uint16_t check_ms) noexcept {
+    MarkShot shot;
+    shot.turning = turning;
+    shot.turn = turning ? turn : uint8_t{0};
+    shot.ease =
+        turning ? uint8_t{0} : (check_ms == 0 ? uint8_t{0} : kit::refresh_check_ease(check_ms));
+    return shot;
+}
+
+/// Returns a registry's mark, or none when this step has not kept one.
+///
+/// @param state the marks
+/// @param id the registry
+/// @return the mark; none when the registry has no row
+const ScreenState::RegistryMark* mark_of(const ScreenState& state, std::string_view id) noexcept {
+    for (const ScreenState::RegistryMark& mark : state.registry_marks)
+        if (mark.id == id)
+            return &mark;
+    return nullptr;
+}
+
+/// Moves a check forward, or starts one.
+///
+/// A start with no time yet still counts as begun. A check that has already
+/// lasted kit::refresh_check_ms is over, and the arrow shows.
+///
+/// @param shown how long it has shown; 0 while it has not
+/// @param begin true starts it from nothing
+/// @param elapsed_ms the milliseconds to add
+/// @return the milliseconds still to show; 0 when the arrow is back
+uint16_t advance_check(uint16_t shown, bool begin, uint32_t elapsed_ms) noexcept {
+    if (!begin && shown == 0)
+        return 0;
+    const uint32_t next =
+        begin ? (elapsed_ms == 0 ? 1u : elapsed_ms) : static_cast<uint32_t>(shown) + elapsed_ms;
+    if (next >= kit::refresh_check_ms)
+        return 0;
+    return static_cast<uint16_t>(next);
+}
+
+} // namespace
+
+bool step_refresh_marks(
+    ScreenState& state,
+    bool checking,
+    std::span<const RegistryPulse> registries,
+    uint32_t elapsed_ms
+) {
+    const MarkShot header_before =
+        mark_shot(state.refresh_was_checking, state.refresh_turn, state.refresh_check_ms);
+    std::vector<MarkShot> rows_before;
+    rows_before.reserve(registries.size());
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool turning = held != nullptr && held->was_refreshing;
+        const uint16_t shown = held != nullptr ? held->check_ms : uint16_t{0};
+        rows_before.push_back(mark_shot(turning, state.refresh_turn, shown));
+    }
+
+    bool any_refreshing = checking;
+    for (const RegistryPulse& pulse : registries)
+        any_refreshing = any_refreshing || pulse.refreshing;
+    if (any_refreshing) {
+        if (!state.refresh_spinning)
+            state.refresh_spin_ms = 0;
+        state.refresh_spin_ms += elapsed_ms;
+        state.refresh_turn = kit::refresh_eighth(state.refresh_spin_ms);
+    } else {
+        state.refresh_spin_ms = 0;
+        state.refresh_turn = 0;
+    }
+    state.refresh_spinning = any_refreshing;
+
+    if (checking && !state.refresh_was_checking)
+        state.refresh_read_list = false;
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool was_refreshing = held != nullptr && held->was_refreshing;
+        if (was_refreshing && !pulse.refreshing && !pulse.failed &&
+            (checking || state.refresh_was_checking))
+            state.refresh_read_list = true;
+    }
+
+    if (checking)
+        state.refresh_check_ms = 0;
+    else if (state.refresh_was_checking) {
+        state.refresh_check_ms =
+            state.refresh_read_list ? advance_check(0, true, elapsed_ms) : uint16_t{0};
+        state.refresh_read_list = false;
+    } else {
+        state.refresh_check_ms = advance_check(state.refresh_check_ms, false, elapsed_ms);
+    }
+    state.refresh_was_checking = checking;
+
+    std::vector<ScreenState::RegistryMark> next_marks;
+    next_marks.reserve(registries.size());
+    for (const RegistryPulse& pulse : registries) {
+        const ScreenState::RegistryMark* held = mark_of(state, pulse.id);
+        const bool was_refreshing = held != nullptr && held->was_refreshing;
+        const uint16_t previous = held != nullptr ? held->check_ms : uint16_t{0};
+        ScreenState::RegistryMark row;
+        row.id = std::string(pulse.id);
+        row.was_refreshing = pulse.refreshing;
+        if (pulse.refreshing)
+            row.check_ms = 0;
+        else if (was_refreshing)
+            row.check_ms = pulse.failed ? uint16_t{0} : advance_check(0, true, elapsed_ms);
+        else
+            row.check_ms = advance_check(previous, false, elapsed_ms);
+        if (row.was_refreshing || row.check_ms > 0)
+            next_marks.push_back(std::move(row));
+    }
+    state.registry_marks = std::move(next_marks);
+
+    if (mark_shot(checking, state.refresh_turn, state.refresh_check_ms) != header_before)
+        return true;
+    for (std::size_t row = 0; row < registries.size(); ++row) {
+        const ScreenState::RegistryMark* held = mark_of(state, registries[row].id);
+        const bool turning = held != nullptr && held->was_refreshing;
+        const uint16_t shown = held != nullptr ? held->check_ms : uint16_t{0};
+        if (mark_shot(turning, state.refresh_turn, shown) != rows_before[row])
+            return true;
+    }
+    return false;
 }
 
 } // namespace oa::ui::library

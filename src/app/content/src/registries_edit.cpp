@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Adding, removing and turning off registries. A check fetches on the worker.
-// An edit writes Registries.yaml and the cache on the calling thread, under
-// the service's lock, and only when that file could be read.
+// It stops at its connect, idle and whole-fetch limits, so one address cannot
+// hold the next check past those limits. An edit writes Registries.yaml and
+// the cache on the calling thread, under the service's lock, and only when
+// that file could be read.
 #include "reach.hpp"
 #include "service_state.hpp"
 
@@ -29,13 +31,6 @@ namespace fs = std::filesystem;
 namespace registry = data::registry;
 namespace catalogue = data::catalogue;
 namespace http = netgame::http;
-
-/// The whole fetch of a descriptor, in milliseconds. A catalogue uses the
-/// refresh's own limit.
-constexpr uint32_t descriptor_total_ms = 60000;
-
-/// The whole fetch of a catalogue, in milliseconds, as a refresh uses.
-constexpr uint32_t catalogue_total_ms = 120000;
 
 /// What a check reads once, before any fetch, so the lock is not held while
 /// the network runs.
@@ -283,8 +278,8 @@ http::Response fetch_bytes(
     request.url = formats::url::url_text(url);
     request.accept_gzip = gzip;
     request.limits.max_body_bytes = limit;
-    request.timeouts.connect_ms = 10000;
-    request.timeouts.idle_ms = 30000;
+    request.timeouts.connect_ms = registry_check_connect_ms;
+    request.timeouts.idle_ms = registry_check_idle_ms;
     request.timeouts.total_ms = total_ms;
     request.cancel = cancel;
     return client.fetch(request, body);
@@ -440,7 +435,7 @@ FetchedCatalogue fetch_catalogue(
             true,
             catalogue::max_catalogue_bytes,
             tools.cancel,
-            catalogue_total_ms,
+            registry_check_catalogue_ms,
             body
         );
         if (response.failure == http::Failure::cancelled ||
@@ -468,7 +463,7 @@ FetchedCatalogue fetch_catalogue(
                 false,
                 4 * 1024,
                 tools.cancel,
-                catalogue_total_ms,
+                registry_check_catalogue_ms,
                 signature
             );
         }
@@ -617,7 +612,7 @@ void complete_url_check(
         false,
         registry::max_descriptor_bytes,
         tools.cancel,
-        descriptor_total_ms,
+        registry_check_descriptor_ms,
         body
     );
     if (response.failure == http::Failure::cancelled ||
@@ -759,7 +754,13 @@ void complete_mirror_check(
 
 /// Runs one check and stores a failure when it throws.
 ///
-/// @param state the service
+/// The check runs on the worker, behind work already queued. The fetch stops
+/// at the connect limit while the address is opened, the idle limit while a
+/// byte is waited for, and the whole-fetch limit, so this check cannot hold
+/// a later one for longer than those clocks.
+///
+/// @param service the service
+/// @param state the service's state
 /// @param request the check
 /// @param job the check
 void run_check(Service& service, ServiceState& state, uint64_t request, WorkerJob job) {
