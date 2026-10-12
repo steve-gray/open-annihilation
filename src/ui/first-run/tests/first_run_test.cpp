@@ -475,6 +475,91 @@ void check_wrap_click_and_buttons() {
     OA_CHECK(escape.ask == Ask::advance);
 }
 
+/// The caption of Next.
+///
+/// @param scene the layout
+/// @return the caption; empty when Next is not there
+std::string next_caption(const oa::ui::first_run::Scene& scene) {
+    const oa::ui::kit::Control* next =
+        oa::ui::kit::control_of(scene.list, oa::ui::first_run::next_id);
+    if (next == nullptr)
+        return {};
+    return next->text;
+}
+
+/// The note and Next follow a readable language in the middle, then the
+/// language in use. A pack that is not installed leaves both as they are.
+void check_centred_language() {
+    const char* catalogue_text =
+        "[Next]\n"
+        "{\n"
+        "de=~de-next~;\n"
+        "fr=~fr-next~;\n"
+        "}\n"
+        "[Other languages download from Core Prime. The first download makes a random install "
+        "ID, which the next step explains.]\n"
+        "{\n"
+        "de=~de-note~;\n"
+        "fr=~fr-note~;\n"
+        "}\n";
+    oa::data::languages::InterfaceText catalogue;
+    OA_CHECK(catalogue.add(catalogue_text));
+    const oa::data::languages::Language* french = oa::data::languages::find_by_tag("fr");
+    const oa::data::languages::Language* german = oa::data::languages::find_by_tag("de");
+    OA_CHECK(french != nullptr && german != nullptr);
+    if (french == nullptr || german == nullptr)
+        return;
+    oa::data::languages::set_interface_language(&catalogue, *french);
+    OA_CHECK(&oa::data::languages::interface_language() == french);
+
+    Card french_card = named_card("fr", "Francais");
+    french_card.current = true;
+    Card german_card = named_card("de", "Deutsch");
+    Card pack;
+    pack.tag = "pt";
+    pack.own_name = "Portugues";
+    pack.english_name = "Portuguese";
+    pack.kind = CardKind::pack;
+    pack.pack = PackState::ready;
+
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+
+    Session session;
+    session.model.step = Step::language;
+    session.model.cards = {french_card, german_card, pack};
+    session.carousel.selected = 1;
+    oa::ui::first_run::bind(session);
+    const auto centred = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(centred) == "~de-next~");
+    OA_CHECK(shows_line(centred, "~de-note~"));
+    OA_CHECK(&oa::data::languages::interface_language() == french);
+
+    session.carousel.selected = 0;
+    oa::ui::first_run::bind(session);
+    const auto home = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(home) == "~fr-next~");
+    OA_CHECK(shows_line(home, "~fr-note~"));
+    OA_CHECK(!shows_line(home, "~de-note~"));
+
+    session.carousel.selected = 2;
+    oa::ui::first_run::bind(session);
+    const auto waiting = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(waiting) == "~fr-next~");
+    OA_CHECK(shows_line(waiting, "~fr-note~"));
+    OA_CHECK(!shows_line(waiting, "~de-note~"));
+    OA_CHECK(&oa::data::languages::interface_language() == french);
+
+    session.model.step = Step::online;
+    session.carousel.selected = 1;
+    const auto online = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(online) == "~fr-next~");
+    OA_CHECK(!shows_line(online, "~de-note~"));
+
+    oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
+}
+
 } // namespace
 
 int main() {
@@ -486,5 +571,6 @@ int main() {
     check_keys();
     check_wrap_click_and_buttons();
     check_lookup();
+    check_centred_language();
     return oa::test::check_exit_status();
 }

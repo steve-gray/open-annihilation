@@ -110,6 +110,8 @@ the interface.
   `InterfaceText`, the engine's own words in the languages translations are
   given for, read from TDF files whose sections name the English text and
   whose keys are tags; `set_interface_language()` and `interface_text()`.
+  `interface_text_in(english, language)` reads one text in a named language
+  from that same catalogue and leaves the language in use unchanged.
 - `oa/data/languages/language_pack.hpp`: language packs, a folder of texts
   for one language that adds to the game data's own translations entry by
   entry. `read_manifest()` reads `language.yaml` with the mod profiles'
