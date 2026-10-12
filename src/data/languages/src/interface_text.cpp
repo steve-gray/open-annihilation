@@ -103,11 +103,15 @@ const Language& interface_language() noexcept {
     return language != nullptr ? *language : english();
 }
 
-std::string_view interface_text(std::string_view english) {
+std::string_view interface_text_in(std::string_view english, const Language& language) {
     const Installed& state = installed();
     if (state.catalogue == nullptr)
         return english;
-    return state.catalogue->text(english, interface_language());
+    return state.catalogue->text(english, language);
+}
+
+std::string_view interface_text(std::string_view english) {
+    return interface_text_in(english, interface_language());
 }
 
 } // namespace oa::data::languages

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The three first-run steps: their layout, their keys and pointer, and their drawing.
-// Words are looked up as the screen is laid out, so a language chosen here redraws them.
+// Words are looked up as the screen is laid out. On the language step a built-in
+// or installed language in the middle is read from the same catalogue, and the
+// language the game shows stays as it was until the player chooses.
 
 #include "oa/ui/first_run/first_run.hpp"
 
@@ -56,10 +58,38 @@ Band content_band(int32_t width, int32_t height) noexcept {
 
 /// Looks a word up and keeps a string the look can own.
 ///
+/// A language reads that word from the installed catalogue. Null reads the
+/// language the game is showing.
+///
 /// @param english the catalogue text
+/// @param language the language to read it in; null for the one in use
 /// @return the words to show
-std::string show(std::string_view english) {
+std::string
+show(std::string_view english, const oa::data::languages::Language* language = nullptr) {
+    if (language != nullptr)
+        return std::string(oa::data::languages::interface_text_in(english, *language));
     return std::string(interface_text(english));
+}
+
+/// The language the language step's own words show in: the card in the middle
+/// when the game can read it now. A pack that is not installed yet, and any
+/// other step, leave the words in the language in use.
+///
+/// @param session the session
+/// @return the language; null to keep the language in use
+const oa::data::languages::Language* centred_language(const Session& session) noexcept {
+    if (session.model.step != Step::language || session.carousel.selected < 0)
+        return nullptr;
+    const auto index = static_cast<std::size_t>(session.carousel.selected);
+    if (index >= session.model.cards.size())
+        return nullptr;
+    const Card& card = session.model.cards[index];
+    if (card.kind != CardKind::built_in && card.kind != CardKind::installed)
+        return nullptr;
+    const oa::data::languages::Language* centred = oa::data::languages::find_by_tag(card.tag);
+    if (centred == nullptr || !oa::data::languages::playable(*centred))
+        return nullptr;
+    return centred;
 }
 
 /// Adds one line of text.
@@ -291,27 +321,28 @@ kit::LanguageAvailability availability_of(const Card& card) noexcept {
 /// The pill's words.
 ///
 /// @param card the card
+/// @param language the language the step is speaking; null for the one in use
 /// @return the words
-std::string pill_text(const Card& card) {
+std::string pill_text(const Card& card, const oa::data::languages::Language* language) {
     if (card.current)
-        return show("Active");
+        return show("Active", language);
     if (card.kind == CardKind::built_in)
-        return show("Built in");
+        return show("Built in", language);
     if (card.kind == CardKind::installed)
-        return show("Installed");
+        return show("Installed", language);
     switch (card.pack) {
     case PackState::downloading:
-        return show("Downloading");
+        return show("Downloading", language);
     case PackState::checking:
-        return show("Checking…");
+        return show("Checking…", language);
     case PackState::failed:
-        return show("Couldn't download");
+        return show("Couldn't download", language);
     case PackState::offline:
-        return show("Offline");
+        return show("Offline", language);
     case PackState::ready:
         break;
     }
-    std::string pill = show("Get");
+    std::string pill = show("Get", language);
     if (!card.size_text.empty()) {
         pill += " · ";
         pill += card.size_text;
@@ -322,16 +353,17 @@ std::string pill_text(const Card& card) {
 /// The line under a card's names: a download's progress, or why it failed.
 ///
 /// @param card the card
+/// @param language the language the step is speaking; null for the one in use
 /// @return the line; empty when the card has none
-std::string facts_text(const Card& card) {
+std::string facts_text(const Card& card, const oa::data::languages::Language* language) {
     if (card.kind == CardKind::pack && card.pack == PackState::downloading) {
-        std::string line = show("Downloading");
+        std::string line = show("Downloading", language);
         line += ' ';
         line += card.own_name;
         line += " · ";
         line += card.progress_done_text;
         line += ' ';
-        line += show("of");
+        line += show("of", language);
         line += ' ';
         line += card.progress_size_text;
         return line;
@@ -348,23 +380,30 @@ std::string facts_text(const Card& card) {
 /// @param height the window's height
 /// @param back_enabled Back takes a press
 /// @param next_enabled Next takes a press
+/// @param language the language the language step is speaking; null on the other steps
 /// @return the look
 kit::SetupChromeLook chrome_look(
-    const Session& session, int32_t width, int32_t height, bool back_enabled, bool next_enabled
+    const Session& session,
+    int32_t width,
+    int32_t height,
+    bool back_enabled,
+    bool next_enabled,
+    const oa::data::languages::Language* language
 ) {
     kit::SetupChromeLook look;
     look.width = width;
     look.height = height;
-    look.page = show("Welcome");
+    look.page = show("Welcome", language);
     // Each call copies before the next, so a view into the catalogue is not kept.
     look.step_name = session.model.step == Step::online ? std::string(interface_text("ONLINE"))
-                                                        : std::string(interface_text("WELCOME"));
-    look.step_pattern = std::string(interface_text(kit::step_line_pattern));
+                                                        : show("WELCOME", language);
+    look.step_pattern = language != nullptr ? show(kit::step_line_pattern, language)
+                                            : std::string(interface_text(kit::step_line_pattern));
     look.step_index = session.model.step == Step::online ? 2 : 1;
     look.step_count = 3;
-    look.skip = show("Skip setup");
-    look.back = show("Back");
-    look.next = show("Next");
+    look.skip = show("Skip setup", language);
+    look.back = show("Back", language);
+    look.next = show("Next", language);
     look.back_enabled = back_enabled;
     look.next_enabled = next_enabled;
     return look;
@@ -379,6 +418,7 @@ kit::SetupChromeLook chrome_look(
 /// @param height the window's height
 /// @param back_enabled Back takes a press
 /// @param next_enabled Next takes a press
+/// @param language the language the language step is speaking; null on the other steps
 void add_chrome(
     Scene& scene,
     std::vector<kit::ControlId>& order,
@@ -386,10 +426,11 @@ void add_chrome(
     int32_t width,
     int32_t height,
     bool back_enabled,
-    bool next_enabled
+    bool next_enabled,
+    const oa::data::languages::Language* language
 ) {
     const kit::SetupChromeLook look =
-        chrome_look(session, width, height, back_enabled, next_enabled);
+        chrome_look(session, width, height, back_enabled, next_enabled, language);
     kit::add_setup_chrome(scene.list, {0, 0}, look);
     const kit::SetupButtons buttons = kit::setup_buttons(nullptr, look);
     const Step step = session.model.step;
@@ -495,19 +536,20 @@ void lay_language(
     const int32_t width = frame.area.width;
     const int32_t height = frame.area.height;
     const bool busy = download_busy(session.model);
+    const oa::data::languages::Language* const preview = centred_language(session);
     std::vector<kit::ControlId> order;
-    add_chrome(scene, order, session, width, height, false, !busy);
+    add_chrome(scene, order, session, width, height, false, !busy, preview);
 
     const Band band = content_band(width, height);
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
     constexpr int32_t kTitle = 40;
-    scene.title_text = show("Welcome to Open Annihilation");
+    scene.title_text = show("Welcome to Open Annihilation", preview);
     scene.title = {band.left, band.top, band.width, kTitle};
     int32_t row = band.top + kTitle + 4;
     add_text(
         scene.list,
         {band.left, row, band.width, kit::compact_metrics.small_line},
-        show("Choose your language."),
+        show("Choose your language.", preview),
         kit::FontRole::small,
         kit::colour::hint,
         kit::Align::centre
@@ -517,7 +559,8 @@ void lay_language(
     constexpr int32_t kArrow = 28;
     const std::string note = show(
         "Other languages download from Core Prime. The first download makes a random install ID, "
-        "which the next step explains."
+        "which the next step explains.",
+        preview
     );
     const int32_t note_width = std::max(band.width, int32_t{1});
     const int32_t note_height = paragraph_height(fonts, note_width, note, kit::FontRole::small);
@@ -529,7 +572,7 @@ void lay_language(
         static_cast<std::size_t>(session.carousel.selected) < session.model.cards.size()) {
         const Card& chosen =
             session.model.cards[static_cast<std::size_t>(session.carousel.selected)];
-        status = facts_text(chosen);
+        status = facts_text(chosen, preview);
         show_bar = chosen.kind == CardKind::pack && chosen.pack == PackState::downloading &&
                    chosen.progress_whole > 0;
         action_cancel = chosen.kind == CardKind::pack && (chosen.pack == PackState::downloading ||
@@ -540,9 +583,10 @@ void lay_language(
     std::string hint;
     if (session.model.catalogue == CatalogueNote::unread ||
         session.model.catalogue == CatalogueNote::downloads_off) {
-        hint = session.model.catalogue == CatalogueNote::downloads_off
-                   ? show("Downloads are off, so language packs stay offline.")
-                   : show("The catalogue could not be read, so language packs stay offline.");
+        hint =
+            session.model.catalogue == CatalogueNote::downloads_off
+                ? show("Downloads are off, so language packs stay offline.", preview)
+                : show("The catalogue could not be read, so language packs stay offline.", preview);
     }
     int32_t under = 8 + note_height;
     if (!status.empty())
@@ -584,8 +628,8 @@ void lay_language(
         face.letters = badge_letters(card.tag);
         face.own_name = card.own_name;
         face.english_name = card.english_name;
-        face.facts = facts_text(card);
-        face.pill = pill_text(card);
+        face.facts = facts_text(card, preview);
+        face.pill = pill_text(card, preview);
         face.availability = availability_of(card);
         face.disabled =
             busy && card.pack != PackState::downloading && card.pack != PackState::checking;
@@ -618,7 +662,7 @@ void lay_language(
         scene.previous,
         previous_id,
         control_name(Step::language, "previous"),
-        show("Previous"),
+        show("Previous", preview),
         has_previous
     );
     order.push_back(previous_id);
@@ -642,7 +686,7 @@ void lay_language(
         scene.next_arrow,
         next_card_id,
         control_name(Step::language, "next-card"),
-        show("Next"),
+        show("Next", preview),
         has_next
     );
     order.push_back(next_card_id);
@@ -678,7 +722,8 @@ void lay_language(
         row_under += metrics.progress_bar_height + 4;
     }
     if (show_action) {
-        const std::string caption = action_cancel ? show("Cancel download") : show("Retry");
+        const std::string caption =
+            action_cancel ? show("Cancel download", preview) : show("Retry", preview);
         const int32_t button_width = std::max(kit::compact_metrics.button_width, int32_t{120});
         const int32_t used = std::min(button_width, band.width);
         const kit::Rect button{
@@ -738,7 +783,7 @@ void lay_online(
     const int32_t width = frame.area.width;
     const int32_t height = frame.area.height;
     std::vector<kit::ControlId> order;
-    add_chrome(scene, order, session, width, height, true, true);
+    add_chrome(scene, order, session, width, height, true, true, nullptr);
     const Band band = content_band(width, height);
 
     const std::string heading = show("Downloads, updates and a number only you hold");

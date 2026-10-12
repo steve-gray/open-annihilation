@@ -11,6 +11,7 @@
 
 #include "oa/app/runtime.hpp"
 #include "oa/app/view_rules.hpp"
+#include "language_packs.hpp"
 
 #include "oa/platform/text_font.hpp"
 #include "oa/base/threads.hpp"
@@ -23,10 +24,12 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <cstdio>
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace oa::app {
 
@@ -85,11 +88,26 @@ struct ModernFonts {
     std::optional<uint64_t> fonts_generation{};
     /// the least pixel size of ideographs for that language, 0 for none
     int32_t least_cjk_size{};
+    /// Fonts of a language the welcome is showing before the player chooses
+    /// it. Empty while the step speaks the language in use.
+    std::vector<PackFontFile> preview{};
+    /// True while `preview` is on the stack, after the language in use.
+    bool preview_on_stack{};
 };
 
 ModernFonts& modern_fonts() {
     static ModernFonts fonts;
     return fonts;
+}
+
+/// Tells whether two preview font lists are the same files in the same roles.
+bool same_preview(const std::vector<PackFontFile>& left, const std::vector<PackFontFile>& right) {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index)
+        if (left[index].file != right[index].file || left[index].role != right[index].role)
+            return false;
+    return true;
 }
 
 /// Opens the fonts the first time they are asked for; null when they cannot be.
@@ -103,6 +121,49 @@ text_font::FontStack* opened_stack(ModernFonts& fonts) {
         }
     }
     return fonts.stack.get();
+}
+
+/// Puts the welcome's preview fonts on the stack after the language in use,
+/// or takes them off. Lines drawn before the change are forgotten.
+///
+/// @param[in,out] fonts the modern fonts, already locked
+/// @param runtime the runtime, for the faces of the language in use
+/// @param shown the language in use
+void apply_preview_faces(
+    ModernFonts& fonts, const Runtime& runtime, const oa::data::languages::Language& shown
+) {
+    text_font::FontStack* stack = opened_stack(fonts);
+    if (fonts.preview.empty()) {
+        if (!fonts.preview_on_stack)
+            return;
+        if (stack != nullptr)
+            runtime.use_language_fonts(*stack);
+        fonts.preview_on_stack = false;
+        fonts.least_cjk_size = writes_cjk(shown) ? text_font::least_cjk_language_pixel_size : 0;
+        fonts.lines.clear();
+        fonts.order.clear();
+        return;
+    }
+    if (fonts.preview_on_stack)
+        return;
+    if (stack == nullptr)
+        return;
+    bool ideographs = false;
+    for (const PackFontFile& font : fonts.preview) {
+        if (font.role == text_font::FaceRole::ideographs)
+            ideographs = true;
+        if (!stack->add_face(font.file, font.role))
+            std::fprintf(
+                stderr,
+                "open-annihilation: the language font %s did not open\n",
+                font.file.string().c_str()
+            );
+    }
+    if (ideographs && fonts.least_cjk_size < text_font::least_cjk_language_pixel_size)
+        fonts.least_cjk_size = text_font::least_cjk_language_pixel_size;
+    fonts.preview_on_stack = true;
+    fonts.lines.clear();
+    fonts.order.clear();
 }
 
 /// The style a face is drawn in at a scale and text size: hinted to whole
@@ -144,6 +205,9 @@ void follow_language(
     text_font::FontStack* stack = opened_stack(fonts);
     if (!runtime.follow_language_fonts(stack, fonts.fonts_generation))
         return;
+    // The language in use replaced the faces, including one the welcome had
+    // added for a language it is only showing.
+    fonts.preview_on_stack = false;
     fonts.least_cjk_size = writes_cjk(language) ? text_font::least_cjk_language_pixel_size : 0;
     fonts.lines.clear();
     fonts.order.clear();
@@ -187,6 +251,17 @@ draw_mask(text_font::FontStack& stack, std::string_view text, const text_font::S
 }
 
 } // namespace
+
+void note_first_run_preview_fonts(std::vector<PackFontFile> fonts) {
+    ModernFonts& state = modern_fonts();
+    const base::threads::LockGuard lock(state.mutex);
+    if (same_preview(state.preview, fonts))
+        return;
+    state.preview = std::move(fonts);
+    state.preview_on_stack = false;
+    state.lines.clear();
+    state.order.clear();
+}
 
 GameTextHooksInstall::~GameTextHooksInstall() {
     if (runtime != nullptr && oa::present::game_text_hooks().context == runtime)
@@ -354,6 +429,9 @@ void Runtime::install_game_text_hooks() {
         auto& fonts = modern_fonts();
         const base::threads::LockGuard lock(fonts.mutex);
         follow_language(fonts, runtime, runtime.shown_language(), scale, size);
+        // After the language in use, so a welcome that is only showing another
+        // language can draw the words the game font has no glyph for.
+        apply_preview_faces(fonts, runtime, runtime.shown_language());
         const auto style = face_style(face, scale, size, fonts.least_cjk_size);
         std::string key;
         key.push_back(static_cast<char>(face));

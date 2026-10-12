@@ -23,6 +23,7 @@
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
 #include "oa/ui/kit/input.hpp"
+#include "oa/platform/text_font.hpp"
 #include "oa/ui/pad_controls.hpp"
 
 #include <SDL3/SDL.h>
@@ -46,6 +47,11 @@ namespace settings = oa::ui::engine_settings;
 namespace frontend_state = oa::ui::frontend_state;
 namespace kit = oa::ui::kit;
 namespace layout = oa::ui::display_layout;
+namespace text_font = oa::platform::text_font;
+
+/// Names the fonts a centred language adds so the welcome can draw words the
+/// game font has no glyph for. Empty puts that stack back to the language in use.
+void note_first_run_preview_fonts(std::vector<PackFontFile> fonts);
 
 /// The screen's name on the OA layer.
 constexpr std::string_view kScreenName = "first-run";
@@ -489,6 +495,20 @@ class FirstRunScreen final : public LayerScreen {
         session_.model.step = step;
     }
 
+    /// Takes a previewed language's fonts off both stacks, so a setup
+    /// closed while such a language is in the middle leaves only the
+    /// language in use.
+    ~FirstRunScreen() override {
+        if (preview_fonts_tag_.empty())
+            return;
+        note_first_run_preview_fonts({});
+        if (text_font::FontStack* stack = runtime_.oa_layer().smooth_fonts())
+            runtime_.use_language_fonts(*stack);
+    }
+
+    FirstRunScreen(const FirstRunScreen&) = delete;
+    FirstRunScreen& operator=(const FirstRunScreen&) = delete;
+
     /// Returns the screen's name.
     ///
     /// @return first-run
@@ -561,10 +581,62 @@ class FirstRunScreen final : public LayerScreen {
         FirstRunHost::note_open(runtime_, session_.model.step);
     }
 
+    /// Puts an installed language's font on the smooth stack while that
+    /// language is in the middle and is not the one the game shows, so the
+    /// step's words can be read. The language itself is not changed. Turning
+    /// away puts the stack back to the language in use.
+    void prepare_preview_fonts() const {
+        text_font::FontStack* stack = runtime_.oa_layer().smooth_fonts();
+        if (stack == nullptr)
+            return;
+        std::string tag;
+        if (session_.model.step == first_run::Step::language && session_.carousel.selected >= 0 &&
+            static_cast<std::size_t>(session_.carousel.selected) < session_.model.cards.size()) {
+            const first_run::Card& card =
+                session_.model.cards[static_cast<std::size_t>(session_.carousel.selected)];
+            const languages::Language* centred = languages::find_by_tag(card.tag);
+            if (card.kind == first_run::CardKind::installed && centred != nullptr &&
+                languages::playable(*centred) &&
+                !same_tag(centred->tag, runtime_.shown_language().tag))
+                tag = card.tag;
+        }
+        const uint64_t generation = runtime_.language_fonts_generation();
+        if (preview_fonts_ready_ && tag == preview_fonts_tag_ &&
+            generation == preview_fonts_generation_)
+            return;
+        runtime_.use_language_fonts(*stack);
+        std::vector<PackFontFile> preview_faces;
+        if (!tag.empty() && runtime_.language_ != nullptr) {
+            // The later group wins, as the catalogue adds the engine's texts,
+            // then the player's, then a mod's.
+            const LoadedLanguagePack* pack = nullptr;
+            const Runtime::LanguageState& state = *runtime_.language_;
+            for (const auto* group : {&state.engine_packs, &state.player_packs, &state.mod_packs}) {
+                for (const auto& loaded : *group) {
+                    if (loaded != nullptr && same_tag(loaded->pack.manifest().tag, tag))
+                        pack = loaded.get();
+                }
+            }
+            if (pack != nullptr) {
+                preview_faces = pack_fonts(*pack);
+                for (const PackFontFile& font : preview_faces) {
+                    if (!stack->add_face(font.file, font.role))
+                        std::cerr << "open-annihilation: the language font "
+                                  << path_to_utf8(font.file) << " did not open\n";
+                }
+            }
+        }
+        note_first_run_preview_fonts(preview_faces);
+        preview_fonts_tag_ = std::move(tag);
+        preview_fonts_generation_ = generation;
+        preview_fonts_ready_ = true;
+    }
+
     /// Draws the step.
     ///
     /// @param canvas where it draws
     void draw(const kit::Canvas& canvas) const override {
+        prepare_preview_fonts();
         first_run::draw(canvas, scene_, session_);
     }
 
@@ -934,6 +1006,11 @@ class FirstRunScreen final : public LayerScreen {
     uint64_t last_ticks_{};                                ///< SDL_GetTicks at the previous tick
     bool selection_set_{};    ///< the carousel has been placed on a language
     std::string bound_tag_{}; ///< the language the carousel last followed
+    /// The installed language whose font was added for a preview; empty when
+    /// the stack holds only the language in use.
+    mutable std::string preview_fonts_tag_{};
+    mutable uint64_t preview_fonts_generation_{}; ///< the font generation that addition followed
+    mutable bool preview_fonts_ready_{};          ///< prepare_preview_fonts has run
 };
 
 /// Returns the setup, showing or waiting.

@@ -84,6 +84,18 @@ void set_interface_language(const InterfaceText* catalogue, const Language& lang
 /// @return the installed language; English before any is installed
 [[nodiscard]] const Language& interface_language() noexcept;
 
+/// Returns one of the interface's own words in a named language, from the
+/// catalogue set_interface_language installed. The language the interface
+/// shows is left as it was. Nothing is loaded to answer it.
+///
+/// @param english the word, in English as the source writes it
+/// @param language the language to read it in
+/// @return its translation, or `english` itself without one; a view of the
+///     catalogue's copy, valid while that catalogue is installed and
+///     nothing is added, or of `english`
+[[nodiscard]] std::string_view
+interface_text_in(std::string_view english, const Language& language);
+
 /// Returns one of the interface's own words in the installed language.
 ///
 /// @param english the word, in English as the source writes it
