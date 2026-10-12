@@ -85,6 +85,52 @@ std::string author_of(const Entry& entry) {
     return author;
 }
 
+/// Returns an author with space and tab taken off either end.
+///
+/// @param author the author
+/// @return the name inside that space
+std::string_view trimmed_author(std::string_view author) noexcept {
+    while (!author.empty() && (author.front() == ' ' || author.front() == '\t'))
+        author.remove_prefix(1);
+    while (!author.empty() && (author.back() == ' ' || author.back() == '\t'))
+        author.remove_suffix(1);
+    return author;
+}
+
+/// Tells whether an author is a name, ignoring ASCII case.
+///
+/// @param author the author, already trimmed
+/// @param lower the name in lower case
+/// @return true when they are the same letters
+bool author_is(std::string_view author, std::string_view lower) noexcept {
+    if (author.size() != lower.size())
+        return false;
+    for (std::size_t index = 0; index < author.size(); ++index) {
+        unsigned char byte = static_cast<unsigned char>(author[index]);
+        if (byte >= 'A' && byte <= 'Z')
+            byte = static_cast<unsigned char>(byte - 'A' + 'a');
+        if (byte != static_cast<unsigned char>(lower[index]))
+            return false;
+    }
+    return true;
+}
+
+/// Returns the author a mark is matched against.
+///
+/// The listing's author when that listing names one, otherwise the installed
+/// manifest's. Empty when neither names one. The publisher is not read, so
+/// a package that names no author shows no mark.
+///
+/// @param entry the entry
+/// @return the author
+std::string_view maker_author(const Entry& entry) noexcept {
+    if (entry.listing != nullptr && !entry.listing->author.empty())
+        return entry.listing->author;
+    if (entry.installed != nullptr)
+        return entry.installed->author;
+    return {};
+}
+
 /// Returns a coverage as the Active tile states it.
 ///
 /// @param text how texts are looked up
@@ -557,6 +603,22 @@ Fact fact_of(std::string_view label, std::string long_value, std::string short_v
 
 } // namespace
 
+PackageMaker package_maker(std::string_view author) noexcept {
+    author = trimmed_author(author);
+    if (author_is(author, "openannihilation") || author_is(author, "open annihilation") ||
+        author_is(author, "oa team"))
+        return PackageMaker::open_annihilation;
+    if (author_is(author, "cavedog entertainment"))
+        return PackageMaker::cavedog;
+    return PackageMaker::none;
+}
+
+PackageMaker entry_maker(const Entry& entry) noexcept {
+    if (!entry.built_in)
+        return PackageMaker::none;
+    return package_maker(maker_author(entry));
+}
+
 void refresh(Library& library, Inputs inputs) {
     library.inputs = std::move(inputs);
     library.entries.clear();
@@ -795,6 +857,8 @@ ActiveSetup active_setup(const Library& library) {
         setup.base_title = std::string(shown(text, words::active_base_game));
         setup.base_look = std::string(shown(text, words::base_supported));
         setup.mod_line = shown(text, words::active_no_mod);
+        if (inputs.base_game_badge)
+            setup.mod_badge = &*inputs.base_game_badge;
     } else if (setup.mod_version.empty()) {
         setup.mod_line = setup.mod_name;
     } else {

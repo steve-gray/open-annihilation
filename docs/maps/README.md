@@ -38,7 +38,8 @@ Maps tab ([the Library](../library.md)), **Download and select** in the map
 browser ([below](#the-map-browser)), or GET MAP in the battle room
 ([below](#get-map-in-the-battle-room)). A pack new to you, or one that
 replaces the copy the same registry installed, installs with no question,
-on any screen but a game. When your Maps folder already holds that pack
+on any screen but a game. When that pack is in place, no notice is shown:
+the Library's row says so. When your Maps folder already holds that pack
 from a file, made by hand or from another registry, OA asks before it
 replaces it, as for a file, whichever registry the download comes from, and
 the question waits for the main menu.

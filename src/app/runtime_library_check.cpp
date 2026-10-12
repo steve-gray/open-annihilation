@@ -266,8 +266,10 @@ library::Listing mod_listing(
 /// @return the inputs
 library::Inputs fixture_inputs_of(const fs::path& mods, bool updates) {
     library::Inputs inputs;
-    inputs.registries.push_back({std::string(kBuiltIn), "Fixture Core", true, true, {}});
-    inputs.registries.push_back({std::string(kAdded), "Fixture Extra", false, true, {}});
+    // The two empty strings are the title and the description. The card heading
+    // is the short name, and the check does not show a description.
+    inputs.registries.push_back({std::string(kBuiltIn), "Fixture Core", {}, {}, true, true, {}});
+    inputs.registries.push_back({std::string(kAdded), "Fixture Extra", {}, {}, false, true, {}});
     library::Listing ridge = mod_listing(kBuiltIn, "ridge", "Ridge", "4.8", 4, 4);
     ridge.homepage = std::string(kRidgeHomepage);
     inputs.listings.push_back(std::move(ridge));

@@ -59,9 +59,11 @@ opens the Library on that tab ([picture](settings.md#downloads)).
 Core Prime's registry is built into Open Annihilation. Its descriptor ships
 in the `registries` folder beside the game, and the key that signs its
 catalogue is compiled into the engine, so no one else can sign a list OA
-takes for Core Prime's. Its row on the Library's Registries tab says
-"Built in", how many packages it lists ("1 package") and when it was last
-read ("refreshed 4 min ago"). It can be turned off, but not removed,
+takes for Core Prime's. Its card on the Library's Registries tab is
+headed "Core Prime - Official Open Annihilation Packages", and says what
+the registry is, "Built in", how many packages it lists ("1 package") and
+when it was last read ("refreshed 4 min ago"). It can be turned off, but
+not removed,
 so it is always one switch away. Its packages are published by the OA team.
 
 A download from Core Prime's registry installs when you press its button,
@@ -76,9 +78,17 @@ Prime ([which downloads ask first](library.md#which-downloads-ask-first)).
 OA suggests no registry: you add each one yourself. There are three ways:
 
 - **By its address.** On the Library's Registries tab, press
-  **ADD REGISTRY…** at the top right, above the list, type the address of the
+  **ADD REGISTRY…** at the top right, above the cards, type the address of the
   registry's descriptor (`http://…` or `https://…`, for example
-  `https://maps.example.org/oa/registry.yaml`) and press **CHECK**. Where
+  `https://maps.example.org/oa/registry.yaml`) and press **CHECK**. Under
+  the address, **Signing key** takes the registry's public key when you
+  have it: `ed25519:` and 43 base64 characters and `=`, pasted as the
+  address is. Leave it empty and OA keeps the descriptor's keys and shows
+  them for you to confirm. Type a key and **CHECK** verifies the catalogue
+  against that key alone. A key that is not of that form is refused before
+  anything is fetched ("The signing key could not be read."). When the
+  catalogue is not signed by the key you gave, the window says "The
+  catalogue isn't signed by this key." and **ADD** stays disabled. Where
   this system has TLS, an `https://` address uses it, and a certificate
   the system rejects fails the check. Where it does not, OA reads that
   address as `http`, and Settings › Downloads says so. If that host serves
@@ -88,22 +98,25 @@ OA suggests no registry: you add each one yourself. There are three ways:
   registry hands out: double-click it, choose Open With and Open
   Annihilation, drag it onto the game's window, or start the game with its
   path. It opens on the main menu, one at a time, never during a game, and
-  the window says "From *file*" where the address would be.
+  the window says "From *file*" where the address would be. It keeps the
+  file's keys and shows no **Signing key** field.
 - **From GET MAP** in the battle room, when the host plays a map from a
   registry you have not added: the line says "Add *registry* to get *pack*",
   and GET MAP opens the window with the registry's address already checked
   ([map packs](maps/README.md#get-map-in-the-battle-room)).
 
-OA then reads the descriptor, fetches the registry's catalogue and checks
-its signature with the descriptor's keys, and the **Add registry** window
-shows what you are about to trust:
+OA then reads the descriptor and fetches the registry's catalogue. With
+no signing key typed, it checks the signature with the descriptor's keys.
+With one typed, it checks the signature with that key alone. The **Add
+registry** window shows what you are about to trust:
 
 - the registry's name;
 - **Address**: the host its catalogue comes from;
 - **Packages**: how many it lists and of which kinds, as "31 · maps";
 - **Key**, or **Keys**: the fingerprint of each key that signs its
   catalogue, four groups of four hexadecimal digits such as
-  `7001 · af50 · b971 · 5bb4`, up to three and then how many more;
+  `7001 · af50 · b971 · 5bb4`, up to three and then how many more. When
+  you gave a signing key, this is that key's fingerprint;
 - **Downloads**: "direct", "with download keys", or "with download keys ·
   needs an install ID" ([the install ID](#the-install-id));
 - "Not reviewed by the OA team. Only add registries you trust. OA checks
@@ -112,9 +125,10 @@ shows what you are about to trust:
 **CANCEL**, which has the focus, adds nothing; **ADD** adds the registry at
 once, and its packages join the Library. From then on OA trusts the keys
 you saw and no others for that registry: a catalogue signed by any other
-key is refused. A registry changes its keys by listing new ones in a
-catalogue signed with a key you already trust, and OA takes them without
-asking.
+key is refused. When you gave a signing key, that one key is the
+registry's only trusted key, in place of the descriptor's. A registry
+changes its keys by listing new ones in a catalogue signed with a key you
+already trust, and OA takes them without asking.
 
 The window refuses, and says why, a registry that would pass for a built-in
 one ("*name* is built in, so it can't be added again.", or "This registry
@@ -130,8 +144,8 @@ anything it cannot read, reach or verify ("OA couldn't use *address*:
 The OA team publishes the packages in Core Prime's registry. Packages from
 a registry you added are marked "Not reviewed by the OA team" in the
 Library's details ("*registry* · Not reviewed by the OA team"), "not
-reviewed" on the registry's row and in Settings › Language, and the
-Registries tab says under its list: "Content from registries other than
+reviewed" on the registry's card and in Settings › Language, and the
+Registries tab says under the last card: "Content from registries other than
 Core Prime isn't reviewed by the OA team. OA still checks every package
 before using it."
 

@@ -26,21 +26,30 @@ namespace oa::ui::kit {
 /// @param ink the colour of its set pixels
 void draw_mark(const Canvas& canvas, Mark mark, Point at, Colour ink);
 
-/// Draws a state icon in one colour: a circled check, a circled up-arrow or
-/// a download arrow, filling a square of the rectangle's shorter side
+/// Draws a state icon, filling a square of the rectangle's shorter side
 /// centred in it.
 ///
-/// The icon is worked out from its rings and strokes at the canvas's own
-/// pixels (covered_pixels), its edges smoothed by how much of each pixel
-/// they cover, and drawn through blend_coverage, so it is as crisp at 2x,
-/// 3x and 150% as at 1x. Its design is a square of 24 units: the ring is 2
-/// units wide with its outer edge a unit in, and every stroke is 2.5 units
-/// wide with round ends. Pixels it does not cover are left as they are.
+/// A circled check, a circled up-arrow, a download arrow and a key are one
+/// colour, `ink`. The key has no ring. They are worked out from rings and
+/// strokes at the canvas's own pixels (covered_pixels), each pixel's share
+/// counted from 16 samples in integers, and drawn through blend_coverage,
+/// so they are as crisp at 2x, 3x and 150% as at 1x. The design is a square
+/// of 24 units: the ring is 2 units wide with its outer edge a unit in, and
+/// every stroke is 2.5 units wide with round ends.
+///
+/// The OA badge and the bone ignore `ink` and use their own colours, sampled
+/// the same way so a 2x drawing is finer than a doubled 1x drawing and 150%
+/// keeps a partial edge. The badge is a rounded plate (red 60, green 64,
+/// blue 56) with the letters in the lock colour. The bone is off-white
+/// (red 244, green 239, blue 224) with a dark outline (red 12, green 10,
+/// blue 8). Both are drawn as shapes, not from a picture.
+///
+/// Pixels an icon does not cover are left as they are.
 ///
 /// @param canvas where it is drawn
 /// @param rect the rectangle, in points; state_icon_side square in a chip
 /// @param icon which icon
-/// @param ink its colour
+/// @param ink the colour of a one-colour icon; ignored for the badge and the bone
 void draw_state_icon(const Canvas& canvas, const Rect& rect, StateIcon icon, Colour ink);
 
 /// Draws the keyboard focus outline: the accent, grown by the focus inset

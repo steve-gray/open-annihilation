@@ -887,6 +887,15 @@ void test_active_setup() {
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);
     OA_CHECK(setup.mod_name.empty() && setup.mod_badge == nullptr);
+    library.inputs.base_game_badge = lib::Badge{std::vector<uint8_t>(2 * 2 * 4, 9), 2, 2};
+    setup = lib::active_setup(library);
+    OA_CHECK(
+        library.inputs.base_game_badge.has_value() &&
+        setup.mod_badge == &*library.inputs.base_game_badge
+    );
+    library.inputs.base_game_badge.reset();
+    setup = lib::active_setup(library);
+    OA_CHECK(setup.mod_badge == nullptr);
     OA_CHECK_TEXT(setup.mod_line, "No mod: the game as it was made");
     OA_CHECK_TEXT(setup.base_title, "Base Game");
     OA_CHECK_TEXT(setup.base_look, "Total Annihilation 3.1c");

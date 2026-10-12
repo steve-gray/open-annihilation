@@ -598,7 +598,7 @@ void check_frame(const fixture::NamedFrame& named) {
     const std::string updates_count = std::to_string(lib::update_count(library));
     OA_CHECK(
         updates_tab != nullptr &&
-        updates_tab->text == (compact ? "Upd " : "Updates ") + updates_count
+        updates_tab->text == (compact ? "Upd (" : "Updates (") + updates_count + ")"
     );
 
     // The Active tab: first, no search, no filters and no list. Its lines
@@ -735,10 +735,11 @@ void larger_classes_show_more() {
     const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
     OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
-    OA_CHECK(languages != nullptr && languages->text == "Lang 2");
+    OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
     OA_CHECK(
-        updates != nullptr && updates->text == "Upd " + std::to_string(lib::update_count(library))
+        updates != nullptr &&
+        updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
     );
 }
 
@@ -1598,12 +1599,22 @@ bool row_refresh_turning(const kit::DisplayList& list) {
 }
 
 /// The Registries tab lists every registry. ADD REGISTRY… sits at the top
-/// right, above the list. Each row shows its refresh time, a key icon and
+/// right, above the cards. Each card shows its refresh time, a key icon and
 /// REFRESH beside the switch; REMOVE and ADD MIRROR… only for one the player
-/// added. It has no search.
+/// added, and a neutral Built in pill under those controls for one that ships
+/// with the game. It has no search. The heading is the title, and the note
+/// keeps the short name.
 void registries_tab_lists_every_registry() {
     lib::Library library = with_ridge();
     lib::set_tab(library, lib::Tab::registries);
+    const std::string core_title = "Fixture Core - Sample packages";
+    const std::string core_description = "A sample registry, including the made-up mod Ridge.";
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id != fixture::core)
+            continue;
+        registry.title = core_title;
+        registry.description = core_description;
+    }
     for (const fixture::NamedFrame& named : fixture::frames()) {
         const kit::DisplayList list = laid_out(library, {}, named.frame);
         const kit::Point window = lib::window_size(named.frame);
@@ -1643,6 +1654,60 @@ void registries_tab_lists_every_registry() {
             !fixture::has_room(kit::intersect(core_key->rect, core_refresh->rect)) &&
             !fixture::has_room(kit::intersect(core_refresh->rect, core_row->rect))
         );
+        OA_CHECK(shows_pill(list, "Built in"));
+        OA_CHECK(!shows_chip(list, "Built in"));
+        OA_CHECK(text_item(list, core_title) != nullptr);
+        OA_CHECK(text_item(list, core_description) != nullptr);
+        OA_CHECK(
+            core_key != nullptr && core_key->rect.width == metrics.state_icon_side &&
+            core_key->rect.height == metrics.state_icon_side
+        );
+        const kit::Item* built_in_pill = nullptr;
+        int built_in_pills = 0;
+        bool key_icon = false;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::pill && item.text == "Built in") {
+                built_in_pill = &item;
+                ++built_in_pills;
+            }
+            if (core_key != nullptr && item.role == kit::Role::chip &&
+                item.control == core_key->id) {
+                const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+                key_icon = chip != nullptr && chip->icon == kit::StateIcon::key;
+            }
+        }
+        OA_CHECK(built_in_pills == 1);
+        OA_CHECK(key_icon);
+        OA_CHECK(built_in_pill != nullptr && core_row != nullptr);
+        if (built_in_pill != nullptr && core_row != nullptr) {
+            const auto* pill_look = std::get_if<kit::PillLook>(&built_in_pill->look);
+            OA_CHECK(pill_look != nullptr && pill_look->state == kit::PillState::neutral);
+            OA_CHECK(built_in_pill->rect.y >= core_row->rect.y + core_row->rect.height);
+            OA_CHECK(
+                built_in_pill->rect.x + built_in_pill->rect.width ==
+                core_row->rect.x + core_row->rect.width
+            );
+        }
+        std::vector<kit::Rect> cards;
+        for (const kit::Item& item : list.items) {
+            if (item.role == kit::Role::outline && item.colour == kit::colour::control_border &&
+                item.rect.width > metrics.list_row_badge)
+                cards.push_back(item.rect);
+        }
+        std::sort(cards.begin(), cards.end(), [](const kit::Rect& left, const kit::Rect& right) {
+            return left.y < right.y;
+        });
+        OA_CHECK(cards.size() == library.inputs.registries.size());
+        for (std::size_t card_index = 1; card_index < cards.size(); ++card_index)
+            OA_CHECK(
+                cards[card_index].y ==
+                cards[card_index - 1].y + cards[card_index - 1].height + metrics.card_gap
+            );
+        const kit::Control* note = fixture::named(list, "library.registries.note");
+        OA_CHECK(note != nullptr && note->text.find("Fixture Core") != std::string::npos);
+        OA_CHECK(note != nullptr && note->text.find(core_title) == std::string::npos);
+        if (note != nullptr && !cards.empty())
+            OA_CHECK(note->rect.y >= cards.back().y + cards.back().height);
         const kit::Control* added_key = fixture::named(list, "library.registry.example-mods.key");
         const kit::Control* added_refresh =
             fixture::named(list, "library.registry.example-mods.refresh");
@@ -1969,6 +2034,380 @@ void more_holds_the_rest() {
     OA_CHECK(state.menu == lib::MenuKind::none);
 }
 
+/// Returns one pixel of a picture.
+///
+/// @param picture the picture
+/// @param x the column
+/// @param y the row
+/// @return the pixel's red, green, blue and alpha
+const uint8_t* pixel_at(const renderer::RgbaPicture& picture, uint32_t x, uint32_t y) {
+    return picture.pixels.data() +
+           (static_cast<std::size_t>(y) * picture.width + x) * renderer::picture_pixel_bytes;
+}
+
+/// Tells whether a pixel is one colour.
+///
+/// @param pixel the pixel
+/// @param red red
+/// @param green green
+/// @param blue blue
+/// @param alpha alpha
+/// @return true when it matches
+bool pixel_is(const uint8_t* pixel, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+    return pixel[0] == red && pixel[1] == green && pixel[2] == blue && pixel[3] == alpha;
+}
+
+/// Returns the look of a named list row.
+///
+/// @param list the display list
+/// @param name the row's name
+/// @return the look; null when the row is not drawn
+const kit::ListRowLook* row_look_named(const kit::DisplayList& list, std::string_view name) {
+    const kit::Control* control = fixture::named(list, std::string(name));
+    if (control == nullptr)
+        return nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::list_row || item.control != control->id)
+            continue;
+        return std::get_if<kit::ListRowLook>(&item.look);
+    }
+    return nullptr;
+}
+
+/// Returns the base game's badge square in a row, as the kit draws it.
+///
+/// @param row the row
+/// @return the square
+kit::Rect test_row_badge(const kit::Rect& row) {
+    const int32_t inset = kit::compact_metrics.list_row_inset;
+    const int32_t side =
+        std::max(std::min(row.height - 2 * inset, kit::compact_metrics.list_row_badge), int32_t{0});
+    return {row.x + inset, row.y + (row.height - side) / 2, side, side};
+}
+
+/// The base game's badge is the icon, nearest-neighbour and centred, and the
+/// letters when there is no icon. Tabs after Active read their counts in brackets.
+void base_badge_is_nearest_and_tabs_are_bracketed() {
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::Inputs inputs = fixture::fixture_inputs();
+    for (lib::Installed& held : inputs.installed)
+        held.playing = false;
+    inputs.playing_mod.reset();
+    inputs.language = {};
+    inputs.map_packs.clear();
+
+    lib::Library letters;
+    lib::refresh(letters, inputs);
+    lib::set_tab(letters, lib::Tab::active);
+    const kit::DisplayList letter_list = laid_out(letters, {}, compact);
+    OA_CHECK(text_item(letter_list, "3.1") != nullptr);
+    const kit::Control* mods = fixture::named(letter_list, "library.tab.mods");
+    OA_CHECK(
+        mods != nullptr &&
+        mods->text == "Mods (" + std::to_string(lib::tab_count(letters, lib::Tab::mods)) + ")" &&
+        mods->name == "library.tab.mods"
+    );
+
+    std::vector<uint8_t> quarters{
+        255,
+        0,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        0,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
+    };
+    inputs.base_game_badge = lib::Badge{quarters, 2, 2};
+    lib::Library library;
+    lib::refresh(library, inputs);
+    lib::set_tab(library, lib::Tab::mods);
+    const kit::DisplayList rows = laid_out(library, {}, compact);
+    OA_CHECK(text_item(rows, "3.1") == nullptr);
+    const kit::Control* base = fixture::named(rows, "library.row.base-game");
+    const kit::ListRowLook* look = row_look_named(rows, "library.row.base-game");
+    OA_CHECK(base != nullptr && look != nullptr);
+    if (base != nullptr && look != nullptr) {
+        const kit::Rect badge = test_row_badge(base->rect);
+        OA_CHECK(badge.width == 20 && badge.height == 20);
+        OA_CHECK(look->badge.width == 20 && look->badge.height == 20);
+        OA_CHECK(pixel_is(pixel_at(look->badge, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 9, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 10, 0), 0, 255, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 0, 10), 0, 0, 255, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 10, 10), 255, 255, 255, 255));
+    }
+
+    kit::Frame doubled = compact;
+    doubled.scale_percent = 200;
+    const kit::DisplayList large_pixels = laid_out(library, {}, doubled);
+    const kit::ListRowLook* doubled_look = row_look_named(large_pixels, "library.row.base-game");
+    OA_CHECK(doubled_look != nullptr && doubled_look->badge.width == 40);
+    if (doubled_look != nullptr && doubled_look->badge.width == 40) {
+        OA_CHECK(pixel_is(pixel_at(doubled_look->badge, 19, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(doubled_look->badge, 20, 0), 0, 255, 0, 255));
+    }
+
+    kit::Frame fractional = compact;
+    fractional.scale_percent = 150;
+    const kit::DisplayList smooth = laid_out(library, {}, fractional);
+    const kit::Control* smooth_row = fixture::named(smooth, "library.row.base-game");
+    const kit::ListRowLook* smooth_look = row_look_named(smooth, "library.row.base-game");
+    OA_CHECK(smooth_row != nullptr && smooth_look != nullptr);
+    if (smooth_row != nullptr && smooth_look != nullptr) {
+        const kit::Rect pixels = kit::to_canvas(test_row_badge(smooth_row->rect), 150);
+        OA_CHECK(smooth_look->badge.width == static_cast<uint32_t>(pixels.width));
+        OA_CHECK(smooth_look->badge.height == static_cast<uint32_t>(pixels.height));
+    }
+
+    std::vector<uint8_t> icon(32U * 32U * 4U, 0);
+    icon[3] = 255;
+    icon[0] = 255;
+    const std::size_t corner = (30U * 32U + 30U) * 4U;
+    icon[corner + 1] = 255;
+    icon[corner + 3] = 255;
+    inputs.base_game_badge = lib::Badge{std::move(icon), 32, 32};
+    lib::Library shrunk;
+    lib::refresh(shrunk, inputs);
+    lib::set_tab(shrunk, lib::Tab::mods);
+    const kit::DisplayList down = laid_out(shrunk, {}, compact);
+    const kit::ListRowLook* down_look = row_look_named(down, "library.row.base-game");
+    OA_CHECK(down_look != nullptr && down_look->badge.width == 20 && down_look->badge.height == 20);
+    if (down_look != nullptr && down_look->badge.width == 20 && down_look->badge.height == 20) {
+        OA_CHECK(pixel_is(pixel_at(down_look->badge, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(down_look->badge, 19, 19), 0, 255, 0, 255));
+    }
+
+    lib::set_tab(library, lib::Tab::active);
+    const kit::DisplayList active = laid_out(library, {}, compact);
+    OA_CHECK(text_item(active, "3.1") == nullptr);
+    const renderer::RgbaPicture* tile = nullptr;
+    for (const kit::Item& item : active.items) {
+        if (item.role != kit::Role::picture)
+            continue;
+        const auto* drawn = std::get_if<kit::PictureLook>(&item.look);
+        if (drawn == nullptr || drawn->picture.pixels.data() == quarters.data())
+            continue;
+        tile = &drawn->picture;
+        OA_CHECK(item.rect.width == 36 && item.rect.height == 36);
+        break;
+    }
+    OA_CHECK(tile != nullptr && tile->width == 36 && tile->height == 36);
+    if (tile != nullptr && tile->width == 36) {
+        OA_CHECK(pixel_is(pixel_at(*tile, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(*tile, 17, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(*tile, 18, 0), 0, 255, 0, 255));
+    }
+}
+
+/// Returns the height a package row has in a size class. The mark does not add to it.
+///
+/// @param size_class the class
+/// @return the height, in points
+int32_t package_row_height(kit::SizeClass size_class) {
+    const kit::Metrics& metrics = kit::metrics_of(size_class);
+    switch (size_class) {
+    case kit::SizeClass::compact:
+        return metrics.short_list_row_height;
+    case kit::SizeClass::regular:
+        return metrics.list_row_height;
+    case kit::SizeClass::large:
+        return metrics.list_row_line_top + 2 * metrics.small_line + metrics.list_row_title_top;
+    }
+    return metrics.list_row_height;
+}
+
+/// A built-in Open Annihilation package shows the OA mark, and a Cavedog one
+/// the bone. The same authors from an added registry, or sideloaded, show
+/// none. A named author that is not a maker does not fall through. A listing
+/// that names no author shows no mark, whatever its publisher says. The
+/// fixture's language pack names its author. A built-in registry's card
+/// shows its mark under the key, and an added registry's card does not. Row
+/// heights stay the size class's.
+void maker_marks_follow_the_registry() {
+    OA_CHECK(lib::package_maker(" OpenAnnihilation ") == lib::PackageMaker::open_annihilation);
+    OA_CHECK(lib::package_maker("oPeN aNnIhIlAtIoN") == lib::PackageMaker::open_annihilation);
+    OA_CHECK(lib::package_maker("\tOA team") == lib::PackageMaker::open_annihilation);
+    OA_CHECK(lib::package_maker("Cavedog Entertainment") == lib::PackageMaker::cavedog);
+    OA_CHECK(lib::package_maker("  cavedog entertainment") == lib::PackageMaker::cavedog);
+    OA_CHECK(lib::package_maker("Open  Annihilation") == lib::PackageMaker::none);
+    OA_CHECK(lib::package_maker("the Ridge team") == lib::PackageMaker::none);
+
+    lib::Inputs inputs = fixture::fixture_inputs();
+    for (lib::Listing& listing : inputs.listings) {
+        if (listing.registry == fixture::core && listing.key == "ridge")
+            listing.author = " openannihilation ";
+        else if (listing.registry == fixture::core && listing.key == "bastion")
+            listing.author = "Cavedog Entertainment";
+        else if (listing.registry == fixture::core && listing.key == "ironclad") {
+            listing.publisher = "Open Annihilation";
+            listing.author = "Another studio";
+        } else if (listing.registry == fixture::core && listing.key == "pt-BR")
+            listing.author = "OA team";
+        else if (listing.registry == fixture::added && listing.key == "frontier")
+            listing.author = "OpenAnnihilation";
+        else if (listing.registry == fixture::core && listing.key == "quarry")
+            listing.author.clear();
+        else if (listing.registry == fixture::core && listing.key == "highland") {
+            listing.author.clear();
+            listing.publisher = "OA team";
+        } else if (listing.registry == fixture::added && listing.key == "dunes") {
+            listing.author.clear();
+            listing.publisher = "OA team";
+        }
+    }
+    lib::Installed kept;
+    kept.kind = lib::Kind::mod;
+    kept.key = "quarry";
+    kept.name = "Quarry";
+    kept.author = "OA team";
+    kept.registry = std::string(fixture::core);
+    kept.folder = "quarry";
+    kept.version = "1.0";
+    inputs.installed.push_back(std::move(kept));
+    lib::Installed loose;
+    loose.kind = lib::Kind::mod;
+    loose.key = "loose-bone";
+    loose.name = "Loose Bone";
+    loose.author = "Cavedog Entertainment";
+    loose.folder = "loose-bone";
+    loose.version = "1.0";
+    inputs.installed.push_back(std::move(loose));
+
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    const kit::Frame regular = fixture::frames()[1].frame;
+    const auto shown = [&](lib::Tab tab, std::string_view query) {
+        lib::set_tab(library, tab);
+        lib::set_query(library, query);
+        return laid_out(library, {}, regular);
+    };
+    const auto expect_mark = [&](const kit::DisplayList& list,
+                                 std::string_view name,
+                                 std::optional<kit::MakerMark> mark,
+                                 std::string_view text) {
+        const kit::Control* row = fixture::named(list, std::string(name));
+        const kit::ListRowLook* look = row_look_named(list, name);
+        OA_CHECK(row != nullptr && look != nullptr);
+        if (row == nullptr || look == nullptr)
+            return;
+        OA_CHECK(row->name == name);
+        OA_CHECK(row->text == text);
+        OA_CHECK(look->maker == mark);
+        OA_CHECK(row->rect.height == package_row_height(kit::SizeClass::regular));
+    };
+
+    const kit::DisplayList ridge = shown(lib::Tab::mods, "ridge");
+    expect_mark(
+        ridge,
+        "library.row.fixture-core.ridge",
+        kit::MakerMark::open_annihilation,
+        "Ridge · Open Annihilation"
+    );
+    const kit::Control* ridge_row = fixture::named(ridge, "library.row.fixture-core.ridge");
+    const kit::Control* ridge_update =
+        fixture::named(ridge, "library.row.fixture-core.ridge.update");
+    OA_CHECK(ridge_row != nullptr && ridge_update != nullptr);
+    if (ridge_row != nullptr && ridge_update != nullptr) {
+        const int32_t side = kit::compact_metrics.state_icon_side;
+        const int32_t offset = (ridge_row->rect.height - 2 * side) / 2;
+        OA_CHECK(ridge_update->rect.y == ridge_row->rect.y + offset);
+        OA_CHECK(ridge_update->rect.height == side && ridge_update->rect.width == side);
+    }
+    expect_mark(
+        shown(lib::Tab::mods, "bastion"),
+        "library.row.fixture-core.bastion",
+        kit::MakerMark::bone,
+        "Bastion · Cavedog Entertainment"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "frontier"),
+        "library.row.example-mods.frontier",
+        std::nullopt,
+        "Frontier"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "ironclad"),
+        "library.row.fixture-core.ironclad",
+        std::nullopt,
+        "Ironclad"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "quarry"),
+        "library.row.fixture-core.quarry",
+        kit::MakerMark::open_annihilation,
+        "Quarry · Open Annihilation"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "highland"),
+        "library.row.fixture-core.highland",
+        std::nullopt,
+        "Highland"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "dunes"), "library.row.example-mods.dunes", std::nullopt, "Dunes"
+    );
+    expect_mark(
+        shown(lib::Tab::mods, "loose"), "library.row.loose-bone", std::nullopt, "Loose Bone"
+    );
+    expect_mark(
+        shown(lib::Tab::languages, "portugues"),
+        "library.row.fixture-core.pt-br",
+        kit::MakerMark::open_annihilation,
+        "Portugues (Brasil) · Open Annihilation"
+    );
+
+    lib::set_query(library, "ridge");
+    lib::set_tab(library, lib::Tab::mods);
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        const kit::DisplayList list = laid_out(library, {}, named.frame);
+        const kit::Control* row = fixture::named(list, "library.row.fixture-core.ridge");
+        OA_CHECK(row != nullptr && row->rect.height == package_row_height(named.frame.size_class));
+    }
+
+    for (lib::Registry& registry : library.inputs.registries) {
+        if (registry.id == fixture::core)
+            registry.author = "Open Annihilation";
+        else if (registry.id == fixture::added)
+            registry.author = "Cavedog Entertainment";
+    }
+    lib::set_tab(library, lib::Tab::registries);
+    lib::set_query(library, "");
+    const kit::DisplayList cards = laid_out(library, {}, regular);
+    const kit::Control* core_key = fixture::named(cards, "library.registry.fixture-core.key");
+    OA_CHECK(core_key != nullptr && core_key->name == "library.registry.fixture-core.key");
+    int oa_marks = 0;
+    int bone_marks = 0;
+    if (core_key != nullptr) {
+        for (const kit::Item& item : cards.items) {
+            if (item.role != kit::Role::chip || item.control != kit::no_control)
+                continue;
+            const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+            if (chip == nullptr || !chip->icon)
+                continue;
+            if (*chip->icon == kit::StateIcon::oa) {
+                ++oa_marks;
+                OA_CHECK(item.rect.x == core_key->rect.x);
+                OA_CHECK(item.rect.y == core_key->rect.y + core_key->rect.height);
+                OA_CHECK(item.rect.width == core_key->rect.width);
+            } else if (*chip->icon == kit::StateIcon::bone) {
+                ++bone_marks;
+            }
+        }
+    }
+    OA_CHECK(oa_marks == 1);
+    OA_CHECK(bone_marks == 0);
+    OA_CHECK(fixture::named(cards, "library.registry.fixture-core.mark") == nullptr);
+}
+
 } // namespace
 
 int main() {
@@ -1990,8 +2429,10 @@ int main() {
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
     active_base_game_is_a_tile();
+    base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();
+    maker_marks_follow_the_registry();
     a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
     details_page_keeps_its_entry();
