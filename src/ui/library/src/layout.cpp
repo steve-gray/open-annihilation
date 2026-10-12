@@ -886,9 +886,24 @@ void add_library_header(
 ///
 /// @param[in,out] building the layout
 /// @param strip the strip
-/// @param compact the tabs take their short names
+/// @param compact the tabs take their short names, as they also do when the
+///     full names and counts do not fit the strip
 void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
     const Library& library = *building.library;
+    // A strip too narrow for the full names and their counts takes the short
+    // names, as Compact's does.
+    if (!compact && building.fonts != nullptr) {
+        kit::TabsLook full;
+        full.count_style = kit::TabCountStyle::words;
+        for (const Tab tab : tab_order) {
+            full.captions.emplace_back(tab_text(tab, false, library.text));
+            full.counts.push_back(
+                tab == Tab::active ? int32_t{-1} : counted_as_int(tab_count(library, tab))
+            );
+        }
+        const std::vector<kit::Rect> rects = kit::tab_rects(*building.fonts, strip, full);
+        compact = !rects.empty() && rects.back().x + rects.back().width > strip.x + strip.width;
+    }
     kit::TabsLook look;
     look.count_style = kit::TabCountStyle::words;
     std::array<kit::ControlId, tab_order.size()> ids{};
