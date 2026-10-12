@@ -528,9 +528,29 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
         line_in(local, FontRole::small, look.english_name, {text_x, text_y, text_w, small}, hint);
         text_y += small;
     }
+    // Facts stay one line when they fit. A line wider than the card wraps
+    // onto the next small line, above the pill, so a narrow card still shows
+    // every word. The pill is drawn under that, not over it.
     const int32_t facts_w = std::max(rect.width - 2 * pad, int32_t{0});
-    if (text_y + small <= pill_top)
-        line_in(local, FontRole::small, look.facts, {pad, text_y, facts_w, small}, quiet);
+    if (text_y + small <= pill_top && facts_w > 0 && !look.facts.empty()) {
+        const auto width_of = [&](std::string_view words) {
+            if (local.fonts == nullptr)
+                return estimated_width(words);
+            return text_width(*local.fonts, FontRole::small, words);
+        };
+        if (width_of(look.facts) <= facts_w) {
+            line_in(local, FontRole::small, look.facts, {pad, text_y, facts_w, small}, quiet);
+        } else {
+            const std::vector<std::string> lines = wrap(look.facts, facts_w, width_of);
+            int32_t y = text_y;
+            for (const std::string& line : lines) {
+                if (y + small > pill_top)
+                    break;
+                line_in(local, FontRole::small, line, {pad, y, facts_w, small}, quiet);
+                y += small;
+            }
+        }
+    }
 
     if (pill_h > 0 && !look.pill.empty()) {
         int32_t pill_w = pill_h * 2;

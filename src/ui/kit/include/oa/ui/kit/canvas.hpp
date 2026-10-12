@@ -292,9 +292,13 @@ void release_offscreen() noexcept;
 ///
 /// One vertical edge keeps the rectangle's height and the other is shorter
 /// by the cosine of the angle, so the drawing looks turned about its
-/// vertical axis. The copy is nearest-neighbour on the crisp form and
-/// filtered on the smooth form, clipped to the destination, and blended by
-/// the opacity. Nothing is drawn when the buffer was not begun for this size.
+/// vertical axis. On the crisp form each destination pixel copies the one
+/// nearest source pixel. On the smooth form each destination pixel blends
+/// the source pixels around its sample. The sample runs from the source's
+/// first pixel at the trapezoid's first pixel toward one past the last
+/// pixel at the far edge, so a sample between two pixels mixes them by the
+/// distance. The copy is clipped to the destination and blended by the
+/// opacity. Nothing is drawn when the buffer was not begun for this size.
 ///
 /// @param dest where it is drawn
 /// @param source_width the drawing's width, in points, as begun
@@ -347,8 +351,9 @@ void perspective_blit(
 }
 
 /// Draws a laid-out rectangle into the reused offscreen buffer, then scaled
-/// into a rectangle: nearest-neighbour on the crisp form, filtered on the
-/// smooth form.
+/// into a rectangle. The crisp form copies the nearest source pixel. The
+/// smooth form blends the source pixels around the sample, as
+/// perspective_blit does.
 ///
 /// The same buffer and the same rule against nesting as perspective_blit.
 ///

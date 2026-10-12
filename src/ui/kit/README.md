@@ -111,8 +111,12 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   draws a laid-out rectangle into one reused offscreen buffer and copies it
   onto the canvas as a trapezoid: one vertical edge keeps its height and the
   other is shorter, so the rectangle looks turned about its vertical axis,
-  at an opacity. The copy is nearest-neighbour on the crisp form and filtered
-  on the smooth form. `scale_blit` is that copy with no turn. The buffer is
+  at an opacity. On the crisp form each destination pixel copies the one
+  nearest source pixel. On the smooth form each destination pixel blends
+  the source pixels around its sample. The sample runs from the source's
+  first pixel at the trapezoid's first pixel toward one past the last
+  pixel at the far edge, so a sample between two pixels mixes them by the
+  distance. `scale_blit` is that copy with no turn. The buffer is
   kept for the thread, grown and never replaced, and a drawing that is
   already using it draws nothing if it asks for the buffer again.
 - `components.hpp`: the controls, drawn through the canvas's primitives on
@@ -244,7 +248,9 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   - A language card (`draw_language_card`, `language_card_layout`,
     `add_language_card`): a badge (the pack's picture, or the language's
     letters on the hint grey, accent while the card is active), the
-    language's own name, its English name, a facts line and a pill. The
+    language's own name, its English name, a facts line and a pill. A facts
+    line wider than the card wraps onto the next small line, above the pill,
+    so the whole line is shown. The
     pill follows `LanguageAvailability`. Built in, get, downloading and
     checking are neutral; active uses the accent pill and an accent badge;
     a failed fetch uses the problem pill; offline is neutral and the card
@@ -675,9 +681,13 @@ first release that carries version 15, keeps 15 and updates the engine's
 own followers and test extensions in the same change; from 0.8.0 on, any
 change to a kit header raises the version.
 
-The compact picture opens on the first-run section, which spans that
-window, so the sections under it sit further down. The large picture shows
-the pills. The Chips section shows the two maker's marks, the OA badge and
+The compact picture is the first-run section, which spans that window at
+the cards' real size, so the sections under it sit further down. Its
+choice-card states sit over the footer, clear of CLOSE. The regular picture
+shows First run and the headings of the next sections. The large picture
+shows First run and the tops of Window chrome, Tabs and Buttons. A facts
+line wider than its language card wraps onto the next small line above the
+pill. The Chips section shows the two maker's marks, the OA badge and
 the bone, as chips with no control. The other state icons are reviewed in
 the Library's pictures (`oa-ui-library-draw-test --frames`).
 

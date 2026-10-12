@@ -676,13 +676,19 @@ slides flat and the call to action holds a steady ring.
   `canvas.hpp`). Draws a rectangle into one reused offscreen buffer, then
   onto the canvas as a trapezoid. One vertical edge keeps its height and
   the other is shorter, so the rectangle looks turned about its vertical
-  axis, at an opacity. The copy is nearest-neighbour on the crisp form and
-  filtered on the smooth form. `scale_blit` is that copy with no turn. A
+  axis, at an opacity. On the crisp form each destination pixel copies the
+  one nearest source pixel. On the smooth form each destination pixel
+  blends the source pixels around its sample. The sample runs from the
+  source's first pixel at the trapezoid's first pixel toward one past the
+  last pixel at the far edge, so a sample between two pixels mixes them by
+  the distance. `scale_blit` is that copy with no turn. A
   drawing that is already using the buffer draws nothing if it asks again.
 - **Language card** (`draw_language_card`, `language_card_layout`). A badge,
   the pack's picture or the language's letters on the hint grey (accent
   while the card is active), the language's own name, its English name, a
-  facts line and a pill. `LanguageAvailability` chooses the pill: built in,
+  facts line and a pill. A facts line wider than the card wraps onto the
+  next small line, above the pill, so every word is shown.
+  `LanguageAvailability` chooses the pill: built in,
   get, downloading and checking are neutral, active uses the accent pill,
   a failed fetch uses the problem pill, and offline is neutral with the
   card dimmed. Hovered, held and disabled change the face. Progress is the
@@ -726,8 +732,8 @@ slides flat and the call to action holds a steady ring.
   1.8 s, from the time. Reduced motion holds a steady ring. Disabled, it
   is the disabled button and sends no ring.
 
-The gallery's First run section shows every one of them, with the carousel
-turned.
+The gallery's First run section shows every one of them, across the full
+width, at the language card's real size, with the carousel turned.
 
 ## The gallery
 
@@ -737,22 +743,26 @@ disabled, and locked where a component has a lock), at the scale and size
 class of the window. The Chips section also shows the two maker's marks,
 the OA badge and the bone, at the state icon's size. These pictures are
 the gallery's own, as its check,
-`native-kit-gallery`, takes them on the main menu with `--snapshot`. The
-compact picture opens on the first-run section, across the whole window.
-The large picture reaches the pills.
+`native-kit-gallery`, takes them on the main menu with `--snapshot`. First
+run spans the content width at every class. The compact picture is that
+section alone: the choice-card states sit over the footer, clear of CLOSE,
+and the sections under it are below the window. The regular picture shows
+First run and the headings of the next sections. The large picture shows
+First run and the tops of Window chrome, Tabs and Buttons. The
+language-card pills are on the cards themselves.
 
 Compact at 1x, on a 640x480 window: one column, scrolling between the
 header and the footer.
 
-![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then the First run section filling the column. A turned carousel of language cards, with an arrow on each side and a pager, then language cards in each pill state, choice cards, the setup window with Skip setup, Back, Next and "LANGUAGE · 1 OF 3", a coach mark "1 Library" on a spotlight, a picture well captioned "Library, Active", a call to action "Start playing" in each state, and a step indicator. CLOSE sits in the footer.](../images/ui-kit/gallery-compact.png)
+![The UI kit gallery at Compact on a 640x480 window: the header "Open Annihilation UI kit gallery" with "Compact · 1x", then First run across the full width at the cards' real size. The carousel shows the centre card and two turned cards each side, with arrows and a pager. Language cards show every pill, and "From Ridge · Coverage 100%" on two lines. Choice cards "Ridge pack" and "Not now", and four short cards over the footer. The setup window, a picture well "Library, Active", a coach mark "1 Library" with its spotlight, and "Start playing" in each state. CLOSE sits clear of the cards.](../images/ui-kit/gallery-compact.png)
 
 Regular at 2x, on a 1920x1080 window: two columns.
 
-![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". The left column is the First run section, the carousel turned, and the start of Toggle. The right column is Window chrome, showing "v1.2.3", then Tabs and Buttons.](../images/ui-kit/gallery-regular.png)
+![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". First run spans the width: the carousel at the real card size, language cards with every pill, the picture well, the coach mark on one line, the setup window, "Start playing" with its captions, and the choice cards. Window chrome and Tabs begin under it. CLOSE is at the bottom right.](../images/ui-kit/gallery-regular.png)
 
 Large at 1x, on a 1280x720 window: three columns.
 
-![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x", and three columns. First run fills the left one, the carousel turned, and Search field begins under it. The middle column is Window chrome, Buttons, an open Drop-down, Pills and Nav list. The right column is Tabs, Toggle, Level strip, Slider, Chips and Progress.](../images/ui-kit/gallery-large.png)
+![The UI kit gallery at Large on a 1280x720 window: the header with "Large · 1x". First run spans the width at the large card size, the facts on one line, the carousel with two turned cards each side, the setup window, the picture well, the coach mark, the call to action and the choice cards. Window chrome, Tabs and Buttons begin under it. CLOSE is at the bottom right.](../images/ui-kit/gallery-large.png)
 
 To open it in the game: Settings › Developer › UI kit gallery, and SHOW. It
 opens over the whole window, on the main menu or in a match, and Escape or

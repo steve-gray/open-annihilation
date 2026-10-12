@@ -762,7 +762,13 @@ int32_t mix_thousandths(int32_t from, int32_t to, int32_t fraction) noexcept {
     return (from * (1000 - fraction) + to * fraction) / 1000;
 }
 
-/// Samples the smooth buffer filtered. u and v run from 0 to 1000 across it.
+/// Samples the smooth buffer by blending the source pixels around the sample.
+///
+/// across and down run from 0 at the first destination pixel to 1000 at the
+/// last. The sample position is that fraction times the source size, so it
+/// starts on the first source pixel and reaches one past the last pixel at
+/// the far edge. A position between two pixels mixes them by the distance.
+/// The last sample clamps to the last pixel.
 ///
 /// @param source the buffer
 /// @param across thousandths across the width
@@ -790,8 +796,11 @@ Sampled sample_filtered(const paint::Canvas& source, int32_t across, int32_t dow
     int column_fraction = 0;
     int row = 0;
     int row_fraction = 0;
-    axis(static_cast<int64_t>(across) * source.width - 500, source.width, column, column_fraction);
-    axis(static_cast<int64_t>(down) * source.height - 500, source.height, row, row_fraction);
+    // No half-pixel bias: a sample on the boundary between two source pixels
+    // has to mix them. A centre adjustment lands a same-size copy inside one
+    // pixel and the smooth form stays unfiltered.
+    axis(static_cast<int64_t>(across) * source.width, source.width, column, column_fraction);
+    axis(static_cast<int64_t>(down) * source.height, source.height, row, row_fraction);
     const Sampled top_left = smooth_at(source, column, row);
     const Sampled top_right = smooth_at(source, column + 1, row);
     const Sampled bottom_left = smooth_at(source, column, row + 1);

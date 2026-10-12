@@ -795,8 +795,9 @@ int main() {
     choice_and_coach_place_as_they_are_told();
     auto modern = text_font::FontStack::open(text_font::bundled_font_directory());
     expect(modern != nullptr, "the bundled fonts are not beside the test");
-    if (modern)
-        smooth_copy_is_filtered(modern.get());
+    // The filtered blit draws no glyphs. A missing font stack still has to
+    // exercise a smooth canvas, or the filter is never checked.
+    smooth_copy_is_filtered(modern.get());
     every_component_at_every_class_and_scale(modern.get());
     return oa::test::check_exit_status();
 }
