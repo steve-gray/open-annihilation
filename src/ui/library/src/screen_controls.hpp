@@ -60,13 +60,16 @@ inline constexpr kit::ControlId active_language = 66;
 /// UNLOAD MOD, at the bottom right of the Active tab's mod tile while a mod
 /// is played. It asks for SWITCH OFF.
 inline constexpr kit::ControlId active_unload = 67;
-/// ADD REGISTRY… on the Registries tab. 70–72 are free between UNLOAD MOD
-/// (67) and the action buttons (100).
+/// ADD REGISTRY… on the Registries tab. 70–73 sit between UNLOAD MOD (67)
+/// and the action buttons (100); 73 is the Active tab's maps search.
 inline constexpr kit::ControlId add_registry = 70;
 /// The Registries tab's amber note, when a change was refused.
 inline constexpr kit::ControlId registries_notice = 71;
 /// The note under the Registries list.
 inline constexpr kit::ControlId registries_note = 72;
+/// The Active tab's maps search (library.active.search). It is not the
+/// catalogue search: that one is absent on Active.
+inline constexpr kit::ControlId active_search = 73;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.
@@ -123,6 +126,9 @@ inline constexpr kit::ControlId registry_controls_end = 9000000;
 inline constexpr int32_t list_group = 0;
 /// The details' scroll area, the group of the controls in them.
 inline constexpr int32_t details_group = 1;
+/// The Active tab's maps pane. The mod tile, the language tile and the maps
+/// search are not in it: they stay put while the maps scroll.
+inline constexpr int32_t maps_group = 2;
 
 /// Returns an action's button's control.
 ///

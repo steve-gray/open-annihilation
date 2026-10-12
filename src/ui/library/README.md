@@ -653,15 +653,19 @@ one is being asked, the labels taking no
 press, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 chip, and a press outside the drop-down, the tag chips, MORE ▾, and the
-Active tab with forty more maps: its lines taking no press, UNLOAD MOD
-asking what SWITCH OFF asks and greyed during a game, and the tiles scrolling
-by the wheel, the page keys, Home, End and the right stick.
+Active tab with forty more maps: the mod and the language take no press
+and stay put, UNLOAD MOD asking what SWITCH OFF asks and greyed during a
+game, the maps pane scrolling by the wheel, a finger, its scroll bar, the
+page keys, Home, End and the right stick, and the maps search filtering
+by map name and by pack name, counting the tiles that match and saying
+when nothing matches.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact, Regular and Large, the Updates tab at
-Compact and Large, the Registries tab at Compact, Regular and Large,
+page, the Active tab at Compact, Regular and Large and with many maps at
+Regular, the Updates tab at Compact and Large, the Registries tab at
+Compact, Regular and Large,
 Languages at Compact, and the Maps tab at Large for one map and for
 several: each twice, byte for byte the same, with nothing
 drawn outside the window and every pixel of it drawn, every part inside
@@ -682,6 +686,7 @@ under its check.
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
 `library-active-regular.png`, `library-active-large.png`,
+`library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
 `library-registries-large.png`, `library-languages-compact.png`,
@@ -703,5 +708,7 @@ for review.
   it presses a row that does not show.
 - Large shows as many tags in its filter pane as fit, and TAGS ▾ holds the
   rest; the filter pane does not scroll.
-- The scroll bars show where the panes are scrolled but take no press: the
-  wheel, the keys, the right stick and a finger scroll them.
+- The list's and the details' scroll bars show where those panes are
+  scrolled but take no press: the wheel, the keys, the right stick and a
+  finger scroll them. The Active tab's maps bar does take a press, and
+  dragging it scrolls the maps.
