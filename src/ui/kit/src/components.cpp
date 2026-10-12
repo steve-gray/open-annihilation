@@ -395,6 +395,10 @@ void paint_item(const Canvas& canvas, const Item& item) {
         if (const auto* look = std::get_if<ChipLook>(&item.look))
             draw_chip(drawn, item.rect, *look);
         break;
+    case Role::pill:
+        if (const auto* look = std::get_if<PillLook>(&item.look))
+            draw_pill(drawn, item.rect, *look);
+        break;
     case Role::field:
         if (const auto* look = std::get_if<SearchLook>(&item.look))
             draw_search(drawn, item.rect, *look);

@@ -58,6 +58,7 @@ constexpr std::array<std::string_view, kit::all_roles.size()> kRoleNames{
     "header_text",    "version",       "title",         "panel",       "icon",
     "banner",         "row",           "divider",       "button_main", "button_danger",
     "progress_track", "progress_fill", "progress_busy", "backdrop",    "sheet",
+    "pill",
 };
 
 /// Returns a role's name.
@@ -212,6 +213,8 @@ std::vector<std::string> texts_of(const kit::Item& part) {
                     add_chip(tag);
             } else if constexpr (std::is_same_v<Look, kit::ChipLook>) {
                 add_chip(look);
+            } else if constexpr (std::is_same_v<Look, kit::PillLook>) {
+                texts.push_back(look.text);
             } else if constexpr (std::is_same_v<Look, kit::SearchLook>) {
                 texts.insert(texts.end(), {look.placeholder, look.field.text});
             } else if constexpr (std::is_same_v<Look, kit::CardLook>) {

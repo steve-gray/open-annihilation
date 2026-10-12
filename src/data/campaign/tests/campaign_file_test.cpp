@@ -644,6 +644,134 @@ void camps_count_tests() {
     );
 }
 
+// A pack map is named stem@id. Its OTA is the file at that name, the path the
+// mounted layer shows, and the name players see is the OTA's missionname. A
+// map of the base game keeps its file name even when the OTA's missionname
+// differs. A stem that is also a base map is not the pack map's file.
+void pack_map_title_tests() {
+    using namespace oa::data::campaign;
+    const char* pack_ota = R"([GlobalHeader]
+{
+missionname=Isle One;
+Germanmissionname=Insel Eins;
+[Schema 0]
+    {
+    Type=Network 1;
+    [specials]
+        {
+        [special0]
+            {
+            specialwhat=StartPos1;
+            }
+        [special1]
+            {
+            specialwhat=StartPos2;
+            }
+        }
+    }
+}
+)";
+    const char* stem_ota = R"([GlobalHeader]
+{
+missionname=Not This;
+[Schema 0]
+    {
+    Type=Network 1;
+    [specials]
+        {
+        [special0]
+            {
+            specialwhat=StartPos1;
+            }
+        [special1]
+            {
+            specialwhat=StartPos2;
+            }
+        }
+    }
+}
+)";
+    const char* untitled = R"([GlobalHeader]
+{
+[Schema 0]
+    {
+    Type=Network 1;
+    [specials]
+        {
+        [special0]
+            {
+            specialwhat=StartPos1;
+            }
+        [special1]
+            {
+            specialwhat=StartPos2;
+            }
+        }
+    }
+}
+)";
+    MemoryFiles memory;
+    memory.files["maps/twoways.ota"] = kSkirmishMap;
+    memory.files["maps/isle_one.ota"] = stem_ota;
+    memory.files["maps/isle_one@oa-test-isles.ota"] = pack_ota;
+    memory.files["maps/bare@oa-test-isles.ota"] = untitled;
+    const auto services = memory_services(memory);
+    auto* file = new CampaignFile;
+    campaign_file_init(file);
+    file->kind = SessionKind::multiplayer;
+    CampaignEnv env{&services, nullptr, 1, 0};
+
+    expect(campaign_select_mission(file, &env, "TwoWays"), "a base map loads");
+    expect(
+        std::strcmp(campaign_localized_name(file), "TwoWays") == 0 &&
+            std::strcmp(campaign_mission_name(file), "TwoWays") == 0,
+        "a base map keeps its file name, not the OTA's missionname"
+    );
+
+    expect(campaign_select_mission(file, &env, "isle_one@oa-test-isles"), "the pack map loads");
+    expect(
+        std::strcmp(campaign_localized_name(file), "Isle One") == 0 &&
+            std::strcmp(campaign_mission_name(file), "isle_one@oa-test-isles") == 0,
+        "a pack map shows the title its OTA gives and keeps its name"
+    );
+    expect(
+        std::strcmp(
+            campaign_path(file, CampaignPath::mission), "Maps/isle_one@oa-test-isles.TNT"
+        ) == 0,
+        "the pack map's files are read at the name the battle room carries"
+    );
+
+    auto german = services;
+    german.language = "German";
+    CampaignEnv translated{&german, nullptr, 1, 0};
+    expect(
+        campaign_select_mission(file, &translated, "isle_one@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "Insel Eins") == 0,
+        "another language's own title wins"
+    );
+
+    expect(campaign_select_mission(file, &env, "TwoWays"), "the base map loads again");
+    expect(
+        std::strcmp(campaign_localized_name(file), "TwoWays") == 0,
+        "leaving the pack map restores the base map's file name"
+    );
+
+    expect(
+        !campaign_select_mission(file, &env, "missing@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "missing@oa-test-isles") == 0 &&
+            campaign_mission_file_size(file) == 0,
+        "a pack map with no OTA keeps the name it was asked by and selects nothing"
+    );
+    expect(
+        campaign_select_mission(file, &env, "bare@oa-test-isles") &&
+            std::strcmp(campaign_localized_name(file), "bare@oa-test-isles") == 0,
+        "a pack map whose OTA gives no title keeps the name the battle room carries"
+    );
+
+    campaign_file_free(file);
+    delete file;
+}
+
 // Directory listing: "\name" subdirectories first when asked, then files with
 // their extensions cut; a time sort keeps subdirectories oldest first and
 // files newest first, a name sort ignores case.
@@ -742,6 +870,7 @@ int main(int argc, char** argv) {
     camps_count_tests();
     synthetic_tests();
     skirmish_profile_tests();
+    pack_map_title_tests();
     if (failures != 0) {
         std::cerr << failures << " failure(s)\n";
         return 1;

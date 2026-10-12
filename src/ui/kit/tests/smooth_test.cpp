@@ -12,6 +12,7 @@
 // fonts beside the test.
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/controls.hpp"
 #include "oa/test/check.hpp"
 
 #include "oa/platform/text_font.hpp"
@@ -429,6 +430,23 @@ void components_draw_on_the_smooth_form() {
     OA_CHECK(inked(listed.pixels) == (paint::Box{0, 0, 30, 15}));
 }
 
+/// A pill's edge at 150% is partly covered pixels, not a step.
+void a_pill_is_smooth_at_one_and_a_half() {
+    Smooth smooth(120, 40, kOneAndAHalf);
+    kit::draw_pill(smooth.canvas, {4, 4, 40, 12}, {"", kit::PillState::playing});
+    int partial = 0;
+    for (int y = 0; y < smooth.pixels.height; ++y) {
+        for (int x = 0; x < smooth.pixels.width; ++x) {
+            const paint::Rgba pixel = paint::pixel_at(smooth.pixels, x, y);
+            if (pixel.a == 0)
+                continue;
+            if (pixel.a < 255)
+                ++partial;
+        }
+    }
+    OA_CHECK(partial > 0);
+}
+
 } // namespace
 
 int main() {
@@ -440,5 +458,6 @@ int main() {
     marks_and_origins_are_in_points();
     coverage_lands_on_the_canvass_own_pixels();
     components_draw_on_the_smooth_form();
+    a_pill_is_smooth_at_one_and_a_half();
     return oa::test::check_exit_status();
 }
