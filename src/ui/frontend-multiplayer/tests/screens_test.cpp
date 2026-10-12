@@ -1957,6 +1957,11 @@ void check_pack_maps(Driver& d) {
     );
     click_map_row(d, *names, pack_row, ox, oy);
     expect(d.click("LOAD"), "LOAD chooses the pack map");
+    d.frame();
+    expect(
+        mp::panel_text(mp::multiplayer_panel(), "MAPNAME") == "Isle of Ashes",
+        "the battle room names the pack map by the title its OTA gives"
+    );
     const auto& chosen = mp::local_info(mp::multiplayer_lobby());
     const auto length = ::strnlen(chosen.map_name, sizeof chosen.map_name);
     expect(

@@ -5,6 +5,7 @@
 // the per-mission OTA header, briefing and placement tables.
 #include "oa/data/campaign/campaign_file.hpp"
 #include "oa/data/defs/layout.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 
 #include "oa/core/game_state.h"
 #include "oa/base/text.hpp"
@@ -635,6 +636,14 @@ bool campaign_select_mission(CampaignFile* file, const CampaignEnv* env, const c
     if (file->kind != SessionKind::skirmish && file->kind != SessionKind::multiplayer)
         return false;
     const bool loaded = campaign_load_mission_info(file, env, name);
+    // A pack map's files keep the stem. The mounted layer shows the OTA at
+    // the name the battle room carries, stem@id. Players see the title that
+    // OTA gives. A map of the base game keeps its file name.
+    if (name != nullptr && oa::data::map_pack::split_pack_map_name(name)) {
+        if (file->localized_name[0] == '\0')
+            copy_bounded(file->localized_name, kCampaignNameBytes, name);
+        return loaded;
+    }
     const char* language = env->files != nullptr ? env->files->language : nullptr;
     if (loaded && language != nullptr && language[0] != '\0' &&
         oa::formats::tdf::compare_nocase(language, "english") != 0) {
@@ -725,6 +734,7 @@ bool campaign_load_mission_info(CampaignFile* file, const CampaignEnv* env, cons
         oa::formats::tdf::reset_cursor(&ota);
     } else if (file->kind == SessionKind::skirmish || file->kind == SessionKind::multiplayer) {
         file->mission_file_size = 0;
+        file->localized_name[0] = '\0';
         copy_bounded(file->mission_name, kCampaignNameBytes, map_name);
         copy_bounded(name, sizeof(name), map_name);
         build_variant_path(&rules, path, sizeof(path), kMapsDirectory, name, "OTA");
@@ -748,6 +758,15 @@ bool campaign_load_mission_info(CampaignFile* file, const CampaignEnv* env, cons
     // What players read and hear comes from the language's folders and keys
     // first, as 3.1c reads it.
     const char* language = files != nullptr ? files->language : nullptr;
+    // The title a pack map shows. The file name stays mission_name, which is
+    // how the map is found again. Another language's own key wins, as a
+    // briefing's does, and a missing title leaves the display name empty so
+    // the caller can keep the name the battle room carries.
+    if ((file->kind == SessionKind::skirmish || file->kind == SessionKind::multiplayer) &&
+        map_name != nullptr && oa::data::map_pack::split_pack_map_name(map_name))
+        language_string(
+            header, language, "missionname", file->localized_name, kCampaignNameBytes, ""
+        );
     char value[kCampaignPathBytes];
     language_string(header, language, "brief", value, sizeof(value), "");
     resolve_path(file, files, CampaignPath::briefing, kBriefsDirectory, value, "TXT");
