@@ -386,18 +386,19 @@ open registered page's rows back to their defaults. A mod's options dialog
 lists none of them. With no registered page the section list is the engine's
 own, Developer pinned at the foot.
 
-The host hands both drawing functions the Open Annihilation icon as an
-RGBA picture: the game's window icon without its clear margin. They scale
-it with `draw_picture` to its place at the surface's own resolution, so a
-dialog drawn twice as large shows the icon twice as sharp. The OA button is
-a bevelled square with the icon 3 source pixels inside its edge: lit with
-a green ring inside the bevel under the pointer, and, while held, its bevel
-sunk and the icon a pixel right and down. Without the icon, an empty
-picture, the header and the button draw the OA mark instead: green "OA"
-letters in a green outlined square. `draw_oa_mark` draws the same icon
-filling a square, or the mark the OA button shows at rest, so that other
-screens, such as the Game files screen, show the OA mark as the dialog
-does.
+The host hands both drawing functions an RGBA picture. Settings passes the
+settings icon, the plates over two gears. Notices, prompts and the other
+OA headers pass the app icon, the plates alone. They scale it with
+`draw_picture` to its place at the surface's own resolution, an area
+filter, so a dialog drawn twice as large shows the icon twice as sharp and
+a clear corner stays clear. The OA button is a bevelled square with the
+icon 3 source pixels inside its edge: lit with a green ring inside the
+bevel under the pointer, and, while held, its bevel sunk and the icon a
+pixel right and down. Without the icon, an empty picture, the header and
+the button draw the OA mark instead: green "OA" letters in a green outlined
+square. `draw_oa_mark` draws the picture it is given filling a square, or
+the mark the OA button shows at rest. The Game files screen passes the app
+icon, so its badge is the plates, not the gears.
 
 Where a game font has no ellipsis, as neither of the dialog's has, the
 dialog draws and measures each ellipsis in a text as three full stops in
@@ -410,7 +411,7 @@ other character the game font lacks is drawn in the modern fonts.
 It is 480 by 324 source pixels, a dark gunmetal panel with a one-pixel raised
 edge and hairline rules, and one green accent for what is selected:
 
-- the header: the Open Annihilation icon, 20 by 20 source pixels, "OPEN
+- the header: the icon it was given, 20 by 20 source pixels, "OPEN
   ANNIHILATION SETTINGS" and the version, with "Shared game - still
   running" in amber while a shared game keeps running;
 - the sections down the left (Controls, Engine Limits, Language & Text,

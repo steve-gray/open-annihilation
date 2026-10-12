@@ -47,6 +47,10 @@ The settings open from:
 - **SETTINGS…** at the foot of the Library;
 - the button under **Resume** in the in-game menu (F2), which shows the
   gears too;
+
+The dialog's header badge is those gears, on the main menu and in a
+match. Notices, prompts and the other OA headers keep the app icon, the
+plates alone.
 - **Cmd+,** on macOS, or **Settings…** in the application menu;
 - **Ctrl+,** on Windows and Linux.
 

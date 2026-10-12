@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The embedded window icon and settings icon each decode to 256 by 256 RGBA
+// The embedded app, settings and mods icons each decode to 256 by 256 RGBA
 // pixels, transparent in the corners and opaque in the middle, and files
-// that are not such an image are refused with a reason. The window icon's
-// visible part, which the settings dialog and the OA button draw, leaves out
-// the clear margin and nothing else, and the settings icon's, which the
-// Settings button draws beside it, is as large.
+// that are not such an image are refused with a reason. Each icon's visible
+// part leaves out only a wholly clear margin, and the three share one size
+// so the buttons that draw them match. An area-scaled copy averages the
+// pixels that land on each result pixel, and a clear corner stays clear.
 #include "oa/app/window_icon.hpp"
 #include "oa/formats/png.hpp"
 
@@ -120,10 +120,11 @@ void test_visible_part() {
     std::string error;
     CHECK(decode_window_icon(window_icon_png(), icon, error));
     const WindowIcon part = visible_part(icon);
-    // The embedded icon has a clear margin; its visible part is smaller,
-    // and each of its four edges touches something visible.
-    CHECK(part.width > window_icon_size / 2 && part.width < window_icon_size);
-    CHECK(part.height > window_icon_size / 2 && part.height < window_icon_size);
+    // The corners are clear. A pixel on an edge may still be visible, so
+    // the visible part can be the whole icon, and each of its four edges
+    // touches something visible.
+    CHECK(part.width > window_icon_size / 2 && part.width <= window_icon_size);
+    CHECK(part.height > window_icon_size / 2 && part.height <= window_icon_size);
     CHECK(part.pixels.size() == std::size_t{part.width} * part.height * window_icon_pixel_bytes);
     if (part.width != 0 && part.height != 0) {
         CHECK(row_visible(part, 0) && row_visible(part, part.height - 1));
@@ -165,33 +166,113 @@ void test_visible_part() {
     CHECK(visible_part(short_of_pixels).pixels.empty());
 }
 
-/// Checks that the settings icon's visible part is as large as the window
-/// icon's, so that the two buttons beside each other show their pictures at
-/// one size.
+/// Checks that the settings icon's and the mods icon's visible parts are as
+/// large as the app icon's, so the buttons beside each other show their
+/// pictures at one size.
 void test_settings_icon_part() {
     WindowIcon logo;
     WindowIcon gears;
+    WindowIcon bays;
     std::string error;
     CHECK(decode_window_icon(window_icon_png(), logo, error));
     CHECK(decode_window_icon(settings_icon_png(), gears, error));
+    CHECK(decode_window_icon(mods_icon_png(), bays, error));
     const WindowIcon logo_part = visible_part(logo);
     const WindowIcon gears_part = visible_part(gears);
+    const WindowIcon bays_part = visible_part(bays);
     CHECK(gears_part.width != 0 && gears_part.height != 0);
+    CHECK(bays_part.width != 0 && bays_part.height != 0);
     CHECK(gears_part.width == logo_part.width && gears_part.height == logo_part.height);
+    CHECK(bays_part.width == logo_part.width && bays_part.height == logo_part.height);
+}
+
+/// Fills a square icon with one colour.
+WindowIcon solid(uint32_t side, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+    WindowIcon icon;
+    icon.width = side;
+    icon.height = side;
+    icon.pixels.assign(std::size_t{side} * side * window_icon_pixel_bytes, 0);
+    for (std::size_t pixel = 0; pixel < std::size_t{side} * side; ++pixel) {
+        icon.pixels[pixel * window_icon_pixel_bytes] = red;
+        icon.pixels[pixel * window_icon_pixel_bytes + 1] = green;
+        icon.pixels[pixel * window_icon_pixel_bytes + 2] = blue;
+        icon.pixels[pixel * window_icon_pixel_bytes + alpha_byte] = alpha;
+    }
+    return icon;
+}
+
+void put_pixel(
+    WindowIcon& icon,
+    uint32_t x,
+    uint32_t y,
+    uint8_t red,
+    uint8_t green,
+    uint8_t blue,
+    uint8_t alpha
+) {
+    const std::size_t at = (static_cast<std::size_t>(y) * icon.width + x) * window_icon_pixel_bytes;
+    icon.pixels[at] = red;
+    icon.pixels[at + 1] = green;
+    icon.pixels[at + 2] = blue;
+    icon.pixels[at + alpha_byte] = alpha;
+}
+
+/// An area-scaled copy averages each block, keeps a clear corner clear, and
+/// a same-sized icon is a copy. A side of 0, or pixels that do not fill the
+/// icon, is empty.
+void test_area_scaled() {
+    CHECK(area_scaled(solid(2, 1, 2, 3, 4), 0).pixels.empty());
+    WindowIcon short_of_pixels = solid(2, 1, 2, 3, 4);
+    short_of_pixels.pixels.pop_back();
+    CHECK(area_scaled(short_of_pixels, 1).pixels.empty());
+
+    const WindowIcon same = solid(2, 9, 8, 7, 6);
+    const WindowIcon copied = area_scaled(same, 2);
+    CHECK(copied.width == 2 && copied.height == 2 && copied.pixels == same.pixels);
+
+    WindowIcon blocks = solid(4, 0, 0, 0, 0);
+    for (uint32_t y = 0; y < 2; ++y)
+        for (uint32_t x = 0; x < 2; ++x)
+            put_pixel(blocks, x, y, 255, 0, 0, 255);
+    for (uint32_t y = 2; y < 4; ++y)
+        for (uint32_t x = 0; x < 2; ++x)
+            put_pixel(blocks, x, y, 0, 255, 0, 255);
+    for (uint32_t y = 2; y < 4; ++y)
+        for (uint32_t x = 2; x < 4; ++x)
+            put_pixel(blocks, x, y, 0, 0, 255, 128);
+    const WindowIcon halved = area_scaled(blocks, 2);
+    CHECK(halved.width == 2 && halved.height == 2);
+    CHECK(alpha_at(halved, 1, 0) == 0);
+    CHECK(halved.pixels[0] == 255 && halved.pixels[3] == 255);
+    CHECK(alpha_at(halved, 0, 1) == 255 && halved.pixels[window_icon_pixel_bytes * 2 + 1] == 255);
+    CHECK(alpha_at(halved, 1, 1) == 128 && halved.pixels[window_icon_pixel_bytes * 3 + 2] == 255);
+
+    // A black and white checker reduced to one pixel is grey, not a corner.
+    WindowIcon checker = solid(4, 0, 0, 0, 255);
+    for (uint32_t y = 0; y < 4; ++y)
+        for (uint32_t x = 0; x < 4; ++x)
+            if (((x + y) % 2) == 0)
+                put_pixel(checker, x, y, 255, 255, 255, 255);
+    const WindowIcon grey = area_scaled(checker, 1);
+    CHECK(grey.width == 1 && grey.pixels.size() == window_icon_pixel_bytes);
+    CHECK(grey.pixels[0] == 128 && grey.pixels[1] == 128 && grey.pixels[2] == 128);
+    CHECK(grey.pixels[3] == 255);
 }
 
 int main() {
     test_embedded_icon(window_icon_png());
     test_embedded_icon(settings_icon_png());
+    test_embedded_icon(mods_icon_png());
     test_refused_files();
     test_visible_part();
     test_settings_icon_part();
+    test_area_scaled();
     if (failures != 0) {
         std::fprintf(stderr, "window icon: %d check(s) failed\n", failures);
         return 1;
     }
     std::printf(
-        "window icon: the embedded window icon and settings icon decode, and other files are "
+        "window icon: the embedded app, settings and mods icons decode, and other files are "
         "refused\n"
     );
     return 0;

@@ -527,10 +527,10 @@ void Runtime::check_engine_settings_in_menu() {
     require(screen_ == Screen::main_menu, "the main menu did not open");
     const auto* fonts = engine_settings_fonts();
     require(fonts != nullptr, "the dialog's fonts did not load");
-    const auto icon = engine_settings_icon();
-    require(artless::picture_drawable(icon), "the OA button and the dialog have no icon to show");
     const auto gears = EngineSettingsMenuHost::settings_icon(*this);
     require(artless::picture_drawable(gears), "the Settings button has no icon to show");
+    const auto bays = EngineSettingsMenuHost::mods_icon(*this);
+    require(artless::picture_drawable(bays), "the Library button has no icon to show");
     require(!main_menu_overlay_, "an extension's overlay stands over the main menu");
 
     const auto point = [this](SDL_EventType type, oa::ui::display_layout::Point at) {
@@ -624,7 +624,7 @@ void Runtime::check_engine_settings_in_menu() {
     const auto draw_library =
         [&](renderer::Surface& target, const artless::SourceRect& at, settings::ButtonLook look) {
             kit::draw_oa_button(
-                {&target, {at.x, at.y, 1}, fonts, icon},
+                {&target, {at.x, at.y, 1}, fonts, bays},
                 at.width,
                 static_cast<kit::OaButtonState>(look),
                 library_badge
@@ -770,7 +770,7 @@ void Runtime::check_engine_settings_in_menu() {
             settings::backdrop_color,
             settings::menu_backdrop_opacity
         );
-        settings::draw_dialog(expected, {placement.x, placement.y, 1}, *dialog, *fonts, icon);
+        settings::draw_dialog(expected, {placement.x, placement.y, 1}, *dialog, *fonts, gears);
         const auto shown = frame();
         snapshot("engine-settings-menu-dialog", shown);
         require(

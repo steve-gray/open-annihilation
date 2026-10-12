@@ -7,7 +7,8 @@
 #     -P OaEmbedWindowIcon.cmake
 # The source defines oa::app::<FUNCTION>() over the file's bytes:
 # window_icon_png() when FUNCTION is not given, settings_icon_png() for the
-# settings icon. OUTPUT is rewritten only when its text changes.
+# settings icon and mods_icon_png() for the mods icon. OUTPUT is rewritten
+# only when its text changes.
 if(NOT INPUT OR NOT OUTPUT)
   message(FATAL_ERROR "OaEmbedWindowIcon.cmake needs -DINPUT=<png> -DOUTPUT=<source>")
 endif()

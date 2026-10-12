@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The game's window icon: the Open Annihilation icon at 256 by 256 pixels,
-// made by tools/make_icons.py and embedded in the game as a PNG file, which
-// start-up decodes and gives the window. The settings dialog's header and
-// the main menu's Library button draw the same icon, cut to its visible
-// part. The settings icon, the logo over a row of gears, is embedded beside
-// it at the same size; the main menu's Settings button and the in-game
-// menu's OA button draw it, cut the same way.
+// The game's three icons, each at 256 by 256 pixels, made by
+// tools/make_icons.py and embedded as a PNG file. The app icon, the plates
+// alone, is the window icon start-up gives the window, and the badge of
+// every OA dialog and notice but Settings and the Library. The settings
+// icon, the plates over two gears, is what the Settings button, the in-game
+// menu's OA button and the Settings dialog's header draw. The mods icon,
+// the plates over drive bays, is what the main menu's Library button and
+// the Library's header draw. Each is cut to its visible part where it is
+// drawn.
 #pragma once
 
 #include <cstdint>
@@ -37,14 +39,26 @@ struct WindowIcon {
 std::span<const uint8_t> window_icon_png();
 
 /// Returns the settings icon the game embeds, which the buttons that open
-/// Settings draw.
+/// Settings draw, and the Settings dialog's header.
 ///
 /// @return a PNG file of window_icon_size by window_icon_size 8-bit RGBA
 ///         pixels, which lasts as long as the program
 std::span<const uint8_t> settings_icon_png();
 
-/// Decodes an 8-bit RGBA PNG file for a window icon, or for the settings
-/// icon, which has the same form.
+/// Returns the mods icon the game embeds, which the Library button and the
+/// Library's header draw.
+///
+/// @return a PNG file of window_icon_size by window_icon_size 8-bit RGBA
+///         pixels, which lasts as long as the program
+std::span<const uint8_t> mods_icon_png();
+
+/// The side, in pixels, of the app icon kept ready for the small maker's
+/// mark. A mark at most this large is drawn from that copy, filtered down,
+/// rather than from the full icon.
+inline constexpr uint32_t maker_mark_prepared_side = 64;
+
+/// Decodes an 8-bit RGBA PNG file for one of the three icons, which share
+/// this form.
 ///
 /// @param png the file
 /// @param[out] icon the pixels; left empty on failure
@@ -62,5 +76,15 @@ decode_window_icon(std::span<const uint8_t> png, WindowIcon& icon, std::string& 
 /// @return that rectangle's pixels; empty when every pixel is transparent or
 ///         the pixels do not fill the icon's size
 [[nodiscard]] WindowIcon visible_part(const WindowIcon& icon);
+
+/// Scales an icon to a square with an area filter: each pixel of the result
+/// is the mean of the source pixels that land on it, weighted by alpha, so
+/// a clear corner stays clear. A side of 0, or pixels that do not fill the
+/// icon, returns an empty icon. The same side returns a copy.
+///
+/// @param icon the icon
+/// @param side the result's width and height, in pixels
+/// @return the scaled icon
+[[nodiscard]] WindowIcon area_scaled(const WindowIcon& icon, uint32_t side);
 
 } // namespace oa::app
