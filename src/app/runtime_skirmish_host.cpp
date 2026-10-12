@@ -307,6 +307,7 @@ void Runtime::install_map_event_callback(map_modal::MenuHandle) {
 
 void Runtime::bind_map_names(std::span<const std::string> names) {
     bound_map_names_.assign(names.begin(), names.end());
+    label_bound_maps();
     fill_frontend_list("MAPNAMES", bound_map_names_.size());
 }
 

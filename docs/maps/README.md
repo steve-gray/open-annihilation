@@ -85,9 +85,13 @@ packs' maps never share a name, whatever their authors called them. The
 whole name fits in 63 bytes, so that it travels in the battle room and in
 a saved game; the pack refuses a map whose name would not.
 
-The map browser shows a map's own title, "Isle of Ashes". The skirmish map
-list, the battle room and saved games use its name,
-`isle_of_ashes@archipelago`, and so does a 3.1c player's battle room.
+The map browser, the skirmish map list and the battle room's map list show
+a map's own title, "Isle of Ashes". When that title would read the same as
+another row, the pack map's row adds its pack's name in brackets, "Comet
+Catcher (Cavedog: Comet Catcher)". Choosing the map, the battle room's
+name sent to other players, a saved game and GET MAP use its name,
+`isle_of_ashes@archipelago`. A 3.1c player's battle room receives that
+name too. The game's own maps stay listed by their file names.
 
 ## One map's files at a time
 
@@ -139,12 +143,14 @@ starts, against the game and the mod being played then.
 ## The map lists and MORE MAPS…
 
 The skirmish list and the battle room host's map list hold a pack's maps
-beside the base maps. A row is the game's name, `<stem>@<id>`. The
-skirmish list puts those pack maps after the base maps, in the packs'
-order. The battle room's list sorts every name together. Once you choose
-a pack map, a screen that has a name under the list shows the title from
-the pack's index. The stock skirmish map screen has no such name, so its
-rows stay the game's names. The battle room's map name is that title.
+beside the base maps. A pack map's row shows the title from the pack's
+index, or the title in its map file when the index has none. A row that
+would read the same as another adds the pack's name in brackets. The
+game's own rows stay their file names. The skirmish list puts the pack
+maps after the base maps, in the packs' order. The battle room's list
+sorts every name together, not by the title. The name under a list, and
+the battle room's map name, are that same title. Choosing the row still
+uses `<stem>@<id>`.
 
 A pack installed from the Library joins both lists at once. A pack
 removed leaves both lists at once. The base maps stay in the order and

@@ -1287,7 +1287,10 @@ void Runtime::rebuild_surface() {
     std::vector<renderer::ListPresentation> lists;
     if (screen_ == Screen::map_selection && !bound_map_names_.empty()) {
         const auto selected = static_cast<std::size_t>(std::max<int16_t>(0, modal_map_index_));
-        lists.push_back({"MAPNAMES", bound_map_names_, map_first_visible(), selected});
+        const std::vector<std::string>& shown = bound_map_labels_.size() == bound_map_names_.size()
+                                                    ? bound_map_labels_
+                                                    : bound_map_names_;
+        lists.push_back({"MAPNAMES", shown, map_first_visible(), selected});
     }
     // A list its scroll bar scrolls shows the rows the bar brings into view.
     if (const auto first = frontend_list_first("Campaign"))

@@ -430,6 +430,26 @@ void Runtime::check_map_pack_lists() {
     const char* title_text = mp::multiplayer_pack_map_title(fitting.c_str());
     const std::string room_title = title_text != nullptr ? title_text : std::string();
     require(room_title == kFittingTitle, "the battle room's title is \"" + room_title + "\"");
+    const std::vector<std::string> room_texts = mp::multiplayer_map_texts(room_after);
+    require(room_texts.size() == room_after.size(), "the battle room's rows lost a title");
+    const auto room_place = static_cast<std::size_t>(
+        std::find(room_after.begin(), room_after.end(), fitting) - room_after.begin()
+    );
+    require(
+        room_place < room_texts.size() && room_texts[room_place] == kFittingTitle,
+        "the battle room's row shows \"" +
+            (room_place < room_texts.size() ? room_texts[room_place] : std::string()) + "\""
+    );
+    if (!room_before.empty()) {
+        const auto base_place = static_cast<std::size_t>(
+            std::find(room_after.begin(), room_after.end(), room_before.front()) -
+            room_after.begin()
+        );
+        require(
+            base_place < room_texts.size() && room_texts[base_place] == room_before.front(),
+            "a base map's battle-room row changed"
+        );
+    }
     std::cout << "map pack lists check: battle room lists " << fitting << ", title " << room_title
               << '\n';
 
@@ -462,9 +482,27 @@ void Runtime::check_map_pack_lists() {
         "the skirmish map list does not show the spaced name, or it shows the other map"
     );
     preview_map_index(row_of(fitting));
+    require(
+        bound_map_labels_.size() == bound_map_names_.size(),
+        "the skirmish rows have no title beside each name"
+    );
+    for (std::size_t index = 0; index < bound_map_names_.size(); ++index) {
+        if (pack::split_pack_map_name(bound_map_names_[index]))
+            continue;
+        require(
+            bound_map_labels_[index] == bound_map_names_[index],
+            "a base map's row changed from \"" + bound_map_names_[index] + "\""
+        );
+    }
+    require(
+        bound_map_labels_[row_of(fitting)] == kFittingTitle &&
+            bound_map_names_[row_of(fitting)] == fitting,
+        "the skirmish row shows \"" + bound_map_labels_[row_of(fitting)] + "\""
+    );
     // The stock skirmish map screen has no name under the list. The title is
     // what that screen writes when its layout has one, and what the battle
-    // room's map name shows. The row stays the game's name.
+    // room's map name shows. The row shows the same title. The name the
+    // choice stores stays the joined name.
     const std::string display = map_display_name();
     require(
         display == kFittingTitle && display != kFittingStem,

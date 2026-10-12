@@ -18,8 +18,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::ui::frontend_multiplayer {
 
@@ -153,13 +155,18 @@ void multiplayer_bind_launch_link(const LaunchLink& link) noexcept;
 ///
 /// The pointers stay valid until the next call of the source that wrote them.
 struct LobbyPackMap {
-    const char* name{};        ///< `<stem>@<id>`, the name the list shows
+    const char* name{};        ///< `<stem>@<id>`, the name a choice and the battle room use
     const char* description{}; ///< one line about the map; empty when unwritten
     const char* size{};        ///< the map's width and height, as the list shows it
     int32_t memory_mb{};       ///< memory the map needs, in MB
-    /// The name the pack's index gives the map, the words players see.
-    /// Null when this row is a base map, or the index has no entry.
+    /// The name the pack's index gives the map. Null when this row is a base
+    /// map, or the index has no entry.
     const char* title{};
+    /// The pack's name. Null when this row is a base map, or the pack has none.
+    const char* pack_name{};
+    /// The map file's title, when the source already holds it. The list does
+    /// not open the file to find one. Null when it is not held.
+    const char* file_title{};
 };
 
 /// Where the battle room reads installed pack maps and the base maps' summaries,
@@ -586,6 +593,24 @@ void multiplayer_reload_maps();
 /// @param index the map's place, from 0
 /// @return the name; null when `index` is out of range
 [[nodiscard]] const char* multiplayer_map_at(int32_t index);
+
+/// The words a map list shows for each name, in the same order.
+///
+/// A pack map shows the title its index gives, or the map file's title when
+/// the source already holds one, and a shared title adds the pack's name in
+/// brackets. A base map's row is its file name. A name the list does not
+/// hold is shown as itself.
+///
+/// @param names the maps' names, in list order
+/// @return one string per name
+[[nodiscard]] std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names);
+
+/// Fills MAPNAMES with the words `multiplayer_map_texts` gives `names`, and
+/// keeps `names` as the rows' keys.
+///
+/// @param[in,out] panel the dialog
+/// @param names the maps' names, in list order
+void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names);
 
 /// Returns the pack index's title for a pack map the battle room's source lists.
 ///

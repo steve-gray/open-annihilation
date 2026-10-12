@@ -132,6 +132,8 @@ void multiplayer_controls(std::vector<AutomationControl>& controls) {
                 : std::string(text);
         if (*kind == AutomationControlKind::list) {
             control.items = source.items;
+            if (source.item_keys.size() == source.items.size())
+                control.item_keys = source.item_keys;
             control.first_visible = std::max<int32_t>(0, source.list_first);
             control.row_height =
                 source.list_item_height > 0 ? source.list_item_height : panel.line_height;
@@ -418,6 +420,13 @@ void answer_controls(Endpoint& endpoint, const Request& request, Answer& answer)
             for (const std::string& item : control.items)
                 json.string(item);
             json.end_array();
+            if (!control.item_keys.empty() && control.item_keys.size() == control.items.size()) {
+                json.key("item_keys");
+                json.begin_array();
+                for (const std::string& key : control.item_keys)
+                    json.string(key);
+                json.end_array();
+            }
             json.key("first_visible");
             json.integer(control.first_visible);
             json.key("rows");

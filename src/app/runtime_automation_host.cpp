@@ -195,6 +195,8 @@ struct ListRows {
     std::span<const std::string> items;  ///< the rows
     std::size_t first_visible{};         ///< the first row shown
     std::optional<std::size_t> selected; ///< the selected row
+    /// The rows' names, when the shown text is not the name. Empty otherwise.
+    std::span<const std::string> keys;
 };
 
 } // namespace
@@ -366,6 +368,8 @@ struct AutomationHostAccess {
                 control.rows = control.row_height > 0 ? control.height / control.row_height : 0;
                 if (const auto rows = frontend_list_rows(game, name)) {
                     control.items.assign(rows->items.begin(), rows->items.end());
+                    if (rows->keys.size() == rows->items.size())
+                        control.item_keys.assign(rows->keys.begin(), rows->keys.end());
                     control.first_visible = static_cast<int32_t>(rows->first_visible);
                     control.selected = rows->selected ? static_cast<int32_t>(*rows->selected) : -1;
                 }
@@ -386,33 +390,40 @@ struct AutomationHostAccess {
         const auto named = [name](std::string_view list) {
             return Runtime::tdf_names_equal(name, list);
         };
-        if (game.screen_ == Screen::map_selection && named("MAPNAMES"))
+        if (game.screen_ == Screen::map_selection && named("MAPNAMES")) {
+            const bool labelled = game.bound_map_labels_.size() == game.bound_map_names_.size();
             return ListRows{
-                game.bound_map_names_,
+                labelled ? std::span<const std::string>{game.bound_map_labels_}
+                         : std::span<const std::string>{game.bound_map_names_},
                 game.map_first_visible(),
-                static_cast<std::size_t>(std::max<int16_t>(0, game.modal_map_index_))
+                static_cast<std::size_t>(std::max<int16_t>(0, game.modal_map_index_)),
+                game.bound_map_names_
             };
+        }
         if ((game.screen_ == Screen::any_mission || game.screen_ == Screen::new_campaign) &&
             named("Campaign"))
             return ListRows{
                 game.campaign_labels_,
                 first(game.campaign_first_visible_),
-                game.selected_campaign_index_
+                game.selected_campaign_index_,
+                {}
             };
         if (game.screen_ == Screen::any_mission && named("Missions"))
             return ListRows{
                 game.campaign_mission_labels_,
                 first(game.campaign_mission_first_visible_),
-                game.selected_mission_index_
+                game.selected_mission_index_,
+                {}
             };
         if (named("GAMES"))
             if (const auto saves = game.load_game_rows(); saves && saves->items != nullptr)
-                return ListRows{*saves->items, first(0), saves->selected};
+                return ListRows{*saves->items, first(0), saves->selected, {}};
         if (game.screen_ == Screen::campaign_end && named("Missions"))
             return ListRows{
                 game.end_mission_rows_,
                 game.campaign_mission_first_visible_,
-                game.selected_mission_index_
+                game.selected_mission_index_,
+                {}
             };
         return std::nullopt;
     }

@@ -21,6 +21,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [Input](#input)
 - [Events](#events)
 - [What it never does](#what-it-never-does)
+- [A map list's names](#a-map-lists-names)
 - [A list that does not fit](#a-list-that-does-not-fit)
 - [In a battle room](#in-a-battle-room)
 - [Checks](#checks)
@@ -144,7 +145,7 @@ print(read(sock)[0]["screen"])  # main_menu
 |---|---|
 | `hello` | the protocol's version, the engine's, the window's size, where the game's 640x480 canvas lies in it, the tick rate (30) |
 | `screen` | the screen shown (`main_menu`, `skirmish`, `mp_battleroom`, `match` and the like), the dialogs over it, the control that takes the keys, the pointer, and in a match where the camera looks |
-| `controls` | an extension's windows first, then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows |
+| `controls` | an extension's windows first, then a message box's, then Open Annihilation's own screens' ([below](#oas-own-screens)), then every control of the panel that takes the pointer, a dialog's first: its name, its kind, the extension window it belongs to (or none), its place on the canvas and in the window, its state and text, and a list's rows. A map list's rows are the words it shows, and `item_keys` names each row ([below](#a-map-lists-names)) |
 | `input` | once the game has taken the events it was given, the frame and tick at which it took them ([below](#input)) |
 | `frame` | the frame the game presented in its window, or the one it composed, whole or a region of it, as RGB pixels, a PNG file, or a hash and mean colour |
 | `prefs` | the preferences as the game holds them now, and their file |
@@ -359,6 +360,10 @@ to the next; nothing is added to the game to produce them.
   time, and never waits.
   A client that stops reading is dropped once 68 MiB of answers wait for
   it (`automation: client dropped: not reading` in the log).
+
+## A map list's names
+
+A map list's `items` are the words each row shows. A pack map's row shows the title its pack's index gives, or the title in its map file when the index has none. When that title would read the same as another row, the pack map's row adds its pack's name in brackets, as in `Comet Catcher (Cavedog: Comet Catcher)`. The game's own maps keep their file names. The same list gives `item_keys`, one key for each row, in the same order: the name the battle room, a saved game and GET MAP use, `<stem>@<id>` for a pack map and the file name for one of the game's own maps. `select_item` takes either the shown text or the key, matched exactly, the shown text first, so a request that names `isle_one@oa-test-isles` still chooses that map when the row reads its title. Other lists omit `item_keys`.
 
 ## A list that does not fit
 

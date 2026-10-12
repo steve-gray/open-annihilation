@@ -87,6 +87,10 @@ struct Control {
     std::array<char, kControlTextBytes> text{};
     std::array<char, kControlNameBytes> link{}; // name a click reports
     std::vector<std::string> items;             // list rows (the list's text buffer)
+    /// A list's names, one per `items` entry, when the shown text is not the
+    /// name a choice uses. Empty for every other list, and for a list whose
+    /// rows were replaced without names.
+    std::vector<std::string> item_keys;
     /// The picture a hot surface without art shows, as palette indices in
     /// rows of picture_width; empty when it has none, and the surface then
     /// shows a blank. MAPPIC holds the selected map's minimap fitted to its size.
@@ -270,6 +274,16 @@ void panel_bind_lists(Panel& panel) noexcept;
 /// @quirk The knob keeps its position, as in 3.1c, so after a refill it can
 ///        stand away from the first row the list now shows until it moves.
 void panel_fill_list(Panel& panel, std::string_view name, std::vector<std::string> rows) noexcept;
+
+/// Sets the names beside a list's rows, one per row.
+///
+/// A count other than the list's row count clears the names. A missing list
+/// is ignored. Replacing the rows clears the names.
+///
+/// @param[in,out] panel Panel holding the list.
+/// @param name List name or link.
+/// @param keys One name per row.
+void panel_set_item_keys(Panel& panel, std::string_view name, std::vector<std::string> keys);
 
 /// Selects a row of a list and brings it into view, as 3.1c does when a screen picks a row.
 ///
