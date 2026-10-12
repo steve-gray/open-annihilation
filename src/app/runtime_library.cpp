@@ -1019,6 +1019,8 @@ library::Inputs Runtime::library_inputs() {
     const oa::data::languages::Language& language = shown_language();
     if (language.tag != oa::data::languages::english().tag)
         inputs.language.name = std::string(language.endonym);
+    if (!language.english_name.empty() && language.english_name != language.endonym)
+        inputs.language.english = std::string(language.english_name);
     if (language_) {
         for (const auto* packs :
              {&language_->mod_packs, &language_->player_packs, &language_->engine_packs}) {
@@ -1029,6 +1031,8 @@ library::Inputs Runtime::library_inputs() {
                 inputs.language.pack =
                     manifest.name.empty() ? std::string(language.endonym) : manifest.name;
                 inputs.language.version = manifest.version;
+                if (manifest.packaging)
+                    inputs.language.revision = manifest.packaging->revision;
                 break;
             }
             if (!inputs.language.pack.empty())

@@ -86,13 +86,17 @@ translator finds them together. Every word passes through `Library::text`
   `updates_shown` the UPDATE entries the list shows, the Updates tab's
   "{n} updates".
 - `active_setup` describes the Active tab from the inputs: the mod being
-  played, the installed mod marked playing (its listing's name and badge
-  when a registry lists it) or else `Inputs::playing_mod`, with its
-  version ("Highland 0.4.0"), or "No mod is played"; the language in use,
-  its pack and version (`Inputs::language`: "Polski 1.0") or the language
-  the game holds itself ("English · built in"); and each installed map
-  pack (`Inputs::map_packs`) by name, its maps' names, players ("4
-  players") and sizes.
+  played, the installed mod marked playing (its listing's name, badge and
+  author when a registry lists it) or else `Inputs::playing_mod`, with its
+  version ("Highland 0.4.0") and the release the tile states
+  ("0.4.0 (rev 1)"), or the base game ("Base Game", "Total Annihilation
+  3.1c", "No mod: the game as it was made"); the language in use, its name
+  in itself and in English, its pack, version, revision and coverage
+  (`Inputs::language`: "Polski 1.0", "Coverage 92%") or the language the
+  game holds itself ("English · built in", "Built in"); and each installed
+  map pack (`Inputs::map_packs`) by name, with its badge when an installed
+  pack of that name has one, and its maps' names, players ("4 players")
+  and sizes.
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
   - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
@@ -243,11 +247,18 @@ app removes the folder (`Runtime::library_uninstall`,
   the Library in a frame's window (`window_size`: 480 by 324, 720 by 486 or
   960 by 600 points, never larger than the frame), from its top left corner:
   - **The Active tab**, at every class, shows under the tabs, with no
-    search and no filters, the headings MOD, LANGUAGE and MAPS: the mod's
-    badge, name and version, or "No mod is played"; the language's line;
-    and each map pack's name over its maps, a line each with the name, the
-    players and the size in columns. The lines are labels, scroll as the
-    details do when they are taller than the window, and take no press;
+    search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
+    The mod tile has a large badge, the name, the version and revision,
+    the author and Playing, or Base Game with the 3.1c look and
+    "No mod: the game as it was made". The language tile has the pack's
+    badge or a language mark, the name in itself and in English, the
+    version and revision and the coverage, or Built in. Each map pack is
+    a tile with its badge, its name and its maps (name, players, size).
+    Compact stacks the tiles; Regular and Large put the mod and the
+    language side by side; Large puts the map packs in two columns when
+    more than one is installed. The mod and language labels cover the
+    tile, and each map's label covers its line. They scroll as the
+    details do when they are taller than the window, and take no press.
     Compact's footer holds no DETAILS there;
   - **The Registries tab**, at every class, shows under the tabs, with no
     search and no filters, one row for each registry: its avatar (the
@@ -394,11 +405,12 @@ app removes the folder (`Runtime::library_uninstall`,
     fact's long value, and the Rules fact's value whole, short at Compact
     and long at Regular and Large);
   - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
-    or "No mod is played"), `library.active.language` ("Polski 1.0") and
-    `library.active.map.<n>`, from 1 in the order shown ("Ridgeline · 4
-    players · 16x16"), each with the part of its line that shows as its
-    rectangle, empty while the line is scrolled out; at most 4,000 maps
-    are named.
+    or "No mod: the game as it was made"), `library.active.language`
+    ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
+    ("Ridgeline · 4 players · 16x16"). The mod and language labels are the
+    part of the tile that shows, and a map's is the part of its line that
+    shows, empty while that part is scrolled out; at most 4,000 maps are
+    named.
 - `focused_field(state, list)` gives the search field while it has the
   focus, over which a host keeps the system's text input started.
 
@@ -547,13 +559,14 @@ by the wheel, the page keys, Home, End and the right stick.
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact and Regular, and the Updates tab at
+page, the Active tab at Compact, Regular and Large, and the Updates tab at
 Compact and Large: each twice, byte for byte the same, with nothing drawn outside the
 window and every pixel of it drawn, every part inside it and every text
 fitting. `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
-`library-active-regular.png`, `library-updates-compact.png` and
+`library-active-regular.png`, `library-active-large.png`,
+`library-updates-compact.png` and
 `library-updates-large.png` for review.
 
 ## Limitations

@@ -33,6 +33,69 @@ using Phase = QueueItem::Phase;
 /// A whole percentage.
 constexpr uint64_t percent_whole = 100;
 
+/// Returns the language pack the game is showing its words from.
+///
+/// @param library the Library
+/// @return the entry marked in use; null when the language is built in or not installed
+const Entry* language_in_use(const Library& library) {
+    for (const Entry& entry : library.entries)
+        if (entry.id.kind == Kind::language && entry.installed != nullptr &&
+            entry.installed->in_use)
+            return &entry;
+    return nullptr;
+}
+
+/// Returns an entry's badge: its listing's, else its installed copy's.
+///
+/// @param entry the entry
+/// @return the badge, which points into the Library's inputs; null without one
+const Badge* badge_of(const Entry& entry) {
+    if (entry.listing != nullptr && entry.listing->badge)
+        return &*entry.listing->badge;
+    if (entry.installed != nullptr && entry.installed->badge)
+        return &*entry.installed->badge;
+    return nullptr;
+}
+
+/// Returns an installed map pack's badge, matched by the name the player sees.
+///
+/// @param library the Library
+/// @param name the pack's name
+/// @return the badge; null when no installed pack of that name has one
+const Badge* pack_badge(const Library& library, std::string_view name) {
+    for (const Entry& entry : library.entries) {
+        if (entry.id.kind != Kind::map_pack || entry_name(entry) != name)
+            continue;
+        if (const Badge* badge = badge_of(entry))
+            return badge;
+    }
+    return nullptr;
+}
+
+/// Returns who made an entry, as the details name an author.
+///
+/// @param entry the entry
+/// @return the author; empty when nobody is named
+std::string author_of(const Entry& entry) {
+    std::string author;
+    if (entry.listing != nullptr)
+        author = entry.listing->author.empty() ? entry.listing->publisher : entry.listing->author;
+    if (author.empty() && entry.installed != nullptr)
+        author = entry.installed->author;
+    return author;
+}
+
+/// Returns a coverage as the Active tile states it.
+///
+/// @param text how texts are looked up
+/// @param coverage the fraction, from 0 to 1
+/// @return such as "Coverage 92%"
+std::string coverage_line(const TextHooks& text, double coverage) {
+    const double clamped = std::clamp(coverage, 0.0, 1.0);
+    const auto percent = static_cast<uint64_t>(clamped * static_cast<double>(percent_whole) + 0.5);
+    return filled(text, words::active_coverage, {{"percent", std::to_string(percent)}});
+}
+
 /// Finds a registry by its id.
 ///
 /// @param inputs the inputs
@@ -644,26 +707,64 @@ ActiveSetup active_setup(const Library& library) {
     if (playing != nullptr) {
         setup.mod_name = entry_name(*playing);
         setup.mod_version = version_text(*playing->installed, text);
-        if (playing->listing != nullptr && playing->listing->badge)
-            setup.mod_badge = &*playing->listing->badge;
-        else if (playing->installed->badge)
-            setup.mod_badge = &*playing->installed->badge;
+        setup.mod_release =
+            release_text(playing->installed->version, playing->installed->revision, text);
+        setup.mod_badge = badge_of(*playing);
+        const std::string author = author_of(*playing);
+        if (!author.empty())
+            setup.mod_author = filled(text, words::byline, {{"author", author}});
+        setup.mod_state = std::string(shown(text, words::status_playing));
     } else if (inputs.playing_mod) {
         setup.mod_name = inputs.playing_mod->name;
         setup.mod_version = inputs.playing_mod->version;
+        setup.mod_release = inputs.playing_mod->version;
         if (inputs.playing_mod->badge)
             setup.mod_badge = &*inputs.playing_mod->badge;
+        setup.mod_state = std::string(shown(text, words::status_playing));
     }
-    if (playing == nullptr && !inputs.playing_mod)
+    if (playing == nullptr && !inputs.playing_mod) {
+        setup.base_title = std::string(shown(text, words::active_base_game));
+        setup.base_look = std::string(shown(text, words::base_supported));
         setup.mod_line = shown(text, words::active_no_mod);
-    else if (setup.mod_version.empty())
+    } else if (setup.mod_version.empty()) {
         setup.mod_line = setup.mod_name;
-    else
+    } else {
         setup.mod_line = filled(
             text, words::active_package, {{"name", setup.mod_name}, {"version", setup.mod_version}}
         );
+    }
 
     const LanguageInUse& language = inputs.language;
+    const bool built_in = language.pack.empty();
+    if (!language.name.empty())
+        setup.language_name = language.name;
+    else if (!language.pack.empty())
+        setup.language_name = language.pack;
+    else
+        setup.language_name = std::string(shown(text, words::language_english));
+    if (!language.english.empty() && language.english != setup.language_name)
+        setup.language_english = language.english;
+    if (!language.pack.empty() && language.pack != setup.language_name &&
+        language.pack != setup.language_english)
+        setup.language_pack = language.pack;
+    if (built_in) {
+        setup.language_note = std::string(shown(text, words::registry_built_in));
+    } else if (const Entry* used = language_in_use(library)) {
+        std::string shown_version = language.version;
+        int64_t shown_revision = language.revision;
+        if (used->installed != nullptr) {
+            if (!used->installed->version.empty())
+                shown_version = used->installed->version;
+            if (used->installed->revision > 0)
+                shown_revision = used->installed->revision;
+        }
+        setup.language_version = release_text(shown_version, shown_revision, text);
+        setup.language_badge = badge_of(*used);
+        if (used->listing != nullptr && used->listing->coverage)
+            setup.language_coverage = coverage_line(text, *used->listing->coverage);
+    } else if (!language.version.empty() || language.revision > 0) {
+        setup.language_version = release_text(language.version, language.revision, text);
+    }
     if (!language.pack.empty()) {
         setup.language_line = language.version.empty()
                                   ? language.pack
@@ -673,10 +774,8 @@ ActiveSetup active_setup(const Library& library) {
                                         {{"name", language.pack}, {"version", language.version}}
                                     );
     } else {
-        const std::string name = language.name.empty()
-                                     ? std::string(shown(text, words::language_english))
-                                     : language.name;
-        setup.language_line = filled(text, words::active_language_built_in, {{"language", name}});
+        setup.language_line =
+            filled(text, words::active_language_built_in, {{"language", setup.language_name}});
     }
 
     for (const InstalledMaps& pack : inputs.map_packs) {
@@ -707,6 +806,8 @@ ActiveSetup active_setup(const Library& library) {
             return folded(left.name) < folded(right.name);
         }
     );
+    for (ActivePack& pack : setup.packs)
+        pack.badge = pack_badge(library, pack.name);
     return setup;
 }
 

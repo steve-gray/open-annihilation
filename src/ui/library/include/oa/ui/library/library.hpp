@@ -215,6 +215,11 @@ struct LanguageInUse {
     /// and the game shows it from its own words.
     std::string pack{};
     std::string version{}; ///< the pack's version, as written; empty for none
+    /// The name in English, such as "German". Empty when it is not known,
+    /// and when it is the same as the name in itself.
+    std::string english{};
+    /// The pack's packaging revision; 0 when it names none.
+    int64_t revision{};
 };
 
 /// One installed map pack, as the Active tab lists it.
@@ -516,17 +521,47 @@ struct ActiveMap {
 struct ActivePack {
     std::string name{};            ///< its name
     std::vector<ActiveMap> maps{}; ///< its maps, in the order the inputs give them
+    /// Its badge, which points into the Library's inputs until the next
+    /// refresh; null without one.
+    const Badge* badge{};
 };
 
 /// What the Active tab shows of the player's setup.
 struct ActiveSetup {
     std::string mod_name{};    ///< the mod being played; empty when no mod is
     std::string mod_version{}; ///< its version, with a revision above 1; empty for none
+    /// Its version and revision as the tile states them ("4.8 (rev 3)");
+    /// empty when it names neither. The base game leaves it empty.
+    std::string mod_release{};
+    /// Who made it, as a byline ("by the Ridge team"); empty when nobody is named.
+    std::string mod_author{};
+    /// "Playing" while a mod is played; empty for the base game.
+    std::string mod_state{};
     /// Its badge, which points into the Library's inputs until the next
-    /// refresh; null without one.
+    /// refresh; null without one, and for the base game.
     const Badge* mod_badge{};
-    /// The mod's line as automation reads it: "Ridge 4.8 · rev 3", or "No mod is played".
+    /// The base game's title when no mod is played ("Base Game"); empty when one is.
+    std::string base_title{};
+    /// The base game's look ("Total Annihilation 3.1c"); empty when a mod is played.
+    std::string base_look{};
+    /// The mod's line as automation reads it: "Ridge 4.8 · rev 3", or
+    /// "No mod: the game as it was made".
     std::string mod_line{};
+    /// The language's name in itself; "English" when none other is named.
+    std::string language_name{};
+    /// The language's name in English, when it differs from the name in itself.
+    std::string language_english{};
+    /// The pack's name, when it differs from both of those; empty otherwise.
+    std::string language_pack{};
+    /// The pack's version and revision ("1.2 (rev 4)"); empty for the built-in language.
+    std::string language_version{};
+    /// The pack's coverage ("Coverage 92%"); empty when it names none, and for the built-in language.
+    std::string language_coverage{};
+    /// "Built in" when the game holds the language; empty for a pack.
+    std::string language_note{};
+    /// The pack's badge, which points into the Library's inputs until the
+    /// next refresh; null without one, and for the built-in language.
+    const Badge* language_badge{};
     /// The language's line: the pack and its version, "Deutsch 1.2", or "English · built in".
     std::string language_line{};
     std::vector<ActivePack> packs{}; ///< the installed map packs, by name
@@ -534,11 +569,13 @@ struct ActiveSetup {
 
 /// Describes the Active tab.
 ///
-/// The mod is the installed mod marked playing, with its listing's name
-/// and badge when a registry lists it, else Inputs::playing_mod, else none.
-/// The language is the pack that holds the language shown, else the
-/// language the game holds itself. The map packs are ordered by name,
-/// folded to lower case, each with its maps in the order given.
+/// The mod is the installed mod marked playing, with its listing's name,
+/// badge and author when a registry lists it, else Inputs::playing_mod,
+/// else the base game. The language is the pack that holds the language
+/// shown, with its name in itself and in English, its version, revision
+/// and coverage, else the language the game holds itself. The map packs
+/// are ordered by name, folded to lower case, each with its badge when an
+/// installed pack of that name has one, and its maps in the order given.
 ///
 /// @param library the Library
 /// @return the setup
