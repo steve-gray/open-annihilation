@@ -19,7 +19,9 @@
 
 namespace oa::ui::first_run {
 
-void draw_sample(const kit::Canvas& canvas, const kit::Rect& inset, const Model& model);
+void draw_sample(
+    const kit::Canvas& canvas, const kit::Rect& inset, const Model& model, kit::SizeClass size_class
+);
 
 namespace {
 
@@ -72,7 +74,8 @@ void add_text(
     const kit::Rect& rect,
     std::string text,
     kit::FontRole font,
-    kit::Colour ink
+    kit::Colour ink,
+    kit::Align align = kit::Align::left
 ) {
     if (rect.width <= 0 || rect.height <= 0 || text.empty())
         return;
@@ -82,8 +85,25 @@ void add_text(
     item.text = std::move(text);
     item.font = font;
     item.colour = ink;
-    item.align = kit::Align::left;
+    item.align = align;
     list.items.push_back(std::move(item));
+}
+
+/// Measures a line. A font that reports nothing falls back to the estimate,
+/// so a paragraph still wraps when the game font has no glyphs.
+///
+/// @param fonts the fonts; null estimates
+/// @param font which font
+/// @return the measure
+kit::Measure measure_of(const kit::Fonts* fonts, kit::FontRole font) {
+    return [fonts, font](std::string_view words) {
+        if (fonts == nullptr || words.empty())
+            return kit::estimated_width(words);
+        const int32_t measured = kit::text_width(*fonts, font, words);
+        if (measured <= 0)
+            return kit::estimated_width(words);
+        return measured;
+    };
 }
 
 /// Breaks a paragraph into lines and adds them. Returns the row under the last line.
@@ -105,13 +125,10 @@ int32_t add_paragraph(
     int32_t width,
     std::string_view text,
     kit::FontRole font,
-    kit::Colour ink
+    kit::Colour ink,
+    kit::Align align = kit::Align::left
 ) {
-    const kit::Measure measure = [fonts, font](std::string_view words) {
-        if (fonts == nullptr)
-            return kit::estimated_width(words);
-        return kit::text_width(*fonts, font, words);
-    };
+    const kit::Measure measure = measure_of(fonts, font);
     std::vector<std::string> lines = kit::wrap(text, std::max(width, int32_t{1}), measure);
     if (lines.empty() && !text.empty())
         lines.emplace_back(text);
@@ -119,7 +136,7 @@ int32_t add_paragraph(
                                                              : kit::compact_metrics.regular_line;
     int32_t row = top;
     for (std::string& line : lines) {
-        add_text(list, {left, row, width, line_height}, std::move(line), font, ink);
+        add_text(list, {left, row, width, line_height}, std::move(line), font, ink, align);
         row += line_height;
     }
     return row;
@@ -135,11 +152,7 @@ int32_t add_paragraph(
 int32_t paragraph_height(
     const kit::Fonts* fonts, int32_t width, std::string_view text, kit::FontRole font
 ) {
-    const kit::Measure measure = [fonts, font](std::string_view words) {
-        if (fonts == nullptr)
-            return kit::estimated_width(words);
-        return kit::text_width(*fonts, font, words);
-    };
+    const kit::Measure measure = measure_of(fonts, font);
     const std::vector<std::string> lines = kit::wrap(text, std::max(width, int32_t{1}), measure);
     const int32_t count = std::max(static_cast<int32_t>(lines.size()), int32_t{1});
     const int32_t line_height = font == kit::FontRole::small ? kit::compact_metrics.small_line
@@ -394,6 +407,95 @@ void add_chrome(
     order.push_back(next_id);
 }
 
+/// Draws the floor the language cards stand on: a grid, denser toward its top.
+///
+/// @param[in,out] list the display list
+/// @param width the window's width
+/// @param top the grid's top
+/// @param bottom the grid's bottom
+void add_floor(kit::DisplayList& list, int32_t width, int32_t top, int32_t bottom) {
+    if (width <= 0 || bottom - top < 8)
+        return;
+    constexpr int32_t kRows = 5;
+    for (int32_t row = 0; row <= kRows; ++row) {
+        const int32_t y = top + (bottom - top) * row * row / (kRows * kRows);
+        kit::Item rule;
+        rule.role = kit::Role::rule;
+        rule.rect = {0, y, width, 1};
+        rule.colour = kit::colour::edge_light;
+        list.items.push_back(std::move(rule));
+    }
+    constexpr int32_t kColumns = 12;
+    for (int32_t column = 0; column <= kColumns; ++column) {
+        const int32_t x = width * column / kColumns;
+        kit::Item rule;
+        rule.role = kit::Role::rule;
+        rule.rect = {x, top, 1, bottom - top};
+        rule.colour = kit::colour::edge_light;
+        list.items.push_back(std::move(rule));
+    }
+}
+
+/// The largest Library window that fits a room, at that window's own class.
+struct SampleFit {
+    kit::SizeClass size_class{kit::SizeClass::compact};
+    int32_t width{};
+    int32_t height{};
+};
+
+/// Picks a Library window that fits a room so the picture is not stretched.
+///
+/// @param room_width the room's width
+/// @param room_height the room's height
+/// @return the window
+SampleFit fit_sample(int32_t room_width, int32_t room_height) {
+    constexpr int32_t kChrome = 2 + 2 * kit::picture_well_inset;
+    const kit::SizeClass order[] = {
+        kit::SizeClass::large, kit::SizeClass::regular, kit::SizeClass::compact
+    };
+    for (const kit::SizeClass size_class : order) {
+        const kit::Metrics& metrics = kit::metrics_of(size_class);
+        if (metrics.dialog_width + kChrome <= room_width &&
+            metrics.dialog_height + kChrome <= room_height)
+            return {size_class, metrics.dialog_width, metrics.dialog_height};
+    }
+    return {
+        kit::SizeClass::compact,
+        std::max(room_width - kChrome, int32_t{1}),
+        std::max(room_height - kChrome, int32_t{1}),
+    };
+}
+
+/// Moves the carousel one card, wrapping from either end when it has more than one.
+///
+/// @param[in,out] model the carousel
+/// @param next true moves to the next card, false to the previous
+/// @return true when the selection changed
+bool step_carousel(kit::CarouselModel& model, bool next) {
+    if (model.count <= 1)
+        return false;
+    if (next && model.selected + 1 >= model.count) {
+        kit::carousel_go(model, 0);
+        return true;
+    }
+    if (!next && model.selected <= 0) {
+        kit::carousel_go(model, model.count - 1);
+        return true;
+    }
+    const kit::CarouselCommand command{!next, next, false};
+    return kit::carousel_command(model, command) != kit::CarouselEvent::none;
+}
+
+/// A line's width, estimated when the font reports nothing.
+///
+/// @param fonts the fonts; null estimates
+/// @param font which font
+/// @param text the line
+/// @return the width, in points
+int32_t line_width(const kit::Fonts* fonts, kit::FontRole font, std::string_view text) {
+    return measure_of(fonts, font)(text);
+}
+
 /// Lays the language step out.
 ///
 /// @param[in,out] scene the scene
@@ -411,36 +513,76 @@ void lay_language(
 
     const Band band = content_band(width, height);
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
-    int32_t row = band.top;
-    const std::string title = show("Welcome to Open Annihilation");
-    add_text(
-        scene.list,
-        {band.left, row, band.width, kit::compact_metrics.regular_line},
-        title,
-        kit::FontRole::regular,
-        kit::colour::text
-    );
-    row += kit::compact_metrics.regular_line + 2;
+    constexpr int32_t kTitle = 40;
+    scene.title_text = show("Welcome to Open Annihilation");
+    scene.title = {band.left, band.top, band.width, kTitle};
+    int32_t row = band.top + kTitle + 4;
     add_text(
         scene.list,
         {band.left, row, band.width, kit::compact_metrics.small_line},
         show("Choose your language."),
         kit::FontRole::small,
-        kit::colour::hint
+        kit::colour::hint,
+        kit::Align::centre
     );
     row += kit::compact_metrics.small_line + 8;
 
     constexpr int32_t kArrow = 28;
-    const int32_t arrow_gap = 4;
-    const int32_t carousel_width = std::max(band.width - 2 * (kArrow + arrow_gap), int32_t{1});
-    const kit::CarouselGeometry geometry = kit::carousel_fit(carousel_width, metrics);
-    const int32_t carousel_height = geometry.card_height + 18 + kit::carousel_pager_band +
-                                    kit::language_progress_gap + metrics.progress_bar_height +
-                                    kit::compact_metrics.button_height + 6;
-    scene.carousel = {band.left + kArrow + arrow_gap, row, carousel_width, carousel_height};
-    const int32_t arrow_y = row + std::max((geometry.card_height - kArrow) / 2, int32_t{0});
-    scene.previous = {band.left, arrow_y, kArrow, kArrow};
-    scene.next_arrow = {band.left + band.width - kArrow, arrow_y, kArrow, kArrow};
+    const std::string note = show(
+        "Other languages download from Core Prime. The first download makes a random install ID, "
+        "which the next step explains."
+    );
+    const int32_t note_width = std::max(band.width, int32_t{1});
+    const int32_t note_height = paragraph_height(fonts, note_width, note, kit::FontRole::small);
+    std::string status;
+    bool show_bar = false;
+    bool show_action = false;
+    bool action_cancel = false;
+    if (session.carousel.selected >= 0 &&
+        static_cast<std::size_t>(session.carousel.selected) < session.model.cards.size()) {
+        const Card& chosen =
+            session.model.cards[static_cast<std::size_t>(session.carousel.selected)];
+        status = facts_text(chosen);
+        show_bar = chosen.kind == CardKind::pack && chosen.pack == PackState::downloading &&
+                   chosen.progress_whole > 0;
+        action_cancel = chosen.kind == CardKind::pack && (chosen.pack == PackState::downloading ||
+                                                          chosen.pack == PackState::checking);
+        show_action =
+            action_cancel || (chosen.kind == CardKind::pack && chosen.pack == PackState::failed);
+    }
+    std::string hint;
+    if (session.model.catalogue == CatalogueNote::unread ||
+        session.model.catalogue == CatalogueNote::downloads_off) {
+        hint = session.model.catalogue == CatalogueNote::downloads_off
+                   ? show("Downloads are off, so language packs stay offline.")
+                   : show("The catalogue could not be read, so language packs stay offline.");
+    }
+    int32_t under = 8 + note_height;
+    if (!status.empty())
+        under += kit::compact_metrics.small_line + 4;
+    if (show_bar)
+        under += metrics.progress_bar_height + 4;
+    if (show_action)
+        under += kit::compact_metrics.button_height + 4;
+    if (!hint.empty())
+        under += 4 + paragraph_height(fonts, note_width, hint, kit::FontRole::small);
+    const int32_t footer_limit = height - kit::compact_metrics.edge -
+                                 kit::compact_metrics.footer_height - 1 -
+                                 kit::compact_metrics.padding;
+    const kit::CarouselGeometry geometry = kit::carousel_fit(width, metrics);
+    constexpr int32_t kFloor = 48;
+    const int32_t band_height = geometry.card_height + kFloor;
+    const int32_t carousel_height = band_height + kit::carousel_pager_band;
+    int32_t band_y = height / 2 - band_height / 2;
+    if (band_y < row)
+        band_y = row;
+    if (band_y + carousel_height + under > footer_limit)
+        band_y = std::max(row, footer_limit - under - carousel_height);
+    scene.carousel = {0, band_y, width, carousel_height};
+    const int32_t arrow_y = band_y + band_height / 2 - kArrow / 2;
+    scene.previous = {4, arrow_y, kArrow, kArrow};
+    scene.next_arrow = {width - 4 - kArrow, arrow_y, kArrow, kArrow};
+    add_floor(scene.list, width, band_y + band_height / 2, band_y + band_height);
 
     kit::CarouselLook carousel;
     carousel.card_width = geometry.card_width;
@@ -448,6 +590,7 @@ void lay_language(
     carousel.step = geometry.step;
     carousel.centre_milli = kit::carousel_index_milli(session.carousel);
     carousel.reduced_motion = frame.reduced_motion;
+    carousel.wrap = session.model.cards.size() > 1;
     carousel.cards.reserve(session.model.cards.size());
     for (const Card& card : session.model.cards) {
         kit::CarouselCard face;
@@ -469,7 +612,8 @@ void lay_language(
         geometry,
         static_cast<int32_t>(session.model.cards.size()),
         carousel.centre_milli,
-        frame.reduced_motion
+        frame.reduced_motion,
+        carousel.wrap
     );
     std::vector<kit::CarouselSlot> left_to_right = scene.places;
     std::sort(
@@ -479,9 +623,9 @@ void lay_language(
             return left.face.x < right.face.x;
         }
     );
-    const bool has_previous = session.carousel.selected > 0;
-    const bool has_next =
-        session.carousel.count > 0 && session.carousel.selected + 1 < session.carousel.count;
+    const bool wraps = session.carousel.count > 1;
+    const bool has_previous = wraps;
+    const bool has_next = wraps;
     kit::add_carousel_control(
         scene.list,
         scene.previous,
@@ -516,76 +660,70 @@ void lay_language(
     );
     order.push_back(next_card_id);
 
-    const kit::CarouselSlot* centre_slot = nullptr;
-    for (const kit::CarouselSlot& slot : scene.places) {
-        if (slot.centre)
-            centre_slot = &slot;
+    int32_t row_under = scene.carousel.y + scene.carousel.height + 8;
+    if (!status.empty()) {
+        add_text(
+            scene.list,
+            {band.left, row_under, band.width, kit::compact_metrics.small_line},
+            status,
+            kit::FontRole::small,
+            kit::colour::text,
+            kit::Align::centre
+        );
+        row_under += kit::compact_metrics.small_line + 4;
     }
-    if (centre_slot != nullptr && session.carousel.selected >= 0 &&
+    if (show_bar && session.carousel.selected >= 0 &&
         static_cast<std::size_t>(session.carousel.selected) < session.model.cards.size()) {
-        const Card& selected =
+        const Card& chosen =
             session.model.cards[static_cast<std::size_t>(session.carousel.selected)];
-        if (selected.kind == CardKind::pack && selected.pack == PackState::downloading &&
-            selected.progress_whole > 0) {
-            const kit::Rect bar{
-                centre_slot->face.x,
-                centre_slot->face.y + centre_slot->face.height + kit::language_progress_gap,
-                centre_slot->face.width,
-                metrics.progress_bar_height
-            };
-            kit::Item progress;
-            progress.role = kit::Role::progress;
-            progress.rect = bar;
-            progress.look = kit::ProgressLook{selected.progress_done, selected.progress_whole};
-            scene.list.items.push_back(std::move(progress));
-        }
-        const bool cancel =
-            selected.kind == CardKind::pack &&
-            (selected.pack == PackState::downloading || selected.pack == PackState::checking);
-        const bool retry = selected.kind == CardKind::pack && selected.pack == PackState::failed;
-        if (cancel || retry) {
-            const std::string caption = cancel ? show("Cancel download") : show("Retry");
-            const int32_t button_width = std::max(kit::compact_metrics.button_width, int32_t{120});
-            const kit::Rect button{
-                band.left + std::max((band.width - button_width) / 2, int32_t{0}),
-                scene.carousel.y + scene.carousel.height - kit::compact_metrics.button_height - 2,
-                std::min(button_width, band.width),
-                kit::compact_metrics.button_height
-            };
-            add_button(
-                scene.list,
-                order,
-                button,
-                cancel ? cancel_id : retry_id,
-                control_name(Step::language, cancel ? "cancel" : "retry"),
-                caption,
-                true,
-                cancel ? kit::ButtonStyle::plain : kit::ButtonStyle::accent
-            );
-        }
+        const int32_t bar_width = std::min(geometry.card_width, band.width);
+        const kit::Rect bar{
+            band.left + std::max((band.width - bar_width) / 2, int32_t{0}),
+            row_under,
+            bar_width,
+            metrics.progress_bar_height
+        };
+        kit::Item progress;
+        progress.role = kit::Role::progress;
+        progress.rect = bar;
+        progress.look = kit::ProgressLook{chosen.progress_done, chosen.progress_whole};
+        scene.list.items.push_back(std::move(progress));
+        row_under += metrics.progress_bar_height + 4;
     }
-
-    const std::string note = show(
-        "Other languages download from Core Prime. The first download makes a random install ID, "
-        "which the next step explains."
-    );
-    int32_t note_top = scene.carousel.y + scene.carousel.height + 8;
-    note_top = add_paragraph(
+    if (show_action) {
+        const std::string caption = action_cancel ? show("Cancel download") : show("Retry");
+        const int32_t button_width = std::max(kit::compact_metrics.button_width, int32_t{120});
+        const int32_t used = std::min(button_width, band.width);
+        const kit::Rect button{
+            band.left + std::max((band.width - used) / 2, int32_t{0}),
+            row_under,
+            used,
+            kit::compact_metrics.button_height
+        };
+        add_button(
+            scene.list,
+            order,
+            button,
+            action_cancel ? cancel_id : retry_id,
+            control_name(Step::language, action_cancel ? "cancel" : "retry"),
+            caption,
+            true,
+            action_cancel ? kit::ButtonStyle::plain : kit::ButtonStyle::accent
+        );
+        row_under += kit::compact_metrics.button_height + 4;
+    }
+    const int32_t note_top = add_paragraph(
         scene.list,
         fonts,
         band.left,
-        note_top,
+        row_under,
         band.width,
         note,
         kit::FontRole::small,
-        kit::colour::hint
+        kit::colour::hint,
+        kit::Align::centre
     );
-    if (session.model.catalogue == CatalogueNote::unread ||
-        session.model.catalogue == CatalogueNote::downloads_off) {
-        const std::string hint =
-            session.model.catalogue == CatalogueNote::downloads_off
-                ? show("Downloads are off, so language packs stay offline.")
-                : show("The catalogue could not be read, so language packs stay offline.");
+    if (!hint.empty()) {
         add_paragraph(
             scene.list,
             fonts,
@@ -594,7 +732,8 @@ void lay_language(
             band.width,
             hint,
             kit::FontRole::small,
-            kit::colour::quiet
+            kit::colour::quiet,
+            kit::Align::centre
         );
     }
     scene.list.tab_order = std::move(order);
@@ -630,60 +769,112 @@ void lay_online(
         "from that registry stop. Built-in languages and files you open keep working."
     );
     const int32_t card_height = kit::choice_card_height();
-    const int32_t choices = card_height * 2 + 8;
-    const int32_t panel_body_height = paragraph_height(
-        fonts, std::max(band.width - 16, int32_t{1}), panel_body, kit::FontRole::small
-    );
-    const int32_t panel_height = 8 + kit::compact_metrics.regular_line + 4 + panel_body_height + 8;
-    const int32_t features = kit::compact_metrics.small_line * 3 + 6;
-    const int32_t words = kit::compact_metrics.small_line + 4 + kit::compact_metrics.regular_line +
-                          6 + features + 8 + panel_height + 8 + choices;
-    int32_t well_height = band.height - words;
-    if (well_height > 300)
-        well_height = 300;
-    if (well_height < 96)
-        well_height = std::min(int32_t{96}, band.height / 3);
+    constexpr int32_t kGap = 16;
+    constexpr int32_t kChrome = 2 + 2 * kit::picture_well_inset;
+    constexpr int32_t kTextFloor = 360;
+    const auto column_height = [&](int32_t column) {
+        const int32_t room = std::max(column, int32_t{1});
+        const int32_t heading_h = paragraph_height(fonts, room, heading, kit::FontRole::regular);
+        const int32_t packs_h = paragraph_height(fonts, room, feature_packs, kit::FontRole::small);
+        const int32_t lists_h = paragraph_height(fonts, room, feature_lists, kit::FontRole::small);
+        const int32_t id_h = paragraph_height(fonts, room, feature_id, kit::FontRole::small);
+        const int32_t body_h = paragraph_height(
+            fonts, std::max(column - 16, int32_t{1}), panel_body, kit::FontRole::small
+        );
+        const int32_t panel_h = 8 + kit::compact_metrics.regular_line + 4 + body_h + 8;
+        return kit::compact_metrics.small_line + 4 + heading_h + 6 + packs_h + 2 + lists_h + 2 +
+               id_h + 8 + panel_h + 8 + card_height * 2 + 8;
+    };
+    const auto place_well = [&](const kit::Rect& well_rect, const SampleFit& fitted) {
+        kit::PictureWellLook well;
+        well.stand_in = fonts == nullptr;
+        kit::add_picture_well(scene.list, well_rect, well);
+        const kit::PictureWellLayout placed = kit::picture_well_layout(well_rect, false);
+        scene.well_inset = placed.inset;
+        scene.sample_class = fitted.size_class;
+        scene.sample = fonts != nullptr && placed.inset.width > 8 && placed.inset.height > 8;
+    };
 
-    int32_t row = band.top;
-    const kit::Rect well_rect{band.left, row, band.width, well_height};
-    kit::PictureWellLook well;
-    well.stand_in = fonts == nullptr;
-    kit::add_picture_well(scene.list, well_rect, well);
-    const kit::PictureWellLayout placed = kit::picture_well_layout(well_rect, false);
-    scene.well_inset = placed.inset;
-    scene.sample = fonts != nullptr && placed.inset.width > 8 && placed.inset.height > 8;
-    row += well_height + 8;
+    bool beside = false;
+    SampleFit fitted{};
+    int32_t text_left = band.left;
+    int32_t text_top = band.top;
+    int32_t text_width = band.width;
+    if (band.width >= kTextFloor + kGap + 200 && band.height >= 200) {
+        const int32_t well_room = band.width - kTextFloor - kGap;
+        fitted = fit_sample(well_room, band.height);
+        const kit::Metrics& fitted_metrics = kit::metrics_of(fitted.size_class);
+        const bool real_dialog = fitted.width == fitted_metrics.dialog_width &&
+                                 fitted.height == fitted_metrics.dialog_height;
+        const int32_t well_w = fitted.width + kChrome;
+        const int32_t well_h = fitted.height + kChrome;
+        const int32_t column = band.width - well_w - kGap;
+        if (real_dialog && column >= 280 && well_h <= band.height &&
+            column_height(column) <= band.height) {
+            beside = true;
+            place_well({band.left, band.top, well_w, well_h}, fitted);
+            text_left = band.left + well_w + kGap;
+            text_width = std::max(band.left + band.width - text_left, int32_t{1});
+        }
+    }
+    if (!beside) {
+        const int32_t words = column_height(std::max(band.width, int32_t{1}));
+        int32_t room_h = std::max(band.height - words - 8, int32_t{72});
+        const int32_t cap = std::max(band.height * 2 / 5, int32_t{72});
+        if (room_h > cap)
+            room_h = cap;
+        fitted = fit_sample(band.width, room_h);
+        const int32_t well_w = std::min(fitted.width + kChrome, std::max(band.width, int32_t{1}));
+        const int32_t well_h = std::min(fitted.height + kChrome, std::max(room_h, int32_t{72}));
+        const kit::Rect well_rect{
+            band.left + std::max((band.width - well_w) / 2, int32_t{0}), band.top, well_w, well_h
+        };
+        place_well(well_rect, fitted);
+        text_top = well_rect.y + well_rect.height + 8;
+        text_width = std::max(band.width, int32_t{1});
+    }
 
+    int32_t row = text_top;
     add_text(
         scene.list,
-        {band.left, row, band.width, kit::compact_metrics.small_line},
+        {text_left, row, text_width, kit::compact_metrics.small_line},
         show("ONLINE FEATURES"),
         kit::FontRole::small,
         kit::colour::quiet
     );
-    row += kit::compact_metrics.small_line + 2;
-    add_text(
+    row += kit::compact_metrics.small_line + 4;
+    row = add_paragraph(
         scene.list,
-        {band.left, row, band.width, kit::compact_metrics.regular_line},
+        fonts,
+        text_left,
+        row,
+        text_width,
         heading,
         kit::FontRole::regular,
         kit::colour::text
     );
-    row += kit::compact_metrics.regular_line + 6;
+    row += 6;
     const std::string features_text[] = {feature_packs, feature_lists, feature_id};
     for (const std::string& line : features_text) {
-        add_text(
+        row = add_paragraph(
             scene.list,
-            {band.left, row, band.width, kit::compact_metrics.small_line},
+            fonts,
+            text_left,
+            row,
+            text_width,
             line,
             kit::FontRole::small,
             kit::colour::text
         );
-        row += kit::compact_metrics.small_line + 2;
+        row += 2;
     }
     row += 6;
 
-    const kit::Rect panel{band.left, row, band.width, panel_height};
+    const int32_t panel_body_height = paragraph_height(
+        fonts, std::max(text_width - 16, int32_t{1}), panel_body, kit::FontRole::small
+    );
+    const int32_t panel_height = 8 + kit::compact_metrics.regular_line + 4 + panel_body_height + 8;
+    const kit::Rect panel{text_left, row, text_width, panel_height};
     kit::Item ground;
     ground.role = kit::Role::fill;
     ground.rect = panel;
@@ -724,8 +915,8 @@ void lay_online(
     const std::string off_hint = show(
         "Check for content updates is set to Never, and Core Prime's install ID is turned off."
     );
-    const kit::Rect on_rect{band.left, row, band.width, card_height};
-    const kit::Rect off_rect{band.left, row + card_height + 8, band.width, card_height};
+    const kit::Rect on_rect{text_left, row, text_width, card_height};
+    const kit::Rect off_rect{text_left, row + card_height + 8, text_width, card_height};
     kit::ChoiceCardLook on_look;
     on_look.title = on_title;
     on_look.hint = on_hint;
@@ -767,10 +958,38 @@ void lay_buttons(
     const int32_t width = frame.area.width;
     const int32_t height = frame.area.height;
     const kit::Rect room{0, 0, width, height};
+    const std::string kicker = show("THE MAIN MENU · 3 OF 3");
+    const std::string heading = show("Two buttons for everything Open Annihilation adds");
+    const std::string paragraph = show(
+        "The Library is where you get mods, map packs and languages. Settings is where you change "
+        "how Open Annihilation looks and plays. Everything else on this menu is the game's own."
+    );
+    const int32_t button_height = kit::compact_metrics.button_height;
+    const auto skip_width_of = [](int32_t panel_w) {
+        return std::min(int32_t{130}, std::max(panel_w - 20, int32_t{72}));
+    };
+    const auto skip_beside = [&](int32_t panel_w) {
+        const int32_t kicker_w = line_width(fonts, kit::FontRole::small, kicker);
+        return 10 + kicker_w + 8 + skip_width_of(panel_w) + 10 <= panel_w;
+    };
+    const auto content_of = [&](int32_t panel_w) {
+        const int32_t inner = std::max(panel_w - 20, int32_t{1});
+        int32_t tall = 10;
+        if (skip_beside(panel_w))
+            tall += std::max(kit::compact_metrics.small_line, button_height);
+        else
+            tall += kit::compact_metrics.small_line + 4 + button_height;
+        tall += 6;
+        tall += paragraph_height(fonts, inner, heading, kit::FontRole::regular);
+        tall += 6;
+        tall += paragraph_height(fonts, inner, paragraph, kit::FontRole::small);
+        tall += 10 + button_height + 10;
+        return tall;
+    };
     int32_t panel_width = std::min(int32_t{360}, std::max(width / 3, int32_t{220}));
     int32_t panel_left = kit::compact_metrics.padding;
     int32_t panel_top = kit::compact_metrics.padding;
-    int32_t panel_height = std::max(height - 2 * panel_top, int32_t{0});
+    int32_t panel_height = content_of(panel_width);
     int32_t limit = width - kit::compact_metrics.padding;
     const auto stop_before = [&](const kit::Rect& button) {
         if (button.width <= 0 || button.height <= 0)
@@ -782,9 +1001,10 @@ void lay_buttons(
     stop_before(session.model.library_button);
     stop_before(session.model.settings_button);
     panel_width = std::min(panel_width, std::max(limit - panel_left, int32_t{0}));
+    panel_height = content_of(std::max(panel_width, int32_t{1}));
     if (panel_width < 180) {
         panel_width = std::min(std::max(width - 2 * panel_left, int32_t{0}), int32_t{420});
-        panel_height = std::min(int32_t{220}, std::max(height / 3, int32_t{120}));
+        panel_height = content_of(std::max(panel_width, int32_t{1}));
         panel_top = std::max(height - panel_height - kit::compact_metrics.padding, int32_t{0});
     }
     const kit::Rect panel{panel_left, panel_top, panel_width, panel_height};
@@ -825,22 +1045,28 @@ void lay_buttons(
     edge.colour = kit::colour::accent;
     scene.list.items.push_back(std::move(edge));
 
-    const std::string kicker = show("THE MAIN MENU · 3 OF 3");
-    const std::string heading = show("Two buttons for everything Open Annihilation adds");
-    const std::string paragraph = show(
-        "The Library is where you get mods, map packs and languages. Settings is where you change "
-        "how Open Annihilation looks and plays. Everything else on this menu is the game's own."
-    );
     int32_t row = panel.y + 10;
     const int32_t text_width = std::max(panel.width - 20, int32_t{1});
+    const int32_t skip_width = skip_width_of(panel.width);
+    const bool skip_on_kicker = skip_beside(panel.width);
+    const int32_t kicker_width =
+        skip_on_kicker ? std::max(text_width - skip_width - 8, int32_t{1}) : text_width;
     add_text(
         scene.list,
-        {panel.x + 10, row, text_width, kit::compact_metrics.small_line},
+        {panel.x + 10, row, kicker_width, kit::compact_metrics.small_line},
         kicker,
         kit::FontRole::small,
         kit::colour::quiet
     );
-    row += kit::compact_metrics.small_line + 6;
+    const kit::Rect skip_rect{
+        panel.x + std::max(panel.width - skip_width - 10, int32_t{10}),
+        skip_on_kicker ? row : row + kit::compact_metrics.small_line + 4,
+        skip_width,
+        button_height
+    };
+    row += skip_on_kicker ? std::max(kit::compact_metrics.small_line, button_height)
+                          : kit::compact_metrics.small_line + 4 + button_height;
+    row += 6;
     row = add_paragraph(
         scene.list,
         fonts,
@@ -852,7 +1078,7 @@ void lay_buttons(
         kit::colour::text
     );
     row += 6;
-    add_paragraph(
+    row = add_paragraph(
         scene.list,
         fonts,
         panel.x + 10,
@@ -862,26 +1088,18 @@ void lay_buttons(
         kit::FontRole::small,
         kit::colour::hint
     );
+    row += 10;
 
-    const int32_t button_height = kit::compact_metrics.button_height;
-    const int32_t button_top = panel.y + std::max(panel.height - button_height - 10, int32_t{10});
     const int32_t back_width = std::max(kit::compact_metrics.button_width, int32_t{72});
     const int32_t start_width = std::max(int32_t{140}, panel.width / 2);
-    const kit::Rect back_rect{panel.x + 10, button_top, back_width, button_height};
+    const kit::Rect back_rect{panel.x + 10, row, back_width, button_height};
     int32_t start_left = panel.x + panel.width - 10 - start_width;
     if (start_left < back_rect.x + back_rect.width + 8)
         start_left = back_rect.x + back_rect.width + 8;
     const int32_t start_w = std::max(panel.x + panel.width - 10 - start_left, int32_t{72});
-    const kit::Rect start_rect{start_left, button_top, start_w, button_height};
+    const kit::Rect start_rect{start_left, row, start_w, button_height};
 
     std::vector<kit::ControlId> order;
-    const int32_t skip_width = std::min(int32_t{130}, std::max(panel.width - 20, int32_t{72}));
-    const kit::Rect skip_rect{
-        panel.x + std::max(panel.width - skip_width - 10, int32_t{10}),
-        panel.y + 8,
-        skip_width,
-        kit::compact_metrics.button_height
-    };
     add_button(
         scene.list,
         order,
@@ -969,13 +1187,11 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
         outcome.ask = Ask::retry_download;
         return outcome;
     case previous_id:
-        if (kit::carousel_command(session.carousel, kit::CarouselCommand{true, false, false}) !=
-            kit::CarouselEvent::none)
+        if (step_carousel(session.carousel, false))
             outcome.redraw = true;
         return outcome;
     case next_card_id:
-        if (kit::carousel_command(session.carousel, kit::CarouselCommand{false, true, false}) !=
-            kit::CarouselEvent::none)
+        if (step_carousel(session.carousel, true))
             outcome.redraw = true;
         return outcome;
     default:
@@ -1137,15 +1353,10 @@ Outcome pointer(
         const kit::PointerPhase phase = kind == PointerKind::move   ? kit::PointerPhase::move
                                         : kind == PointerKind::down ? kit::PointerPhase::down
                                                                     : kit::PointerPhase::up;
-        const kit::CarouselEvent event = kit::carousel_pointer(
-            session.carousel,
-            scene.places,
-            scene.previous,
-            scene.next_arrow,
-            session.drag,
-            phase,
-            at
-        );
+        // Arrows are ordinary controls, so a press on either end wraps. The
+        // carousel's own arrow handling stops at the first and last card.
+        const kit::CarouselEvent event =
+            kit::carousel_pointer(session.carousel, scene.places, {}, {}, session.drag, phase, at);
         if (kind == PointerKind::up && event != kit::CarouselEvent::none) {
             std::ignore = kit::pointer_up(session.interaction, scene.list, at);
             outcome.redraw = true;
@@ -1206,9 +1417,8 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     }
     if (taken.result == kit::KeyResult::to_control) {
         if (pressed == kit::Key::left || pressed == kit::Key::right) {
-            const kit::CarouselCommand command = kit::carousel_key(pressed);
-            if ((command.previous || command.next) &&
-                kit::carousel_command(session.carousel, command) != kit::CarouselEvent::none)
+            if (session.model.step == Step::language &&
+                step_carousel(session.carousel, pressed == kit::Key::right))
                 outcome.redraw = true;
             return outcome;
         }
@@ -1232,8 +1442,10 @@ void draw(const kit::Canvas& canvas, const Scene& scene, const Session& session)
         dim_around(canvas, {0, 0, scene.width, scene.height}, library, settings);
     }
     kit::paint(canvas, list);
+    if (!scene.title_text.empty() && scene.title.width > 0 && scene.title.height > 0)
+        kit::draw_prominent_line(canvas, scene.title_text, scene.title, kit::colour::text);
     if (scene.sample)
-        draw_sample(canvas, scene.well_inset, session.model);
+        draw_sample(canvas, scene.well_inset, session.model, scene.sample_class);
 }
 
 } // namespace oa::ui::first_run

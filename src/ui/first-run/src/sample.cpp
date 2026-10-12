@@ -10,6 +10,8 @@
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/screen.hpp"
 
+#include <algorithm>
+
 namespace oa::ui::first_run {
 namespace {
 
@@ -67,13 +69,15 @@ library::Library ridge_library(std::string_view own, std::string_view english) {
 
 } // namespace
 
-void draw_sample(const kit::Canvas& canvas, const kit::Rect& inset, const Model& model) {
+void draw_sample(
+    const kit::Canvas& canvas, const kit::Rect& inset, const Model& model, kit::SizeClass size_class
+) {
     if (canvas.fonts == nullptr || inset.width < 8 || inset.height < 8)
         return;
     library::Library library = ridge_library(model.sample_own, model.sample_english);
     kit::Frame sample_frame;
-    sample_frame.size_class = kit::SizeClass::regular;
-    sample_frame.area = {0, 0, 720, 486};
+    sample_frame.size_class = size_class;
+    sample_frame.area = {0, 0, inset.width, inset.height};
     sample_frame.scale_percent = 100;
     const kit::Point window = library::window_size(sample_frame);
     if (window.x <= 0 || window.y <= 0)
@@ -84,7 +88,30 @@ void draw_sample(const kit::Canvas& canvas, const kit::Rect& inset, const Model&
     const kit::DisplayList laid =
         library::library_layout(library, state, laid_frame, *canvas.fonts);
     const kit::Rect drawn{0, 0, window.x, window.y};
-    kit::scale_blit(canvas, drawn, inset, [&](const kit::Canvas& into) {
+    // The same scale on both axes. A well that is the Library's own size is
+    // copied straight across, so its text is not squeezed over itself.
+    int32_t place_w = inset.width;
+    int32_t place_h = inset.height;
+    if (window.x != inset.width || window.y != inset.height) {
+        const int64_t fit_w = static_cast<int64_t>(inset.height) * window.x;
+        const int64_t fit_h = static_cast<int64_t>(inset.width) * window.y;
+        if (fit_h <= fit_w) {
+            place_w = inset.width;
+            place_h = static_cast<int32_t>(fit_h / std::max(window.x, int32_t{1}));
+        } else {
+            place_h = inset.height;
+            place_w = static_cast<int32_t>(fit_w / std::max(window.y, int32_t{1}));
+        }
+        place_w = std::max(place_w, int32_t{1});
+        place_h = std::max(place_h, int32_t{1});
+    }
+    const kit::Rect place{
+        inset.x + (inset.width - place_w) / 2,
+        inset.y + (inset.height - place_h) / 2,
+        place_w,
+        place_h,
+    };
+    kit::scale_blit(canvas, drawn, place, [&](const kit::Canvas& into) {
         library::draw_library(into, laid);
     });
 }

@@ -5512,7 +5512,7 @@ settings::Dialog your_files_dialog() {
 void your_files_shows_the_folder_and_opens_its_folders() {
     settings::Dialog dialog = your_files_dialog();
     const auto open = geometry::open_rows(dialog);
-    CHECK(open.rows.rows.size() == 2);
+    CHECK(open.rows.rows.size() == 3);
     const geometry::Row row = open.rows.rows[0];
     CHECK(row.setting == Setting::user_folder);
     CHECK(row.lock == Lock::none);

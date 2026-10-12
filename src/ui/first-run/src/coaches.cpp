@@ -30,28 +30,10 @@ bool meets(const kit::Rect& left, const kit::Rect& right) noexcept {
     return shared.width > 0 && shared.height > 0;
 }
 
-/// Holds a card inside a room, keeping its size when the room is large enough.
+/// Places one card where it lies wholly in the room and misses the target and the extras.
 ///
-/// @param card the card
-/// @param room the room
-/// @return the card, moved inside the room
-kit::Rect held_inside(kit::Rect card, const kit::Rect& room) noexcept {
-    if (card.width > room.width)
-        card.width = std::max(room.width, int32_t{0});
-    if (card.height > room.height)
-        card.height = std::max(room.height, int32_t{0});
-    if (card.x < room.x)
-        card.x = room.x;
-    if (card.y < room.y)
-        card.y = room.y;
-    if (card.x + card.width > room.x + room.width)
-        card.x = room.x + room.width - card.width;
-    if (card.y + card.height > room.y + room.height)
-        card.y = room.y + room.height - card.height;
-    return card;
-}
-
-/// Places one card, trying the right, the left, below and above.
+/// A place that would have to be dragged onto a button is refused. The width
+/// shrinks only when nothing at the asked width fits.
 ///
 /// @param room the rectangle the card must lie in
 /// @param target the button the card points at
@@ -59,7 +41,7 @@ kit::Rect held_inside(kit::Rect card, const kit::Rect& room) noexcept {
 /// @param card_height the card's height
 /// @param extra rectangles the card must also miss
 /// @param extra_count how many extras
-/// @return the card
+/// @return the card; empty when the room has nowhere clear
 kit::Rect place_one(
     const kit::Rect& room,
     const kit::Rect& target,
@@ -68,32 +50,79 @@ kit::Rect place_one(
     const kit::Rect* extra,
     int32_t extra_count
 ) noexcept {
-    const kit::Rect right{
-        target.x + target.width + kit::coach_gap, target.y, card_width, card_height
-    };
-    const kit::Rect left{target.x - kit::coach_gap - card_width, target.y, card_width, card_height};
-    const kit::Rect below{
-        target.x, target.y + target.height + kit::coach_gap, card_width, card_height
-    };
-    const kit::Rect above{
-        target.x, target.y - kit::coach_gap - card_height, card_width, card_height
-    };
-    const kit::Rect sides[] = {right, left, below, above};
-    for (const kit::Rect& side : sides) {
-        const kit::Rect card = held_inside(side, room);
+    const auto fits = [&](const kit::Rect& card) {
         if (!live(card) || !kit::wholly_in(card, room))
-            continue;
+            return false;
         if (meets(card, target))
-            continue;
-        bool blocked = false;
-        for (int32_t place = 0; place < extra_count; ++place) {
-            if (meets(card, extra[place]))
-                blocked = true;
+            return false;
+        for (int32_t index = 0; index < extra_count; ++index) {
+            if (meets(card, extra[index]))
+                return false;
         }
-        if (!blocked)
-            return card;
+        return true;
+    };
+    const auto search = [&](int32_t card_w, int32_t card_h) -> kit::Rect {
+        const int32_t gap = kit::coach_gap;
+        const kit::Rect beside[] = {
+            {target.x - gap - card_w, target.y, card_w, card_h},
+            {target.x + target.width + gap, target.y, card_w, card_h},
+            {target.x, target.y + target.height + gap, card_w, card_h},
+            {target.x + target.width - card_w, target.y + target.height + gap, card_w, card_h},
+            {room.x + room.width - card_w, target.y + target.height + gap, card_w, card_h},
+            {room.x, target.y + target.height + gap, card_w, card_h},
+            {target.x, target.y - gap - card_h, card_w, card_h},
+            {target.x + target.width - card_w, target.y - gap - card_h, card_w, card_h},
+            {room.x + room.width - card_w, target.y - gap - card_h, card_w, card_h},
+        };
+        for (const kit::Rect& candidate : beside) {
+            if (fits(candidate))
+                return candidate;
+        }
+        for (int32_t index = 0; index < extra_count; ++index) {
+            const kit::Rect& other = extra[index];
+            if (!live(other))
+                continue;
+            const int32_t below = other.y + other.height + gap;
+            const kit::Rect stacked[] = {
+                {room.x + room.width - card_w, below, card_w, card_h},
+                {other.x + other.width - card_w, below, card_w, card_h},
+                {target.x + target.width - card_w, below, card_w, card_h},
+                {other.x, below, card_w, card_h},
+                {room.x, below, card_w, card_h},
+            };
+            for (const kit::Rect& candidate : stacked) {
+                if (fits(candidate))
+                    return candidate;
+            }
+        }
+        for (int32_t row = 1; row <= 6; ++row) {
+            const int32_t below = target.y + target.height + gap + row * (card_h + gap);
+            const kit::Rect lowered[] = {
+                {room.x + room.width - card_w, below, card_w, card_h},
+                {target.x + target.width - card_w, below, card_w, card_h},
+                {room.x, below, card_w, card_h},
+            };
+            for (const kit::Rect& candidate : lowered) {
+                if (fits(candidate))
+                    return candidate;
+            }
+        }
+        return {};
+    };
+
+    const kit::Rect full = search(card_width, card_height);
+    if (live(full))
+        return full;
+    int32_t narrower = card_width;
+    while (narrower > 80) {
+        narrower = std::max(narrower * 3 / 4, int32_t{80});
+        const kit::Rect shrunk = search(narrower, card_height);
+        if (live(shrunk))
+            return shrunk;
+        if (narrower <= 80)
+            break;
     }
-    return held_inside(right, room);
+    return {};
 }
 
 } // namespace

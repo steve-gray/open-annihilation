@@ -181,6 +181,9 @@ struct Scene {
     std::vector<kit::CarouselSlot> places{}; ///< the cards that show
     kit::Rect coach_library{};               ///< the Library coach card
     kit::Rect coach_settings{};              ///< the Settings coach card
+    kit::Rect title{};                       ///< the large centred title; empty when the step has none
+    std::string title_text{};                ///< the title's words
+    kit::SizeClass sample_class{kit::SizeClass::compact}; ///< the class the sample Library is laid out at
 };
 
 /// Skip setup.

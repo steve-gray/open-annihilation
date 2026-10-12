@@ -225,7 +225,6 @@ void Runtime::prepare_first_run_check() {
     added.descriptor.catalogue = *parsed;
     added.descriptor.keys.push_back(registry::RegistryKey{std::string(kKeyId), public_key});
     added.descriptor.mode = registry::DownloadMode::direct;
-    added.descriptor.install_id = registry::InstallIdUse::required;
     added.added = "2026-10-01";
     added.enabled = true;
     registries.registries.push_back(std::move(added));
@@ -234,7 +233,7 @@ void Runtime::prepare_first_run_check() {
         registry::player_registries_text(registries)
     );
     std::cout << "first-run check: registry " << kRegistry << " at " << catalogue_url << ", "
-              << registries.disabled.size() << " built-in registries turned off\n";
+              << registries.disabled.size() << " built-in registries turned off" << std::endl;
 }
 
 void Runtime::check_first_run() {
@@ -362,13 +361,13 @@ void Runtime::check_first_run() {
             pump();
         }
     }
-    std::cout << "first-run check: showing, catalogue lists " << kTag << '\n';
+    std::cout << "first-run check: showing, catalogue lists " << kTag << std::endl;
 
     pick_card("first-run.language.card.de");
     require(
         settings::language_notice_same_tag(shown_language().tag, "de"), "Deutsch was not chosen"
     );
-    std::cout << "first-run check: language de\n";
+    std::cout << "first-run check: language de" << std::endl;
 
     pick_card("first-run.language.card.en-xa");
     {
@@ -392,7 +391,7 @@ void Runtime::check_first_run() {
             pump();
         }
     }
-    std::cout << "first-run check: the pack was missing\n";
+    std::cout << "first-run check: the pack was missing" << std::endl;
     fixture_server().serve_bytes(held_pack().path, held_pack().bytes, "application/octet-stream");
     {
         const auto deadline = std::chrono::steady_clock::now() + kWait;
@@ -422,7 +421,7 @@ void Runtime::check_first_run() {
             pump();
         }
     }
-    std::cout << "first-run check: language " << kTag << '\n';
+    std::cout << "first-run check: language " << kTag << std::endl;
 
     click("first-run.language.skip");
     require(setup() == nullptr, "Skip setup left the setup showing");
@@ -430,7 +429,7 @@ void Runtime::check_first_run() {
         preference(first_run::preference_key) == first_run::preference_done,
         "Skip setup did not record done"
     );
-    std::cout << "first-run check: skipped, preference done\n";
+    std::cout << "first-run check: skipped, preference done" << std::endl;
 
     {
         const auto deadline = std::chrono::steady_clock::now() + kWait;
@@ -451,7 +450,7 @@ void Runtime::check_first_run() {
         preference(content::install_id_key("coreprime")) == "off",
         "Not now did not turn Core Prime's install ID off"
     );
-    std::cout << "first-run check: online features off\n";
+    std::cout << "first-run check: online features off" << std::endl;
 
     click("first-run.buttons.back");
     require(control_named("first-run.online.on").has_value(), "Back did not return to online");
@@ -465,7 +464,7 @@ void Runtime::check_first_run() {
         preference_values_.find(content::install_id_key("coreprime")) == preference_values_.end(),
         "Turn on made an install ID"
     );
-    std::cout << "first-run check: online features on, no install ID made\n";
+    std::cout << "first-run check: online features on, no install ID made" << std::endl;
 
     click("first-run.buttons.start");
     require(setup() == nullptr, "Start playing left the setup showing");

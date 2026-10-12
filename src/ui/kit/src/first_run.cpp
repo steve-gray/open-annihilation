@@ -636,6 +636,46 @@ void draw_connector(const Canvas& canvas, const Rect& card, const Rect& target) 
         rule_rect(canvas, {x, from, 1, to - from}, colour::accent);
 }
 
+/// A smooth line's width, in points, with the same tracking the header draws.
+///
+/// @param canvas a smooth canvas
+/// @param role which font
+/// @param text the line
+/// @param tracking extra points after each character but the last
+/// @return the width; 0 when the modern fonts are not open
+int32_t
+smooth_tracked(const Canvas& canvas, FontRole role, std::string_view text, int32_t tracking) {
+    if (text.empty() || canvas.smooth.fonts == nullptr)
+        return 0;
+    if (tracking == 0)
+        return measure_text(canvas, role, text);
+    int32_t width = 0;
+    bool any = false;
+    for (std::size_t at = 0; at < text.size();) {
+        const std::size_t bytes = character_bytes(text.substr(at));
+        if (bytes == 0)
+            break;
+        if (any)
+            width += tracking;
+        width += measure_text(canvas, role, text.substr(at, bytes));
+        any = true;
+        at += bytes;
+    }
+    return width;
+}
+
+/// Tells whether the game font has a glyph to measure. A modern-only font does not.
+///
+/// @param fonts the fonts
+/// @return true when the regular font drew a glyph
+bool game_font_has_glyphs(const Fonts& fonts) {
+    return std::any_of(
+        fonts.regular.font.glyphs.begin(), fonts.regular.font.glyphs.end(), [](const auto& glyph) {
+            return glyph.has_value();
+        }
+    );
+}
+
 } // namespace
 
 void carousel_go(CarouselModel& model, int32_t index) noexcept {
@@ -694,7 +734,8 @@ std::vector<CarouselSlot> carousel_places(
     const CarouselGeometry& geometry,
     int32_t count,
     int32_t centre_milli,
-    bool reduced_motion
+    bool reduced_motion,
+    bool wrap
 ) {
     std::vector<CarouselSlot> slots;
     if (count <= 0 || area.width <= 0 || area.height <= 0 || geometry.card_width <= 0 ||
@@ -703,7 +744,15 @@ std::vector<CarouselSlot> carousel_places(
     const int32_t nearest = std::clamp((centre_milli + 500) / 1000, int32_t{0}, count - 1);
     const int32_t mid = area.x + area.width / 2;
     for (int32_t index = 0; index < count; ++index) {
-        const int32_t delta = index * 1000 - centre_milli;
+        int32_t delta = index * 1000 - centre_milli;
+        if (wrap && count > 1) {
+            const int32_t span = count * 1000;
+            const int32_t half = span / 2;
+            while (delta > half)
+                delta -= span;
+            while (delta <= -half)
+                delta += span;
+        }
         const int32_t distance = std::abs(delta);
         if (distance >= 3000)
             continue;
@@ -831,7 +880,9 @@ CarouselEvent carousel_pointer(
         model.count <= 0
             ? 0
             : std::clamp((carousel_index_milli(model) + 500) / 1000, int32_t{0}, model.count - 1);
-    if (card == centre)
+    // The selected card is the one a press is bringing to the centre. A second
+    // press on it picks it before that move has arrived.
+    if (card == centre || card == model.selected)
         return carousel_command(model, CarouselCommand{false, false, true});
     carousel_go(model, card);
     return CarouselEvent::moved;
@@ -849,6 +900,10 @@ LanguageCardLayout language_card_layout(Point at, const Metrics& metrics, bool p
         };
     }
     return laid;
+}
+
+void draw_prominent_line(const Canvas& canvas, std::string_view text, const Rect& box, Colour ink) {
+    draw_fitted(canvas, FontRole::regular, text, box, ink, 32);
 }
 
 void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCardLook& look) {
@@ -1023,7 +1078,7 @@ void draw_carousel(const Canvas& canvas, const Rect& rect, const CarouselLook& l
     const CarouselGeometry geometry{look.card_width, look.card_height, look.step};
     const auto count = static_cast<int32_t>(look.cards.size());
     const std::vector<CarouselSlot> slots =
-        carousel_places(band, geometry, count, look.centre_milli, look.reduced_motion);
+        carousel_places(band, geometry, count, look.centre_milli, look.reduced_motion, look.wrap);
     for (const CarouselSlot& slot : slots) {
         if (slot.index < 0 || slot.index >= count || slot.opacity <= 0)
             continue;
@@ -1176,14 +1231,32 @@ void draw_setup_chrome(const Canvas& canvas, const SetupChromeLook& look) {
     step.name = look.step_name;
     step.index = look.step_index;
     step.count = look.step_count;
-    const int32_t step_w = canvas.fonts == nullptr ? 0 : step_indicator_width(*canvas.fonts, step);
+    const bool smooth = canvas.smooth.painter != nullptr && canvas.smooth.fonts != nullptr;
+    const bool modern_only = canvas.fonts == nullptr || !game_font_has_glyphs(*canvas.fonts);
+    const int32_t segments =
+        step.count <= 0 ? 0 : step.count * 14 + (std::max(step.count, int32_t{0}) - 1) * 3;
+    int32_t step_w = 0;
+    if (!modern_only && canvas.fonts != nullptr)
+        step_w = step_indicator_width(*canvas.fonts, step);
+    else if (smooth)
+        step_w = std::max(
+            smooth_tracked(
+                canvas, FontRole::small, step_line(step), compact_metrics.heading_tracking
+            ),
+            segments
+        );
     HeaderLook header;
     header.width = look.width;
     header.title = "Open Annihilation";
     header.tracking = compact_metrics.heading_tracking;
     header.second = look.page;
     header.right_inset = step_w + compact_metrics.padding;
-    if (canvas.fonts != nullptr) {
+    if (modern_only && smooth) {
+        header.title_width =
+            smooth_tracked(canvas, FontRole::regular, header.title, header.tracking);
+        header.second_width =
+            smooth_tracked(canvas, FontRole::regular, header.second, header.tracking);
+    } else if (canvas.fonts != nullptr) {
         header.title_width =
             tracked_width(*canvas.fonts, FontRole::regular, header.title, header.tracking);
         header.second_width =
@@ -1406,9 +1479,12 @@ void draw_coach_mark(const Canvas& canvas, const Rect& rect, const CoachMarkLook
     const int32_t body_y = rect.y + 6 + compact_metrics.regular_line + 2;
     const int32_t body_w = std::max(rect.width - 12, int32_t{0});
     const Measure measure = [&](std::string_view words) {
-        if (canvas.fonts == nullptr)
+        if (canvas.fonts == nullptr || words.empty())
             return estimated_width(words);
-        return text_width(*canvas.fonts, FontRole::small, words);
+        const int32_t measured = text_width(*canvas.fonts, FontRole::small, words);
+        if (measured <= 0)
+            return estimated_width(words);
+        return measured;
     };
     const std::vector<std::string> lines = wrap(look.body, body_w, measure);
     int32_t y = body_y;
