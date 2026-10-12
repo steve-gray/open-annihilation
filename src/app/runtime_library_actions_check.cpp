@@ -1086,7 +1086,7 @@ void Runtime::check_library_install() {
                 !install::pending_change_waiting(),
             "the held update was not put in place as the mod was switched"
         );
-        for (int frame = 0; frame < 30; ++frame)
+        for (int tick = 0; tick < 30; ++tick)
             tell_mod_installs();
         require(
             state.prompt == nullptr && state.stage != ModInstallState::Stage::telling,
