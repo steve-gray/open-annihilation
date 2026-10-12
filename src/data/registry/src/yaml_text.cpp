@@ -197,12 +197,12 @@ bool take_http_url(
 ) {
     std::string text;
     if (!take_string(node, text, error, where)) {
-        error = std::string(where) + " must be an http address with no query";
+        error = std::string(where) + " must be an http or https address with no query";
         return false;
     }
     const auto parsed = url::parse_http_url(text);
     if (!parsed || url::has_query(*parsed)) {
-        error = std::string(where) + " must be an http address with no query";
+        error = std::string(where) + " must be an http or https address with no query";
         return false;
     }
     out = *parsed;

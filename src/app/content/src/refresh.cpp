@@ -3,6 +3,7 @@
 
 // One registry's refresh: each source in order, the check, the cache and a
 // key rotation.
+#include "reach.hpp"
 #include "service_state.hpp"
 
 #include <cstdint>
@@ -158,8 +159,7 @@ bool try_sources(
         if (catalogue.failure == netgame::http::Failure::cancelled || state.cancel.load())
             return false;
         if (catalogue.failure != netgame::http::Failure::none) {
-            const std::string outcome =
-                std::string("cannot be reached: ") + netgame::http::failure_text(catalogue.failure);
+            const std::string outcome = reach_detail(catalogue);
             log_outcome(state, plan.id, source, outcome);
             errors.push_back(outcome);
             continue;

@@ -303,9 +303,11 @@ latched the closing key and drew a backdrop.
   is refused) through the platform's `take_opened_file` where it has one,
   and opens the window filled in from it. A run nobody watches leaves the
   files waiting, unless `--check-registries` asks for them. CHECK reads
-  the typed address with `parse_http_url` first: an https address, and any
-  other the reader refuses, is refused there with its sentence, and the
-  content service is never asked. Otherwise the window asks the content
+  the typed address with `parse_http_url` first: an address the reader
+  refuses is refused there, and the content service is never asked. An
+  https address is asked. The client uses the system's TLS where this
+  system has it, and reads https as http where it does not. A certificate
+  the system rejects fails the check. The window asks the content
   service (`check_registry_url`, `check_mirror`, or `check_registry_file`
   for a file) and polls `registry_check` each frame in its tick; CANCEL
   closes it and drops the check, whose answer is never used. ADD calls
@@ -329,7 +331,7 @@ latched the closing key and drew a backdrop.
   its 2,048-byte limit. `native-registries` (`--check-registries`) writes
   its own registry list under `--user-folder` before the content service
   starts, switches its added registry off and on at once, removes it at
-  once, refuses an https address without a check, and opens an `.oareg`
+  once, asks about an https address, and opens an `.oareg`
   file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale on the kit canvas's crisp form, or at 150% on its smooth

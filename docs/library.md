@@ -438,7 +438,9 @@ the reason stands over the note ("OA could not change the registries:
 Add registry window as opening an `.oareg` file: the address or "From
 *file*", the fingerprints of the keys, and
 "Not reviewed by the OA team"
-([adding a registry](downloads.md#adding-a-registry)). **CLOSE** leaves a
+([adding a registry](downloads.md#adding-a-registry)). An address may be
+`http` or `https`. Where this system has no TLS, `https` is read as
+`http`, and Settings › Downloads says so. **CLOSE** leaves a
 switch or a removal as it was stored. During a game **ADD REGISTRY…** and
 **ADD MIRROR…** are locked ("Choose from the main menu."); the switches
 and **REMOVE** stay.

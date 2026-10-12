@@ -94,8 +94,8 @@ struct Descriptor {
 /// registry must be 1. id, name, catalogue and downloads are required.
 /// homepage, mirrors and keys are optional; absent mirrors and keys read as
 /// empty, and empty keys are an unsigned registry. A catalogue, mirror or
-/// download API is an http address with no query. A homepage is an http or
-/// https address. downloads.mode is direct or tokens. direct refuses an API
+/// download API is an http or https address with no query. A homepage is an
+/// http or https address. downloads.mode is direct or tokens. direct refuses an API
 /// and refuses install-id required, and defaults install-id to none. tokens
 /// requires an API and defaults install-id to required. A key id and a
 /// public key are each unique. At most 8 keys and 8 mirrors. A key this
@@ -125,7 +125,7 @@ read_descriptor(std::span<const uint8_t> bytes, Descriptor& out, std::string* er
 [[nodiscard]] std::vector<std::string> key_fingerprints(const Descriptor& descriptor);
 
 /// The address shown for a registry: its catalogue's host, and the port when
-/// the port is not 80.
+/// it is not the scheme's default.
 ///
 /// @param descriptor the descriptor
 /// @return the host, or the host, a colon and the port

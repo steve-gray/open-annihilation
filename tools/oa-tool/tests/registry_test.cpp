@@ -503,9 +503,8 @@ void test_init(
 
     const fs::path https_folder = scratch / "https-registry";
     const Captured https = init_at(https_folder, "https://127.0.0.1:9", key, pass);
-    exited("https", https, oa::tool::exit_failed);
-    OA_CHECK(contains(https.err, "a registry address is plain http"));
-    OA_CHECK(!fs::exists(https_folder));
+    exited("https", https, oa::tool::exit_done);
+    OA_CHECK(fs::exists(https_folder / "registry.yaml"));
 }
 
 void test_direct(

@@ -652,6 +652,9 @@ struct DownloadsOffer {
     std::vector<InstallIdRow> install_ids; ///< one row per registry that uses an install ID
     uint64_t kept_bytes{};                 ///< downloaded files kept for resuming and repairs
     bool downloads_busy{};                 ///< a download is queued, running or paused
+    /// True when this system reads an https registry address as http. The
+    /// check's hint then says so, once.
+    bool https_over_http{};
 };
 
 /// One install-ID switch, as the dialog keeps the player's choice.

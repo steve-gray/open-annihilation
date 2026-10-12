@@ -603,7 +603,7 @@ struct Options {
     // retries it and cancels it, and keeps it hidden during a skirmish.
     bool check_challenge = false;
     // Lists, switches and removes an added registry in Settings › Downloads,
-    // refuses an https address without asking the content service, and opens
+    // asks the content service about an https address, and opens
     // an .oareg file the run posts. It writes its own registry list under
     // --user-folder before the content service starts.
     bool check_registries = false;

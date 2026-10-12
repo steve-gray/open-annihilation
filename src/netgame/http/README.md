@@ -1,8 +1,11 @@
 # HTTP client
 
 A blocking HTTP/1.1 client for a worker thread. It fetches catalogues and
-packages over plain HTTP. `fetch` runs on the thread that calls it and is
-never called on the game's main thread. One client serves one thread. Two
+packages. `https` uses the system's TLS where this system has it, and is
+read as `http` where it does not. A certificate the system rejects fails
+the fetch and is not tried again as `http`. OA ships no TLS library and no
+certificate list. `fetch` runs on the thread that calls it and is never
+called on the game's main thread. One client serves one thread. Two
 clients on two threads share nothing.
 
 Library `oa-netgame-http`, header `include/oa/netgame/http/client.hpp`,
@@ -29,7 +32,8 @@ namespace `oa::netgame::http`.
 
 ## State
 
-The client keeps a pool of idle connections, keyed by host and port. A
+The client keeps a pool of idle plain-HTTP connections, keyed by host and
+port. A TLS connection is never pooled. A
 response that can carry another request is put back, up to
 `idle_connections_per_server` (two unless the options say otherwise). A
 connection that has waited longer than `keep_alive_ms` (30 seconds unless
@@ -40,8 +44,10 @@ keep-alive, after a body read to the close, and after any failure.
 
 ## Invariants
 
-- Only `http` addresses are fetched. An `https` address is refused before a
-  connection is opened.
+- An `http` or `https` address is fetched. `https` uses the system's TLS
+  where this system has it. Where it does not, the scheme becomes `http`
+  before any connection, and a port the text named is kept. A rejected
+  certificate fails the fetch and is not fetched again as `http`.
 - Only IPv4. A name is resolved to one IPv4 address. A numeric address is
   read on the calling thread; any other name runs on a detached helper so
   the caller can walk away.
@@ -51,8 +57,10 @@ keep-alive, after a body read to the close, and after any failure.
   `max_header_bytes`, and the body stops at `max_body_bytes` after decoding.
 - A GET or HEAD whose reused connection fails before the first response byte
   is sent once more on a new connection. A POST is never sent twice.
-- A redirect is followed only to the address's own host and port, or to a
-  host the allow-list names. Only the final answer reaches the sink.
+- A redirect is followed to the address's own host when the port is the
+  same or is the port the target scheme uses by default, or to a host the
+  allow-list names. An absolute `https` location is read as `http` when TLS
+  is off. Only the final answer reaches the sink.
 - A 200 answer to a range request is the whole resource from byte 0. A 206
   names the range it carried. A 416 is status 416 with no failure.
 
@@ -69,7 +77,8 @@ network or the system's resolver.
 
 ## Limitations
 
-- No TLS, proxies, cookies, authentication or IPv6.
+- No proxies, cookies, authentication or IPv6. TLS is the system's, loaded
+  at run time. A missing library is "no TLS", and the game still starts.
 - One range, from a byte to the end. Several ranges are not asked for.
 - A lookup that runs out of time leaves its helper thread running until the
   resolver answers. The caller has already returned.

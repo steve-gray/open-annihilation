@@ -712,7 +712,7 @@ bool read_keys(
     return true;
 }
 
-/// Reads the mirror list. Each address is http and has no query.
+/// Reads the mirror list. Each address is http or https and has no query.
 bool read_mirrors(const json::Json& array, std::vector<url::Url>& out, std::string& error) {
     if (array.elements().size() > max_mirrors) {
         error = "mirrors names more than 8";
@@ -722,7 +722,8 @@ bool read_mirrors(const json::Json& array, std::vector<url::Url>& out, std::stri
         const std::string* text = array.elements()[index].string();
         const auto parsed = text ? url::parse_http_url(*text) : std::nullopt;
         if (!text || !parsed || url::has_query(*parsed)) {
-            error = "mirrors[" + std::to_string(index) + "] is not an http address without a query";
+            error = "mirrors[" + std::to_string(index) +
+                    "] is not an http or https address without a query";
             return false;
         }
         out.push_back(*parsed);
@@ -795,7 +796,7 @@ bool read_catalogue(std::span<const uint8_t> bytes, Catalogue& out, std::string*
         const std::string* text = downloads->string();
         const auto parsed = text ? url::parse_http_url(*text) : std::nullopt;
         if (!parsed)
-            return refuse(error, "downloads is not an http address");
+            return refuse(error, "downloads is not an http or https address");
         loaded.downloads = url::url_text(*parsed);
     }
     if (const json::Json* keys = root->find("keys")) {

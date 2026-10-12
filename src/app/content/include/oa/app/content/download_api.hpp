@@ -47,7 +47,7 @@ struct KeyRequest {
 struct IssuedKey {
     std::string download;  ///< 1 to 128 characters of letters, digits, `_` and `-`
     int64_t expires = 0;   ///< when the address expires, seconds since 1970
-    formats::url::Url url; ///< the package, plain HTTP
+    formats::url::Url url; ///< the package, an http or https address
 };
 
 /// A check the registry asked for before it will issue a key.
@@ -78,7 +78,7 @@ struct ApiError {
 /// Reads a 201 body.
 ///
 /// The download id is 1 to 128 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`.
-/// The address is plain HTTP. The expiry is a UTC time.
+/// The address is http or https. The expiry is a UTC time.
 ///
 /// @param body the response body
 /// @param[out] why why it was refused; may be null

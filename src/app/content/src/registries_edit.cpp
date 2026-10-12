@@ -4,6 +4,7 @@
 // Adding, removing and turning off registries. A check fetches on the worker.
 // An edit writes Registries.yaml and the cache on the calling thread, under
 // the service's lock, and only when that file could be read.
+#include "reach.hpp"
 #include "service_state.hpp"
 
 #include "oa/data/catalogue/check.hpp"
@@ -389,9 +390,7 @@ FetchedCatalogue fetch_catalogue(
             return fetched;
         }
         if (response.failure != http::Failure::none) {
-            errors.push_back(
-                std::string("cannot be reached: ") + http::failure_text(response.failure)
-            );
+            errors.push_back(reach_detail(response));
             continue;
         }
         if (response.status != 200) {
@@ -550,8 +549,7 @@ void complete_url_check(
         stored.result.url = formats::url::url_text(*parsed);
         stored.result.refusal = registry::Refusal::unreadable;
         if (response.failure != http::Failure::none) {
-            stored.result.detail =
-                std::string("cannot be reached: ") + http::failure_text(response.failure);
+            stored.result.detail = reach_detail(response);
         } else {
             stored.result.detail = "the server answered " + std::to_string(response.status);
         }
@@ -918,6 +916,10 @@ registry::Refusal check_usable(const StoredCheck* stored, bool mirror, std::stri
 }
 
 } // namespace
+
+bool https_read_over_http() noexcept {
+    return !netgame::http::tls_available();
+}
 
 uint64_t Service::check_registry_url(std::string url) {
     ServiceState& state = *impl_;

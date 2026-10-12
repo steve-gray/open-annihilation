@@ -17,11 +17,11 @@ namespace oa::formats::url {
 /// The longest address this reader accepts, in bytes.
 inline constexpr std::size_t max_url_bytes = 2048;
 
-/// Which kind of web address this is. https is only a page the system's
-/// browser opens; a fetch uses http.
+/// Which kind of web address this is. A fetch uses https where the system
+/// has TLS, and reads an https address as http where it does not.
 enum class Scheme : uint8_t {
     http,  ///< plain HTTP
-    https, ///< a page the system's browser opens
+    https, ///< HTTP over TLS, where the system has it
 };
 
 /// One absolute web address, already in the form the readers agree on.
@@ -45,7 +45,7 @@ enum class UrlError : uint8_t {
     too_long,          ///< more than max_url_bytes
     no_scheme,         ///< no http or https scheme
     unknown_scheme,    ///< a scheme that is neither http nor https
-    https_not_fetched, ///< https, which a fetch does not use
+    https_not_fetched, ///< kept so a switch still compiles; a fetch no longer produces it
     user_info,         ///< a user name or password in the authority
     ipv6_host,         ///< an IPv6 literal
     bad_host,          ///< a host that is not a domain or four decimal numbers
@@ -72,16 +72,36 @@ enum class UrlError : uint8_t {
 /// @return the address, or nothing when it was refused
 [[nodiscard]] std::optional<Url> parse_web_url(std::string_view text, UrlError* error = nullptr);
 
-/// Reads an absolute http address that a fetch may use.
+/// Reads an absolute http or https address that a fetch may use.
 ///
-/// The same rules as parse_web_url. An https address is refused with
-/// https_not_fetched: OA fetches over plain HTTP and checks what it gets
-/// with signatures.
+/// The same rules as parse_web_url. https is accepted. The client decides
+/// whether to use TLS or to read the address as http.
 ///
 /// @param text the address
 /// @param error set to the refusal, or to none on success; may be null
 /// @return the address, or nothing when it was refused
 [[nodiscard]] std::optional<Url> parse_http_url(std::string_view text, UrlError* error = nullptr);
+
+/// An address a fetch will open, after the transport choice.
+struct FetchAddress {
+    Url url;                        ///< the address to open
+    bool rewritten_to_http = false; ///< https was read as http because TLS is off
+};
+
+/// Chooses the address a fetch opens.
+///
+/// The text is read as parse_web_url reads it. An https address is kept when
+/// `tls_available` is true. When it is false, the scheme becomes http, the
+/// port becomes 80 unless the text named one, and a named port is kept,
+/// including an explicit 443. A refusal is the same refusal parse_web_url
+/// would give. This does not connect.
+///
+/// @param text the address
+/// @param tls_available true when the fetch will use TLS
+/// @param error set to the refusal, or to none on success; may be null
+/// @return the address to open, or nothing when the text was refused
+[[nodiscard]] std::optional<FetchAddress>
+address_for_fetch(std::string_view text, bool tls_available, UrlError* error = nullptr);
 
 /// Writes an address in the one form the readers agree on.
 ///
