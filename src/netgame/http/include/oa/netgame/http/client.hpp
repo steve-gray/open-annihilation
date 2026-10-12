@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // A blocking HTTP/1.1 client for a worker thread. It fetches catalogues and
-// packages over plain HTTP. One client is used by one thread; two clients on
-// two threads share nothing. fetch is never called on the game's main thread.
+// packages. HTTPS uses the system's TLS where this system has it, and is read
+// as HTTP where it does not. A certificate the system rejects fails the fetch.
+// One client is used by one thread; two clients on two threads share nothing.
+// fetch is never called on the game's main thread.
 #pragma once
 
 #include <atomic>
@@ -22,7 +24,9 @@ namespace oa::netgame::http {
 enum class Failure : uint8_t {
     none,              ///< a whole final response was read
     bad_url,           ///< the address could not be read
-    https_unsupported, ///< the address is https, which a fetch does not use
+    https_unsupported, ///< https was asked for and this system cannot use it
+    certificate,       ///< the server's certificate was rejected
+    https_needs_tls,   ///< https was read as http and the host served no http
     bad_request,       ///< the request is one the client will not send
     cannot_resolve,    ///< the name did not resolve to an IPv4 address
     cannot_connect,    ///< the connection could not be opened
@@ -38,9 +42,20 @@ enum class Failure : uint8_t {
 
 /// The short description of a failure, for a log line.
 ///
+/// https_needs_tls is the sentence the registry window shows on its own:
+/// "This registry needs HTTPS, which this system cannot use".
+///
 /// @param failure the failure, or none
 /// @return a stable English phrase; never null
 [[nodiscard]] const char* failure_text(Failure failure) noexcept;
+
+/// True when this process can fetch an https address with the system's TLS.
+///
+/// False where the system library is missing or this build left TLS out. The
+/// game still starts in that case; a fetch reads https as http.
+///
+/// @return true when HTTPS is fetched with the system's TLS
+[[nodiscard]] bool tls_available() noexcept;
 
 /// The method a fetch sends.
 enum class Method : uint8_t {
@@ -187,7 +202,7 @@ struct RedirectPolicy {
 /// One fetch. The client's own headers are sent ahead of `headers`.
 struct Request {
     Method method = Method::get;        ///< GET, HEAD or POST
-    std::string url;                    ///< an absolute http address
+    std::string url;                    ///< an absolute http or https address
     std::vector<Header> headers;        ///< added after the client's own headers
     std::vector<uint8_t> body;          ///< the POST body; empty for GET and HEAD
     std::string content_type;           ///< the POST Content-Type; empty sends the generic type
@@ -221,6 +236,8 @@ struct ClientOptions {
     uint32_t keep_alive_ms = 30000;
     /// Resolves names. Null uses the sockets' own IPv4 resolver.
     Resolver resolve = nullptr;
+    /// Forces HTTPS on or off. Unset uses tls_available. The game leaves it unset.
+    std::optional<bool> tls;
 };
 
 /// Fetches one address at a time on the thread that calls it.

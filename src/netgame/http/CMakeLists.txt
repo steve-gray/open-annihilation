@@ -1,13 +1,16 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-# Fetches catalogues and packages over plain HTTP.
+# Fetches catalogues and packages. HTTPS uses the system's TLS where this
+# system has it. OA_HTTP_TLS=OFF compiles the stub and https is read as http.
+option(OA_HTTP_TLS "Fetch HTTPS with the system's TLS" ON)
 add_library(oa-netgame-http
   src/url_request.cpp
   src/response_reader.cpp
   src/gzip.cpp
   src/lookup.cpp
-  src/client.cpp)
+  src/client.cpp
+  src/tls.cpp)
 add_library(oa::netgame::http ALIAS oa-netgame-http)
 target_include_directories(oa-netgame-http PUBLIC include)
 target_compile_features(oa-netgame-http PUBLIC cxx_std_20)
@@ -16,6 +19,29 @@ target_link_libraries(oa-netgame-http
   PRIVATE oa-netgame oa-formats-url oa-base-threads ZLIB::ZLIB)
 set_property(SOURCE src/client.cpp APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
+
+if(OA_HTTP_TLS)
+  target_compile_definitions(oa-netgame-http PRIVATE OA_HTTP_TLS=1)
+  if(APPLE)
+    enable_language(OBJCXX)
+    target_sources(oa-netgame-http PRIVATE src/tls_apple.mm)
+    set_source_files_properties(src/tls_apple.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    set_target_properties(oa-netgame-http PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
+    target_link_libraries(oa-netgame-http PRIVATE "-framework Foundation")
+  elseif(WIN32)
+    # Loaded at run time. No import library, so a 95-era toolchain without
+    # winhttp.h still compiles, and a machine without WinHTTP still starts.
+    target_sources(oa-netgame-http PRIVATE src/tls_winhttp.cpp)
+  elseif(UNIX)
+    target_sources(oa-netgame-http PRIVATE src/tls_openssl.cpp)
+    target_link_libraries(oa-netgame-http PRIVATE ${CMAKE_DL_LIBS})
+  else()
+    target_sources(oa-netgame-http PRIVATE src/tls_none.cpp)
+  endif()
+else()
+  target_compile_definitions(oa-netgame-http PRIVATE OA_HTTP_TLS=0)
+  target_sources(oa-netgame-http PRIVATE src/tls_none.cpp)
+endif()
 
 if(BUILD_TESTING)
   add_executable(oa-netgame-http-test tests/client_test.cpp)

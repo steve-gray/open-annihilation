@@ -113,9 +113,10 @@ void test_field_order() {
         "summary-hit@fixture-core",
     };
     OA_CHECK(found(library, "alpha") == by_field);
-    // An empty search shows every entry, by name.
-    OA_CHECK(found(library, "").size() == 6);
-    OA_CHECK(found(library, "   ").size() == 6);
+    // An empty search shows every entry, by name, the base game entry first.
+    OA_CHECK(found(library, "").size() == 7);
+    OA_CHECK(found(library, "   ").size() == 7);
+    OA_CHECK(found(library, "").front() == "@base-game@");
 
     const auto class_of = [&](std::string_view key, std::string_view query) {
         const lib::Entry* entry =
@@ -238,6 +239,7 @@ void test_ties() {
     };
     OA_CHECK(found(library, "same") == word_first);
     const Keys by_name = {
+        "@base-game@",
         "aaa@fixture-core",
         "beta@fixture-core",
         "same@fixture-core",

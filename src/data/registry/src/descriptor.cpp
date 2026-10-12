@@ -179,12 +179,7 @@ std::vector<std::string> key_fingerprints(const Descriptor& descriptor) {
 }
 
 std::string address_text(const Descriptor& descriptor) {
-    std::string text = descriptor.catalogue.host;
-    if (descriptor.catalogue.port != 80) {
-        text.push_back(':');
-        text += std::to_string(descriptor.catalogue.port);
-    }
-    return text;
+    return formats::url::host_header(descriptor.catalogue);
 }
 
 } // namespace oa::data::registry

@@ -77,10 +77,13 @@ OA suggests no registry: you add each one yourself. There are three ways:
 
 - **By its address.** On the Library's Registries tab, press
   **ADD REGISTRY…** at the left of the footer, type the address of the
-  registry's descriptor (`http://…`, for example
-  `http://maps.example.org/oa/registry.yaml`) and press **CHECK**. Use the
-  `http://` address: an `https://` one is refused ("Use the registry's
-  http:// address. OA checks every catalogue's signature itself.").
+  registry's descriptor (`http://…` or `https://…`, for example
+  `https://maps.example.org/oa/registry.yaml`) and press **CHECK**. Where
+  this system has TLS, an `https://` address uses it, and a certificate
+  the system rejects fails the check. Where it does not, OA reads that
+  address as `http`, and Settings › Downloads says so. If that host serves
+  no HTTP, the window says "This registry needs HTTPS, which this system
+  cannot use".
 - **By opening an `.oareg` file**, a registry's descriptor as a file a
   registry hands out: double-click it, choose Open With and Open
   Annihilation, drag it onto the game's window, or start the game with its
@@ -337,10 +340,12 @@ request came from.
 
 ### What someone on the network can see
 
-Every catalogue and package travels over plain HTTP, so that every build,
-down to Windows XP and the Raspberry Pi, can download. Someone on the
-network path between you and a registry, on a shared Wi-Fi network say,
-can:
+Where this system has TLS, an `https` catalogue or package is encrypted on
+the path, and a certificate the system rejects is a failed fetch, not a
+quiet retry over HTTP. Where it does not, OA reads an `https` address as
+`http` (Settings › Downloads says so once), so that a build without a TLS
+library can still download. On that plain path, someone between you and a
+registry, on a shared Wi-Fi network say, can:
 
 - **see what you download**: the addresses fetched, which name each
   package by its SHA-256, and the key requests and results, install ID
@@ -348,7 +353,8 @@ can:
 - **stop a download**: the Library then says it could not reach the
   registry, and what you installed keeps working.
 
-The signatures and hashes stop them from changing anything:
+The signatures and hashes stop them from changing anything, whichever
+transport carried the bytes:
 
 | They try to | OA checks | And so |
 |---|---|---|
@@ -356,8 +362,8 @@ The signatures and hashes stop them from changing anything:
 | serve a forged catalogue | its Ed25519 signature over the exact bytes, against the keys built in for Core Prime or the ones you trusted when you added the registry | it is refused, and OA keeps the last good list |
 | serve an older catalogue, to hide a fix | its sequence number, which never goes back | it is refused |
 
-A check that you are a person names the page to open, and that too comes
-over plain HTTP. Core Prime's check is at
+A check that you are a person names the page to open. That page may be
+`http` or `https`. Core Prime's check is at
 `https://downloads.coreprime.net/verify`; do not complete a check in Core
 Prime's name on any other page.
 

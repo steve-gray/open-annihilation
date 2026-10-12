@@ -650,6 +650,35 @@ void tabs_draw_with_a_count_and_with_none() {
     expect(surface, 20, 13, kit::colour::hint);
 }
 
+/// Words draw a count of 0, skip a negative count, and read the look's text.
+void tabs_in_words_keep_a_count_of_zero() {
+    kit::TabsLook words;
+    words.count_style = kit::TabCountStyle::words;
+    words.captions = {"Mods", "Active", "Updates"};
+    words.counts = {0, -1, 4};
+    words.count_amber = {0, 0, 1};
+    words.readings = {"Mods 0", {}, "Updates 4"};
+    const kit::Rect strip{0, 0, 400, kit::compact_metrics.tab_height};
+    const std::vector<kit::Rect> with_counts = kit::tab_rects(fonts(), strip, words);
+    kit::TabsLook bare = words;
+    bare.counts = {-1, -1, -1};
+    const std::vector<kit::Rect> plain = kit::tab_rects(fonts(), strip, bare);
+    OA_CHECK(with_counts[0].width > plain[0].width);
+    OA_CHECK(with_counts[1].width == plain[1].width);
+    OA_CHECK(with_counts[2].width > plain[2].width);
+
+    kit::DisplayList list;
+    const std::array<kit::ControlId, 3> ids{1, 2, 3};
+    const std::array<std::string, 3> names{"mods", "active", "updates"};
+    kit::add_tabs(list, fonts(), strip, words, ids, names);
+    const kit::Control* mods = kit::control_of(list, 1);
+    const kit::Control* active = kit::control_of(list, 2);
+    const kit::Control* updates = kit::control_of(list, 3);
+    OA_CHECK(mods != nullptr && mods->text == "Mods 0");
+    OA_CHECK(active != nullptr && active->text == "Active");
+    OA_CHECK(updates != nullptr && updates->text == "Updates 4");
+}
+
 // ---- Cards ----
 
 /// Checks a cell's place and size.
@@ -1161,6 +1190,7 @@ int main() {
     a_long_text_scrolls_so_its_caret_shows();
     typing_moves_the_caret_drawn();
     tabs_draw_with_a_count_and_with_none();
+    tabs_in_words_keep_a_count_of_zero();
     cards_lie_in_a_grid();
     a_card_shows_its_placeholder_chips_and_lines();
     a_greyed_card_fades_into_the_panel();

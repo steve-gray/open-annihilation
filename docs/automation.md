@@ -184,7 +184,7 @@ centre would land on the line between Off and On.
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library · 1 mod" or "Library · N mods", and "Library · N mods · 1 update" or "Library · N mods · M updates" while updates wait; while the mod count is not final yet the mod count is left out, so the text is "Library", or "Library · 1 update" and "Library · N updates"; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
 | The Settings button (main menu) | `oa.settings-button` | button; no dialog; the settings icon right of the OA button, which opens Settings with no Library under it; its text "Settings" |
 | GET MAP in the battle room, while a joiner lacks the host's pack map | `oa.get-map`, `oa.get-map-text`, `oa.get-map-progress` | no dialog, listed only while they show: the button (its text "GET MAP"); a label, its text the line saying what it fetches; a label, its text how much of the download has come, as a percentage, while the bar shows in the button's place |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
@@ -290,14 +290,17 @@ Its rows and their state icons are listed so:
 | A row's circled up-arrow, its UPDATE | `oa.library.row.<registry>.<key>.update` | button, its text "UPDATE", listed just before its row; disabled while the details offer no UPDATE that can act |
 | The details' buttons | `oa.library.action.get`, `.update`, `.cancel`, `.retry`, `.play-now`, `.switch-off`, `.roll-back`, `.uninstall`, `.open-folder`, `.homepage` | button, its text the button's words; SWITCH OFF stands in PLAY NOW's place on the mod being played, and both are listed disabled during a game and while the command line chose the mod |
 | SWITCH OFF's Switch Mod question, and the note PLAY NOW shows for a folder it cannot play | `oa.prompt.cancel`, `oa.prompt.switch`; the note's `oa.prompt.ok`; `oa.prompt.body` | button; label |
-| The footer's CHECK NOW | `oa.library.check-now` | button, its text "CHECK NOW"; disabled while no registry can be asked, while one is being asked and during a game |
+| The header's refresh icon | `oa.library.refresh` | button, its text "Refresh", or "Refreshing" while it turns; disabled while no registry can be asked, while one is being asked and during a game. F5 presses it |
 | The details' and the footer's lines | `oa.library.status`, `oa.library.from`, `oa.library.rules`, `oa.library.note`, `oa.library.queue` | label, its text the words shown |
 
 A row's circled check, installed and up to date, is no control. A click
 at a row's centre chooses it; a click at its icon's centre presses GET or
 UPDATE for that row, as the details' button does, asking the same
 questions. `<registry>` and `<key>` are the registry's id and the package's
-key, lower-cased, every other run of characters one `-`.
+key, lower-cased, every other run of characters one `-`. The base game
+entry is not a package. Its key is `@base-game`, and the row is
+`oa.library.row.base-game`: the `@` is not a letter or a digit, so the
+row's name does not keep it.
 
 ## Input
 

@@ -172,6 +172,64 @@ void settle_entry(const Library& library, Entry& entry) {
     entry.can_act = entry.blocked.empty();
 }
 
+/// Tells whether a mod is played: an installed mod marked playing, or a
+/// mod the inputs name outside the packages.
+///
+/// @param library the Library
+/// @return true when one is
+bool mod_is_played(const Library& library) {
+    if (library.inputs.playing_mod)
+        return true;
+    for (const Installed& installed : library.inputs.installed)
+        if (installed.kind == Kind::mod && installed.playing)
+            return true;
+    return false;
+}
+
+/// Sets the base game entry: played while no mod is, otherwise installed,
+/// with its name, summary and badge, and with no package behind it.
+///
+/// @param library the Library
+/// @param[in,out] entry the base game entry
+void settle_base_game(const Library& library, Entry& entry) {
+    entry.listing = nullptr;
+    entry.installed = nullptr;
+    entry.update = nullptr;
+    entry.queued = nullptr;
+    entry.replaces_registry_name.clear();
+    entry.built_in = false;
+    entry.not_reviewed = false;
+    entry.registry_name.clear();
+    entry.blocked.clear();
+    entry.can_act = true;
+    entry.state = mod_is_played(library) ? State::installed : State::playing;
+    entry.badge = library.inputs.base_game_badge ? &*library.inputs.base_game_badge : nullptr;
+    entry.shown_name = std::string(shown(library.text, words::base_game_name));
+    entry.shown_summary = std::string(shown(library.text, words::base_game_summary));
+}
+
+/// Makes sure the base game entry is present, and settles it.
+///
+/// An entry a package already took under the same id is kept as the base
+/// game entry: a package key cannot be base_game_key, and the entry offers
+/// none of a package's actions.
+///
+/// @param[in,out] library the Library, its other entries already settled
+void ensure_base_game(Library& library) {
+    const EntryId id = base_game_id();
+    std::optional<std::size_t> place;
+    for (std::size_t index = 0; index < library.entries.size(); ++index)
+        if (library.entries[index].id == id)
+            place = index;
+    if (!place) {
+        Entry added;
+        added.id = id;
+        library.entries.push_back(std::move(added));
+        place = library.entries.size() - 1;
+    }
+    settle_base_game(library, library.entries[*place]);
+}
+
 /// Makes the selection one of the visible entries.
 ///
 /// A selection that still shows stays. Otherwise the first visible entry
@@ -489,6 +547,7 @@ void refresh(Library& library, Inputs inputs) {
             break;
         }
     }
+    ensure_base_game(library);
     recompute(library);
 }
 
@@ -572,6 +631,9 @@ const Entry* selected_entry(const Library& library) {
 }
 
 std::string_view entry_name(const Entry& entry) {
+    if (is_base_game(entry.id))
+        return entry.shown_name.empty() ? words::base_game_name
+                                        : std::string_view(entry.shown_name);
     if (entry.listing != nullptr)
         return entry.listing->name;
     if (entry.installed != nullptr)
@@ -580,6 +642,9 @@ std::string_view entry_name(const Entry& entry) {
 }
 
 std::string_view entry_summary(const Entry& entry) {
+    if (is_base_game(entry.id))
+        return entry.shown_summary.empty() ? words::base_game_summary
+                                           : std::string_view(entry.shown_summary);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         return entry.listing->summary;
     if (entry.installed != nullptr)
@@ -602,7 +667,11 @@ std::vector<std::pair<std::string, std::size_t>> tags_in_tab(const Library& libr
 
 std::size_t filter_count(const Library& library, Filter filter) {
     const std::vector<bool> kept = kept_by_filter(library, filter);
-    return static_cast<std::size_t>(std::count(kept.begin(), kept.end(), true));
+    std::size_t packages = 0;
+    for (std::size_t index = 0; index < kept.size(); ++index)
+        if (kept[index] && !is_base_game(library.entries[index].id))
+            ++packages;
+    return packages;
 }
 
 std::string filter_caption(const Library& library, Filter filter) {
@@ -718,6 +787,15 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const auto add = [&](Action action, bool enabled) {
         buttons.push_back({action, enabled, action_text(action, text)});
     };
+    // The base game is not a package. While it is played it offers nothing;
+    // while a mod is, PLAY NOW follows SWITCH OFF's rule and does its work.
+    if (is_base_game(entry.id)) {
+        if (entry.state != State::playing) {
+            const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
+            add(Action::play_now, can_switch);
+        }
+        return buttons;
+    }
     if (entry.state == State::get || entry.state == State::update) {
         if (item != nullptr && pending(item->phase))
             add(Action::cancel, true);
@@ -753,6 +831,9 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
     const Listing* listing = entry.listing;
     const Installed* installed = entry.installed;
     std::vector<Fact> list;
+    // The base game is not a package: its details are its summary alone.
+    if (is_base_game(entry.id))
+        return list;
 
     // Which version is installed and which is newest, and who made it: each
     // left out when it has nothing to say.
@@ -967,7 +1048,17 @@ std::string byline(const Entry& entry, const TextHooks& text) {
 std::string playing_note(const Library& library) {
     const TextHooks& text = library.text;
     const Entry* entry = selected_entry(library);
-    if (entry == nullptr || entry->id.kind != Kind::mod || entry->installed == nullptr)
+    if (entry == nullptr || entry->id.kind != Kind::mod)
+        return {};
+    // PLAY NOW on the base game is off for the same reason SWITCH OFF is,
+    // and the note says so in the same words. While it is the one played
+    // it offers nothing, so it has no note.
+    if (is_base_game(entry->id)) {
+        if (entry->state == State::playing || !library.inputs.mod_from_command_line)
+            return {};
+        return std::string(shown(text, words::note_command_line));
+    }
+    if (entry->installed == nullptr)
         return {};
     // While the command line chose the mod, PLAY NOW and SWITCH OFF are off,
     // and the note says why first.

@@ -39,6 +39,9 @@ struct HeaderLook {
     std::string version{};   ///< the version, already looked up
     int32_t version_width{}; ///< the columns kept for the version
     std::string note{};      ///< the note before the version, already looked up
+    /// Columns kept clear at the right, inside the padding, for a control
+    /// the header does not draw. 0 puts the version against the padding.
+    int32_t right_inset{};
 };
 
 /// One entry of a nav list.

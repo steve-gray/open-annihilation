@@ -32,7 +32,10 @@ translator finds them together. Every word passes through `Library::text`
     installed from the same registry, kind and key, and one per installed
     package no listing names (the player's own, or one whose registry is off
     or no longer lists it). Two registries that list one key are two
-    entries;
+    entries. It then makes the base game entry (`base_game_id`): a mod, no
+    registry, key `@base-game`. A package key is lower-case kebab-case, so
+    it cannot hold `@`. That entry is not a package: it has no listing, no
+    installed copy and no update, whatever a folder of the same key held;
   - its state: UPDATE when an update note names it (blocked or not), else
     PLAYING for the mod being played, else INSTALLED, else GET;
   - whether GET or UPDATE is allowed, and why not, the first reason that
@@ -64,9 +67,11 @@ translator finds them together. Every word passes through `Library::text`
     All; New keeps the tab's ten listings (`newest_count`) with the latest
     `Listing::published` day, ties by name, and never a listing without a
     day, so a package's release and revision play no part; Installed keeps
-    INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE. Each tab keeps its
-    filter when another is shown: Updates starts on Updates and the others
-    on All;
+    INSTALLED, PLAYING and UPDATE; Updates keeps UPDATE. The base game
+    entry shows on Mods under All and Installed only, including when a
+    search matches its name, and on no other tab or filter. New never
+    holds it. Each tab keeps its filter when another is shown: Updates
+    starts on Updates and the others on All;
   - with no search: under New, the latest day first, then by name; under
     the others, updates, then the other installed entries, then GET
     entries that can be installed, then blocked ones; within each, by name
@@ -76,10 +81,12 @@ translator finds them together. Every word passes through `Library::text`
     with it, the author or publisher, the summary. Entries order by the
     worst class among the words, then the sum of the classes, then names
     that start with the first word, then as with no search. The search is
-    kept to 64 bytes, cut at a character boundary.
+    kept to 64 bytes, cut at a character boundary. Whenever the list keeps
+    the base game entry, it is moved to the front after that order;
 - `tags_in_tab` counts the tags of the entries a tab shows under its
-  filter; `filter_count` counts the entries a filter keeps on the tab
+  filter; `filter_count` counts the packages a filter keeps on the tab
   shown before the tag and the search, so no count moves with them, and
+  leaves the base game entry out of every count, and
   `filter_caption` writes it as the filters show it, "Installed (4)"
   (`words::filter_with_count`); `update_count` counts the updates that can
   be installed, the number on the Updates tab and the OA button, and
@@ -126,15 +133,16 @@ translator finds them together. Every word passes through `Library::text`
 - `entry_summary` gives the words under the details' status line: the
   listing's summary, else the installed manifest's description
   (`Installed::description`), as for a mod of the player's own.
-- `can_check_now` says whether the footer's CHECK NOW can be pressed: a
+- `can_check_now` says whether the header's refresh icon can be pressed: a
   registry is on that it can ask (`Inputs::can_check`), none is being asked
-  (`Inputs::checking`), and no game is being played.
+  (`Inputs::checking`), and no game is being played. While one is being
+  asked the icon turns and its text is "Refreshing".
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
 - `text.hpp` writes sizes in binary units (`size_text`: "41.0 MB",
   "188 MB"), download counts (`downloads_text`: "1 download",
-  "12,400 downloads"), download progress, ages, the header's list age, rules hashes
+  "12,400 downloads"), download progress, ages, rules hashes
   ("9c1f 4e0b"), versions ("4.8 · rev 3", "1.2 · 2 maps"), a release as
   the facts give it (`release_text`: "4.8 (rev 3)"), engine
   requirements, what an update changes from and to (`change_texts`:
@@ -257,16 +265,19 @@ app removes the folder (`Runtime::library_uninstall`,
     under the subtitle for one the player added. A note under the list
     (`registry_note`) names the built-in registries, and a refusal
     (`Inputs::registries_notice`) stands over it in the lock colour. The rows and
-    the note scroll as the details do. The footer holds ADD REGISTRY…,
-    SETTINGS… and CLOSE, and no DETAILS. During a match ADD REGISTRY… and
+    the note scroll as the details do. The footer holds ADD REGISTRY… and
+    CLOSE, and no DETAILS. During a match ADD REGISTRY… and
     ADD MIRROR… give way to the padlock and "Choose from the main menu.";
     the switches and REMOVE stay. A switch, REMOVE, ADD MIRROR… and ADD
     REGISTRY… ask the host (`Action::set_registry`, `remove_registry`,
     `add_mirror`, `add_registry`); the host applies a switch and a removal
     at once;
-  - **Compact** shows a list page: the header (the OA mark, "Library" and
-    the list's age), the tabs with short names ("Active", "Mods", "Maps",
-    "Lang", "Upd" with the update count, "Reg"), the search field and the filter
+  - **Compact** shows a list page: the header (the OA mark, "Library", this
+    build's version, and a refresh icon at the top right; "offline" in the
+    lock colour beside it when the last refresh could not reach a registry),
+    the tabs with short names and their All counts ("Active", "Mods 11",
+    "Maps 2", "Lang 2", "Upd 15", "Reg 2"; Updates' digits are amber while
+    its count is above 0), the search field and the filter
     drop-down (All, New, Installed and Updates with their counts, "All
     (11)", then "Tag: balance (3)" for each tag of the tab), on the
     Updates tab "{n} updates" and UPDATE ALL on a line over the list, the
@@ -274,8 +285,8 @@ app removes the folder (`Runtime::library_uninstall`,
     added registry's name, and the state's icon: a download arrow for GET,
     a circled up-arrow for UPDATE, a circled check for INSTALLED and
     PLAYING, dimmed when GET or UPDATE cannot act), and the footer (the queue's short line with a
-    progress bar while downloading, CHECK NOW, SETTINGS…, DETAILS and
-    CLOSE). While
+    progress bar while downloading, DETAILS and CLOSE, CLOSE drawn as the
+    main button). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
     (`details_page_layout`): its name and version in the header, the way
@@ -283,8 +294,8 @@ app removes the folder (`Runtime::library_uninstall`,
     three lines, the short facts in label and value columns, the playing
     note, and in the footer the first three actions, MORE ▾ holding the
     rest, and CLOSE;
-  - **Regular** shows "Open Annihilation Library" and "v0.8.0 · list from
-    4 min ago", the tabs and a 240-point search, a row of chips (All, New,
+  - **Regular** shows "Open Annihilation Library" and "v0.8.0", the same
+    refresh icon, the tabs with their All counts and a 240-point search, a row of chips (All, New,
     Installed and Updates with their counts, and the tags while they fit,
     TAGS ▾ holding the rest; on Updates, "{n} updates" and UPDATE ALL on a
     line over the list), a 420-point list of
@@ -292,7 +303,7 @@ app removes the folder (`Runtime::library_uninstall`,
     size, the state's icon), the details (a 40-point badge beside the
     name, its state's icon and the status line, the summary in at most six lines, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
-    lines, CHECK NOW, SETTINGS… and CLOSE);
+    lines and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
     pane (a nav list of All, New, Installed and Updates with their counts,
     the heading TAGS and the tab's tags with their counts) in place of the
@@ -380,8 +391,10 @@ app removes the folder (`Runtime::library_uninstall`,
     `.homepage`; on Compact's
     details page MORE ▾ is `library.action`, whose open items are the
     actions after the first three under those same names;
-  - `library.details`, `library.back`, `library.check-now`,
-    `library.settings`, `library.close`;
+  - `library.refresh` (the header's icon, kind `button`, its text "Refresh",
+    or "Refreshing" while the registries are being asked; disabled while no
+    registry can be asked, while one is being asked and during a game),
+    `library.details`, `library.back`, `library.close`;
   - the labels `library.status`, `library.queue`, `library.note`,
     `library.from` and `library.rules`: controls of kind `area` that are
     neither enabled nor focusable, whose text is the words shown (the From
@@ -469,7 +482,7 @@ the Active tab's mod, language and map packs in each case; the order with
 no search; the update count; the selection across refreshes and browsing;
 the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
-CHECK NOW can be pressed; the summary, the manifest's description standing
+the refresh icon can be pressed; the summary, the manifest's description standing
 in for a listing's for a mod of the player's own, and "No oamod.yaml
 present" for a folder without one; the facts with the sample numbers, Installed,
 Latest and Author among them, a revision of 0 left out, a version left
@@ -509,7 +522,7 @@ windows of 640x480 at 1x, 1920x1080 at 2x and 2560x1440 at 2x. At each it
 checks that every part lies inside the window; that no two controls or
 press areas meet; that every action of the selected entry is a control
 (at Compact on its details page, MORE ▾ open), UPDATE ALL over the list
-on the Updates tab beside the Mods tab's filters, and SETTINGS… and CLOSE;
+on the Updates tab beside the Mods tab's filters, the refresh icon and CLOSE;
 that the Active tab is first, has no search, filter, list or DETAILS,
 reads its mod, language and maps as labels and keeps only the tabs and
 the footer in Tab's order; that the Registries tab lists each registry's
@@ -529,8 +542,9 @@ and B, the list's keys, Tab's walk, presses, double presses and taps on
 rows (which never get anything), a row's up-arrow and download arrow at
 every frame (named after the row, a button whose text is the word,
 pressed as UPDATE and GET, and listed disabled and passing the press to
-the row while blocked or queued), an action's button, CHECK NOW greyed
-until a registry can be asked and then asking, the labels taking no
+the row while blocked or queued), an action's button, the refresh icon greyed
+until a registry can be asked and then asking, and saying "Refreshing" while
+one is being asked, the labels taking no
 press, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 chip, and a press outside the drop-down, the tag chips, MORE ▾, and the

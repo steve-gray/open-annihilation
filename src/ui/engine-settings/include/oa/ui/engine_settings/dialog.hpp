@@ -42,8 +42,9 @@ namespace oa::ui::engine_settings {
 inline constexpr int32_t dialog_width = oa::ui::kit::compact_metrics.dialog_width;
 /// The dialog's height at Compact, in source pixels.
 inline constexpr int32_t dialog_height = oa::ui::kit::compact_metrics.dialog_height;
-/// The OA button's side on the main menu, in source pixels.
-inline constexpr int32_t menu_button_side = 32;
+/// The OA button's side on the main menu, in source pixels: one and a half
+/// times the 32 it was.
+inline constexpr int32_t menu_button_side = 48;
 /// The OA button's side in the in-game menu's column, in source pixels.
 inline constexpr int32_t ingame_button_side = 24;
 
@@ -651,6 +652,9 @@ struct DownloadsOffer {
     std::vector<InstallIdRow> install_ids; ///< one row per registry that uses an install ID
     uint64_t kept_bytes{};                 ///< downloaded files kept for resuming and repairs
     bool downloads_busy{};                 ///< a download is queued, running or paused
+    /// True when this system reads an https registry address as http. The
+    /// check's hint then says so, once.
+    bool https_over_http{};
 };
 
 /// One install-ID switch, as the dialog keeps the player's choice.
