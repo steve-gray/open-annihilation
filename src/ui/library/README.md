@@ -140,7 +140,8 @@ translator finds them together. Every word passes through `Library::text`
 - `can_check_now` says whether the header's refresh icon can be pressed: a
   registry is on that it can ask (`Inputs::can_check`), none is being asked
   (`Inputs::checking`), and no game is being played. While one is being
-  asked the icon turns and its text is "Refreshing".
+  asked the icon turns and its text is "Refreshing". The check after a
+  list was read does not disable it.
 - `queue_lines` writes the footer: what the queue is doing now, what comes
   next, and a line for a small screen. After an update that changed the
   rules, it says so and that ROLL BACK restores the previous revision.
@@ -294,7 +295,9 @@ app removes the folder (`Runtime::library_uninstall`,
     sits beside the switch and asks the host to refresh that registry
     (`Action::refresh_registry`); it is greyed while the registry is off
     or already being asked, and the refresh mark beside it turns while it
-    is. REMOVE and ADD MIRROR… sit under the subtitle for one the player
+    is. When the ask reads a catalogue the mark shows a check
+    (`ButtonLook::check_ms`) and then the arrow; a failed ask leaves the
+    arrow. REMOVE and ADD MIRROR… sit under the subtitle for one the player
     added. A note under the list (`registry_note`) names the built-in
     registries, and a refusal (`Inputs::registries_notice`) stands over it
     in the lock colour. The rows and the note scroll as the details do.
@@ -575,7 +578,9 @@ right above the list, with no search or DETAILS; that resting on the key
 icon or focusing it shows that registry's fingerprints and public keys,
 and pressing it asks for nothing; that REFRESH asks for that registry and
 is greyed, with the refresh mark turning beside it, while the registry is
-off or already being asked; that a switch's halves, Space, REMOVE, ADD
+off or already being asked; that a refresh which reads a list shows the
+check and then the arrow, and one which fails shows the arrow; that a
+switch's halves, Space, REMOVE, ADD
 MIRROR… and ADD REGISTRY… ask for those actions, with ADD REGISTRY… and
 ADD MIRROR… absent during a match; that
 Tab follows the declared order and the

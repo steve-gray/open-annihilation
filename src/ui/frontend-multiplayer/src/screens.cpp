@@ -561,7 +561,22 @@ data::campaign::CampaignFile* bound_map_context() {
     const char* bound = data::campaign::campaign_mission_name(&state.map_context);
     if (oa::formats::tdf::compare_nocase(bound, map->name.c_str()) != 0) {
         const auto files = map_files();
-        const data::campaign::CampaignEnv env{&files, nullptr, 0, 0};
+        data::campaign::CampaignEnv env{&files, nullptr, 0, 0};
+        // The list's row carries the pack index's name. A base map's row
+        // has none, and a map the source does not list has none.
+        env.pack_index_name = [](void*, const char* name) -> const char* {
+            if (name == nullptr || g_map_source.count == nullptr || g_map_source.at == nullptr)
+                return nullptr;
+            const int32_t count = g_map_source.count(g_map_source.context);
+            for (int32_t row = 0; row < count; ++row) {
+                LobbyPackMap pack{};
+                if (!g_map_source.at(g_map_source.context, row, &pack) || pack.name == nullptr)
+                    continue;
+                if (std::strcmp(pack.name, name) == 0)
+                    return pack.title;
+            }
+            return nullptr;
+        };
         data::campaign::campaign_select_mission(&state.map_context, &env, map->name.c_str());
     }
     return &state.map_context;

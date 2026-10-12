@@ -78,7 +78,7 @@ std::string desktop_exec_argument(std::string_view path_utf8) {
     return written;
 }
 
-std::string desktop_entry(const fs::path& executable) {
+std::string desktop_entry(const fs::path& executable, TypeSet types) {
     const std::string path = detail::utf8_of(executable);
     const std::string argument = desktop_exec_argument(path);
     if (argument.empty())
@@ -89,7 +89,7 @@ std::string desktop_entry(const fs::path& executable) {
     entry += "Name=Open Annihilation\n";
     entry += "Comment=Plays Total Annihilation from your own game files\n";
     // %f: the file opened. Started with no file, the entry drops it and the game starts as
-    // usual; a bare argument naming one of the four file types opens that file.
+    // usual; a bare argument naming one of the file types opens that file.
     entry += "Exec=" + argument + " %f\n";
     // The entry is passed over once the executable is gone.
     entry += "TryExec=" + desktop_string(path) + "\n";
@@ -98,20 +98,24 @@ std::string desktop_entry(const fs::path& executable) {
     entry += "Categories=Game;StrategyGame;\n";
     std::string mime_types;
     for (const FileType& type : file_types) {
+        if (!types.contains(type.extension))
+            continue;
         mime_types += type.mime_type;
         mime_types += ';';
     }
     entry += "MimeType=" + mime_types + "\n";
-    // An opener of the four file types that "Open With" lists, not an entry in the menus.
+    // An opener of the file types that "Open With" lists, not an entry in the menus.
     entry += "NoDisplay=true\n";
     return entry;
 }
 
-std::string mime_package() {
+std::string mime_package(TypeSet types) {
     std::string package;
     package += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     package += "<mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n";
     for (const FileType& type : file_types) {
+        if (!types.contains(type.extension))
+            continue;
         package += "  <mime-type type=\"" + std::string(type.mime_type) + "\">\n";
         package += "    <comment>" + std::string(type.type_name) + "</comment>\n";
         package += "    <sub-class-of type=\"" + std::string(type.parent_mime_type) + "\"/>\n";
@@ -180,17 +184,33 @@ std::optional<fs::path> running_executable() {
 }
 
 Registration register_file_types(
-    const fs::path& executable, std::span<const uint8_t> icon_png, const Places& places
+    const fs::path& executable,
+    std::span<const uint8_t> icon_png,
+    const Places& places,
+    const TypeSet types
 ) {
 #ifdef _WIN32
     static_cast<void>(icon_png);
-    return register_windows(executable, places);
+    return register_windows(executable, places, types);
 #elif defined(__linux__) && !defined(__ANDROID__)
-    return register_xdg(executable, icon_png, places);
+    return register_xdg(executable, icon_png, places, types);
 #else
     // The bundle's Info.plist registers the type; nothing is written at run time.
     static_cast<void>(executable);
     static_cast<void>(icon_png);
+    static_cast<void>(places);
+    static_cast<void>(types);
+    return Registration{};
+#endif
+}
+
+Registration withdraw_file_types(const TypeSet types, const Places& places) {
+#ifdef _WIN32
+    return withdraw_windows(types, places);
+#elif defined(__linux__) && !defined(__ANDROID__)
+    return withdraw_xdg(types, places);
+#else
+    static_cast<void>(types);
     static_cast<void>(places);
     return Registration{};
 #endif

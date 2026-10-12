@@ -56,7 +56,10 @@ if(BUILD_TESTING)
     PRIVATE oa-app-content oa-netgame-http-fixture oa-base-signing oa-base-sha256 oa-base-threads
       oa-test-support)
   add_test(NAME app-content-registries COMMAND oa-app-content-registries-test)
-  set_tests_properties(app-content-registries PROPERTIES TIMEOUT 120)
+  # The wait is the check's connect, idle, descriptor and catalogue limits
+  # plus a margin (see registries_edit_test.cpp), so the harness limit sits
+  # above that one wait.
+  set_tests_properties(app-content-registries PROPERTIES TIMEOUT 300)
 
   # The download API's bodies, and the queue against a local fixture.
   add_executable(oa-app-content-download-api-test tests/download_api_test.cpp)

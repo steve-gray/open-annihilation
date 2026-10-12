@@ -53,6 +53,10 @@ keep-alive, after a body read to the close, and after any failure.
   the caller can walk away.
 - A fetch never blocks past its connect, idle or total limit, and it notices
   a cancel within 50 milliseconds, including while a name is looked up.
+  On Windows the system stack is held to those same limits: the wait ends
+  when a limit runs out even if the stack has not reported an error, which
+  is what happens when a refused address is treated as open and then left
+  in a receive.
 - Nothing is read without a bound: the status and headers stop at
   `max_header_bytes`, and the body stops at `max_body_bytes` after decoding.
 - A GET or HEAD whose reused connection fails before the first response byte

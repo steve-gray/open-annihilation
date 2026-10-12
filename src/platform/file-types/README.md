@@ -17,12 +17,29 @@ nothing is done at run time there.
   start it again: the module's file name on Windows, `/proc/self/exe` on
   Linux. It gives none on macOS and iOS, and none on Linux once the
   executable was deleted or replaced since it started.
-- `register_file_types(executable, icon_png, places)` registers the
-  program on Windows and Linux and says what it did in a `Registration`:
-  whether this system registers at run time, whether anything was written,
-  a line for the log for each thing written, skipped or run, and the error
-  that stopped it. It never throws. `Places` names where it writes, so that
-  the tests write into scratch folders and keys.
+- `TypeSet` names which of the four a call acts on. Each is on unless the
+  caller turns it off, so a call that passes none acts on all four.
+  `complement()` is the types it does not hold.
+- `register_file_types(executable, icon_png, places, types)` registers the
+  program for `types` on Windows and Linux and says what it did in a
+  `Registration`: whether this system registers at run time, whether
+  anything was written, a line for the log for each thing written, skipped
+  or run, and the error that stopped it. It never throws. `Places` names
+  where it writes, so that the tests write into scratch folders and keys.
+  On Linux the MIME package and the desktop entry then list exactly
+  `types`. A type left out loses its mimetype icon. With none of the four,
+  the desktop entry and the MIME package are removed; the program's icon
+  stays.
+- `withdraw_file_types(types, places)` withdraws those types. On Windows a
+  value is this game's, and is removed, only when it is the type's
+  program-identifier key, the `OpenWithProgids` value whose name is that
+  program identifier, or the extension's (Default) or `Content Type` while
+  that value's data is still the game's program identifier or MIME type.
+  Another program's values, and the player's `UserChoice`, stay. On Linux
+  it takes those types out of the package and the desktop entry and removes
+  their mimetype icons, and removes the entry and the package once neither
+  lists a type. The program's icon stays. A missing value is already
+  withdrawn. macOS and iOS withdraw nothing at run time.
 - The texts it writes: `desktop_entry`, `mime_package`,
   `desktop_exec_argument`, `open_command` and `default_icon`.
 - `file_types` names the four, each with its extension, MIME type, the name
@@ -51,11 +68,22 @@ the four file types, 24 in all:
 | `.oamap` | `OpenAnnihilation.MapPack` | `application/x-oamap` | Open Annihilation map pack |
 | `.oareg` | `OpenAnnihilation.Registry` | `application/x-oareg` | Open Annihilation registry |
 
-Each value is read first and written only when it is missing or differs;
-after any write the shell is told that a file association changed, so
-Explorer shows the icon at once. A choice of opener the player made in
-Windows is never touched. A copy started from the temporary folder, as one
-started from inside a zip in Explorer is, registers nothing. Only calls that
+Each value is read first and written only when it is missing or differs.
+A registration of some of the four writes those types and leaves the others
+as they are; the caller withdraws the rest. Withdrawing a type deletes its
+program-identifier key leaf first (`shell\open\command`, then `shell\open`,
+`shell`, `DefaultIcon`, then the program identifier) with `RegDeleteKey`,
+which stops if an unexpected subkey remains, and deletes the
+`OpenWithProgids` value whose name is that program identifier. The
+extension's (Default) is deleted only while its data is still that program
+identifier, and `Content Type` only while its data is still that MIME type.
+The extension key itself stays, and so does every other value on it. The
+player's choice of opener, Explorer's `UserChoice`, is never opened. A
+missing value is already withdrawn. After any write or withdrawal the shell
+is told that a file association changed, so Explorer shows the icon at
+once. A copy started from the temporary folder, as one
+started from inside a zip in Explorer is, registers nothing and withdraws
+nothing. Only calls that
 Windows XP has are used. Removing the eight keys `.oamod`,
 `OpenAnnihilation.Mod`, `.oalang`, `OpenAnnihilation.Language`, `.oamap`,
 `OpenAnnihilation.MapPack`, `.oareg` and `OpenAnnihilation.Registry` forgets
@@ -69,8 +97,8 @@ through a temporary file renamed over it:
 
 | File | What |
 |---|---|
-| `mime/packages/net.coreprime.open-annihilation.xml` | the four MIME types, each with its comment, its parent and its glob: the packages a kind of `application/zip`, `.oareg` a kind of `text/plain` |
-| `applications/net.coreprime.open-annihilation.desktop` | the opener: `Exec="<exe>" %f`, `MimeType=application/x-oamod;application/x-oalang;application/x-oamap;application/x-oareg;`, `NoDisplay=true` |
+| `mime/packages/net.coreprime.open-annihilation.xml` | the registered MIME types, each with its comment, its parent and its glob: the packages a kind of `application/zip`, `.oareg` a kind of `text/plain`. A type left out is not in the package |
+| `applications/net.coreprime.open-annihilation.desktop` | the opener: `Exec="<exe>" %f`, `MimeType=` listing only the registered types (`application/x-oamod;application/x-oalang;application/x-oamap;application/x-oareg;` when all four are), `NoDisplay=true` |
 | `icons/hicolor/256x256/apps/net.coreprime.open-annihilation.png` | the program's icon |
 | `icons/hicolor/256x256/mimetypes/application-x-oamod.png` | the mod packages' icon |
 | `icons/hicolor/256x256/mimetypes/application-x-oalang.png` | the language packs' icon |
@@ -94,7 +122,13 @@ failed, was stopped or was never made, each start runs that tool again. A
 build that starts no other programs (`OA_PROCESS_SPAWNING` off) runs none.
 A copy under `$TMPDIR` or `/tmp`, inside a Flatpak or a Snap (which
 register their own types), or whose path holds a control character or is
-not UTF-8, registers nothing.
+not UTF-8, registers nothing and withdraws nothing. Withdrawing a type
+edits the package and the desktop entry that are already there, removes
+that type's mimetype icon, and removes a file once it lists no type. The
+program's icon is never removed. With all four off, registering the empty
+set removes the desktop entry and the MIME package the same way. The stamp
+rules are a write's: a file whose bytes change loses its stamp first, and
+a removed file loses it too.
 
 ## Tests
 
@@ -107,11 +141,20 @@ tool runs once, the next run writes and runs nothing, a moved executable
 rewrites the desktop entry alone, a new icon with an icon cache runs the
 cache tool, missing tools are no error and run at the next start that has
 them, a tool that hangs is stopped at a one-second limit and runs again at
-the next start, and the starts that register nothing write nothing. On
+the next start, and the starts that register nothing write nothing.
+`test_xdg_subset_and_withdrawal` registers two of the four and checks that
+the package, the desktop entry and the icons hold only those, withdraws one
+and checks that the other remains, and with all four off checks that the
+desktop entry and the MIME package are gone and the program's icon remains.
+On
 Windows it registers under a scratch key of `HKEY_CURRENT_USER` and checks
 the 24 values, that the next run writes nothing, that a moved executable
 rewrites two values per type, and that a copy in the temporary folder
-writes nothing, then removes the key. `app-bundle-file-types`
+writes nothing. `test_windows_withdrawal` registers two types, writes
+another program's (Default), `Content Type` and `OpenWithProgids` value on
+one extension and a `UserChoice` key beside them, withdraws one type and
+checks that the other type and the other program's values are unchanged,
+then removes the scratch key. `app-bundle-file-types`
 (`tools/check_bundle_file_types.py`) checks the two `Info.plist` templates.
 
 ## Limitations

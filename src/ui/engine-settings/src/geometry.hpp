@@ -988,13 +988,16 @@ struct RowContext {
     /// Language lists MORE IN THE LIBRARY… under its row
     /// (Dialog::library_link, for the engine's settings).
     bool library_link{};
+    /// System lists the file-type switches (Dialog::file_type_switches).
+    /// Off, it shows the text row. The default is this system's own.
+    bool file_type_switches{file_types_switchable};
 };
 
 /// Returns what a dialog shows beyond each setting's own rows and lines.
 ///
 /// @param dialog the dialog
-/// @return its Steam Input notice, its Steam Deck's screen rate and whether
-///     Language links to the Library
+/// @return its Steam Input notice, its Steam Deck's screen rate, whether
+///     Language links to the Library, and whether System lists the switches
 [[nodiscard]] RowContext row_context(const Dialog& dialog) noexcept;
 
 /// Tells whether a setting's hint lines are its status, as its row spec

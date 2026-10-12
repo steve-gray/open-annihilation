@@ -61,7 +61,7 @@ inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop
 /// each kind lists alone.
 enum class Page : uint8_t {
     controls,      ///< Controls
-    common_tweaks, ///< Common Tweaks: the player's own folder, the unit limit and pathfinding
+    common_tweaks, ///< Engine Limits: the unit limit and pathfinding
     language,      ///< Language & Text: the language and how game text is drawn
     graphics,      ///< Graphics
     /// User Interface: menu scaling, the window's frame, HUD scaling,
@@ -84,8 +84,12 @@ enum class Page : uint8_t {
     game_files,
     /// Downloads: when catalogues are checked, each registry's install ID
     /// and the downloaded files. On the main menu a link opens the Library
-    /// on Registries. Listed after Game files and before Developer.
+    /// on Registries. Listed after Game files and before System.
     downloads,
+    /// System: the player's own folder, and, where the game registers file
+    /// types at run time, a switch for each. Listed after Downloads and
+    /// before Developer.
+    system,
     mod_keys,   ///< the mod's keys
     mod_patrol, ///< what patrolling builders do
     mod_guard,  ///< what guarding builders do
@@ -96,13 +100,22 @@ enum class Page : uint8_t {
     registered,
 };
 
-/// The number of sections, of every kind of dialog, counting Downloads and
-/// the registered page.
-inline constexpr std::size_t page_count = 16;
-/// The most sections a dialog lists: the engine's settings' ten with
-/// Touch, Controller and Game files, seven without them; a mod's options have
+/// The number of sections, of every kind of dialog, counting Downloads,
+/// System and the registered page.
+inline constexpr std::size_t page_count = 17;
+/// The most sections a dialog lists: the engine's settings' eleven with
+/// Touch, Controller and Game files, eight without them; a mod's options have
 /// five.
-inline constexpr std::size_t most_listed_pages = 10;
+inline constexpr std::size_t most_listed_pages = 11;
+/// Windows and Linux register the four file types at run time, so System
+/// lists a switch for each. macOS and iOS take the types from the app and
+/// cannot withdraw one, so System shows a text row instead. Android does
+/// not register at run time either.
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+inline constexpr bool file_types_switchable = true;
+#else
+inline constexpr bool file_types_switchable = false;
+#endif
 
 /// Which settings a dialog shows.
 enum class DialogKind : uint8_t {
@@ -126,10 +139,10 @@ enum class DialogKind : uint8_t {
 /// @param controller a gamepad has sent input in this run
 ///     (Dialog::controller), so that the engine's settings list Controller
 ///     after Touch and before Game files and Developer
-/// @return seven sections for the engine's settings (Controls, Common
-///     Tweaks, Language & Text, Graphics, User Interface, Downloads and
-///     Developer), one more for each of Touch, Controller and Game files
-///     listed, ten with all three; five
+/// @return eight sections for the engine's settings (Controls, Common
+///     Tweaks, Language & Text, Graphics, User Interface, Downloads, System
+///     and Developer), one more for each of Touch, Controller and Game files
+///     listed, eleven with all three; five
 ///     for a mod's options and one for Language & Text alone, whatever the
 ///     others say
 [[nodiscard]] std::span<const Page> dialog_pages(
@@ -138,7 +151,8 @@ enum class DialogKind : uint8_t {
 
 /// Returns a section's word: its name in kebab case, the same in every
 /// language, as automation names its entry (`oa.settings.nav.<word>`) and a
-/// stage file may name the section ("language", "user-interface").
+/// stage file may name the section ("language", "user-interface",
+/// "engine-limits").
 ///
 /// @param page the section
 /// @return the word
@@ -256,6 +270,16 @@ enum class Setting : uint8_t {
     /// part of Open Annihilation's own screens (DialogAction::show_gallery);
     /// it changes no setting
     kit_gallery,
+    /// File Type Registration: the heading over the four file-type switches,
+    /// with the group's hint. It changes no setting.
+    file_type_registration,
+    file_type_oamod,  ///< Mod packages (.oamod): a switch
+    file_type_oamap,  ///< Map packs (.oamap): a switch
+    file_type_oalang, ///< Language packs (.oalang): a switch
+    file_type_oareg,  ///< Registry files (.oareg): a switch
+    /// File types: the text row macOS and iOS show in place of the switches.
+    /// It changes no setting.
+    file_types_note,
 };
 
 /// Returns the settings a section shows, top to bottom.
@@ -332,8 +356,8 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
-/// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8 and
-/// Downloads 9 in every dialog of the engine's settings, and a dialog
+/// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8,
+/// Downloads 9 and System 10 in every dialog of the engine's settings, and a dialog
 /// without Touch has no control 5, one without Controller no control 6.
 /// The registered page has no entry of this form; its entries are
 /// registered_nav_control.
@@ -783,6 +807,12 @@ struct Dialog {
     /// open_dialog where the platform brings game files in and the dialog is
     /// the main menu's.
     bool game_files{};
+    /// System lists a switch for each file type. Off, it shows the text row
+    /// instead. The default is this system's own capability
+    /// (file_types_switchable). open_dialog starts from that; a test may set
+    /// it afterwards to draw the other layout. OK reads the settings either
+    /// way.
+    bool file_type_switches{file_types_switchable};
     /// The Game files section's summary: "3.1c · Core Contingency · Battle Tactics · music · 1 mod".
     std::string game_files_summary{};
     /// Its sizes line: what the game files use and what is free on the device.

@@ -20,8 +20,10 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa::ui::library {
 
@@ -67,10 +69,61 @@ struct ScreenState {
     /// model's details closes the page too.
     bool details_page{};
     Drag drag{}; ///< a finger's press in a pane
-    /// How far the header's refresh icon has turned, in eighths of a turn,
-    /// 0 to 7. The screen advances it while the registries are being asked.
+    /// How far a turning refresh mark has turned, in eighths of a turn, 0 to 7.
+    /// step_refresh_marks advances it from the time spent turning.
     uint8_t refresh_turn{};
+    /// How long the header's check has been showing, in milliseconds. Zero
+    /// while the arrow rests or turns. The check lasts kit::refresh_check_ms.
+    uint16_t refresh_check_ms{};
+    /// Milliseconds the marks have been turning, since the latest turn began.
+    uint32_t refresh_spin_ms{};
+    /// A mark was turning on the previous step.
+    bool refresh_spinning{};
+    /// The header's refresh was running on the previous step.
+    bool refresh_was_checking{};
+    /// This turn of the header's refresh has read a list.
+    bool refresh_read_list{};
+
+    /// One registry's refresh mark, between steps.
+    struct RegistryMark {
+        std::string id{};      ///< the registry's id
+        bool was_refreshing{}; ///< it was being asked on the previous step
+        uint16_t check_ms{};   ///< how long its check has shown; 0 while it has not
+    };
+
+    /// The registries whose marks are turning or showing a check.
+    std::vector<RegistryMark> registry_marks{};
 };
+
+/// One registry's refresh, as the inputs name it for one step of the marks.
+struct RegistryPulse {
+    std::string_view id{}; ///< the registry's id
+    bool refreshing{};     ///< it is being asked now
+    bool failed{};         ///< the last ask found nothing usable
+};
+
+/// Advances every refresh mark by the time since the previous step.
+///
+/// While a refresh runs, the shared turn is the eighth kit::refresh_eighth
+/// names for the milliseconds spent turning, so the place after a given time
+/// does not depend on how many frames made that time up. When the header's
+/// refresh stops after a list was read, or a registry's does and that ask
+/// did not fail, its mark shows the check; a failure leaves the arrow. A
+/// refresh that starts again clears that mark's check at once. The return is
+/// false while nothing a mark draws has changed, so a host can leave the
+/// screen as it is.
+///
+/// @param[in,out] state the marks, and what the previous step left
+/// @param checking the header's refresh is running
+/// @param registries each registry's refresh this step
+/// @param elapsed_ms the milliseconds since the previous step
+/// @return true when a mark's arrow, turn or check would draw differently
+[[nodiscard]] bool step_refresh_marks(
+    ScreenState& state,
+    bool checking,
+    std::span<const RegistryPulse> registries,
+    uint32_t elapsed_ms
+);
 
 /// What one input asked of the host.
 struct ScreenResult {

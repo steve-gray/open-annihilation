@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -984,10 +985,84 @@ void recover_package_installs(const Options& options) {
     }
 }
 
-/// Makes this copy of the game the opener of the four file types for the
-/// player, where the system takes it at run time; only a start someone
-/// plays does: no check, test or unattended run, and none that names its
-/// own preferences, player's or data folder, or draws no window.
+/// Writes what a file-type registration did, one log line each.
+///
+/// @param done what the registration or withdrawal did
+void log_file_types(const oa::platform::file_types::Registration& done) {
+    for (const auto& line : done.lines)
+        std::cerr << "open-annihilation: file types: " << line << '\n';
+    if (!done.error.empty())
+        std::cerr << "open-annihilation: file types: " << done.error << '\n';
+}
+
+/// Tells whether a registration did not take, so a withdrawal must not run
+/// over whatever another copy or another program left.
+///
+/// @param done what the registration did
+/// @return true when this system does not register, the registration failed,
+///     or it skipped
+bool file_types_not_applied(const oa::platform::file_types::Registration& done) {
+    if (!done.supported || !done.error.empty())
+        return true;
+    for (const auto& line : done.lines)
+        if (line.rfind("skipped:", 0) == 0)
+            return true;
+    return false;
+}
+
+/// The file types whose preference is not the word off. A missing file, a
+/// missing key, or a failure to read the preferences leaves all four on.
+///
+/// @return the types to register
+oa::platform::file_types::TypeSet enabled_file_types() {
+    namespace file_types = oa::platform::file_types;
+    file_types::TypeSet enabled;
+    try {
+        const fs::path preferences = preference_file(std::nullopt);
+        std::error_code error;
+        if (!fs::exists(preferences, error) || error)
+            return enabled;
+        const oa::platform::preferences::Values values =
+            oa::platform::preferences::load(preferences);
+        const auto off = [&values](std::string_view key) {
+            const auto found = values.find(std::string{key});
+            return found != values.end() && found->second == "off";
+        };
+        namespace key = oa::ui::engine_settings::key;
+        if (off(key::file_type_oamod))
+            enabled.mod = false;
+        if (off(key::file_type_oalang))
+            enabled.language = false;
+        if (off(key::file_type_oamap))
+            enabled.map = false;
+        if (off(key::file_type_oareg))
+            enabled.registry = false;
+    } catch (const std::exception&) {
+        return {};
+    }
+    return enabled;
+}
+
+/// Registers the types in `enabled` and, where that took, withdraws the rest.
+///
+/// @param enabled the types the player left on
+void apply_file_type_set(oa::platform::file_types::TypeSet enabled) {
+    namespace file_types = oa::platform::file_types;
+    const auto executable = file_types::running_executable();
+    if (!executable)
+        return;
+    const auto done = file_types::register_file_types(*executable, window_icon_png(), {}, enabled);
+    log_file_types(done);
+    if (file_types_not_applied(done))
+        return;
+    log_file_types(file_types::withdraw_file_types(enabled.complement()));
+}
+
+/// Makes this copy of the game the opener of the file types the player left
+/// on, where the system takes it at run time; only a start someone plays
+/// does: no check, test or unattended run, and none that names its own
+/// preferences, player's or data folder, or draws no window. A type left
+/// off is withdrawn then, not at the next start after this one.
 ///
 /// @param options the parsed command line
 void register_file_types_for_player(const Options& options) {
@@ -997,15 +1072,7 @@ void register_file_types_for_player(const Options& options) {
     if (const auto driver = oa::platform::environment_value("SDL_VIDEO_DRIVER");
         driver && (*driver == "dummy" || *driver == "offscreen"))
         return;
-    namespace file_types = oa::platform::file_types;
-    const auto executable = file_types::running_executable();
-    if (!executable)
-        return;
-    const auto done = file_types::register_file_types(*executable, window_icon_png());
-    for (const auto& line : done.lines)
-        std::cerr << "open-annihilation: file types: " << line << '\n';
-    if (!done.error.empty())
-        std::cerr << "open-annihilation: file types: " << done.error << '\n';
+    apply_file_type_set(enabled_file_types());
 }
 
 /// Hands the files a start carries to the copy of the game already running,

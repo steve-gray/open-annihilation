@@ -24,6 +24,7 @@
 #include "oa/ui/gui_input/gadget_panel.hpp"
 #include "oa/ui/gui_layout/gui_gadget.hpp"
 #include "oa/ui/hud/player_records.hpp"
+#include "map_packs.hpp"
 #include "match_fault.hpp"
 
 #include <SDL3/SDL.h>
@@ -49,6 +50,21 @@
 #include <vector>
 
 namespace oa::app {
+
+/// The name an installed pack gives a map, or null when the index has no entry.
+///
+/// @param context the runtime
+/// @param map_name the map's name, `<stem>@<id>`
+/// @return the index's name; the text stays valid through the call that asks
+const char* pack_index_title(void* context, const char* map_name) {
+    if (context == nullptr || map_name == nullptr)
+        return nullptr;
+    const PackMap* found = static_cast<Runtime*>(context)->map_packs().find(map_name);
+    if (found == nullptr || found->title.empty())
+        return nullptr;
+    return found->title.c_str();
+}
+
 namespace {
 
 namespace campaign = oa::ui::campaign;
@@ -324,6 +340,7 @@ bool names_equal(std::string_view left, std::string_view right) {
 bool load_skirmish_session(
     missions::CampaignFile* session,
     oa::AssetStore& assets,
+    Runtime& runtime,
     uint32_t difficulty,
     const entry::SkirmishSettings& settings,
     const std::string& map
@@ -343,7 +360,9 @@ bool load_skirmish_session(
         nullptr,
         nullptr
     };
-    const missions::CampaignEnv env{&files, nullptr, static_cast<int32_t>(difficulty), roster};
+    missions::CampaignEnv env{&files, nullptr, static_cast<int32_t>(difficulty), roster};
+    env.pack_index_name = pack_index_title;
+    env.pack_index_context = &runtime;
     session->kind = missions::SessionKind::skirmish;
     return missions::campaign_load_mission_info(session, &env, map.c_str());
 }
@@ -614,9 +633,11 @@ const missions::CampaignFile* Runtime::match_map_context() {
     const char* name = selected_map_name_runtime_.c_str();
     if (oa::formats::tdf::compare_nocase(state.map.mission_name, name) != 0) {
         const auto files = missions::campaign_asset_files(assets_);
-        const missions::CampaignEnv env{
+        missions::CampaignEnv env{
             &files, nullptr, static_cast<int32_t>(preferences_.difficulty), 0
         };
+        env.pack_index_name = pack_index_title;
+        env.pack_index_context = this;
         if (!missions::campaign_select_mission(&state.map, &env, name)) {
             state.map.mission_name[0] = '\0';
             return nullptr;
@@ -743,6 +764,7 @@ std::string Runtime::session_ai_profile_path() {
     if (load_skirmish_session(
             session.get(),
             assets_,
+            *this,
             preferences_.difficulty,
             skirmish_settings_,
             selected_map_name_runtime_
@@ -765,6 +787,7 @@ std::string Runtime::session_schema() {
     if (load_skirmish_session(
             session.get(),
             assets_,
+            *this,
             preferences_.difficulty,
             skirmish_settings_,
             selected_map_name_runtime_
@@ -819,6 +842,7 @@ void Runtime::load_mission_features(
         if (load_skirmish_session(
                 session.get(),
                 assets_,
+                *this,
                 preferences_.difficulty,
                 skirmish_settings_,
                 selected_map_name_runtime_

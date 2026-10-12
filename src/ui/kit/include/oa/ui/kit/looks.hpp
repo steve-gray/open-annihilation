@@ -60,10 +60,15 @@ struct ButtonLook {
     bool enabled{true};                    ///< false draws the plain look's disabled face
     ButtonMark mark{ButtonMark::none};     ///< a mark in place of the caption
     /// How far a refresh arrow has turned, in eighths of a turn, 0 to 7.
+    /// One eighth is refresh_revolution_ms / 8 milliseconds.
     uint8_t turn{};
     /// The refresh arrow is turning: it stays in the text colour while the
-    /// button is disabled, so the turn can be seen.
+    /// button is disabled, so the turn can be seen. A new turn clears the check.
     bool turning{};
+    /// How long a finished refresh has shown its check, in milliseconds.
+    /// Zero is the arrow. The kit eases the arrow into the check over
+    /// refresh_ease_ms and holds the check until refresh_check_ms.
+    uint16_t check_ms{};
 };
 
 /// An Off/On switch. The captions are already looked up.

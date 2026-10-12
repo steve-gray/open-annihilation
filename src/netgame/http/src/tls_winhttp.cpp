@@ -16,9 +16,11 @@
 
 #include "oa/formats/url.hpp"
 
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -53,6 +55,9 @@ constexpr DWORD kErrorCancelled = 12017;
 constexpr DWORD kErrorConnect = 12029;
 constexpr DWORD kErrorReset = 12030;
 constexpr DWORD kErrorSecure = 12175;
+/// WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT. The four WinHttpSetTimeouts
+/// values do not set this one, and a missing value waits with no limit.
+constexpr DWORD kOptionReceiveResponseTimeout = 7;
 constexpr DWORD kCertCn = 0x00000010;
 constexpr DWORD kCertDate = 0x00000020;
 constexpr DWORD kCertRevoked = 0x00000004;
@@ -123,10 +128,52 @@ struct AsyncResult {
     DWORD error{};
 };
 
+/// Notes a callback may still touch after the fetch has stopped waiting.
+std::mutex g_notes_mu;
+std::vector<std::shared_ptr<AsyncNote>> g_notes;
+
+/// Keeps a note alive for the callback until drop_note.
+///
+/// @return the note
+std::shared_ptr<AsyncNote> keep_note() {
+    auto note = std::make_shared<AsyncNote>();
+    std::lock_guard<std::mutex> lock(g_notes_mu);
+    g_notes.push_back(note);
+    return note;
+}
+
+/// Drops the registry's reference. A callback already holding the note may finish.
+///
+/// @param note the note; null is ignored
+void drop_note(AsyncNote* note) {
+    if (note == nullptr)
+        return;
+    std::lock_guard<std::mutex> lock(g_notes_mu);
+    for (auto it = g_notes.begin(); it != g_notes.end(); ++it) {
+        if (it->get() == note) {
+            g_notes.erase(it);
+            return;
+        }
+    }
+}
+
+/// Finds a note the callback may still use.
+///
+/// @param context the pointer passed to the send
+/// @return the note, or null when the fetch has dropped it
+std::shared_ptr<AsyncNote> find_note(uintptr_t context) {
+    std::lock_guard<std::mutex> lock(g_notes_mu);
+    for (const std::shared_ptr<AsyncNote>& note : g_notes) {
+        if (reinterpret_cast<uintptr_t>(note.get()) == context)
+            return note;
+    }
+    return {};
+}
+
 void WINAPI
 status_callback(void* /*handle*/, uintptr_t context, DWORD status, void* info, DWORD length) {
-    auto* note = reinterpret_cast<AsyncNote*>(context);
-    if (note == nullptr)
+    const std::shared_ptr<AsyncNote> note = find_note(context);
+    if (!note)
         return;
     std::lock_guard<std::mutex> lock(note->mu);
     if (note->closing)
@@ -224,80 +271,157 @@ void map_error(DWORD error, DWORD secure, Failure& failure, std::string& detail)
     (void)kErrorReset;
 }
 
-/// True when the whole fetch's clock or the cancel flag has fired.
+/// Milliseconds from a start until now, never negative.
+///
+/// @param from the start
+/// @param now the current time
+/// @return the elapsed milliseconds
+int64_t
+elapsed_ms(std::chrono::steady_clock::time_point from, std::chrono::steady_clock::time_point now) {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - from).count();
+    return elapsed < 0 ? 0 : elapsed;
+}
+
+/// Which clock bounds this wait. Opening an address uses the connect limit.
+/// Waiting for a byte uses the idle limit. The whole-fetch limit applies to both.
+enum class WaitPhase : uint8_t { connect, idle };
+
+/// True when cancel or a clock says this wait is over.
+///
+/// The system stack's own report is not required. A refused address can be
+/// treated as connected and then left waiting in a receive, so this clock is
+/// what ends the hop.
 ///
 /// @param clock the clocks
+/// @param from when this phase started
+/// @param phase connect while the address is opening, idle after that
 /// @param[out] failure the failure, when this returns true
 /// @param[out] detail the sentence
 /// @return true when the hop should stop
-bool clock_stopped(const FetchClock& clock, Failure& failure, std::string& detail) {
+bool clocks_fired(
+    const FetchClock& clock,
+    std::chrono::steady_clock::time_point from,
+    WaitPhase phase,
+    Failure& failure,
+    std::string& detail
+) {
     if (clock.cancel != nullptr && clock.cancel->load()) {
         failure = Failure::cancelled;
         detail = "the fetch was cancelled";
         return true;
     }
-    if (clock.timeouts.total_ms == 0)
-        return false;
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - clock.started
-    )
-                             .count();
-    if (elapsed >= static_cast<int64_t>(clock.timeouts.total_ms)) {
+    const auto now = std::chrono::steady_clock::now();
+    if (clock.timeouts.total_ms > 0 &&
+        elapsed_ms(clock.started, now) >= static_cast<int64_t>(clock.timeouts.total_ms)) {
         failure = Failure::timed_out;
         detail = "the time limit ran out";
+        return true;
+    }
+    const uint32_t limit =
+        phase == WaitPhase::connect ? clock.timeouts.connect_ms : clock.timeouts.idle_ms;
+    const std::chrono::steady_clock::time_point origin =
+        phase == WaitPhase::connect ? clock.hop : from;
+    if (elapsed_ms(origin, now) >= static_cast<int64_t>(limit)) {
+        if (phase == WaitPhase::connect) {
+            failure = Failure::cannot_connect;
+            detail = "the connection could not be opened";
+        } else {
+            failure = Failure::timed_out;
+            detail = "the time limit ran out";
+        }
         return true;
     }
     return false;
 }
 
-/// Waits until the callback records a completion, or the clock fires.
+/// What one callback recorded, copied while the note's lock was held.
+struct CallbackSnap {
+    bool completed = false;
+    DWORD status = 0;
+    DWORD error = 0;
+    DWORD secure = 0;
+    DWORD count = 0;
+};
+
+/// Waits until the callback records a completion, or a clock fires.
+///
+/// The recorded fields are copied before the lock is released. A callback
+/// that arrives after the wait has ended must not race those reads.
 ///
 /// @param note the callback's note
-/// @param request closed when the clock fires, so the callback can finish
 /// @param clock the clocks
+/// @param from when this phase started
+/// @param phase connect while the address is opening, idle after that
 /// @param[out] failure why the wait stopped
 /// @param[out] detail the sentence
-/// @return true when a completion was recorded
-bool wait_callback(
-    AsyncNote& note, void* request, const FetchClock& clock, Failure& failure, std::string& detail
+/// @return the copy; completed is false when a clock stopped the wait
+CallbackSnap wait_callback(
+    AsyncNote& note,
+    const FetchClock& clock,
+    std::chrono::steady_clock::time_point from,
+    WaitPhase phase,
+    Failure& failure,
+    std::string& detail
 ) {
+    CallbackSnap snap;
     std::unique_lock<std::mutex> lock(note.mu);
     while (!note.got) {
-        if (clock_stopped(clock, failure, detail)) {
-            lock.unlock();
-            if (request != nullptr && g_api.close != nullptr)
-                g_api.close(request);
-            return false;
-        }
+        if (clocks_fired(clock, from, phase, failure, detail))
+            return snap;
         note.cv.wait_for(lock, std::chrono::milliseconds(50));
     }
-    return true;
+    snap.completed = true;
+    snap.status = note.status;
+    snap.error = note.error;
+    snap.secure = note.secure;
+    if (note.status == kStatusData)
+        snap.count = note.available;
+    else if (note.status == kStatusRead)
+        snap.count = note.read_count;
+    return snap;
 }
 
 /// Starts an async call and waits for its callback.
 ///
 /// @param started what the WinHTTP call returned
 /// @param note the note, cleared by the caller before the call
-/// @param request the request handle
 /// @param clock the clocks
+/// @param from when this phase started
+/// @param phase connect while the address is opening, idle after that
 /// @param[out] exchange the hop, filled when this returns false
+/// @param[out] count bytes the callback reported, when it reported a count
 /// @return true when the callback reported the step finished
 bool finish_async(
-    BOOL started, AsyncNote& note, void* request, const FetchClock& clock, HttpsExchange& exchange
+    BOOL started,
+    AsyncNote& note,
+    const FetchClock& clock,
+    std::chrono::steady_clock::time_point from,
+    WaitPhase phase,
+    HttpsExchange& exchange,
+    DWORD* count
 ) {
     if (started == FALSE) {
         const DWORD error = GetLastError();
         if (error != kPending) {
-            map_error(error, note.secure, exchange.failure, exchange.detail);
+            DWORD secure = 0;
+            {
+                std::lock_guard<std::mutex> lock(note.mu);
+                secure = note.secure;
+            }
+            map_error(error, secure, exchange.failure, exchange.detail);
             return false;
         }
     }
-    if (!wait_callback(note, request, clock, exchange.failure, exchange.detail))
+    const CallbackSnap snap =
+        wait_callback(note, clock, from, phase, exchange.failure, exchange.detail);
+    if (!snap.completed)
         return false;
-    if (note.status == kStatusError) {
-        map_error(note.error, note.secure, exchange.failure, exchange.detail);
+    if (snap.status == kStatusError) {
+        map_error(snap.error, snap.secure, exchange.failure, exchange.detail);
         return false;
     }
+    if (count != nullptr)
+        *count = snap.count;
     return true;
 }
 
@@ -377,6 +501,7 @@ void close_all(AsyncNote& note, void* request, void* connection, void* session) 
         g_api.close(connection);
     if (session != nullptr)
         g_api.close(session);
+    drop_note(&note);
 }
 
 /// True when TLS 1.2 can be selected on a session.
@@ -389,6 +514,44 @@ bool allow_tls12(void* session) {
         return true;
     protocols = kTls12;
     return g_api.set_option(session, kOptionSecureProtocols, &protocols, sizeof protocols) != FALSE;
+}
+
+/// One millisecond when a limit is zero. The stack treats zero as no limit.
+///
+/// @param limit the limit, in milliseconds
+/// @return the value passed to the stack
+int stack_timeout(uint32_t limit) {
+    if (limit == 0)
+        return 1;
+    if (limit > static_cast<uint32_t>(INT32_MAX))
+        return INT32_MAX;
+    return static_cast<int>(limit);
+}
+
+/// Gives one handle the fetch's clocks.
+///
+/// The receive-response limit is separate from the four timeout values.
+/// While the address is still opening it is the connect limit, so a receive
+/// that follows a refused connection the stack treated as open cannot outlast
+/// that limit. After the request has been sent it is the idle limit.
+///
+/// @param handle a session or a request
+/// @param clock the clocks
+/// @param response_ms how long a receive of the response may wait
+void apply_clocks(void* handle, const FetchClock& clock, uint32_t response_ms) {
+    if (handle == nullptr)
+        return;
+    const int connect = stack_timeout(clock.timeouts.connect_ms);
+    const int idle = stack_timeout(clock.timeouts.idle_ms);
+    const int response = stack_timeout(response_ms);
+    if (g_api.timeouts != nullptr)
+        g_api.timeouts(handle, connect, connect, idle, idle);
+    if (g_api.set_option != nullptr) {
+        DWORD response_timeout = static_cast<DWORD>(response);
+        g_api.set_option(
+            handle, kOptionReceiveResponseTimeout, &response_timeout, sizeof response_timeout
+        );
+    }
 }
 
 } // namespace
@@ -502,17 +665,13 @@ HttpsExchange fetch_https_hop(
         exchange.detail = "This system cannot use HTTPS";
         return exchange;
     }
-    if (g_api.timeouts != nullptr) {
-        const int connect =
-            static_cast<int>(clock.timeouts.connect_ms == 0 ? 1 : clock.timeouts.connect_ms);
-        const int idle = static_cast<int>(clock.timeouts.idle_ms == 0 ? 1 : clock.timeouts.idle_ms);
-        g_api.timeouts(session, connect, connect, idle, idle);
-    }
-    AsyncNote note;
+    apply_clocks(session, clock, clock.timeouts.connect_ms);
+    const std::shared_ptr<AsyncNote> note = keep_note();
     const std::wstring host = widen(url.host);
     void* connection = g_api.connect(session, host.c_str(), static_cast<WORD>(url.port), 0);
     if (connection == nullptr) {
         g_api.close(session);
+        drop_note(note.get());
         exchange.failure = Failure::cannot_connect;
         exchange.detail = "the connection could not be opened";
         return exchange;
@@ -528,11 +687,12 @@ HttpsExchange fetch_https_hop(
         connection, verb, target.c_str(), nullptr, nullptr, accepts, kFlagSecure
     );
     if (handle == nullptr) {
-        close_all(note, nullptr, connection, session);
+        close_all(*note, nullptr, connection, session);
         exchange.failure = Failure::cannot_connect;
         exchange.detail = "the connection could not be opened";
         return exchange;
     }
+    apply_clocks(handle, clock, clock.timeouts.connect_ms);
     DWORD disable = kDisableRedirects;
     g_api.set_option(handle, kOptionDisableFeature, &disable, sizeof disable);
     // The last argument is reserved and must be null. The callback's context
@@ -545,7 +705,7 @@ HttpsExchange fetch_https_hop(
     std::memcpy(&invalid_callback, &invalid_bits, sizeof invalid_callback);
     const CallbackFn installed = g_api.set_callback(handle, status_callback, kCallbackFlags, 0);
     if (installed == invalid_callback) {
-        close_all(note, handle, connection, session);
+        close_all(*note, handle, connection, session);
         exchange.failure = Failure::connection_lost;
         exchange.detail = "the secure connection failed";
         return exchange;
@@ -565,7 +725,7 @@ HttpsExchange fetch_https_hop(
     for (const Header& header : request.headers)
         headers += widen(header.name) + L": " + widen(header.value) + L"\r\n";
 
-    reset_note(note);
+    reset_note(*note);
     const DWORD body_size = static_cast<DWORD>(body.size());
     void* body_bytes = body.empty() ? nullptr : const_cast<uint8_t*>(body.data());
     const BOOL sent = g_api.send(
@@ -575,48 +735,58 @@ HttpsExchange fetch_https_hop(
         method == Method::post ? body_bytes : nullptr,
         method == Method::post ? body_size : 0,
         method == Method::post ? body_size : 0,
-        reinterpret_cast<uintptr_t>(&note)
+        reinterpret_cast<uintptr_t>(note.get())
     );
-    if (!finish_async(sent, note, handle, clock, exchange)) {
-        close_all(note, handle, connection, session);
+    if (!finish_async(sent, *note, clock, clock.hop, WaitPhase::connect, exchange, nullptr)) {
+        close_all(*note, handle, connection, session);
         return exchange;
     }
-    reset_note(note);
+    auto idle_from = std::chrono::steady_clock::now();
+    apply_clocks(handle, clock, clock.timeouts.idle_ms);
+    reset_note(*note);
     const BOOL received = g_api.receive(handle, nullptr);
-    if (!finish_async(received, note, handle, clock, exchange)) {
-        close_all(note, handle, connection, session);
+    if (!finish_async(received, *note, clock, idle_from, WaitPhase::idle, exchange, nullptr)) {
+        close_all(*note, handle, connection, session);
         return exchange;
     }
     if (!read_headers(handle, exchange)) {
         exchange.failure = Failure::bad_response;
         exchange.detail = "the response could not be read";
-        close_all(note, handle, connection, session);
+        close_all(*note, handle, connection, session);
         return exchange;
     }
     HopBody hop(request, sink, exchange, oa::formats::url::url_text(url));
     if (!hop.take_head()) {
-        close_all(note, handle, connection, session);
+        close_all(*note, handle, connection, session);
         return exchange;
     }
     if (!hop.redirect() && method != Method::head) {
         while (exchange.failure == Failure::none) {
-            reset_note(note);
+            idle_from = std::chrono::steady_clock::now();
+            reset_note(*note);
             const BOOL asked = g_api.data(handle, nullptr);
-            if (!finish_async(asked, note, handle, clock, exchange))
+            DWORD available = 0;
+            if (!finish_async(
+                    asked, *note, clock, idle_from, WaitPhase::idle, exchange, &available
+                ))
                 break;
-            if (note.available == 0)
+            if (available == 0)
                 break;
-            DWORD want = note.available;
+            DWORD want = available;
             if (want > 16384)
                 want = 16384;
             std::vector<uint8_t> buffer(want);
-            reset_note(note);
+            idle_from = std::chrono::steady_clock::now();
+            reset_note(*note);
             const BOOL reading = g_api.read(handle, buffer.data(), want, nullptr);
-            if (!finish_async(reading, note, handle, clock, exchange))
+            DWORD read_count = 0;
+            if (!finish_async(
+                    reading, *note, clock, idle_from, WaitPhase::idle, exchange, &read_count
+                ))
                 break;
-            if (note.read_count == 0)
+            if (read_count == 0)
                 break;
-            buffer.resize(note.read_count);
+            buffer.resize(read_count);
             if (!hop.take_bytes(buffer))
                 break;
         }
@@ -626,7 +796,7 @@ HttpsExchange fetch_https_hop(
             exchange.detail = "the body could not be decoded";
         }
     }
-    close_all(note, handle, connection, session);
+    close_all(*note, handle, connection, session);
     return exchange;
 }
 
