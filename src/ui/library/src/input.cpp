@@ -779,6 +779,19 @@ ScreenResult activate(
         after_browsing(library, state, list);
         return redrawn();
     }
+    if (controls::detail_tag_control(id)) {
+        const Entry* entry = selected_entry(library);
+        if (entry == nullptr || entry->listing == nullptr)
+            return {};
+        const auto index = static_cast<std::size_t>(id - controls::first_detail_tag);
+        const std::vector<std::string>& package_tags = entry->listing->tags;
+        if (index < package_tags.size())
+            set_tag(
+                library, library.tag == package_tags[index] ? std::string() : package_tags[index]
+            );
+        after_browsing(library, state, list);
+        return redrawn();
+    }
     if (controls::row_icon_control(id)) {
         const auto place = static_cast<std::size_t>(id - controls::first_row_icon);
         if (place >= library.visible.size())

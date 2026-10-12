@@ -374,6 +374,129 @@ void pills_are_rounded_and_stepped_at_1x() {
     expect(chip, 10, 10, kit::colour::accent);
 }
 
+/// A selectable pill: active matches Playing, inactive matches Built in,
+/// hover and focus show on the capsule, and disabled ignores both.
+void a_selectable_pill_shows_its_states() {
+    const kit::Rect pill{10, 10, 40, 12};
+    renderer::Surface active = black(60, 32);
+    kit::draw_pill(canvas_on(active), pill, {"", kit::PillState::active});
+    expect(active, 10, 10, kBlack);
+    expect(active, 10, 16, kit::colour::accent);
+    expect(active, 30, 16, kit::colour::accent);
+
+    renderer::Surface inactive = black(60, 32);
+    kit::draw_pill(canvas_on(inactive), pill, {"", kit::PillState::inactive});
+    expect(inactive, 10, 10, kBlack);
+    expect(inactive, 10, 16, kit::colour::control_hover);
+    expect(inactive, 30, 16, kit::colour::control_hover);
+
+    kit::PillLook hovered{"", kit::PillState::active};
+    hovered.hovered = true;
+    renderer::Surface hot = black(60, 32);
+    kit::draw_pill(canvas_on(hot), pill, hovered);
+    expect(hot, 10, 16, kit::colour::accent_light);
+    expect(hot, 30, 16, kit::colour::accent_light);
+
+    kit::PillLook muted{"", kit::PillState::inactive};
+    muted.hovered = true;
+    renderer::Surface outlined = black(60, 32);
+    kit::draw_pill(canvas_on(outlined), pill, muted);
+    expect(outlined, 10, 16, kit::colour::accent);
+    expect(outlined, 30, 16, kit::colour::control_hover);
+
+    kit::PillLook focused = hovered;
+    focused.focused = true;
+    renderer::Surface both = black(60, 32);
+    kit::draw_pill(canvas_on(both), pill, focused);
+    expect(both, 10, 16, kit::colour::text);
+    expect(both, 30, 16, kit::colour::accent_light);
+
+    kit::PillLook idle_focus{"", kit::PillState::inactive};
+    idle_focus.focused = true;
+    renderer::Surface focus = black(60, 32);
+    kit::draw_pill(canvas_on(focus), pill, idle_focus);
+    expect(focus, 10, 16, kit::colour::text);
+    expect(focus, 30, 16, kit::colour::control_hover);
+
+    kit::PillLook off{"GET", kit::PillState::active};
+    off.disabled = true;
+    off.hovered = true;
+    off.focused = true;
+    renderer::Surface disabled = black(60, 32);
+    kit::draw_pill(canvas_on(disabled), pill, off);
+    expect(disabled, 10, 16, kit::colour::control_hover);
+    // The word sits in the middle; the ground is the capsule beside it.
+    expect(disabled, 18, 16, kit::colour::control_hover);
+    renderer::Surface enabled = black(60, 32);
+    kit::draw_pill(canvas_on(enabled), pill, {"GET", kit::PillState::active});
+    bool saw_word = false;
+    for (int32_t y = 10; y < 22; ++y) {
+        for (int32_t x = 10; x < 50; ++x) {
+            if (pixel(enabled, x, y) != kit::colour::on_accent)
+                continue;
+            expect(disabled, x, y, kit::colour::switch_idle);
+            saw_word = true;
+        }
+    }
+    OA_CHECK(saw_word);
+
+    kit::DisplayList list;
+    kit::add_pill(list, pill, {"All (11)", kit::PillState::active}, 7, "library.filter.all");
+    OA_CHECK(list.controls.size() == 1 && list.controls[0].checked && list.controls[0].enabled);
+    kit::PillLook disabled_look{"All (11)", kit::PillState::inactive};
+    disabled_look.disabled = true;
+    kit::add_pill(list, {0, 20, 40, 12}, disabled_look, 8, "library.filter.new");
+    OA_CHECK(!list.controls[1].checked && !list.controls[1].enabled);
+}
+
+/// A name with spaces at either end is drawn trimmed, and the maker starts
+/// list_row_gap after that drawn name.
+void a_trimmed_name_keeps_a_gap_before_the_maker() {
+    const kit::Rect rect{0, 0, 320, kit::compact_metrics.list_row_height};
+    const auto draw = [&](std::string title) {
+        kit::ListRowLook look;
+        look.badge_text = "AL";
+        look.badge_colour = kit::colour::lock;
+        look.title = std::move(title);
+        look.by = "by Cavedog Entertainment";
+        renderer::Surface surface = black(360, 80);
+        kit::Canvas canvas = canvas_on(surface);
+        kit::draw_list_row(canvas, rect, look);
+        return surface;
+    };
+    const renderer::Surface spaced = draw("  Lake  ");
+    const renderer::Surface plain = draw("Lake");
+    same(spaced, plain);
+
+    const int32_t inset = kit::compact_metrics.list_row_inset;
+    const int32_t side = std::min(rect.height - 2 * inset, kit::compact_metrics.list_row_badge);
+    const int32_t text_left = rect.x + inset + side + inset;
+    renderer::Surface scratch = black(1, 1);
+    kit::Canvas canvas = canvas_on(scratch);
+    const int32_t drawn = kit::measure_text(canvas, kit::FontRole::regular, "Lake");
+    const int32_t by_left = text_left + drawn + kit::compact_metrics.list_row_gap;
+    bool saw_maker = false;
+    for (int32_t y = 0; y < static_cast<int32_t>(plain.height); ++y) {
+        for (int32_t x = 0; x < static_cast<int32_t>(plain.width); ++x) {
+            const kit::Colour ink = pixel(plain, x, y);
+            if (ink == kit::colour::text)
+                OA_CHECK(x < by_left);
+            if (ink == kit::colour::hint) {
+                OA_CHECK(x >= by_left);
+                saw_maker = true;
+            }
+        }
+    }
+    OA_CHECK(saw_maker);
+
+    const renderer::Surface blank = draw(" \t ");
+    bool maker_at_the_name = false;
+    for (int32_t y = 0; y < static_cast<int32_t>(blank.height); ++y)
+        for (int32_t x = text_left; x < text_left + 8; ++x)
+            maker_at_the_name = maker_at_the_name || pixel(blank, x, y) == kit::colour::hint;
+    OA_CHECK(maker_at_the_name);
+}
+
 // ---- State icons ----
 
 /// Tells whether a surface holds black everywhere outside a rectangle.
@@ -1327,6 +1450,8 @@ int main() {
     a_blank_badge_and_tags();
     chips_take_every_state();
     pills_are_rounded_and_stepped_at_1x();
+    a_selectable_pill_shows_its_states();
+    a_trimmed_name_keeps_a_gap_before_the_maker();
     state_icons_are_drawn_at_their_own_pixels();
     chips_show_state_icons();
     the_aside_keeps_a_whole_version();

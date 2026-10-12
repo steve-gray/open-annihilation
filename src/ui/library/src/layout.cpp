@@ -1264,33 +1264,35 @@ void add_compact_search_row(Building& building, const kit::Rect& row) {
     );
 }
 
-/// Appends Regular's chips: All, New, Installed and Updates with their
-/// counts, the tab's tags while they fit, and TAGS ▾ with the rest.
+/// Appends Regular's pills: All, New, Installed and Updates with their
+/// counts, the tab's tags while they fit, and TAGS ▾ with the rest. The
+/// chosen one is active, the others inactive. Large's column is unchanged.
 ///
 /// @param[in,out] building the layout
 /// @param row the row
 void add_chip_row(Building& building, const kit::Rect& row) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
-    const int32_t chip_top = row.y + (row.height - metrics.chip_height) / 2;
+    const int32_t height = kit::pill_height();
+    const int32_t pill_top = row.y + (row.height - height) / 2;
     int32_t left = row.x;
-    const auto add_chip = [&](const kit::ChipLook& look, kit::ControlId id, std::string name) {
-        const int32_t width = kit::chip_width(*building.fonts, look);
-        const kit::Rect rect{left, chip_top, width, metrics.chip_height};
-        kit::ChipLook drawn = look;
-        drawn.hovered = hovered(building, id);
+    const auto add_one = [&](kit::PillLook look, kit::ControlId id, std::string name) {
+        look.hovered = hovered(building, id);
+        look.focused = focused(building, id);
+        const int32_t width = kit::pill_width(*building.fonts, look);
+        const kit::Rect rect{left, pill_top, width, height};
         const std::size_t before = building.list.controls.size();
-        kit::add_chip(building.list, rect, drawn, id, unique_name(building, std::move(name)));
+        kit::add_pill(building.list, rect, look, id, unique_name(building, std::move(name)));
         move_controls(building.list, before, building.top);
         tab_stop(building, building.top.back());
         left += width + metrics.chip_gap;
     };
     for (std::size_t index = 0; index < filter_order.size(); ++index) {
-        kit::ChipLook look;
+        kit::PillLook look;
         look.text = filter_caption(library, filter_order[index]);
-        look.state = kit::ChipState::filter;
-        look.selected = shown_filter(library) == filter_order[index];
-        add_chip(
+        look.state = shown_filter(library) == filter_order[index] ? kit::PillState::active
+                                                                  : kit::PillState::inactive;
+        add_one(
             look,
             controls::filter_control(filter_order[index]),
             named("filter." + std::string(filter_words[index]))
@@ -1300,9 +1302,9 @@ void add_chip_row(Building& building, const kit::Rect& row) {
     std::vector<int32_t> widths;
     int32_t total = 0;
     for (const auto& [tag, count] : tags) {
-        kit::ChipLook look;
+        kit::PillLook look;
         look.text = tag;
-        widths.push_back(kit::chip_width(*building.fonts, look));
+        widths.push_back(kit::pill_width(*building.fonts, look));
         total += widths.back() + metrics.chip_gap;
     }
     const int32_t row_right = row.x + row.width;
@@ -1325,11 +1327,11 @@ void add_chip_row(Building& building, const kit::Rect& row) {
             );
             break;
         }
-        kit::ChipLook look;
+        kit::PillLook look;
         look.text = tags[index].first;
-        look.state = kit::ChipState::filter;
-        look.selected = library.tag == tags[index].first;
-        add_chip(
+        look.state =
+            library.tag == tags[index].first ? kit::PillState::active : kit::PillState::inactive;
+        add_one(
             look,
             controls::first_tag + static_cast<kit::ControlId>(index),
             named("tag." + name_word(tags[index].first))
@@ -2432,6 +2434,65 @@ int32_t add_note(
     return bottom;
 }
 
+/// Appends a package's tags as inactive pills on a wrapping row. Pressing
+/// one chooses that tag. Nothing is added when the package has no tags.
+///
+/// @param[in,out] building the layout
+/// @param entry the entry
+/// @param left the row's left
+/// @param top the row's top
+/// @param width the columns the row may use
+/// @param clip the part that shows
+/// @param scroll_group the scroll area
+/// @return the bottom of the row, or top when there are no tags
+int32_t add_detail_tags(
+    Building& building,
+    const Entry& entry,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    const kit::Rect& clip,
+    int32_t scroll_group
+) {
+    if (entry.listing == nullptr || entry.listing->tags.empty() || width <= 0)
+        return top;
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t height = kit::pill_height();
+    int32_t x = left;
+    int32_t y = top;
+    const std::size_t count = std::min(entry.listing->tags.size(), controls::most_detail_tags);
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::string& tag = entry.listing->tags[index];
+        kit::PillLook look;
+        look.text = tag;
+        look.state = kit::PillState::inactive;
+        const kit::ControlId id = controls::first_detail_tag + static_cast<kit::ControlId>(index);
+        look.hovered = hovered(building, id);
+        look.focused = focused(building, id);
+        const int32_t across = kit::pill_width(*building.fonts, look);
+        if (index > 0 && x > left && x + across > left + width) {
+            x = left;
+            y += height + metrics.chip_gap;
+        }
+        const kit::Rect rect{x, y, across, height};
+        const std::size_t before = building.list.controls.size();
+        kit::add_pill(
+            building.list,
+            rect,
+            look,
+            id,
+            unique_name(building, named("detail.tag." + name_word(tag)))
+        );
+        building.list.items.back().clip = clip;
+        move_controls(building.list, before, building.detail);
+        building.detail.back().clip = clip;
+        building.detail.back().group = scroll_group;
+        tab_stop(building, building.detail.back());
+        x += across + metrics.chip_gap;
+    }
+    return y + height;
+}
+
 /// Appends the details pane's parts for an entry, scrolled up by an offset.
 ///
 /// @param[in,out] building the layout
@@ -2506,6 +2567,10 @@ int32_t add_details_content(
         top = add_lines(building, summary, left, top, width, kit::colour::list_text, view) +
               metrics.paragraph_gap;
     }
+    const int32_t tags_bottom =
+        add_detail_tags(building, entry, left, top, width, view, controls::details_group);
+    if (tags_bottom != top)
+        top = tags_bottom + metrics.paragraph_gap;
     top = add_map_previews(building, entry, left, top, width, view);
     top = add_facts(building, entry, {left, top, width, 0}, true, wide_fact_lines, view) +
           metrics.paragraph_gap;
@@ -4436,7 +4501,7 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
 }
 
 /// Appends the focus ring round the control that has the focus, unless the
-/// control draws its own: a nav entry, or the search field's border.
+/// control draws its own: a nav entry, a pill, or the search field's border.
 ///
 /// @param[in,out] building the layout
 void add_focus_ring(Building& building) {
@@ -4445,7 +4510,8 @@ void add_focus_ring(Building& building) {
         interaction.focused == controls::search || interaction.focused == controls::active_search)
         return;
     for (const kit::Item& item : building.list.items)
-        if (item.control == interaction.focused && item.role == kit::Role::nav)
+        if (item.control == interaction.focused &&
+            (item.role == kit::Role::nav || item.role == kit::Role::pill))
             return;
     for (const auto* group : {&building.top, &building.panes, &building.detail, &building.footer}) {
         for (const kit::Control& control : *group) {
@@ -5071,6 +5137,10 @@ kit::DisplayList details_page_layout(
             top = add_lines(into, summary, view.x, top, width, kit::colour::list_text, view) +
                   metrics.paragraph_gap;
         }
+        const int32_t tags_bottom =
+            add_detail_tags(into, *entry, view.x, top, width, view, controls::details_group);
+        if (tags_bottom != top)
+            top = tags_bottom + metrics.paragraph_gap;
         top = add_map_previews(into, *entry, view.x, top, width, view);
         top = add_facts(into, *entry, {view.x, top, width, 0}, false, compact_fact_lines, view) +
               metrics.paragraph_gap;

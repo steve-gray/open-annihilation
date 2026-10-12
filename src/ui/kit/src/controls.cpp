@@ -520,6 +520,29 @@ void draw_arrow(const Canvas& canvas, const Rect& rect, const HoverCardLook& loo
     }
 }
 
+/// Tells whether a byte is white space a shown name sheds at either end.
+///
+/// ASCII only, so a name trims the same way on every machine.
+///
+/// @param byte the byte
+/// @return true for space, tab or a line break
+bool ascii_space(unsigned char byte) noexcept {
+    return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r' || byte == '\f' ||
+           byte == '\v';
+}
+
+/// Returns a text with white space taken off both ends.
+///
+/// @param text the text
+/// @return the text inside that white space; empty when it was only white space
+std::string_view trimmed_ends(std::string_view text) noexcept {
+    while (!text.empty() && ascii_space(static_cast<unsigned char>(text.front())))
+        text.remove_prefix(1);
+    while (!text.empty() && ascii_space(static_cast<unsigned char>(text.back())))
+        text.remove_suffix(1);
+    return text;
+}
+
 } // namespace
 
 std::string cut_to_width(const Fonts& fonts, FontRole role, std::string_view text, int32_t width) {
@@ -638,11 +661,17 @@ void draw_list_row(const Canvas& canvas, const Rect& rect, const ListRowLook& lo
 
     const int32_t room = std::max(text_right - text_left, int32_t{0});
     const Rect title_box{text_left, title_row, room, kMetrics.regular_line};
-    if (canvas.fonts != nullptr && !look.title.empty()) {
-        const std::string title = cut_to_width(*canvas.fonts, FontRole::regular, look.title, room);
-        line(canvas, FontRole::regular, title, title_box, Align::left, colour::text);
-        const int32_t by_left =
-            text_left + text_width(*canvas.fonts, FontRole::regular, title) + kMetrics.list_row_gap;
+    // Trim only what the row shows. The maker is placed from the width the
+    // title is drawn at (bold on the smooth form), plus list_row_gap, so a
+    // wider drawn face cannot eat the space before "by".
+    const std::string_view trimmed = trimmed_ends(look.title);
+    if (canvas.fonts != nullptr && !trimmed.empty()) {
+        const std::string title = cut_to_width(*canvas.fonts, FontRole::regular, trimmed, room);
+        const int32_t drawn = measure_text(canvas, FontRole::regular, title);
+        const int32_t title_width = std::min(drawn, room);
+        const Rect fitted{text_left, title_row, title_width, kMetrics.regular_line};
+        line(canvas, FontRole::regular, title, fitted, Align::left, colour::text);
+        const int32_t by_left = text_left + title_width + kMetrics.list_row_gap;
         if (!look.by.empty() && by_left < text_right) {
             const Rect by_box{by_left, title_row, text_right - by_left, kMetrics.regular_line};
             cut_line(canvas, FontRole::small, look.by, by_box, Align::left, colour::hint);
@@ -726,18 +755,21 @@ struct PillColours {
     std::optional<Colour> outline{}; ///< the outline; none when the ground is the whole pill
 };
 
-/// Returns a pill's colours. Playing is the accent filled, with on_accent
-/// text and no separate outline. Neutral is the muted ground under the text
-/// colour. Installed, update and problem use that ground with an outline and
-/// text in the colour a chip of that state uses.
+/// Returns a pill's colours from its state alone. Playing and active are
+/// the accent filled, with on_accent text and no separate outline. Neutral
+/// and inactive are the muted ground under the text colour. Installed,
+/// update and problem use that ground with an outline and text in the
+/// colour a chip of that state uses.
 ///
-/// @param state the pill
+/// @param state the state
 /// @return its colours
-PillColours pill_colours(PillState state) noexcept {
+PillColours colours_for(PillState state) noexcept {
     switch (state) {
     case PillState::playing:
+    case PillState::active:
         return {colour::accent, colour::on_accent, std::nullopt};
     case PillState::neutral:
+    case PillState::inactive:
         return {colour::control_hover, colour::text, std::nullopt};
     case PillState::installed:
         return {colour::control_hover, colour::accent, colour::accent};
@@ -747,6 +779,29 @@ PillColours pill_colours(PillState state) noexcept {
         return {colour::control_hover, colour::danger, colour::danger};
     }
     return {colour::control_hover, colour::text, std::nullopt};
+}
+
+/// Returns a pill's colours, including hover, focus and disabled.
+///
+/// Hover lightens an accent ground and outlines a muted one. Focus outlines
+/// the pill in the text colour, over a hover outline. Disabled is the muted
+/// ground under the idle colour and ignores the other two.
+///
+/// @param look the pill
+/// @return its colours
+PillColours pill_colours(const PillLook& look) noexcept {
+    if (look.disabled)
+        return {colour::control_hover, colour::switch_idle, std::nullopt};
+    PillColours colours = colours_for(look.state);
+    const bool accent_ground = look.state == PillState::playing || look.state == PillState::active;
+    const bool muted = look.state == PillState::neutral || look.state == PillState::inactive;
+    if (look.hovered && accent_ground)
+        colours.ground = colour::accent_light;
+    if (look.hovered && muted)
+        colours.outline = colour::accent;
+    if (look.focused)
+        colours.outline = colour::text;
+    return colours;
 }
 
 /// Returns the padding either side of a pill's text: half its height, and
@@ -769,7 +824,7 @@ void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look) {
     if (!drawable(canvas) || rect.width <= 0 || rect.height <= 0)
         return;
     const int32_t radius = std::min(rect.width, rect.height) / 2;
-    const PillColours colours = pill_colours(look.state);
+    const PillColours colours = pill_colours(look);
     if (colours.outline.has_value()) {
         // The outline is the whole capsule, and the ground is the capsule
         // one point in, so a partial pixel is one colour or the other.
@@ -794,12 +849,24 @@ void add_pill(
     item.rect = rect;
     item.control = id;
     item.text = look.text;
+    item.state.hovered = look.hovered;
+    item.state.focused = look.focused;
+    item.state.selected = look.state == PillState::active;
+    item.state.disabled = look.disabled;
     item.look = look;
     list.items.push_back(std::move(item));
     if (id == no_control)
         return;
     add_control(
-        list, rect, id, std::move(name), ControlKind::button, false, false, look.text, true
+        list,
+        rect,
+        id,
+        std::move(name),
+        ControlKind::button,
+        false,
+        look.state == PillState::active,
+        look.text,
+        !look.disabled
     );
 }
 

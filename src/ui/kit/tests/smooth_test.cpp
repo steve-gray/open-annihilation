@@ -15,6 +15,7 @@
 #include "oa/ui/kit/controls.hpp"
 #include "oa/test/check.hpp"
 
+#include "oa/formats/fnt.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/paint/painter.hpp"
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -450,6 +452,89 @@ void components_draw_on_the_smooth_form() {
     OA_CHECK(inked(listed.pixels) == (paint::Box{0, 0, 30, 15}));
 }
 
+/// The synthetic font the crisp checks use: a few columns a glyph, so the
+/// bold face at 150% is wider than this measure.
+///
+/// @return the fonts
+kit::Fonts block_fonts() {
+    renderer::TextFont font;
+    font.font.nominal_height = 8;
+    constexpr uint8_t ink_index = 1;
+    for (int byte = 0; byte < 256; ++byte) {
+        const auto width = static_cast<uint16_t>(2 + byte % 4);
+        constexpr uint16_t height = 8;
+        const auto count = static_cast<std::size_t>(width) * height;
+        std::vector<uint8_t> pixels(count, ink_index);
+        std::vector<uint8_t> coverage(count, 0);
+        for (uint16_t y = 0; y < height; ++y) {
+            for (uint16_t x = 0; x < width; ++x) {
+                if ((static_cast<int>(x) + y + byte) % 3 != 0)
+                    coverage[static_cast<std::size_t>(y) * width + x] = 1;
+            }
+        }
+        font.font.glyphs[static_cast<std::size_t>(byte)] =
+            oa::formats::fnt::Glyph{width, height, 0, 0, std::move(pixels), std::move(coverage)};
+    }
+    font.ink[ink_index] = static_cast<uint16_t>(renderer::blend_opaque);
+    return {font, font, {}, {}};
+}
+
+/// At 150% the name is drawn in the bold face, which is wider than the game
+/// font, and the maker still starts list_row_gap after that drawn name. A
+/// name with spaces at either end draws as the trimmed name.
+void the_maker_starts_after_the_drawn_name_at_one_and_a_half() {
+    auto modern = bundled_fonts();
+    OA_CHECK(modern != nullptr);
+    if (!modern)
+        return;
+    const kit::Fonts game = block_fonts();
+    const kit::Rect rect{0, 0, 420, kit::compact_metrics.list_row_height};
+    const auto draw = [&](Smooth& smooth, std::string title, std::string by) {
+        smooth.canvas.fonts = &game;
+        kit::ListRowLook look;
+        look.badge_text = "AL";
+        look.badge_colour = kit::colour::lock;
+        look.title = std::move(title);
+        look.by = std::move(by);
+        kit::draw_list_row(smooth.canvas, rect, look);
+    };
+    Smooth spaced(700, 90, kOneAndAHalf, modern.get());
+    Smooth plain(700, 90, kOneAndAHalf, modern.get());
+    draw(spaced, "  Lake  ", "by Cavedog Entertainment");
+    draw(plain, "Lake", "by Cavedog Entertainment");
+    OA_CHECK(spaced.pixels.width == plain.pixels.width);
+    OA_CHECK(spaced.pixels.height == plain.pixels.height);
+    bool matches = true;
+    for (int y = 0; y < plain.pixels.height && matches; ++y)
+        for (int x = 0; x < plain.pixels.width; ++x)
+            matches = matches &&
+                      paint::pixel_at(spaced.pixels, x, y) == paint::pixel_at(plain.pixels, x, y);
+    OA_CHECK(matches);
+
+    Smooth named(700, 90, kOneAndAHalf, modern.get());
+    Smooth bare(700, 90, kOneAndAHalf, modern.get());
+    draw(named, "Lake", "by Cavedog Entertainment");
+    draw(bare, "Lake", "");
+    int leftmost = named.pixels.width;
+    for (int y = 0; y < named.pixels.height; ++y)
+        for (int x = 0; x < named.pixels.width; ++x)
+            if (paint::pixel_at(named.pixels, x, y) != paint::pixel_at(bare.pixels, x, y))
+                leftmost = std::min(leftmost, x);
+    const int32_t inset = kit::compact_metrics.list_row_inset;
+    const int32_t side = std::min(rect.height - 2 * inset, kit::compact_metrics.list_row_badge);
+    const int32_t text_left = rect.x + inset + side + inset;
+    const int32_t measured = kit::measure_text(named.canvas, kit::FontRole::regular, "Lake");
+    const int32_t game_width = kit::text_width(game, kit::FontRole::regular, "Lake");
+    OA_CHECK(measured > game_width);
+    const int32_t by_left = text_left + measured + kit::compact_metrics.list_row_gap;
+    const int32_t old_left = text_left + game_width + kit::compact_metrics.list_row_gap;
+    const int start = kit::to_canvas(kit::Rect{by_left, 0, 1, 1}, kOneAndAHalf).x;
+    const int old_start = kit::to_canvas(kit::Rect{old_left, 0, 1, 1}, kOneAndAHalf).x;
+    OA_CHECK(leftmost < named.pixels.width);
+    OA_CHECK(leftmost + 1 >= start);
+    OA_CHECK(leftmost > old_start);
+}
+
 /// A pill's edge at 150% is partly covered pixels, not a step.
 void a_pill_is_smooth_at_one_and_a_half() {
     Smooth smooth(120, 40, kOneAndAHalf);
@@ -479,6 +564,7 @@ int main() {
     coverage_lands_on_the_canvass_own_pixels();
     components_draw_on_the_smooth_form();
     a_pill_is_smooth_at_one_and_a_half();
+    the_maker_starts_after_the_drawn_name_at_one_and_a_half();
     maker_marks_are_smooth_at_one_and_a_half();
     return oa::test::check_exit_status();
 }

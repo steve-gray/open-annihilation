@@ -250,20 +250,27 @@ struct ChipLook {
 };
 
 /// What a pill says, which chooses its colours. A pill is a word on a fully
-/// rounded ground, not a chip: chips stay rectangular.
+/// rounded ground, not a chip: chips stay rectangular. Active and inactive
+/// are the selectable pair: active is drawn as playing, inactive as neutral.
 enum class PillState : uint8_t {
     playing,   ///< accent ground, on_accent text
     neutral,   ///< a muted ground, text colour: built in
     installed, ///< the accent, as a chip's installed state
     update,    ///< the lock colour, as a chip's update state
     problem,   ///< the danger colour, as a chip's problem state
+    active,    ///< chosen, as playing: accent ground, on_accent text
+    inactive,  ///< not chosen, as neutral: a muted ground, text colour
 };
 
 /// A pill: a short text on a fully rounded ground about chip_height high.
-/// The text is drawn as given, already looked up.
+/// The text is drawn as given, already looked up. Hover, focus and disabled
+/// are drawn on the pill itself.
 struct PillLook {
     std::string text{};                  ///< the words
     PillState state{PillState::neutral}; ///< which colours
+    bool hovered{};                      ///< the pointer is over it, or holds it
+    bool focused{};                      ///< the keyboard focus is on it
+    bool disabled{};                     ///< it cannot act: muted ground, idle text
 };
 
 /// A row of a list, in its full or its short form, which its rectangle's

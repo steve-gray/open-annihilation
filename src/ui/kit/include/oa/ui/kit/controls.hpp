@@ -189,11 +189,15 @@ void add_chip(
 }
 
 /// Draws a pill: a small-font word centred on a fully rounded ground about
-/// chip_height high. Playing is filled with the accent under on_accent text.
-/// Neutral is a muted ground (control_hover) under the text colour. Installed,
-/// update and problem use that muted ground, with an outline and text in the
-/// colour the chips' states use (the accent, the lock colour, the danger
-/// colour). The corner is stepped at scale 1 and smooth on the 150% form.
+/// chip_height high. Playing and active are filled with the accent under
+/// on_accent text. Neutral and inactive are a muted ground (control_hover)
+/// under the text colour. Installed, update and problem use that muted
+/// ground, with an outline and text in the colour the chips' states use
+/// (the accent, the lock colour, the danger colour). Hover lightens an
+/// accent ground and outlines a muted one; focus outlines the pill in the
+/// text colour. Disabled is the muted ground under the idle colour, and
+/// ignores hover and focus. The corner is stepped at scale 1 and smooth
+/// on the 150% form.
 ///
 /// @param canvas where it is drawn
 /// @param rect the pill
@@ -201,7 +205,8 @@ void add_chip(
 void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look);
 
 /// Appends a pill: one item and, with a control number, one control of kind
-/// button that does not take steps. With no_control only the item is added.
+/// button that does not take steps, checked while its state is active,
+/// enabled unless disabled. With no_control only the item is added.
 ///
 /// @param[in,out] list the display list
 /// @param rect the pill

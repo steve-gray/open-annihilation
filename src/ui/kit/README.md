@@ -173,12 +173,16 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     is never cut on either form;
   - a pill (`PillLook`, `pill_width`, `pill_height`, `draw_pill`,
     `add_pill`): a small-font word on a fully rounded ground
-    `chip_height` (12) points high. Playing fills the accent and writes
-    `on_accent`; neutral fills a muted ground (`control_hover`) and writes
-    the text colour, for "Built in"; installed, update and problem fill
-    that same muted ground and outline the word in the colour the chip of
-    that state uses. The ends are stepped at 1x on the crisp form and
-    smooth at 150%. A chip stays a rectangle;
+    `chip_height` (12) points high. Playing and active fill the accent and
+    write `on_accent`; neutral and inactive fill a muted ground
+    (`control_hover`) and write the text colour, for "Built in" and for a
+    filter that is off; installed, update and problem fill that same muted
+    ground and outline the word in the colour the chip of that state uses.
+    Hover lightens an accent ground and outlines a muted one; focus
+    outlines the pill in the text colour; disabled is the muted ground
+    under the idle colour and ignores hover and focus. The ends are
+    stepped at 1x on the crisp form and smooth at 150%. A chip stays a
+    rectangle;
   - a text field, and with the magnifier the search field, its text moved
     so its caret shows;
   - tabs with a count, `tab_rects`;
