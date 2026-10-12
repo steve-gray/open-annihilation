@@ -4422,7 +4422,7 @@ class Runtime final : public menu::Host,
     void prepare_registries_check();
 
     /// Lists, switches and removes an added registry on the Library's Registries
-    /// tab, refuses an https address without asking the content service, and
+    /// tab, asks the content service about an https address, and
     /// opens an .oareg file the run posts, which is refused once its catalogue
     /// cannot be reached (--check-registries).
     void check_registries();

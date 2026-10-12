@@ -278,7 +278,7 @@ const char* refusal_text(Refusal refusal) noexcept {
     case Refusal::built_in_mirror:
         return "A mirror cannot be added to a registry that ships with the game.";
     case Refusal::bad_mirror:
-        return "A mirror must be an http address with no query.";
+        return "A mirror must be an http or https address with no query.";
     case Refusal::mirror_listed:
         return "This mirror is already listed.";
     case Refusal::no_keys:
@@ -344,7 +344,8 @@ check_new_mirror(std::string_view id, const formats::url::Url& url, const AddCon
         context.player == nullptr ? nullptr : find_added(*context.player, id);
     if (added == nullptr)
         return Refusal::not_added;
-    if (url.scheme != formats::url::Scheme::http || formats::url::has_query(url))
+    if ((url.scheme != formats::url::Scheme::http && url.scheme != formats::url::Scheme::https) ||
+        formats::url::has_query(url))
         return Refusal::bad_mirror;
     for (const formats::url::Url& mirror : added->descriptor.mirrors) {
         if (mirror == url)

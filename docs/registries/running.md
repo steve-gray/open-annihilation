@@ -1,7 +1,8 @@
 # Running a registry
 
-A direct registry is a folder on any static HTTP server. OA fetches it over
-plain HTTP and checks the signature, so the server does not need TLS.
+A direct registry is a folder on any static file server. OA checks the
+signature, so the server does not need TLS: plain HTTP is enough. An
+`https` address is fetched with the system's TLS where the system has it.
 
 ## Make the folder
 
@@ -10,7 +11,7 @@ plain HTTP and checks the signature, so the server does not need TLS.
    its fingerprint. Put only the public key in the descriptor.
 2. `oa-tool registry init FOLDER --id ID --name NAME --base-url URL --key KEY_FILE`
    makes a direct registry. `FOLDER` must be missing or empty.
-   `--base-url` is the `http` address the registry is served at, with no
+   `--base-url` is the `http` or `https` address the registry is served at, with no
    trailing slash. `--homepage` is optional. The command writes
    `registry.yaml`, an empty catalogue signed for 30 days, its `.sig`, and
    the `v1/p` and `v1/i` folders. It reads the descriptor and the signed
@@ -28,7 +29,7 @@ plain HTTP and checks the signature, so the server does not need TLS.
 5. `oa-tool catalogue sign --key KEY_FILE catalogue.json` writes the
    detached signature over those exact bytes. Do not reformat the catalogue
    after signing.
-6. Serve the folder at `--base-url` over plain HTTP. The catalogue URL in
+6. Serve the folder at `--base-url`. Plain HTTP is enough. The catalogue URL in
    the descriptor MUST be the URL of `catalogue.json` on that host.
 
 The publish script in the open-annihilation/content-library repository is

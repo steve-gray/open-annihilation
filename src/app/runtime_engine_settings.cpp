@@ -120,6 +120,7 @@ namespace content = oa::app::content;
     }
     offer.kept_bytes = content::downloaded_bytes(folder);
     offer.downloads_busy = busy;
+    offer.https_over_http = content::https_read_over_http();
     return offer;
 }
 

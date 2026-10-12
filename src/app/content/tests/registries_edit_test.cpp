@@ -442,14 +442,20 @@ void test_refusals() {
     service.start();
 
     const int before = static_cast<int>(server.requests().size());
-    const uint64_t https = service.check_registry_url("https://127.0.0.1/oa/registry.yaml");
+    const uint64_t https = service.check_registry_url("https://127.0.0.1:1/oa/registry.yaml");
     const std::optional<content::RegistryCheck> https_check = await(service, https);
     expect_refusal(https_check, registry::Refusal::unreadable);
     OA_CHECK(https_check && !https_check->descriptor.has_value());
     OA_CHECK(https_check && https_check->address.empty());
-    OA_CHECK(
-        https_check && https_check->detail == url::url_error_text(url::UrlError::https_not_fetched)
-    );
+    const bool needs_https =
+        https_check &&
+        https_check->detail ==
+            oa::netgame::http::failure_text(oa::netgame::http::Failure::https_needs_tls);
+    const bool reached =
+        https_check && (https_check->detail.find("cannot be reached") != std::string::npos ||
+                        https_check->detail.find("certificate") != std::string::npos);
+    OA_CHECK(needs_https || reached);
+    OA_CHECK(https_check && https_check->detail.find("plain HTTP") == std::string::npos);
     OA_CHECK(static_cast<int>(server.requests().size()) == before);
 
     server.serve_bytes("/bad.yaml", {'n', 'o', '\n'}, "text/plain");

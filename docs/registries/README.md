@@ -1,9 +1,11 @@
 # The OA Registry Specification
 
-A registry is a catalogue of packages Open Annihilation can install, served
-over plain HTTP, with a detached signature so the catalogue can be trusted
-without TLS. This specification, `registry: 1`, is everything a registry
-serves. Anyone can run one that OA trusts without reading the engine.
+A registry is a catalogue of packages Open Annihilation can install. A
+detached signature is the trust, whatever the transport: OA fetches an
+`https` address with the system's TLS where the system has it, and reads
+it as `http` where it does not. This specification, `registry: 1`, is
+everything a registry serves. Anyone can run one that OA trusts without
+reading the engine.
 
 The key words MUST, MUST NOT, SHOULD and SHOULD NOT in these documents are
 to be interpreted as described in RFC 2119.
@@ -46,7 +48,9 @@ signature and, if `downloads.mode` is `tokens`, its download API follow
 these documents. A package file conforms when it follows
 [packages.md](packages.md) and the standard for its kind.
 
-OA fetches catalogues and packages over plain HTTP. It checks a signed
+OA fetches catalogues and packages over `http` or `https`. Where the system
+has TLS, `https` uses it and a certificate the system rejects fails the
+fetch. Where it does not, `https` is read as `http`. It checks a signed
 catalogue against the keys it already trusts, and a package against the
-SHA-256 the catalogue names. HTTPS is for a page a browser opens, not for a
-fetch.
+SHA-256 the catalogue names, either way. A page a browser opens may be
+`http` or `https` and may have a query.

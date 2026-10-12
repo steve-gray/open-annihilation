@@ -34,7 +34,7 @@ Every document in the repository, by what you want to do.
   built-in registry, adding one by its address or an `.oareg` file, "Not
   reviewed by the OA team", mirrors, the Downloads settings and the install
   ID, and privacy: exactly what a download sends, what Core Prime records
-  and for how long, and what plain HTTP shows to someone on the network.
+  and for how long, and what a download shows to someone on the network.
 - [touch-controls.md](touch-controls.md): playing with fingers on an iPad,
   an iPhone or a touch screen: the gestures, the tablet and phone layouts,
   QUEUE, ADD and x5, the order wheel, building, the Touch settings, the

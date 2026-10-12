@@ -356,7 +356,7 @@ std::optional<IssuedKey> read_issued_key(std::span<const uint8_t> body, std::str
     url::UrlError url_error = url::UrlError::none;
     const std::optional<url::Url> parsed = url::parse_http_url(*address, &url_error);
     if (!parsed) {
-        set_why(why, "the key's address is not a plain HTTP address");
+        set_why(why, "the key's address is not an http or https address");
         return std::nullopt;
     }
     IssuedKey key;

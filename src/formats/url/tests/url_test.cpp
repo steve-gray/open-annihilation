@@ -228,9 +228,6 @@ void test_refused() {
     expect_refused("ftp://host/", UrlError::unknown_scheme);
     expect_refused("file://host/a", UrlError::unknown_scheme);
 
-    expect_refused("https://example.org/", UrlError::https_not_fetched, true);
-    expect_refused("HTTPS://example.org/a", UrlError::https_not_fetched, true);
-
     expect_refused("http://user@host/", UrlError::user_info);
     expect_refused("http://user:secret@host/a", UrlError::user_info);
 
@@ -262,7 +259,7 @@ void test_refused() {
     expect_refused("http://host/q%zz", UrlError::bad_escape);
 
     OA_CHECK(!parse_web_url("http://127.1/").has_value());
-    OA_CHECK(!parse_http_url("https://example.org/").has_value());
+    OA_CHECK(parse_http_url("https://example.org/").has_value());
     UrlError untouched = UrlError::none;
     OA_CHECK(!parse_web_url("ftp://host/"));
     OA_CHECK(untouched == UrlError::none);
@@ -335,6 +332,57 @@ void test_resolution() {
     OA_CHECK(secured && secured->scheme == Scheme::https && secured->host == "other");
 }
 
+/// The address a fetch opens: https kept when TLS is on, read as http when it is not.
+void test_fetch_address() {
+    UrlError error = UrlError::none;
+    const std::optional<FetchAddress> kept =
+        address_for_fetch("https://example.org/a", true, &error);
+    OA_CHECK(kept.has_value());
+    OA_CHECK(error == UrlError::none);
+    OA_CHECK(kept && url_text(kept->url) == "https://example.org/a");
+    OA_CHECK(kept && !kept->rewritten_to_http);
+
+    const std::optional<FetchAddress> folded =
+        address_for_fetch("HTTPS://Example.ORG/a", true, &error);
+    OA_CHECK(folded && url_text(folded->url) == "https://example.org/a");
+    OA_CHECK(folded && !folded->rewritten_to_http);
+
+    const std::optional<FetchAddress> plain =
+        address_for_fetch("https://example.org/a", false, &error);
+    OA_CHECK(plain && url_text(plain->url) == "http://example.org/a");
+    OA_CHECK(plain && plain->url.port == 80);
+    OA_CHECK(plain && plain->rewritten_to_http);
+
+    const std::optional<FetchAddress> named_https =
+        address_for_fetch("https://example.org:443/a", false, &error);
+    OA_CHECK(named_https && url_text(named_https->url) == "http://example.org:443/a");
+    OA_CHECK(named_https && named_https->url.port == 443);
+    OA_CHECK(named_https && named_https->rewritten_to_http);
+
+    const std::optional<FetchAddress> named_other =
+        address_for_fetch("https://example.org:8443/a", false, &error);
+    OA_CHECK(named_other && url_text(named_other->url) == "http://example.org:8443/a");
+    OA_CHECK(named_other && named_other->rewritten_to_http);
+
+    const std::optional<FetchAddress> named_http =
+        address_for_fetch("https://example.org:80/a", false, &error);
+    OA_CHECK(named_http && url_text(named_http->url) == "http://example.org/a");
+    OA_CHECK(named_http && named_http->url.port == 80);
+    OA_CHECK(named_http && named_http->rewritten_to_http);
+
+    const std::optional<FetchAddress> http =
+        address_for_fetch("http://example.org/a", false, &error);
+    OA_CHECK(http && url_text(http->url) == "http://example.org/a");
+    OA_CHECK(http && !http->rewritten_to_http);
+
+    OA_CHECK(!address_for_fetch("http://user@example.org/a", true, &error));
+    OA_CHECK(error == UrlError::user_info);
+    OA_CHECK(!address_for_fetch("https://[::1]/a", false, &error));
+    OA_CHECK(error == UrlError::ipv6_host);
+    OA_CHECK(!address_for_fetch("ftp://example.org/a", true, &error));
+    OA_CHECK(error == UrlError::unknown_scheme);
+}
+
 /// A host under a domain, and an IPv4 literal only under itself.
 void test_hosts() {
     OA_CHECK(host_within("a.example.org", "example.org"));
@@ -372,6 +420,7 @@ void test_hosts() {
 int main() {
     test_accepted();
     test_refused();
+    test_fetch_address();
     test_resolution();
     test_hosts();
     return oa::test::check_exit_status();

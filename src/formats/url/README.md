@@ -7,9 +7,9 @@ all read an address here, so they agree on what an address is and which
 host it names.
 
 `parse_web_url` reads an absolute `http` or `https` address. `parse_http_url`
-is the same reader for a fetch, and refuses `https`: OA fetches over plain
-HTTP and checks what it gets with signatures. `https` is only a page the
-system's browser opens. `url_text` writes the address back in one form.
+is the same reader for a fetch: `https` is accepted, and the client chooses
+TLS or reads the address as `http`. `address_for_fetch` is that choice.
+`url_text` writes the address back in one form.
 `resolve_reference` resolves a reference against a base the way RFC 3986
 section 5.2 does, then applies the same rules to the result. `host_within`
 tells whether a host is a domain or lies under it, and `same_server` tells
@@ -19,6 +19,8 @@ whether two addresses name the same scheme, host and port.
 
 - `parse_web_url` and `parse_http_url` read one address and, on a refusal,
   set a `UrlError`. `url_error_text` describes that refusal.
+  `address_for_fetch` keeps `https` when TLS is on, and reads it as `http`
+  (port 80 unless the text named a port) when TLS is off.
 - `url_text` writes `<scheme>://<host>[:<port>]<target>`, leaving out the
   scheme's default port. `host_header` is the host and, when the port is
   not that default, the port. `has_query` reports a query on the target.

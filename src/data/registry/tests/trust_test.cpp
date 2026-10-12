@@ -341,7 +341,7 @@ void mirror_on_builtin_is_refused() {
     OA_CHECK(player.registries[0].player_mirrors.empty());
 }
 
-/// A mirror must be an http address with no query, and not one already listed.
+/// A mirror must be an http or https address with no query, and not one already listed.
 void mirror_address_rules_are_refused() {
     registry::PlayerRegistries player;
     registry::AddedRegistry added;
@@ -353,8 +353,7 @@ void mirror_address_rules_are_refused() {
     context.player = &player;
     if (const auto secure = url::parse_web_url("https://other.example.org/catalogue.json"))
         OA_CHECK(
-            registry::check_new_mirror("other-maps", *secure, context) ==
-            registry::Refusal::bad_mirror
+            registry::check_new_mirror("other-maps", *secure, context) == registry::Refusal::none
         );
     if (const auto query = url::parse_http_url("http://other.example.org/catalogue.json?x=1"))
         OA_CHECK(

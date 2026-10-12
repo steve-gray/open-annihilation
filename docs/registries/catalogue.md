@@ -24,9 +24,9 @@ signs.
 | `sequence` | yes | A whole number, at least 0. It never goes backwards. |
 | `generated` | yes | UTC time. `expires` MUST be later. |
 | `expires` | yes | UTC time, after `generated`. |
-| `downloads` | no | An `http` address. A query is allowed here. Informational. |
+| `downloads` | no | An `http` or `https` address. A query is allowed here. Informational. |
 | `keys` | no | At most 8 current signing keys. See [signatures.md](signatures.md). |
-| `mirrors` | no | At most 8 `http` addresses with no query. |
+| `mirrors` | no | At most 8 `http` or `https` addresses with no query. |
 | `packages` | yes | The entries. At most 20,000. An empty array is a catalogue. |
 
 A UTC time is `YYYY-MM-DDTHH:MM:SSZ`. A fraction of a second may follow the
@@ -43,9 +43,9 @@ characters of base64, ids unique, public keys unique, at most 8. A member of
 a key object other than `id` and `public` is ignored. An empty list is not
 a rotation. See [signatures.md](signatures.md).
 
-`downloads` on a catalogue is any `http` address the URL reader accepts,
-including one with a query. The descriptor's `catalogue`, `mirrors` and
-`api` still forbid a query.
+`downloads` on a catalogue is any `http` or `https` address the URL reader
+accepts, including one with a query. The descriptor's `catalogue`,
+`mirrors` and `api` are `http` or `https` and still forbid a query.
 
 ## Every package
 

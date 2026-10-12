@@ -110,13 +110,15 @@ void test_issued_key() {
         ),
         &why
     ));
-    OA_CHECK(!content::read_issued_key(
+    const auto secure = content::read_issued_key(
         bytes_of(
             "{\"download\":\"ridge-dl-1\",\"expires\":\"2026-02-01T00:00:00Z\","
             "\"url\":\"https://downloads.example.net/p\"}"
         ),
         &why
-    ));
+    );
+    OA_CHECK(secure.has_value());
+    OA_CHECK(secure && secure->url.scheme == oa::formats::url::Scheme::https);
     OA_CHECK(!content::read_issued_key(
         bytes_of(
             "{\"download\":\"ridge-dl-1\",\"expires\":\"tomorrow\","
