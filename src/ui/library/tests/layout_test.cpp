@@ -465,6 +465,28 @@ const kit::Item* text_item(const kit::DisplayList& list, std::string_view text) 
     return nullptr;
 }
 
+/// Returns the smallest card face that holds a text item.
+///
+/// @param list the display list
+/// @param text the item
+/// @return the face; null when none holds it
+const kit::Item* tile_around(const kit::DisplayList& list, const kit::Item& text) {
+    const kit::Item* found = nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::fill || item.colour != kit::colour::list_selected)
+            continue;
+        if (text.rect.x < item.rect.x || text.rect.y < item.rect.y)
+            continue;
+        if (text.rect.x >= item.rect.x + item.rect.width)
+            continue;
+        if (text.rect.y >= item.rect.y + item.rect.height)
+            continue;
+        if (found == nullptr || item.rect.height < found->rect.height)
+            found = &item;
+    }
+    return found;
+}
+
 /// Tells whether a layout shows a chip with these words.
 ///
 /// @param list the display list
@@ -689,16 +711,49 @@ void check_frame(const fixture::NamedFrame& named) {
             OA_CHECK(atoll->rect.y < ridgeline->rect.y && atoll->rect.x == ridgeline->rect.x);
         }
     }
+    // Island Hopping holds Atoll alone, so its title is the link and the
+    // tile has no From line. Core Map Pack holds two, so those keep From.
     const kit::Control* from_atoll = fixture::named(active_list, "library.active.from.1");
     const kit::Control* from_ridge = fixture::named(active_list, "library.active.from.2");
+    const kit::Control* from_twin = fixture::named(active_list, "library.active.from.3");
+    OA_CHECK(text_item(active_list, "From Island Hopping") == nullptr);
     if (from_atoll != nullptr) {
         OA_CHECK(from_atoll->kind == kit::ControlKind::link);
-        OA_CHECK(from_atoll->text == "From Island Hopping");
+        OA_CHECK(from_atoll->text == "Atoll");
+        OA_CHECK(from_atoll->enabled && from_atoll->focusable);
+        if (atoll != nullptr)
+            OA_CHECK(from_atoll->rect.y == atoll->rect.y && from_atoll->rect.x == atoll->rect.x);
         if (first_map != nullptr)
-            OA_CHECK(from_atoll->rect.y > first_map->rect.y);
+            OA_CHECK(from_atoll->rect.y < first_map->rect.y);
     }
-    if (from_ridge != nullptr)
+    if (from_ridge != nullptr) {
         OA_CHECK(from_ridge->text == "From Core Map Pack");
+        if (ridgeline != nullptr)
+            OA_CHECK(from_ridge->rect.y > ridgeline->rect.y);
+    }
+    if (from_twin != nullptr)
+        OA_CHECK(from_twin->text == "From Core Map Pack");
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const kit::Item* atoll_tile = atoll != nullptr ? tile_around(active_list, *atoll) : nullptr;
+    const kit::Item* ridge_tile =
+        ridgeline != nullptr ? tile_around(active_list, *ridgeline) : nullptr;
+    if (atoll_tile != nullptr && ridge_tile != nullptr) {
+        const int32_t side = metrics.list_row_badge + 2 * metrics.card_inset;
+        const auto tile_height = [&](int32_t lines) {
+            return metrics.card_inset + std::max(side, lines) + metrics.card_inset;
+        };
+        const int32_t atoll_height = tile_height(metrics.regular_line + metrics.small_line);
+        const int32_t ridge_height = tile_height(metrics.regular_line + 2 * metrics.small_line);
+        if (frame.size_class == kit::SizeClass::large) {
+            // Side by side, the row takes the taller tile.
+            OA_CHECK(atoll_tile->rect.height == ridge_tile->rect.height);
+            OA_CHECK(atoll_tile->rect.height == ridge_height);
+        } else {
+            OA_CHECK(atoll_tile->rect.height == atoll_height);
+            OA_CHECK(ridge_tile->rect.height == ridge_height);
+            OA_CHECK(atoll_height < ridge_height);
+        }
+    }
     if (mod_line != nullptr && language_line != nullptr) {
         if (compact) {
             OA_CHECK(
@@ -2690,18 +2745,24 @@ void map_previews_fit_their_boxes() {
     const kit::DisplayList active = laid_out(library, {}, large);
     const kit::Control* atoll = fixture::named(active, "library.active.map.1");
     const kit::Control* from = fixture::named(active, "library.active.from.1");
+    const kit::Item* atoll_title = text_item(active, "Atoll");
     OA_CHECK(atoll != nullptr && atoll->text == "Atoll · 6 players · 20x20");
+    OA_CHECK(from != nullptr && from->kind == kit::ControlKind::link && from->text == "Atoll");
+    if (atoll != nullptr && from != nullptr && atoll_title != nullptr) {
+        OA_CHECK(from->rect.y == atoll_title->rect.y);
+        OA_CHECK(from->rect.y < atoll->rect.y);
+    }
+    OA_CHECK(text_item(active, "From Island Hopping") == nullptr);
+    const kit::Control* from_ridge = fixture::named(active, "library.active.from.2");
     OA_CHECK(
-        from != nullptr && from->kind == kit::ControlKind::link &&
-        from->text == "From Island Hopping"
+        from_ridge != nullptr && from_ridge->kind == kit::ControlKind::link &&
+        from_ridge->text == "From Core Map Pack"
     );
-    if (atoll != nullptr && from != nullptr)
-        OA_CHECK(from->rect.y > atoll->rect.y);
     const kit::Item* tile_picture = nullptr;
-    if (atoll != nullptr) {
+    if (atoll_title != nullptr) {
         for (const kit::Item& item : active.items) {
-            if (item.role != kit::Role::picture || item.rect.y != atoll->rect.y ||
-                item.rect.x >= atoll->rect.x)
+            if (item.role != kit::Role::picture || item.rect.y != atoll_title->rect.y ||
+                item.rect.x >= atoll_title->rect.x)
                 continue;
             tile_picture = &item;
             break;
@@ -2789,7 +2850,8 @@ void from_link_opens_the_pack() {
     lib::ScreenState state;
     kit::DisplayList list = laid_out(clicked, state, large);
     const kit::Control* from = fixture::named(list, "library.active.from.2");
-    OA_CHECK(from != nullptr && from->text == "From Desert Pack" && from->enabled);
+    OA_CHECK(from != nullptr && from->text == "Dry Lake" && from->enabled);
+    OA_CHECK(text_item(list, "From Desert Pack") == nullptr);
     if (from == nullptr)
         return;
     const lib::ScreenResult pressed = click(clicked, state, list, "library.active.from.2");

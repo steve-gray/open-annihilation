@@ -381,10 +381,12 @@ struct Metrics {
     /// A notice's or a question's greatest height: what the class's least
     /// window holds with a margin. Text below it is cut.
     int32_t greatest_notice_height{};
-    /// A language card's width, in points. Regular and Large grow it with
-    /// the class; every other control keeps Compact's size.
+    /// A language card's width, in points. The design's card is 232 points
+    /// wide at Large; Regular and Compact keep that card's proportions.
+    /// Every other control keeps Compact's size.
     int32_t language_card_width{};
-    /// A language card's height, in points.
+    /// A language card's height, in points. The design's card is 304 points
+    /// tall at Large.
     int32_t language_card_height{};
     /// How far a carousel's next card sits to the right of the one before
     /// it, in points. At Large this is the design's 236.
@@ -495,16 +497,16 @@ inline constexpr Metrics compact_metrics{
     .notice_width = 400,
     .least_notice_height = 150,
     .greatest_notice_height = 440,
-    .language_card_width = 120,
-    .language_card_height = 104,
-    .carousel_step = 118,
+    .language_card_width = 139,
+    .language_card_height = 182,
+    .carousel_step = 132,
 };
 
 /// Regular metrics: Compact's, with a settings dialog of 720 by 486 points,
 /// 16 points of padding, a nav list 176 points wide, 82 characters to a
 /// host's line under a row, and notices and prompts 520 points wide and at
-/// most 500 tall. The language card is 160 by 128 and the carousel steps
-/// 177 points, three quarters of Large's step. Rows, text and the other
+/// most 500 tall. The language card is 186 by 244, the design's card at
+/// four fifths, and the carousel steps 177 points. Rows, text and the other
 /// controls keep Compact's sizes, so the dialog shows more of them.
 inline constexpr Metrics regular_metrics = [] {
     Metrics sized = compact_metrics;
@@ -515,8 +517,8 @@ inline constexpr Metrics regular_metrics = [] {
     sized.hint_line_characters = 82;
     sized.notice_width = 520;
     sized.greatest_notice_height = 500;
-    sized.language_card_width = 160;
-    sized.language_card_height = 128;
+    sized.language_card_width = 186;
+    sized.language_card_height = 244;
     sized.carousel_step = 177;
     return sized;
 }();
@@ -524,9 +526,9 @@ inline constexpr Metrics regular_metrics = [] {
 /// Large metrics: Compact's, with a settings dialog of 960 by 600 points,
 /// 20 points of padding, a nav list 208 points wide, 114 characters to a
 /// host's line under a row, and notices and prompts 600 points wide and at
-/// most 640 tall. The language card is 200 by 148 and the carousel steps
-/// 236 points, the design's step. Rows, text and the other controls keep
-/// Compact's sizes.
+/// most 640 tall. The language card is 232 by 304, the design's card, and
+/// the carousel steps 236 points, the design's step. Rows, text and the other
+/// controls keep Compact's sizes.
 inline constexpr Metrics large_metrics = [] {
     Metrics sized = compact_metrics;
     sized.dialog_width = 960;
@@ -536,8 +538,8 @@ inline constexpr Metrics large_metrics = [] {
     sized.hint_line_characters = 114;
     sized.notice_width = 600;
     sized.greatest_notice_height = 640;
-    sized.language_card_width = 200;
-    sized.language_card_height = 148;
+    sized.language_card_width = 232;
+    sized.language_card_height = 304;
     sized.carousel_step = 236;
     return sized;
 }();

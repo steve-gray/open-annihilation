@@ -4721,6 +4721,20 @@ class Runtime final : public menu::Host,
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();
 
+    /// Writes --check-library-map-previews's two installed packs and its
+    /// registry list, and serves its catalogue, before the content service
+    /// reads the player's folder.
+    ///
+    /// Every built-in registry is turned off. Throws std::runtime_error when
+    /// the run has no player folder or data folder, or a file cannot be written.
+    void prepare_library_map_preview_check();
+
+    /// Runs --check-library-map-previews: the Library opens on Maps and each
+    /// of the three pictures is decoded at the size that place produces, then
+    /// the Active tab's two map tiles show the installed ones. Throws
+    /// std::runtime_error naming the first step that failed.
+    void check_library_map_previews();
+
     // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
     // over the skirmish map list and over the host's map list in the battle
     // room opens it.

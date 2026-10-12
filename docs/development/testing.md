@@ -67,6 +67,15 @@ added only when `OA_GAME_DIR` names one at configure time. The game is
 executable inside the application bundle `open-annihilation.app`), the file
 the `oa-game` target builds; tests start it through `$<TARGET_FILE:oa-game>`.
 
+`native-library-map-previews` (`--check-library-map-previews`) opens the
+Library on Maps with three packs and waits until each preview is drawn: one
+installed pack's own picture, one installed pack's terrain minimap, and one
+picture from the check's registry for a pack that is not installed. It then
+requires the same two installed pictures on the Active tab's map tiles, each
+at the size that source produces rather than the empty well shown while a
+picture is still missing. Its catalogue is served by the test fixture, and
+its Maps folder, data folder and preferences stay in the build tree.
+
 Every native check names its preferences file with `--preferences-file`, so
 that it never reads or writes the player's own, nor the renderer records
 the game keeps beside it, which with a named file live in memory for the

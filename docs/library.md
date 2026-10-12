@@ -111,10 +111,13 @@ filters.
 - **MAPS**: one tile for each map you have installed. The tile shows
   that map's minimap, its title, how many
   players it is for and its size ("4 players · 16x16"), and its
-  description cut to one line. Under that, **From** and the pack's name
-  is a link. Choosing it, with the pointer, Enter or a controller's A,
-  opens the Maps tab with that pack selected and its row in view. When
-  you have no map pack, the tile says "No map packs are installed."
+  description cut to one line. When the pack holds several maps, **From**
+  and the pack's name is a link under that. When the pack holds just that
+  map, there is no **From** line: the title is the link, in the same accent,
+  lighter while the pointer rests on it. Choosing the link, with the
+  pointer, Enter or a controller's A, opens the Maps tab with that pack
+  selected and its row in view. When you have no map pack, the tile says
+  "No map packs are installed."
 
 The badge, the title and the lines start at the top of each tile, with the
 same small padding above them and below the last line or, on the mod tile,
@@ -127,15 +130,16 @@ On a small window the tiles stand in one column. On a larger window the
 mod and the language stand side by side, and on the largest the maps
 stand in two columns when you have more than one. The tab has no search
 and no filters. The mod and language labels and each map's title line take
-no press. **UNLOAD MOD** does, and so does each map's **From** link while
-that line shows. Tab and the arrows reach both. When the
+no press, except the title of a map whose pack holds only that map: that
+title is the link to the pack. **UNLOAD MOD** does, and so does each map's
+link to its pack while that link shows. Tab and the arrows reach both. When the
 tiles are taller than the window they scroll with the mouse wheel, a
 finger, Page Up and Page Down, Home and End, and a controller's right
 stick. The other tabs are where packages are got, updated and played.
 
-![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and Atoll's minimap with its description cut short.](images/library/library-active-compact.png)
+![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and Atoll's minimap with its description cut short and no From line.](images/library/library-active-compact.png)
 
-![The Active tab at Regular: the mod and the language side by side, and under them each installed map with its minimap, a cut description and a From link.](images/library/library-active-regular.png)
+![The Active tab at Regular: the mod and the language side by side, and under them each installed map with its minimap and a cut description. Atoll, alone in its pack, has no From line; the others keep one.](images/library/library-active-regular.png)
 
 ![The Active tab at Large: the same tiles, with the maps in two columns of equal height.](images/library/library-active-large.png)
 
