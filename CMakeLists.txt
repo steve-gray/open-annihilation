@@ -1037,6 +1037,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
+  src/app/runtime_library_map_preview_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1717,6 +1718,29 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-library PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_library_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The Library's Maps tab and the Active tab's map tiles, with three
+      # packs: one installed with a preview picture, one installed with only
+      # its terrain minimap, and one listed so its picture comes from the
+      # check's registry. Each picture is its own size, and none is the well
+      # drawn while a picture is missing.
+      set(oa_library_previews_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-map-previews")
+      file(MAKE_DIRECTORY "${oa_library_previews_dir}")
+      add_test(NAME library-map-previews-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_previews_dir}/Open Annihilation"
+        "${oa_library_previews_dir}/data"
+        "${oa_library_previews_dir}/library-map-previews.conf")
+      set_tests_properties(library-map-previews-clean PROPERTIES
+        FIXTURES_SETUP library-map-previews-clean)
+      add_test(NAME native-library-map-previews COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-map-previews
+        --preferences-file "${oa_library_previews_dir}/library-map-previews.conf"
+        --user-folder "${oa_library_previews_dir}/Open Annihilation"
+        --data-dir "${oa_library_previews_dir}/data")
+      set_tests_properties(native-library-map-previews PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_previews_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED library-map-previews-clean)
       # Made-up mod packages posted as the download queue posts them, from a
       # built-in registry and two added ones, installed while the Library
       # shows: the built-in one's with no question, the added ones' asking
