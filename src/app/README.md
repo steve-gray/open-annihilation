@@ -346,18 +346,23 @@ latched the closing key and drew a backdrop.
   the game has touch controls, the window's safe insets. The scale
   (`kit::layer_viewport`) is the Interface size setting's whole step, taken
   when its OK is pressed, or for Auto `kit::auto_scale`: the canvas height
-  over 720, halves rounded up, never below the density, so a point is never
-  smaller than a window point; it is then held to the largest scale at
-  which Compact's 480 by 324 dialog fits the canvas less its insets, and to
-  at least 1. 150% is 1.5 where Compact fits at one and a half, else 1, and
-  only while the modern fonts in effect are on and the layer's own stack of
-  them opens (`smooth_fonts`). The class comes from
+  over 720, the nearest step, never below the density, so a point is never
+  smaller than a window point. While the modern fonts are on and the
+  layer's stack of them opens (`smooth_fonts`), 150% is among the steps and
+  a tie takes the larger: 1x below 900 lines, 150% from 900, 2x from 1260
+  and 3x from 1800 (`kit::auto_with_fraction_percent`). Otherwise the steps
+  are whole: 1x below 1080 lines, 2x from 1080. It is then held to the
+  largest scale at which Compact's 480 by 324 dialog fits the canvas less
+  its insets, and to at least 1. 150%, chosen or what Auto picked, is 1.5
+  where Compact fits at one and a half, else 1. The class comes from
   `kit::frame_of`: Compact below 960 by 540 points, Regular from 960 by 540,
   Large from 1280 by 720. A 640 by 480 window is Compact at 1×, pixel for
   pixel as 0.7.3; 1024 by 768 is Regular at 1×, 1280 by 720 Large at 1×,
-  1920 by 1080 and 2560 by 1080 Regular at 2×, 2560 by 1440 Large at 2× and
-  3840 by 2160 Large at 3×; a phone of 852 by 393 points at 3 pixels a
-  point is Compact at 3×; 1920 by 1080 at 150% is Large at 1.5×.
+  1920 by 1080 and 2560 by 1080 Regular at 2× with the modern fonts off and
+  Large at 1.5× with them on (1914 by 1077 is Regular at 1.5×), 2560 by
+  1440 Large at 2× and 3840 by 2160 Large at 3×; a phone of 852 by 393
+  points at 3 pixels a point is Compact at 3×; a chosen 150% on 1920 by
+  1080 is Large at 1.5×.
   `screen_scale`, `screen_scale_percent`, `screen_class` and
   `placement_of(name)` report them, for the checks. Without a renderer the canvas is the picture
   itself, Compact at 1×. In a match the view is Compact at 100%, and
@@ -371,10 +376,12 @@ latched the closing key and drew a backdrop.
   324 points do not fit the area right of the column at that scale, it is
   the largest whole step at which they do, and at least 1. The class comes
   from the points of that area, ((width − column's right edge) / scale) by
-  (height / scale). So with HUD scaling On 640 by 480 is Compact at 1× (512
-  by 480 points), 1280 by 720 Regular at 1× (1088 by 720), 1920 by 1080
-  Compact at 2× (832 by 540) and 2560 by 1080 Regular at 2× (1152 by 540);
-  with it Off, 1920 by 1080 is Large at 1× (1792 by 1080). On a phone with
+  (height / scale). So with HUD scaling On and the modern fonts off, 640 by
+  480 is Compact at 1× (512 by 480 points), 1280 by 720 Regular at 1× (1088
+  by 720), 1920 by 1080 Compact at 2× (832 by 540) and 2560 by 1080 Regular
+  at 2× (1152 by 540). With the modern fonts on, 1920 by 1080 is Regular at
+  1.5×. With HUD scaling Off, 1920 by 1080 is Large at 1× (1792 by 1080),
+  the column's scale of 1 holding Auto's 150% down. On a phone with
   touch controls (`match_fits_safe_area`) Settings is Compact, drawn at 1×
   and fitted to the safe area, as before.
 - **Placement.** A screen says where it shows (`LayerPlacement::shown`) in

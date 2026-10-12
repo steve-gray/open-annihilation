@@ -453,8 +453,12 @@ inline constexpr std::array<MenuScaling, 3> menu_scaling_choices{
 /// cannot hold the smallest layout at is drawn at the largest whole step
 /// that holds it.
 enum class InterfaceSize : uint8_t {
-    /// The window's own size: its height over 720, rounded, and never
-    /// below the display's density
+    /// The window's own size: its height over 720, the nearest step, and
+    /// never below the display's density. While the modern fonts are on and
+    /// opened the steps include 150% (1x below 900 lines, 150% from 900, 2x
+    /// from 1260); otherwise they are whole steps (1x below 1080, 2x from
+    /// 1080). The OA layer passes that to the kit as 0 or
+    /// kit::auto_with_fraction_percent (interface_size_percent is 0 either way)
     automatic,
     size_100, ///< one window pixel a point
     /// One and a half window pixels a point, drawn in the modern fonts: it

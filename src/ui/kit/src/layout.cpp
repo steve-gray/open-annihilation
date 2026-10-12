@@ -122,13 +122,25 @@ rest_of(int32_t origin, int32_t extent, int32_t first, int32_t gap, int32_t& sta
 
 } // namespace
 
-int32_t auto_scale(int32_t canvas_height, float density) noexcept {
-    const long scale = std::max(
-        {long{1},
-         std::lround(static_cast<double>(canvas_height) / static_cast<double>(auto_scale_height)),
-         std::lround(static_cast<double>(density))}
-    );
-    return static_cast<int32_t>(scale);
+int32_t auto_scale(int32_t canvas_height, float density, bool offer_fractional) noexcept {
+    const double ratio =
+        static_cast<double>(canvas_height) / static_cast<double>(auto_scale_height);
+    // 1.25 and 1.75 times 720: the ties between 1x and 150%, and 150% and 2x.
+    // A tie takes the larger, so 150% runs from 900 lines up to 1260.
+    constexpr int32_t fraction_from = auto_scale_height * 5 / 4;
+    constexpr int32_t two_from = auto_scale_height * 7 / 4;
+    const long density_step = std::max(long{1}, std::lround(static_cast<double>(density)));
+    int32_t percent = 100;
+    if (offer_fractional && canvas_height < two_from)
+        percent = canvas_height < fraction_from ? 100 : fractional_scale_percent;
+    else {
+        const long step = std::max(long{1}, std::lround(ratio));
+        percent = static_cast<int32_t>(step) * 100;
+    }
+    const int32_t floor_percent = static_cast<int32_t>(density_step) * 100;
+    if (percent < floor_percent)
+        percent = floor_percent;
+    return percent;
 }
 
 SizeClass size_class_of(int32_t width_points, int32_t height_points) noexcept {
@@ -159,7 +171,12 @@ Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept
     const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
     const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
     Viewport viewport = canvas;
-    if (chosen_percent == fractional_scale_percent) {
+    // 0 or less is Auto on whole steps, except the one value that offers 150%.
+    const bool offer_fractional = chosen_percent == auto_with_fraction_percent;
+    int32_t percent = chosen_percent;
+    if (chosen_percent <= 0)
+        percent = auto_scale(canvas.height, canvas.density, offer_fractional);
+    if (percent == fractional_scale_percent) {
         // One and a half where Compact's dialog fits the room at it, else 1x.
         const bool fits_fraction =
             int64_t{room_width} * 100 >=
@@ -169,8 +186,7 @@ Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept
         viewport.scale_percent = fits_fraction ? fractional_scale_percent : 100;
         return viewport;
     }
-    const int32_t chosen =
-        chosen_percent > 0 ? chosen_percent / 100 : auto_scale(canvas.height, canvas.density);
+    const int32_t chosen = percent > 0 ? percent / 100 : 1;
     // The largest whole step at which Compact's dialog fits the room.
     const int32_t fits = std::min(
         room_width / compact_metrics.dialog_width, room_height / compact_metrics.dialog_height

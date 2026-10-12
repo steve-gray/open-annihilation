@@ -85,9 +85,11 @@ struct LayerView {
     /// smooth form at 150%. 100 in a match.
     int32_t scale_percent{100};
     /// The Interface size in effect, in percent, as kit::layer_viewport
-    /// takes it: 0 for Auto, else 100 to 400, and 150 only while the modern
-    /// fonts in effect are on and open. On the front end and in a match
-    /// alike; in a match the settings dialog takes its scale from it
+    /// takes it: 0 for Auto on whole steps, kit::auto_with_fraction_percent
+    /// for Auto with 150% among the steps (the modern fonts are on and
+    /// open), else 100 to 400, and 150 only while the modern fonts in
+    /// effect are on and open. On the front end and in a match alike; in a
+    /// match the settings dialog takes its scale from it
     /// (OaLayer::match_dialog).
     int32_t interface_percent{};
     /// The room in window pixels: the canvas less its safe insets on the
@@ -872,8 +874,9 @@ class OaLayer {
     /// right edge + (area width - dialog width) / 2, top = (canvas height -
     /// dialog height) / 2. A 640 by 480 window is Compact at 1× at (144,
     /// 78), as before; 1280 by 720 is Regular at 1×, 1920 by 1080 Compact
-    /// at 2× and 2560 by 1080 Regular at 2× with HUD scaling On, and 1920 by
-    /// 1080 with it Off Large at 1×.
+    /// at 2× and 2560 by 1080 Regular at 2× with HUD scaling On and 150%
+    /// not offered, 1920 by 1080 Regular at 1.5× with it offered, and 1920
+    /// by 1080 with HUD scaling Off Large at 1×.
     ///
     /// Fitted to a phone's safe area, Compact is drawn at 1× and fitted to
     /// the largest scale that shows it whole there (min(safe width /
@@ -901,7 +904,8 @@ class OaLayer {
     /// (kit::frame_of). Unlike the settings dialog the gallery covers the
     /// whole canvas, so the room right of the column plays no part: a 640
     /// by 480 window is Compact at 1×, 1280 by 720 Large at 1× and 1920 by
-    /// 1080 Regular at 2× with HUD scaling On.
+    /// 1080 Regular at 2× with HUD scaling On while 150% is not offered,
+    /// and Large at 1.5× while it is.
     ///
     /// @param match_layout the match's layout
     /// @param interface_percent the Interface size in effect, in percent

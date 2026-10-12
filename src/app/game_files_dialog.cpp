@@ -382,16 +382,23 @@ struct DialogPlace {
 
 /// Places the dialog on a viewport as the OA layer places its screens: at
 /// the scale the Interface size chooses (oa::ui::kit::layer_viewport: the
-/// chosen step, or the Auto scale, no larger than lets Compact's dialog fit
-/// the canvas less its safe insets and at least 1), laid out at the size
-/// class of the points left over, and centred in the canvas less its insets,
-/// rounded down.
+/// chosen step, or the Auto scale, with 150% among Auto's steps while
+/// offer_fractional, no larger than lets Compact's dialog fit the canvas
+/// less its safe insets and at least 1), laid out at the size class of the
+/// points left over, and centred in the canvas less its insets, rounded
+/// down. The bitmap scale is the whole part of that percent, as a chosen
+/// 150% already is.
 ///
 /// @param viewport the viewport
 /// @param size the Interface size the settings in effect choose
+/// @param offer_fractional 150% is among Auto's steps: the modern fonts are
+///     on and opened
 /// @return the place
-[[nodiscard]] DialogPlace
-place_dialog(const oa::ui::game_files::Viewport& viewport, settings::InterfaceSize size) noexcept {
+[[nodiscard]] DialogPlace place_dialog(
+    const oa::ui::game_files::Viewport& viewport,
+    settings::InterfaceSize size,
+    bool offer_fractional
+) noexcept {
     namespace kit = oa::ui::kit;
     kit::Viewport canvas;
     canvas.width = viewport.width;
@@ -402,7 +409,10 @@ place_dialog(const oa::ui::game_files::Viewport& viewport, settings::InterfaceSi
     };
     const int32_t room_width = canvas.width - canvas.safe.left - canvas.safe.right;
     const int32_t room_height = canvas.height - canvas.safe.top - canvas.safe.bottom;
-    canvas = kit::layer_viewport(canvas, settings::interface_size_percent(size));
+    int32_t chosen_percent = settings::interface_size_percent(size);
+    if (chosen_percent <= 0 && offer_fractional)
+        chosen_percent = kit::auto_with_fraction_percent;
+    canvas = kit::layer_viewport(canvas, chosen_percent);
     DialogPlace place;
     place.scale = canvas.scale_percent / 100;
     place.size_class = kit::frame_of(canvas).size_class;
@@ -621,7 +631,10 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
     float pointer_y = 0.0F;
     oa::ui::game_files::Viewport viewport =
         hooks.viewport != nullptr ? hooks.viewport(hooks.context) : oa::ui::game_files::Viewport{};
-    DialogPlace place = place_dialog(viewport, current.interface_size);
+    // 150% is among Auto's steps while the modern fonts are on and this
+    // screen's stack of them opened.
+    const bool offer_fractional = current.modern_fonts && request.fonts != nullptr;
+    DialogPlace place = place_dialog(viewport, current.interface_size, offer_fractional);
     dialog.size_class = place.size_class;
     // Canvas pixels to the dialog's own.
     const auto source_x = [&](float x) {
@@ -661,7 +674,7 @@ bool run_game_files_language_dialog(const GameFilesLanguageRequest& request) {
             if (next.width != viewport.width || next.height != viewport.height ||
                 next.px_per_point != viewport.px_per_point) {
                 viewport = next;
-                place = place_dialog(viewport, current.interface_size);
+                place = place_dialog(viewport, current.interface_size, offer_fractional);
                 dialog.size_class = place.size_class;
                 dirty = true;
             }
