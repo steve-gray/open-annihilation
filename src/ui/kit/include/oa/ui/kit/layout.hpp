@@ -193,6 +193,11 @@ struct Frame {
     Rect area{};                              ///< the canvas less its safe insets, in points
     SizeClass size_class{SizeClass::compact}; ///< the class of area
     int32_t scale_percent{100};               ///< the viewport's scale, as a percentage
+    /// Reduced motion, from a later Settings row. The kit does not read
+    /// preferences: a screen copies the row into the frame. Off, the
+    /// default, turns a carousel and pulses a call to action. On, the
+    /// carousel slides flat and the call to action holds a steady ring.
+    bool reduced_motion{false};
 };
 
 /// Returns the frame of a viewport.
@@ -462,6 +467,15 @@ enum class Role : uint8_t {
     backdrop,       ///< the dimming behind a sheet; no press reaches a part under it
     sheet,          ///< a sheet over a backdrop: a panel with a shadow
     pill,           ///< a pill; the item's PillLook
+    language_card,  ///< a language card; the item's LanguageCardLook
+    carousel,       ///< cards turned in a ring; the item's CarouselLook
+    step_indicator, ///< a step's name and segments; the item's StepLook
+    setup_chrome,   ///< a setup window's header and footer; the item's SetupChromeLook
+    choice_card,    ///< a radio row; the item's ChoiceCardLook
+    coach_mark,     ///< a numbered coach mark; the item's CoachMarkLook
+    spotlight,      ///< a dimmed layer with a cut-out; the item's SpotlightLook
+    picture_well,   ///< a bordered well and a caption; the item's PictureWellLook
+    call_to_action, ///< an accent button that pulses; the item's CallToActionLook
 };
 
 /// Every role, in the order Role declares them. A role appended to Role is
@@ -496,7 +510,11 @@ inline constexpr std::array all_roles{
     Role::button_danger, Role::progress_track,
     Role::progress_fill, Role::progress_busy,
     Role::backdrop,      Role::sheet,
-    Role::pill,
+    Role::pill,          Role::language_card,
+    Role::carousel,      Role::step_indicator,
+    Role::setup_chrome,  Role::choice_card,
+    Role::coach_mark,    Role::spotlight,
+    Role::picture_well,  Role::call_to_action,
 };
 
 /// Tells whether the kit's canvas draws a role (paint, in either form): it
@@ -543,6 +561,15 @@ inline constexpr std::array all_roles{
     case Role::link:
     case Role::progress:
     case Role::pill:
+    case Role::language_card:
+    case Role::carousel:
+    case Role::step_indicator:
+    case Role::setup_chrome:
+    case Role::choice_card:
+    case Role::coach_mark:
+    case Role::spotlight:
+    case Role::picture_well:
+    case Role::call_to_action:
         return true;
     case Role::header_bar:
     case Role::badge:
@@ -578,9 +605,9 @@ inline constexpr std::array all_roles{
 }
 
 // The last role is named here: a role appended to Role is appended to
-// all_roles and named here in pill's place.
+// all_roles and named here in call_to_action's place.
 static_assert(
-    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::pill) + 1,
+    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::call_to_action) + 1,
     "all_roles names every role of Role once, in its order"
 );
 

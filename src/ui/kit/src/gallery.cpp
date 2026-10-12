@@ -13,6 +13,7 @@
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/controls.hpp"
+#include "oa/ui/kit/first_run.hpp"
 #include "oa/ui/kit/theme.hpp"
 
 #include <algorithm>
@@ -62,6 +63,18 @@ constexpr ControlId kFirstCard = kFirstListRow + static_cast<ControlId>(kListRow
 constexpr ControlId kOaButton = kFirstCard + static_cast<ControlId>(kCardCount);
 constexpr ControlId kClose = kOaButton + 1;
 
+constexpr std::size_t kCarouselCount = 5; ///< the working carousel's cards
+constexpr std::size_t kChoiceCount = 2;   ///< the working choice cards
+constexpr ControlId kCarouselPrevious = kClose + 1;
+constexpr ControlId kFirstCarousel = kCarouselPrevious + 1;
+constexpr ControlId kCarouselNext = kFirstCarousel + static_cast<ControlId>(kCarouselCount);
+constexpr ControlId kFirstChoice = kCarouselNext + 1;
+constexpr ControlId kSetupSkip = kFirstChoice + static_cast<ControlId>(kChoiceCount);
+constexpr ControlId kSetupBack = kSetupSkip + 1;
+constexpr ControlId kSetupNext = kSetupBack + 1;
+constexpr ControlId kCallToAction = kSetupNext + 1;
+constexpr ControlId kLanguageCard = kCallToAction + 1;
+
 static_assert(
     std::tuple_size_v<decltype(GalleryModel::chips)> == kChipCount,
     "the model holds one value for each working filter chip"
@@ -76,7 +89,7 @@ constexpr int32_t kRowsGroup = 0;
 constexpr int32_t kHeadingHeight = kMetrics.regular_line; ///< a section's heading
 constexpr int32_t kAfterRule = 6;                         ///< under the rule under a heading
 constexpr int32_t kSectionGap = 14;                       ///< between two sections of a column
-constexpr int32_t kContentTop = 10;                       ///< over the first section of a column
+constexpr int32_t kFirstRunTop = 0;                       ///< First run starts flush with the view
 constexpr int32_t kContentBottom = 10;                    ///< under the last section of a column
 constexpr int32_t kLineGap = 8;                           ///< between two lines of samples
 constexpr int32_t kCellGap = 8;                           ///< between two samples of a line
@@ -239,12 +252,13 @@ struct Builder {
     const Fonts* fonts{};        ///< the fonts
     DisplayList list{};          ///< the gallery's parts and controls
     std::vector<GalleryPanel> panels{};
-    std::vector<ControlId> order{};  ///< the declared Tab order
-    Rect view{};                     ///< the sections' view
-    ScrollArea rows{};               ///< the scroll list's
-    Rect menu{};                     ///< the working drop-down's open menu
-    ChoiceMenuLook menu_look{};      ///< what it shows
-    std::optional<Item> menu_part{}; ///< its part, drawn over the sections
+    std::vector<ControlId> order{};    ///< the declared Tab order
+    Rect view{};                       ///< the sections' view
+    ScrollArea rows{};                 ///< the scroll list's
+    Rect menu{};                       ///< the working drop-down's open menu
+    ChoiceMenuLook menu_look{};        ///< what it shows
+    std::optional<Item> menu_part{};   ///< its part, drawn over the sections
+    const Metrics* metrics{&kMetrics}; ///< the frame's size class
 };
 
 /// Appends a part of a role at a rectangle.
@@ -1631,6 +1645,667 @@ int32_t oa_mark(Builder& b, Point at, int32_t width, std::string_view word) {
     return top - at.y;
 }
 
+/// A language the carousel and the language-card row show.
+struct Tongue {
+    std::string_view letters{}; ///< the badge, when the pack has no picture
+    std::string_view own{};     ///< the language's own name
+    std::string_view english{}; ///< its English name
+    std::string_view facts{};   ///< the facts line
+    std::string_view pill{};    ///< the pill's words
+    std::string_view tag{};     ///< the carousel card's automation word
+    LanguageAvailability availability{LanguageAvailability::built_in};
+};
+
+/// The carousel's five cards. The centre is the third, so two show on each side.
+constexpr std::array<Tongue, kCarouselCount> kTongues{{
+    {"EN",
+     "English",
+     "English",
+     "Built into the game",
+     "Built in",
+     "english",
+     LanguageAvailability::built_in},
+    {"DE",
+     "Deutsch",
+     "German",
+     "Built into the game",
+     "Built in",
+     "deutsch",
+     LanguageAvailability::built_in},
+    {"ES",
+     "Español",
+     "Spanish",
+     "Built into the game",
+     "Built in",
+     "espanol",
+     LanguageAvailability::built_in},
+    {"FR",
+     "Français",
+     "French",
+     "Built into the game",
+     "Built in",
+     "francais",
+     LanguageAvailability::built_in},
+    {"JA",
+     "日本語",
+     "Japanese",
+     "From Ridge · Coverage 100%",
+     "Get · 3.4 MB",
+     "nihongo",
+     LanguageAvailability::get},
+}};
+
+/// Tells whether a press is held on a control with the pointer still over it.
+///
+/// @param model the model
+/// @param id the control
+/// @return true when it is
+bool held_on(const GalleryModel& model, ControlId id) noexcept {
+    return model.interaction.hovered == id && model.interaction.pressed == id;
+}
+
+/// Fills a language card's look from a tongue.
+///
+/// @param tongue the tongue
+/// @param hovered the pointer is over the card
+/// @param held a press is held on it
+/// @param disabled it takes nothing
+/// @return the look
+LanguageCardLook tongue_look(const Tongue& tongue, bool hovered, bool held, bool disabled) {
+    LanguageCardLook look;
+    look.letters = std::string(tongue.letters);
+    look.own_name = std::string(tongue.own);
+    look.english_name = std::string(tongue.english);
+    look.facts = std::string(tongue.facts);
+    look.pill = std::string(tongue.pill);
+    look.availability = tongue.availability;
+    look.hovered = hovered;
+    look.held = held;
+    look.disabled = disabled;
+    return look;
+}
+
+/// Tells whether the centre card and two turned cards on each side lie inside
+/// a band. The outer cards shrink, so the band can be narrower than four
+/// steps plus a full card.
+///
+/// @param geometry the card and the step
+/// @param room the band's width, in points
+/// @return true when every shown face lies in the band
+bool turned_faces_fit(const CarouselGeometry& geometry, int32_t room) {
+    if (room <= 0 || geometry.card_width <= 0 || geometry.card_height <= 0 || geometry.step <= 0)
+        return false;
+    const Rect area{0, 0, room, geometry.card_height};
+    const std::vector<CarouselSlot> slots =
+        carousel_places(area, geometry, static_cast<int32_t>(kCarouselCount), 2 * 1000, false);
+    if (slots.size() != kCarouselCount)
+        return false;
+    for (const CarouselSlot& slot : slots) {
+        if (slot.face.x < area.x || slot.face.y < area.y)
+            return false;
+        if (slot.face.x + slot.face.width > area.x + area.width)
+            return false;
+        if (slot.face.y + slot.face.height > area.y + area.height)
+            return false;
+    }
+    return true;
+}
+
+/// First run, across the whole gallery, at the language card's real size.
+/// The carousel shows the centre card and two turned cards on each side.
+/// Compact keeps every row, so the choice-card states sit in the footer
+/// band, left of CLOSE, rather than shrinking the cards.
+int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/) {
+    const GalleryModel& model = *b.model;
+    const Metrics& metrics = b.metrics != nullptr ? *b.metrics : kMetrics;
+    constexpr int32_t kArrowWidth = 22;
+    constexpr int32_t kArrowGap = 4;
+    constexpr int32_t kGap = 4;
+    constexpr int32_t kSetupHeight = 62;
+    const int32_t room = std::max(width - 2 * (kArrowWidth + kArrowGap), int32_t{1});
+    const int32_t card_w = std::max(metrics.language_card_width, int32_t{1});
+    const int32_t card_h = std::max(metrics.language_card_height, int32_t{1});
+    CarouselGeometry geometry{card_w, card_h, std::max(metrics.carousel_step, int32_t{1})};
+    if (!turned_faces_fit(geometry, room))
+        geometry = carousel_fit(room, metrics);
+
+    const int32_t row_height = geometry.card_height + carousel_pager_band;
+    const int32_t centre =
+        std::clamp(model.carousel_index, int32_t{0}, static_cast<int32_t>(kCarouselCount) - 1);
+    const Rect previous{
+        at.x,
+        at.y + (geometry.card_height - kMetrics.button_height) / 2,
+        kArrowWidth,
+        kMetrics.button_height
+    };
+    const Rect band{previous.x + previous.width + kArrowGap, at.y, room, row_height};
+    const Rect next{
+        band.x + band.width + kArrowGap, previous.y, kArrowWidth, kMetrics.button_height
+    };
+
+    CarouselLook carousel;
+    carousel.card_width = geometry.card_width;
+    carousel.card_height = geometry.card_height;
+    carousel.step = geometry.step;
+    carousel.centre_milli = centre * 1000;
+    carousel.cards.reserve(kTongues.size());
+    for (std::size_t place = 0; place < kTongues.size(); ++place) {
+        const ControlId id = kFirstCarousel + static_cast<ControlId>(place);
+        const bool over = model.interaction.hovered == id;
+        CarouselCard card;
+        card.letters = std::string(kTongues[place].letters);
+        card.own_name = std::string(kTongues[place].own);
+        card.english_name = std::string(kTongues[place].english);
+        card.facts = std::string(kTongues[place].facts);
+        card.pill = std::string(kTongues[place].pill);
+        card.availability = kTongues[place].availability;
+        card.hovered = over;
+        card.held = held_on(model, id);
+        carousel.cards.push_back(std::move(card));
+    }
+    add_carousel(b.list, band, carousel);
+
+    const std::vector<CarouselSlot> slots = carousel_places(
+        carousel_band(band),
+        geometry,
+        static_cast<int32_t>(kCarouselCount),
+        carousel.centre_milli,
+        false
+    );
+    std::array<Rect, kCarouselCount> faces{};
+    std::array<bool, kCarouselCount> face_shown{};
+    for (const CarouselSlot& slot : slots) {
+        if (slot.index < 0 || slot.index >= static_cast<int32_t>(kCarouselCount))
+            continue;
+        faces[static_cast<std::size_t>(slot.index)] = slot.face;
+        face_shown[static_cast<std::size_t>(slot.index)] =
+            slot.opacity > 0 && slot.face.width > 0 && slot.face.height > 0;
+    }
+    {
+        const bool over = model.interaction.hovered == kCarouselPrevious;
+        const std::size_t part_at = b.list.items.size();
+        add_button(
+            b.list,
+            previous,
+            button_look("<", ButtonStyle::plain, over, held_on(model, kCarouselPrevious)),
+            kCarouselPrevious,
+            "gallery.carousel.previous"
+        );
+        b.list.controls.back().steps = true;
+        show_working(b, part_at, kCarouselPrevious, previous);
+        b.order.push_back(kCarouselPrevious);
+    }
+    for (std::size_t place = 0; place < kCarouselCount; ++place) {
+        if (!face_shown[place])
+            continue;
+        const ControlId id = kFirstCarousel + static_cast<ControlId>(place);
+        add_carousel_control(
+            b.list,
+            faces[place],
+            id,
+            "gallery.carousel.card." + std::string(kTongues[place].tag),
+            std::string(kTongues[place].own),
+            true
+        );
+        if (focus_on(model, id))
+            add_focus_ring(b.list, faces[place], true);
+        b.order.push_back(id);
+    }
+    {
+        const bool over = model.interaction.hovered == kCarouselNext;
+        const std::size_t part_at = b.list.items.size();
+        add_button(
+            b.list,
+            next,
+            button_look(">", ButtonStyle::plain, over, held_on(model, kCarouselNext)),
+            kCarouselNext,
+            "gallery.carousel.next"
+        );
+        b.list.controls.back().steps = true;
+        show_working(b, part_at, kCarouselNext, next);
+        b.order.push_back(kCarouselNext);
+    }
+
+    struct LanguageSample {
+        Tongue tongue;
+        bool working;
+        Sample shown;
+    };
+
+    const std::array<LanguageSample, 7> language_samples{{
+        {kTongues[0], true, Sample::idle},
+        {{"DE",
+          "Deutsch",
+          "German",
+          "Built into the game",
+          "Get · 3.4 MB",
+          "deutsch",
+          LanguageAvailability::get},
+         false,
+         Sample::hovered},
+        {{"ES",
+          "Español",
+          "Spanish",
+          "Built into the game",
+          "Downloading…",
+          "espanol",
+          LanguageAvailability::downloading},
+         false,
+         Sample::pressed},
+        {{"FR",
+          "Français",
+          "French",
+          "Built into the game",
+          "Active",
+          "francais",
+          LanguageAvailability::active},
+         false,
+         Sample::focused},
+        {{"JA",
+          "日本語",
+          "Japanese",
+          "From Ridge · Coverage 100%",
+          "Offline",
+          "nihongo",
+          LanguageAvailability::offline},
+         false,
+         Sample::disabled},
+        {{"EN",
+          "English",
+          "English",
+          "Built into the game",
+          "Checking…",
+          "english",
+          LanguageAvailability::checking},
+         false,
+         Sample::idle},
+        {{"RD",
+          "Ridge",
+          "Ridge",
+          "From Ridge · Coverage 100%",
+          "Couldn't download",
+          "ridge",
+          LanguageAvailability::failed},
+         false,
+         Sample::idle},
+    }};
+
+    auto add_language = [&](std::size_t place, const Rect& card) {
+        const LanguageSample& sample = language_samples[place];
+        if (sample.working) {
+            const bool over = model.interaction.hovered == kLanguageCard;
+            const std::size_t part_at = b.list.items.size();
+            add_language_card(
+                b.list,
+                card,
+                tongue_look(sample.tongue, over, held_on(model, kLanguageCard), false),
+                kLanguageCard,
+                "gallery.language-card.1"
+            );
+            show_working(b, part_at, kLanguageCard, card);
+            b.order.push_back(kLanguageCard);
+            return;
+        }
+        const LanguageCardLook look = tongue_look(
+            sample.tongue,
+            looks_hovered(sample.shown),
+            sample.shown == Sample::pressed,
+            sample.shown == Sample::disabled
+        );
+        add_fixed(b.list, card, card, sample.shown, false, [&] {
+            add_language_card(b.list, card, look, no_control, {});
+        });
+    };
+
+    constexpr std::array<std::string_view, kChoiceCount> kChoiceTitles{"Ridge pack", "Not now"};
+    constexpr std::array<std::string_view, kChoiceCount> kChoiceHints{
+        "From the sample catalogue.", "Set this up later."
+    };
+    auto add_working_choice = [&](std::size_t place, const Rect& card) {
+        const ControlId id = kFirstChoice + static_cast<ControlId>(place);
+        ChoiceCardLook look;
+        look.title = std::string(kChoiceTitles[place]);
+        look.hint = std::string(kChoiceHints[place]);
+        look.chosen = place == model.choice_index;
+        look.hovered = model.interaction.hovered == id;
+        look.held = held_on(model, id);
+        const std::size_t part_at = b.list.items.size();
+        add_choice_card(b.list, card, look, id, named("choice-card", place + 1));
+        show_working(b, part_at, id, card);
+        b.order.push_back(id);
+    };
+    constexpr std::array<Sample, 4> kChoiceStates{
+        Sample::hovered, Sample::pressed, Sample::focused, Sample::disabled
+    };
+    auto add_choice_state = [&](const Rect& card, Sample shown) {
+        add_fixed(b.list, card, card, shown, false, [&] {
+            ChoiceCardLook look;
+            look.title = "Ridge pack";
+            look.hint = "A choice.";
+            look.chosen = shown == Sample::focused;
+            look.hovered = looks_hovered(shown);
+            look.held = shown == Sample::pressed;
+            look.disabled = shown == Sample::disabled;
+            add_choice_card(b.list, card, look, no_control, {});
+        });
+    };
+    auto add_chrome = [&](const Rect& panel_rect) {
+        SetupChromeLook chrome;
+        chrome.width = panel_rect.width;
+        chrome.height = panel_rect.height;
+        chrome.page = "Language";
+        chrome.step_name = "LANGUAGE";
+        chrome.step_index = 1;
+        chrome.step_count = 3;
+        chrome.skip_hovered = model.interaction.hovered == kSetupSkip;
+        chrome.skip_held = held_on(model, kSetupSkip);
+        chrome.back_hovered = model.interaction.hovered == kSetupBack;
+        chrome.back_held = held_on(model, kSetupBack);
+        chrome.next_hovered = model.interaction.hovered == kSetupNext;
+        chrome.next_held = held_on(model, kSetupNext);
+        GalleryPanel panel;
+        panel.origin = {panel_rect.x, panel_rect.y};
+        panel.place = panel_rect;
+        add_setup_chrome(panel.list, {0, 0}, chrome);
+        b.panels.push_back(std::move(panel));
+        const SetupButtons buttons = setup_buttons(b.fonts, chrome);
+        const Point origin{panel_rect.x, panel_rect.y};
+        add_setup_controls(
+            b.list,
+            origin,
+            buttons,
+            chrome,
+            kSetupSkip,
+            "gallery.setup.skip",
+            kSetupBack,
+            "gallery.setup.back",
+            kSetupNext,
+            "gallery.setup.next"
+        );
+        const Rect skip{
+            buttons.skip.x + origin.x,
+            buttons.skip.y + origin.y,
+            buttons.skip.width,
+            buttons.skip.height
+        };
+        const Rect back{
+            buttons.back.x + origin.x,
+            buttons.back.y + origin.y,
+            buttons.back.width,
+            buttons.back.height
+        };
+        const Rect next_button{
+            buttons.next.x + origin.x,
+            buttons.next.y + origin.y,
+            buttons.next.width,
+            buttons.next.height
+        };
+        const std::array<std::pair<ControlId, Rect>, 3> setup_controls{{
+            {kSetupSkip, skip},
+            {kSetupBack, back},
+            {kSetupNext, next_button},
+        }};
+        for (const std::pair<ControlId, Rect>& setup_control : setup_controls) {
+            if (focus_on(model, setup_control.first))
+                add_focus_ring(b.list, setup_control.second, true);
+            b.order.push_back(setup_control.first);
+        }
+    };
+    auto add_picture = [&](const Rect& well) {
+        PictureWellLook picture;
+        picture.caption = "Library, Active";
+        picture.stand_in = true;
+        add_picture_well(b.list, well, picture);
+    };
+    auto add_coach = [&](const Rect& layer) {
+        const int32_t mark = std::min(int32_t{28}, std::max(layer.height - 8, int32_t{16}));
+        Rect target;
+        Rect coach_card;
+        // The compact column is only as wide as the row leaves. The card stays
+        // wide enough for its body; the spotlight target shrinks to fit beside it.
+        if (layer.height <= kSetupHeight) {
+            constexpr int32_t kCard = 100;
+            constexpr int32_t kTarget = 20;
+            constexpr int32_t kLeft = 2;
+            constexpr int32_t kGapHere = 4;
+            constexpr int32_t kRight = 2;
+            int32_t target_w = kTarget;
+            int32_t card_w = layer.width - kLeft - target_w - kGapHere - kRight;
+            if (card_w < kCard) {
+                target_w = std::max(layer.width - kLeft - kGapHere - kRight - kCard, int32_t{12});
+                card_w = std::max(layer.width - kLeft - target_w - kGapHere - kRight, int32_t{40});
+            }
+            const int32_t target_h = std::min(mark, std::max(layer.height - 8, int32_t{16}));
+            target = {
+                layer.x + kLeft,
+                layer.y + std::max((layer.height - target_h) / 2, int32_t{0}),
+                target_w,
+                target_h,
+            };
+            coach_card = {
+                target.x + target.width + kGapHere,
+                layer.y + 2,
+                card_w,
+                std::max(layer.height - 4, int32_t{40}),
+            };
+        } else {
+            target = {
+                layer.x + 4,
+                layer.y + std::max((layer.height - mark) / 2, int32_t{0}),
+                std::min(mark, std::max(layer.width / 5, int32_t{16})),
+                mark,
+            };
+            const int32_t wanted_w =
+                std::max(layer.width - (target.width + coach_gap + 8), int32_t{40});
+            const int32_t wanted_h = std::max(layer.height - 8, int32_t{40});
+            coach_card = place_coach_mark(layer, target, wanted_w, wanted_h);
+            const Rect overlap = intersect(coach_card, target);
+            if (coach_card.width < 48 || coach_card.height < 40 ||
+                (overlap.width > 0 && overlap.height > 0)) {
+                const int32_t card_x = target.x + target.width + coach_gap;
+                coach_card = {
+                    card_x,
+                    layer.y + 4,
+                    std::max(layer.x + layer.width - card_x - 4, int32_t{40}),
+                    std::max(layer.height - 8, int32_t{40}),
+                };
+            }
+        }
+        add_spotlight(b.list, layer, SpotlightLook{target});
+        CoachMarkLook coach_mark;
+        coach_mark.number = 1;
+        coach_mark.title = "Library";
+        coach_mark.body = "Open it from the main menu.";
+        coach_mark.target = target;
+        add_coach_mark(b.list, coach_card, coach_mark);
+    };
+    auto add_step = [&](const Rect& step_rect) {
+        StepLook step;
+        step.name = "LANGUAGE";
+        step.index = 1;
+        step.count = 3;
+        add_step_indicator(b.list, step_rect, step);
+    };
+    auto add_calls = [&](const Rect& area, bool stacked, bool captions) {
+        constexpr int32_t kCount = 5;
+        constexpr std::array<Sample, kCount> kStates{
+            Sample::idle,
+            Sample::hovered,
+            Sample::pressed,
+            Sample::focused,
+            Sample::disabled,
+        };
+        const int32_t button_h = kMetrics.button_height;
+        int32_t button_w = 1;
+        int32_t origin_x = area.x;
+        int32_t origin_y = area.y;
+        int32_t pitch_x = 0;
+        int32_t pitch_y = 0;
+        if (stacked) {
+            constexpr int32_t kCallGap = 2;
+            const int32_t stack = kCount * button_h + (kCount - 1) * kCallGap;
+            origin_y = area.y + std::max((area.height - stack) / 2, int32_t{0});
+            button_w = std::max(area.width - 12, int32_t{1});
+            origin_x = area.x + std::max((area.width - button_w) / 2, int32_t{0});
+            pitch_y = button_h + kCallGap;
+        } else {
+            constexpr int32_t kCallGap = 8;
+            const int32_t gaps = (kCount - 1) * kCallGap;
+            button_w = std::max((area.width - gaps) / kCount, int32_t{1});
+            const int32_t used = kCount * button_w + gaps;
+            origin_x = area.x + std::max((area.width - used) / 2, int32_t{0});
+            pitch_x = button_w + kCallGap;
+        }
+        for (int32_t place = 0; place < kCount; ++place) {
+            const Rect button{
+                origin_x + place * pitch_x,
+                origin_y + place * pitch_y,
+                button_w,
+                button_h,
+            };
+            const Sample shown = kStates[static_cast<std::size_t>(place)];
+            if (place == 0) {
+                const bool over = model.interaction.hovered == kCallToAction;
+                CallToActionLook look;
+                look.caption = "Start playing";
+                look.hovered = over;
+                look.held = held_on(model, kCallToAction);
+                look.enabled = true;
+                look.time_ms = 400;
+                const std::size_t part_at = b.list.items.size();
+                add_call_to_action(b.list, button, look, kCallToAction, "gallery.call-to-action.1");
+                show_working(b, part_at, kCallToAction, button);
+                b.order.push_back(kCallToAction);
+            } else {
+                add_fixed(b.list, button, button, shown, false, [&] {
+                    CallToActionLook look;
+                    look.caption = "Start playing";
+                    look.hovered = looks_hovered(shown);
+                    look.held = shown == Sample::pressed;
+                    look.enabled = shown != Sample::disabled;
+                    look.time_ms = 400;
+                    look.reduced_motion = shown == Sample::focused;
+                    add_call_to_action(b.list, button, look, no_control, {});
+                });
+            }
+            if (!captions)
+                continue;
+            add_words(
+                b.list,
+                {button.x, button.y + button_h + kCaptionGap + 2, button_w, kMetrics.small_line},
+                caption_of(shown),
+                FontRole::small,
+                Align::left,
+                colour::hint
+            );
+        }
+    };
+
+    const bool compact = card_w <= compact_metrics.language_card_width;
+    const int32_t choice_h = choice_card_height();
+    int32_t bottom = at.y + row_height;
+    if (compact) {
+        const int32_t row1 = at.y + row_height;
+        const int32_t row2 = row1 + card_h;
+        const int32_t row3 = row2 + card_h;
+        const int32_t row4 = row3 + kSetupHeight;
+        const int32_t used_four = 4 * card_w + 3 * kGap;
+        const Rect calls{
+            at.x + used_four + kGap, row1, std::max(width - used_four - kGap, int32_t{1}), card_h
+        };
+        for (int32_t index = 0; index < 4; ++index)
+            add_language(
+                static_cast<std::size_t>(index),
+                {at.x + index * (card_w + kGap), row1, card_w, card_h}
+            );
+        const int32_t used_three = 3 * card_w + 2 * kGap;
+        const int32_t pocket_x = at.x + used_three + kGap;
+        const int32_t pocket_w = std::max(at.x + width - pocket_x, int32_t{1});
+        for (int32_t index = 0; index < 3; ++index)
+            add_language(
+                static_cast<std::size_t>(index + 4),
+                {at.x + index * (card_w + kGap), row2, card_w, card_h}
+            );
+        add_working_choice(0, {pocket_x, row2, pocket_w, choice_h});
+        add_working_choice(1, {pocket_x, row2 + choice_h, pocket_w, choice_h});
+        const int32_t step_h = step_indicator_height();
+        add_step({pocket_x, row2 + card_h - step_h, pocket_w, step_h});
+
+        // The setup header holds "Open Annihilation", the page word and the
+        // step indicator on one line. The picture stays wide enough for its
+        // caption. The coach column keeps a 100-point card beside its target.
+        constexpr int32_t kCoachWidth = 128;
+        constexpr int32_t kPictureWidth = 88;
+        const int32_t setup_w =
+            std::max(width - kCoachWidth - kPictureWidth - 2 * kGap, int32_t{1});
+        add_chrome({at.x, row3, setup_w, kSetupHeight});
+        add_picture({at.x + setup_w + kGap, row3, kPictureWidth, kSetupHeight});
+        add_coach({
+            at.x + setup_w + kGap + kPictureWidth + kGap,
+            row3,
+            kCoachWidth,
+            kSetupHeight,
+        });
+
+        const int32_t strip_w = std::max(width - kButtonWidth - kGap, int32_t{1});
+        const int32_t short_w = std::max((strip_w - 3 * kGap) / 4, int32_t{1});
+        for (std::size_t state_at = 0; state_at < kChoiceStates.size(); ++state_at)
+            add_choice_state(
+                {at.x + static_cast<int32_t>(state_at) * (short_w + kGap), row4, short_w, choice_h},
+                kChoiceStates[state_at]
+            );
+        add_calls(calls, true, false);
+        bottom = row4 + choice_h;
+    } else {
+        const int32_t vgap = card_w >= large_metrics.language_card_width ? 8 : 2;
+        const int32_t row1 = at.y + row_height + vgap;
+        const int32_t row2 = row1 + card_h + vgap;
+        const int32_t choice_y = row2 + card_h + vgap;
+        const int32_t four_x = at.x + 4 * card_w + 4 * kGap;
+        const int32_t three_x = at.x + 3 * card_w + 3 * kGap;
+        const int32_t pocket1_w = std::max(at.x + width - four_x, int32_t{1});
+        const int32_t pocket2_w = std::max(at.x + width - three_x, int32_t{1});
+        for (int32_t index = 0; index < 4; ++index)
+            add_language(
+                static_cast<std::size_t>(index),
+                {at.x + index * (card_w + kGap), row1, card_w, card_h}
+            );
+        for (int32_t index = 0; index < 3; ++index)
+            add_language(
+                static_cast<std::size_t>(index + 4),
+                {at.x + index * (card_w + kGap), row2, card_w, card_h}
+            );
+
+        int32_t long_w = std::min(card_w + 50, std::max((width - 5 * kGap) / 3, int32_t{1}));
+        const int32_t short_w = std::max((width - 2 * long_w - 5 * kGap) / 4, int32_t{1});
+        int32_t choice_x = at.x;
+        for (std::size_t place = 0; place < kChoiceCount; ++place) {
+            add_working_choice(place, {choice_x, choice_y, long_w, choice_h});
+            choice_x += long_w + kGap;
+        }
+        for (std::size_t state_at = 0; state_at < kChoiceStates.size(); ++state_at) {
+            add_choice_state({choice_x, choice_y, short_w, choice_h}, kChoiceStates[state_at]);
+            choice_x += short_w + kGap;
+        }
+
+        add_chrome({three_x, row2, pocket2_w, kSetupHeight});
+        const int32_t picture_w = card_w >= large_metrics.language_card_width ? 168 : 112;
+        const int32_t coach_x = four_x + picture_w + kGap;
+        add_picture({four_x, row1, picture_w, card_h});
+        add_coach({coach_x, row1, std::max(four_x + pocket1_w - coach_x, int32_t{1}), card_h});
+        const int32_t under = row2 + kSetupHeight + 4;
+        add_step({
+            three_x,
+            under + kMetrics.button_height + kMetrics.small_line + 8,
+            pocket2_w,
+            step_indicator_height(),
+        });
+        add_calls({three_x, under, pocket2_w, kMetrics.button_height}, false, true);
+        bottom = choice_y + choice_h;
+    }
+    return bottom - at.y;
+}
+
 /// One section of the gallery.
 struct Section {
     std::string_view heading{}; ///< its heading, in capitals
@@ -1642,6 +2317,7 @@ struct Section {
 
 /// The sections, in the order they show.
 constexpr auto kSections = std::to_array<Section>({
+    {"FIRST RUN", "first-run", &first_run},
     {"WINDOW CHROME", "window-chrome", &window_chrome},
     {"TABS", "tabs", &tabs},
     {"BUTTONS", "buttons", &buttons_section},
@@ -1799,6 +2475,15 @@ GalleryResult press_at(GalleryModel& model, const GalleryLayout& laid, ControlId
         model.list_row = *list_at;
     } else if (const auto card = in_run(id, kFirstCard, kCardCount)) {
         model.card = *card;
+    } else if (const auto carousel_card = in_run(id, kFirstCarousel, kCarouselCount)) {
+        model.carousel_index = static_cast<int32_t>(*carousel_card);
+    } else if (id == kCarouselPrevious) {
+        model.carousel_index = std::max(model.carousel_index - 1, int32_t{0});
+    } else if (id == kCarouselNext) {
+        model.carousel_index =
+            std::min(model.carousel_index + 1, static_cast<int32_t>(kCarouselCount) - 1);
+    } else if (const auto choice = in_run(id, kFirstChoice, kChoiceCount)) {
+        model.choice_index = *choice;
     }
     return GalleryResult::redraw;
 }
@@ -1873,6 +2558,16 @@ GalleryResult key_on(GalleryModel& model, const GalleryLayout& laid, ControlId i
             if (language < 0 || language >= static_cast<int32_t>(gallery_languages.size()))
                 return GalleryResult::none;
             model.language = static_cast<std::size_t>(language);
+        } else if (
+            id == kCarouselPrevious || id == kCarouselNext ||
+            in_run(id, kFirstCarousel, kCarouselCount)
+        ) {
+            const int32_t next_index = std::clamp(
+                model.carousel_index + by, int32_t{0}, static_cast<int32_t>(kCarouselCount) - 1
+            );
+            if (next_index == model.carousel_index)
+                return GalleryResult::none;
+            model.carousel_index = next_index;
         } else {
             return GalleryResult::none;
         }
@@ -2031,23 +2726,38 @@ GalleryLayout gallery_layout(const GalleryModel& model, const Frame& frame, cons
     Builder b;
     b.model = &model;
     b.fonts = &fonts;
+    b.metrics = &sized;
     b.view = {kMetrics.edge, header_bottom, width - 2 * kMetrics.edge, footer_rule - header_bottom};
     add_part(b.list, Role::fill, {0, 0, width, height}).colour = colour::panel;
 
     const std::size_t first_part = b.list.items.size();
+    // Compact's choice-card states hang into the footer so the cards keep
+    // their real height. They are drawn after the footer, still in the frame.
+    std::vector<Item> over_footer;
     const bool roomy = b.view.width > 0 && b.view.height > 0;
     if (roomy) {
         const auto columns = static_cast<int32_t>(laid.columns);
         const int32_t content_width = width - 2 * pad;
         const int32_t column_width = std::max((content_width - (columns - 1) * pad) / columns, 1);
-        // Each section goes under the column that is shortest so far.
+        // First run spans the content width. The other sections flow into the
+        // shortest column under it.
         std::array<Point, kSections.size()> places{};
-        std::vector<int32_t> bottoms(laid.columns, b.view.y + kContentTop);
-        for (std::size_t index = 0; index < kSections.size(); ++index) {
+        std::array<int32_t, kSections.size()> spans{};
+        Builder measured;
+        measured.model = &model;
+        measured.fonts = &fonts;
+        measured.view = b.view;
+        measured.metrics = &sized;
+        const int32_t first_height = add_section(measured, kSections[0], {0, 0}, content_width);
+        places[0] = {pad, b.view.y + kFirstRunTop};
+        spans[0] = content_width;
+        std::vector<int32_t> bottoms(laid.columns, places[0].y + first_height + kSectionGap);
+        for (std::size_t index = 1; index < kSections.size(); ++index) {
             Builder measure;
             measure.model = &model;
             measure.fonts = &fonts;
             measure.view = b.view;
+            measure.metrics = &sized;
             const int32_t section_height =
                 add_section(measure, kSections[index], {0, 0}, column_width);
             const auto shortest = static_cast<std::size_t>(
@@ -2056,6 +2766,7 @@ GalleryLayout gallery_layout(const GalleryModel& model, const Frame& frame, cons
             places[index] = {
                 pad + static_cast<int32_t>(shortest) * (column_width + pad), bottoms[shortest]
             };
+            spans[index] = column_width;
             bottoms[shortest] += section_height + kSectionGap;
         }
         const int32_t content_bottom =
@@ -2075,29 +2786,49 @@ GalleryLayout gallery_layout(const GalleryModel& model, const Frame& frame, cons
         area.offset = std::clamp(model.scroll, int32_t{0}, area.limit);
         for (std::size_t index = 0; index < kSections.size(); ++index)
             add_section(
-                b, kSections[index], {places[index].x, places[index].y - area.offset}, column_width
+                b, kSections[index], {places[index].x, places[index].y - area.offset}, spans[index]
             );
         if (b.menu_part)
             b.list.items.push_back(std::move(*b.menu_part));
         // Every part and control of the sections is clipped to the view; the
         // scroll list's rows to its own view within it. Rows whose view the
         // sections' view shows none of are not drawn and take no press.
+        const Rect below_header{
+            b.view.x, b.view.y, b.view.width, std::max(height - b.view.y, int32_t{0})
+        };
         std::vector<Item> kept;
         kept.reserve(b.list.items.size());
         for (std::size_t index = 0; index < b.list.items.size(); ++index) {
             Item& part = b.list.items[index];
             if (index >= first_part) {
                 const bool own = part.clip.width > 0 && part.clip.height > 0;
-                part.clip = own ? intersect(part.clip, b.view) : b.view;
-                if (part.clip.width <= 0 || part.clip.height <= 0)
+                if (own) {
+                    part.clip = intersect(part.clip, b.view);
+                    if (part.clip.width <= 0 || part.clip.height <= 0)
+                        continue;
+                } else if (wholly_in(part.rect, b.view)) {
+                    part.clip = b.view;
+                } else if (wholly_in(part.rect, below_header)) {
+                    part.clip = below_header;
+                    over_footer.push_back(std::move(part));
                     continue;
+                } else {
+                    part.clip = b.view;
+                    if (part.clip.width <= 0 || part.clip.height <= 0)
+                        continue;
+                }
             }
             kept.push_back(std::move(part));
         }
         b.list.items = std::move(kept);
         for (Control& control : b.list.controls) {
             const bool own = control.clip.width > 0 && control.clip.height > 0;
-            control.clip = own ? intersect(control.clip, b.view) : b.view;
+            if (own)
+                control.clip = intersect(control.clip, b.view);
+            else if (!wholly_in(control.rect, b.view) && wholly_in(control.rect, below_header))
+                control.clip = below_header;
+            else
+                control.clip = b.view;
             if (control.clip.width <= 0 || control.clip.height <= 0)
                 control.enabled = false;
         }
@@ -2149,6 +2880,8 @@ GalleryLayout gallery_layout(const GalleryModel& model, const Frame& frame, cons
     );
     show_working(b, close_at, kClose, close);
     b.order.push_back(kClose);
+    for (Item& part : over_footer)
+        b.list.items.push_back(std::move(part));
     add_part(b.list, Role::bevel, {0, 0, width, height}).colour = colour::edge_light;
 
     b.list.tab_order = std::move(b.order);

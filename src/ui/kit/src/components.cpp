@@ -10,6 +10,7 @@
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/controls.hpp"
+#include "oa/ui/kit/first_run.hpp"
 
 #include "oa/ui/frontend_renderer/artless.hpp"
 
@@ -223,7 +224,7 @@ ButtonColours button_colours(const ButtonLook& look) noexcept {
         Colour face = colour::accent;
         if (look.held)
             face = colour::accent_held;
-        else if (look.hovered)
+        else if (look.hovered || look.bright)
             face = colour::accent_light;
         return {face, colour::accent_light, colour::on_accent};
     }
@@ -437,6 +438,42 @@ void paint_item(const Canvas& canvas, const Item& item) {
     case Role::progress:
         if (const auto* look = std::get_if<ProgressLook>(&item.look))
             draw_progress(drawn, item.rect, look->done, look->whole);
+        break;
+    case Role::language_card:
+        if (const auto* look = std::get_if<LanguageCardLook>(&item.look))
+            draw_language_card(drawn, item.rect, *look);
+        break;
+    case Role::carousel:
+        if (const auto* look = std::get_if<CarouselLook>(&item.look))
+            draw_carousel(drawn, item.rect, *look);
+        break;
+    case Role::step_indicator:
+        if (const auto* look = std::get_if<StepLook>(&item.look))
+            draw_step_indicator(drawn, item.rect, *look);
+        break;
+    case Role::setup_chrome:
+        if (const auto* look = std::get_if<SetupChromeLook>(&item.look))
+            draw_setup_chrome(placed_at(drawn, {item.rect.x, item.rect.y}), *look);
+        break;
+    case Role::choice_card:
+        if (const auto* look = std::get_if<ChoiceCardLook>(&item.look))
+            draw_choice_card(drawn, item.rect, *look);
+        break;
+    case Role::coach_mark:
+        if (const auto* look = std::get_if<CoachMarkLook>(&item.look))
+            draw_coach_mark(drawn, item.rect, *look);
+        break;
+    case Role::spotlight:
+        if (const auto* look = std::get_if<SpotlightLook>(&item.look))
+            draw_spotlight(drawn, item.rect, *look);
+        break;
+    case Role::picture_well:
+        if (const auto* look = std::get_if<PictureWellLook>(&item.look))
+            draw_picture_well(drawn, item.rect, *look);
+        break;
+    case Role::call_to_action:
+        if (const auto* look = std::get_if<CallToActionLook>(&item.look))
+            draw_call_to_action(drawn, item.rect, *look);
         break;
     case Role::header_bar:
     case Role::badge:

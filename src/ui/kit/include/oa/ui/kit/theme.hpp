@@ -154,6 +154,9 @@ inline constexpr float greyed_opacity = 0.4F;
 
 /// How far the main menu is darkened under the dialog, in 256ths.
 inline constexpr uint32_t menu_backdrop_opacity = 159;
+/// How far a coach mark's spotlight dims the layer, in 256ths: 74 percent
+/// of the backdrop, to the nearest 256th (189 / 256).
+inline constexpr uint32_t spotlight_opacity = 189;
 /// How far the in-game menu's column is darkened beside the dialog, in 256ths.
 inline constexpr uint32_t ingame_backdrop_opacity = 128;
 /// How far a locked row is faded into the panel, in 256ths.
@@ -165,8 +168,9 @@ inline constexpr uint32_t selected_tint = 15;
 /// its prompts' sizes, and the sizes of the controls it does not have.
 /// compact_metrics holds 0.7.3's; regular_metrics and large_metrics differ
 /// from them only in the dialog's and the notices' sizes, the padding, the
-/// nav list's width and the hint's characters a line (oa/ui/kit/layout.hpp's
-/// metrics_of picks a class's).
+/// nav list's width, the hint's characters a line, and the first-run
+/// language card and carousel step (oa/ui/kit/layout.hpp's metrics_of picks
+/// a class's).
 struct Metrics {
     /// The raised edge's width.
     int32_t edge{};
@@ -377,6 +381,14 @@ struct Metrics {
     /// A notice's or a question's greatest height: what the class's least
     /// window holds with a margin. Text below it is cut.
     int32_t greatest_notice_height{};
+    /// A language card's width, in points. Regular and Large grow it with
+    /// the class; every other control keeps Compact's size.
+    int32_t language_card_width{};
+    /// A language card's height, in points.
+    int32_t language_card_height{};
+    /// How far a carousel's next card sits to the right of the one before
+    /// it, in points. At Large this is the design's 236.
+    int32_t carousel_step{};
     /// Tells whether two sets of metrics hold the same sizes.
     friend constexpr bool operator==(const Metrics&, const Metrics&) = default;
 };
@@ -483,13 +495,17 @@ inline constexpr Metrics compact_metrics{
     .notice_width = 400,
     .least_notice_height = 150,
     .greatest_notice_height = 440,
+    .language_card_width = 120,
+    .language_card_height = 104,
+    .carousel_step = 118,
 };
 
 /// Regular metrics: Compact's, with a settings dialog of 720 by 486 points,
 /// 16 points of padding, a nav list 176 points wide, 82 characters to a
 /// host's line under a row, and notices and prompts 520 points wide and at
-/// most 500 tall. Rows, text and controls keep Compact's sizes, so the
-/// dialog shows more of them.
+/// most 500 tall. The language card is 160 by 128 and the carousel steps
+/// 177 points, three quarters of Large's step. Rows, text and the other
+/// controls keep Compact's sizes, so the dialog shows more of them.
 inline constexpr Metrics regular_metrics = [] {
     Metrics sized = compact_metrics;
     sized.dialog_width = 720;
@@ -499,13 +515,18 @@ inline constexpr Metrics regular_metrics = [] {
     sized.hint_line_characters = 82;
     sized.notice_width = 520;
     sized.greatest_notice_height = 500;
+    sized.language_card_width = 160;
+    sized.language_card_height = 128;
+    sized.carousel_step = 177;
     return sized;
 }();
 
 /// Large metrics: Compact's, with a settings dialog of 960 by 600 points,
 /// 20 points of padding, a nav list 208 points wide, 114 characters to a
 /// host's line under a row, and notices and prompts 600 points wide and at
-/// most 640 tall. Rows, text and controls keep Compact's sizes.
+/// most 640 tall. The language card is 200 by 148 and the carousel steps
+/// 236 points, the design's step. Rows, text and the other controls keep
+/// Compact's sizes.
 inline constexpr Metrics large_metrics = [] {
     Metrics sized = compact_metrics;
     sized.dialog_width = 960;
@@ -515,6 +536,9 @@ inline constexpr Metrics large_metrics = [] {
     sized.hint_line_characters = 114;
     sized.notice_width = 600;
     sized.greatest_notice_height = 640;
+    sized.language_card_width = 200;
+    sized.language_card_height = 148;
+    sized.carousel_step = 236;
     return sized;
 }();
 
