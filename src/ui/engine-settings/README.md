@@ -717,11 +717,15 @@ buttons keep their sizes.
 
 The OA layer takes the class and the scale from the window
 (`kit::layer_viewport`): the Interface size's whole step, or with Auto the
-window's height over 720, rounded, never below the display's density. The
-step is capped at the largest at which Compact's 480 by 324 dialog fits the
-window, less its safe insets on a touch screen, and is at least 1×, so a
+window's height over 720, the nearest step, never below the display's
+density. While the modern fonts are on and opened, 150% is among Auto's
+steps and a tie takes the larger (1× below 900 lines, 150% from 900, 2×
+from 1260); otherwise Auto keeps whole steps (1× below 1080, 2× from 1080).
+The step is capped at the largest at which Compact's 480 by 324 dialog fits
+the window, less its safe insets on a touch screen, and is at least 1×, so a
 size never draws a dialog cut off by the window's edge; the class then
-comes from the window's points at that step. 150% is held the same way:
+comes from the window's points at that step. 150%, chosen or what Auto
+picked, is held the same way:
 it is 1.5× where Compact's 720 by 486 pixels at one and a half fit the
 window, and 1× where they do not. On a 1920 by 1080 window
 100% is Large at 1×, 150% is Large at 1.5× (1280 by 720 points, the dialog

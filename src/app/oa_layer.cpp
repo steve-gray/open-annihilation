@@ -685,9 +685,10 @@ LayerPlacement centred_box(const LayerView& view, int32_t box_height) noexcept {
 
 /// Returns the match's canvas at the layer's scale on it, as the in-match
 /// Settings and the gallery start from: the Interface size's step, 150%, or
-/// for Auto the Auto scale of its height (kit::layer_viewport), never above
-/// the side column's scale, which HUD scaling caps: the largest whole step
-/// at or below it instead, and at least 1.
+/// for Auto the Auto scale of its height (kit::layer_viewport, with 150%
+/// among the steps when interface_percent is kit::auto_with_fraction_percent),
+/// never above the side column's scale, which HUD scaling caps: the largest
+/// whole step at or below it instead, and at least 1.
 ///
 /// @param match_layout the match's layout
 /// @param interface_percent the Interface size in effect, in percent; 0 for Auto
@@ -1727,6 +1728,11 @@ LayerView OaLayer::view() const {
             chosen, current.modern_fonts && smooth_fonts() != nullptr
         );
     seen.interface_percent = settings::interface_size_percent(chosen);
+    // Auto counts 150% among its steps only while the modern fonts are on
+    // and the layer's stack of them opened.
+    if (chosen == settings::InterfaceSize::automatic && current.modern_fonts &&
+        smooth_fonts() != nullptr)
+        seen.interface_percent = kit::auto_with_fraction_percent;
     if (seen.match) {
         // The in-match Settings takes its own class and scale from the area
         // beside the side column (match_dialog).
