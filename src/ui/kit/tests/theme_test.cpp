@@ -187,14 +187,14 @@ void compact_metrics_of_the_new_controls() {
     OA_CHECK(kit::compact_metrics.card_inset == 4);
     OA_CHECK(kit::compact_metrics.hover_card_padding == 6);
     OA_CHECK(kit::compact_metrics.hover_card_arrow == 5);
-    OA_CHECK(kit::compact_metrics.language_card_width == 120);
-    OA_CHECK(kit::compact_metrics.language_card_height == 104);
-    OA_CHECK(kit::compact_metrics.carousel_step == 118);
-    OA_CHECK(kit::regular_metrics.language_card_width == 160);
-    OA_CHECK(kit::regular_metrics.language_card_height == 128);
+    OA_CHECK(kit::compact_metrics.language_card_width == 139);
+    OA_CHECK(kit::compact_metrics.language_card_height == 182);
+    OA_CHECK(kit::compact_metrics.carousel_step == 132);
+    OA_CHECK(kit::regular_metrics.language_card_width == 186);
+    OA_CHECK(kit::regular_metrics.language_card_height == 244);
     OA_CHECK(kit::regular_metrics.carousel_step == 177);
-    OA_CHECK(kit::large_metrics.language_card_width == 200);
-    OA_CHECK(kit::large_metrics.language_card_height == 148);
+    OA_CHECK(kit::large_metrics.language_card_width == 232);
+    OA_CHECK(kit::large_metrics.language_card_height == 304);
     OA_CHECK(kit::large_metrics.carousel_step == 236);
 }
 

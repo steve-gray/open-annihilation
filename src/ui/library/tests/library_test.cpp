@@ -867,7 +867,7 @@ void test_active_setup() {
         OA_CHECK_TEXT(setup.maps[0].pack_name, "zeta pack");
         OA_CHECK_TEXT(setup.maps[0].players, "1 player");
         OA_CHECK_TEXT(setup.maps[0].line, "Last Map · 1 player · 8x8");
-        OA_CHECK_TEXT(setup.maps[0].from, "From zeta pack");
+        OA_CHECK(setup.maps[0].from.empty());
         OA_CHECK_TEXT(setup.maps[0].description, "The last island.");
         OA_CHECK(setup.maps[0].preview != nullptr && setup.maps[0].preview->width == 8);
         OA_CHECK(setup.maps[0].pack_id.key.empty());
@@ -882,6 +882,7 @@ void test_active_setup() {
         OA_CHECK(setup.maps[1].pack_id.registry == core);
         OA_CHECK_TEXT(setup.maps[2].name, "Twin");
         OA_CHECK_TEXT(setup.maps[2].pack_name, "Alpha Pack");
+        OA_CHECK_TEXT(setup.maps[2].from, "From Alpha Pack");
         OA_CHECK(setup.maps[2].pack_id.key == "alpha");
     }
 

@@ -4094,6 +4094,13 @@ class Runtime final : public menu::Host,
     /// @return every rule the map breaks; kept until the runtime ends
     const oa::data::map_fit::Fit& pack_map_fit(const PackMap& map);
 
+    /// Drops the kept map-fit results.
+    ///
+    /// The game's names are collected once, from the archives mounted then.
+    /// A later archive is not seen until this drops that collection, so the
+    /// next check reads the names again.
+    void drop_pack_map_fits();
+
     /// Makes a pack map's files, and no other map's, the store's pack layer.
     ///
     /// A map already mounted answers at once. Otherwise any mounted layer is
@@ -4155,19 +4162,35 @@ class Runtime final : public menu::Host,
     /// @return the key; empty when the mod being played has none
     [[nodiscard]] std::string played_map_key() const;
 
+    /// How a registry pack's catalogue answers for one map and one mod key.
+    enum class CatalogueMapFit {
+        /// The content service has not started, or the snapshot does not
+        /// list this pack's release. The file check is provisional.
+        unlisted,
+        /// The key is empty, or the map's compatible table has no row for
+        /// it. The files decide, and a miss is final.
+        unchecked,
+        /// The table records the key as fitting.
+        fits,
+        /// The table records the key as not fitting, or the release lists
+        /// no such map.
+        unfit,
+    };
+
     /// Rebuilds the pack maps in the skirmish list and the battle room's list.
     ///
     /// Keeps the base maps already listed, in their order and under their
-    /// names. A pack map is listed when its recorded compatibility for
-    /// played_map_key is true: the catalogue's compatible table for a pack
-    /// from a registry, or the map-fit check for a sideloaded pack. A
-    /// registry pack whose release is not in the catalogue yet is listed by
-    /// the map-fit check until that table arrives, and a miss then is not
-    /// logged. A map that is left out for good writes one log line for its
-    /// pack and the mod, the first time that pair is left out. An open
-    /// skirmish map list is filled again, and so is an open battle-room map
-    /// list. The base map that was the default stays the default while it is
-    /// still listed.
+    /// names. A pack map is listed when it fits the mod being played. For a
+    /// pack from a registry, the catalogue's compatible table is final when
+    /// it has a row for played_map_key: true lists the map and false leaves
+    /// it out. An empty key, or a key that table lacks, is decided by the
+    /// map-fit check, as a sideloaded pack is, and a miss there is final. A
+    /// release the snapshot does not list yet is listed by that check until
+    /// the table arrives, and a miss then is not logged. A map that is left
+    /// out for good writes one log line for its pack and the mod, the first
+    /// time that pair is left out. An open skirmish map list is filled
+    /// again, and so is an open battle-room map list. The base map that was
+    /// the default stays the default while it is still listed.
     void refresh_listed_pack_maps();
 
     /// Rebuilds the pack-map lists when the catalogue snapshot has moved on.
@@ -4213,19 +4236,19 @@ class Runtime final : public menu::Host,
     /// @return the generation; nothing when the service has not started
     [[nodiscard]] std::optional<uint64_t> content_catalogue_generation() const;
 
-    /// Returns whether a registry pack's catalogue says a map fits a key.
+    /// Returns how a registry pack's catalogue answers for a map and a key.
     ///
-    /// Nothing is returned when the content service has not started, or its
-    /// snapshot does not yet list that pack's release. False when the release
-    /// is listed and the map is absent, the key is absent, or the key is
-    /// recorded false. Does not start the content service, and does not open
-    /// the map's files.
+    /// Unlisted when the content service has not started, or its snapshot
+    /// does not yet list that pack's release. Unchecked when the release
+    /// lists the map and the key is empty or absent from its compatible
+    /// table. Unfit when the release lists no such map, or records the key
+    /// as false. Fits when the key is recorded true. Does not start the
+    /// content service, and does not open the map's files.
     ///
     /// @param map the installed pack map
-    /// @param key the mod's key; empty matches no recorded compatibility
-    /// @return whether the recorded value for `key` is true; nothing when
-    ///     that release is not in the snapshot
-    [[nodiscard]] std::optional<bool>
+    /// @param key the mod's key; empty is not a row of the table
+    /// @return the catalogue's answer for that map and key
+    [[nodiscard]] CatalogueMapFit
     catalogue_map_fits(const PackMap& map, std::string_view key) const;
 
     /// Returns the content service, starting it on first use.
@@ -4698,6 +4721,20 @@ class Runtime final : public menu::Host,
     /// Throws std::runtime_error naming the first step that failed.
     void check_library_install();
 
+    /// Writes --check-library-map-previews's two installed packs and its
+    /// registry list, and serves its catalogue, before the content service
+    /// reads the player's folder.
+    ///
+    /// Every built-in registry is turned off. Throws std::runtime_error when
+    /// the run has no player folder or data folder, or a file cannot be written.
+    void prepare_library_map_preview_check();
+
+    /// Runs --check-library-map-previews: the Library opens on Maps and each
+    /// of the three pictures is decoded at the size that place produces, then
+    /// the Active tab's two map tiles show the installed ones. Throws
+    /// std::runtime_error naming the first step that failed.
+    void check_library_map_previews();
+
     // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
     // over the skirmish map list and over the host's map list in the battle
     // room opens it.
@@ -4728,10 +4765,14 @@ class Runtime final : public menu::Host,
     /// or the server cannot listen.
     void prepare_map_pack_lists_check();
 
-    /// Runs --check-map-pack-lists: installs that pack through the Library
-    /// path while the map lists already exist, then requires the map that
-    /// fits in both lists and played to its first frame, and the map that
-    /// fits only another mod left out with one log line.
+    /// Runs --check-map-pack-lists: shows the skirmish list and reads the
+    /// battle room's list, installs that pack through the Library path, and
+    /// requires the new map in both the next time they are read. A map the
+    /// catalogue records as not fitting the base game stays out. A local mod
+    /// with no origin then lists a map whose table lacks that mod when its
+    /// files fit, and leaves one out, logged, when they do not. Uninstalling
+    /// the pack removes both maps from both lists. The map that fits is
+    /// played to its first frame.
     ///
     /// Throws std::runtime_error naming the first step that failed.
     void check_map_pack_lists();

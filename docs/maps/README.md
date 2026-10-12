@@ -127,11 +127,16 @@ so once for that pack and that mod:
 open-annihilation: map pack <id>: 1 map does not fit <key>
 ```
 
-`<key>` is `ta-3.1c` for the base game, and `<catalogue-id>@<release>` for
-a mod installed from a catalogue. Several maps of one pack share one
-line, and then it reads `maps do not fit`. A pack from a registry is
-listed when that catalogue records the key as true. A pack installed from
-a file is listed when its files fit the game and the mod being played.
+`<key>` is `ta-3.1c` for the base game, `<catalogue-id>@<release>` for a
+mod installed from a catalogue, and `the mod being played` for a mod that
+has no catalogue key. Several maps of one pack share one line, and then
+it reads `maps do not fit`. A pack from a registry follows the catalogue
+when that catalogue has a row for the mod's key: true lists the map, and
+false leaves it out. A mod the catalogue has no row for, including one
+that was not installed from a catalogue, is listed when the map's files
+fit that mod, and left out when they do not. A pack installed from a file
+is listed the same way, by its files. A release the catalogue has not
+listed yet is listed by its files until that table arrives.
 The map browser still shows the map: its card is greyed with "Doesn't
 fit", and Select is greyed ([below](#the-map-browser)). Choosing a map
 the lists left out, from a save or by its name, is refused and keeps the

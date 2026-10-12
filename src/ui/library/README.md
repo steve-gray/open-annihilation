@@ -103,7 +103,8 @@ translator finds them together. Every word passes through `Library::text`
   game holds itself ("English · built in", "Built in"); and each installed
   map (`Inputs::map_packs`), ordered by folded title and then folded pack
   name, with its players ("4 players"), size, description, minimap when
-  one has been decoded, and the link "From Alpha Pack". The pack's entry
+  one has been decoded, and the link "From Alpha Pack" when the pack holds
+  several maps (empty when it holds one). The pack's entry
   is the map-pack entry of the same key and registry, or, when the pack
   names no key, the entry of the pack's name.
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
@@ -274,8 +275,11 @@ app removes the folder (`Runtime::library_uninstall`,
     the version and revision and the coverage, or Built in as a neutral
     pill on the title's line. Each installed map is a tile with its minimap,
     its title, its players and size, its description cut to one line, and
-    a link `library.active.from.<n>` ("From Core Map Pack") that opens the
-    Maps tab with that pack selected and its row in view. A minimap is
+    a link `library.active.from.<n>` that opens the Maps tab with that pack
+    selected and its row in view. A pack of several maps keeps the link on
+    a From line ("From Core Map Pack"). A pack of one map leaves that line
+    out and the title is the link, its text the title, drawn in the accent
+    and lighter while hovered. A minimap is
     fitted in its square, centred, and the letterbox is the list's well
     colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
@@ -284,10 +288,11 @@ app removes the folder (`Runtime::library_uninstall`,
     the tiles the same height; Large puts the maps in two columns of
     equal height when more than one is installed. The mod label stops
     above UNLOAD MOD, the language label covers its tile, and each map's
-    label covers its title line, so it does not meet the link. They scroll
+    label covers its title line, or the players-and-size line when the
+    title is the link, so it does not meet the link. They scroll
     as the details do when they are taller than the window. The labels take
-    no press. UNLOAD MOD does, while it is enabled, and so does a From link
-    while its line shows; Tab and the arrows reach both. A pack of one map
+    no press. UNLOAD MOD does, while it is enabled, and so does a map's
+    link while its line shows; Tab and the arrows reach both. A pack of one map
     wears that map's minimap on every row and in the details. A pack of
     several keeps its badge or its letters, and on the Maps tab a pack
     with no badge shows the first map's minimap. The details show one
@@ -466,12 +471,14 @@ app removes the folder (`Runtime::library_uninstall`,
     or "No mod: the game as it was made"), `library.active.language`
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
     ("Ridgeline · 4 players · 16x16"), the link `library.active.from.<n>`
-    ("From Core Map Pack") for the same map, and while a mod is played the
+    ("From Core Map Pack", or the map's title when its pack holds that map
+    alone) for the same map, and while a mod is played the
     button `library.active.unload` ("UNLOAD MOD"), disabled during a game
     and while the command line chose the mod. The mod label is the part of
     the tile above that button, the language label the part of its tile that
-    shows, and a map's the part of its title line that shows, empty while
-    that part is scrolled out. The From link is left out while its line is
+    shows, and a map's the part of its title line that shows, or the
+    players-and-size line when the title is the link, empty while
+    that part is scrolled out. The pack's link is left out while its line is
     scrolled out of the area. At most 4,000 maps are named.
 - `focused_field(state, list)` gives the search field while it has the
   focus, over which a host keeps the system's text input started.
@@ -509,8 +516,8 @@ stay valid until the model's next refresh.
   order, their states, what blocks them, their actions, the filters'
   counts and what the Active tab says are the model's.
 - On the Active tab UNLOAD MOD takes a press, a key or Tab only while a
-  mod is played and SWITCH OFF would act, and each map's From link does
-  while its line shows. The labels do not.
+  mod is played and SWITCH OFF would act, and each map's link to its pack
+  does while its line shows. The labels do not.
 - Every action Regular offers is reachable at Compact: on the list page, or
   on the details page, its first three as buttons and the rest in MORE ▾.
 - No two controls meet, but the list and the rows it holds and each row
@@ -548,7 +555,7 @@ Updates tab's filters across every kind, and tags with their counts; the
 filters' counts unmoved by the tag and the search; New's ten newest by
 day, ties by name, never an undated listing, on Mods, Maps and Updates;
 the Active tab's mod, language and maps in each case, ordered by folded
-title and then pack, with the From link and the minimap when one is set;
+title and then pack, with the From link when the pack holds several maps and the minimap when one is set;
 the order with
 no search; the update count; the selection across refreshes and browsing;
 the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
@@ -605,7 +612,7 @@ letterbox, that a several-map pack keeps its badge, that a several-map
 pack with no badge shows the first map's minimap on the Maps tab and its
 letters on Updates, that the details show one large picture or a grid
 with each map's name, players, size and description, that a minimap not
-yet decoded is a placeholder and then the picture, and that a From link
+yet decoded is a placeholder and then the picture, and that a one-map pack's title is the link to its pack with no From line while a pack of several keeps its From line, and that the link
 opens Maps with that pack selected and its row in view; that the Registries tab lists each registry on a card, its heading the
 title, its switch, key icon and REFRESH, its address, refresh time and
 description, a neutral Built in pill under those controls for one that

@@ -248,11 +248,14 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   until a later Settings row sets it. The kit does not read preferences: a
   screen copies the flag onto the look, and the draw functions read the look.
   - A language card (`draw_language_card`, `language_card_layout`,
-    `add_language_card`): a badge (the pack's picture, or the language's
-    letters on the hint grey, accent while the card is active), the
-    language's own name, its English name, a facts line and a pill. A facts
-    line wider than the card wraps onto the next small line, above the pill,
-    so the whole line is shown. The
+    `add_language_card`): a tall card. The badge is centred at the top
+    (the pack's picture, or the language's letters on the hint grey,
+    accent while the card is active). Under it, centred, the language's
+    own name, large and shrunk until it fits, its English name, a facts
+    line and a pill centred at the bottom. A facts line wider than the
+    card wraps onto the next small line, above the pill, so the whole
+    line is shown. An active card, and the carousel's centre card, have
+    an accent border and a one-point accent ring outside it. The
     pill follows `LanguageAvailability`. Built in, get, downloading and
     checking are neutral; active uses the accent pill and an accent badge;
     a failed fetch uses the problem pill; offline is neutral and the card

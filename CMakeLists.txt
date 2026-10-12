@@ -1037,6 +1037,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_language_install_check.cpp src/app/runtime_challenge_check.cpp
   src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
+  src/app/runtime_library_map_preview_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1658,12 +1659,16 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_map_browser_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED map-browser-clean)
-      # A two-map pack installed from the check's own registry while both
-      # lists already exist. One stem has a space, an apostrophe and
-      # parentheses and fits the base game; the other fits only another mod
-      # and is left out. The fitting map is played to its first frame and
-      # named in a saved game. Each run starts from a clean folder. No game
-      # file is committed: the check serves the pack itself.
+      # A two-map pack installed from the check's own registry after the
+      # skirmish list has been shown and the battle room's list has been
+      # read. One stem has a space, an apostrophe and parentheses and the
+      # catalogue records it as fitting the base game. The other map's files
+      # fit too, and the catalogue records that as false, so it is left out.
+      # A local mod with no origin then lists a map the table has no row for
+      # when its files fit, and leaves one out when they do not. Uninstalling
+      # removes both. The fitting map is played to its first frame and named
+      # in a saved game. Each run starts from a clean folder. No game file is
+      # committed: the check serves the pack itself.
       set(oa_map_pack_lists_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/map-pack-lists")
       file(MAKE_DIRECTORY "${oa_map_pack_lists_dir}")
       add_test(NAME map-pack-lists-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
@@ -1717,6 +1722,29 @@ if(OA_BUILD_PLATFORM)
       set_tests_properties(native-library PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_library_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The Library's Maps tab and the Active tab's map tiles, with three
+      # packs: one installed with a preview picture, one installed with only
+      # its terrain minimap, and one listed so its picture comes from the
+      # check's registry. Each picture is its own size, and none is the well
+      # drawn while a picture is missing.
+      set(oa_library_previews_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-map-previews")
+      file(MAKE_DIRECTORY "${oa_library_previews_dir}")
+      add_test(NAME library-map-previews-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_previews_dir}/Open Annihilation"
+        "${oa_library_previews_dir}/data"
+        "${oa_library_previews_dir}/library-map-previews.conf")
+      set_tests_properties(library-map-previews-clean PROPERTIES
+        FIXTURES_SETUP library-map-previews-clean)
+      add_test(NAME native-library-map-previews COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-map-previews
+        --preferences-file "${oa_library_previews_dir}/library-map-previews.conf"
+        --user-folder "${oa_library_previews_dir}/Open Annihilation"
+        --data-dir "${oa_library_previews_dir}/data")
+      set_tests_properties(native-library-map-previews PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_previews_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED library-map-previews-clean)
       # Made-up mod packages posted as the download queue posts them, from a
       # built-in registry and two added ones, installed while the Library
       # shows: the built-in one's with no question, the added ones' asking

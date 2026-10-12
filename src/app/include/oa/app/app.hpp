@@ -625,6 +625,10 @@ struct Options {
     // and PLAY NOW from it, and an update to the mod played held until the
     // mod is switched, over soft restarts.
     bool check_library_install = false;
+    // Opens the Library on Maps with three packs, one picture from a pack,
+    // one from a terrain minimap and one from a catalogue, then shows the
+    // two installed maps on the Active tab. Each picture has its own size.
+    bool check_library_map_previews = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

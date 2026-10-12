@@ -934,7 +934,10 @@ ActiveSetup active_setup(const Library& library) {
             line.pack_id = pack_id;
             if (map.preview && !map.preview->rgba.empty())
                 line.preview = &*map.preview;
-            line.from = filled(text, words::active_from_pack, {{"pack", pack.name}});
+            // One map in the pack: the title is the way to the pack, so the
+            // From line would only repeat a name the tile already shows.
+            if (pack.maps.size() > 1)
+                line.from = filled(text, words::active_from_pack, {{"pack", pack.name}});
             setup.maps.push_back(std::move(line));
         }
     }
