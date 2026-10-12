@@ -56,12 +56,55 @@ void draw_focus_ring(const Canvas& canvas, const Rect& control, bool around);
 /// whatever the pointer is doing. A refresh mark draws a circular arrow in
 /// place of the caption: the quiet look's face while the pointer is over it,
 /// the plain look's disabled face while it cannot be pressed, and the arrow
-/// in the text colour while it is turning.
+/// in the text colour while it is turning. When the look's check has been
+/// showing, the arrow eases into a check in the accent, then the arrow returns.
 ///
 /// @param canvas where it is drawn
 /// @param area the button
 /// @param look its caption, style and state
 void draw_button(const Canvas& canvas, const Rect& area, const ButtonLook& look);
+
+/// How long one full turn of a refresh mark, or of the OA button's spinner,
+/// takes, in milliseconds. The place on the turn comes from this time, so it
+/// is the same at every frame rate.
+inline constexpr uint32_t refresh_revolution_ms = 1600;
+
+/// How long a refresh mark shows its check after a refresh that read a list,
+/// in milliseconds, and then the arrow again.
+inline constexpr uint32_t refresh_check_ms = 800;
+
+/// How long the arrow takes to ease into that check, in milliseconds, counted
+/// inside refresh_check_ms.
+inline constexpr uint32_t refresh_ease_ms = 160;
+
+/// Returns the eighth of a turn a refresh mark or the OA button's spinner
+/// shows after this long turning. Eight eighths are one refresh_revolution_ms.
+/// The same time is the same eighth however many frames drew it.
+///
+/// @param elapsed_ms how long it has been turning, in milliseconds
+/// @return the eighth, 0 to 7
+[[nodiscard]] constexpr uint8_t refresh_eighth(uint32_t elapsed_ms) noexcept {
+    constexpr uint32_t place_ms = refresh_revolution_ms / 8u;
+    return static_cast<uint8_t>((elapsed_ms / place_ms) % 8u);
+}
+
+/// Returns how far a refresh mark's check has eased in: 0 is still the arrow
+/// and 255 is the check. The ease takes a few steps across refresh_ease_ms,
+/// then holds. Past refresh_check_ms, or at zero, the mark is not showing it.
+///
+/// @param shown_ms how long the check has been showing, in milliseconds
+/// @return 0, or a step up to 255
+[[nodiscard]] constexpr uint8_t refresh_check_ease(uint32_t shown_ms) noexcept {
+    if (shown_ms == 0 || shown_ms >= refresh_check_ms)
+        return 0;
+    if (shown_ms >= refresh_ease_ms)
+        return 255;
+    constexpr uint32_t steps = 4;
+    const uint32_t step = shown_ms * steps / refresh_ease_ms;
+    if (step == 0)
+        return 0;
+    return static_cast<uint8_t>(step * 255u / (steps - 1u));
+}
 
 /// Draws an Off/On switch.
 ///
@@ -222,7 +265,8 @@ inline constexpr int32_t oa_button_badge_height = 11;
 /// The badge's gap between its outline and the number, on each side, in points.
 inline constexpr int32_t oa_button_badge_pad = 2;
 
-/// How many places the badge's spinner has, one full turn.
+/// How many places the badge's spinner has, one full turn. One turn takes
+/// refresh_revolution_ms, the same as a refresh mark, measured in time.
 inline constexpr int32_t oa_button_spinner_places = 8;
 
 /// The largest number the badge writes as itself. Above it, the badge says 999+.

@@ -397,6 +397,14 @@ kit::DisplayList lay_out_screen(void*, const kit::Frame& frame) {
   [components_more.hpp][components_more] (the progress bar),
   [chrome.hpp][chrome] (the nav list) and [rows.hpp][rows] (declared rows,
   `add_rows`).
+- A button whose mark is `ButtonMark::refresh` draws a circular arrow
+  instead of its caption. `turn` is the eighth of the turn (one full turn
+  is `refresh_revolution_ms`, 1.6 seconds) and `turning` keeps the arrow in
+  the text colour while the button is disabled. `check_ms` is how long a
+  finished refresh has shown its check: the arrow eases into a check in the
+  accent over `refresh_ease_ms`, the check holds until `refresh_check_ms`
+  (0.8 seconds), and then the arrow is back. The same look draws the same
+  animation on every screen. The OA button's spinner uses the same turn.
 - Every control's name starts with the screen's name. Names are words of
   `a` to `z`, `0` to `9` and hyphens joined by dots, at most 100 bytes, and
   unique on the screen (`kit::name_problem` reports the first fault).

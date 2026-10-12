@@ -126,7 +126,9 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   dark pill, or a spinner of eight places in that pill while the count is
   not final. The spinner is worked out at the canvas's own pixels, each
   pixel's share counted from 16 samples in integers, and drawn through
-  `blend_coverage`. `turn` names which place is lit. The badge does not
+  `blend_coverage`. `turn` names which place is lit. One full turn is
+  `refresh_revolution_ms` (1.6 seconds), the same period as a refresh mark,
+  measured in time. The badge does not
   move when the button is pressed, and a button too small to hold it draws
   none. Without the dot and without a corner mark the button is drawn
   exactly as before.

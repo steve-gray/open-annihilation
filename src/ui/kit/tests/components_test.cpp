@@ -1105,22 +1105,48 @@ void a_menu_draws_a_divider_an_aside_and_a_greyed_row() {
     );
 }
 
+/// Tells whether a surface holds the accent check. The stroke is thinner than
+/// a pixel, so a covered pixel is a share of the accent on black rather than
+/// the accent itself. The accent is much greener than the grey arrow.
+///
+/// @param surface the picture
+/// @return true when some pixel is the accent and not the arrow
+bool shows_accent(const renderer::Surface& surface) {
+    for (std::size_t at = 0; at + 2 < surface.rgb.size(); at += 3) {
+        const int red = surface.rgb[at];
+        const int green = surface.rgb[at + 1];
+        const int blue = surface.rgb[at + 2];
+        if (green > red + 16 && green > blue)
+            return true;
+    }
+    return false;
+}
+
 /// The refresh mark turns, stays visible while it is disabled and turning,
-/// and changes its face while the pointer is over it.
+/// and changes its face while the pointer is over it. Each eighth of the
+/// arrow differs, the check is the accent, and the frames between them are
+/// neither the arrow nor the check.
 void refresh_mark_turns() {
-    const auto draw = [](uint8_t turn, bool enabled, bool turning, bool hovered) {
-        kit::ButtonLook look;
-        look.mark = kit::ButtonMark::refresh;
-        look.style = kit::ButtonStyle::quiet;
-        look.enabled = enabled;
-        look.turning = turning;
-        look.turn = turn;
-        look.hovered = hovered;
-        renderer::Surface surface = black(40, 40);
-        kit::draw_button(canvas_on(surface), {8, 8, 17, 17}, look);
-        return surface;
-    };
+    const auto draw =
+        [](uint8_t turn, bool enabled, bool turning, bool hovered, uint16_t check_ms = 0) {
+            kit::ButtonLook look;
+            look.mark = kit::ButtonMark::refresh;
+            look.style = kit::ButtonStyle::quiet;
+            look.enabled = enabled;
+            look.turning = turning;
+            look.turn = turn;
+            look.hovered = hovered;
+            look.check_ms = check_ms;
+            renderer::Surface surface = black(40, 40);
+            kit::draw_button(canvas_on(surface), {8, 8, 17, 17}, look);
+            return surface;
+        };
     const renderer::Surface rest = draw(0, true, false, false);
+    std::array<renderer::Surface, 8> places;
+    for (uint8_t eighth = 0; eighth < 8; ++eighth)
+        places[eighth] = draw(eighth, true, true, false);
+    for (uint8_t eighth = 0; eighth < 8; ++eighth)
+        OA_CHECK(places[eighth].rgb != places[static_cast<uint8_t>((eighth + 1u) % 8u)].rgb);
     const renderer::Surface turned = draw(4, true, false, false);
     OA_CHECK(rest.rgb != turned.rgb);
     const renderer::Surface idle = draw(0, false, false, false);
@@ -1128,6 +1154,50 @@ void refresh_mark_turns() {
     OA_CHECK(idle.rgb != spinning.rgb);
     const renderer::Surface hover = draw(0, true, false, true);
     OA_CHECK(rest.rgb != hover.rgb);
+
+    // Halfway through the ease, then the held check. The check is the accent.
+    const renderer::Surface between = draw(0, true, false, false, 80);
+    const renderer::Surface done = draw(0, true, false, false, 400);
+    OA_CHECK(between.rgb != rest.rgb);
+    OA_CHECK(between.rgb != done.rgb);
+    OA_CHECK(done.rgb != rest.rgb);
+    OA_CHECK(shows_accent(done));
+    OA_CHECK(!shows_accent(rest));
+}
+
+/// The eighth after 0.8 seconds is one place, whether the clock was stepped
+/// at 30, 60 or 120 frames a second. The place is the time, not the count of
+/// steps. 0.8 seconds is half of one turn, the fourth eighth.
+void refresh_turn_follows_time() {
+    const auto place_after = [](uint32_t frame_ms) {
+        uint32_t elapsed = 0;
+        uint8_t place = 0;
+        while (elapsed < 800u) {
+            const uint32_t step_ms = frame_ms < 800u - elapsed ? frame_ms : 800u - elapsed;
+            elapsed += step_ms;
+            place = kit::refresh_eighth(elapsed);
+        }
+        return place;
+    };
+    const uint8_t at_thirty = place_after(1000u / 30u);
+    const uint8_t at_sixty = place_after(1000u / 60u);
+    const uint8_t at_one_twenty = place_after(1000u / 120u);
+    OA_CHECK(at_thirty == at_sixty);
+    OA_CHECK(at_sixty == at_one_twenty);
+    OA_CHECK(at_one_twenty == kit::refresh_eighth(800));
+    OA_CHECK(kit::refresh_eighth(800) == 4);
+    OA_CHECK(kit::refresh_eighth(0) == 0);
+    OA_CHECK(kit::refresh_eighth(kit::refresh_revolution_ms - 1u) == 7);
+    OA_CHECK(kit::refresh_eighth(kit::refresh_revolution_ms) == 0);
+    // The main menu's clock is 30 units a second. 0.8 seconds is 24 units,
+    // and one place is 6 of them: the same fourth eighth.
+    constexpr uint32_t units_per_place = kit::refresh_revolution_ms * 30u / 1000u / 8u;
+    OA_CHECK(units_per_place == 6u);
+    OA_CHECK(static_cast<uint8_t>((24u / units_per_place) % 8u) == kit::refresh_eighth(800));
+    OA_CHECK(kit::refresh_check_ease(80) != 0);
+    OA_CHECK(kit::refresh_check_ease(80) != 255);
+    OA_CHECK(kit::refresh_check_ease(400) == 255);
+    OA_CHECK(kit::refresh_check_ease(kit::refresh_check_ms) == 0);
 }
 
 } // namespace
@@ -1135,6 +1205,7 @@ void refresh_mark_turns() {
 int main() {
     buttons_match_the_five_looks();
     refresh_mark_turns();
+    refresh_turn_follows_time();
     switch_levels_and_slider_match();
     choice_lock_and_scroll_match();
     a_menu_draws_a_divider_an_aside_and_a_greyed_row();
