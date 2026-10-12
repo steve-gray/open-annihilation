@@ -127,8 +127,9 @@ enum class ScreenCommand : uint8_t {
 /// entries' actions, facts, status lines and bylines, the playing note and
 /// the queue lines, and decides no rule of its own.
 ///
-/// @param library the model; the display list refers to its badges' pixels
-///     until its next refresh
+/// @param library the model; the display list refers to its badges' pixels,
+///     and to the base game's badge scaled for this layout, until the next
+///     layout or refresh
 /// @param state the hover, press, focus, scroll, search and open drop-down
 /// @param frame the room, its size class and its scale
 /// @param fonts the fonts its texts are measured in

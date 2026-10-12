@@ -30,8 +30,8 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
-#include "oa/app/window_icon.hpp"
 #include "oa/base/signing/ed25519.hpp"
+#include "oa/data/pe_icon.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/languages.hpp"
@@ -57,7 +57,9 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <system_error>
 #include <map>
 #include <memory>
 #include <optional>
@@ -219,15 +221,110 @@ std::optional<library::Badge> badge_of(const ModBadge& picture) {
     return library::Badge{picture.pixels, picture.width, picture.height};
 }
 
-/// Returns the Open Annihilation logo as the base game entry's badge.
+/// Returns a byte as a lower-case ASCII letter, and every other byte as it is.
 ///
-/// Read once from the icon the window shows. Empty when that icon cannot
-/// be read; the entry then shows its letters.
+/// @param byte the byte
+/// @return the letter
+char ascii_lower(unsigned char byte) noexcept {
+    if (byte >= 'A' && byte <= 'Z')
+        return static_cast<char>(byte - 'A' + 'a');
+    return static_cast<char>(byte);
+}
+
+/// Returns text with its ASCII letters in lower case.
 ///
-/// @return the badge
-std::optional<library::Badge> base_game_logo() {
-    static const std::optional<library::Badge> logo = badge_of(read_mod_badge(window_icon_png()));
-    return logo;
+/// @param text the text
+/// @return the text
+std::string ascii_lowered(std::string_view text) {
+    std::string lowered(text);
+    for (char& byte : lowered)
+        byte = ascii_lower(static_cast<unsigned char>(byte));
+    return lowered;
+}
+
+/// The program file's name, compared as a stem and an extension apart.
+constexpr std::string_view program_stem = "totala";
+constexpr std::string_view program_suffix = "exe";
+
+/// Finds the game folder's program file, compared without regard to case.
+///
+/// @param folder the game folder
+/// @return the file; nothing when the folder has none
+std::optional<fs::path> program_file(const fs::path& folder) {
+    std::error_code error;
+    for (fs::directory_iterator entry{folder, error}, end; !error && entry != end;
+         entry.increment(error)) {
+        std::error_code kind;
+        if (!entry->is_regular_file(kind) || kind)
+            continue;
+        const fs::path name = entry->path().filename();
+        const std::string stem = ascii_lowered(path_to_utf8(name.stem()));
+        std::string extension = ascii_lowered(path_to_utf8(name.extension()));
+        if (!extension.empty() && extension.front() == '.')
+            extension.erase(extension.begin());
+        if (stem == program_stem && extension == program_suffix)
+            return entry->path();
+    }
+    return std::nullopt;
+}
+
+/// Reads a program file's icon. A file longer than the reader accepts is
+/// left unread. Nothing here is written anywhere.
+///
+/// @param file the program file
+/// @return the icon; nothing when it cannot be read
+std::optional<library::Badge> icon_of_program(const fs::path& file) {
+    std::error_code error;
+    const auto size = fs::file_size(file, error);
+    if (error || size > oa::data::pe_icon::most_file_bytes)
+        return std::nullopt;
+    std::ifstream input{file, std::ios::binary};
+    if (!input)
+        return std::nullopt;
+    std::vector<uint8_t> bytes(static_cast<std::size_t>(size));
+    if (size > 0) {
+        input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+        if (input.gcount() != static_cast<std::streamsize>(size))
+            return std::nullopt;
+    }
+    const std::optional<oa::data::pe_icon::Icon> icon = oa::data::pe_icon::read_program_icon(bytes);
+    const uint64_t pixel_bytes = icon ? uint64_t{icon->width} * icon->height * 4U : 0U;
+    if (!icon || icon->width == 0 || icon->height == 0 || icon->rgba.size() != pixel_bytes)
+        return std::nullopt;
+    return library::Badge{icon->rgba, icon->width, icon->height};
+}
+
+/// Returns the base game's icon from the game folder in use.
+///
+/// The folder is read once. A folder with no icon is remembered too, and
+/// one line is logged the time it is first found to have none. The icon
+/// stays in memory.
+///
+/// @param folder the game folder
+/// @return the icon; nothing when it cannot be read, and the badge then shows its letters
+std::optional<library::Badge> base_game_icon(const fs::path& folder) {
+    std::error_code error;
+    const fs::path absolute = fs::absolute(folder, error);
+    const std::string key = path_to_utf8((error ? folder : absolute).lexically_normal());
+
+    struct Held {
+        std::string key{};
+        std::optional<library::Badge> badge{};
+        bool ready{false};
+    };
+
+    static Held held;
+    if (held.ready && held.key == key)
+        return held.badge;
+    std::optional<library::Badge> badge;
+    if (const std::optional<fs::path> program = program_file(folder))
+        badge = icon_of_program(*program);
+    held.key = key;
+    held.badge = badge;
+    held.ready = true;
+    if (!held.badge)
+        std::cerr << "open-annihilation: library: the base game's icon could not be read\n";
+    return held.badge;
 }
 
 /// Returns the seconds since 1970 by the system's clock.
@@ -1084,7 +1181,9 @@ library::Inputs Runtime::library_inputs() {
         );
     }
     inputs.registries_notice = registry_edit_notice();
-    inputs.base_game_badge = base_game_logo();
+    const fs::path& game_folder =
+        options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
+    inputs.base_game_badge = base_game_icon(game_folder);
     return inputs;
 }
 

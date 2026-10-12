@@ -598,7 +598,7 @@ void check_frame(const fixture::NamedFrame& named) {
     const std::string updates_count = std::to_string(lib::update_count(library));
     OA_CHECK(
         updates_tab != nullptr &&
-        updates_tab->text == (compact ? "Upd " : "Updates ") + updates_count
+        updates_tab->text == (compact ? "Upd (" : "Updates (") + updates_count + ")"
     );
 
     // The Active tab: first, no search, no filters and no list. Its lines
@@ -735,10 +735,11 @@ void larger_classes_show_more() {
     const kit::Control* first_tab = kit::control_of(compact, compact.tab_order.front());
     OA_CHECK(first_tab != nullptr && first_tab->name == "library.tab.active");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
-    OA_CHECK(languages != nullptr && languages->text == "Lang 2");
+    OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
     OA_CHECK(
-        updates != nullptr && updates->text == "Upd " + std::to_string(lib::update_count(library))
+        updates != nullptr &&
+        updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
     );
 }
 
@@ -1830,6 +1831,180 @@ void more_holds_the_rest() {
     OA_CHECK(state.menu == lib::MenuKind::none);
 }
 
+/// Returns one pixel of a picture.
+///
+/// @param picture the picture
+/// @param x the column
+/// @param y the row
+/// @return the pixel's red, green, blue and alpha
+const uint8_t* pixel_at(const renderer::RgbaPicture& picture, uint32_t x, uint32_t y) {
+    return picture.pixels.data() +
+           (static_cast<std::size_t>(y) * picture.width + x) * renderer::picture_pixel_bytes;
+}
+
+/// Tells whether a pixel is one colour.
+///
+/// @param pixel the pixel
+/// @param red red
+/// @param green green
+/// @param blue blue
+/// @param alpha alpha
+/// @return true when it matches
+bool pixel_is(const uint8_t* pixel, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+    return pixel[0] == red && pixel[1] == green && pixel[2] == blue && pixel[3] == alpha;
+}
+
+/// Returns the look of a named list row.
+///
+/// @param list the display list
+/// @param name the row's name
+/// @return the look; null when the row is not drawn
+const kit::ListRowLook* row_look_named(const kit::DisplayList& list, std::string_view name) {
+    const kit::Control* control = fixture::named(list, std::string(name));
+    if (control == nullptr)
+        return nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::list_row || item.control != control->id)
+            continue;
+        return std::get_if<kit::ListRowLook>(&item.look);
+    }
+    return nullptr;
+}
+
+/// Returns the base game's badge square in a row, as the kit draws it.
+///
+/// @param row the row
+/// @return the square
+kit::Rect test_row_badge(const kit::Rect& row) {
+    const int32_t inset = kit::compact_metrics.list_row_inset;
+    const int32_t side =
+        std::max(std::min(row.height - 2 * inset, kit::compact_metrics.list_row_badge), int32_t{0});
+    return {row.x + inset, row.y + (row.height - side) / 2, side, side};
+}
+
+/// The base game's badge is the icon, nearest-neighbour and centred, and the
+/// letters when there is no icon. Tabs after Active read their counts in brackets.
+void base_badge_is_nearest_and_tabs_are_bracketed() {
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::Inputs inputs = fixture::fixture_inputs();
+    for (lib::Installed& held : inputs.installed)
+        held.playing = false;
+    inputs.playing_mod.reset();
+    inputs.language = {};
+    inputs.map_packs.clear();
+
+    lib::Library letters;
+    lib::refresh(letters, inputs);
+    lib::set_tab(letters, lib::Tab::active);
+    const kit::DisplayList letter_list = laid_out(letters, {}, compact);
+    OA_CHECK(text_item(letter_list, "3.1") != nullptr);
+    const kit::Control* mods = fixture::named(letter_list, "library.tab.mods");
+    OA_CHECK(
+        mods != nullptr &&
+        mods->text == "Mods (" + std::to_string(lib::tab_count(letters, lib::Tab::mods)) + ")" &&
+        mods->name == "library.tab.mods"
+    );
+
+    std::vector<uint8_t> quarters{
+        255,
+        0,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        0,
+        255,
+        255,
+        255,
+        255,
+        255,
+        255,
+    };
+    inputs.base_game_badge = lib::Badge{quarters, 2, 2};
+    lib::Library library;
+    lib::refresh(library, inputs);
+    lib::set_tab(library, lib::Tab::mods);
+    const kit::DisplayList rows = laid_out(library, {}, compact);
+    OA_CHECK(text_item(rows, "3.1") == nullptr);
+    const kit::Control* base = fixture::named(rows, "library.row.base-game");
+    const kit::ListRowLook* look = row_look_named(rows, "library.row.base-game");
+    OA_CHECK(base != nullptr && look != nullptr);
+    if (base != nullptr && look != nullptr) {
+        const kit::Rect badge = test_row_badge(base->rect);
+        OA_CHECK(badge.width == 20 && badge.height == 20);
+        OA_CHECK(look->badge.width == 20 && look->badge.height == 20);
+        OA_CHECK(pixel_is(pixel_at(look->badge, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 9, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 10, 0), 0, 255, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 0, 10), 0, 0, 255, 255));
+        OA_CHECK(pixel_is(pixel_at(look->badge, 10, 10), 255, 255, 255, 255));
+    }
+
+    kit::Frame doubled = compact;
+    doubled.scale_percent = 200;
+    const kit::DisplayList large_pixels = laid_out(library, {}, doubled);
+    const kit::ListRowLook* doubled_look = row_look_named(large_pixels, "library.row.base-game");
+    OA_CHECK(doubled_look != nullptr && doubled_look->badge.width == 40);
+    if (doubled_look != nullptr && doubled_look->badge.width == 40) {
+        OA_CHECK(pixel_is(pixel_at(doubled_look->badge, 19, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(doubled_look->badge, 20, 0), 0, 255, 0, 255));
+    }
+
+    kit::Frame fractional = compact;
+    fractional.scale_percent = 150;
+    const kit::DisplayList smooth = laid_out(library, {}, fractional);
+    const kit::Control* smooth_row = fixture::named(smooth, "library.row.base-game");
+    const kit::ListRowLook* smooth_look = row_look_named(smooth, "library.row.base-game");
+    OA_CHECK(smooth_row != nullptr && smooth_look != nullptr);
+    if (smooth_row != nullptr && smooth_look != nullptr) {
+        const kit::Rect pixels = kit::to_canvas(test_row_badge(smooth_row->rect), 150);
+        OA_CHECK(smooth_look->badge.width == static_cast<uint32_t>(pixels.width));
+        OA_CHECK(smooth_look->badge.height == static_cast<uint32_t>(pixels.height));
+    }
+
+    std::vector<uint8_t> icon(32U * 32U * 4U, 0);
+    icon[3] = 255;
+    icon[0] = 255;
+    const std::size_t corner = (30U * 32U + 30U) * 4U;
+    icon[corner + 1] = 255;
+    icon[corner + 3] = 255;
+    inputs.base_game_badge = lib::Badge{std::move(icon), 32, 32};
+    lib::Library shrunk;
+    lib::refresh(shrunk, inputs);
+    lib::set_tab(shrunk, lib::Tab::mods);
+    const kit::DisplayList down = laid_out(shrunk, {}, compact);
+    const kit::ListRowLook* down_look = row_look_named(down, "library.row.base-game");
+    OA_CHECK(down_look != nullptr && down_look->badge.width == 20 && down_look->badge.height == 20);
+    if (down_look != nullptr && down_look->badge.width == 20 && down_look->badge.height == 20) {
+        OA_CHECK(pixel_is(pixel_at(down_look->badge, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(down_look->badge, 19, 19), 0, 255, 0, 255));
+    }
+
+    lib::set_tab(library, lib::Tab::active);
+    const kit::DisplayList active = laid_out(library, {}, compact);
+    OA_CHECK(text_item(active, "3.1") == nullptr);
+    const renderer::RgbaPicture* tile = nullptr;
+    for (const kit::Item& item : active.items) {
+        if (item.role != kit::Role::picture)
+            continue;
+        const auto* drawn = std::get_if<kit::PictureLook>(&item.look);
+        if (drawn == nullptr || drawn->picture.pixels.data() == quarters.data())
+            continue;
+        tile = &drawn->picture;
+        OA_CHECK(item.rect.width == 36 && item.rect.height == 36);
+        break;
+    }
+    OA_CHECK(tile != nullptr && tile->width == 36 && tile->height == 36);
+    if (tile != nullptr && tile->width == 36) {
+        OA_CHECK(pixel_is(pixel_at(*tile, 0, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(*tile, 17, 0), 255, 0, 0, 255));
+        OA_CHECK(pixel_is(pixel_at(*tile, 18, 0), 0, 255, 0, 255));
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1851,6 +2026,7 @@ int main() {
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
     active_base_game_is_a_tile();
+    base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();
     more_holds_the_rest();

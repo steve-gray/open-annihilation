@@ -34,8 +34,8 @@ inline constexpr std::string_view tab_updates_short = "Upd";
 inline constexpr std::string_view tab_registries = "Registries";
 /// Compact's short name, as Languages and Updates have.
 inline constexpr std::string_view tab_registries_short = "Reg";
-/// A tab and how many it lists under All, as the tab reads: "Mods 11".
-inline constexpr std::string_view tab_with_count = "{tab} {count}";
+/// A tab and how many it lists under All, as the tab reads: "Mods (11)".
+inline constexpr std::string_view tab_with_count = "{tab} ({count})";
 inline constexpr std::string_view filter_all = "All";
 inline constexpr std::string_view filter_new = "New";
 inline constexpr std::string_view filter_installed = "Installed";
@@ -349,7 +349,8 @@ inline constexpr std::string_view active_heading_language = "LANGUAGE";
 inline constexpr std::string_view active_heading_maps = "MAPS";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
-/// The tile shown when no mod is played: the base game, in the 3.1c look.
+/// The tile shown when no mod is played: the base game. Its badge is the
+/// game's icon, or the letters "3.1c" when that icon cannot be read.
 inline constexpr std::string_view active_base_game = "Base Game";
 /// The line on that tile.
 inline constexpr std::string_view active_no_mod = "No mod: the game as it was made";
