@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // --check-map-pack-lists: a map pack installed from the Library during the
-// run joins the skirmish list and the battle room's map list, and a map
-// that does not fit the mod being played is left out. The pack holds two
-// maps. One stem has a space, an apostrophe and parentheses, and fits the
-// base game. The other fits only the made-up mod Ridge. No game file is
-// committed: the check serves the pack from its own server.
+// run joins the skirmish list and the battle room's map list the next time
+// either is shown, including when the skirmish list was opened before the
+// download. The pack holds two maps. One stem has a space, an apostrophe
+// and parentheses, and the catalogue records it as fitting the base game.
+// The other map's files also fit the base game, and the catalogue records
+// that as false, so the lists leave it out. A local mod with no origin
+// then lists both, because that mod's key is not in the table and the
+// files fit, and leaves the second out once a mounted archive defines the
+// feature only that map adds. Uninstalling the pack removes both maps.
+// No game file is committed: the check serves the pack from its own server.
 
 #include "map_pack_check_packs.hpp"
 #include "map_packs.hpp"
@@ -15,6 +20,7 @@
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/app/package_install.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/base/sha256.hpp"
 #include "oa/base/signing/ed25519.hpp"
@@ -24,6 +30,7 @@
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/player_registries.hpp"
 #include "oa/data/registry/trust.hpp"
+#include "oa/formats/hpi.hpp"
 #include "oa/formats/url.hpp"
 #include "oa/formats/zip.hpp"
 #include "oa/netgame/http_fixture/server.hpp"
@@ -78,10 +85,20 @@ constexpr std::string_view kFittingStem = "A Player's Pond (North)";
 /// The title the pack's index gives that map. The scenario names the stem,
 /// so a list that shows the scenario's name fails the check.
 constexpr std::string_view kFittingTitle = "North Pond";
-/// The map that fits only Ridge.
+/// The map the catalogue records as not fitting the base game. Its files
+/// fit until an archive defines the feature only this map adds.
 constexpr std::string_view kOtherStem = "ridge_only";
 /// That map's title.
 constexpr std::string_view kOtherTitle = "Ridge Only";
+/// The feature only the second map adds. It is new to the base game.
+constexpr std::string_view kLocalFeature = "oa check pond local";
+/// That feature's file in the pack, listed on the second map alone.
+constexpr std::string_view kLocalFile = "features/oa-check/local.tdf";
+/// The same feature in the archive mounted for the local mod, at another
+/// path, so the map's own file is still one the game did not have.
+constexpr std::string_view kMountedFeatureFile = "features/oa-check-game/pond.tdf";
+/// The archive the check mounts so the second map's feature is no longer new.
+constexpr std::string_view kLocalArchive = "oa-check-pond-local.hpi";
 /// How long the check waits for the catalogue, and then for the install.
 constexpr std::chrono::seconds kWait{20};
 
@@ -155,6 +172,75 @@ std::string gadget_text(const oa::ui::gui_layout::Gadget* gadget) {
     return {};
 }
 
+/// The feature file only the second map lists: a new section, drawn with a
+/// model of the game.
+///
+/// @param model the stem of that model
+/// @return the TDF's text
+std::string local_feature_tdf(std::string_view model) {
+    return "[" + std::string(kLocalFeature) +
+           "]\n"
+           "\t{\n"
+           "\tworld=allworld;\n"
+           "\tdescription=Pond;\n"
+           "\tcategory=rocks;\n"
+           "\tobject=" +
+           std::string(model) +
+           ";\n"
+           "\tfootprintx=1;\n"
+           "\tfootprintz=1;\n"
+           "\theight=16;\n"
+           "\tblocking=1;\n"
+           "\thitdensity=100;\n"
+           "\treclaimable=0;\n"
+           "\tdamage=1000;\n"
+           "\t}\n";
+}
+
+/// Adds the second map's own feature file and lists it in the manifest.
+///
+/// The shared feature file stays on both maps. This one is only on the
+/// second, so a later archive that defines the same section leaves the
+/// first map fitting.
+///
+/// @param folder the pack's folder
+/// @param model the stem of a model of the game
+void add_local_feature(const fs::path& folder, std::string_view model) {
+    write_text(folder / std::string(kLocalFile), local_feature_tdf(model));
+    const std::vector<uint8_t> bytes = read_whole(folder / std::string(pack::manifest_file));
+    pack::Manifest manifest;
+    std::vector<pack::Problem> problems;
+    require(
+        pack::read_manifest(bytes, pack::ManifestUse::package, manifest, problems),
+        "the pack's manifest cannot be read"
+    );
+    require(manifest.maps.size() == 2, "the pack does not hold two maps");
+    manifest.maps[1].files.push_back(std::string(kLocalFile));
+    write_text(folder / std::string(pack::manifest_file), pack::write_manifest(manifest));
+}
+
+/// Writes the archive whose feature section the second map also defines.
+///
+/// @param file the archive
+/// @param model the stem of a model of the game
+void write_local_archive(const fs::path& file, std::string_view model) {
+    const std::string text = local_feature_tdf(model);
+    oa::HpiWriteFile entry;
+    entry.path = std::string(kMountedFeatureFile);
+    entry.bytes.assign(text.begin(), text.end());
+    const std::array<oa::HpiWriteFile, 1> files{std::move(entry)};
+    const std::vector<uint8_t> archive = oa::write_hpi(files);
+    std::error_code error;
+    fs::create_directories(file.parent_path(), error);
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    if (!archive.empty())
+        out.write(
+            reinterpret_cast<const char*>(archive.data()),
+            static_cast<std::streamsize>(archive.size())
+        );
+    require(static_cast<bool>(out), "could not write " + path_to_utf8(file));
+}
+
 /// Stores one check pack as an archive of the files its manifest lists.
 ///
 /// @param folder the pack's folder
@@ -219,6 +305,8 @@ void Runtime::prepare_map_pack_lists_check() {
         {kOtherStem, kOtherTitle, false},
     };
     write_map_pack_check_folder(source, kPackId, kPackName, maps, model);
+    add_local_feature(source, model);
+    write_local_archive(user_folder() / std::string(kLocalArchive), model);
     std::vector<uint8_t> archive;
     zip_pack(source, archive);
     const sha::Digest digest = sha::digest_of(archive);
@@ -262,7 +350,8 @@ void Runtime::prepare_map_pack_lists_check() {
     json += json_string(std::string(kOtherStem) + "@" + std::string(kPackId));
     json += ",\"name\":";
     json += json_string(kOtherTitle);
-    json += ",\"players\":2,\"size\":\"2x2\",\"compatible\":{\"ridge@28\":true}}]}]}";
+    json +=
+        ",\"players\":2,\"size\":\"2x2\",\"compatible\":{\"ta-3.1c\":false,\"ridge@28\":true}}]}]}";
 
     const std::vector<uint8_t> catalogue_bytes(json.begin(), json.end());
     const signing::Signature signature = signing::sign(secret, catalogue_bytes);
@@ -340,6 +429,41 @@ void Runtime::check_map_pack_lists() {
     std::cout << "map pack lists check: before install, skirmish " << base_before.size()
               << " maps, battle room " << room_before.size() << " maps, absent " << fitting << '\n';
 
+    // The skirmish list is opened before the download, then closed, and the
+    // run returns to the main menu, which is where the install happens.
+    const auto row_of = [this](const std::string& name) {
+        return static_cast<std::size_t>(
+            std::find(bound_map_names_.begin(), bound_map_names_.end(), name) -
+            bound_map_names_.begin()
+        );
+    };
+    const auto room_lists = [](const std::string& name) {
+        const int32_t count = mp::multiplayer_map_count();
+        for (int32_t place = 0; place < count; ++place) {
+            const char* listed = mp::multiplayer_map_at(place);
+            if (listed != nullptr && name == listed)
+                return true;
+        }
+        return false;
+    };
+    exercise_click(menu::resource_name(menu::Button::single_player));
+    exercise_click(entry::resource_name(entry::Button::skirmish));
+    require(screen_ == Screen::skirmish, "Skirmish did not open its setup");
+    exercise_click(skirmish::resource_name(skirmish::Button::select_map));
+    require(
+        screen_ == Screen::map_selection && row_of(fitting) == bound_map_names_.size() &&
+            row_of(other) == bound_map_names_.size(),
+        "the skirmish list shows a pack map before it is installed"
+    );
+    std::cout << "map pack lists check: skirmish list shown before install, "
+              << bound_map_names_.size() << " maps\n";
+    close_map_modal();
+    require(screen_ == Screen::skirmish, "the skirmish map list did not close");
+    exercise_click(skirmish::resource_name(skirmish::Button::previous_menu));
+    require(screen_ == Screen::single_player, "PrevMenu did not leave the skirmish setup");
+    exercise_click(entry::resource_name(entry::Button::previous_menu));
+    require(screen_ == Screen::main_menu, "PrevMenu did not return to the main menu");
+
     const auto deadline_passed = [](std::chrono::steady_clock::time_point deadline) {
         return std::chrono::steady_clock::now() >= deadline;
     };
@@ -394,6 +518,34 @@ void Runtime::check_map_pack_lists() {
     }
     require(map_packs().find(other) != nullptr, "the other map was not installed");
     std::cout << "map pack lists check: installed " << fitting << " and " << other << '\n';
+
+    // A recorded true or false is final. An empty key, and a key the table
+    // does not hold, are left to the files.
+    const PackMap* fitting_map = map_packs().find(fitting);
+    const PackMap* other_map = map_packs().find(other);
+    require(fitting_map != nullptr && other_map != nullptr, "an installed map left the index");
+    require(
+        catalogue_map_fits(*fitting_map, "ta-3.1c") == CatalogueMapFit::fits,
+        "the catalogue does not record the spaced map as fitting the base game"
+    );
+    require(
+        catalogue_map_fits(*other_map, "ta-3.1c") == CatalogueMapFit::unfit,
+        "the catalogue does not record the other map as not fitting the base game"
+    );
+    require(
+        catalogue_map_fits(*other_map, "ridge@28") == CatalogueMapFit::fits,
+        "the catalogue does not record the other map as fitting Ridge"
+    );
+    require(
+        catalogue_map_fits(*fitting_map, "") == CatalogueMapFit::unchecked &&
+            catalogue_map_fits(*other_map, "") == CatalogueMapFit::unchecked,
+        "an empty key was treated as a recorded answer"
+    );
+    require(
+        catalogue_map_fits(*other_map, "ridge@99") == CatalogueMapFit::unchecked &&
+            catalogue_map_fits(*fitting_map, "ridge@99") == CatalogueMapFit::unchecked,
+        "a key the table lacks was treated as a recorded answer"
+    );
 
     require(
         eligible_map_names_.size() >= base_before.size() &&
@@ -466,12 +618,70 @@ void Runtime::check_map_pack_lists() {
     std::cout << "map pack lists check: after install, skirmish " << eligible_map_names_.size()
               << " maps, battle room " << room_after.size() << " maps\n";
 
-    const auto row_of = [this](const std::string& name) {
-        return static_cast<std::size_t>(
-            std::find(bound_map_names_.begin(), bound_map_names_.end(), name) -
-            bound_map_names_.begin()
-        );
-    };
+    // A folder with no origin record, played in front of the base game. The
+    // catalogue has no row for that empty key, so the files decide. Both
+    // maps' files fit until the archive that defines the second map's
+    // feature is mounted.
+    const fs::path local_mod = user_folder() / "local-ridge";
+    std::error_code made;
+    fs::create_directories(local_mod, made);
+    require(!made, "could not make the local mod's folder");
+    const std::vector<fs::path> saved_folders = options_.game_folders;
+    if (options_.game_folders.empty())
+        options_.game_folders.push_back(options_.game_dir);
+    options_.game_folders.insert(options_.game_folders.begin(), local_mod);
+    require(plays_mod(), "the local folder is not played as a mod");
+    require(played_map_key().empty(), "the local mod has a catalogue key");
+    drop_pack_map_fits();
+    refresh_listed_pack_maps();
+    require(
+        skirmish_has(fitting) && skirmish_has(other),
+        "a map whose files fit a mod the catalogue has no row for was left out"
+    );
+    require(
+        room_lists(fitting) && room_lists(other),
+        "the battle room left out a map whose files fit a mod the catalogue has no row for"
+    );
+    std::cout << "map pack lists check: local mod with no origin lists " << fitting << " and "
+              << other << '\n';
+
+    const fs::path local_archive = user_folder() / std::string(kLocalArchive);
+    std::string mount_error;
+    require(
+        assets_.try_mount(local_archive, &mount_error),
+        "the local feature was not mounted: " + mount_error
+    );
+    drop_pack_map_fits();
+    refresh_listed_pack_maps();
+    require(skirmish_has(fitting), "the spaced map no longer fits the local mod");
+    require(!skirmish_has(other), "the local mod lists the map whose feature it already defines");
+    require(room_lists(fitting), "the battle room dropped the spaced map for the local mod");
+    require(
+        !room_lists(other), "the battle room lists the map whose feature the local mod defines"
+    );
+    bool local_omitted = false;
+    for (const std::string& line : pack_map_omission_lines()) {
+        if (line.find(std::string(kPackId)) != std::string::npos &&
+            line.find("1 map does not fit the mod being played") != std::string::npos) {
+            local_omitted = true;
+            std::cout << "map pack lists check: " << line << '\n';
+        }
+    }
+    require(
+        local_omitted, "the map that does not fit the local mod was not left out with one log line"
+    );
+
+    options_.game_folders = saved_folders;
+    drop_pack_map_fits();
+    refresh_listed_pack_maps();
+    require(!plays_mod(), "the base game is still played as a mod");
+    require(played_map_key() == "ta-3.1c", "the base game's key is not ta-3.1c");
+    require(skirmish_has(fitting) && !skirmish_has(other), "the base game's lists changed");
+    require(
+        room_lists(fitting) && !room_lists(other),
+        "the battle room's list changed for the base game"
+    );
+
     exercise_click(menu::resource_name(menu::Button::single_player));
     exercise_click(entry::resource_name(entry::Button::skirmish));
     require(screen_ == Screen::skirmish, "Skirmish did not open its setup");
@@ -540,6 +750,31 @@ void Runtime::check_map_pack_lists() {
     require(mission == fitting, "the save names \"" + mission + "\"");
     std::cout << "map pack lists check: saved mission " << mission << '\n';
     leave_match();
+
+    // The match screen is still showing. The lists are what the next visit
+    // reads, so this does not click through a menu.
+    namespace install = oa::app::package_install;
+    const install::PackageKind* kind = install::find_kind("oamap");
+    require(kind != nullptr && kind->read_installed != nullptr, "the map pack kind is missing");
+    const PackMap* still = map_packs().find(fitting);
+    require(still != nullptr, "the spaced map left the index before it was removed");
+    const fs::path pack_folder = still->folder;
+    const install::InstalledPackage expected = kind->read_installed(pack_folder);
+    install::ChangeOptions change{};
+    change.expected = expected;
+    const install::UninstallResult removed = install::uninstall_package(
+        *kind, pack_folder.parent_path(), path_to_utf8(pack_folder.filename()), change
+    );
+    require(removed.removed, "the pack was not removed: " + removed.detail);
+    package_changed(*kind, pack_folder);
+    require(
+        !skirmish_has(fitting) && !skirmish_has(other), "uninstall left a map in the skirmish list"
+    );
+    require(
+        !room_lists(fitting) && !room_lists(other), "uninstall left a map in the battle room's list"
+    );
+    require(map_packs().find(fitting) == nullptr, "the spaced map is still installed");
+    std::cout << "map pack lists check: uninstalled " << kPackId << '\n';
     std::cout << "map pack lists check passed\n";
 }
 

@@ -183,6 +183,14 @@ const fit::Fit& Runtime::pack_map_fit(const PackMap& map) {
     return state.fits.emplace(std::move(key), std::move(checked)).first->second;
 }
 
+void Runtime::drop_pack_map_fits() {
+    if (pack_map_state_ == nullptr)
+        return;
+    auto& state = pack_map_state();
+    state.fits.clear();
+    state.game_names.reset();
+}
+
 bool Runtime::prepare_pack_map(std::string_view name, std::string* reason) {
     auto& state = pack_map_state();
     // GET MAP is replacing this pack's folder: none of its maps is mounted
@@ -418,16 +426,27 @@ void Runtime::refresh_listed_pack_maps() {
         bool include = false;
         bool final_omit = false;
         if (from_registry) {
-            const std::optional<bool> recorded = catalogue_map_fits(installed_map, key);
-            if (!recorded) {
+            switch (catalogue_map_fits(installed_map, key)) {
+            case CatalogueMapFit::fits:
+                include = true;
+                break;
+            case CatalogueMapFit::unfit:
+                // A recorded false is final. The files are not asked, so
+                // they cannot overrule the catalogue.
+                final_omit = true;
+                break;
+            case CatalogueMapFit::unlisted:
                 // The catalogue has not listed this release yet. The file
                 // check keeps a map that fits until that table arrives, and
                 // a miss here is not final, so it is not logged.
                 include = pack_map_fit(installed_map).fits();
-            } else if (*recorded) {
-                include = true;
-            } else {
-                final_omit = true;
+                break;
+            case CatalogueMapFit::unchecked:
+                // The key is empty, or the table has no row for it. The
+                // files decide, and a miss is final for this mod.
+                include = pack_map_fit(installed_map).fits();
+                final_omit = !include;
+                break;
             }
         } else {
             include = pack_map_fit(installed_map).fits();
