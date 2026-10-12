@@ -261,18 +261,35 @@ enum class PointerKind : uint8_t {
 /// @param kind where the finger is
 /// @param at the finger, in the screen's points
 /// @param finger_reach how far a finger may lie from a control; 0 for a mouse
+/// @param clicks how many presses landed as one; 2 or more is a double-click
 /// @return what the setup did
 [[nodiscard]] Outcome pointer(
-    Session& session, const Scene& scene, PointerKind kind, kit::Point at, int32_t finger_reach
+    Session& session,
+    const Scene& scene,
+    PointerKind kind,
+    kit::Point at,
+    int32_t finger_reach,
+    uint8_t clicks = 1
 );
 
-/// Takes a key. Escape does nothing on the language step and goes back on the others.
+/// Takes a key. Escape does nothing on the language step and goes back on the
+/// online step. On the buttons step Escape and Enter finish the walk.
 ///
 /// @param[in,out] session the session
 /// @param scene the layout
 /// @param pressed the key
 /// @return what the setup did
 [[nodiscard]] Outcome key(Session& session, const Scene& scene, kit::Key pressed);
+
+/// Takes a turn of the wheel on the language step. A turn away from the player
+/// moves to the previous card, and toward the player to the next. One card
+/// does not move. Any other step swallows the turn.
+///
+/// @param[in,out] session the session
+/// @param scene the layout
+/// @param notches how far the wheel turned; positive is away from the player
+/// @return what the setup did
+[[nodiscard]] Outcome wheel(Session& session, const Scene& scene, float notches);
 
 /// Words the sample Library looks up through the model's text hook: the Active
 /// and Mods tabs, PLAYING, UNLOAD MOD and Built in, one a line.

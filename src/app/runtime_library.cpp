@@ -86,8 +86,7 @@ constexpr std::string_view kOpenSound = "Options";
 constexpr std::string_view kCloseSound = "Previous";
 /// The settings' screen's name on the OA layer.
 constexpr std::string_view kSettingsScreen = "settings";
-/// The words the Library's rows' automation names start with.
-constexpr std::string_view kRowNamePrefix = "library.row.";
+
 /// The words an Active tab map line's automation name starts with.
 constexpr std::string_view kActiveMapPrefix = "library.active.map.";
 /// The key of a mod folder whose name gives no word: a folder at a root.
@@ -551,21 +550,6 @@ void library_worker(void* argument) {
     }
 }
 
-/// Tells whether a row's read text is an entry's name. A maker's mark adds
-/// " · " and the maker after the name.
-///
-/// @param entry the entry
-/// @param text the row's text
-/// @return true when the row is that entry's
-bool row_text_names(const library::Entry& entry, std::string_view text) {
-    const std::string_view name = library::entry_name(entry);
-    if (text == name)
-        return true;
-    if (name.empty() || text.size() <= name.size() + 3)
-        return false;
-    return text.compare(0, name.size(), name) == 0 && text.compare(name.size(), 3, " · ") == 0;
-}
-
 /// Returns the key a decoded minimap is kept under for an installed map.
 ///
 /// A preview picture and a terrain file are different keys, so one map can
@@ -730,28 +714,6 @@ bool active_tile_shows(const kit::DisplayList& list, std::size_t number) {
     return false;
 }
 
-/// Tells whether a list row or the open details show an entry.
-///
-/// @param model the Library
-/// @param list the display list
-/// @param entry the entry
-/// @return true when it is on screen
-bool entry_on_screen(
-    const library::Library& model, const kit::DisplayList& list, const library::Entry& entry
-) {
-    if (model.selected && *model.selected == entry.id)
-        return true;
-    for (const kit::Control& control : list.controls) {
-        if (control.kind != kit::ControlKind::list_item)
-            continue;
-        if (control.name.compare(0, kRowNamePrefix.size(), kRowNamePrefix) != 0)
-            continue;
-        if (row_text_names(entry, control.text))
-            return true;
-    }
-    return false;
-}
-
 /// Tells whether an entry is an installed map pack.
 ///
 /// @param entry the entry
@@ -904,6 +866,50 @@ void Runtime::LibraryHost::rebuild(Runtime& runtime) {
     ++model_revision;
 }
 
+bool Runtime::LibraryHost::picture_known(void* context, const library::Entry& entry) {
+    auto* host = static_cast<LibraryHost*>(context);
+    if (host == nullptr || host->work.pictures == nullptr)
+        return true;
+    const auto url = host->picture_urls.find({entry.id.registry, entry.id.key});
+    if (url != host->picture_urls.end() && host->badges.count(url->second) == 0 &&
+        !host->work.pictures->asked(entry.id.registry, url->second))
+        return false;
+    if (host->previews != nullptr && entry.listing != nullptr) {
+        for (const library::MapLine& map : entry.listing->maps) {
+            if (map.preview_url.empty() || host->previews->pictures.count(map.preview_url) != 0 ||
+                host->previews->online_bytes.count(map.preview_url) != 0)
+                continue;
+            if (!host->work.pictures->asked(entry.id.registry, map.preview_url))
+                return false;
+        }
+    }
+    return true;
+}
+
+void Runtime::LibraryHost::picture_request(void* context, const library::Entry& entry, bool lead) {
+    auto* host = static_cast<LibraryHost*>(context);
+    if (host == nullptr || host->work.pictures == nullptr)
+        return;
+    const auto url = host->picture_urls.find({entry.id.registry, entry.id.key});
+    if (url != host->picture_urls.end() && host->badges.count(url->second) == 0 &&
+        !host->work.pictures->refused(entry.id.registry, url->second)) {
+        if (lead)
+            host->work.pictures->prefer(entry.id.registry, url->second);
+        else
+            host->work.pictures->request(entry.id.registry, url->second);
+    }
+    if (host->previews == nullptr || entry.listing == nullptr)
+        return;
+    for (const library::MapLine& map : entry.listing->maps) {
+        if (map.preview_url.empty() || host->previews->pictures.count(map.preview_url) != 0 ||
+            host->previews->online_bytes.count(map.preview_url) != 0)
+            continue;
+        if (host->work.pictures->refused(entry.id.registry, map.preview_url))
+            continue;
+        host->work.pictures->request(entry.id.registry, map.preview_url);
+    }
+}
+
 void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
     if (!own_feed || !work.pictures)
         return;
@@ -912,36 +918,15 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
         if (work.match_running)
             return;
     }
-    // A picture already asked for, ready or refused is not asked for
-    // again; what waits is forgotten as the Library closes. A row whose
-    // maker shows reads as the name, then " · ", then the maker.
-    const auto ask = [this](const library::Entry& entry) {
-        const auto url = picture_urls.find({entry.id.registry, entry.id.key});
-        if (url != picture_urls.end() && badges.count(url->second) == 0)
-            work.pictures->request(entry.id.registry, url->second);
-        if (previews == nullptr || entry.listing == nullptr)
-            return;
-        for (const library::MapLine& map : entry.listing->maps) {
-            if (map.preview_url.empty() || previews->pictures.count(map.preview_url) != 0 ||
-                previews->online_bytes.count(map.preview_url) != 0)
-                continue;
-            if (work.pictures->refused(entry.id.registry, map.preview_url))
-                continue;
-            work.pictures->request(entry.id.registry, map.preview_url);
-        }
-    };
-    for (const kit::Control& control : list.controls) {
-        if (control.kind != kit::ControlKind::list_item ||
-            control.name.compare(0, kRowNamePrefix.size(), kRowNamePrefix) != 0)
-            continue;
-        for (const std::size_t row : model.visible) {
-            const library::Entry& entry = model.entries[row];
-            if (row_text_names(entry, control.text))
-                ask(entry);
-        }
-    }
-    if (const library::Entry* selected = library::selected_entry(model))
-        ask(*selected);
+    // Rows are asked by their control, not by the text they draw: a maker's
+    // mark and a download count ride on that text, and matching it left
+    // every marked row unasked. The selected row is first. What waits is
+    // forgotten as the Library closes.
+    library::PictureSource source;
+    source.context = this;
+    source.known = picture_known;
+    source.request = picture_request;
+    library::request_visible_pictures(model, list, source);
     if (!work.pictures->waiting())
         return;
     {
@@ -1008,7 +993,8 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
         }
     } else {
         for (const library::Entry& entry : model.entries) {
-            if (entry.id.kind != library::Kind::map_pack || !entry_on_screen(model, list, entry))
+            if (entry.id.kind != library::Kind::map_pack ||
+                !library::entry_row_shown(model, list, entry.id))
                 continue;
             if (entry.listing != nullptr) {
                 for (const library::MapLine& line : entry.listing->maps) {
@@ -1515,6 +1501,7 @@ library::Inputs Runtime::library_inputs() {
         item.kind = kind_of(queued.target.kind);
         item.key = queued.target.key;
         item.name = queued.target.name;
+        item.release = queued.target.release;
         if (snapshot)
             for (const content::Entry& entry : snapshot->entries)
                 if (entry.package != nullptr && entry.registry == item.registry &&

@@ -193,13 +193,30 @@ struct Runtime::LibraryHost {
     /// @param runtime the runtime
     void rebuild(Runtime& runtime);
 
-    /// Asks for the pictures of the entries the Library's list shows, and of
-    /// the entry whose details show, that it does not hold yet, and wakes the
-    /// worker while any waits. The runtime's own feed only; nothing while a
-    /// match runs. A map pack's catalogue preview is asked for the same way.
+    /// Asks for the pictures of the rows in view and a few rows beyond each
+    /// edge, the selected row's first, and wakes the worker while any waits.
+    /// The runtime's own feed only; nothing while a match runs. A picture
+    /// already asked for, held or refused is not asked for again. A map
+    /// pack's catalogue preview is asked for the same rows.
     ///
     /// @param list the display list the Library shows
     void request_pictures(const oa::ui::kit::DisplayList& list);
+
+    /// The picture source's known: an entry whose badge and map previews
+    /// are held, already asked for or refused.
+    ///
+    /// @param context the host
+    /// @param entry the entry
+    /// @return true when nothing of it remains to ask for
+    static bool picture_known(void* context, const oa::ui::library::Entry& entry);
+
+    /// The picture source's request: the entry's badge, and a map pack's
+    /// catalogue previews. The lead, the selected row, is fetched first.
+    ///
+    /// @param context the host
+    /// @param entry the entry
+    /// @param lead the selected row
+    static void picture_request(void* context, const oa::ui::library::Entry& entry, bool lead);
 
     /// Decodes a few minimaps for the rows this list shows, into `previews`.
     ///

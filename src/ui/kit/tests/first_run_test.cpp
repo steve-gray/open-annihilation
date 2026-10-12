@@ -872,9 +872,127 @@ void own_name_shrinks_to_fit_and_the_active_card_has_a_ring() {
     expect(pixel_is(built_in, origin, origin - 1, 0, 0, 0), "a built-in card drew the active ring");
 }
 
+void carousel_wraps_one_step_and_a_double_click_picks() {
+    kit::CarouselModel first{5, 0, 0, kit::carousel_move_ms};
+    expect(
+        kit::carousel_command(first, kit::CarouselCommand{true, false, false}) ==
+            kit::CarouselEvent::moved,
+        "left from the first card does not move"
+    );
+    expect(first.selected == 4, "left from the first card did not select the last");
+    const int32_t left_start = kit::carousel_index_milli(first);
+    expect(left_start - 4 * 1000 == 1000, "left from the first card is not one step");
+    kit::carousel_tick(first, 20);
+    expect(
+        kit::carousel_index_milli(first) < left_start,
+        "the move from the first card does not go left"
+    );
+
+    const kit::CarouselGeometry fitted = kit::carousel_fit(1280, kit::large_metrics);
+    const kit::Rect wide{0, 0, 1280, 220};
+    const std::vector<kit::CarouselSlot> leaving =
+        kit::carousel_places(wide, fitted, 5, left_start, false, true);
+    const auto slot_of = [](const std::vector<kit::CarouselSlot>& slots,
+                            int32_t index) -> const kit::CarouselSlot* {
+        for (const kit::CarouselSlot& slot : slots)
+            if (slot.index == index)
+                return &slot;
+        return nullptr;
+    };
+    const kit::CarouselSlot* last_card = slot_of(leaving, 4);
+    const kit::CarouselSlot* first_card = slot_of(leaving, 0);
+    expect(last_card != nullptr && first_card != nullptr, "the wrap does not show both ends");
+    if (last_card != nullptr && first_card != nullptr) {
+        expect(last_card->face.x < first_card->face.x, "the last card is not left of the first");
+        expect(first_card->centre, "the first card is not the centre as the move starts");
+    }
+
+    kit::CarouselModel last{5, 4, 4 * 1000, kit::carousel_move_ms};
+    expect(
+        kit::carousel_command(last, kit::CarouselCommand{false, true, false}) ==
+            kit::CarouselEvent::moved,
+        "right from the last card does not move"
+    );
+    expect(last.selected == 0, "right from the last card did not select the first");
+    const int32_t right_start = kit::carousel_index_milli(last);
+    expect(0 - right_start == 1000, "right from the last card is not one step");
+    kit::carousel_tick(last, 20);
+    expect(
+        kit::carousel_index_milli(last) > right_start,
+        "the move from the last card does not go right"
+    );
+
+    kit::CarouselModel only{1, 0, 0, 0};
+    expect(
+        kit::carousel_command(only, kit::CarouselCommand{true, false, false}) ==
+            kit::CarouselEvent::none,
+        "one card moved left"
+    );
+    expect(
+        kit::carousel_command(only, kit::CarouselCommand{false, true, false}) ==
+            kit::CarouselEvent::none,
+        "one card moved right"
+    );
+    expect(only.selected == 0, "one card changed its selection");
+
+    kit::CarouselModel pair_first{2, 0, 0, kit::carousel_move_ms};
+    expect(
+        kit::carousel_command(pair_first, kit::CarouselCommand{true, false, false}) ==
+            kit::CarouselEvent::moved,
+        "left from the first of two cards does not move"
+    );
+    expect(pair_first.selected == 1, "left from the first of two cards did not select the last");
+    const int32_t pair_left = kit::carousel_index_milli(pair_first);
+    expect(pair_left - 1000 == 1000, "left from the first of two cards is not one step");
+    kit::carousel_tick(pair_first, 20);
+    expect(
+        kit::carousel_index_milli(pair_first) < pair_left,
+        "the move from the first of two cards does not go left"
+    );
+
+    kit::CarouselModel pair_last{2, 1, 1000, kit::carousel_move_ms};
+    expect(
+        kit::carousel_command(pair_last, kit::CarouselCommand{false, true, false}) ==
+            kit::CarouselEvent::moved,
+        "right from the last of two cards does not move"
+    );
+    expect(pair_last.selected == 0, "right from the last of two cards did not select the first");
+    const int32_t pair_right = kit::carousel_index_milli(pair_last);
+    expect(0 - pair_right == 1000, "right from the last of two cards is not one step");
+    kit::carousel_tick(pair_last, 20);
+    expect(
+        kit::carousel_index_milli(pair_last) > pair_right,
+        "the move from the last of two cards does not go right"
+    );
+
+    const std::vector<kit::CarouselSlot> turned =
+        kit::carousel_places(wide, fitted, 5, 2000, false, true);
+    const kit::CarouselSlot* side = slot_of(turned, 0);
+    expect(side != nullptr, "a side card is missing");
+    if (side != nullptr) {
+        const kit::Point at{
+            side->face.x + side->face.width / 2, side->face.y + side->face.height / 2
+        };
+        kit::CarouselModel pressed{5, 2, 2000, kit::carousel_move_ms};
+        kit::CarouselDrag drag;
+        expect(
+            kit::carousel_pointer(pressed, turned, {}, {}, drag, kit::PointerPhase::down, at, 2) ==
+                kit::CarouselEvent::none,
+            "a double-click answers before the finger comes up"
+        );
+        expect(
+            kit::carousel_pointer(pressed, turned, {}, {}, drag, kit::PointerPhase::up, at, 2) ==
+                kit::CarouselEvent::picked,
+            "a double-click on a side card does not pick it"
+        );
+        expect(pressed.selected == 0, "a double-click picked a different card");
+    }
+}
+
 int main() {
     perspective_keeps_edges_opacity_and_clip();
     carousel_place_is_a_function_of_time();
+    carousel_wraps_one_step_and_a_double_click_picks();
     choice_and_coach_place_as_they_are_told();
     own_name_shrinks_to_fit_and_the_active_card_has_a_ring();
     auto modern = text_font::FontStack::open(text_font::bundled_font_directory());

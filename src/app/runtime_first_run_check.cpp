@@ -9,6 +9,7 @@
 // committed: the check serves the pack from its own server.
 
 #include "oa_layer.hpp"
+#include "oa_layer_check.hpp"
 
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
@@ -32,6 +33,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -362,6 +364,84 @@ void Runtime::check_first_run() {
         }
     }
     std::cout << "first-run check: showing, catalogue lists " << kTag << std::endl;
+
+    // A window taller than the picture puts the footer in the letterbox. The
+    // software cursor has to be drawn there, and the check puts 640 by 480 back
+    // before the walk.
+    {
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, 960) && SDL_SyncWindow(sdl_.window),
+            "the window did not take 640x960"
+        );
+        apply_output_mode();
+        pump();
+        const std::optional<kit::Control> next = control_named("first-run.language.next");
+        require(next.has_value() && next->enabled, "Next is not on the setup");
+        LayerScreen* screen = setup();
+        require(screen != nullptr, "the setup is not showing");
+        const LayerView seen = oa_layer().view();
+        const LayerPlacement placed = screen->placement(seen);
+        const oa::ui::display_layout::Point pixel = layer_window_pixel(
+            placed, {next->rect.x + next->rect.width / 2, next->rect.y + next->rect.height / 2}
+        );
+        const bool outside = pixel.x < seen.picture.x || pixel.y < seen.picture.y ||
+                             pixel.x >= seen.picture.x + seen.picture.width ||
+                             pixel.y >= seen.picture.y + seen.picture.height;
+        require(outside, "Next sits inside the picture");
+        SDL_Event motion =
+            window_pointer_event(sdl_.window, sdl_.renderer, SDL_EVENT_MOUSE_MOTION, pixel, 0);
+        bool going = true;
+        dispatch_event(motion, going);
+        require(going, "moving onto Next ended the run");
+        const auto capture = [this] {
+            oa_layer().read_whole_window(true);
+            renderer::Surface presented;
+            capture_frame_ = &presented;
+            render();
+            capture_frame_ = nullptr;
+            oa_layer().read_whole_window(false);
+            return presented;
+        };
+        const renderer::Surface with_cursor = capture();
+        frame_without_cursor_ = true;
+        const renderer::Surface without_cursor = capture();
+        frame_without_cursor_ = false;
+        const double across = seen.picture_size.x > 0 ? static_cast<double>(seen.picture.width) /
+                                                            static_cast<double>(seen.picture_size.x)
+                                                      : 1.0;
+        const double down = seen.picture_size.y > 0 ? static_cast<double>(seen.picture.height) /
+                                                          static_cast<double>(seen.picture_size.y)
+                                                    : 1.0;
+        const auto tip_of = [](int32_t origin, float picture_point, double scale) {
+            return origin + static_cast<int32_t>(
+                                std::floor((static_cast<double>(picture_point) + 0.5) * scale)
+                            );
+        };
+        const LayerPointer tip{
+            {tip_of(seen.picture.x, pointer_x_, across), tip_of(seen.picture.y, pointer_y_, down)},
+            0
+        };
+        require(
+            layer_differences(with_cursor, without_cursor, tip) > 0,
+            "the cursor is not drawn over the footer"
+        );
+        const int32_t reach = static_cast<int32_t>(
+            std::ceil(static_cast<double>(layer_cursor_reach) * std::max(across, down))
+        );
+        const LayerPointer covered{tip.at, reach};
+        require(
+            layer_differences(with_cursor, without_cursor, covered) == 0,
+            "the footer frames differ outside the cursor"
+        );
+        std::cout << "first-run check: the cursor shows over the footer" << std::endl;
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) &&
+                SDL_SyncWindow(sdl_.window),
+            "the window did not return to 640x480"
+        );
+        apply_output_mode();
+        pump();
+    }
 
     pick_card("first-run.language.card.de");
     require(

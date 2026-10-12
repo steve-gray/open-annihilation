@@ -219,6 +219,8 @@ struct QueueItem {
     std::string key{};
     std::string name{};    ///< the name a player sees
     std::string version{}; ///< as written; empty when the kind has none
+    /// The catalogue release it installs; 0 when the queue did not name one.
+    int64_t release{};
     Phase phase{Phase::waiting};
     uint64_t done_bytes{};  ///< bytes downloaded so far
     uint64_t total_bytes{}; ///< the package's size; 0 when unknown
@@ -481,12 +483,19 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 /// Keeps the tab, each tab's filter, the tag, query and selection.
 /// When the selected entry no longer shows, the first visible entry is
 /// selected and the details close.
+/// An update note is not attached when the installed copy, or a queue item
+/// whose phase is installed, already names a catalogue release above 0 that
+/// is at least the note's. A release of 0 names none, and a held item has
+/// not finished, so neither retires the note.
 ///
 /// @param[in,out] library the Library
 /// @param inputs the new inputs, which the Library keeps
 void refresh(Library& library, Inputs inputs);
 
 /// Shows a tab with its own filter, keeping the tag and query.
+///
+/// The tag hides rows only while this tab's filter offers it. A tag left
+/// from another tab is kept and applies again on a tab that offers it.
 ///
 /// @param[in,out] library the Library
 /// @param tab the tab
@@ -504,7 +513,9 @@ void set_filter(Library& library, Filter filter);
 /// @return the filter
 [[nodiscard]] Filter shown_filter(const Library& library);
 
-/// Shows the entries whose listing has a tag.
+/// Shows the entries whose listing has a tag, when the tab's filter offers it.
+///
+/// A tag the filter does not offer hides nothing. The tag is kept.
 ///
 /// @param[in,out] library the Library
 /// @param tag the tag; empty for every tag

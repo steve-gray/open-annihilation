@@ -1969,7 +1969,7 @@ OaLayer::hand_input(LayerScreen& screen, const LayerView& seen, const ScreenInpu
                 runtime_, window_per_point * canvas_per_window
             );
         }
-        return screen.pointer(input.kind, input.button, point, reach);
+        return screen.pointer_with_clicks(input.kind, input.button, point, reach, input.clicks);
     }
     case ScreenInputKind::wheel:
         return screen.wheel(point, input.wheel_y);

@@ -78,11 +78,14 @@ struct CarouselModel {
     uint32_t elapsed_ms{};  ///< how long this move has been running, in milliseconds
 };
 
-/// Starts a move to a card. The index is held inside the carousel. The centre
-/// stays where it is now and eases to the card over carousel_move_ms.
+/// Starts a move to a card. With one card or none the centre stays put. With
+/// more, the index wraps, and the centre eases the short way, one step when
+/// the ask was one step, rather than back across the row. A tie takes the
+/// way the index was asked. The centre stays where it is now and eases to
+/// the card over carousel_move_ms.
 ///
 /// @param[in,out] model the carousel
-/// @param index the card to move to, from 0
+/// @param index the card to move to; it may lie outside 0 .. count-1
 void carousel_go(CarouselModel& model, int32_t index) noexcept;
 
 /// Advances a move by a slice of time. Past carousel_move_ms the centre stays
@@ -211,7 +214,8 @@ struct CarouselDrag {
 /// finger that travels left selects the next card, and right the previous.
 /// A short press on a side card centres it. A short press on the centre
 /// card, or on the card already selected while it is still on its way there,
-/// picks it. A short press on an arrow moves one card.
+/// picks it. A double-click on any card centres it and picks it. A short
+/// press on an arrow moves one card. A swipe still moves one card.
 ///
 /// @param[in,out] model the carousel
 /// @param places the cards as carousel_places laid them, kept alive by the caller
@@ -220,6 +224,7 @@ struct CarouselDrag {
 /// @param[in,out] drag the press
 /// @param phase where the finger is
 /// @param at the finger, in the same points as the places
+/// @param clicks how many presses landed as one; 2 or more is a double-click
 /// @return what the carousel did; none until the finger comes up
 CarouselEvent carousel_pointer(
     CarouselModel& model,
@@ -228,7 +233,8 @@ CarouselEvent carousel_pointer(
     const Rect& next,
     CarouselDrag& drag,
     PointerPhase phase,
-    Point at
+    Point at,
+    uint8_t clicks = 1
 ) noexcept;
 
 // ---- Language card ----

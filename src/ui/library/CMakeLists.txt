@@ -67,6 +67,15 @@ if(BUILD_TESTING)
   add_test(NAME ui-library-layout COMMAND oa-ui-library-layout-test)
   set_tests_properties(ui-library-layout PROPERTIES TIMEOUT 60)
 
+  # The pictures of the rows in view, and a few past each edge: a list of
+  # forty, scrolled, asks for each of those once, the selected row first,
+  # and a picture that arrives is on its row.
+  add_executable(oa-ui-library-pictures-test tests/pictures_test.cpp)
+  target_link_libraries(oa-ui-library-pictures-test PRIVATE oa-ui-library oa-ui-kit oa-test-support
+    oa-options)
+  add_test(NAME ui-library-pictures COMMAND oa-ui-library-pictures-test)
+  set_tests_properties(ui-library-pictures PROPERTIES TIMEOUT 30)
+
   # Each class drawn twice in the installed game's fonts, and the Active and
   # Updates tabs, byte for byte the same and nothing outside the window;
   # with --frames DIR it writes the pictures for review.
