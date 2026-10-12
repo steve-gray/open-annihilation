@@ -56,7 +56,7 @@ if(BUILD_TESTING)
 
   add_executable(oa-ui-engine-settings-dialog-test tests/dialog_test.cpp)
   target_link_libraries(oa-ui-engine-settings-dialog-test PRIVATE oa-ui-engine-settings
-    oa-test-game-data oa-options)
+    oa-platform-file-types oa-test-game-data oa-options)
   # The test places parts through the dialog's own geometry (src/geometry.hpp).
   target_include_directories(oa-ui-engine-settings-dialog-test PRIVATE src)
   add_test(NAME ui-engine-settings-dialog COMMAND oa-ui-engine-settings-dialog-test)

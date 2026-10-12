@@ -673,7 +673,15 @@ of the game's file types this copy opens.
   or plain text (a registry file). The app keeps the type and its icon
   either way; only the program that opens it changes. If the system
   refuses, the log says so and the switch shows the choice the system
-  kept. [macOS](installation/macos.md) says the same for opening a file.
+  kept. When macOS keeps Open Annihilation as the opener, the hint under
+  File Type Registration names each type that stayed, in one sentence:
+  "macOS kept Open Annihilation as the opener of .oamod. To choose another,
+  select a .oamod file in Finder, then File › Get Info › Open with ›
+  Change All." Several types are named together, and the sentence then
+  says to select one of them. The line is there the next time Settings ›
+  System opens in this run, and it goes away when every switch matches
+  what you asked. [macOS](installation/macos.md) says the same for opening
+  a file.
 - **File types**, on iPhone and iPad, in place of the four switches. The
   system takes the types from the app, and there is no way to choose a
   default opener, so there is no switch. The hint is one sentence.

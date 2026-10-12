@@ -1823,12 +1823,35 @@ constexpr std::string_view file_types_taken_text =
 constexpr std::string_view file_types_finder_lead = "Finder's Get Info › Open with";
 constexpr std::string_view file_types_finder_rest = "chooses another opener.";
 
+/// The lines under File Type Registration. While macOS kept this copy as an
+/// opener, that sentence replaces the usual hint; otherwise the usual two.
+std::vector<std::string> file_type_heading_lines(const SettingsModel& model) {
+    if (model.dialog != nullptr && !model.dialog->file_type_kept_hint.empty())
+        return break_lines(
+            model.dialog->file_type_kept_hint, line_characters(model), most_notice_lines
+        );
+    return {
+        std::string(file_type_heading_lead),
+        std::string(file_type_heading_rest),
+    };
+}
+
+/// Returns a line under File Type Registration.
+std::string file_type_heading_hint(const SettingsModel& model, std::size_t line) {
+    const std::vector<std::string> lines = file_type_heading_lines(model);
+    return line < lines.size() ? lines[line] : std::string{};
+}
+
+/// Returns how many lines File Type Registration's hint takes.
+std::size_t file_type_heading_hint_count(const SettingsModel& model) {
+    return file_type_heading_lines(model).size();
+}
+
 /// The File Type Registration heading. It keeps no setting.
 constexpr Spec file_type_heading_row() noexcept {
-    Spec spec =
+    const Spec spec =
         kit::text<SettingsModel>("file-type-registration", "File Type Registration", nullptr);
-    spec.hint = {file_type_heading_lead, file_type_heading_rest};
-    return spec;
+    return changing(spec, &file_type_heading_hint, &file_type_heading_hint_count);
 }
 
 /// The Finder sentence, as two catalog lines joined where a hint line holds it.
@@ -2768,6 +2791,41 @@ std::string value_text(Setting setting, const Dialog& dialog) {
 }
 
 } // namespace geometry
+
+std::string kept_opener_hint(const std::span<const std::string_view> dotted) {
+    if (dotted.empty())
+        return {};
+    // "and" is its own catalogue word, so a translation can say the list.
+    const std::string and_word(geometry::shown_text("and"));
+    std::string types(dotted[0]);
+    if (dotted.size() == 2) {
+        types += " ";
+        types += and_word;
+        types += " ";
+        types += dotted[1];
+    } else if (dotted.size() > 2) {
+        for (std::size_t index = 1; index < dotted.size(); ++index) {
+            if (index + 1 < dotted.size())
+                types += ", ";
+            else {
+                types += " ";
+                types += and_word;
+                types += " ";
+            }
+            types += dotted[index];
+        }
+    }
+    // One type is named where the player looks and where they act. Several
+    // are named once; the rest of the sentence says to pick one of them, so
+    // the whole instruction still fits under the switches.
+    constexpr std::string_view one_type =
+        "macOS kept Open Annihilation as the opener of {types}. To choose another, select a "
+        "{types} file in Finder, then File › Get Info › Open with › Change All.";
+    constexpr std::string_view several =
+        "macOS kept Open Annihilation as the opener of {types}. To choose another, select one of "
+        "them in Finder, then File › Get Info › Open with › Change All.";
+    return geometry::filled(dotted.size() == 1 ? one_type : several, {{"types", types}});
+}
 
 std::span<const Setting> page_settings(Page page) noexcept {
     return geometry::kPageRows[std::min(static_cast<std::size_t>(page), page_count - 1)];
