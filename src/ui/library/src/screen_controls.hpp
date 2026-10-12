@@ -57,8 +57,11 @@ inline constexpr kit::ControlId rules = 64;
 inline constexpr kit::ControlId active_mod = 65;
 /// The Active tab's tile for the language in use.
 inline constexpr kit::ControlId active_language = 66;
-/// ADD REGISTRY… on the Registries tab. 70–72 are free between the Active
-/// lines (66) and the action buttons (100).
+/// UNLOAD MOD, at the bottom right of the Active tab's mod tile while a mod
+/// is played. It asks for SWITCH OFF.
+inline constexpr kit::ControlId active_unload = 67;
+/// ADD REGISTRY… on the Registries tab. 70–72 are free between UNLOAD MOD
+/// (67) and the action buttons (100).
 inline constexpr kit::ControlId add_registry = 70;
 /// The Registries tab's amber note, when a change was refused.
 inline constexpr kit::ControlId registries_notice = 71;

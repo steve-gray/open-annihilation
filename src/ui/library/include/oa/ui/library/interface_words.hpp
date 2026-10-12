@@ -129,6 +129,7 @@ inline constexpr std::string_view interface_words[] = {
     words::action_switch,
     words::switch_title,
     words::action_switch_off,
+    words::action_unload_mod,
     words::search_languages,
     words::search_maps,
     words::search_mods,

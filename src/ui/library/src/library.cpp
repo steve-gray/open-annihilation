@@ -880,6 +880,10 @@ ActiveSetup active_setup(const Library& library) {
     return setup;
 }
 
+bool can_switch(const Library& library) noexcept {
+    return !library.inputs.in_match && !library.inputs.mod_from_command_line;
+}
+
 std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry) {
     const TextHooks& text = library.text;
     const bool in_match = library.inputs.in_match;
@@ -891,10 +895,8 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     // The base game is not a package. While it is played it offers nothing;
     // while a mod is, PLAY NOW follows SWITCH OFF's rule and does its work.
     if (is_base_game(entry.id)) {
-        if (entry.state != State::playing) {
-            const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
-            add(Action::play_now, can_switch);
-        }
+        if (entry.state != State::playing)
+            add(Action::play_now, can_switch(library));
         return buttons;
     }
     if (entry.state == State::get || entry.state == State::update) {
@@ -908,9 +910,8 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const Installed* installed = entry.installed;
     // The mod being played switches off where another mod plays now: the
     // game then plays none.
-    const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
     if (installed != nullptr && entry.id.kind == Kind::mod)
-        add(installed->playing ? Action::switch_off : Action::play_now, can_switch);
+        add(installed->playing ? Action::switch_off : Action::play_now, can_switch(library));
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
     if (installed != nullptr) {

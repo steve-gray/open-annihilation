@@ -720,6 +720,14 @@ struct ActionButton {
 /// @return the buttons
 [[nodiscard]] std::vector<ActionButton> entry_actions(const Library& library, const Entry& entry);
 
+/// Tells whether PLAY NOW and SWITCH OFF can act, and so whether the Active
+/// tab's UNLOAD MOD can: not during a game, and not while the command line
+/// chose this run's mod.
+///
+/// @param library the Library
+/// @return true when the switch can be asked for
+[[nodiscard]] bool can_switch(const Library& library) noexcept;
+
 /// Tells whether the header's refresh icon can be pressed: a registry is on
 /// that it can ask, none is being asked now, and no game is being played.
 ///

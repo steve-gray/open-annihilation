@@ -229,6 +229,23 @@ struct ChipLook {
     std::optional<StateIcon> icon{};
 };
 
+/// What a pill says, which chooses its colours. A pill is a word on a fully
+/// rounded ground, not a chip: chips stay rectangular.
+enum class PillState : uint8_t {
+    playing,   ///< accent ground, on_accent text
+    neutral,   ///< a muted ground, text colour: built in
+    installed, ///< the accent, as a chip's installed state
+    update,    ///< the lock colour, as a chip's update state
+    problem,   ///< the danger colour, as a chip's problem state
+};
+
+/// A pill: a short text on a fully rounded ground about chip_height high.
+/// The text is drawn as given, already looked up.
+struct PillLook {
+    std::string text{};                  ///< the words
+    PillState state{PillState::neutral}; ///< which colours
+};
+
 /// A row of a list, in its full or its short form, which its rectangle's
 /// height chooses. Every text is already looked up.
 struct ListRowLook {
@@ -377,6 +394,7 @@ using Look = std::variant<
     HoverCardLook,
     LinkLook,
     ProgressLook,
-    PictureLook>;
+    PictureLook,
+    PillLook>;
 
 } // namespace oa::ui::kit

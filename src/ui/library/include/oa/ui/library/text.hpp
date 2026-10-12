@@ -60,6 +60,8 @@ inline constexpr std::string_view action_retry = "RETRY";
 inline constexpr std::string_view action_roll_back = "ROLL BACK";
 inline constexpr std::string_view action_play_now = "PLAY NOW";
 inline constexpr std::string_view action_switch_off = "SWITCH OFF";
+/// UNLOAD MOD on the Active tab. It asks what SWITCH OFF asks.
+inline constexpr std::string_view action_unload_mod = "UNLOAD MOD";
 inline constexpr std::string_view action_open_folder = "OPEN FOLDER";
 inline constexpr std::string_view action_homepage = "HOMEPAGE";
 inline constexpr std::string_view action_details = "DETAILS";
