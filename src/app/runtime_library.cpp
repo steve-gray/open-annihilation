@@ -1663,6 +1663,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
     ///
     /// @param canvas where it draws
     void draw(const kit::Canvas& canvas) const override {
+        // A rebuild in this frame's tick_library replaced the model's inputs,
+        // and with them the badges and icons the last layout points into.
+        // Lay out again before drawing, so nothing freed is read.
+        if (runtime_.library_ && runtime_.library_->model_revision != seen_model_)
+            const_cast<LibraryScreen*>(this)->relayout();
         kit::Canvas drawn = canvas;
         drawn.icon = Runtime::EngineSettingsMenuHost::mods_icon(runtime_);
         library::draw_library(drawn, list_);

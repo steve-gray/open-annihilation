@@ -201,7 +201,15 @@ std::optional<lib::Badge> shipped_logo() {
     const std::filesystem::path relative =
         std::filesystem::path("branding") / "open-annihilation-256.png";
     std::error_code ignored;
-    std::filesystem::path file = climb_for(std::filesystem::current_path(ignored), relative);
+    std::filesystem::path file;
+#ifdef OA_BRANDING_DIR
+    const std::filesystem::path given =
+        std::filesystem::path(OA_BRANDING_DIR) / "open-annihilation-256.png";
+    if (std::filesystem::is_regular_file(given, ignored))
+        file = given;
+#endif
+    if (file.empty())
+        file = climb_for(std::filesystem::current_path(ignored), relative);
     if (file.empty())
         file = climb_for(text_font::bundled_font_directory(), relative);
     if (file.empty()) {

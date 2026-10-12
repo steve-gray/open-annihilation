@@ -84,6 +84,10 @@ if(BUILD_TESTING)
     oa-formats-hpi oa-platform-text-font oa-present oa-test-game-data oa-test-support oa-options)
   # The modern fonts draw the characters the game's fonts lack, as beside the game.
   oa_copy_text_fonts(oa-ui-library-draw-test "$<TARGET_FILE_DIR:oa-ui-library-draw-test>")
+  # The Registries picture draws the app icon from the source tree's branding
+  # folder, which a build tree outside the sources cannot find by climbing.
+  target_compile_definitions(oa-ui-library-draw-test PRIVATE
+    OA_BRANDING_DIR="${PROJECT_SOURCE_DIR}/branding")
   oa_add_game_data_test(ui-library-draw-data oa-ui-library-draw-test --data)
   set_tests_properties(ui-library-draw-data PROPERTIES TIMEOUT 60)
 endif()
