@@ -623,7 +623,9 @@ Compact and Large, and the Registries tab at Compact, Regular and Large:
 each twice, byte for byte the same, with nothing drawn outside the
 window and every pixel of it drawn, every part inside it and every text
 fitting. The Registries pictures dress the fixture's built-in registry as
-Core Prime, title, description and short name, on that copy only.
+Core Prime, title, description, author and short name, on that copy only.
+That author is Open Annihilation, so the card shows the OA mark under
+its key.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
