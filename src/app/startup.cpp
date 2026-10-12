@@ -1252,6 +1252,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
                    "[--check-registered-kit] [--check-kit-gallery] "
                    "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
+                   "[--check-map-pack-lists] "
                    "[--check-map-browser] "
                    "[--check-mod-warning] "
                    "[--check-mod-install] [--check-language-install] [--check-challenge] "
