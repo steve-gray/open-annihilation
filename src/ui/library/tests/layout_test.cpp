@@ -1842,7 +1842,8 @@ void registries_tab_lists_every_registry() {
         ));
         bare_list = laid_out(library, bare_state, regular);
         OA_CHECK(
-            hover_card_words(bare_list).find("Keybuilt inNo signing key") != std::string::npos
+            hover_card_words(bare_list).find("Signing keybuilt inNo signing key") !=
+            std::string::npos
         );
         OA_EXPECT_NONE(
             fixture::outside_window(bare_list, lib::window_size(regular)), "empty key tooltip"
@@ -1885,7 +1886,7 @@ void registries_tab_lists_every_registry() {
         ));
         key_list = laid_out(with_keys, key_state, regular);
         const std::string card = hover_card_words(key_list);
-        OA_CHECK(card.find("Keys") != std::string::npos);
+        OA_CHECK(card.find("Signing keys") != std::string::npos);
         OA_CHECK(card.find("added by you") != std::string::npos);
         OA_CHECK(card.find(first_fingerprint) != std::string::npos);
         OA_CHECK(card.find(first_public) != std::string::npos);

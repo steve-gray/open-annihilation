@@ -51,7 +51,7 @@ inline constexpr std::string_view interface_words[] = {
     "Settings",
     "Skip setup",
     "Start playing",
-    "THE MAIN MENU · 3 OF 3",
+    "THE MAIN MENU",
     "The Library is where you get mods, map packs and languages. Settings is where you change "
     "how Open Annihilation looks and plays. Everything else on this menu is the game's own.",
     "The catalogue could not be read, so language packs stay offline.",
@@ -61,6 +61,7 @@ inline constexpr std::string_view interface_words[] = {
     "Welcome",
     "Welcome to Open Annihilation",
     "Your install ID",
+    "{step} · {index} OF {count}",
     "of",
 };
 

@@ -514,7 +514,8 @@ Each card shows:
   registry whose author is Open Annihilation or Cavedog Entertainment
   shows that maker's mark directly under the key, the same size, inside
   the band. A registry you added shows no mark. Resting on the key,
-  or moving the keys or the pad onto it, shows the keys its signatures are
+  or moving the keys or the pad onto it, shows a card headed **Signing key**,
+  or **Signing keys**, with the keys its signatures are
   checked against: each key's fingerprint ("7001 · af50 · b971 · 5bb4")
   and its full public key (`ed25519:…`), and "built in" or "added by you",
   wide enough or wrapped so those words show whole. A registry that names

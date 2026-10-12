@@ -235,7 +235,9 @@ void the_window_shows_each_mode_and_phase() {
     OA_CHECK(label_of(list, "add-registry.name") == std::string("Example Maps"));
     OA_CHECK(label_of(list, "add-registry.address") == std::string("Address maps.example.org"));
     OA_CHECK(words.find("31 · maps") != std::string::npos);
-    OA_CHECK(label_of(list, "add-registry.key") == std::string("Key 9fa2 · 77c1 · e04b · 2kw0"));
+    OA_CHECK(
+        label_of(list, "add-registry.key") == std::string("Signing key 9fa2 · 77c1 · e04b · 2kw0")
+    );
     OA_CHECK(words.find("Downloads") != std::string::npos);
     OA_CHECK(words.find("direct") != std::string::npos);
     OA_CHECK(words.find("Not reviewed by the OA team.") != std::string::npos);
@@ -255,7 +257,15 @@ void the_window_shows_each_mode_and_phase() {
     keys.shown.kinds = {"mods", "maps", "languages"};
     keys.shown.downloads = "with download keys · needs an install ID";
     list = settings::add_registry_list(keys);
-    OA_CHECK(label_of(list, "add-registry.key") == std::string("Keys aaaa\nbbbb\ncccc\n+2 more"));
+    OA_CHECK(
+        label_of(list, "add-registry.key") == std::string("Signing keys aaaa\nbbbb\ncccc\n+2 more")
+    );
+    bool key_fits = false;
+    for (const kit::Item& item : list.items) {
+        if (item.text == "Signing keys")
+            key_fits = item.rect.width >= kit::estimated_width(item.text);
+    }
+    OA_CHECK(key_fits);
     OA_CHECK(words_of(list).find("31 · mods, maps, languages") != std::string::npos);
     OA_CHECK(words_of(list).find("with download keys · needs an install ID") != std::string::npos);
 

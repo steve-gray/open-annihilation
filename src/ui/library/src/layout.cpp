@@ -4114,7 +4114,24 @@ void add_key_tooltip(Building& building, const Window& window) {
             append_fitted(building, look.block, signing_key.public_key, inner);
         }
     }
-    const kit::Point size = kit::hover_card_size(*building.fonts, look);
+    kit::Point size = kit::hover_card_size(*building.fonts, look);
+    // The card's header is sized with the wider of the font and the estimate,
+    // so "Signing keys" beside "added by you" is not cut at Compact.
+    const int32_t card_padding = kit::compact_metrics.hover_card_padding;
+    int32_t header_width = 0;
+    const auto add_header = [&](std::string_view text) {
+        if (text.empty())
+            return;
+        const int32_t part = std::max(
+            kit::text_width(*building.fonts, kit::FontRole::small, text), kit::estimated_width(text)
+        );
+        header_width += (header_width > 0 ? card_padding : 0) + part;
+    };
+    add_header(look.title);
+    add_header(look.aside);
+    const int32_t header_card = header_width + 2 * card_padding;
+    if (header_card > size.x)
+        size.x = std::min(header_card, window.width);
     const kit::Rect frame{0, 0, window.width, window.height};
     const kit::Rect card = kit::hover_card_rect(seen, frame, size);
     const int32_t anchor_mid = seen.x + seen.width / 2;

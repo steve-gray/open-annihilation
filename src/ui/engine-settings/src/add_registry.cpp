@@ -10,8 +10,10 @@
 
 #include "oa/ui/engine_settings/add_registry.hpp"
 
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/formats/url.hpp"
 #include "oa/ui/kit/chrome.hpp"
+#include "oa/ui/library/text.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/controls.hpp"
@@ -33,12 +35,13 @@ namespace oa::ui::engine_settings {
 namespace {
 
 namespace kit = oa::ui::kit;
+namespace library = oa::ui::library;
 
 /// The Compact metrics the text, the field, the buttons and the footer are
 /// placed by. The width and the height limits come from the size class.
 constexpr const kit::Metrics& metrics = kit::compact_metrics;
 
-/// The columns a fact's label keeps before its value.
+/// The columns a fact's label keeps before its value, when the label is short.
 constexpr int32_t kLabelWidth = 76;
 /// The rows between the name and the facts under it.
 constexpr int32_t kNameGap = 4;
@@ -47,7 +50,6 @@ constexpr int32_t kNameGap = 4;
 constexpr std::string_view kAddTitle = "Add registry";
 constexpr std::string_view kMirrorTitle = "Add mirror";
 constexpr std::string_view kPlaceholder = "http://…";
-constexpr std::string_view kSigningKeyLabel = "Signing key";
 constexpr std::string_view kKeyPlaceholder = "ed25519:…";
 /// A public key is 52 characters. A longer paste stays too long to be a key
 /// rather than being cut into one.
@@ -144,6 +146,19 @@ kit::Measure measure_of(const kit::Fonts* fonts, kit::FontRole role) {
     if (fonts == nullptr)
         return kit::estimated_width;
     return [fonts, role](std::string_view text) { return kit::text_width(*fonts, role, text); };
+}
+
+/// How wide a fact's label column is. A signing-key label longer than
+/// kLabelWidth widens the column, with a gap before the value, so the word
+/// is not cut at Compact. The measure is the wider of the font and the estimate.
+///
+/// @param fonts the fonts; null estimates
+/// @param label the looked-up label
+/// @return the column, in points
+int32_t fact_column(const kit::Fonts* fonts, std::string_view label) {
+    const int32_t measured = measure_of(fonts, kit::FontRole::small)(label);
+    const int32_t estimated = kit::estimated_width(label);
+    return std::max(kLabelWidth, std::max(measured, estimated) + metrics.label_gap);
 }
 
 /// Fills a text's {name} places.
@@ -285,19 +300,22 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
         row += metrics.small_line;
     };
     // A fact: its label at the left, in the hint colour, and its value after it.
+    // The signing-key label widens the column before the facts are placed.
+    int32_t column = kLabelWidth;
     const auto fact = [&](std::string_view label_text, std::string value, Label label) {
         if (!label_text.empty()) {
             Line name;
             name.text = std::string(label_text);
-            name.rect = {metrics.padding, row, kLabelWidth, metrics.small_line};
+            name.rect = {metrics.padding, row, column, metrics.small_line};
             name.colour = kit::colour::hint;
             lines.push_back({std::move(name), label});
         }
-        const int32_t value_left = metrics.padding + kLabelWidth;
-        Line shown;
-        shown.text = kit::fit(value, line_width - kLabelWidth, small);
-        shown.rect = {value_left, row, line_width - kLabelWidth, metrics.small_line};
-        lines.push_back({std::move(shown), label});
+        const int32_t value_left = metrics.padding + column;
+        const int32_t value_width = std::max(line_width - column, int32_t{0});
+        Line value_line;
+        value_line.text = kit::fit(value, value_width, small);
+        value_line.rect = {value_left, row, value_width, metrics.small_line};
+        lines.push_back({std::move(value_line), label});
         row += metrics.small_line;
     };
 
@@ -316,7 +334,11 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
     }
     if (fields.key_label && fields.key_field) {
         row = *fields.key_label;
-        text_line(std::string(kSigningKeyLabel), kit::colour::hint, Label::none);
+        text_line(
+            std::string(oa::data::languages::interface_text(library::words::registry_key_one)),
+            kit::colour::hint,
+            Label::none
+        );
         placed.key_field =
             kit::Rect{metrics.padding, *fields.key_field, fields.line_width, metrics.field_height};
         row = *fields.key_field + metrics.field_height;
@@ -339,6 +361,19 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
             heading_line(shown.name, Label::name);
             row += kNameGap;
         }
+        std::string key_label;
+        if (!mirror && shown.is_signed) {
+            // Copy before the next lookup. One key and several keys are different texts.
+            key_label =
+                shown.fingerprints.size() > 1
+                    ? std::string(
+                          oa::data::languages::interface_text(library::words::registry_key_many)
+                      )
+                    : std::string(
+                          oa::data::languages::interface_text(library::words::registry_key_one)
+                      );
+            column = fact_column(fonts, key_label);
+        }
         fact("Address", shown.address, Label::address);
         if (mirror) {
             row += metrics.paragraph_gap;
@@ -356,7 +391,7 @@ Placed place(const AddRegistry& window, const kit::Fonts* fonts) {
             const std::vector<std::string> keys = fingerprint_lines(shown.fingerprints);
             for (std::size_t index = 0; index < keys.size(); ++index)
                 fact(
-                    index == 0 ? (shown.fingerprints.size() > 1 ? "Keys" : "Key") : "",
+                    index == 0 ? std::string_view{key_label} : std::string_view{},
                     keys[index],
                     Label::key
                 );

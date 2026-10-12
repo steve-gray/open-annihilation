@@ -7,7 +7,7 @@ add_library(oa-ui-first-run src/gate.cpp src/coaches.cpp src/screen.cpp src/samp
 add_library(oa::ui::first_run ALIAS oa-ui-first-run)
 target_include_directories(oa-ui-first-run PUBLIC include)
 target_compile_features(oa-ui-first-run PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-first-run PUBLIC oa-ui-kit oa-data-languages PRIVATE oa-ui-library)
+target_link_libraries(oa-ui-first-run PUBLIC oa-ui-kit oa-data-languages oa-ui-library)
 
 if(BUILD_TESTING)
   # The gate's order, and the coach marks at Compact, Regular and Large.
