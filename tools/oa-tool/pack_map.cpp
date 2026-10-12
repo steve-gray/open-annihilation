@@ -3,9 +3,12 @@
 
 // A map folder becomes a .oamap. The index is computed from each map's OTA
 // and TNT: feature sections in the folder, then each section's sprite or
-// model, burn weapon and links. The manifest is written first, then every
-// other file in byte order of its path, to a sibling .part file that is
-// renamed into place only after the archive reads back.
+// model, burn weapon and links. players comes from the OTA's numplayers when
+// that list is whole numbers from 2 to 10, and otherwise from the start
+// positions. A folder may set a map's name, description or players. The
+// manifest is written first, then every other file in byte order of its
+// path, to a sibling .part file that is renamed into place only after the
+// archive reads back.
 
 #include "pack_map.hpp"
 
@@ -30,6 +33,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -94,6 +98,22 @@ struct BuiltMap {
     map_pack::MapEntry entry;
     std::vector<std::string> needs;
     std::optional<Crop> crop;
+    /// A line about numplayers, empty when the count needs nothing said.
+    std::string player_note;
+};
+
+/// Which of a folder entry's fields were written, so an empty description is kept.
+struct FolderFields {
+    bool name{};
+    bool description{};
+    bool players{};
+};
+
+/// The largest whole number in an OTA numplayers value.
+struct PermittedCounts {
+    bool stated{};   ///< the OTA's numplayers is not empty
+    bool accepted{}; ///< every number is a whole number from 2 to 10
+    int32_t largest{};
 };
 
 using Item = detail::Item;
@@ -450,16 +470,8 @@ find_source(const std::map<std::string, Source>& files, std::string_view folded_
     return found == files.end() ? nullptr : &found->second;
 }
 
-/// Returns the stems to pack, in the order their entries are written.
-std::vector<std::string>
-choose_stems(const map_pack::Manifest& manifest, const std::map<std::string, Source>& files) {
-    if (!manifest.maps.empty()) {
-        std::vector<std::string> stems;
-        stems.reserve(manifest.maps.size());
-        for (const map_pack::MapEntry& map : manifest.maps)
-            stems.push_back(map.stem);
-        return stems;
-    }
+/// Returns the stems of maps the folder holds that have a Network schema.
+std::vector<std::string> discover_stems(const std::map<std::string, Source>& files) {
     std::vector<std::string> discovered;
     for (const auto& [key, source] : files) {
         if (!key.starts_with("maps/") || !key.ends_with(".ota"))
@@ -491,6 +503,128 @@ choose_stems(const map_pack::Manifest& manifest, const std::map<std::string, Sou
         stems.emplace_back(base.substr(0, base.size() - extension.size()));
     }
     return stems;
+}
+
+/// Returns the stems to pack, in the order their entries are written.
+///
+/// With no list, that is every map the folder holds, in byte order of its
+/// path. A list names maps whose name, description or players replace the
+/// computed values; those stems come first, in the order written. A map the
+/// list does not name follows them, computed, in that same path order.
+std::vector<std::string>
+choose_stems(const map_pack::Manifest& manifest, const std::map<std::string, Source>& files) {
+    const std::vector<std::string> discovered = discover_stems(files);
+    if (manifest.maps.empty())
+        return discovered;
+    std::vector<std::string> stems;
+    stems.reserve(manifest.maps.size() + discovered.size());
+    std::vector<std::string> listed;
+    listed.reserve(manifest.maps.size());
+    for (const map_pack::MapEntry& map : manifest.maps) {
+        stems.push_back(map.stem);
+        listed.push_back(folded(map.stem));
+    }
+    for (const std::string& stem : discovered) {
+        const std::string key = folded(stem);
+        bool named = false;
+        for (const std::string& earlier : listed) {
+            if (earlier == key)
+                named = true;
+        }
+        if (!named)
+            stems.push_back(stem);
+    }
+    return stems;
+}
+
+/// Reads which listed entries set a name, a description or a player count.
+std::vector<FolderFields> folder_fields(std::span<const uint8_t> bytes) {
+    std::vector<FolderFields> fields;
+    oa::formats::oamod::Node root;
+    oa::formats::oamod::ReadError error{};
+    if (!oa::formats::oamod::read_document(bytes, root, error))
+        return fields;
+    const oa::formats::oamod::Node* maps = oa::formats::oamod::find_entry(root, "maps");
+    if (maps == nullptr || maps->kind != oa::formats::oamod::NodeKind::sequence)
+        return fields;
+    fields.reserve(maps->children.size());
+    for (const oa::formats::oamod::Node& entry : maps->children) {
+        FolderFields field;
+        if (entry.kind == oa::formats::oamod::NodeKind::mapping) {
+            field.name = oa::formats::oamod::find_entry(entry, "name") != nullptr;
+            field.description = oa::formats::oamod::find_entry(entry, "description") != nullptr;
+            field.players = oa::formats::oamod::find_entry(entry, "players") != nullptr;
+        }
+        fields.push_back(field);
+    }
+    return fields;
+}
+
+/// Replaces a map's name, description or players when the folder set them.
+///
+/// Size, preview and files stay as computed.
+void apply_folder(
+    BuiltMap& built, const map_pack::Manifest& header, const std::vector<FolderFields>& fields
+) {
+    const std::string key = folded(built.entry.stem);
+    for (std::size_t index = 0; index < header.maps.size() && index < fields.size(); ++index) {
+        if (folded(header.maps[index].stem) != key)
+            continue;
+        const map_pack::MapEntry& given = header.maps[index];
+        if (fields[index].name)
+            built.entry.title = given.title;
+        if (fields[index].description)
+            built.entry.description = given.description;
+        if (fields[index].players)
+            built.entry.players = given.players;
+        return;
+    }
+}
+
+/// Reads numplayers. An empty value is absent. One number outside 2 to 10,
+/// or a token that is not a whole number, refuses the whole value.
+PermittedCounts permitted_counts(std::string_view text) {
+    PermittedCounts counts;
+    if (text.empty())
+        return counts;
+    counts.stated = true;
+    int32_t largest = 0;
+    bool any = false;
+    std::size_t at = 0;
+    while (true) {
+        const std::size_t comma = text.find(',', at);
+        const std::string_view raw =
+            text.substr(at, comma == std::string_view::npos ? std::string_view::npos : comma - at);
+        std::string_view token = raw;
+        while (!token.empty() && (token.front() == ' ' || token.front() == '\t'))
+            token.remove_prefix(1);
+        while (!token.empty() && (token.back() == ' ' || token.back() == '\t'))
+            token.remove_suffix(1);
+        if (token.empty())
+            return counts;
+        for (const char character : token) {
+            if (character < '0' || character > '9')
+                return counts;
+        }
+        int32_t value = 0;
+        const char* const first = token.data();
+        const char* const last = first + token.size();
+        const std::from_chars_result parsed = std::from_chars(first, last, value);
+        if (parsed.ec != std::errc{} || parsed.ptr != last || value < 2 ||
+            value > map_pack::most_players)
+            return counts;
+        if (!any || value > largest)
+            largest = value;
+        any = true;
+        if (comma == std::string_view::npos)
+            break;
+        at = comma + 1;
+    }
+    if (!any)
+        return counts;
+    counts.accepted = true;
+    counts.largest = largest;
+    return counts;
 }
 
 /// Requires a listed map's OTA and TNT, and returns them in disk spelling.
@@ -717,7 +851,22 @@ BuiltMap build_map(
             stem + " has " + std::to_string(most_starts) +
             " start positions in its Network schemas; a map is for 2 to 10 players"
         );
-    built.entry.players = static_cast<int32_t>(most_starts);
+    const PermittedCounts counts = permitted_counts(metadata.permitted_player_counts);
+    if (counts.accepted) {
+        built.entry.players = counts.largest;
+        if (static_cast<std::size_t>(counts.largest) > most_starts) {
+            built.player_note = stem + ": numplayers lists " + std::to_string(counts.largest) +
+                                " players, more than its " + std::to_string(most_starts) +
+                                " start positions; using " + std::to_string(counts.largest);
+        }
+    } else {
+        built.entry.players = static_cast<int32_t>(most_starts);
+        if (counts.stated) {
+            built.player_note = stem + ": numplayers '" + metadata.permitted_player_counts +
+                                "' does not list whole numbers from 2 to 10; using " +
+                                std::to_string(most_starts) + " start positions";
+        }
+    }
 
     const uint32_t width = map_side(tnt_parsed.map->attribute_width);
     const uint32_t height = map_side(tnt_parsed.map->attribute_height);
@@ -1019,9 +1168,12 @@ int pack_map(const PackMapRequest& request, Output& output) {
 
     std::vector<BuiltMap> maps;
     maps.reserve(stems.size());
+    const std::vector<FolderFields> given = folder_fields(manifest_bytes);
     for (const std::string& stem : stems) {
         const auto [ota_file, tnt_file] = require_map_files(sources, stem);
-        maps.push_back(build_map(stem, *ota_file, *tnt_file, sections, sources));
+        BuiltMap built = build_map(stem, *ota_file, *tnt_file, sections, sources);
+        apply_folder(built, header, given);
+        maps.push_back(std::move(built));
     }
 
     const std::vector<uint8_t> palette = load_palette(*request.game_dir);
@@ -1131,8 +1283,11 @@ int pack_map(const PackMapRequest& request, Output& output) {
     const sha256::Digest digest = digest_file(destination, written);
     output_file.release();
 
-    for (const BuiltMap& map : maps)
+    for (const BuiltMap& map : maps) {
+        if (!map.player_note.empty())
+            output.out << map.player_note << '\n';
         print_map(output.out, header.id, map);
+    }
     print_left(output.out, left);
     const auto hex = sha256::to_hex(digest);
     output.out << "packed " << utf8_of(destination) << ": " << pieces.size() << " files, "

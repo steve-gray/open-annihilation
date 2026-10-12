@@ -74,7 +74,7 @@ language pack; they are not defined a second time for maps.
 | `packaging.packager` | yes | 1 to 64 characters |
 | `requires.base` | no | when written, `ta-3.1c` |
 | `requires.engine` | no | the shared engine requirement, written in quotes. An unquoted `>` starts a block scalar, which is refused. Reading the manifest does not ask whether this Open Annihilation meets it |
-| `maps` | yes | 1 to 256 map entries. [4. The index](#4-the-index) |
+| `maps` | yes | 1 to 256 map entries in a packed manifest. A folder may leave the key out. [4. The index](#4-the-index) |
 
 `requires` holds `base` and `engine` and nothing else. `author` holds `name`
 and `email` and nothing else. `packaging` holds `revision`, `date` and
@@ -82,11 +82,21 @@ and `email` and nothing else. `packaging` holds `revision`, `date` and
 
 ## 4. The index
 
-`oa-tool pack` writes `maps`. An author may write the stems to include, and
-may leave the rest out; the packer fills each entry and rewrites it. In the
-packed manifest every entry is complete, and `files` is required. It is not
-optional. The game lists a pack's maps from this index and does not open the
-maps to do it.
+`oa-tool pack` writes `maps`. A folder may leave `maps` out. The packer then
+writes one entry for every map the folder holds that has a Network schema,
+in byte order of the map's path. A folder may instead list entries. Each
+entry names a `stem` and may set `name`, `description` and `players`. A
+value that is set replaces the one the packer would write, and it is checked
+by the same rules as a packed entry. `size`, `preview` and `files` are always
+computed, even when the folder sets them. A stem the folder does not hold is
+an error. A map the folder holds that the list does not name is still packed,
+and every field of that entry is computed. The listed maps come first, in the
+order written, then the maps the list does not name, in byte order of their
+paths.
+
+In the packed manifest every entry is complete, and `files` is required. It
+is not optional. The game lists a pack's maps from this index and does not
+open the maps to do it.
 
 `oa-tool pack FOLDER --game-dir DIR [--out FILE] [--force]` packs a folder
 that holds this header. `--game-dir` is the game's data. A map pack reads
@@ -96,8 +106,20 @@ stops when `--game-dir` is missing. The palette file itself is not packed.
 `<id>-<version>-r<revision>.oamap` in the current folder. `--force` replaces
 a package that is already there.
 
-The command writes each map's entry from that map's OTA and TNT. It does not
-keep an index the folder already held. `files` lists the map's OTA and TNT,
+The command writes each map's entry from that map's OTA and TNT, then keeps
+a `name`, `description` or `players` the folder set for that stem. `name` is
+the OTA's `missionname`, or the stem when that is empty. `description` is
+the OTA's `missiondescription`, cut at a whole character to 127 bytes, and
+left out when it is empty. `players` is the largest whole number in the
+OTA's `numplayers` when that field is present and every number it names is
+from 2 to 10. Otherwise `players` is the most start positions of any Network
+schema. That count is from 2 to 10, or the pack stops. A `numplayers` that
+does not parse, or that names a number outside 2 to 10, is not used, and the
+packer prints one line naming the map. A largest `numplayers` greater than
+the start positions is used, and the packer prints one line naming the map.
+The folder's `players` replaces either result.
+
+`files` lists the map's OTA and TNT,
 then the feature files the map uses, in order of their paths. A feature file
 two maps use is one file in the package and a line in each map's `files`. A
 preview is `previews/<stem>.png`, drawn from the TNT's minimap and cropped to
@@ -284,11 +306,15 @@ maps: # written by oa-tool pack
       - objects3d/wreck.3do
 ```
 
-Before packing, the same header can name only the stems to include. `oa-tool
-pack` replaces that list with the entries above.
+Before packing, the same header can name the stems and set the fields the
+folder is allowed to choose. `oa-tool pack` still writes `size`, `preview`
+and `files`, and it still packs a map this list does not name.
 
 ```yaml
 maps:
   - stem: isle_of_ashes
+    name: Isle of Ashes
+    description: "A ring of ash."
+    players: 4
   - stem: black_shoals
 ```
