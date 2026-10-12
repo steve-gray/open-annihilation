@@ -235,6 +235,8 @@ inline constexpr std::string_view interface_words[] = {
     words::row_from_registry,
     words::tab_with_count,
     words::active_map,
+    words::map_players_size,
+    words::active_from_pack,
     words::question_names_more,
     words::uninstall_failed,
     words::question_heading_version,

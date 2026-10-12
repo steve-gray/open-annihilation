@@ -108,31 +108,36 @@ filters.
   holds itself, **Built in** is a rounded pill at the top right, on the
   title's line, in a muted ground so it does not look like an installed
   chip.
-- **MAPS**: one tile for each map pack you have installed, with the pack's
-  badge and its name, and its maps under that: each map's name, how many
-  players it is for and its size ("Ridgeline · 4 players · 16x16"). When
+- **MAPS**: one tile for each map you have installed. The tile shows
+  that map's minimap, its title, how many
+  players it is for and its size ("4 players · 16x16"), and its
+  description cut to one line. Under that, **From** and the pack's name
+  is a link. Choosing it, with the pointer, Enter or a controller's A,
+  opens the Maps tab with that pack selected and its row in view. When
   you have no map pack, the tile says "No map packs are installed."
 
 The badge, the title and the lines start at the top of each tile, with the
 same small padding above them and below the last line or, on the mod tile,
 below **UNLOAD MOD**. Side by side, the mod and the language share a title
-line and the same height, and so do map packs in one row. Extra room stays
-under the shorter tile's lines.
+line and the same height, and so do maps in one row. Extra room stays
+under the shorter tile's lines. A minimap keeps its shape: it is centred
+in its square, and the rest of the square is the list's well colour.
 
 On a small window the tiles stand in one column. On a larger window the
-mod and the language stand side by side, and on the largest the map packs
+mod and the language stand side by side, and on the largest the maps
 stand in two columns when you have more than one. The tab has no search
-and no filters. The mod and language labels and each map line take no
-press; **UNLOAD MOD** does, and Tab and the arrows reach it. When the
+and no filters. The mod and language labels and each map's title line take
+no press. **UNLOAD MOD** does, and so does each map's **From** link while
+that line shows. Tab and the arrows reach both. When the
 tiles are taller than the window they scroll with the mouse wheel, a
 finger, Page Up and Page Down, Home and End, and a controller's right
 stick. The other tabs are where packages are got, updated and played.
 
-![The Active tab at Compact: Highland's tile with a Playing pill and UNLOAD MOD, and the language tile top-aligned beside the maps.](images/library/library-active-compact.png)
+![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and Atoll's minimap with its description cut short.](images/library/library-active-compact.png)
 
-![The Active tab at Regular: the mod and the language side by side, titles on one line, Playing as a pill and UNLOAD MOD at the mod tile's bottom right.](images/library/library-active-regular.png)
+![The Active tab at Regular: the mod and the language side by side, and under them each installed map with its minimap, a cut description and a From link.](images/library/library-active-regular.png)
 
-![The Active tab at Large: the same tiles, with the map packs in two columns of equal height.](images/library/library-active-large.png)
+![The Active tab at Large: the same tiles, with the maps in two columns of equal height.](images/library/library-active-large.png)
 
 ## Tabs and states
 
@@ -149,7 +154,13 @@ where registries are added, checked and turned off
 
 Each row shows the package's badge (its own picture, or up to three
 letters), its name, its version ("4.8 · rev 4" from its second packaging
-revision on, and a map pack's number of maps), its size and its state. The
+revision on, and a map pack's number of maps), its size and its state. A
+map pack of one map shows that map's minimap in place of the badge, on
+Maps and on Updates and in the details. A pack of several keeps its own
+badge or its letters, except on the Maps tab, where a pack with no badge
+shows the first map's minimap. The minimap keeps its shape in the square:
+it is centred, and the rest of the square is the list's well colour. While the
+picture has not arrived the square is an empty dashed outline. The
 Regular and Large rows add who made it and its summary, with its download
 count where the registry keeps one ("by the Ridge team · 12,400
 downloads"), and Large adds its tags. A Compact row names the registry
@@ -250,6 +261,13 @@ name) back to the list.
   ([above](#tabs-and-states)).
 - **The summary**: the registry's, or for a mod of your own its
   `oamod.yaml`'s description.
+- **The map previews**, for a map pack: one large picture when the pack
+  holds one map, and a grid of pictures when it holds several. Each
+  picture is that map's minimap, fitted the same way as the row, and under
+  it the map's name, how many players it is for, its size and its
+  description. The picture is there before you download the pack and after.
+  ![Maps, one map: the row's minimap, and a larger one in the details with the map's name, players, size and description.](images/library/library-maps-one-large.png)
+  ![Maps, several maps and no pack badge: the first map's minimap on the row, and a grid of each map in the details.](images/library/library-maps-several-large.png)
 - **The facts**:
   - **Installed**, the version you have and its packaging revision, "4.8
     (rev 3)", for a package you have installed;
@@ -361,7 +379,7 @@ where a mod's folder goes to be listed
 | Tab, Shift+Tab | the next and previous control |
 | arrow keys | move by where controls are; on the list, Up and Down choose the row |
 | Page Up, Page Down, Home, End | move through the list, or scroll the details while they have the focus, and the Active tab |
-| Enter, Space | on a row: open its details page in Compact, or go to its first button; on UNLOAD MOD: ask SWITCH MOD |
+| Enter, Space | on a row: open its details page in Compact, or go to its first button; on UNLOAD MOD: ask SWITCH MOD; on a map's From link: open Maps on that pack |
 | Cmd+F (Ctrl+F elsewhere), or `/` | the search |
 | F5 | the header's refresh icon, when a registry can be asked |
 | Ctrl+Tab, Ctrl+Shift+Tab | the next and previous tab |

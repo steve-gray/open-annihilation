@@ -38,8 +38,10 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/trust.hpp"
+#include "oa/formats/hpi.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 #include "oa/formats/url.hpp"
+#include "oa/ui/map_previews/map_previews.hpp"
 #include "oa/netgame/http/client.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
@@ -86,6 +88,8 @@ constexpr std::string_view kCloseSound = "Previous";
 constexpr std::string_view kSettingsScreen = "settings";
 /// The words the Library's rows' automation names start with.
 constexpr std::string_view kRowNamePrefix = "library.row.";
+/// The words an Active tab map line's automation name starts with.
+constexpr std::string_view kActiveMapPrefix = "library.active.map.";
 /// The key of a mod folder whose name gives no word: a folder at a root.
 constexpr std::string_view kOwnModWord = "mod";
 
@@ -547,6 +551,226 @@ void library_worker(void* argument) {
     }
 }
 
+/// Tells whether a row's read text is an entry's name. A maker's mark adds
+/// " · " and the maker after the name.
+///
+/// @param entry the entry
+/// @param text the row's text
+/// @return true when the row is that entry's
+bool row_text_names(const library::Entry& entry, std::string_view text) {
+    const std::string_view name = library::entry_name(entry);
+    if (text == name)
+        return true;
+    if (name.empty() || text.size() <= name.size() + 3)
+        return false;
+    return text.compare(0, name.size(), name) == 0 && text.compare(name.size(), 3, " · ") == 0;
+}
+
+/// Returns the key a decoded minimap is kept under for an installed map.
+///
+/// A preview picture and a terrain file are different keys, so one map can
+/// keep either.
+///
+/// @param map the installed map
+/// @return the key
+std::string installed_picture_key(const PackMap& map) {
+    if (!map.preview.empty())
+        return "png:" + map.preview.generic_string();
+    return "tnt:" + map.folder.generic_string() + "/" + map.stem;
+}
+
+/// Returns the terrain file an installed map's minimap is read from.
+///
+/// A file in the manifest whose name is the stem plus ".tnt", without regard
+/// to case, wins. Otherwise the file is maps/<stem>.tnt in the pack folder.
+///
+/// @param map the installed map
+/// @return the file, which need not exist
+std::filesystem::path terrain_file(const PackMap& map) {
+    const std::string wanted = ascii_lowered(map.stem + ".tnt");
+    for (const std::string& listed : map.files) {
+        const std::filesystem::path path{listed};
+        if (ascii_lowered(path.filename().string()) != wanted)
+            continue;
+        if (path.is_absolute())
+            return path;
+        return map.folder / path;
+    }
+    return map.folder / "maps" / (map.stem + ".tnt");
+}
+
+} // namespace
+
+/// Minimaps decoded for the Library, and the bytes a catalogue picture is
+/// waiting to be decoded from. The cache is used from the main thread only.
+struct MapPreviewState {
+    oa::ui::map_previews::PreviewCache cache{};
+    std::optional<oa::PaletteBytes>
+        palette{};        ///< the game palette; empty when it could not be read
+    bool palette_tried{}; ///< the palette was looked up once
+    /// The one terrain file the next base decode reads. The cache asks for
+    /// "maps/<stem>.tnt"; the reader ignores that and reads this file.
+    std::filesystem::path terrain{};
+    /// Catalogue picture bytes taken from the worker and not yet decoded, by address.
+    std::map<std::string, std::vector<uint8_t>> online_bytes{};
+    /// Decoded minimaps, by installed_picture_key or by the catalogue address.
+    std::map<std::string, library::MapPicture> pictures{};
+    uint64_t generation{}; ///< moves on when a minimap is stored
+};
+
+namespace {
+
+/// Copies one range of the terrain file the preview state names.
+///
+/// @param context the preview state
+/// @param path unused: the cache names a file inside the game data
+/// @param offset where the range starts, in bytes
+/// @param out where it is copied
+/// @param size its bytes
+/// @return false when fewer are there
+bool preview_read_map(
+    void* context, const char* /*path*/, uint32_t offset, void* out, uint32_t size
+) {
+    auto* state = static_cast<MapPreviewState*>(context);
+    if (state == nullptr || out == nullptr || size == 0 || state->terrain.empty())
+        return false;
+    std::ifstream input{state->terrain, std::ios::binary};
+    if (!input)
+        return false;
+    input.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+    if (!input)
+        return false;
+    input.read(static_cast<char*>(out), static_cast<std::streamsize>(size));
+    return input.gcount() == static_cast<std::streamsize>(size);
+}
+
+/// Reads an installed map's preview picture, at most the picture cache's limit.
+///
+/// @param file the picture
+/// @param[out] out its bytes
+/// @return false when it cannot be read
+bool preview_read_file(
+    void* /*context*/, const std::filesystem::path& file, std::vector<uint8_t>* out
+) {
+    if (out == nullptr)
+        return false;
+    std::error_code size_error;
+    const auto size = std::filesystem::file_size(file, size_error);
+    if (size_error || size == 0 || size > static_cast<uintmax_t>(content::max_picture_bytes))
+        return false;
+    std::ifstream input{file, std::ios::binary};
+    if (!input)
+        return false;
+    out->resize(static_cast<std::size_t>(size));
+    input.read(reinterpret_cast<char*>(out->data()), static_cast<std::streamsize>(size));
+    if (input.gcount() != static_cast<std::streamsize>(size)) {
+        out->clear();
+        return false;
+    }
+    return true;
+}
+
+/// Copies catalogue picture bytes the host has already taken.
+///
+/// @param context the preview state
+/// @param key the picture's address
+/// @param[out] out its bytes
+/// @return false when they have not been taken
+bool preview_online_bytes(void* context, const std::string& key, std::vector<uint8_t>* out) {
+    auto* state = static_cast<MapPreviewState*>(context);
+    if (state == nullptr || out == nullptr)
+        return false;
+    const auto found = state->online_bytes.find(key);
+    if (found == state->online_bytes.end() || found->second.empty())
+        return false;
+    *out = found->second;
+    return true;
+}
+
+/// Copies a decoded thumbnail into the pictures the inputs are built from.
+///
+/// @param[in,out] state the preview state
+/// @param request the picture, already asked for
+/// @return true when a new picture was stored
+bool store_ready_preview(
+    MapPreviewState& state, const oa::ui::map_previews::PreviewRequest& request
+) {
+    const oa::ui::map_previews::Thumbnail* thumbnail = state.cache.ask(request);
+    if (thumbnail == nullptr || thumbnail->width <= 0 || thumbnail->height <= 0)
+        return false;
+    if (state.pictures.find(request.key) != state.pictures.end())
+        return false;
+    const auto width = static_cast<uint32_t>(thumbnail->width);
+    const auto height = static_cast<uint32_t>(thumbnail->height);
+    const std::size_t bytes =
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4U;
+    if (thumbnail->rgba.size() != bytes)
+        return false;
+    library::MapPicture picture;
+    picture.rgba = thumbnail->rgba;
+    picture.width = width;
+    picture.height = height;
+    state.pictures.emplace(request.key, std::move(picture));
+    state.online_bytes.erase(request.key);
+    return true;
+}
+
+/// Tells whether an Active map's line is on screen.
+///
+/// @param list the display list
+/// @param number the map's place among the tiles, from 1
+/// @return true when its label has room
+bool active_tile_shows(const kit::DisplayList& list, std::size_t number) {
+    const std::string name = std::string(kActiveMapPrefix) + std::to_string(number);
+    for (const kit::Control& control : list.controls) {
+        if (control.name != name)
+            continue;
+        return control.rect.width > 0 && control.rect.height > 0;
+    }
+    return false;
+}
+
+/// Tells whether a list row or the open details show an entry.
+///
+/// @param model the Library
+/// @param list the display list
+/// @param entry the entry
+/// @return true when it is on screen
+bool entry_on_screen(
+    const library::Library& model, const kit::DisplayList& list, const library::Entry& entry
+) {
+    if (model.selected && *model.selected == entry.id)
+        return true;
+    for (const kit::Control& control : list.controls) {
+        if (control.kind != kit::ControlKind::list_item)
+            continue;
+        if (control.name.compare(0, kRowNamePrefix.size(), kRowNamePrefix) != 0)
+            continue;
+        if (row_text_names(entry, control.text))
+            return true;
+    }
+    return false;
+}
+
+/// Tells whether an entry is an installed map pack.
+///
+/// @param entry the entry
+/// @param pack the pack
+/// @return true when the Maps tab would select this entry for the pack
+bool entry_is_installed_pack(const library::Entry& entry, const library::InstalledMaps& pack) {
+    if (entry.id.kind != library::Kind::map_pack)
+        return false;
+    if (!pack.key.empty())
+        return entry.id.key == pack.key && entry.id.registry == pack.registry;
+    return library::entry_name(entry) == pack.name;
+}
+
+/// One minimap to decode this frame.
+struct PreviewJob {
+    oa::ui::map_previews::PreviewRequest request{};
+    std::filesystem::path terrain{}; ///< set for a terrain file
+};
+
 } // namespace
 
 library::Tab library_tab_of(settings::LibraryTab tab) noexcept {
@@ -689,20 +913,30 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
             return;
     }
     // A picture already asked for, ready or refused is not asked for
-    // again; what waits is forgotten as the Library closes.
+    // again; what waits is forgotten as the Library closes. A row whose
+    // maker shows reads as the name, then " · ", then the maker.
     const auto ask = [this](const library::Entry& entry) {
         const auto url = picture_urls.find({entry.id.registry, entry.id.key});
-        if (url == picture_urls.end() || badges.count(url->second) != 0)
+        if (url != picture_urls.end() && badges.count(url->second) == 0)
+            work.pictures->request(entry.id.registry, url->second);
+        if (previews == nullptr || entry.listing == nullptr)
             return;
-        work.pictures->request(entry.id.registry, url->second);
+        for (const library::MapLine& map : entry.listing->maps) {
+            if (map.preview_url.empty() || previews->pictures.count(map.preview_url) != 0 ||
+                previews->online_bytes.count(map.preview_url) != 0)
+                continue;
+            if (work.pictures->refused(entry.id.registry, map.preview_url))
+                continue;
+            work.pictures->request(entry.id.registry, map.preview_url);
+        }
     };
     for (const kit::Control& control : list.controls) {
         if (control.kind != kit::ControlKind::list_item ||
             control.name.compare(0, kRowNamePrefix.size(), kRowNamePrefix) != 0)
             continue;
-        for (const std::size_t index : model.visible) {
-            const library::Entry& entry = model.entries[index];
-            if (library::entry_name(entry) == control.text)
+        for (const std::size_t row : model.visible) {
+            const library::Entry& entry = model.entries[row];
+            if (row_text_names(entry, control.text))
                 ask(entry);
         }
     }
@@ -716,6 +950,149 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
     }
     if (ensure_worker())
         work.wake.notify_all();
+}
+
+void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::DisplayList& list) {
+    if (previews == nullptr)
+        return;
+    MapPreviewState& preview = *previews;
+    if (!preview.palette_tried) {
+        preview.palette_tried = true;
+        try {
+            const std::vector<uint8_t> bytes = runtime.assets_.read("palettes/palette.pal").bytes;
+            if (bytes.size() == oa::PaletteBytes{}.size()) {
+                oa::PaletteBytes palette{};
+                std::copy(bytes.begin(), bytes.end(), palette.begin());
+                preview.palette = palette;
+            }
+        } catch (const std::exception&) {
+        }
+    }
+
+    std::vector<PreviewJob> jobs;
+    const auto want = [&](oa::ui::map_previews::PreviewRequest request,
+                          std::filesystem::path terrain) {
+        if (request.key.empty() || preview.pictures.count(request.key) != 0 ||
+            preview.cache.failed(request.key))
+            return;
+        for (const PreviewJob& job : jobs)
+            if (job.request.key == request.key)
+                return;
+        jobs.push_back(PreviewJob{std::move(request), std::move(terrain)});
+    };
+
+    if (model.tab == library::Tab::active) {
+        const library::ActiveSetup setup = library::active_setup(model);
+        for (const PackMap& map : runtime.map_packs().maps()) {
+            const std::string title = map.title.empty() ? map.stem : map.title;
+            bool shows = false;
+            for (std::size_t place = 0; place < setup.maps.size(); ++place) {
+                const library::ActiveMap& tile = setup.maps[place];
+                if (tile.name == title && tile.pack_name == map.pack_name &&
+                    active_tile_shows(list, place + 1))
+                    shows = true;
+            }
+            if (!shows)
+                continue;
+            oa::ui::map_previews::PreviewRequest request;
+            request.key = installed_picture_key(map);
+            if (!map.preview.empty()) {
+                request.source = oa::ui::map_previews::PreviewSource::pack;
+                request.file = map.preview;
+                want(std::move(request), {});
+            } else if (preview.palette) {
+                request.source = oa::ui::map_previews::PreviewSource::base;
+                request.map = map.stem;
+                want(std::move(request), terrain_file(map));
+            }
+        }
+    } else {
+        for (const library::Entry& entry : model.entries) {
+            if (entry.id.kind != library::Kind::map_pack || !entry_on_screen(model, list, entry))
+                continue;
+            if (entry.listing != nullptr) {
+                for (const library::MapLine& line : entry.listing->maps) {
+                    if (line.preview_url.empty() ||
+                        preview.online_bytes.count(line.preview_url) == 0)
+                        continue;
+                    oa::ui::map_previews::PreviewRequest request;
+                    request.key = line.preview_url;
+                    request.source = oa::ui::map_previews::PreviewSource::online;
+                    want(std::move(request), {});
+                }
+            }
+            const library::InstalledMaps* pack = nullptr;
+            for (const library::InstalledMaps& installed : model.inputs.map_packs) {
+                if (entry_is_installed_pack(entry, installed)) {
+                    pack = &installed;
+                    break;
+                }
+            }
+            if (pack == nullptr)
+                continue;
+            for (const PackMap& map : runtime.map_packs().maps()) {
+                if (map.pack_name != pack->name)
+                    continue;
+                bool listed = false;
+                for (const library::MapLine& line : pack->maps)
+                    listed = listed || line.stem == map.stem;
+                if (!listed)
+                    continue;
+                oa::ui::map_previews::PreviewRequest request;
+                request.key = installed_picture_key(map);
+                if (!map.preview.empty()) {
+                    request.source = oa::ui::map_previews::PreviewSource::pack;
+                    request.file = map.preview;
+                    want(std::move(request), {});
+                } else if (preview.palette) {
+                    request.source = oa::ui::map_previews::PreviewSource::base;
+                    request.map = map.stem;
+                    want(std::move(request), terrain_file(map));
+                }
+            }
+        }
+    }
+
+    preview.cache.new_frame();
+    oa::ui::map_previews::PreviewHost reader;
+    reader.context = &state;
+    reader.read_map = preview_read_map;
+    reader.read_file = preview_read_file;
+    reader.online_bytes = preview_online_bytes;
+    reader.palette = preview.palette ? &*preview.palette : nullptr;
+
+    const PreviewJob* base_job = nullptr;
+    for (const PreviewJob& job : jobs) {
+        if (job.request.source == oa::ui::map_previews::PreviewSource::base) {
+            base_job = &job;
+            break;
+        }
+    }
+    if (base_job != nullptr) {
+        preview.terrain = base_job->terrain;
+        preview.cache.ask(base_job->request);
+        preview.cache.pump(reader, 1);
+    } else {
+        preview.terrain.clear();
+        for (const PreviewJob& job : jobs)
+            preview.cache.ask(job.request);
+        preview.cache.pump(reader, 4);
+    }
+
+    bool stored = false;
+    const auto take_job = [&](const PreviewJob& job) {
+        if (store_ready_preview(preview, job.request))
+            stored = true;
+        else if (preview.cache.failed(job.request.key))
+            preview.online_bytes.erase(job.request.key);
+    };
+    if (base_job != nullptr)
+        take_job(*base_job);
+    else
+        for (const PreviewJob& job : jobs)
+            take_job(job);
+    if (stored)
+        ++preview.generation;
 }
 
 void Runtime::destroy_library_host(LibraryHost* host) noexcept {
@@ -746,6 +1123,8 @@ Runtime::LibraryHost& Runtime::library_host() {
         host.work.pictures =
             std::make_unique<content::PictureCache>(pictures_folder, &host.work.cancel);
     }
+    if (!library_->previews)
+        library_->previews = std::make_unique<MapPreviewState>();
     return *library_;
 }
 
@@ -816,8 +1195,9 @@ uint64_t Runtime::library_feed_generation() {
         counts_seen = host.work.counts_generation;
     }
     const uint64_t pictures = host.work.pictures ? host.work.pictures->generation() : 0;
+    const uint64_t minimaps = host.previews ? host.previews->generation : 0;
     return content_service().generation() + content_downloads().generation() + searches + pictures +
-           counts_seen + engine_settings_state().offered_generation;
+           minimaps + counts_seen + engine_settings_state().offered_generation;
 }
 
 library::Inputs Runtime::library_inputs() {
@@ -914,15 +1294,37 @@ library::Inputs Runtime::library_inputs() {
             listing.size = package.size;
             listing.coverage = package.coverage;
             listing.published = package.published;
-            for (const data::catalogue::MapEntry& map : package.maps)
-                listing.maps.push_back(
-                    {map.name,
-                     map.players,
-                     std::to_string(map.width) + "x" + std::to_string(map.height)}
-                );
+            const content::RegistryView* view = registry_view(*snapshot, entry.registry);
+            for (const data::catalogue::MapEntry& map : package.maps) {
+                library::MapLine line;
+                line.name = map.name;
+                line.players = map.players;
+                line.size = std::to_string(map.width) + "x" + std::to_string(map.height);
+                line.stem = map.stem;
+                if (!map.preview.empty() && view != nullptr && view->served_from) {
+                    if (const std::optional<formats::url::Url> resolved =
+                            formats::url::resolve_reference(*view->served_from, map.preview))
+                        line.preview_url = formats::url::url_text(*resolved);
+                }
+                if (host.previews != nullptr && !line.preview_url.empty()) {
+                    const auto decoded = host.previews->pictures.find(line.preview_url);
+                    if (decoded != host.previews->pictures.end())
+                        line.preview = decoded->second;
+                    else if (
+                        host.work.pictures &&
+                        host.previews->online_bytes.count(line.preview_url) == 0
+                    ) {
+                        if (std::optional<std::vector<uint8_t>> preview_bytes =
+                                host.work.pictures->take_bytes(entry.registry, line.preview_url))
+                            host.previews->online_bytes.emplace(
+                                line.preview_url, std::move(*preview_bytes)
+                            );
+                    }
+                }
+                listing.maps.push_back(std::move(line));
+            }
             // A count is shown only when this registry hands out keys and its
             // last counts name this package. It changes nothing but the byline.
-            const content::RegistryView* view = registry_view(*snapshot, entry.registry);
             if (view != nullptr &&
                 view->registry.descriptor.mode == data::registry::DownloadMode::tokens &&
                 view->registry.descriptor.api) {
@@ -1198,11 +1600,30 @@ library::Inputs Runtime::library_inputs() {
             pack_folders.push_back(map.folder);
             library::InstalledMaps added;
             added.name = map.pack_name;
+            for (std::size_t matched = 0; matched < installed.size() && matched < matches.size();
+                 ++matched) {
+                if (matches[matched].provenance == content::Provenance::own)
+                    continue;
+                if (!same_folder(path_to_utf8(installed[matched].folder), path_to_utf8(map.folder)))
+                    continue;
+                added.key = matches[matched].key;
+                added.registry = matches[matched].registry;
+                break;
+            }
             inputs.map_packs.push_back(std::move(added));
         }
-        inputs.map_packs[place].maps.push_back(
-            {map.title.empty() ? map.stem : map.title, map.players, map.size}
-        );
+        library::MapLine line;
+        line.name = map.title.empty() ? map.stem : map.title;
+        line.players = map.players;
+        line.size = map.size;
+        line.description = map.description;
+        line.stem = map.stem;
+        if (host.previews != nullptr) {
+            const auto decoded = host.previews->pictures.find(installed_picture_key(map));
+            if (decoded != host.previews->pictures.end())
+                line.preview = decoded->second;
+        }
+        inputs.map_packs[place].maps.push_back(std::move(line));
     }
     inputs.registries_notice = registry_edit_notice();
     const fs::path& game_folder =
@@ -1486,6 +1907,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
         seen_model_ = host.model_revision;
         list_ = library::library_layout(host.model, host.state, frame_, *fonts);
         host.request_pictures(list_);
+        host.pump_map_previews(runtime_, list_);
     }
 
     /// Carries out what an input asked for, and lays the Library out again

@@ -74,12 +74,25 @@ inline constexpr kit::ControlId first_tag = 1000;
 /// An open drop-down's item: this and the item's place among its items,
 /// below first_active_map.
 inline constexpr kit::ControlId first_menu_item = 3000;
-/// The Active tab's line on a map, inside its pack's tile: this and the
-/// map's place among the lines, from 0, below first_row.
+/// The Active tab's line on a map: this and the map's place among the
+/// tiles, from 0, below first_row. The label takes no press.
 inline constexpr kit::ControlId first_active_map = 6000;
-/// The most maps whose lines are labels; the lines after them are drawn
-/// but not named.
+/// The most maps whose lines and From links are named; the tiles after
+/// them are drawn but not named.
 inline constexpr std::size_t most_active_maps = 4000;
+/// The Active tab's From link: this and the map's place among the tiles,
+/// from 0. Past the Registries-tab controls, so a link is never a row.
+inline constexpr kit::ControlId first_active_from = 9000000;
+
+/// Tells whether a control is an Active tab From link.
+///
+/// @param id the control
+/// @return true for a link the map tiles name
+[[nodiscard]] constexpr bool active_from_control(kit::ControlId id) noexcept {
+    return id >= first_active_from &&
+           id < first_active_from + static_cast<kit::ControlId>(most_active_maps);
+}
+
 /// A row: this and the entry's place in the model's visible entries, below first_row_icon.
 inline constexpr kit::ControlId first_row = 10000;
 /// A row's state icon that is pressed as GET or UPDATE: this and the

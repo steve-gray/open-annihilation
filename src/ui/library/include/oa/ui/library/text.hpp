@@ -365,6 +365,10 @@ inline constexpr std::string_view active_players_one = "{count} player";
 inline constexpr std::string_view active_players_many = "{count} players";
 /// One map of an installed map pack, as automation reads its line.
 inline constexpr std::string_view active_map = "{map} · {players} · {size}";
+/// A map's players and size under its title: "4 players · 16x16".
+inline constexpr std::string_view map_players_size = "{players} · {size}";
+/// The link on an Active map's tile that opens its pack on the Maps tab.
+inline constexpr std::string_view active_from_pack = "From {pack}";
 inline constexpr std::string_view active_no_maps = "No map packs are installed.";
 
 // A row: the version and size under the name at Compact.
