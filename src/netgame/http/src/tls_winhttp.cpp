@@ -119,8 +119,8 @@ struct AsyncNote {
 };
 
 struct AsyncResult {
-    uintptr_t result;
-    DWORD error;
+    uintptr_t result{};
+    DWORD error{};
 };
 
 void WINAPI
