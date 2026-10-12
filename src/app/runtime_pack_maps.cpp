@@ -18,6 +18,7 @@
 #include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/ui/frontend/savegame_dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/map_list.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include <algorithm>
@@ -502,6 +503,41 @@ void Runtime::refresh_listed_pack_maps() {
     }
 
     oa::ui::frontend_multiplayer::multiplayer_reload_maps();
+}
+
+void Runtime::label_bound_maps() {
+    namespace mp = oa::ui::frontend_multiplayer;
+
+    // Copy each title before the next find. The first find may refresh the
+    // index, which frees the list a pointer into it would still name.
+    struct Held {
+        std::string key;
+        std::string title;
+        std::string pack_name;
+        bool pack = false;
+    };
+
+    std::vector<Held> held;
+    held.reserve(bound_map_names_.size());
+    for (const std::string& name : bound_map_names_) {
+        Held row;
+        row.key = name;
+        if (pack::split_pack_map_name(name)) {
+            row.pack = true;
+            if (const PackMap* map = map_packs().find(name)) {
+                row.title = map->title;
+                row.pack_name = map->pack_name;
+            }
+        }
+        held.push_back(std::move(row));
+    }
+    std::vector<mp::MapListFact> facts;
+    facts.reserve(held.size());
+    for (const Held& row : held)
+        facts.push_back(mp::MapListFact{row.key, row.title, {}, row.pack_name, row.pack});
+    bound_map_labels_ = mp::map_list_texts(facts);
+    if (bound_map_labels_.size() != bound_map_names_.size())
+        bound_map_labels_ = bound_map_names_;
 }
 
 void Runtime::note_pack_catalogue() {

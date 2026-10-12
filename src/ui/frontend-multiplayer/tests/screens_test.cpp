@@ -22,6 +22,7 @@
 #include "oa/present/palette_tables.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
+#include "oa/ui/frontend_multiplayer/map_list.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/data/unit_definitions.hpp"
 #include "oa/test/game_assets.hpp"
@@ -1617,6 +1618,49 @@ bool write_pack_folder(const std::filesystem::path& folder) {
     return static_cast<bool>(out);
 }
 
+/// The name a map row chooses: its key when the list has one per row, else its text.
+const std::string& map_row_key(const mp::Control& list, std::size_t row) {
+    if (list.item_keys.size() == list.items.size())
+        return list.item_keys[row];
+    return list.items[row];
+}
+
+/// The words a map list shows, and choosing a row by those words or by its name.
+void check_map_list_words() {
+    const mp::MapListFact rows[] = {
+        {"comet@sample-comet", "Comet Catcher", {}, "Cavedog: Comet Catcher", true},
+        {"Comet Catcher", {}, {}, {}, false},
+        {"ponds@sample-ponds", "A Plethora of Ponds", {}, "Sample Ponds", true},
+        {"ashes@archipelago", {}, "Isle of Ashes", "Archipelago Pack", true},
+        {"bare@archipelago", {}, {}, "Archipelago Pack", true},
+    };
+    const std::vector<std::string> texts = mp::map_list_texts(rows);
+    const std::vector<std::string> keys{
+        "comet@sample-comet",
+        "Comet Catcher",
+        "ponds@sample-ponds",
+        "ashes@archipelago",
+        "bare@archipelago",
+    };
+    expect(texts.size() == keys.size(), "every row has words");
+    if (texts.size() != keys.size())
+        return;
+    expect(texts[0] == "Comet Catcher (Cavedog: Comet Catcher)", "a shared title names the pack");
+    expect(texts[1] == "Comet Catcher", "a base map keeps its file name");
+    expect(texts[2] == "A Plethora of Ponds", "a pack map shows its index title");
+    expect(texts[3] == "Isle of Ashes", "a pack map with no index name shows the map file's title");
+    expect(texts[4] == "bare@archipelago", "a pack map with no title shows its name");
+    const int32_t by_words = mp::map_list_row(texts, keys, texts[0]);
+    const int32_t by_name = mp::map_list_row(texts, keys, keys[0]);
+    expect(
+        by_words == 0 && by_name == 0,
+        "the marked words and the pack map's name choose the same map"
+    );
+    expect(mp::map_list_row(texts, keys, "Comet Catcher") == 1, "the base map's words choose it");
+    expect(mp::map_list_row(texts, keys, "") == -1, "an empty choice matches nothing");
+    expect(mp::map_list_row(texts, keys, "Missing") == -1, "an unknown choice matches nothing");
+}
+
 /// Clicks a map row, scrolling it onto the page first.
 void click_map_row(Driver& d, mp::Control& names, int32_t row, int32_t ox, int32_t oy) {
     const int32_t visible =
@@ -1700,6 +1744,7 @@ void check_bound_base_maps(Driver& d) {
     if (names == nullptr)
         return;
     const std::vector<std::string> listed(names->items.begin(), names->items.end());
+    const std::vector<std::string> keys(names->item_keys.begin(), names->item_keys.end());
     std::vector<std::string> expected{
         BoundBaseMaps::kReal, PackProbe::kName, BoundBaseMaps::kRidge
     };
@@ -1707,12 +1752,110 @@ void check_bound_base_maps(Driver& d) {
     const bool other = std::find(listed.begin(), listed.end(), "Two Continents") != listed.end() ||
                        std::find(listed.begin(), listed.end(), "two continents") != listed.end();
     expect(
-        listed == expected && !other,
+        listed == expected && keys == expected && !other,
         "the bound list is the supplied maps and no other installed map"
     );
     expect(
         mp::panel_text(*modal, "DESCRIPTION") == BoundBaseMaps::kDescription,
         "the selected map's description is the one the source supplied"
+    );
+}
+
+/// Select Map shows a base map and two pack maps, one titled like the base map.
+/// Choosing that pack map by its words or by its name is the same row.
+void check_pack_map_titles(Driver& d) {
+    struct Guard {
+        ~Guard() { mp::multiplayer_bind_map_source({}); }
+    } guard;
+
+    struct TitledMaps {
+        static int32_t count(void*) { return 2; }
+
+        static bool at(void*, int32_t index, mp::LobbyPackMap* out) {
+            if (out == nullptr)
+                return false;
+            if (index == 0) {
+                *out = {
+                    "comet@sample-comet",
+                    "A catch",
+                    "16x16",
+                    8,
+                    "Comet Catcher",
+                    "Cavedog: Comet Catcher"
+                };
+                return true;
+            }
+            if (index == 1) {
+                *out = {
+                    "ponds@sample-ponds",
+                    "Many ponds",
+                    "32x32",
+                    12,
+                    "A Plethora of Ponds",
+                    "Sample Ponds"
+                };
+                return true;
+            }
+            return false;
+        }
+
+        static bool prepare(void*, const char*, char*, std::size_t) { return true; }
+
+        static void release(void*) {}
+
+        static int32_t base_count(void*) { return 2; }
+
+        static bool base_at(void*, int32_t index, mp::LobbyPackMap* out) {
+            if (out == nullptr)
+                return false;
+            if (index == 0) {
+                *out = {"Coast To Coast", "A shore", "12 x 12", 16};
+                return true;
+            }
+            if (index == 1) {
+                *out = {"Comet Catcher", "The original", "16x16", 8};
+                return true;
+            }
+            return false;
+        }
+
+        mp::LobbyMapSource source() {
+            return {this, count, at, prepare, release, base_count, base_at};
+        }
+    };
+
+    TitledMaps titled;
+    mp::multiplayer_bind_map_source(titled.source());
+    mp::multiplayer_reset();
+    if (!host_battleroom(d, "Titles", "Host"))
+        return;
+    expect(d.click("MAP"), "MAP opens on the titled pack maps");
+    auto* modal = mp::multiplayer_modal();
+    auto* names = modal != nullptr ? mp::panel_control(*modal, "MAPNAMES") : nullptr;
+    expect(names != nullptr, "SELMAP lists the titled maps");
+    if (names == nullptr)
+        return;
+    const std::vector<std::string> want_keys{
+        "Coast To Coast", "Comet Catcher", "comet@sample-comet", "ponds@sample-ponds"
+    };
+    const std::vector<std::string> want_text{
+        "Coast To Coast",
+        "Comet Catcher",
+        "Comet Catcher (Cavedog: Comet Catcher)",
+        "A Plethora of Ponds",
+    };
+    const std::vector<std::string> shown(names->items.begin(), names->items.end());
+    const std::vector<std::string> keys(names->item_keys.begin(), names->item_keys.end());
+    expect(
+        shown == want_text && keys == want_keys, "the rows show titles, and the names stay in order"
+    );
+    const int32_t by_text = mp::map_list_row(names->items, names->item_keys, want_text[2]);
+    const int32_t by_key = mp::map_list_row(names->items, names->item_keys, "comet@sample-comet");
+    const int32_t base = mp::map_list_row(names->items, names->item_keys, "Comet Catcher");
+    expect(
+        by_text == by_key && by_text == 2 && base == 1 &&
+            map_row_key(*names, static_cast<std::size_t>(by_key)) == "comet@sample-comet",
+        "the pack map's words and its name choose it, and the base map's words choose the base map"
     );
 }
 
@@ -1794,7 +1937,7 @@ void check_pack_map_page(Driver& d) {
         return;
     int32_t pack_row = -1;
     for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row) {
-        if (names->items[static_cast<std::size_t>(row)] == "isle_one@oa-test-isles")
+        if (map_row_key(*names, static_cast<std::size_t>(row)) == "isle_one@oa-test-isles")
             pack_row = row;
     }
     const int32_t shown =
@@ -1863,6 +2006,7 @@ void check_pack_map_page(Driver& d) {
     click_map_row(d, *names, pack_row, ox, oy);
     expect(
         names->list_selection == pack_row &&
+            map_row_key(*names, static_cast<std::size_t>(pack_row)) == "isle_one@oa-test-isles" &&
             names->items[static_cast<std::size_t>(pack_row)] == "isle_one@oa-test-isles",
         "the pack map's row can be chosen once it is on the page"
     );
@@ -1918,13 +2062,13 @@ void check_pack_maps(Driver& d) {
     int32_t pack_row = -1;
     int32_t base_row = -1;
     for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row) {
-        if (names->items[static_cast<std::size_t>(row)] != PackProbe::kName)
+        if (map_row_key(*names, static_cast<std::size_t>(row)) != PackProbe::kName)
             continue;
         ++listed;
         pack_row = row;
     }
     for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row) {
-        if (names->items[static_cast<std::size_t>(row)] != PackProbe::kName) {
+        if (map_row_key(*names, static_cast<std::size_t>(row)) != PackProbe::kName) {
             base_row = row;
             break;
         }
@@ -1933,6 +2077,10 @@ void check_pack_maps(Driver& d) {
         return path.find(PackProbe::kName) != std::string::npos;
     });
     expect(listed == 1 && pack_row >= 0, "MAPNAMES lists the pack map once, among the base maps");
+    expect(
+        pack_row >= 0 && names->items[static_cast<std::size_t>(pack_row)] == PackProbe::kName,
+        "a pack map with no title shows its name"
+    );
     expect(!looked_up, "the pack map's files are not read while the list is built");
     if (pack_row < 0 || base_row < 0)
         return;
@@ -1988,10 +2136,14 @@ void check_pack_maps(Driver& d) {
         return;
     pack_row = -1;
     for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row)
-        if (names->items[static_cast<std::size_t>(row)] == PackProbe::kName)
+        if (map_row_key(*names, static_cast<std::size_t>(row)) == PackProbe::kName)
             pack_row = row;
     if (pack_row < 0)
         return;
+    expect(
+        names->items[static_cast<std::size_t>(pack_row)] == "Cinder Atoll",
+        "the pack map's row shows the name its index gives"
+    );
     const auto [ax, ay] = dialog_offset(map_art, modal->controls[0]);
     click_map_row(d, *names, pack_row, ax, ay);
     expect(d.click("LOAD"), "LOAD chooses the pack map by its index name");
@@ -2022,7 +2174,7 @@ void check_pack_maps(Driver& d) {
         return;
     pack_row = -1;
     for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row)
-        if (names->items[static_cast<std::size_t>(row)] == PackProbe::kName)
+        if (map_row_key(*names, static_cast<std::size_t>(row)) == PackProbe::kName)
             pack_row = row;
     if (pack_row < 0)
         return;
@@ -2031,6 +2183,7 @@ void check_pack_maps(Driver& d) {
     auto* picture = mp::panel_control(*modal, "MAPPIC");
     expect(
         names->list_selection == pack_row &&
+            map_row_key(*names, static_cast<std::size_t>(pack_row)) == PackProbe::kName &&
             names->items[static_cast<std::size_t>(pack_row)] == PackProbe::kName &&
             mp::panel_text(*modal, "DESCRIPTION") == "Doesn't fit this game: too many features" &&
             picture != nullptr && picture->active == 0,
@@ -2609,6 +2762,7 @@ void check_player_row_focus(Driver& d) {
 } // namespace
 
 int main() {
+    check_map_list_words();
     const std::filesystem::path data = oa::test::require_game_directory("the multiplayer screens");
     mp::multiplayer_reset();
     Driver d(data);
@@ -3978,6 +4132,7 @@ int main() {
     check_pack_maps(d);
     check_pack_map_page(d);
     check_bound_base_maps(d);
+    check_pack_map_titles(d);
     check_presence_badges(d);
     check_player_row_focus(d);
 

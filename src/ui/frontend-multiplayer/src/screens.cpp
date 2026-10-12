@@ -4,6 +4,7 @@
 // Multiplayer screens: resources, input routing, dialogs and drawing.
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/frontend_multiplayer/get_map.hpp"
+#include "oa/ui/frontend_multiplayer/map_list.hpp"
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/decoded.hpp"
 
@@ -120,6 +121,10 @@ struct Resources {
 struct MapInfo {
     std::string name, description, size;
     int32_t memory = 0;
+    std::string title;      ///< the pack index's name; empty for a base map
+    std::string file_title; ///< the map file's title, when the source held one
+    std::string pack_name;  ///< the pack's name; empty for a base map
+    bool pack = false;
 };
 
 struct UnitStore {
@@ -475,23 +480,42 @@ void load_maps() {
     if (!sourced && (state.ctx == nullptr || state.ctx->assets == nullptr))
         return;
     state.maps_loaded = true;
-    const auto append =
-        [&](const char* name, const char* description, const char* size, int32_t memory) {
-            if (name == nullptr || name[0] == '\0')
-                return;
-            const bool listed =
-                std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
-                    return info.name == name;
-                });
-            if (listed)
-                return;
-            MapInfo info;
-            info.name = name;
-            info.description = description != nullptr ? description : "";
-            info.size = size != nullptr ? size : "";
-            info.memory = memory;
-            state.maps.push_back(std::move(info));
-        };
+
+    // Pointers are copied before this returns. A base map keeps an empty
+    // title, so its row stays the file name.
+    struct Listed {
+        const char* name{};
+        const char* description{};
+        const char* size{};
+        int32_t memory = 0;
+        const char* title{};
+        const char* file_title{};
+        const char* pack_name{};
+        bool pack = false;
+    };
+
+    const auto append = [&](const Listed& map) {
+        if (map.name == nullptr || map.name[0] == '\0')
+            return;
+        const bool listed =
+            std::any_of(state.maps.begin(), state.maps.end(), [&](const MapInfo& info) {
+                return info.name == map.name;
+            });
+        if (listed)
+            return;
+        MapInfo info;
+        info.name = map.name;
+        info.description = map.description != nullptr ? map.description : "";
+        info.size = map.size != nullptr ? map.size : "";
+        info.memory = map.memory;
+        if (map.pack) {
+            info.title = map.title != nullptr ? map.title : "";
+            info.file_title = map.file_title != nullptr ? map.file_title : "";
+            info.pack_name = map.pack_name != nullptr ? map.pack_name : "";
+            info.pack = true;
+        }
+        state.maps.push_back(std::move(info));
+    };
     // A bound source already gathered the base maps in the one start scan.
     // With no binding, the list scans the installed maps as before.
     if (g_map_source.base_count != nullptr && g_map_source.base_at != nullptr) {
@@ -499,7 +523,7 @@ void load_maps() {
         for (int32_t index = 0; index < base; ++index) {
             LobbyPackMap map{};
             if (g_map_source.base_at(g_map_source.context, index, &map))
-                append(map.name, map.description, map.size, map.memory_mb);
+                append({map.name, map.description, map.size, map.memory_mb});
         }
     } else {
         auto& assets = *state.ctx->assets;
@@ -522,12 +546,14 @@ void load_maps() {
                 if (!parsed.ok())
                     continue;
                 append(
-                    name,
-                    parsed.metadata->mission_description.c_str(),
-                    parsed.metadata->map_size.c_str(),
-                    map_memory_mb(
-                        static_cast<int32_t>(assets.file_size(std::string("maps/") + name + ".tnt"))
-                    )
+                    {name,
+                     parsed.metadata->mission_description.c_str(),
+                     parsed.metadata->map_size.c_str(),
+                     map_memory_mb(
+                         static_cast<int32_t>(
+                             assets.file_size(std::string("maps/") + name + ".tnt")
+                         )
+                     )}
                 );
             } catch (const std::exception&) {
             }
@@ -541,7 +567,16 @@ void load_maps() {
         for (int32_t index = 0; index < extra; ++index) {
             LobbyPackMap pack{};
             if (g_map_source.at(g_map_source.context, index, &pack))
-                append(pack.name, pack.description, pack.size, pack.memory_mb);
+                append(
+                    {pack.name,
+                     pack.description,
+                     pack.size,
+                     pack.memory_mb,
+                     pack.title,
+                     pack.file_title,
+                     pack.pack_name,
+                     true}
+                );
         }
     }
     std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
@@ -627,6 +662,10 @@ void list_new_pack_map(const char* name) {
         info.description = pack.description != nullptr ? pack.description : "";
         info.size = pack.size != nullptr ? pack.size : "";
         info.memory = pack.memory_mb;
+        info.title = pack.title != nullptr ? pack.title : "";
+        info.file_title = pack.file_title != nullptr ? pack.file_title : "";
+        info.pack_name = pack.pack_name != nullptr ? pack.pack_name : "";
+        info.pack = true;
         state.maps.push_back(std::move(info));
         std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
             return a.name < b.name;
@@ -4160,7 +4199,7 @@ void multiplayer_reload_maps() {
     state.mapselect.names.reserve(state.maps.size());
     for (const MapInfo& info : state.maps)
         state.mapselect.names.push_back(info.name);
-    panel_fill_list(state.modal.panel, "MAPNAMES", state.mapselect.names);
+    multiplayer_fill_map_names(state.modal.panel, state.mapselect.names);
     if (highlighted.empty())
         return;
     for (std::size_t row = 0; row < state.mapselect.names.size(); ++row) {
@@ -4177,6 +4216,39 @@ int32_t multiplayer_map_count() {
     if (count > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
         return std::numeric_limits<int32_t>::max();
     return static_cast<int32_t>(count);
+}
+
+std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names) {
+    load_maps();
+    const auto& maps = ui().maps;
+    std::vector<MapListFact> facts;
+    facts.reserve(names.size());
+    for (const std::string& key : names) {
+        const auto found = std::find_if(maps.begin(), maps.end(), [&](const MapInfo& info) {
+            return info.name == key;
+        });
+        MapListFact fact;
+        fact.key = key;
+        if (found != maps.end()) {
+            fact.title = found->title;
+            fact.file_title = found->file_title;
+            fact.pack_name = found->pack_name;
+            fact.pack = found->pack;
+        }
+        facts.push_back(fact);
+    }
+    std::vector<std::string> texts = map_list_texts(facts);
+    if (texts.size() != names.size())
+        texts.assign(names.begin(), names.end());
+    return texts;
+}
+
+void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names) {
+    std::vector<std::string> texts = multiplayer_map_texts(names);
+    if (texts.size() != names.size())
+        texts.assign(names.begin(), names.end());
+    panel_fill_list(panel, "MAPNAMES", std::move(texts));
+    panel_set_item_keys(panel, "MAPNAMES", names);
 }
 
 const char* multiplayer_map_at(int32_t index) {

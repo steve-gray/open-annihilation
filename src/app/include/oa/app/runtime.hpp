@@ -13706,6 +13706,11 @@ class Runtime final : public menu::Host,
     /// @param names sorted map names
     void bind_map_names(std::span<const std::string> names) override;
 
+    /// Fills the words MAPNAMES shows from the pack index, in `bound_map_names_` order.
+    ///
+    /// A base map's row stays its file name. The names themselves do not change.
+    void label_bound_maps();
+
     /// Installs the MAPNAMES selection-change callback; the runtime previews the selection itself.
     void install_map_selection_callback() override;
 
@@ -14607,6 +14612,8 @@ class Runtime final : public menu::Host,
     std::vector<oa::data::defs::UnitPreviewKeys> unit_preview_keys_;
     map_modal::ModalState map_modal_{};
     std::vector<std::string> bound_map_names_;
+    /// The words MAPNAMES shows, one per `bound_map_names_` entry. The names stay the keys.
+    std::vector<std::string> bound_map_labels_;
     std::string pending_parent_map_name_;
     // The map selection's picture; null until a map's picture is first used.
     std::unique_ptr<MapPictureState, void (*)(MapPictureState*) noexcept> map_picture_{
