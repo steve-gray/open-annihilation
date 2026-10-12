@@ -52,6 +52,9 @@ Every document in the repository, by what you want to do.
   Total Annihilation files onto an iPhone or an iPad: its three routes,
   stopping and continuing a copy, Settings › Game files and managing the
   files, and the `--check-game-files` check.
+- [game-content.md](game-content.md): the base games and expansions the
+  engine knows, the files each one is made of, and which expansions need
+  which others.
 - [typing.md](typing.md): typing in any script, Chinese among them, in
   the chat lines, a saved game's name and the whiteboard: input methods,
   commands, saves and recordings named in any script, the iPhone and iPad
