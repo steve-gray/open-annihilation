@@ -521,6 +521,30 @@ bool multiplayer_compose(const char* composition) noexcept;
 ///     machine is not the host
 bool multiplayer_map_list_rect(int32_t* x, int32_t* y, int32_t* width, int32_t* height) noexcept;
 
+/// Tells whether a point on the canvas lies on a shown list's scroll arrow,
+/// and that list shows a page of rows the arrow can move.
+///
+/// A list whose rows all fit, a bar that is not shown, and a list with no
+/// row pitch are not such arrows: a click there is the game's own.
+///
+/// @param x the point's column on the canvas
+/// @param y the point's row on the canvas
+/// @return true when the point is on such an arrow
+[[nodiscard]] bool multiplayer_list_page_arrow(int32_t x, int32_t y) noexcept;
+
+/// Moves the list whose scroll arrow contains the point by one page of the
+/// rows it shows, toward that arrow, and the scroll bar's knob follows.
+///
+/// One step of the knob does not bring a new row onto the page, so a program
+/// that clicks the arrow to reach a row would run out of clicks. A page is
+/// the rows the list shows. A player's own click on the arrow does not come
+/// here, and still steps the knob once.
+///
+/// @param x the point's column on the canvas
+/// @param y the point's row on the canvas
+/// @return true when the list's first row changed
+bool multiplayer_scroll_list_page(int32_t x, int32_t y) noexcept;
+
 /// Shows a map in the host's open map dialog, as a click on its row
 /// highlights it: when the name is not in the screens' map list, which is
 /// built once a visit, the list is built again, so that a pack installed

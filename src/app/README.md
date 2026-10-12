@@ -303,9 +303,11 @@ latched the closing key and drew a backdrop.
   is refused) through the platform's `take_opened_file` where it has one,
   and opens the window filled in from it. A run nobody watches leaves the
   files waiting, unless `--check-registries` asks for them. CHECK reads
-  the typed address with `parse_http_url` first: an https address, and any
-  other the reader refuses, is refused there with its sentence, and the
-  content service is never asked. Otherwise the window asks the content
+  the typed address with `parse_http_url` first: an address the reader
+  refuses is refused there, and the content service is never asked. An
+  https address is asked. The client uses the system's TLS where this
+  system has it, and reads https as http where it does not. A certificate
+  the system rejects fails the check. The window asks the content
   service (`check_registry_url`, `check_mirror`, or `check_registry_file`
   for a file) and polls `registry_check` each frame in its tick; CANCEL
   closes it and drops the check, whose answer is never used. ADD calls
@@ -329,7 +331,7 @@ latched the closing key and drew a backdrop.
   its 2,048-byte limit. `native-registries` (`--check-registries`) writes
   its own registry list under `--user-folder` before the content service
   starts, switches its added registry off and on at once, removes it at
-  once, refuses an https address without a check, and opens an `.oareg`
+  once, asks about an https address, and opens an `.oareg`
   file whose catalogue at 127.0.0.1:1 cannot be reached.
 - **Scale and size class.** On the front end the layer draws its screens at
   a whole scale on the kit canvas's crisp form, or at 150% on its smooth
@@ -552,11 +554,13 @@ runtime goes).
   (`content::PictureCache`, with its own HTTP client and no install ID)
   for the rows the Library shows, never while a match runs. The host's
   destructor stops it and joins it within a second, a fetch included.
-- **The dot.** The main menu's OA button wears the kit's attention dot
-  (`kit::draw_oa_button`) while `library_update_count` is above 0: the
-  updates the Library's last model counts as installable, so the dot shows
-  from the first frame the cached catalogue offers one. With none the
-  button is drawn byte for byte as before.
+- **The dot and the count.** The main menu's OA button wears the kit's
+  attention dot (`kit::draw_oa_button`) while `library_update_count` is
+  above 0: the updates the Library's last model counts as installable, so
+  the dot shows from the first frame the cached catalogue offers one. Its
+  bottom-right badge is the number of mods that model lists (the Mods tab's
+  All), or a spinner while a fetch has not yet produced a list. With no
+  updates the button is that face and that badge.
 - **The actions.** OPEN FOLDER shows the package's folder
   (`open_player_folder`) and HOMEPAGE opens its page (`open_web_link`),
   both recorded in a run nobody watches. SETTINGS… opens Settings over the
@@ -600,10 +604,11 @@ runtime goes).
 - **The check.** `native-library` (`--check-library`,
   `runtime_library_check.cpp`) gives the Library a feed of made-up
   packages and no network, with its data and the player's folder in the
-  build tree, at 640x480 and 1920x1080: the button drawn as before with no
-  update, the Library opened on Active, its lines read and taking no
-  press, and closed, the dot and `oa.button`'s "Library · 2 updates" with
-  two, the Library on Active and its Updates tab on its two updates,
+  build tree, at 640x480 and 1920x1080: the button's count of the fixture's
+  four mods with no update (`oa.button` "Library · 4 mods"), the Library
+  opened on Active, its lines read and taking no press, and closed, the dot
+  and `oa.button`'s "Library · 4 mods · 2 updates" with two, the Library on
+  Active and its Updates tab on its two updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
   recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft
   restart, Settings over the Library and the Library over Settings, never

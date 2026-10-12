@@ -12,7 +12,7 @@
 // follows the declared order and the arrows reach every control that takes
 // the focus; the names are step 8's and unique; every text fits, and the
 // Rules fact is shown whole. The Active tab is first, has no search and no
-// filters, and its lines take nothing. Then the keys, the controller's
+// filters, and its tiles take nothing. Then the keys, the controller's
 // buttons, the pointer, a finger, the wheel and typing, each changing the
 // model as the screen promises, no press on a row getting anything, and a
 // row's download arrow and up-arrow pressed as GET and UPDATE.
@@ -447,6 +447,30 @@ std::string_view word_of(lib::Action action) {
 }
 
 /// Checks a frame's layouts: the list page, the details at Regular and
+/// Returns the first text item that shows these words.
+///
+/// @param list the display list
+/// @param text the words
+/// @return the item; null when none shows them
+const kit::Item* text_item(const kit::DisplayList& list, std::string_view text) {
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::text && item.text == text)
+            return &item;
+    return nullptr;
+}
+
+/// Tells whether a layout shows a chip with these words.
+///
+/// @param list the display list
+/// @param text the chip's words
+/// @return true when one does
+bool shows_chip(const kit::DisplayList& list, std::string_view text) {
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::chip && item.text == text)
+            return true;
+    return false;
+}
+
 /// Large or the details page at Compact, and the Updates tab.
 ///
 /// @param named the frame
@@ -599,6 +623,59 @@ void check_frame(const fixture::NamedFrame& named) {
     const kit::Control* last_map = fixture::named(active_list, "library.active.map.3");
     OA_CHECK(last_map != nullptr && last_map->text == "Atoll · 6 players · 20x20");
     OA_CHECK(fixture::named(active_list, "library.active.map.4") == nullptr);
+    // The three tiles: the kit's card face, the mod's facts, and the language's.
+    if (mod_line != nullptr) {
+        OA_CHECK(!mod_line->enabled && !mod_line->focusable);
+        bool face = false;
+        bool border = false;
+        const auto same_rect = [](const kit::Rect& left, const kit::Rect& right) {
+            return left.x == right.x && left.y == right.y && left.width == right.width &&
+                   left.height == right.height;
+        };
+        for (const kit::Item& item : active_list.items) {
+            if (!same_rect(item.rect, mod_line->rect))
+                continue;
+            if (item.role == kit::Role::fill && item.colour == kit::colour::list_selected)
+                face = true;
+            if (item.role == kit::Role::outline && item.colour == kit::colour::control_border)
+                border = true;
+        }
+        OA_CHECK(face && border);
+    }
+    OA_CHECK(shows_chip(active_list, "Playing"));
+    OA_CHECK(text_item(active_list, "by the Highland team") != nullptr);
+    OA_CHECK(text_item(active_list, "0.4.0 (rev 1)") != nullptr);
+    OA_CHECK(text_item(active_list, "Polish") != nullptr);
+    OA_CHECK(text_item(active_list, "1.0 (rev 2)") != nullptr);
+    OA_CHECK(text_item(active_list, "Coverage 92%") != nullptr);
+    const kit::Item* core_pack = text_item(active_list, "Core Map Pack");
+    const kit::Item* island_pack = text_item(active_list, "Island Hopping");
+    OA_CHECK(core_pack != nullptr && island_pack != nullptr);
+    if (core_pack != nullptr && island_pack != nullptr) {
+        if (frame.size_class == kit::SizeClass::large) {
+            OA_CHECK(
+                core_pack->rect.y == island_pack->rect.y && core_pack->rect.x < island_pack->rect.x
+            );
+        } else {
+            OA_CHECK(
+                core_pack->rect.y < island_pack->rect.y && core_pack->rect.x == island_pack->rect.x
+            );
+        }
+    }
+    if (mod_line != nullptr && language_line != nullptr) {
+        if (compact) {
+            OA_CHECK(
+                mod_line->rect.y < language_line->rect.y &&
+                mod_line->rect.x == language_line->rect.x
+            );
+        } else {
+            OA_CHECK(
+                mod_line->rect.y == language_line->rect.y &&
+                mod_line->rect.x < language_line->rect.x
+            );
+        }
+    }
+    OA_CHECK(first_map != nullptr && core_pack != nullptr && first_map->rect.y > core_pack->rect.y);
 }
 
 /// Checks every frame.
@@ -643,6 +720,14 @@ void larger_classes_show_more() {
 void rows_name_their_entries() {
     const lib::Library library = with_ridge();
     const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* base = fixture::named(list, "library.row.base-game");
+    OA_CHECK(
+        base != nullptr && base->text == "Base Game (Disable Mods)" &&
+        base->kind == kit::ControlKind::list_item && !base->checked
+    );
+    OA_CHECK(
+        !library.visible.empty() && library.entries[library.visible.front()].id.key == "@base-game"
+    );
     const kit::Control* ridge = fixture::named(list, "library.row.fixture-core.ridge");
     OA_CHECK(
         ridge != nullptr && ridge->text == "Ridge" && ridge->kind == kit::ControlKind::list_item
@@ -720,16 +805,22 @@ void empty_and_offline_lists_say_why() {
     OA_EXPECT_NONE(fixture::outside_window(offline_list, {480, 324}), "offline");
     OA_EXPECT_NONE(meeting_controls(offline_list), "offline");
 
+    // No registry and no package: Mods still starts with the base game, so
+    // the empty-list line is not shown.
     lib::Library none;
     lib::refresh(none, {});
     lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
+    const kit::Control* base_row = fixture::named(none_list, "library.row.base-game");
+    OA_CHECK(
+        base_row != nullptr && base_row->text == "Base Game (Disable Mods)" && base_row->checked
+    );
     bool told = false;
     for (const kit::Item& item : none_list.items)
         told =
             told || (item.role == kit::Role::text &&
                      item.text == "Nothing here yet. Turn a registry on in Settings › Downloads.");
-    OA_CHECK(told);
+    OA_CHECK(!told);
 }
 
 /// Returns a state whose focus shows on a named control.
@@ -1255,7 +1346,39 @@ void filters_and_tags() {
     );
 }
 
-/// The Active tab's lines take no press, and with more maps than fit they
+/// With no mod played the Active tab's tile is the base game, the language
+/// says it is built in, and the maps tile says there are none.
+void active_base_game_is_a_tile() {
+    const std::vector<fixture::NamedFrame> all = fixture::frames();
+    lib::Inputs inputs = fixture::fixture_inputs();
+    for (lib::Installed& held : inputs.installed)
+        held.playing = false;
+    inputs.language = {};
+    inputs.map_packs.clear();
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    OA_CHECK(library.tab == lib::Tab::active);
+    for (const fixture::NamedFrame& named : {all[0], all[2]}) {
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const kit::Point window = lib::window_size(named.frame);
+        OA_EXPECT_NONE(fixture::outside_window(list, window), named.name + " base game");
+        OA_EXPECT_NONE(meeting_controls(list), named.name + " base game");
+        OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), named.name + " base game");
+        const kit::Control* mod = fixture::named(list, "library.active.mod");
+        OA_CHECK(mod != nullptr && mod->text == "No mod: the game as it was made");
+        OA_CHECK(mod != nullptr && !mod->enabled && !mod->focusable);
+        OA_CHECK(text_item(list, "Base Game") != nullptr);
+        OA_CHECK(text_item(list, "Total Annihilation 3.1c") != nullptr);
+        OA_CHECK(text_item(list, "3.1") != nullptr);
+        OA_CHECK(!shows_chip(list, "Playing"));
+        OA_CHECK(shows_chip(list, "Built in"));
+        OA_CHECK(text_item(list, "No map packs are installed.") != nullptr);
+        OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
+    }
+}
+
+/// The Active tab's tiles take no press, and with more maps than fit they
 /// scroll by the wheel, a finger, the page keys and the right stick.
 void active_tab_takes_nothing_and_scrolls() {
     const kit::Frame compact = fixture::frames()[0].frame;
@@ -1632,6 +1755,7 @@ int main() {
     typing_searches();
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
+    active_base_game_is_a_tile();
     registries_tab_lists_every_registry();
     more_holds_the_rest();
     details_page_keeps_its_entry();

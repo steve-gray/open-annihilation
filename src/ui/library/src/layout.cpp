@@ -74,6 +74,8 @@ constexpr std::size_t badge_letter_count = 3;
 constexpr kit::Colour badge_face = kit::colour::hint;
 /// The most bytes one word of an automation name keeps.
 constexpr std::size_t most_name_word_bytes = 40;
+/// The letters on the base game's badge: the 3.1c mark.
+constexpr std::string_view base_badge_name = "3.1c";
 /// A full progress bar, in the bar's own units.
 constexpr int32_t progress_whole = 1000;
 /// The prefix of every control's name.
@@ -620,15 +622,16 @@ oa::ui::frontend_renderer::RgbaPicture picture_of(const Badge* badge) {
     return picture;
 }
 
-/// Returns an entry's badge picture: its listing's, else its installed copy's.
+/// Returns an entry's badge picture: its own, else its listing's, else its
+/// installed copy's.
 ///
 /// @param entry the entry
 /// @return the picture; empty without one
 oa::ui::frontend_renderer::RgbaPicture badge_picture(const Entry& entry) {
-    const Badge* badge = nullptr;
-    if (entry.listing != nullptr && entry.listing->badge)
+    const Badge* badge = entry.badge;
+    if (badge == nullptr && entry.listing != nullptr && entry.listing->badge)
         badge = &*entry.listing->badge;
-    else if (entry.installed != nullptr && entry.installed->badge)
+    else if (badge == nullptr && entry.installed != nullptr && entry.installed->badge)
         badge = &*entry.installed->badge;
     return picture_of(badge);
 }
@@ -707,6 +710,11 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.by = byline(entry, library.text);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
+    else if (is_base_game(entry.id)) {
+        const std::string_view about = entry_summary(entry);
+        if (!about.empty())
+            look.lines.push_back(std::string(about));
+    }
     if (!version.empty())
         look.aside.push_back(version);
     if (!size.empty())
@@ -1852,6 +1860,549 @@ void add_details_pane(Building& building, const kit::Rect& pane) {
     }
 }
 
+/// The side of an Active tile's badge. A list row's badge plus the card's
+/// inset on either side, so the badge is larger than a row's and the size
+/// is still taken from the kit's metrics.
+///
+/// @param metrics the class's metrics
+/// @return the side, in points
+int32_t active_badge_side(const kit::Metrics& metrics) {
+    return metrics.list_row_badge + 2 * metrics.card_inset;
+}
+
+/// Appends a tile's face: the kit card's fill and its outline. Nothing
+/// here takes a press.
+///
+/// @param[in,out] building the layout
+/// @param rect the tile
+/// @param clip what drawing may touch
+void add_tile_face(Building& building, const kit::Rect& rect, const kit::Rect& clip) {
+    add_item(building.list, kit::Role::fill, rect, clip).colour = kit::colour::list_selected;
+    add_item(building.list, kit::Role::outline, rect, clip).colour = kit::colour::control_border;
+}
+
+/// One line of text on a tile.
+struct TileLine {
+    std::string text{};
+    kit::FontRole font{kit::FontRole::small};
+    kit::Colour ink{kit::colour::text};
+};
+
+/// Returns a tile line's height.
+///
+/// @param metrics the class's metrics
+/// @param font the line's font
+/// @return the height, in points
+int32_t tile_line_height(const kit::Metrics& metrics, kit::FontRole font) {
+    return font == kit::FontRole::regular ? metrics.regular_line : metrics.small_line;
+}
+
+/// Returns the height of a tile's lines, stacked.
+///
+/// @param metrics the class's metrics
+/// @param lines the lines
+/// @return the height, in points
+int32_t tile_lines_height(const kit::Metrics& metrics, const std::vector<TileLine>& lines) {
+    int32_t height = 0;
+    for (const TileLine& line : lines)
+        height += tile_line_height(metrics, line.font);
+    return height;
+}
+
+/// Returns an identity tile's height: the badge or the lines, whichever is
+/// taller, and the card's inset above and below.
+///
+/// @param metrics the class's metrics
+/// @param badge the badge's side
+/// @param lines the lines beside the badge
+/// @return the height, in points
+int32_t identity_tile_height(
+    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines
+) {
+    return std::max(badge, tile_lines_height(metrics, lines)) + 2 * metrics.card_inset;
+}
+
+/// Appends a tile's lines. The first line keeps room at its right for a
+/// chip; a line that cannot fit is left out, and its row is kept.
+///
+/// @param[in,out] building the layout
+/// @param lines the lines
+/// @param left their left column
+/// @param top the first line's top row
+/// @param width their width
+/// @param first_room the first line's width
+/// @param clip what drawing may touch
+void place_tile_lines(
+    Building& building,
+    const std::vector<TileLine>& lines,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    int32_t first_room,
+    const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    int32_t row = top;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const TileLine& line = lines[index];
+        const int32_t room = index == 0 ? first_room : width;
+        const int32_t height = tile_line_height(metrics, line.font);
+        if (room > 0 && !line.text.empty()) {
+            const std::string drawn = cut(building, line.font, line.text, room);
+            if (width_of(building, line.font, drawn) <= room)
+                add_text(
+                    building,
+                    line.font,
+                    drawn,
+                    {left, row, room, height},
+                    kit::Align::left,
+                    line.ink,
+                    clip
+                );
+        }
+        row += height;
+    }
+}
+
+/// Appends a chip that takes no press, at the right of a line, when it fits.
+///
+/// @param[in,out] building the layout
+/// @param line the line it sits on
+/// @param words_shown the chip's words
+/// @param state the chip's colours
+/// @param clip what drawing may touch
+/// @return the chip's width, or 0 when it does not fit
+int32_t add_idle_chip(
+    Building& building,
+    const kit::Rect& line,
+    const std::string& words_shown,
+    kit::ChipState state,
+    const kit::Rect& clip
+) {
+    if (words_shown.empty() || line.width <= 0 || line.height <= 0)
+        return 0;
+    kit::ChipLook look;
+    look.text = words_shown;
+    look.state = state;
+    const int32_t chip_width = kit::chip_width(*building.fonts, look);
+    const int32_t chip_height = building.metrics->chip_height;
+    if (chip_width > line.width || chip_height > line.height)
+        return 0;
+    const kit::Rect chip{
+        line.x + line.width - chip_width,
+        line.y + (line.height - chip_height) / 2,
+        chip_width,
+        chip_height,
+    };
+    kit::add_chip(building.list, chip, look, kit::no_control, {});
+    building.list.items.back().clip = clip;
+    return chip_width;
+}
+
+/// Appends an identity tile: a badge, lines beside it and a chip on the
+/// first line. Its label is the part of the tile that shows, and it takes
+/// no press.
+///
+/// @param[in,out] building the layout
+/// @param tile the tile
+/// @param badge the badge; null for the letters
+/// @param letters the name the letters are taken from
+/// @param lines the lines beside the badge
+/// @param chip the chip's words; empty for none
+/// @param chip_state the chip's colours
+/// @param id the label's number
+/// @param name the label's name
+/// @param read the label's text
+/// @param clip what drawing may touch
+void add_identity_tile(
+    Building& building,
+    const kit::Rect& tile,
+    const Badge* badge,
+    std::string_view letters,
+    const std::vector<TileLine>& lines,
+    const std::string& chip,
+    kit::ChipState chip_state,
+    kit::ControlId id,
+    std::string name,
+    std::string read,
+    const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    const int32_t side =
+        std::min(active_badge_side(metrics), std::max(tile.width - 2 * inset, int32_t{0}));
+    add_tile_face(building, tile, clip);
+    const int32_t inner_left = tile.x + inset;
+    const int32_t inner_top = tile.y + inset;
+    if (side > 0)
+        add_badge_of(
+            building, picture_of(badge), letters, {inner_left, inner_top, side, side}, clip
+        );
+    const int32_t text_left = inner_left + side + metrics.list_row_gap;
+    const int32_t text_width = std::max(tile.x + tile.width - inset - text_left, int32_t{0});
+    const int32_t text_height = tile_lines_height(metrics, lines);
+    const int32_t text_top = inner_top + std::max((side - text_height) / 2, int32_t{0});
+    const int32_t title_height =
+        lines.empty() ? metrics.regular_line : tile_line_height(metrics, lines.front().font);
+    const int32_t chip_width = add_idle_chip(
+        building, {text_left, text_top, text_width, title_height}, chip, chip_state, clip
+    );
+    const int32_t first_room =
+        chip_width > 0 ? std::max(text_width - chip_width - metrics.list_row_gap, int32_t{0})
+                       : text_width;
+    place_tile_lines(building, lines, text_left, text_top, text_width, first_room, clip);
+    add_label(
+        building.detail,
+        id,
+        kit::intersect(tile, clip),
+        std::move(name),
+        std::move(read),
+        clip,
+        controls::details_group
+    );
+}
+
+/// Returns a map pack tile's height.
+///
+/// @param metrics the class's metrics
+/// @param badge the badge's side
+/// @param maps how many maps the pack lists
+/// @return the height, in points
+int32_t pack_tile_height(const kit::Metrics& metrics, int32_t badge, std::size_t maps) {
+    const int32_t header = std::max(badge, metrics.regular_line);
+    const int32_t listed = static_cast<int32_t>(maps) * metrics.small_line;
+    const int32_t between = maps == 0 ? 0 : metrics.hint_gap;
+    return metrics.card_inset + header + between + listed + metrics.card_inset;
+}
+
+/// What an identity tile shows. The layout paints it; the model chose the words.
+struct IdentityTile {
+    const Badge* badge{};
+    std::string letters{};
+    std::vector<TileLine> lines{};
+    std::string chip{};
+    kit::ChipState chip_state{kit::ChipState::playing};
+    kit::ControlId id{};
+    std::string name{};
+    std::string read{};
+};
+
+/// Returns the mod tile: the mod being played, or the base game.
+///
+/// @param[in,out] building the layout, which records the label's name
+/// @param setup what the tab shows
+/// @return the tile
+IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
+    IdentityTile tile;
+    tile.badge = setup.mod_badge;
+    tile.id = controls::active_mod;
+    tile.name = unique_name(building, named("active.mod"));
+    tile.read = setup.mod_line;
+    tile.chip_state = kit::ChipState::playing;
+    if (setup.mod_name.empty()) {
+        tile.letters = std::string(base_badge_name);
+        if (!setup.base_title.empty())
+            tile.lines.push_back(
+                TileLine{setup.base_title, kit::FontRole::regular, kit::colour::text}
+            );
+        if (!setup.base_look.empty())
+            tile.lines.push_back(
+                TileLine{setup.base_look, kit::FontRole::small, kit::colour::hint}
+            );
+        if (!setup.mod_line.empty())
+            tile.lines.push_back(TileLine{setup.mod_line, kit::FontRole::small, kit::colour::hint});
+    } else {
+        tile.letters = setup.mod_name;
+        tile.lines.push_back(TileLine{setup.mod_name, kit::FontRole::regular, kit::colour::text});
+        const std::string& version =
+            setup.mod_release.empty() ? setup.mod_version : setup.mod_release;
+        if (!version.empty())
+            tile.lines.push_back(TileLine{version, kit::FontRole::small, kit::colour::hint});
+        if (!setup.mod_author.empty())
+            tile.lines.push_back(
+                TileLine{setup.mod_author, kit::FontRole::small, kit::colour::list_text}
+            );
+        tile.chip = setup.mod_state;
+    }
+    return tile;
+}
+
+/// Returns the language tile.
+///
+/// @param[in,out] building the layout, which records the label's name
+/// @param setup what the tab shows
+/// @return the tile
+IdentityTile language_tile(Building& building, const ActiveSetup& setup) {
+    IdentityTile tile;
+    tile.badge = setup.language_badge;
+    tile.letters = setup.language_name;
+    tile.id = controls::active_language;
+    tile.name = unique_name(building, named("active.language"));
+    tile.read = setup.language_line;
+    tile.chip = setup.language_note;
+    tile.chip_state = kit::ChipState::installed;
+    if (!setup.language_name.empty())
+        tile.lines.push_back(
+            TileLine{setup.language_name, kit::FontRole::regular, kit::colour::text}
+        );
+    if (!setup.language_english.empty())
+        tile.lines.push_back(
+            TileLine{setup.language_english, kit::FontRole::small, kit::colour::hint}
+        );
+    if (!setup.language_pack.empty())
+        tile.lines.push_back(
+            TileLine{setup.language_pack, kit::FontRole::small, kit::colour::list_text}
+        );
+    if (!setup.language_version.empty())
+        tile.lines.push_back(
+            TileLine{setup.language_version, kit::FontRole::small, kit::colour::hint}
+        );
+    if (!setup.language_coverage.empty())
+        tile.lines.push_back(
+            TileLine{setup.language_coverage, kit::FontRole::small, kit::colour::list_text}
+        );
+    return tile;
+}
+
+/// Returns an identity tile's height at this class.
+///
+/// @param metrics the class's metrics
+/// @param tile the tile
+/// @return the height, in points
+int32_t identity_height(const kit::Metrics& metrics, const IdentityTile& tile) {
+    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines);
+}
+
+/// Appends an identity tile.
+///
+/// @param[in,out] building the layout
+/// @param tile the tile
+/// @param rect where it sits
+/// @param clip what drawing may touch
+void place_identity(
+    Building& building, const IdentityTile& tile, const kit::Rect& rect, const kit::Rect& clip
+) {
+    add_identity_tile(
+        building,
+        rect,
+        tile.badge,
+        tile.letters,
+        tile.lines,
+        tile.chip,
+        tile.chip_state,
+        tile.id,
+        tile.name,
+        tile.read,
+        clip
+    );
+}
+
+/// Appends one map pack's tile, and names each map's line in order.
+///
+/// @param[in,out] building the layout
+/// @param pack the pack
+/// @param tile the tile
+/// @param[in,out] number how many map lines have been named; this pack's follow
+/// @param clip what drawing may touch
+void add_pack_tile(
+    Building& building,
+    const ActivePack& pack,
+    const kit::Rect& tile,
+    std::size_t& number,
+    const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    const int32_t side =
+        std::min(active_badge_side(metrics), std::max(tile.width - 2 * inset, int32_t{0}));
+    add_tile_face(building, tile, clip);
+    const int32_t inner_left = tile.x + inset;
+    const int32_t inner_top = tile.y + inset;
+    if (side > 0)
+        add_badge_of(
+            building, picture_of(pack.badge), pack.name, {inner_left, inner_top, side, side}, clip
+        );
+    const int32_t text_left = inner_left + side + metrics.list_row_gap;
+    const int32_t text_width = std::max(tile.x + tile.width - inset - text_left, int32_t{0});
+    const int32_t header = std::max(side, metrics.regular_line);
+    if (text_width > 0 && !pack.name.empty()) {
+        const std::string drawn = cut(building, kit::FontRole::regular, pack.name, text_width);
+        if (width_of(building, kit::FontRole::regular, drawn) <= text_width)
+            add_text(
+                building,
+                kit::FontRole::regular,
+                drawn,
+                {text_left,
+                 inner_top + (header - metrics.regular_line) / 2,
+                 text_width,
+                 metrics.regular_line},
+                kit::Align::left,
+                kit::colour::text,
+                clip
+            );
+    }
+    // The maps' names, players and sizes in three columns of this tile,
+    // each as wide as its widest words, the players and the sizes no more
+    // than a quarter of the text each and the names taking what is left.
+    int32_t name_width = 0;
+    int32_t players_width = 0;
+    int32_t size_width = 0;
+    for (const ActiveMap& map : pack.maps) {
+        name_width = std::max(name_width, width_of(building, kit::FontRole::small, map.name));
+        players_width =
+            std::max(players_width, width_of(building, kit::FontRole::small, map.players));
+        size_width = std::max(size_width, width_of(building, kit::FontRole::small, map.size));
+    }
+    players_width = std::min(players_width, text_width / 4);
+    size_width = std::min(size_width, text_width / 4);
+    name_width = std::max(
+        std::min(name_width, text_width - players_width - size_width - 2 * metrics.label_gap),
+        int32_t{0}
+    );
+    const int32_t players_left = text_left + name_width + metrics.label_gap;
+    const int32_t size_left = players_left + players_width + metrics.label_gap;
+    int32_t row = inner_top + header + (pack.maps.empty() ? 0 : metrics.hint_gap);
+    for (const ActiveMap& map : pack.maps) {
+        ++number;
+        const auto column = [&](const std::string& words_shown,
+                                int32_t column_left,
+                                int32_t column_width,
+                                kit::Align align,
+                                kit::Colour ink) {
+            if (column_width <= 0 || words_shown.empty())
+                return;
+            const std::string drawn =
+                cut(building, kit::FontRole::small, words_shown, column_width);
+            if (width_of(building, kit::FontRole::small, drawn) > column_width)
+                return;
+            add_text(
+                building,
+                kit::FontRole::small,
+                drawn,
+                {column_left, row, column_width, metrics.small_line},
+                align,
+                ink,
+                clip
+            );
+        };
+        column(map.name, text_left, name_width, kit::Align::left, kit::colour::list_text);
+        column(map.players, players_left, players_width, kit::Align::right, kit::colour::hint);
+        column(map.size, size_left, size_width, kit::Align::right, kit::colour::hint);
+        if (number <= controls::most_active_maps)
+            add_label(
+                building.detail,
+                controls::first_active_map + static_cast<kit::ControlId>(number - 1),
+                kit::intersect({text_left, row, text_width, metrics.small_line}, clip),
+                unique_name(building, named("active.map." + std::to_string(number))),
+                map.line,
+                clip,
+                controls::details_group
+            );
+        row += metrics.small_line;
+    }
+}
+
+int32_t add_active_heading(
+    Building& building,
+    std::string_view words_shown,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    const kit::Rect& clip
+);
+
+/// Appends the map tiles: one column, or two at Large when more than one
+/// pack is installed. A window with none shows that in one tile.
+///
+/// @param[in,out] building the layout
+/// @param setup what the tab shows
+/// @param left the section's left column
+/// @param top the section's top row
+/// @param width the section's width
+/// @param clip what drawing may touch
+/// @return the row under the section
+int32_t add_map_tiles(
+    Building& building,
+    const ActiveSetup& setup,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    const kit::Rect& clip
+) {
+    const Library& library = *building.library;
+    const kit::Metrics& metrics = *building.metrics;
+    top = add_active_heading(
+        building, shown(library.text, words::active_heading_maps), left, top, width, clip
+    );
+    if (setup.packs.empty()) {
+        const int32_t inset = metrics.card_inset;
+        const int32_t inner = std::max(width - 2 * inset, int32_t{0});
+        const int32_t height = metrics.small_line + 2 * inset;
+        const kit::Rect tile{left, top, width, height};
+        add_tile_face(building, tile, clip);
+        const std::string words_shown = std::string(shown(library.text, words::active_no_maps));
+        if (inner > 0) {
+            const std::string drawn = cut(building, kit::FontRole::small, words_shown, inner);
+            if (width_of(building, kit::FontRole::small, drawn) <= inner)
+                add_text(
+                    building,
+                    kit::FontRole::small,
+                    drawn,
+                    {left + inset, top + inset, inner, metrics.small_line},
+                    kit::Align::left,
+                    kit::colour::hint,
+                    clip
+                );
+        }
+        return top + height;
+    }
+    const int32_t columns =
+        building.size_class == kit::SizeClass::large && setup.packs.size() > 1 ? 2 : 1;
+    const int32_t gap = metrics.card_gap;
+    const int32_t left_width = columns == 1 ? width : std::max((width - gap) / 2, int32_t{0});
+    const auto tile_width = [&](std::size_t place) {
+        if (columns == 1 || place % 2 == 0)
+            return left_width;
+        return std::max(width - left_width - gap, int32_t{0});
+    };
+    const auto tile_left = [&](std::size_t place) {
+        if (columns == 1 || place % 2 == 0)
+            return left;
+        return left + left_width + gap;
+    };
+    std::size_t number = 0;
+    std::size_t index = 0;
+    while (index < setup.packs.size()) {
+        const std::size_t row_count =
+            std::min(static_cast<std::size_t>(columns), setup.packs.size() - index);
+        int32_t row_height = 0;
+        for (std::size_t place = 0; place < row_count; ++place) {
+            const ActivePack& pack = setup.packs[index + place];
+            const int32_t across = tile_width(index + place);
+            const int32_t side = std::min(
+                active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
+            );
+            row_height = std::max(row_height, pack_tile_height(metrics, side, pack.maps.size()));
+        }
+        for (std::size_t place = 0; place < row_count; ++place) {
+            const ActivePack& pack = setup.packs[index + place];
+            const int32_t across = tile_width(index + place);
+            const int32_t side = std::min(
+                active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
+            );
+            const int32_t height = pack_tile_height(metrics, side, pack.maps.size());
+            add_pack_tile(
+                building, pack, {tile_left(index + place), top, across, height}, number, clip
+            );
+        }
+        index += row_count;
+        top += row_height;
+        if (index < setup.packs.size())
+            top += gap;
+    }
+    return top;
+}
+
 /// Appends a heading of the Active tab, and returns the row under it.
 ///
 /// @param[in,out] building the layout
@@ -1877,12 +2428,13 @@ int32_t add_active_heading(
     return top + metrics.small_line + metrics.hint_gap;
 }
 
-/// Appends the Active tab's parts, scrolled up by an offset: under a
-/// heading each, the mod being played (its badge, name and version) or that
-/// none is, the language in use, and each installed map pack's name over
-/// its maps (name, players and size). Each line is a label in the details'
-/// scroll area, its rectangle the part of the line that shows, empty while
-/// it is scrolled out of the area; none takes a press, a key or Tab.
+/// Appends the Active tab's tiles, scrolled up by an offset. Under a
+/// heading each: the mod being played, or the base game, and the language
+/// in use, side by side from Regular on; then one tile per installed map
+/// pack, in two columns at Large when more than one pack is installed.
+/// The mod's and the language's labels are the part of the tile that
+/// shows, and each map's is the part of its line that shows, empty while
+/// that part is scrolled out of the area. None takes a press, a key or Tab.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
@@ -1902,189 +2454,44 @@ int32_t add_active_content(
     const int32_t first = view.y - offset;
     const int32_t left = view.x;
     const std::size_t first_item = building.list.items.size();
+    const IdentityTile mod = mod_tile(building, setup);
+    const IdentityTile language = language_tile(building, setup);
+    const int32_t mod_height = identity_height(metrics, mod);
+    const int32_t language_height = identity_height(metrics, language);
     int32_t top = first;
-
-    top = add_active_heading(
-        building, shown(library.text, words::active_heading_mod), left, top, width, view
-    );
-    if (setup.mod_name.empty()) {
-        const kit::Rect line{left, top, width, metrics.small_line};
-        add_text(
-            building,
-            kit::FontRole::small,
-            cut(building, kit::FontRole::small, setup.mod_line, width),
-            line,
-            kit::Align::left,
-            kit::colour::hint,
-            view
+    if (building.size_class == kit::SizeClass::compact) {
+        top = add_active_heading(
+            building, shown(library.text, words::active_heading_mod), left, top, width, view
         );
-        add_label(
-            building.detail,
-            controls::active_mod,
-            kit::intersect(line, view),
-            unique_name(building, named("active.mod")),
-            setup.mod_line,
-            view,
-            controls::details_group
+        place_identity(building, mod, {left, top, width, mod_height}, view);
+        top += mod_height + metrics.paragraph_gap;
+        top = add_active_heading(
+            building, shown(library.text, words::active_heading_language), left, top, width, view
         );
-        top += metrics.small_line;
+        place_identity(building, language, {left, top, width, language_height}, view);
+        top += language_height + metrics.paragraph_gap;
     } else {
-        const int32_t side = metrics.list_row_badge;
-        add_badge_of(
-            building, picture_of(setup.mod_badge), setup.mod_name, {left, top, side, side}, view
+        const int32_t gap = metrics.card_gap;
+        const int32_t left_width = std::max((width - gap) / 2, int32_t{0});
+        const int32_t right = left + left_width + gap;
+        const int32_t right_width = std::max(left + width - right, int32_t{0});
+        const int32_t tiles = add_active_heading(
+            building, shown(library.text, words::active_heading_mod), left, top, left_width, view
         );
-        const int32_t text_left = left + side + metrics.list_row_gap;
-        const int32_t text_room = std::max(left + width - text_left, int32_t{0});
-        const std::string version =
-            cut(building, kit::FontRole::small, setup.mod_version, text_room / 2);
-        const int32_t version_width = width_of(building, kit::FontRole::small, version);
-        const int32_t name_room = std::max(
-            text_room - (version.empty() ? 0 : version_width + metrics.label_gap), int32_t{0}
-        );
-        const std::string name = cut(building, kit::FontRole::regular, setup.mod_name, name_room);
-        const int32_t name_width = width_of(building, kit::FontRole::regular, name);
-        add_text(
+        static_cast<void>(add_active_heading(
             building,
-            kit::FontRole::regular,
-            name,
-            {text_left, top + (side - metrics.regular_line) / 2, name_width, metrics.regular_line},
-            kit::Align::left,
-            kit::colour::text,
+            shown(library.text, words::active_heading_language),
+            right,
+            top,
+            right_width,
             view
-        );
-        add_text(
-            building,
-            kit::FontRole::small,
-            version,
-            {text_left + name_width + metrics.label_gap,
-             top + (side - metrics.small_line) / 2,
-             version_width,
-             metrics.small_line},
-            kit::Align::left,
-            kit::colour::hint,
-            view
-        );
-        add_label(
-            building.detail,
-            controls::active_mod,
-            kit::intersect({left, top, width, side}, view),
-            unique_name(building, named("active.mod")),
-            setup.mod_line,
-            view,
-            controls::details_group
-        );
-        top += side;
+        ));
+        const int32_t tile_height = std::max(mod_height, language_height);
+        place_identity(building, mod, {left, tiles, left_width, tile_height}, view);
+        place_identity(building, language, {right, tiles, right_width, tile_height}, view);
+        top = tiles + tile_height + metrics.paragraph_gap;
     }
-    top += metrics.paragraph_gap;
-
-    top = add_active_heading(
-        building, shown(library.text, words::active_heading_language), left, top, width, view
-    );
-    const kit::Rect language{left, top, width, metrics.small_line};
-    add_text(
-        building,
-        kit::FontRole::small,
-        cut(building, kit::FontRole::small, setup.language_line, width),
-        language,
-        kit::Align::left,
-        kit::colour::text,
-        view
-    );
-    add_label(
-        building.detail,
-        controls::active_language,
-        kit::intersect(language, view),
-        unique_name(building, named("active.language")),
-        setup.language_line,
-        view,
-        controls::details_group
-    );
-    top += metrics.small_line + metrics.paragraph_gap;
-
-    top = add_active_heading(
-        building, shown(library.text, words::active_heading_maps), left, top, width, view
-    );
-    if (setup.packs.empty()) {
-        add_text(
-            building,
-            kit::FontRole::small,
-            cut(building, kit::FontRole::small, shown(library.text, words::active_no_maps), width),
-            {left, top, width, metrics.small_line},
-            kit::Align::left,
-            kit::colour::hint,
-            view
-        );
-        top += metrics.small_line;
-    }
-    // The maps' names, players and sizes in three columns, each as wide as
-    // its widest words, the players and the sizes no more than a quarter of
-    // the width each and the names taking what is left.
-    int32_t name_width = 0;
-    int32_t players_width = 0;
-    int32_t size_width = 0;
-    for (const ActivePack& pack : setup.packs)
-        for (const ActiveMap& map : pack.maps) {
-            name_width = std::max(name_width, width_of(building, kit::FontRole::small, map.name));
-            players_width =
-                std::max(players_width, width_of(building, kit::FontRole::small, map.players));
-            size_width = std::max(size_width, width_of(building, kit::FontRole::small, map.size));
-        }
-    const int32_t map_left = left + metrics.list_row_inset;
-    const int32_t map_width = std::max(left + width - map_left, int32_t{0});
-    players_width = std::min(players_width, map_width / 4);
-    size_width = std::min(size_width, map_width / 4);
-    name_width = std::max(
-        std::min(name_width, map_width - players_width - size_width - 2 * metrics.label_gap),
-        int32_t{0}
-    );
-    const int32_t players_left = map_left + name_width + metrics.label_gap;
-    const int32_t size_left = players_left + players_width + metrics.label_gap;
-    std::size_t number = 0;
-    for (const ActivePack& pack : setup.packs) {
-        add_text(
-            building,
-            kit::FontRole::regular,
-            cut(building, kit::FontRole::regular, pack.name, width),
-            {left, top, width, metrics.regular_line},
-            kit::Align::left,
-            kit::colour::text,
-            view
-        );
-        top += metrics.regular_line;
-        for (const ActiveMap& map : pack.maps) {
-            ++number;
-            const auto column = [&](const std::string& words_shown,
-                                    int32_t column_left,
-                                    int32_t column_width,
-                                    kit::Align align,
-                                    kit::Colour ink) {
-                add_text(
-                    building,
-                    kit::FontRole::small,
-                    cut(building, kit::FontRole::small, words_shown, column_width),
-                    {column_left, top, column_width, metrics.small_line},
-                    align,
-                    ink,
-                    view
-                );
-            };
-            column(map.name, map_left, name_width, kit::Align::left, kit::colour::list_text);
-            column(map.players, players_left, players_width, kit::Align::right, kit::colour::hint);
-            column(map.size, size_left, size_width, kit::Align::right, kit::colour::hint);
-            if (number <= controls::most_active_maps)
-                add_label(
-                    building.detail,
-                    controls::first_active_map + static_cast<kit::ControlId>(number - 1),
-                    kit::intersect({map_left, top, map_width, metrics.small_line}, view),
-                    unique_name(building, named("active.map." + std::to_string(number))),
-                    map.line,
-                    view,
-                    controls::details_group
-                );
-            top += metrics.small_line;
-        }
-        top += metrics.hint_gap;
-    }
+    static_cast<void>(add_map_tiles(building, setup, left, top, width, view));
     const std::optional<controls::Extent> extent =
         controls::clipped_extent(building.list, view, first_item);
     return extent ? extent->bottom - first : 0;

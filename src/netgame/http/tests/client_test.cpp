@@ -572,19 +572,41 @@ int main() {
         OA_CHECK(!saw_target(server.requests(), "/x"));
     }
 
-    say("redirect refused https");
+    say("redirect https read as http when tls is off");
     {
         Server server;
         std::string error;
         OA_CHECK(server.start(&error));
-        server.redirect("/go", "https://127.0.0.1/x");
-        FlagSink sink;
-        Client client;
-        const Response response = client.fetch(get(server.url("/go")), sink);
-        note_failure("redirect refused https", response, Failure::redirect_refused);
-        OA_CHECK(response.failure == Failure::redirect_refused);
-        OA_CHECK(!sink.began);
-        OA_CHECK(server.connections_accepted() == 1);
+        server.serve_bytes("/x", bytes_of("yes"));
+        const std::string https = "https://127.0.0.1:" + std::to_string(server.port()) + "/x";
+        server.redirect("/go", https);
+        ClientOptions options;
+        options.tls = false;
+        Client client(options);
+        std::vector<uint8_t> body;
+        const Response response = client.fetch(get(server.url("/go")), body);
+        note_failure("redirect https read as http when tls is off", response, Failure::none);
+        OA_CHECK(response.failure == Failure::none);
+        OA_CHECK(is_text(body, "yes"));
+        OA_CHECK(response.final_url == "http://127.0.0.1:" + std::to_string(server.port()) + "/x");
+    }
+
+    say("redirect https is not the plain body when tls is on");
+    {
+        Server server;
+        std::string error;
+        OA_CHECK(server.start(&error));
+        server.serve_bytes("/x", bytes_of("yes"));
+        const std::string https = "https://127.0.0.1:" + std::to_string(server.port()) + "/x";
+        server.redirect("/go", https);
+        ClientOptions options;
+        options.tls = true;
+        Client client(options);
+        std::vector<uint8_t> body;
+        const Response response = client.fetch(get(server.url("/go")), body);
+        OA_CHECK(response.failure != Failure::none);
+        OA_CHECK(!is_text(body, "yes"));
+        OA_CHECK(response.final_url.find("https://") != std::string::npos);
     }
 
     say("redirect past five");
@@ -844,21 +866,64 @@ int main() {
         OA_CHECK(sink.began);
     }
 
-    say("https refused");
+    say("https read as http when tls is off");
     {
         Server server;
         std::string error;
         OA_CHECK(server.start(&error));
-        Client client;
+        server.serve_bytes("/x", bytes_of("yes"));
+        ClientOptions options;
+        options.tls = false;
+        Client client(options);
         std::vector<uint8_t> body;
-        const Response response =
-            client.fetch(get("https://127.0.0.1:" + std::to_string(server.port()) + "/x"), body);
-        note_failure("https refused", response, Failure::https_unsupported);
-        OA_CHECK(response.failure == Failure::https_unsupported);
-        OA_CHECK(
-            response.detail == "OA fetches over plain HTTP and checks what it gets with signatures"
+        const std::string https = "https://127.0.0.1:" + std::to_string(server.port()) + "/x";
+        const Response response = client.fetch(get(https), body);
+        note_failure("https read as http when tls is off", response, Failure::none);
+        OA_CHECK(response.failure == Failure::none);
+        OA_CHECK(is_text(body, "yes"));
+        OA_CHECK(response.final_url == "http://127.0.0.1:" + std::to_string(server.port()) + "/x");
+    }
+
+    say("https does not fall back when tls fails");
+    {
+        // No TLS listener: a certificate would need one, and this test must
+        // not start a program. The plain fixture answers only HTTP, so a
+        // fallback would return its body.
+        Server server;
+        std::string error;
+        OA_CHECK(server.start(&error));
+        server.serve_bytes("/x", bytes_of("yes"));
+        ClientOptions options;
+        options.tls = true;
+        Client client(options);
+        std::vector<uint8_t> body;
+        const std::string https = "https://127.0.0.1:" + std::to_string(server.port()) + "/x";
+        const Response response = client.fetch(get(https), body);
+        OA_CHECK(response.failure != Failure::none);
+        OA_CHECK(body.empty());
+        OA_CHECK(!is_text(body, "yes"));
+        OA_CHECK(response.final_url == https);
+        if (!oa::netgame::http::tls_available()) {
+            OA_CHECK(response.failure == Failure::https_unsupported);
+            OA_CHECK(
+                response.detail == oa::netgame::http::failure_text(Failure::https_unsupported)
+            );
+        }
+    }
+
+    say("closed port after an https rewrite needs tls");
+    {
+        ClientOptions options;
+        options.tls = false;
+        Client client(options);
+        std::vector<uint8_t> body;
+        const Response response = client.fetch(get("https://127.0.0.1:1/oa/registry.yaml"), body);
+        note_failure(
+            "closed port after an https rewrite needs tls", response, Failure::https_needs_tls
         );
-        OA_CHECK(server.connections_accepted() == 0);
+        OA_CHECK(response.failure == Failure::https_needs_tls);
+        OA_CHECK(response.detail == oa::netgame::http::failure_text(Failure::https_needs_tls));
+        OA_CHECK(body.empty());
     }
 
     say("ipv6 refused");

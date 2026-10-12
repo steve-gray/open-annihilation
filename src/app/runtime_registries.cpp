@@ -87,9 +87,8 @@ constexpr std::array<RefusalSentence, 11> kRefusalSentences{{
     {registry::Refusal::mirror_listed, "{name} already lists that mirror."},
     {registry::Refusal::bad_mirror, "That isn't a web address OA can read."},
 }};
-/// An https address, which OA does not fetch: refused before any check.
-constexpr std::string_view kHttpsSentence =
-    "Use the registry's http:// address. OA checks every catalogue's signature itself.";
+/// An https address this system read as http, when that host served no http.
+constexpr std::string_view kNeedsHttps = "This registry needs HTTPS, which this system cannot use";
 /// Any other address the address reader refuses, before any check.
 constexpr std::string_view kNotAddressSentence = "That isn't a web address OA can read.";
 /// Every other refusal: unreadable, and what no row above names. {address}
@@ -448,17 +447,12 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
         ask(runtime_.content_service().check_registry_file(std::move(*bytes)), model_.file_name);
     }
 
-    /// Checks the address in the field: an address OA cannot fetch is
-    /// refused here, and the content service is asked only for an http one.
+    /// Checks the address in the field. An address the reader refuses is
+    /// refused here. http and https are both asked of the content service.
     void check_address() {
-        url::UrlError error = url::UrlError::none;
-        const std::optional<url::Url> parsed = url::parse_http_url(model_.url, &error);
+        const std::optional<url::Url> parsed = url::parse_http_url(model_.url);
         if (!parsed) {
-            refuse(
-                std::string(
-                    error == url::UrlError::https_not_fetched ? kHttpsSentence : kNotAddressSentence
-                )
-            );
+            refuse(std::string(kNotAddressSentence));
             return;
         }
         fallback_address_ = url::host_header(*parsed);
@@ -532,6 +526,10 @@ struct Runtime::AddRegistryScreen final : LayerScreen {
     ///
     /// @param check the check
     void show_check(const content::RegistryCheck& check) {
+        if (check.detail == kNeedsHttps) {
+            refuse(std::string(kNeedsHttps));
+            return;
+        }
         if (check.refusal != registry::Refusal::none) {
             refuse(refusal_sentence(check.refusal, named_for(check, check.detail)));
             return;

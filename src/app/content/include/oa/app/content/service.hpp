@@ -27,6 +27,14 @@ namespace oa::app::content {
 /// The folder under the data folder that holds cached catalogues.
 inline constexpr std::string_view content_folder_name = "content";
 
+/// True when this system reads an https registry address as http.
+///
+/// Settings › Downloads says so once when this is true. The game still
+/// starts where the system has no TLS library.
+///
+/// @return true when the HTTP client has no TLS
+[[nodiscard]] bool https_read_over_http() noexcept;
+
 /// The folder under the content folder, one directory per registry.
 inline constexpr std::string_view catalogues_folder_name = "catalogues";
 
@@ -300,8 +308,9 @@ class Service {
     ///
     /// The descriptor is fetched and read, every rule for a new registry is
     /// applied, and the catalogue is fetched and checked with that
-    /// descriptor's own keys. Nothing is written. An https address is refused
-    /// without a fetch. The result is read with registry_check.
+    /// descriptor's own keys. Nothing is written. An https address is fetched
+    /// with the system's TLS where this system has it, and read as http where
+    /// it does not. The result is read with registry_check.
     ///
     /// @param url the address of the descriptor
     /// @return the request id

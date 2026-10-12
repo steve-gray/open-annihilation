@@ -458,6 +458,7 @@ inline constexpr std::string_view interface_words[] = {
     "The stick pointer settles on a lone unit near it.",
     "The view stays on the map, as the game kept it.",
     "The wheel, a pinch and a controller stop there.",
+    "This system reads HTTPS registries over HTTP.",
     "Timed Shell Detonation",
     "Touch",
     "Trackpad glide",

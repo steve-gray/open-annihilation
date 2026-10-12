@@ -21,6 +21,7 @@ It is off unless `--fark` is on the command line. A player never needs it.
 - [Input](#input)
 - [Events](#events)
 - [What it never does](#what-it-never-does)
+- [A list that does not fit](#a-list-that-does-not-fit)
 - [In a battle room](#in-a-battle-room)
 - [Checks](#checks)
 
@@ -183,7 +184,7 @@ centre would land on the line between Off and On.
 
 | Control | Name | Kind, and what it reports |
 |---|---|---|
-| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library", or "Library · 1 update" and "Library · N updates" while updates wait; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
+| The OA button (main menu, in-game menu) | `oa.button` | button; no dialog; on the main menu, the Open Annihilation icon at the menu's bottom right, left of the Settings button, where it opens the Library, its text "Library · 1 mod" or "Library · N mods", and "Library · N mods · 1 update" or "Library · N mods · M updates" while updates wait; while the mod count is not final yet the mod count is left out, so the text is "Library", or "Library · 1 update" and "Library · N updates"; in the in-game menu, the settings icon under Resume, where it opens Settings, empty |
 | The Settings button (main menu) | `oa.settings-button` | button; no dialog; the settings icon right of the OA button, which opens Settings with no Library under it; its text "Settings" |
 | GET MAP in the battle room, while a joiner lacks the host's pack map | `oa.get-map`, `oa.get-map-text`, `oa.get-map-progress` | no dialog, listed only while they show: the button (its text "GET MAP"); a label, its text the line saying what it fetches; a label, its text how much of the download has come, as a percentage, while the bar shows in the button's place |
 | A section's entry | `oa.settings.nav.<page>` | check box, checked while its section shows |
@@ -208,7 +209,7 @@ centre would land on the line between Off and On.
 | The Library's tabs, in dialog `oa.library` | `oa.library.tab.<tab>`: `active`, `mods`, `maps`, `languages`, `updates`, `registries`, in that order, so the last is `oa.library.tab.registries` | check box, checked on the tab shown; the Library opens on `active` when no tab is asked for; `updates`' text holds the updates that can be installed, "Updates 2" |
 | The Library's Registries tab | `oa.library.registry.<id>` with its halves `.off` and `.on`, and for a registry the player added `.remove` and `.add-mirror`; `.key` (the signing-key icon; its text the fingerprints, one a line), `.refresh` (REFRESH, beside the switch, disabled while that registry is off or already being asked), and the labels `.address` (the address it was added from, or its catalogue's address) and `.refreshed` ("refreshed 5 min ago", "never refreshed", or "couldn't reach · 2 h ago"); `oa.library.add-registry` at the top right of the tab, above the list, absent during a game; the labels `oa.library.registries.note` and `oa.library.registries.notice` | the switch a label, its halves check boxes; the key icon, REFRESH, REMOVE, ADD MIRROR… and ADD REGISTRY… buttons; the labels' text the address, the refresh time, the note under the list and, while a change was refused, why |
 | The Library's filters | `oa.library.filter.<filter>`: `all`, `new`, `installed`, `updates`; at Compact the drop-down `oa.library.filter`, its open items under the same names | a chip a button, a column's entry or an open item a check box, checked on the tab's own filter; the text the filter and how many packages it holds on the tab, whatever the tag and the search: "Installed (4)"; the drop-down a button, its text the choice shown |
-| The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label, its text the line shown: "Ridge 4.8 · rev 3" or "No mod is played"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
+| The Library's Active tab | `oa.library.active.mod`, `oa.library.active.language`, `oa.library.active.map.<n>` from 1 in the order shown | label on the mod tile, the language tile and each map line: "Ridge 4.8 · rev 3" or "No mod: the game as it was made"; "Deutsch 1.2" or "English · built in"; "Ridgeline · 4 players · 16x16"; none takes a press |
 
 `<page>` is the section's word (`controls`, `common-tweaks`, `language`,
 `graphics`, `user-interface`, `mod-keys`). Language & Text keeps the word
@@ -264,8 +265,7 @@ included.
 map zoom out to the whole map, from the main menu:
 
 1. click `oa.settings-button`, which opens Settings, and wait until
-   `oa.settings.ok` is listed (or click `oa.button`, which opens the
-   Library, then its `oa.library.settings`);
+   `oa.settings.ok` is listed;
 2. click `oa.settings.nav.controls`, then `oa.settings.wheel-zoom.off`
    (its `checked` turns true);
 3. click `oa.settings.max-zoom-out`, then
@@ -296,7 +296,10 @@ A row's circled check, installed and up to date, is no control. A click
 at a row's centre chooses it; a click at its icon's centre presses GET or
 UPDATE for that row, as the details' button does, asking the same
 questions. `<registry>` and `<key>` are the registry's id and the package's
-key, lower-cased, every other run of characters one `-`.
+key, lower-cased, every other run of characters one `-`. The base game
+entry is not a package. Its key is `@base-game`, and the row is
+`oa.library.row.base-game`: the `@` is not a letter or a digit, so the
+row's name does not keep it.
 
 ## Input
 
@@ -350,6 +353,10 @@ to the next; nothing is added to the game to produce them.
   time, and never waits.
   A client that stops reading is dropped once 68 MiB of answers wait for
   it (`automation: client dropped: not reading` in the log).
+
+## A list that does not fit
+
+When a list on a multiplayer screen holds more rows than it can show, `controls` names the scroll arrows that move it. `scroll_up` is the arrow toward the start of the list and `scroll_down` is the arrow toward the end. A click on either, sent as input in the game's own space, moves the list by one page, the `rows` it shows at once. Select Map in the battle room is that list: `MAPNAMES`, with arrows `SLIDER.up` and `SLIDER.down`. A player clicking the same arrow still moves the knob by one step. A list whose rows all fit, and a list on any other screen, reports no arrows.
 
 ## In a battle room
 

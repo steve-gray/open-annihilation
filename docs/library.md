@@ -40,11 +40,17 @@ settings and exactly what a download sends and records.
 The Library opens on the main menu, from:
 
 - **the OA button**, the Open Annihilation logo at the bottom right of the
-  main menu, left of the **Settings** button and its gears. It opens on the
-  [Active](#the-active-tab) tab. While updates you can install wait, the
-  button wears an amber dot in its top right corner, from the moment OA
-  finds them: you need not open the Library to learn of them, and its
-  **Updates** tab lists them;
+  main menu, a 48-pixel square left of the **Settings** button and its
+  gears (the same size, a quarter of a side apart, 12 pixels in from the
+  frame). It opens on the [Active](#the-active-tab) tab. Its bottom-right
+  corner shows how many mods the Mods tab lists under All (every mod the
+  registries list, plus your own, without the Base Game entry): `7`, `123`,
+  or `999+` above 999. While the catalogues are still being read and that
+  number is not final, a small spinner turns there instead, and stops once
+  the list is in. While updates you can install wait, the button also wears
+  an amber dot in its top right corner, from the moment OA finds them: you
+  need not open the Library to learn of them, and its **Updates** tab lists
+  them;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
   Languages, over the settings, which stay open under it.
 
@@ -74,22 +80,30 @@ filters.
 
 ## The Active tab
 
-**Active**, the first tab, shows what you are using now, top to bottom:
+**Active**, the first tab, shows what you are using now, as tiles:
 
-- **MOD**: the mod you are playing, with its badge, name and version
-  ("Ridge 4.8 · rev 3"), or "No mod is played";
-- **LANGUAGE**: the language pack the game's words come from, with its
-  version ("Deutsch 1.2"), or the language the game holds itself
-  ("English · built in");
-- **MAPS**: each map pack you have installed, by name, with its maps under
-  it: each map's name, how many players it is for and its size ("Ridgeline
-  · 4 players · 16x16"), or "No map packs are installed."
+- **MOD**: a tile for the mod you are playing. Its badge is large, and the
+  tile names the mod, its version and revision ("4.8 (rev 3)"), who made it
+  ("by the Ridge team") and **Playing**. When you are playing no mod, the
+  tile is **Base Game**, with the 3.1c look ("Total Annihilation 3.1c") and
+  "No mod: the game as it was made".
+- **LANGUAGE**: a tile for the language the game is showing. It carries the
+  pack's badge, or a language mark, the language's name in itself and in
+  English, the pack's version and revision, and how much of the game the
+  pack covers ("Coverage 92%"). When the game is showing a language it
+  holds itself, the tile says **Built in**.
+- **MAPS**: one tile for each map pack you have installed, with the pack's
+  badge and its name, and its maps under that: each map's name, how many
+  players it is for and its size ("Ridgeline · 4 players · 16x16"). When
+  you have no map pack, the tile says "No map packs are installed."
 
-It is a list to read: nothing on it can be chosen or pressed, and it has no
-search and no filters. When it is longer than the window it scrolls with
-the mouse wheel, a finger, Page Up and Page Down, Home and End, and a
-controller's right stick. The other tabs are where packages are got,
-updated and played.
+On a small window the tiles stand in one column. On a larger window the
+mod and the language stand side by side, and on the largest the map packs
+stand in two columns when you have more than one. Nothing on these tiles
+can be chosen or pressed, and the tab has no search and no filters. When
+the tiles are taller than the window they scroll with the mouse wheel, a
+finger, Page Up and Page Down, Home and End, and a controller's right
+stick. The other tabs are where packages are got, updated and played.
 
 ## Tabs and states
 
@@ -241,7 +255,22 @@ count, on its row; Compact shows them under the status line.
 
 ## Choosing a mod
 
-The Mods tab lists every mod you can play: the ones you installed, from a
+The Mods list starts with **Base Game (Disable Mods)**, above every mod,
+under All and Installed, and whenever a search matches its name. Its
+details say "Total Annihilation 3.1c as it was made, with no mod". It is
+not a mod: All, New, Installed and Updates leave it out of their counts,
+New never lists it, and Active, Updates and Registries do not list it. It
+has no update, and its details never offer UPDATE, ROLL BACK, UNINSTALL or
+OPEN FOLDER.
+
+While no mod is played it is marked **PLAYING** and its details offer no
+action. While a mod is played its details offer **PLAY NOW**. That asks
+the same **SWITCH MOD** question as **SWITCH OFF** on the mod you play
+and, on **SWITCH**, reloads the game with no mod. It is greyed during a
+game and while the command line chose the run's mod, and the details then
+say "The command line chose this run's mod."
+
+The Mods tab then lists every mod you can play: the ones you installed, from a
 registry or a file, and every other folder the game can play as a mod,
 each marked "Your own copy": the folders in the game folder's `mods`
 folder and in your own Mods folder, `Documents/Open Annihilation/Mods`,
@@ -249,8 +278,8 @@ a folder without an `oamod.yaml`, which shows "N/A" for its version and
 "No oamod.yaml present" in its details and plays with the game's own
 rules, and a folder an earlier version's Pick Folder… chose, while it is
 still the mod you play. A mod of your own shows its `oamod.yaml`'s
-description in its details. The one you play is marked **PLAYING**; with
-no mod none is.
+description in its details. The one you play is marked **PLAYING**. With
+no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
 
 - **PLAY NOW**, on any other mod, plays it: the game reloads its data for
   that mod and returns to the main menu, without closing the window, and
@@ -428,11 +457,12 @@ the reason stands over the note ("OA could not change the registries:
 footer holds **CLOSE**. It opens the same Add registry window as opening
 an `.oareg` file: the address or "From *file*", the fingerprints of the
 keys, and "Not reviewed by the OA team"
-([adding a registry](downloads.md#adding-a-registry)). **CLOSE** leaves a
-switch or a removal as it was stored. During a game the padlock and
-"Choose from the main menu." stand where **ADD REGISTRY…** was, and
-**ADD MIRROR…** is locked the same way; the switches, **REFRESH** and
-**REMOVE** stay.
+([adding a registry](downloads.md#adding-a-registry)). An address may be
+`http` or `https`. Where this system has no TLS, `https` is read as
+`http`, and Settings › Downloads says so. **CLOSE** leaves a switch or a
+removal as it was stored. During a game the padlock and "Choose from the
+main menu." stand where **ADD REGISTRY…** was, and **ADD MIRROR…** is
+locked the same way; the switches, **REFRESH** and **REMOVE** stay.
 
 The rows and the note scroll together when they are taller than the
 window. Settings › Downloads, on the main menu, has **REGISTRIES IN THE

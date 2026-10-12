@@ -277,6 +277,12 @@ inline constexpr std::string_view note_playing_other =
 /// Why PLAY NOW and SWITCH OFF are off: --mod-dir or --base-game.
 inline constexpr std::string_view note_command_line = "The command line chose this run's mod.";
 
+/// The Mods list's first entry, which plays Total Annihilation 3.1c with no mod.
+inline constexpr std::string_view base_game_name = "Base Game (Disable Mods)";
+/// What that entry's details say under its name.
+inline constexpr std::string_view base_game_summary =
+    "Total Annihilation 3.1c as it was made, with no mod";
+
 // The download queue in the footer.
 inline constexpr std::string_view queue_package = "{name} {version}";
 inline constexpr std::string_view queue_downloading = "Downloading {package} · {progress}";
@@ -330,6 +336,9 @@ inline constexpr std::string_view more_menu = "MORE";
 /// How many updates the Updates tab shows.
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
+/// How many mods the main menu's Library button says the Mods tab lists.
+inline constexpr std::string_view mod_count_one = "{count} mod";
+inline constexpr std::string_view mod_count_many = "{count} mods";
 
 // The Active tab: the mod being played, the language in use and the
 // installed maps, under one heading each.
@@ -338,9 +347,14 @@ inline constexpr std::string_view active_heading_language = "LANGUAGE";
 inline constexpr std::string_view active_heading_maps = "MAPS";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
-inline constexpr std::string_view active_no_mod = "No mod is played";
+/// The tile shown when no mod is played: the base game, in the 3.1c look.
+inline constexpr std::string_view active_base_game = "Base Game";
+/// The line on that tile.
+inline constexpr std::string_view active_no_mod = "No mod: the game as it was made";
 /// A language no pack holds, which the game shows from its own words.
 inline constexpr std::string_view active_language_built_in = "{language} · built in";
+/// A language pack's coverage, as its tile states it.
+inline constexpr std::string_view active_coverage = "Coverage {percent}%";
 /// The language the game shows with no language chosen.
 inline constexpr std::string_view language_english = "English";
 /// How many players a map is for: one, and every other count.

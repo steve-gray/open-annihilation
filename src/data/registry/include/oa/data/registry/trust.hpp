@@ -65,7 +65,7 @@ enum class Refusal : uint8_t {
     too_many_registries,           ///< the player already has max_added_registries
     not_added,                     ///< no added registry has this id
     built_in_mirror,               ///< a mirror cannot be added to a built-in registry
-    bad_mirror,                    ///< the mirror is not an http address with no query
+    bad_mirror,                    ///< the mirror is not an http or https address with no query
     mirror_listed,                 ///< the registry already lists this mirror
     no_keys,                       ///< the trusted keys would be empty
 };

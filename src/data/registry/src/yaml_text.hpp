@@ -62,7 +62,7 @@ void append_quoted(std::string& out, std::string_view text);
     const formats::oamod::Node& node, std::string& out, std::string& error, std::string_view where
 );
 
-/// Reads an http address with no query.
+/// Reads an http or https address with no query.
 ///
 /// @param node the field's node
 /// @param[out] out the address; unchanged on failure
@@ -90,7 +90,7 @@ void append_quoted(std::string& out, std::string_view text);
     std::string_view where
 );
 
-/// Reads a list of http addresses with no query.
+/// Reads a list of http or https addresses with no query.
 ///
 /// @param node the field's node
 /// @param[out] out the addresses; unchanged on failure

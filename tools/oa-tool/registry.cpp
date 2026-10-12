@@ -1200,17 +1200,15 @@ int run_registry_init(std::span<const std::string> arguments, Output& output) {
         if (!fs::is_empty(folder, error) || error)
             throw Failure("the folder is not empty");
     }
-    if (!base->starts_with("http://")) {
-        if (base->starts_with("https://"))
-            throw Failure("a registry address is plain http");
-        throw Failure("the address must be an http address");
-    }
     if (base->ends_with('/'))
         throw Failure("the address must not end with a slash");
     url::UrlError url_error = url::UrlError::none;
     const std::optional<url::Url> base_url = url::parse_http_url(*base, &url_error);
-    if (!base_url)
+    if (!base_url) {
+        if (url_error == url::UrlError::no_scheme || url_error == url::UrlError::unknown_scheme)
+            throw Failure("the address must be an http or https address");
         throw Failure(url::url_error_text(url_error));
+    }
     if (url::has_query(*base_url))
         throw Failure("the address must not have a query");
 
@@ -1368,11 +1366,8 @@ int run_registry_mirror(std::span<const std::string> arguments, Output& output) 
     url::UrlError url_error = url::UrlError::none;
     const std::optional<url::Url> descriptor_url =
         url::parse_http_url(parsed->positional[0], &url_error);
-    if (!descriptor_url) {
-        if (parsed->positional[0].starts_with("https://"))
-            throw Failure("a registry address is plain http");
+    if (!descriptor_url)
         throw Failure(url::url_error_text(url_error));
-    }
     const std::optional<std::string> descriptor_storage = storage_path(*descriptor_url);
     if (!descriptor_storage)
         throw Failure("a path leaves the folder");

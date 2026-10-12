@@ -294,7 +294,8 @@ void test_state_matrix() {
     inputs.updates.push_back(update(core, Kind::mod, "get-mod"));
     const lib::Library library = built(std::move(inputs));
 
-    OA_CHECK(library.entries.size() == 8);
+    // The packages, and the base game entry refresh always adds.
+    OA_CHECK(library.entries.size() == 9);
     const lib::Entry* get = at(library, core, Kind::mod, "get-mod");
     OA_CHECK(get != nullptr && get->state == State::get && get->listing != nullptr);
     OA_CHECK(get != nullptr && get->installed == nullptr && get->update == nullptr && get->can_act);
@@ -586,6 +587,7 @@ void test_tabs_filters_tags() {
     using Keys = std::vector<std::string>;
     OA_CHECK(library.tab == lib::Tab::mods && lib::shown_filter(library) == lib::Filter::all);
     const Keys every_mod = {
+        "@base-game@",
         "gamma-mod@fixture-core",
         "beta-mod@fixture-core",
         "delta-mod@fixture-core",
@@ -600,6 +602,7 @@ void test_tabs_filters_tags() {
     lib::set_tab(library, lib::Tab::mods);
     lib::set_filter(library, lib::Filter::installed);
     const Keys installed_mods = {
+        "@base-game@",
         "gamma-mod@fixture-core",
         "beta-mod@fixture-core",
         "delta-mod@fixture-core",
@@ -722,10 +725,8 @@ void test_opens_on_active() {
     OA_CHECK(library.visible.empty());
     lib::set_query(library, "");
     lib::set_tab(library, lib::Tab::mods);
-    OA_CHECK(
-        (library.selected == lib::EntryId{std::string(core), Kind::mod, "alpha-mod"}) &&
-        library.visible.size() == 1
-    );
+    // The base game entry leads Mods, ahead of the one package.
+    OA_CHECK(library.selected == lib::base_game_id() && library.visible.size() == 2);
     // A refresh keeps the tab shown.
     lib::refresh(library, inputs);
     OA_CHECK(library.tab == lib::Tab::mods);
@@ -835,12 +836,19 @@ void test_active_setup() {
     inputs.language = {"Deutsch", "Deutsch (Fixture)", "1.2"};
     inputs.map_packs.push_back({"zeta pack", {{"Last Map", 1, "8x8"}}});
     inputs.map_packs.push_back({"Alpha Pack", {{"Ridgeline", 4, "16x16"}, {"Twin", 2, "12x12"}}});
+    lib::Installed alpha = installed(core, Kind::map_pack, "alpha", "Alpha Pack");
+    alpha.badge = lib::Badge{std::vector<uint8_t>(4, 0xff), 1, 1};
+    inputs.installed.push_back(std::move(alpha));
     lib::Library library = built(inputs);
 
     // The installed mod marked playing comes first, by its listing's name and badge.
     lib::ActiveSetup setup = lib::active_setup(library);
     OA_CHECK_TEXT(setup.mod_name, "Ridge");
     OA_CHECK_TEXT(setup.mod_version, "4.8 · rev 3");
+    OA_CHECK_TEXT(setup.mod_release, "4.8 (rev 3)");
+    OA_CHECK_TEXT(setup.mod_author, "by Fixture Author");
+    OA_CHECK_TEXT(setup.mod_state, "Playing");
+    OA_CHECK(setup.base_title.empty());
     OA_CHECK_TEXT(setup.mod_line, "Ridge 4.8 · rev 3");
     OA_CHECK(setup.mod_badge != nullptr && setup.mod_badge->width == 4);
     OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
@@ -856,6 +864,8 @@ void test_active_setup() {
         }
         if (!setup.packs[1].maps.empty())
             OA_CHECK_TEXT(setup.packs[1].maps[0].line, "Last Map · 1 player · 8x8");
+        OA_CHECK(setup.packs[0].badge != nullptr && setup.packs[0].badge->width == 1);
+        OA_CHECK(setup.packs[1].badge == nullptr);
     }
 
     // Without one, the mod the app says is played; a pack without a version is named alone.
@@ -864,6 +874,9 @@ void test_active_setup() {
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);
     OA_CHECK_TEXT(setup.mod_line, "Ridge (settings) 4.8");
+    OA_CHECK_TEXT(setup.mod_release, "4.8");
+    OA_CHECK_TEXT(setup.mod_state, "Playing");
+    OA_CHECK(setup.mod_author.empty());
     OA_CHECK(setup.mod_badge == nullptr);
     OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture)");
 
@@ -874,12 +887,46 @@ void test_active_setup() {
     lib::refresh(library, inputs);
     setup = lib::active_setup(library);
     OA_CHECK(setup.mod_name.empty() && setup.mod_badge == nullptr);
-    OA_CHECK_TEXT(setup.mod_line, "No mod is played");
+    OA_CHECK_TEXT(setup.mod_line, "No mod: the game as it was made");
+    OA_CHECK_TEXT(setup.base_title, "Base Game");
+    OA_CHECK_TEXT(setup.base_look, "Total Annihilation 3.1c");
+    OA_CHECK(setup.mod_state.empty() && setup.mod_release.empty() && setup.mod_author.empty());
+    OA_CHECK_TEXT(setup.language_name, "Français");
+    OA_CHECK_TEXT(setup.language_note, "Built in");
+    OA_CHECK(setup.language_english.empty() && setup.language_version.empty());
     OA_CHECK_TEXT(setup.language_line, "Français · built in");
     OA_CHECK(setup.packs.empty());
     inputs.language = {};
     lib::refresh(library, inputs);
-    OA_CHECK_TEXT(lib::active_setup(library).language_line, "English · built in");
+    setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.language_line, "English · built in");
+    OA_CHECK_TEXT(setup.language_name, "English");
+    OA_CHECK_TEXT(setup.language_note, "Built in");
+
+    // A pack in use names itself, its English name, its revision and its coverage.
+    inputs.language.name = "Deutsch";
+    inputs.language.pack = "Deutsch (Fixture)";
+    inputs.language.version = "1.2";
+    inputs.language.english = "German";
+    inputs.language.revision = 4;
+    lib::Listing deutsch = listing(core, Kind::language, "de", "Deutsch");
+    deutsch.coverage = 0.92;
+    inputs.listings.push_back(deutsch);
+    lib::Installed deutsch_installed = installed(core, Kind::language, "de", "Deutsch (folder)");
+    deutsch_installed.version = "1.2";
+    deutsch_installed.revision = 4;
+    deutsch_installed.in_use = true;
+    inputs.installed.push_back(deutsch_installed);
+    lib::refresh(library, inputs);
+    setup = lib::active_setup(library);
+    OA_CHECK_TEXT(setup.language_name, "Deutsch");
+    OA_CHECK_TEXT(setup.language_english, "German");
+    OA_CHECK_TEXT(setup.language_pack, "Deutsch (Fixture)");
+    OA_CHECK_TEXT(setup.language_version, "1.2 (rev 4)");
+    OA_CHECK_TEXT(setup.language_coverage, "Coverage 92%");
+    OA_CHECK(setup.language_note.empty());
+    OA_CHECK(setup.language_badge == nullptr);
+    OA_CHECK_TEXT(setup.language_line, "Deutsch (Fixture) 1.2");
 }
 
 void test_order_without_search() {
@@ -905,6 +952,7 @@ void test_order_without_search() {
     const lib::Library library = built(std::move(inputs));
     using Keys = std::vector<std::string>;
     const Keys order = {
+        "@base-game@",
         "zz-update@fixture-core",
         "cc-own@",
         "dd-playing@fixture-core",
@@ -928,14 +976,15 @@ void test_selection() {
     const lib::EntryId beta{std::string(core), Kind::mod, "beta-mod"};
     const lib::EntryId gamma{std::string(core), Kind::mod, "gamma-mod"};
 
-    // The first refresh selects the first visible entry.
-    OA_CHECK(library.selected == alpha && !library.details_open);
+    // The first refresh selects the first visible entry, the base game.
+    const lib::EntryId base = lib::base_game_id();
+    OA_CHECK(library.selected == base && !library.details_open);
     lib::move_selection(library, 1);
-    OA_CHECK(library.selected == beta);
+    OA_CHECK(library.selected == alpha);
     lib::move_selection(library, 5);
     OA_CHECK(library.selected == gamma);
     lib::move_selection(library, -9);
-    OA_CHECK(library.selected == alpha);
+    OA_CHECK(library.selected == base);
     lib::select(library, beta);
     OA_CHECK(library.selected == beta);
     // An entry that is not visible is not selected.
@@ -957,7 +1006,7 @@ void test_selection() {
     inputs.installed.clear();
     inputs.listings.erase(inputs.listings.begin() + 1);
     lib::refresh(library, inputs);
-    OA_CHECK(library.selected == alpha && !library.details_open);
+    OA_CHECK(library.selected == base && !library.details_open);
 
     // A search or tab that hides it moves it too.
     lib::open_details(library);
@@ -1854,6 +1903,185 @@ std::string_view reversed_words(void*, std::string_view english) {
     return english;
 }
 
+/// Tells whether the visible list holds a key.
+///
+/// @param library the Library
+/// @param key the key, as visible_keys writes it
+/// @return true when it shows
+bool shows_key(const lib::Library& library, std::string_view key) {
+    const std::vector<std::string> keys = visible_keys(library);
+    return std::find(keys.begin(), keys.end(), key) != keys.end();
+}
+
+/// The base game entry's name and summary in another language.
+///
+/// @param english the pattern
+/// @return its translation, or the pattern
+std::string_view translated_base_game(void*, std::string_view english) {
+    if (english == lib::words::base_game_name)
+        return "Jeu de base";
+    if (english == lib::words::base_game_summary)
+        return "Sans mod";
+    return english;
+}
+
+void test_base_game() {
+    using Keys = std::vector<std::string>;
+    using Buttons = std::vector<std::pair<Action, bool>>;
+
+    // No package: it is first, marked PLAYING, and offers no action.
+    const lib::Library none = built({});
+    OA_CHECK(visible_keys(none) == Keys({"@base-game@"}));
+    OA_CHECK(lib::filter_count(none, lib::Filter::all) == 0);
+    OA_CHECK(lib::filter_count(none, lib::Filter::installed) == 0);
+    OA_CHECK(lib::filter_count(none, lib::Filter::newest) == 0);
+    OA_CHECK(lib::filter_count(none, lib::Filter::updates) == 0);
+    OA_CHECK(lib::update_count(none) == 0);
+    const lib::Entry* entry = lib::find_entry(none, lib::base_game_id());
+    OA_CHECK(entry != nullptr && entry->state == State::playing);
+    OA_CHECK(entry != nullptr && entry->listing == nullptr && entry->installed == nullptr);
+    OA_CHECK(entry != nullptr && entry->update == nullptr && entry->queued == nullptr);
+    OA_CHECK(entry != nullptr && !entry->built_in && !entry->not_reviewed);
+    OA_CHECK(entry != nullptr && entry->registry_name.empty() && entry->badge == nullptr);
+    if (entry != nullptr) {
+        OA_CHECK(actions_of(none, *entry).empty());
+        OA_CHECK(lib::facts(none, *entry).empty());
+        OA_CHECK_TEXT(lib::entry_name(*entry), "Base Game (Disable Mods)");
+        OA_CHECK_TEXT(
+            lib::entry_summary(*entry), "Total Annihilation 3.1c as it was made, with no mod"
+        );
+        OA_CHECK_TEXT(lib::status_line(none, *entry), "Playing");
+    }
+    OA_CHECK_TEXT(lib::playing_note(none), "");
+
+    // The badge the app supplies is the one the row shows.
+    lib::Inputs with_badge;
+    with_badge.base_game_badge = lib::Badge{{1, 2, 3, 4}, 1, 1};
+    lib::Library badged;
+    lib::refresh(badged, std::move(with_badge));
+    const lib::Entry* marked = lib::find_entry(badged, lib::base_game_id());
+    OA_CHECK(marked != nullptr && marked->badge != nullptr && marked->badge->width == 1);
+    OA_CHECK(marked != nullptr && marked->badge != nullptr && marked->badge->height == 1);
+    if (marked != nullptr && marked->badge != nullptr && marked->badge->rgba.size() == 4)
+        OA_CHECK(marked->badge->rgba[0] == 1 && marked->badge->rgba[3] == 4);
+
+    // A mod played: INSTALLED, and PLAY NOW alone, on the same rule as SWITCH OFF.
+    lib::Inputs inputs = base_inputs();
+    inputs.installed.push_back(installed(core, Kind::mod, "ridge", "Ridge"));
+    inputs.installed.back().playing = true;
+    lib::Library library = built(inputs);
+    entry = lib::find_entry(library, lib::base_game_id());
+    OA_CHECK(entry != nullptr && entry->state == State::installed);
+    if (entry != nullptr) {
+        OA_CHECK(actions_of(library, *entry) == Buttons({{Action::play_now, true}}));
+        OA_CHECK_TEXT(lib::entry_actions(library, *entry).front().text, "PLAY NOW");
+        OA_CHECK(lib::facts(library, *entry).empty());
+    }
+    lib::select(library, lib::base_game_id());
+    OA_CHECK_TEXT(lib::playing_note(library), "");
+    inputs.in_match = true;
+    lib::refresh(library, inputs);
+    entry = lib::find_entry(library, lib::base_game_id());
+    if (entry != nullptr)
+        OA_CHECK(actions_of(library, *entry) == Buttons({{Action::play_now, false}}));
+    inputs.in_match = false;
+    inputs.mod_from_command_line = true;
+    lib::refresh(library, inputs);
+    lib::select(library, lib::base_game_id());
+    entry = lib::find_entry(library, lib::base_game_id());
+    if (entry != nullptr)
+        OA_CHECK(actions_of(library, *entry) == Buttons({{Action::play_now, false}}));
+    OA_CHECK_TEXT(lib::playing_note(library), "The command line chose this run's mod.");
+
+    // A mod the inputs name, with no installed copy marked playing, is still one played.
+    inputs.mod_from_command_line = false;
+    inputs.installed.clear();
+    inputs.playing_mod = lib::PlayingMod{"Ridge", "1", std::nullopt};
+    lib::refresh(library, inputs);
+    entry = lib::find_entry(library, lib::base_game_id());
+    OA_CHECK(entry != nullptr && entry->state == State::installed);
+    if (entry != nullptr)
+        OA_CHECK(actions_of(library, *entry) == Buttons({{Action::play_now, true}}));
+
+    // A folder keyed @base-game cannot take the entry: it stays the base game.
+    inputs.playing_mod.reset();
+    inputs.installed.push_back(installed("", Kind::mod, "@base-game", "Clash"));
+    lib::refresh(library, inputs);
+    entry = lib::find_entry(library, lib::base_game_id());
+    OA_CHECK(entry != nullptr && entry->installed == nullptr && entry->state == State::playing);
+    if (entry != nullptr)
+        OA_CHECK(actions_of(library, *entry).empty());
+    std::size_t clashes = 0;
+    for (const lib::Entry& each : library.entries)
+        if (lib::is_base_game(each.id))
+            ++clashes;
+    OA_CHECK(clashes == 1);
+
+    // First under All and Installed. Absent from New, Updates, Maps, Active and Registries.
+    // Never counted. A search of its name keeps it first, ahead of a name that also matches.
+    inputs = base_inputs();
+    lib::Listing dated = listing(core, Kind::mod, "dated", "Dated Mod");
+    dated.published = "2026-10-01";
+    inputs.listings.push_back(dated);
+    inputs.listings.push_back(listing(core, Kind::mod, "game-kit", "Game Kit"));
+    inputs.listings.push_back(listing(example, Kind::map_pack, "pack", "Pack"));
+    inputs.installed.push_back(installed(core, Kind::mod, "dated", "Dated Mod"));
+    inputs.updates.push_back(update(core, Kind::mod, "dated"));
+    library = built(std::move(inputs));
+    OA_CHECK(visible_keys(library).front() == "@base-game@");
+    OA_CHECK(lib::filter_count(library, lib::Filter::all) == 2);
+    OA_CHECK(lib::filter_count(library, lib::Filter::installed) == 1);
+    OA_CHECK(lib::filter_count(library, lib::Filter::newest) == 1);
+    OA_CHECK(lib::filter_count(library, lib::Filter::updates) == 1);
+    OA_CHECK(lib::update_count(library) == 1);
+    lib::set_filter(library, lib::Filter::installed);
+    OA_CHECK(visible_keys(library).front() == "@base-game@");
+    OA_CHECK(shows_key(library, "dated@fixture-core"));
+    lib::set_filter(library, lib::Filter::newest);
+    OA_CHECK(visible_keys(library) == Keys({"dated@fixture-core"}));
+    lib::set_filter(library, lib::Filter::updates);
+    OA_CHECK(visible_keys(library) == Keys({"dated@fixture-core"}));
+    lib::set_filter(library, lib::Filter::all);
+    lib::set_tag(library, "units");
+    OA_CHECK(!shows_key(library, "@base-game@"));
+    lib::set_tag(library, "");
+    for (const std::string_view word : {"base", "game", "disable", "mods"}) {
+        lib::set_query(library, word);
+        OA_CHECK(visible_keys(library).front() == "@base-game@");
+    }
+    lib::set_query(library, "game");
+    OA_CHECK(shows_key(library, "game-kit@fixture-core"));
+    lib::set_query(library, "zzzz");
+    OA_CHECK(library.visible.empty());
+    lib::set_query(library, "");
+    lib::set_tab(library, lib::Tab::maps);
+    OA_CHECK(visible_keys(library) == Keys({"pack@example-maps"}));
+    lib::set_tab(library, lib::Tab::updates);
+    OA_CHECK(!shows_key(library, "@base-game@"));
+    lib::set_tab(library, lib::Tab::active);
+    OA_CHECK(library.visible.empty());
+    lib::set_tab(library, lib::Tab::registries);
+    OA_CHECK(!shows_key(library, "@base-game@"));
+
+    // The name and summary are the language's, and a search matches that name.
+    lib::TextHooks hooks;
+    hooks.shown = translated_base_game;
+    lib::Library translated;
+    translated.text = hooks;
+    lib::refresh(translated, base_inputs());
+    lib::set_tab(translated, lib::Tab::mods);
+    const lib::Entry* french = lib::find_entry(translated, lib::base_game_id());
+    OA_CHECK(french != nullptr);
+    if (french != nullptr) {
+        OA_CHECK_TEXT(lib::entry_name(*french), "Jeu de base");
+        OA_CHECK_TEXT(lib::entry_summary(*french), "Sans mod");
+    }
+    lib::set_query(translated, "jeu");
+    OA_CHECK(visible_keys(translated) == Keys({"@base-game@"}));
+    lib::set_query(translated, "disable");
+    OA_CHECK(translated.visible.empty());
+}
+
 void test_tab_counts() {
     // A tab's count is its All count, before the search and the tag, and it
     // does not follow the tab that is open. Registries counts its rows.
@@ -1873,6 +2101,8 @@ void test_tab_counts() {
     OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 1);
     OA_CHECK(lib::tab_count(library, lib::Tab::updates) == lib::update_count(library));
     OA_CHECK(lib::tab_count(library, lib::Tab::registries) == 2);
+    // Base Game is not a mod: Mods' count leaves it out.
+    OA_CHECK(lib::find_entry(library, lib::base_game_id()) != nullptr);
 }
 
 void test_lookup() {
@@ -1909,6 +2139,7 @@ int main() {
     test_selection();
     test_entry_actions();
     test_switch_off();
+    test_base_game();
     test_check_now();
     test_tab_counts();
     test_own_mod_description();

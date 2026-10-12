@@ -211,6 +211,7 @@ inline lib::Inputs fixture_inputs() {
         "Rules for ranked play",
         {"rules"}
     );
+    highland.badge = gradient_badge();
     lib::Listing ta_zero = listing(
         core,
         Kind::mod,
@@ -291,6 +292,7 @@ inline lib::Inputs fixture_inputs() {
         {"maps"}
     );
     core_maps.maps = {{"Ridgeline", 4, "16x16"}, {"Twin Rivers", 2, "12x12"}};
+    core_maps.badge = gradient_badge();
     lib::Listing desert = listing(
         added,
         Kind::map_pack,
@@ -307,6 +309,7 @@ inline lib::Inputs fixture_inputs() {
     );
     portuguese.coverage = 0.92;
     lib::Listing polish = listing(added, Kind::language, "pl", "Polski", "", 2 * mib, "Polish", {});
+    polish.coverage = 0.92;
     ridge.published = "2026-10-01";
     bastion.published = "2026-09-12";
     dunes.published = "2026-10-11";
@@ -338,6 +341,9 @@ inline lib::Inputs fixture_inputs() {
     highland_installed.playing = true;
     lib::Installed lattice_installed = installed(lattice, "3.0", 3);
     lattice_installed.kept = lib::Kept{"3.0", 2};
+    lib::Installed polish_installed = installed(polish, "1.0", 2);
+    polish_installed.in_use = true;
+    polish_installed.badge = gradient_badge();
     inputs.installed = {
         ridge_installed,
         installed(bastion, "10.2.0", 1),
@@ -345,7 +351,7 @@ inline lib::Inputs fixture_inputs() {
         installed(ironclad, "2.0", 1),
         lattice_installed,
         installed(core_maps, "1.0", 1),
-        installed(polish, "", 1),
+        polish_installed,
     };
 
     lib::UpdateNote ridge_update;
@@ -388,7 +394,11 @@ inline lib::Inputs fixture_inputs() {
     updated.update_to = "revision 3";
     inputs.queue = {downloading, queued(frontier, Phase::waiting), failed, updated};
 
-    inputs.language = {"Polski", "Polski", "1.0"};
+    inputs.language.name = "Polski";
+    inputs.language.pack = "Polski";
+    inputs.language.version = "1.0";
+    inputs.language.english = "Polish";
+    inputs.language.revision = 2;
     inputs.map_packs = {
         {"Core Map Pack", {{"Ridgeline", 4, "16x16"}, {"Twin Rivers", 2, "12x12"}}},
         {"Island Hopping", {{"Atoll", 6, "20x20"}}},

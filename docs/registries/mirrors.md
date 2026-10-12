@@ -22,7 +22,7 @@ check's code and address, and carries on once the check is passed. The
 folder is served as a direct registry either way. The origin's download API
 stays the origin's policy; the mirror does not have to run one.
 
-Serve `FOLDER` over plain HTTP, as [running.md](running.md) serves a
+Serve `FOLDER` over `http` or `https`, as [running.md](running.md) serves a
 registry made with `registry init`. The descriptor in the folder names the
 origin's catalogue. To publish the mirror, the origin adds the mirror's
 catalogue URL to its own descriptor, or the player adds it themselves.
@@ -30,7 +30,7 @@ catalogue URL to its own descriptor, or the player adds it themselves.
 ## How a mirror is named
 
 The descriptor's `mirrors` list, at most 8, holds other copies of the
-catalogue. Each is an `http` address with no query. The catalogue may repeat
+catalogue. Each is an `http` or `https` address with no query. The catalogue may repeat
 that list in its own `mirrors`. A player who added the registry can add
 further mirrors, kept as `player-mirrors` in
 [Registries.yaml](descriptor.md). Those follow the same address rule, and a

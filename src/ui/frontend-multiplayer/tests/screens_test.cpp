@@ -1714,6 +1714,158 @@ void check_bound_base_maps(Driver& d) {
     );
 }
 
+/// A pack map past Select Map's first page is reached by paging the down
+/// arrow, then chosen. A player's click on that arrow still steps the knob once.
+void check_pack_map_page(Driver& d) {
+    struct Guard {
+        ~Guard() { mp::multiplayer_bind_map_source({}); }
+    } guard;
+
+    struct PageSource {
+        static int32_t count(void*) { return 1; }
+
+        static bool at(void*, int32_t index, mp::LobbyPackMap* out) {
+            if (index != 0 || out == nullptr)
+                return false;
+            *out = {"isle_one@oa-test-isles", "One isle", "16x16", 16};
+            return true;
+        }
+
+        static bool prepare(void*, const char*, char*, std::size_t) { return true; }
+
+        static void release(void*) {}
+
+        // One real installed map, so the battle room has a map file selected.
+        // Select Map stays closed when the selected map has no file. It sorts
+        // ahead of the generated names, and the pack map stays past the page.
+        static int32_t base_count(void*) { return 37; }
+
+        static bool base_at(void*, int32_t index, mp::LobbyPackMap* out) {
+            if (out == nullptr || index < 0 || index >= 37)
+                return false;
+            if (index == 0) {
+                *out = {BoundBaseMaps::kReal, "A shore", "12 x 12", 16};
+                return true;
+            }
+            static char names[36][4]{};
+            static bool filled = false;
+            if (!filled) {
+                for (int place = 0; place < 36; ++place) {
+                    names[place][0] = 'a';
+                    names[place][1] = static_cast<char>('0' + place / 10);
+                    names[place][2] = static_cast<char>('0' + place % 10);
+                    names[place][3] = '\0';
+                }
+                filled = true;
+            }
+            *out = {names[index - 1], "A plain", "8x8", 8};
+            return true;
+        }
+
+        mp::LobbyMapSource source() {
+            mp::LobbyMapSource bound{};
+            bound.context = this;
+            bound.count = count;
+            bound.at = at;
+            bound.prepare = prepare;
+            bound.release = release;
+            bound.base_count = base_count;
+            bound.base_at = base_at;
+            return bound;
+        }
+    };
+
+    PageSource pages;
+    mp::multiplayer_bind_map_source(pages.source());
+    mp::multiplayer_reset();
+    if (!host_battleroom(d, "Isles", "Host"))
+        return;
+    expect(d.click("MAP"), "MAP opens on a list longer than one page");
+    auto* modal = mp::multiplayer_modal();
+    auto* names = modal != nullptr ? mp::panel_control(*modal, "MAPNAMES") : nullptr;
+    auto* bar = modal != nullptr ? mp::panel_control(*modal, "SLIDER") : nullptr;
+    expect(
+        names != nullptr && bar != nullptr && mp::multiplayer_modal_kind() == mp::ModalKind::selmap,
+        "SELMAP lists the maps and its scroll bar"
+    );
+    if (names == nullptr || bar == nullptr)
+        return;
+    int32_t pack_row = -1;
+    for (int32_t row = 0; row < static_cast<int32_t>(names->items.size()); ++row) {
+        if (names->items[static_cast<std::size_t>(row)] == "isle_one@oa-test-isles")
+            pack_row = row;
+    }
+    const int32_t shown =
+        names->list_item_height > 0 ? std::max(names->height / names->list_item_height, 1) : 1;
+    expect(
+        pack_row >= shown && names->list_first == 0,
+        "the pack map is listed and starts off the first page"
+    );
+    if (pack_row < shown)
+        return;
+    const auto& down = bar->scroll.forward_arrow;
+    const auto& up = bar->scroll.back_arrow;
+    expect(down.width > 0 && up.width > 0, "SELMAP's scroll arrows are shown");
+    if (down.width <= 0 || up.width <= 0)
+        return;
+
+    const Art map_art =
+        load_art(d.assets, "guis/selmap.gui", "bitmaps/dselectmap2.pcx", "anims/skirmish.gaf");
+    const auto [ox, oy] = dialog_offset(map_art, modal->controls[0]);
+    const int32_t down_x = ox + down.x + down.width / 2;
+    const int32_t down_y = oy + down.y + down.height / 2;
+    const int32_t up_x = ox + up.x + up.width / 2;
+    const int32_t up_y = oy + up.y + up.height / 2;
+    expect(
+        mp::multiplayer_list_page_arrow(down_x, down_y) &&
+            mp::multiplayer_list_page_arrow(up_x, up_y) &&
+            !mp::multiplayer_list_page_arrow(ox + down.x - 1, down_y),
+        "the arrows page a list, and a point beside one does not"
+    );
+
+    const int32_t knob = bar->scroll.knob;
+    d.pointer_click(down_x, down_y);
+    expect(
+        bar->scroll.knob == knob + 1 && names->list_first == 0,
+        "a player's click on the down arrow steps the knob once"
+    );
+
+    const int32_t before = names->list_first;
+    expect(
+        mp::multiplayer_scroll_list_page(down_x, down_y) && names->list_first == before + shown,
+        "an endpoint click moves one page, the rows the list shows"
+    );
+    int steps = 1;
+    while (pack_row < names->list_first || pack_row >= names->list_first + shown) {
+        if (steps >= 8 || !mp::multiplayer_scroll_list_page(down_x, down_y))
+            break;
+        ++steps;
+    }
+    expect(
+        pack_row >= names->list_first && pack_row < names->list_first + shown,
+        "paging brings the pack map onto the page"
+    );
+    if (pack_row < names->list_first || pack_row >= names->list_first + shown)
+        return;
+    const int32_t paged = names->list_first;
+    expect(
+        mp::multiplayer_scroll_list_page(up_x, up_y) && names->list_first == paged - shown,
+        "the up arrow moves one page toward the start"
+    );
+    int back = 0;
+    while (pack_row < names->list_first || pack_row >= names->list_first + shown) {
+        if (back >= 8 || !mp::multiplayer_scroll_list_page(down_x, down_y))
+            break;
+        ++back;
+    }
+    click_map_row(d, *names, pack_row, ox, oy);
+    expect(
+        names->list_selection == pack_row &&
+            names->items[static_cast<std::size_t>(pack_row)] == "isle_one@oa-test-isles",
+        "the pack map's row can be chosen once it is on the page"
+    );
+}
+
 /// The battle room lists an installed pack map, mounts it, refuses one, and a
 /// joiner without it sees the name the host sent.
 void check_pack_maps(Driver& d) {
@@ -3789,6 +3941,7 @@ int main() {
     check_launch_exit(d);
     check_engine_banner(d);
     check_pack_maps(d);
+    check_pack_map_page(d);
     check_bound_base_maps(d);
     check_presence_badges(d);
     check_player_row_focus(d);

@@ -44,6 +44,8 @@ namespace kit = oa::ui::kit;
 constexpr std::string_view kCheckHint =
     "OA looks for new content and updates in the registries' lists. "
     "It never installs anything until you say so.";
+/// Said once, after that hint, when this system reads https as http.
+constexpr std::string_view kHttpsOverHttp = "This system reads HTTPS registries over HTTP.";
 /// An install ID's hint. {name} is the registry's name.
 constexpr std::string_view kInstallHint =
     "A random number that lets {name} stop automated downloads. "
@@ -198,8 +200,21 @@ std::string wrapped_line(const Dialog& dialog, std::string text, std::size_t lin
 ///
 /// @param model the row
 /// @return the lines
+/// The check's hint, plus the https note on a system that reads it as http.
+///
+/// @param dialog the dialog
+/// @return the hint
+std::string check_hint_text(const Dialog& dialog) {
+    std::string text(kCheckHint);
+    if (dialog.downloads.https_over_http) {
+        text.push_back(' ');
+        text.append(kHttpsOverHttp);
+    }
+    return text;
+}
+
 std::size_t check_hint_lines(const RowModel& model) {
-    return wrapped(*model.dialog, std::string(kCheckHint)).size();
+    return wrapped(*model.dialog, check_hint_text(*model.dialog)).size();
 }
 
 /// Returns one line of the check's hint.
@@ -208,7 +223,7 @@ std::size_t check_hint_lines(const RowModel& model) {
 /// @param line the line, from 0
 /// @return the line
 std::string check_hint_line(const RowModel& model, std::size_t line) {
-    return wrapped_line(*model.dialog, std::string(kCheckHint), line);
+    return wrapped_line(*model.dialog, check_hint_text(*model.dialog), line);
 }
 
 /// Returns an install ID's label: "Install ID", or "Install ID · {name}"

@@ -8,6 +8,7 @@
 #include "requests.hpp"
 
 #include "oa/app/frame_coordinates.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include <algorithm>
 #include <array>
@@ -515,6 +516,19 @@ void answer_input(Endpoint& endpoint, const Request& request, Answer& answer) {
     auto& state = input_state();
     StepMaker maker(placement, state.held, cursor_x, cursor_y);
     for (const InputEvent& event : *events) {
+        // A multiplayer list's arrows are reported so a program can reach a
+        // row that starts off the page. One step of the knob does not bring
+        // a new row on, so a click from here moves a whole page. A player's
+        // own click never comes through this request, and still steps once.
+        const bool press =
+            event.kind == InputKind::button_down || event.kind == InputKind::button_up;
+        if (press && event.button == PointerButton::left && event.has_point &&
+            event.space == PointSpace::game &&
+            oa::ui::frontend_multiplayer::multiplayer_list_page_arrow(event.x, event.y)) {
+            if (event.kind == InputKind::button_down)
+                (void)oa::ui::frontend_multiplayer::multiplayer_scroll_list_page(event.x, event.y);
+            continue;
+        }
         if (!maker.make(event, touch, text_taken)) {
             answer.refuse(
                 "internal", std::string("a point cannot be placed in the window: ") + SDL_GetError()

@@ -120,7 +120,15 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   (`colour::lock`), its outer point a ring in the outline token
   (`colour::control_border`), `oa_button_dot_inset` (2) points in from the
   button's top and right edges (`oa_button_dot`), at the canvas's scale.
-  Without the dot the button is drawn exactly as before.
+  It may also wear a badge in the bottom right (`OaButtonMark`,
+  `oa_button_badge`): the count, "999+" above 999, in the small font on a
+  dark pill, or a spinner of eight places in that pill while the count is
+  not final. The spinner is worked out at the canvas's own pixels, each
+  pixel's share counted from 16 samples in integers, and drawn through
+  `blend_coverage`. `turn` names which place is lit. The badge does not
+  move when the button is pressed, and a button too small to hold it draws
+  none. Without the dot and without a corner mark the button is drawn
+  exactly as before.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
   the nav list, and a section's heading, row, rule and locked fade.
 - `controls.hpp`: the controls of the Library, the map browser and the

@@ -33,6 +33,69 @@ using Phase = QueueItem::Phase;
 /// A whole percentage.
 constexpr uint64_t percent_whole = 100;
 
+/// Returns the language pack the game is showing its words from.
+///
+/// @param library the Library
+/// @return the entry marked in use; null when the language is built in or not installed
+const Entry* language_in_use(const Library& library) {
+    for (const Entry& entry : library.entries)
+        if (entry.id.kind == Kind::language && entry.installed != nullptr &&
+            entry.installed->in_use)
+            return &entry;
+    return nullptr;
+}
+
+/// Returns an entry's badge: its listing's, else its installed copy's.
+///
+/// @param entry the entry
+/// @return the badge, which points into the Library's inputs; null without one
+const Badge* badge_of(const Entry& entry) {
+    if (entry.listing != nullptr && entry.listing->badge)
+        return &*entry.listing->badge;
+    if (entry.installed != nullptr && entry.installed->badge)
+        return &*entry.installed->badge;
+    return nullptr;
+}
+
+/// Returns an installed map pack's badge, matched by the name the player sees.
+///
+/// @param library the Library
+/// @param name the pack's name
+/// @return the badge; null when no installed pack of that name has one
+const Badge* pack_badge(const Library& library, std::string_view name) {
+    for (const Entry& entry : library.entries) {
+        if (entry.id.kind != Kind::map_pack || entry_name(entry) != name)
+            continue;
+        if (const Badge* badge = badge_of(entry))
+            return badge;
+    }
+    return nullptr;
+}
+
+/// Returns who made an entry, as the details name an author.
+///
+/// @param entry the entry
+/// @return the author; empty when nobody is named
+std::string author_of(const Entry& entry) {
+    std::string author;
+    if (entry.listing != nullptr)
+        author = entry.listing->author.empty() ? entry.listing->publisher : entry.listing->author;
+    if (author.empty() && entry.installed != nullptr)
+        author = entry.installed->author;
+    return author;
+}
+
+/// Returns a coverage as the Active tile states it.
+///
+/// @param text how texts are looked up
+/// @param coverage the fraction, from 0 to 1
+/// @return such as "Coverage 92%"
+std::string coverage_line(const TextHooks& text, double coverage) {
+    const double clamped = std::clamp(coverage, 0.0, 1.0);
+    const auto percent = static_cast<uint64_t>(clamped * static_cast<double>(percent_whole) + 0.5);
+    return filled(text, words::active_coverage, {{"percent", std::to_string(percent)}});
+}
+
 /// Finds a registry by its id.
 ///
 /// @param inputs the inputs
@@ -170,6 +233,64 @@ void settle_entry(const Library& library, Entry& entry) {
     }
     entry.blocked = blocked_reason(library, entry);
     entry.can_act = entry.blocked.empty();
+}
+
+/// Tells whether a mod is played: an installed mod marked playing, or a
+/// mod the inputs name outside the packages.
+///
+/// @param library the Library
+/// @return true when one is
+bool mod_is_played(const Library& library) {
+    if (library.inputs.playing_mod)
+        return true;
+    for (const Installed& installed : library.inputs.installed)
+        if (installed.kind == Kind::mod && installed.playing)
+            return true;
+    return false;
+}
+
+/// Sets the base game entry: played while no mod is, otherwise installed,
+/// with its name, summary and badge, and with no package behind it.
+///
+/// @param library the Library
+/// @param[in,out] entry the base game entry
+void settle_base_game(const Library& library, Entry& entry) {
+    entry.listing = nullptr;
+    entry.installed = nullptr;
+    entry.update = nullptr;
+    entry.queued = nullptr;
+    entry.replaces_registry_name.clear();
+    entry.built_in = false;
+    entry.not_reviewed = false;
+    entry.registry_name.clear();
+    entry.blocked.clear();
+    entry.can_act = true;
+    entry.state = mod_is_played(library) ? State::installed : State::playing;
+    entry.badge = library.inputs.base_game_badge ? &*library.inputs.base_game_badge : nullptr;
+    entry.shown_name = std::string(shown(library.text, words::base_game_name));
+    entry.shown_summary = std::string(shown(library.text, words::base_game_summary));
+}
+
+/// Makes sure the base game entry is present, and settles it.
+///
+/// An entry a package already took under the same id is kept as the base
+/// game entry: a package key cannot be base_game_key, and the entry offers
+/// none of a package's actions.
+///
+/// @param[in,out] library the Library, its other entries already settled
+void ensure_base_game(Library& library) {
+    const EntryId id = base_game_id();
+    std::optional<std::size_t> place;
+    for (std::size_t index = 0; index < library.entries.size(); ++index)
+        if (library.entries[index].id == id)
+            place = index;
+    if (!place) {
+        Entry added;
+        added.id = id;
+        library.entries.push_back(std::move(added));
+        place = library.entries.size() - 1;
+    }
+    settle_base_game(library, library.entries[*place]);
 }
 
 /// Makes the selection one of the visible entries.
@@ -489,6 +610,7 @@ void refresh(Library& library, Inputs inputs) {
             break;
         }
     }
+    ensure_base_game(library);
     recompute(library);
 }
 
@@ -572,6 +694,9 @@ const Entry* selected_entry(const Library& library) {
 }
 
 std::string_view entry_name(const Entry& entry) {
+    if (is_base_game(entry.id))
+        return entry.shown_name.empty() ? words::base_game_name
+                                        : std::string_view(entry.shown_name);
     if (entry.listing != nullptr)
         return entry.listing->name;
     if (entry.installed != nullptr)
@@ -580,6 +705,9 @@ std::string_view entry_name(const Entry& entry) {
 }
 
 std::string_view entry_summary(const Entry& entry) {
+    if (is_base_game(entry.id))
+        return entry.shown_summary.empty() ? words::base_game_summary
+                                           : std::string_view(entry.shown_summary);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         return entry.listing->summary;
     if (entry.installed != nullptr)
@@ -602,7 +730,11 @@ std::vector<std::pair<std::string, std::size_t>> tags_in_tab(const Library& libr
 
 std::size_t filter_count(const Library& library, Filter filter) {
     const std::vector<bool> kept = kept_by_filter(library, filter);
-    return static_cast<std::size_t>(std::count(kept.begin(), kept.end(), true));
+    std::size_t packages = 0;
+    for (std::size_t index = 0; index < kept.size(); ++index)
+        if (kept[index] && !is_base_game(library.entries[index].id))
+            ++packages;
+    return packages;
 }
 
 std::string filter_caption(const Library& library, Filter filter) {
@@ -644,26 +776,64 @@ ActiveSetup active_setup(const Library& library) {
     if (playing != nullptr) {
         setup.mod_name = entry_name(*playing);
         setup.mod_version = version_text(*playing->installed, text);
-        if (playing->listing != nullptr && playing->listing->badge)
-            setup.mod_badge = &*playing->listing->badge;
-        else if (playing->installed->badge)
-            setup.mod_badge = &*playing->installed->badge;
+        setup.mod_release =
+            release_text(playing->installed->version, playing->installed->revision, text);
+        setup.mod_badge = badge_of(*playing);
+        const std::string author = author_of(*playing);
+        if (!author.empty())
+            setup.mod_author = filled(text, words::byline, {{"author", author}});
+        setup.mod_state = std::string(shown(text, words::status_playing));
     } else if (inputs.playing_mod) {
         setup.mod_name = inputs.playing_mod->name;
         setup.mod_version = inputs.playing_mod->version;
+        setup.mod_release = inputs.playing_mod->version;
         if (inputs.playing_mod->badge)
             setup.mod_badge = &*inputs.playing_mod->badge;
+        setup.mod_state = std::string(shown(text, words::status_playing));
     }
-    if (playing == nullptr && !inputs.playing_mod)
+    if (playing == nullptr && !inputs.playing_mod) {
+        setup.base_title = std::string(shown(text, words::active_base_game));
+        setup.base_look = std::string(shown(text, words::base_supported));
         setup.mod_line = shown(text, words::active_no_mod);
-    else if (setup.mod_version.empty())
+    } else if (setup.mod_version.empty()) {
         setup.mod_line = setup.mod_name;
-    else
+    } else {
         setup.mod_line = filled(
             text, words::active_package, {{"name", setup.mod_name}, {"version", setup.mod_version}}
         );
+    }
 
     const LanguageInUse& language = inputs.language;
+    const bool built_in = language.pack.empty();
+    if (!language.name.empty())
+        setup.language_name = language.name;
+    else if (!language.pack.empty())
+        setup.language_name = language.pack;
+    else
+        setup.language_name = std::string(shown(text, words::language_english));
+    if (!language.english.empty() && language.english != setup.language_name)
+        setup.language_english = language.english;
+    if (!language.pack.empty() && language.pack != setup.language_name &&
+        language.pack != setup.language_english)
+        setup.language_pack = language.pack;
+    if (built_in) {
+        setup.language_note = std::string(shown(text, words::registry_built_in));
+    } else if (const Entry* used = language_in_use(library)) {
+        std::string shown_version = language.version;
+        int64_t shown_revision = language.revision;
+        if (used->installed != nullptr) {
+            if (!used->installed->version.empty())
+                shown_version = used->installed->version;
+            if (used->installed->revision > 0)
+                shown_revision = used->installed->revision;
+        }
+        setup.language_version = release_text(shown_version, shown_revision, text);
+        setup.language_badge = badge_of(*used);
+        if (used->listing != nullptr && used->listing->coverage)
+            setup.language_coverage = coverage_line(text, *used->listing->coverage);
+    } else if (!language.version.empty() || language.revision > 0) {
+        setup.language_version = release_text(language.version, language.revision, text);
+    }
     if (!language.pack.empty()) {
         setup.language_line = language.version.empty()
                                   ? language.pack
@@ -673,10 +843,8 @@ ActiveSetup active_setup(const Library& library) {
                                         {{"name", language.pack}, {"version", language.version}}
                                     );
     } else {
-        const std::string name = language.name.empty()
-                                     ? std::string(shown(text, words::language_english))
-                                     : language.name;
-        setup.language_line = filled(text, words::active_language_built_in, {{"language", name}});
+        setup.language_line =
+            filled(text, words::active_language_built_in, {{"language", setup.language_name}});
     }
 
     for (const InstalledMaps& pack : inputs.map_packs) {
@@ -707,6 +875,8 @@ ActiveSetup active_setup(const Library& library) {
             return folded(left.name) < folded(right.name);
         }
     );
+    for (ActivePack& pack : setup.packs)
+        pack.badge = pack_badge(library, pack.name);
     return setup;
 }
 
@@ -718,6 +888,15 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const auto add = [&](Action action, bool enabled) {
         buttons.push_back({action, enabled, action_text(action, text)});
     };
+    // The base game is not a package. While it is played it offers nothing;
+    // while a mod is, PLAY NOW follows SWITCH OFF's rule and does its work.
+    if (is_base_game(entry.id)) {
+        if (entry.state != State::playing) {
+            const bool can_switch = !in_match && !library.inputs.mod_from_command_line;
+            add(Action::play_now, can_switch);
+        }
+        return buttons;
+    }
     if (entry.state == State::get || entry.state == State::update) {
         if (item != nullptr && pending(item->phase))
             add(Action::cancel, true);
@@ -753,6 +932,9 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
     const Listing* listing = entry.listing;
     const Installed* installed = entry.installed;
     std::vector<Fact> list;
+    // The base game is not a package: its details are its summary alone.
+    if (is_base_game(entry.id))
+        return list;
 
     // Which version is installed and which is newest, and who made it: each
     // left out when it has nothing to say.
@@ -967,7 +1149,17 @@ std::string byline(const Entry& entry, const TextHooks& text) {
 std::string playing_note(const Library& library) {
     const TextHooks& text = library.text;
     const Entry* entry = selected_entry(library);
-    if (entry == nullptr || entry->id.kind != Kind::mod || entry->installed == nullptr)
+    if (entry == nullptr || entry->id.kind != Kind::mod)
+        return {};
+    // PLAY NOW on the base game is off for the same reason SWITCH OFF is,
+    // and the note says so in the same words. While it is the one played
+    // it offers nothing, so it has no note.
+    if (is_base_game(entry->id)) {
+        if (entry->state == State::playing || !library.inputs.mod_from_command_line)
+            return {};
+        return std::string(shown(text, words::note_command_line));
+    }
+    if (entry->installed == nullptr)
         return {};
     // While the command line chose the mod, PLAY NOW and SWITCH OFF are off,
     // and the note says why first.
