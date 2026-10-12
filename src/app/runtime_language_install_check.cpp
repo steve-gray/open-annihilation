@@ -260,6 +260,10 @@ void Runtime::check_language_install() {
     );
     click(install::Answer::alongside);
     until_prompt("the language installed");
+    require(
+        state.prompt != nullptr && state.prompt->question().title == "LANGUAGE INSTALLED",
+        "--open did not tell that the language pack was installed"
+    );
     require(fs::is_regular_file(manifest), "Languages/en-XA/language.yaml was not installed");
     require(std::string_view(shown_language().tag) == kTag, "en-XA is not the language shown");
     require(

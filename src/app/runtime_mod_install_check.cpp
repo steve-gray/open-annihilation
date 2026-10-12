@@ -6,7 +6,8 @@
 // pointer, and the player's Mods folder checked after each. Each run of
 // the check is one turn. The first: the command line's missing package
 // refused; a catalogue map pack installed from the skirmish setup with no
-// prompt, and a catalogue mod left waiting until the main menu; a package
+// prompt, and a catalogue mod installed on the main menu with no notice,
+// the same files opened as --open does still showing theirs; a package
 // the Finder made installed with no question from a dropped file; an update
 // asked and cancelled, then replaced; a third
 // revision replacing, keeping one .backup; a reinstall dropping a file
@@ -299,7 +300,7 @@ bool plain_stem(std::string_view stem) {
 ///
 /// @param game_dir the base game's folder
 /// @return the TDF text
-std::string ridge_marker_tdf(const fs::path& game_dir) {
+std::string ridge_marker_tdf(const fs::path& game_dir, std::string_view feature) {
     const GameInstall install = inspect_game_install(game_dir);
     require(usable(install), "the base game cannot be read");
     oa::AssetStore store(install.folders);
@@ -316,16 +317,22 @@ std::string ridge_marker_tdf(const fs::path& game_dir) {
         }
     }
     require(!stem.empty(), "the base game has no animation a map can name");
-    return "[zz ridge marker]\n{\nfilename=" + stem + ";\n}\n";
+    return "[" + std::string(feature) + "]\n{\nfilename=" + stem + ";\n}\n";
 }
 
 /// Writes a two-map pack that places only its own feature.
 ///
 /// @param file the package
 /// @param game_dir the base game's folder
-void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
-    constexpr std::string_view feature = "zz ridge marker";
-    const std::string tdf = ridge_marker_tdf(game_dir);
+/// @param id the pack's id
+/// @param feature the one feature the maps place
+void write_ridge_pack(
+    const fs::path& file,
+    const fs::path& game_dir,
+    std::string_view id = "ridge-pack",
+    std::string_view feature = "zz ridge marker"
+) {
+    const std::string tdf = ridge_marker_tdf(game_dir, feature);
     const std::string ota = "[GlobalHeader]\n"
                             "{\n"
                             "[Schema 0]\n"
@@ -348,7 +355,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
     const std::string terrain_text(terrain.begin(), terrain.end());
     oa::data::map_pack::Manifest manifest;
     manifest.format = oa::data::map_pack::format_version;
-    manifest.id = "ridge-pack";
+    manifest.id = std::string(id);
     manifest.name = "Ridge Pack";
     manifest.version = "1.0";
     manifest.author = {"Ridge", {}};
@@ -363,7 +370,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
         map.files = {
             "maps/" + map.stem + ".ota",
             "maps/" + map.stem + ".tnt",
-            "features/ridgepack/marker.tdf",
+            "features/" + std::string(id) + "/marker.tdf",
         };
         manifest.maps.push_back(std::move(map));
     };
@@ -376,7 +383,7 @@ void write_ridge_pack(const fs::path& file, const fs::path& game_dir) {
          {"maps/north.tnt", terrain_text},
          {"maps/south.ota", ota},
          {"maps/south.tnt", terrain_text},
-         {"features/ridgepack/marker.tdf", tdf}}
+         {"features/" + std::string(id) + "/marker.tdf", tdf}}
     );
 }
 
@@ -669,10 +676,66 @@ void Runtime::check_mod_install() {
         require(screen_ == Screen::single_player, "PrevMenu did not leave the skirmish setup");
         exercise_click(entry::resource_name(entry::Button::previous_menu));
         require(screen_ == Screen::main_menu, "PrevMenu did not return to the main menu");
-        until_prompt("the catalogue mod");
-        require(titled("MOD INSTALLED"), "the catalogue mod was not installed on the main menu");
+        // A catalogue install shows no notice. The same file, posted as
+        // --open posts it, still does.
+        const auto installed_quietly = [&](std::string_view what, const auto& done) {
+            bool placed = false;
+            for (int frame = 0; frame < kMostFrames; ++frame) {
+                tell_mod_installs();
+                require(
+                    state.stage != ModInstallState::Stage::telling,
+                    std::string(what) + " showed an installed notice"
+                );
+                if (done() && state.stage == ModInstallState::Stage::idle && !state.unpacking &&
+                    state.prompt == nullptr) {
+                    placed = true;
+                    break;
+                }
+            }
+            require(placed, std::string(what) + " was not installed with no notice");
+        };
+        installed_quietly("the catalogue mod", [&] {
+            return revision_in(mods / "ridge-mod") == 1;
+        });
+        std::error_code remove_error;
+        fs::remove_all(mods / "ridge-mod", remove_error);
+        require(!remove_error, "the catalogue mod's folder could not be removed");
+        install::post_opened_file(waiting_mod);
+        until_prompt("the mod opened as --open opens it");
+        require(titled("MOD INSTALLED"), "--open did not tell that the mod was installed");
+        require(
+            std::find(state.answers.begin(), state.answers.end(), install::Answer::open_folder) !=
+                state.answers.end(),
+            "--open's notice has no OPEN FOLDER"
+        );
         key(SDLK_RETURN);
-        require(state.prompt == nullptr, "Enter did not close the catalogue mod's notice");
+        require(state.prompt == nullptr, "Enter did not close the mod's notice");
+
+        install::post_package_file(pack_file, pack_origin);
+        installed_quietly("the catalogue map pack on the main menu", [&] {
+            const auto outcomes = install::take_package_outcomes();
+            return !outcomes.empty() &&
+                   outcomes.front().result == install::OutcomeResult::installed;
+        });
+        // A different pack, removed first so each run asks INSTALL. Replacing
+        // ridge-pack with a file would leave a file origin, and the next
+        // run's catalogue install of ridge-pack would wait for a question
+        // instead of reporting.
+        const fs::path opened_folder = user_folder_ / "Maps" / "opened-pack";
+        fs::remove_all(opened_folder, remove_error);
+        require(!remove_error, "the opened map pack's folder could not be removed");
+        const fs::path opened_pack = packages / "opened-pack.oamap";
+        write_ridge_pack(opened_pack, options_.game_dir, "opened-pack", "zz opened marker");
+        install::post_opened_file(opened_pack);
+        until_prompt("the map pack opened as --open opens it");
+        require(titled("INSTALL MAP PACK"), "--open did not ask before installing the map pack");
+        click(install::Answer::alongside);
+        until_prompt("the map pack installed from outside");
+        require(
+            titled("MAP PACK INSTALLED"), "--open did not tell that the map pack was installed"
+        );
+        key(SDLK_RETURN);
+        require(state.prompt == nullptr, "Enter did not close the map pack's notice");
 
         // A package the Finder made, dropped on the window: installed with
         // no question.

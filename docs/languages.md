@@ -234,6 +234,9 @@ replace. Install alongside is not offered. `requires.engine` must be a
 range this build meets; the question that refuses names the range and this
 version. Quote a requirement that starts with `>`.
 
+When a file you opened is in place, **LANGUAGE INSTALLED** says where, with
+**OPEN FOLDER** and **OK**.
+
 When the pack is the language chosen, including a choice that read as
 System default until the pack was installed, the running game switches to
 it at once. The registry, the interface catalogue, the pack layers and the
