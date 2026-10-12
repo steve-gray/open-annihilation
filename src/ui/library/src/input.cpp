@@ -602,6 +602,48 @@ std::optional<ScreenResult> registry_press(
     return result;
 }
 
+/// Opens the Maps tab on the pack a From link names, with that pack's row
+/// in view. The link is followed before the Maps list is laid out, so the
+/// scroll is left for the next layout (reveal_row) rather than read from
+/// the Active tab's list.
+///
+/// @param[in,out] library the model
+/// @param[in,out] state the screen's state
+/// @param id the link
+/// @return a redraw, and nothing for the host to do
+ScreenResult open_map_pack(Library& library, ScreenState& state, kit::ControlId id) {
+    const auto index = static_cast<std::size_t>(id - controls::first_active_from);
+    const ActiveSetup setup = active_setup(library);
+    if (index >= setup.maps.size())
+        return {};
+    const EntryId pack = setup.maps[index].pack_id;
+    // The filter written is the tab that is open, so Maps is open first.
+    set_tab(library, Tab::maps);
+    set_filter(library, Filter::all);
+    set_query(library, {});
+    set_tag(library, {});
+    state.search.text.clear();
+    state.search.caret = 0;
+    close_details(library);
+    state.details_page = false;
+    state.menu = MenuKind::none;
+    state.details_scroll = 0;
+    state.list_scroll = 0;
+    select(library, pack);
+    state.reveal_row = -1;
+    if (library.selected) {
+        for (std::size_t place = 0; place < library.visible.size(); ++place) {
+            if (library.entries[library.visible[place]].id == *library.selected) {
+                state.reveal_row = static_cast<int32_t>(place);
+                break;
+            }
+        }
+    }
+    if (state.interaction.focus_shown)
+        state.interaction.focused = controls::list;
+    return redrawn();
+}
+
 /// Does what a control does when it is pressed, or takes Space or Enter.
 ///
 /// No press on a row gets, updates or installs anything: it selects the
@@ -683,6 +725,8 @@ ScreenResult activate(
             return open_page(library, state);
         return redrawn();
     }
+    if (controls::active_from_control(id))
+        return open_map_pack(library, state, id);
     ScreenResult result = redrawn();
     switch (id) {
     case controls::search:

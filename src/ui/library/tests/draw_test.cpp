@@ -15,10 +15,14 @@
 // Portugues (Brasil) pack the author "OA team" and an installed copy, on
 // that drawing only, so the row shows the OA mark under its check. The
 // characters the game's fonts lack are drawn in the modern fonts beside the
-// test, as the game draws them. Given --frames DIR, it writes
+// test, as the game draws them. The Active pictures and the Maps pictures
+// dress the fixture's maps with made-up minimaps on that drawing only, so
+// the tiles, the row and the details show those pictures and not a file
+// from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
-// library-updates-<class>.png, library-registries-<class>.png and
-// library-languages-compact.png there.
+// library-updates-<class>.png, library-registries-<class>.png,
+// library-languages-compact.png, library-maps-one-large.png and
+// library-maps-several-large.png there.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -122,6 +126,10 @@ struct Scene {
     kit::Viewport window{};       ///< the window it is laid out for
     bool details_page{};          ///< Compact's details page instead of the list
     lib::Tab tab{lib::Tab::mods}; ///< the tab shown
+    /// Dress the maps with made-up minimaps. The fixture's own inputs stay.
+    bool previews{};
+    std::string select_registry{}; ///< selected after the tab, when select_key is set
+    std::string select_key{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -188,6 +196,78 @@ void dress_registries(lib::Library& library) {
     }
 }
 
+/// Returns a solid minimap wider than it is tall. The pixels are made here:
+/// nothing is read from the game's files.
+///
+/// @param red red
+/// @param green green
+/// @param blue blue
+/// @return an 8 by 2 picture
+lib::MapPicture solid_minimap(uint8_t red, uint8_t green, uint8_t blue) {
+    lib::MapPicture picture;
+    picture.width = 8;
+    picture.height = 2;
+    picture.rgba.assign(8U * 2U * 4U, 0);
+    for (std::size_t index = 0; index + 3 < picture.rgba.size(); index += 4) {
+        picture.rgba[index] = red;
+        picture.rgba[index + 1] = green;
+        picture.rgba[index + 2] = blue;
+        picture.rgba[index + 3] = 255;
+    }
+    return picture;
+}
+
+/// Dresses the map pictures. Installed maps gain a minimap and a long
+/// description, so the Active tiles show both and a From link. Shore Pack is
+/// one map, not installed, so its row and its details show that minimap. Desert
+/// Pack has several maps and no badge, so the Maps row shows the first and the
+/// details show the grid. The fixture's own inputs stay as they were.
+///
+/// @param[in,out] library the scene's library
+void dress_map_previews(lib::Library& library) {
+    const lib::MapPicture red = solid_minimap(180, 40, 30);
+    const lib::MapPicture blue = solid_minimap(30, 70, 160);
+    const lib::MapPicture green = solid_minimap(40, 140, 50);
+    const std::string note =
+        "Black sand, white water and a reef that runs further than one line of this tile can "
+        "hold, then the same shore again so the line is cut.";
+    for (lib::Listing& listing : library.inputs.listings) {
+        if (listing.key == "desert-pack" && listing.maps.size() == 2) {
+            listing.maps[0].preview = blue;
+            listing.maps[0].description = "Dry and flat.";
+            listing.maps[1].preview = green;
+            listing.maps[1].description = "A table of stone.";
+        }
+    }
+    lib::Listing shore = fixture::listing(
+        fixture::core,
+        lib::Kind::map_pack,
+        "shore",
+        "Shore Pack",
+        "1.0",
+        fixture::mib,
+        "One cove",
+        {}
+    );
+    lib::MapLine cove;
+    cove.name = "Cove";
+    cove.players = 3;
+    cove.size = "10x10";
+    cove.description = note;
+    cove.preview = red;
+    shore.maps.push_back(std::move(cove));
+    library.inputs.listings.push_back(std::move(shore));
+    if (library.inputs.map_packs.size() >= 2) {
+        library.inputs.map_packs[0].maps[0].preview = green;
+        library.inputs.map_packs[0].maps[0].description = note;
+        library.inputs.map_packs[0].maps[1].preview = blue;
+        library.inputs.map_packs[0].maps[1].description = note;
+        library.inputs.map_packs[1].maps[0].preview = red;
+        library.inputs.map_packs[1].maps[0].description = note;
+    }
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -199,8 +279,12 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_registries(library);
     else if (scene.tab == lib::Tab::languages)
         dress_languages(library);
+    if (scene.previews)
+        dress_map_previews(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
+    if (!scene.select_key.empty())
+        lib::select(library, {scene.select_registry, lib::Kind::map_pack, scene.select_key});
     lib::ScreenState state;
     if (scene.details_page) {
         lib::open_details(library);
@@ -378,15 +462,29 @@ int main(int argc, char** argv) {
         {"regular", window_of(1920, 1080, 200), false},
         {"large", window_of(2560, 1440, 200), false},
         {"details-compact", window_of(640, 480, 100), true},
-        {"active-compact", window_of(640, 480, 100), false, lib::Tab::active},
-        {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active},
-        {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active},
+        {"active-compact", window_of(640, 480, 100), false, lib::Tab::active, true},
+        {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
+        {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
         {"updates-compact", window_of(640, 480, 100), false, lib::Tab::updates},
         {"updates-large", window_of(2560, 1440, 200), false, lib::Tab::updates},
         {"registries-compact", window_of(640, 480, 100), false, lib::Tab::registries},
         {"registries-regular", window_of(1920, 1080, 200), false, lib::Tab::registries},
         {"registries-large", window_of(2560, 1440, 200), false, lib::Tab::registries},
         {"languages-compact", window_of(640, 480, 100), false, lib::Tab::languages},
+        {"maps-one-large",
+         window_of(2560, 1440, 200),
+         false,
+         lib::Tab::maps,
+         true,
+         std::string(fixture::core),
+         "shore"},
+        {"maps-several-large",
+         window_of(2560, 1440, 200),
+         false,
+         lib::Tab::maps,
+         true,
+         std::string(fixture::added),
+         "desert-pack"},
     };
     for (const Scene& scene : scenes) {
         const Drawing first = draw_scene(scene, fonts);

@@ -1540,6 +1540,201 @@ oa::ui::frontend_renderer::RgbaPicture fitted_base_picture(
     return fitted;
 }
 
+/// Returns a map picture as the painter takes one.
+///
+/// @param picture the minimap
+/// @return the picture, which points into it
+oa::ui::frontend_renderer::RgbaPicture picture_of_map(const MapPicture& picture) {
+    oa::ui::frontend_renderer::RgbaPicture drawn;
+    drawn.width = picture.width;
+    drawn.height = picture.height;
+    drawn.pixels = std::span<const uint8_t>(picture.rgba);
+    return drawn;
+}
+
+/// Fits a minimap into a box, nearest-neighbour, and fills the letterbox and
+/// every transparent pixel with the list's well colour. The result is the
+/// box's pixel size, so drawing it into that box does not stretch it. The
+/// pixels live on the Library until the next layout.
+///
+/// @param building the layout
+/// @param picture the minimap
+/// @param rect the box, in points
+/// @return the fitted picture; empty when the box covers no pixels
+oa::ui::frontend_renderer::RgbaPicture fitted_well_picture(
+    Building& building, const oa::ui::frontend_renderer::RgbaPicture& picture, const kit::Rect& rect
+) {
+    const kit::Point pixels = badge_pixel_size(building, rect);
+    if (pixels.x <= 0 || pixels.y <= 0)
+        return {};
+    const auto columns = static_cast<uint32_t>(pixels.x);
+    const auto rows = static_cast<uint32_t>(pixels.y);
+    std::vector<uint8_t> scaled = scale_nearest(picture, columns, rows);
+    if (scaled.empty())
+        return {};
+    const kit::Colour well = kit::colour::well;
+    for (std::size_t index = 0; index + 3 < scaled.size(); index += 4) {
+        if (scaled[index + 3] != 0)
+            continue;
+        scaled[index] = well.r;
+        scaled[index + 1] = well.g;
+        scaled[index + 2] = well.b;
+        scaled[index + 3] = well.a;
+    }
+    std::vector<uint8_t>& kept =
+        building.library->scaled_badge_pixels.emplace_back(std::move(scaled));
+    oa::ui::frontend_renderer::RgbaPicture fitted;
+    fitted.width = columns;
+    fitted.height = rows;
+    fitted.pixels = kept;
+    return fitted;
+}
+
+/// Returns a map line's minimap when its pixels are there.
+///
+/// @param line the map
+/// @return the minimap; null without one
+const MapPicture* map_pixels(const MapLine& line) noexcept {
+    if (!line.preview || line.preview->rgba.empty() || line.preview->width == 0 ||
+        line.preview->height == 0)
+        return nullptr;
+    return &*line.preview;
+}
+
+/// Returns the installed pack an entry is, by its key and registry, or by
+/// its name when the pack names no key.
+///
+/// @param library the model
+/// @param entry the entry
+/// @return the pack; null when the entry is not an installed map pack
+const InstalledMaps* installed_pack(const Library& library, const Entry& entry) {
+    if (entry.id.kind != Kind::map_pack)
+        return nullptr;
+    const InstalledMaps* by_name = nullptr;
+    for (const InstalledMaps& pack : library.inputs.map_packs) {
+        if (!pack.key.empty() && pack.key == entry.id.key && pack.registry == entry.id.registry)
+            return &pack;
+        if (pack.key.empty() && pack.name == entry_name(entry))
+            by_name = &pack;
+    }
+    return by_name;
+}
+
+/// Returns the installed map that is the same as a listed one: the stem
+/// when both name one, else the title.
+///
+/// @param pack the installed pack
+/// @param listed the catalogue's map
+/// @return the installed map; null when none matches
+const MapLine* installed_map(const InstalledMaps& pack, const MapLine& listed) {
+    if (!listed.stem.empty()) {
+        for (const MapLine& map : pack.maps)
+            if (map.stem == listed.stem)
+                return &map;
+    }
+    for (const MapLine& map : pack.maps)
+        if (map.name == listed.name)
+            return &map;
+    return nullptr;
+}
+
+/// One map as the details and a row show it. The words point into the
+/// Library's inputs until the next refresh.
+struct ShownMap {
+    std::string_view name{};
+    int32_t players{};
+    std::string_view size{};
+    std::string_view description{};
+    const MapPicture* preview{}; ///< null while it has not been decoded
+};
+
+/// Returns the maps an entry shows. A listing's maps come first, and an
+/// installed map's minimap and description fill in where the listing has
+/// none. An installed minimap wins when both have pixels. With no listing
+/// the installed pack's maps are the ones shown.
+///
+/// @param library the model
+/// @param entry the entry
+/// @return the maps; empty when the entry is not a map pack
+std::vector<ShownMap> maps_shown(const Library& library, const Entry& entry) {
+    std::vector<ShownMap> result;
+    if (entry.id.kind != Kind::map_pack)
+        return result;
+    const InstalledMaps* pack = installed_pack(library, entry);
+    if (entry.listing != nullptr && !entry.listing->maps.empty()) {
+        for (const MapLine& listed : entry.listing->maps) {
+            const MapLine* installed = pack != nullptr ? installed_map(*pack, listed) : nullptr;
+            ShownMap map;
+            map.name = listed.name;
+            map.players = listed.players;
+            map.size = listed.size.empty() && installed != nullptr
+                           ? std::string_view{installed->size}
+                           : std::string_view{listed.size};
+            map.description = listed.description.empty() && installed != nullptr
+                                  ? std::string_view{installed->description}
+                                  : std::string_view{listed.description};
+            const MapPicture* from_installed =
+                installed != nullptr ? map_pixels(*installed) : nullptr;
+            const MapPicture* from_listed = map_pixels(listed);
+            map.preview = from_installed != nullptr ? from_installed : from_listed;
+            result.push_back(map);
+        }
+        return result;
+    }
+    if (pack == nullptr)
+        return result;
+    for (const MapLine& map_line : pack->maps) {
+        ShownMap map;
+        map.name = map_line.name;
+        map.players = map_line.players;
+        map.size = map_line.size;
+        map.description = map_line.description;
+        map.preview = map_pixels(map_line);
+        result.push_back(map);
+    }
+    return result;
+}
+
+/// What a map pack's row shows in place of its badge.
+struct RowPreview {
+    const MapPicture* picture{}; ///< the minimap to fit; null to keep the badge
+    bool placeholder{};          ///< a dashed square: the minimap is not here yet
+};
+
+/// Returns the minimap a map pack's row shows.
+///
+/// One map always shows its minimap, or a placeholder while it is not
+/// decoded. Several maps on the Maps tab show the pack's badge when it has
+/// a picture, and otherwise the first map's minimap. Everywhere else a pack
+/// of several keeps its badge or its letters.
+///
+/// @param library the model
+/// @param entry the entry
+/// @return what the row shows; both empty keeps the badge the row already has
+RowPreview row_preview(const Library& library, const Entry& entry) {
+    RowPreview choice;
+    if (entry.id.kind != Kind::map_pack)
+        return choice;
+    const std::vector<ShownMap> maps = maps_shown(library, entry);
+    if (maps.size() == 1) {
+        choice.picture = maps.front().preview;
+        choice.placeholder = choice.picture == nullptr;
+        return choice;
+    }
+    if (maps.size() > 1 && library.tab == Tab::maps &&
+        !oa::ui::frontend_renderer::picture_drawable(badge_picture(entry))) {
+        choice.picture = maps.front().preview;
+        choice.placeholder = choice.picture == nullptr;
+    }
+    return choice;
+}
+
+/// The side of one map's large preview, and of one cell in a grid of several.
+constexpr int32_t map_preview_large = 160;
+constexpr int32_t map_preview_cell = 72;
+/// How many lines of a map's description a grid cell keeps.
+constexpr std::size_t map_preview_lines = 3;
+
 /// Appends the list pane: the note on a list the last fetch could not
 /// bring up to date, the rows that show, an empty list's words, the scroll
 /// bar and the list's own control.
@@ -1577,6 +1772,17 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
     const int32_t rows_width = view.width - well_width - metrics.button_gap;
     const auto content = static_cast<int32_t>(library.visible.size()) * height;
     const int32_t limit = kit::ScrollArea::limit_for(content, view.height);
+    // A From link names the row to put at the top of the list. The write is
+    // through the state's mutable scroll: the layout is handed a const state,
+    // and a temporary state discards it.
+    if (building.state->reveal_row >= 0 && !library.visible.empty()) {
+        const int32_t last = static_cast<int32_t>(library.visible.size()) - 1;
+        const int32_t place = std::clamp(building.state->reveal_row, int32_t{0}, last);
+        const int64_t raw = static_cast<int64_t>(place) * static_cast<int64_t>(height);
+        const int64_t furthest = static_cast<int64_t>(std::max(limit, int32_t{0}));
+        building.state->list_scroll = static_cast<int32_t>(std::clamp(raw, int64_t{0}, furthest));
+        building.state->reveal_row = -1;
+    }
     const int32_t offset = std::clamp(building.state->list_scroll, int32_t{0}, limit);
 
     if (library.visible.empty())
@@ -1599,9 +1805,23 @@ void add_list(Building& building, const kit::Rect& pane, RowForm form) {
         look.selected = library.selected.has_value() && *library.selected == entry.id;
         look.hovered = hovered(building, id);
         const kit::Rect rect{view.x, top, rows_width, height};
-        if (base_badge(library, entry.badge) &&
-            oa::ui::frontend_renderer::picture_drawable(look.badge))
+        const RowPreview preview = row_preview(library, entry);
+        if (preview.picture != nullptr || preview.placeholder) {
+            look.badge = {};
+            look.badge_text.clear();
+            if (preview.picture != nullptr) {
+                const oa::ui::frontend_renderer::RgbaPicture fitted = fitted_well_picture(
+                    building, picture_of_map(*preview.picture), row_badge_square(rect)
+                );
+                if (oa::ui::frontend_renderer::picture_drawable(fitted))
+                    look.badge = fitted;
+            }
+        } else if (
+            base_badge(library, entry.badge) &&
+            oa::ui::frontend_renderer::picture_drawable(look.badge)
+        ) {
             look.badge = fitted_base_picture(building, look.badge, row_badge_square(rect));
+        }
         if (look.chip && (entry.state == State::get || entry.state == State::update)) {
             // The download arrow and the up-arrow are GET and UPDATE: a
             // control of their own, tried before the row, named after it.
@@ -1689,8 +1909,41 @@ void add_badge_of(
     );
 }
 
-/// Appends an entry's badge as the details show it: its picture, or its
-/// letters on the badge's colour, as a row's badge.
+/// Appends a square filled with the list's well colour and outlined, the
+/// place a minimap takes while it has not been decoded.
+///
+/// @param[in,out] building the layout
+/// @param rect the square
+/// @param clip what drawing may touch
+void add_well_square(Building& building, const kit::Rect& rect, const kit::Rect& clip) {
+    add_item(building.list, kit::Role::fill, rect, clip).colour = kit::colour::well;
+    add_item(building.list, kit::Role::outline, rect, clip).colour = kit::colour::control_border;
+}
+
+/// Appends a minimap fitted into a square, or the well while it is not decoded.
+///
+/// @param[in,out] building the layout
+/// @param picture the minimap; null for the well
+/// @param rect the square
+/// @param clip what drawing may touch
+void add_fitted_preview(
+    Building& building, const MapPicture* picture, const kit::Rect& rect, const kit::Rect& clip
+) {
+    if (picture != nullptr) {
+        const oa::ui::frontend_renderer::RgbaPicture fitted =
+            fitted_well_picture(building, picture_of_map(*picture), rect);
+        if (oa::ui::frontend_renderer::picture_drawable(fitted)) {
+            add_item(building.list, kit::Role::picture, rect, clip).look = kit::PictureLook{fitted};
+            add_item(building.list, kit::Role::outline, rect, clip).colour =
+                kit::colour::control_border;
+            return;
+        }
+    }
+    add_well_square(building, rect, clip);
+}
+
+/// Appends an entry's badge as the details show it. A pack of one map wears
+/// that map's minimap. A pack of several keeps its picture or its letters.
 ///
 /// @param[in,out] building the layout
 /// @param entry the entry
@@ -1699,7 +1952,167 @@ void add_badge_of(
 void add_badge(
     Building& building, const Entry& entry, const kit::Rect& rect, const kit::Rect& clip
 ) {
+    // A pack of one map wears that map's minimap everywhere, including the
+    // details. A pack of several keeps its badge or its letters.
+    if (entry.id.kind == Kind::map_pack) {
+        const std::vector<ShownMap> maps = maps_shown(*building.library, entry);
+        if (maps.size() == 1) {
+            add_fitted_preview(building, maps.front().preview, rect, clip);
+            return;
+        }
+    }
     add_badge_of(building, badge_picture(entry), entry_name(entry), rect, clip);
+}
+
+/// Returns a map's players and size as one line: "4 players · 16x16".
+///
+/// @param building the layout
+/// @param players how many players it is for
+/// @param size its size, as written
+/// @return the line; the size alone when the count is empty
+std::string players_and_size(const Building& building, int32_t players, std::string_view size) {
+    const std::string count = filled(
+        building.library->text,
+        players == 1 ? words::active_players_one : words::active_players_many,
+        {{"count", std::to_string(players)}}
+    );
+    if (size.empty())
+        return count;
+    if (count.empty())
+        return std::string(size);
+    return filled(
+        building.library->text,
+        words::map_players_size,
+        {{"players", count}, {"size", std::string(size)}}
+    );
+}
+
+/// Appends lines of a text in the small font, one under another.
+///
+/// @param[in,out] building the layout
+/// @param lines the lines
+/// @param left their left column
+/// @param top the first line's top row
+/// @param width their width
+/// @param ink their colour
+/// @param clip what drawing may touch
+/// @return the row under the last line
+int32_t add_lines(
+    Building& building,
+    const std::vector<std::string>& lines,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    kit::Colour ink,
+    const kit::Rect& clip
+);
+
+/// Appends a map pack's previews: one large picture for one map, a grid for
+/// several, each with its name, players, size and description.
+///
+/// @param[in,out] building the layout
+/// @param entry the entry
+/// @param left the column
+/// @param top the row the first picture starts on
+/// @param width the columns they take
+/// @param clip what drawing may touch
+/// @return the row under the last map, or `top` when the entry is not a map pack
+int32_t add_map_previews(
+    Building& building,
+    const Entry& entry,
+    int32_t left,
+    int32_t top,
+    int32_t width,
+    const kit::Rect& clip
+) {
+    if (entry.id.kind != Kind::map_pack || width <= 0)
+        return top;
+    const std::vector<ShownMap> maps = maps_shown(*building.library, entry);
+    if (maps.empty())
+        return top;
+    const kit::Metrics& metrics = *building.metrics;
+    const bool one = maps.size() == 1;
+    const int32_t gap = metrics.card_gap;
+    const int32_t columns = one || width < map_preview_cell * 2 + gap ? int32_t{1} : int32_t{2};
+    const int32_t cell = one ? std::min(map_preview_large, width) : map_preview_cell;
+    const int32_t across =
+        columns == 1 ? cell : std::min(cell, std::max((width - gap) / 2, int32_t{0}));
+    if (across <= 0)
+        return top;
+    int32_t row_top = top;
+    for (std::size_t index = 0; index < maps.size();) {
+        const std::size_t row_count =
+            std::min(static_cast<std::size_t>(columns), maps.size() - index);
+        int32_t block_height = across;
+        std::vector<std::vector<std::string>> descriptions(row_count);
+        for (std::size_t place = 0; place < row_count; ++place) {
+            const ShownMap& map = maps[index + place];
+            int32_t lines = metrics.small_line;
+            if (!map.size.empty() || map.players > 0)
+                lines += metrics.small_line;
+            if (!map.description.empty()) {
+                descriptions[place] = wrapped(
+                    building,
+                    kit::FontRole::small,
+                    map.description,
+                    across,
+                    one ? wide_summary_lines : map_preview_lines
+                );
+                lines += static_cast<int32_t>(descriptions[place].size()) * metrics.small_line;
+            }
+            block_height = std::max(block_height, across + metrics.hint_gap + lines);
+        }
+        for (std::size_t place = 0; place < row_count; ++place) {
+            const ShownMap& map = maps[index + place];
+            const int32_t column = left + static_cast<int32_t>(place) * (across + gap);
+            add_fitted_preview(building, map.preview, {column, row_top, across, across}, clip);
+            int32_t text_top = row_top + across + metrics.hint_gap;
+            const std::string title = cut(building, kit::FontRole::small, map.name, across);
+            if (!title.empty() && width_of(building, kit::FontRole::small, title) <= across) {
+                add_text(
+                    building,
+                    kit::FontRole::small,
+                    title,
+                    {column, text_top, across, metrics.small_line},
+                    kit::Align::left,
+                    kit::colour::text,
+                    clip
+                );
+            }
+            text_top += metrics.small_line;
+            if (!map.size.empty() || map.players > 0) {
+                const std::string meta = players_and_size(building, map.players, map.size);
+                const std::string meta_drawn = cut(building, kit::FontRole::small, meta, across);
+                if (!meta_drawn.empty() &&
+                    width_of(building, kit::FontRole::small, meta_drawn) <= across)
+                    add_text(
+                        building,
+                        kit::FontRole::small,
+                        meta_drawn,
+                        {column, text_top, across, metrics.small_line},
+                        kit::Align::left,
+                        kit::colour::hint,
+                        clip
+                    );
+                text_top += metrics.small_line;
+            }
+            if (!descriptions[place].empty())
+                add_lines(
+                    building,
+                    descriptions[place],
+                    column,
+                    text_top,
+                    across,
+                    kit::colour::list_text,
+                    clip
+                );
+        }
+        index += row_count;
+        row_top += block_height;
+        if (index < maps.size())
+            row_top += gap;
+    }
+    return row_top + metrics.paragraph_gap;
 }
 
 /// Tells whether a fact is the Rules fact.
@@ -1980,6 +2393,7 @@ int32_t add_details_content(
         top = add_lines(building, summary, left, top, width, kit::colour::list_text, view) +
               metrics.paragraph_gap;
     }
+    top = add_map_previews(building, entry, left, top, width, view);
     top = add_facts(building, entry, {left, top, width, 0}, true, wide_fact_lines, view) +
           metrics.paragraph_gap;
 
@@ -2301,17 +2715,18 @@ void add_identity_tile(
     );
 }
 
-/// Returns a map pack tile's height.
+/// Returns one map tile's height: the minimap or the lines beside it,
+/// whichever is taller, with the card's padding above and below.
 ///
 /// @param metrics the class's metrics
-/// @param badge the badge's side
-/// @param maps how many maps the pack lists
+/// @param side the minimap's side
+/// @param described the map has a description to show
 /// @return the height, in points
-int32_t pack_tile_height(const kit::Metrics& metrics, int32_t badge, std::size_t maps) {
-    const int32_t header = std::max(badge, metrics.regular_line);
-    const int32_t listed = static_cast<int32_t>(maps) * metrics.small_line;
-    const int32_t between = maps == 0 ? 0 : metrics.hint_gap;
-    return metrics.card_inset + header + between + listed + metrics.card_inset;
+int32_t map_tile_height(const kit::Metrics& metrics, int32_t side, bool described) {
+    int32_t lines = metrics.regular_line + 2 * metrics.small_line;
+    if (described)
+        lines += metrics.small_line;
+    return metrics.card_inset + std::max(side, lines) + metrics.card_inset;
 }
 
 /// What an identity tile shows. The layout paints it; the model chose the words.
@@ -2439,18 +2854,19 @@ void place_identity(
     );
 }
 
-/// Appends one map pack's tile, and names each map's line in order.
+/// Appends one installed map's tile: its minimap, title, players and size,
+/// its description cut to one line, and the link to its pack.
 ///
 /// @param[in,out] building the layout
-/// @param pack the pack
+/// @param map the map
 /// @param tile the tile
-/// @param[in,out] number how many map lines have been named; this pack's follow
+/// @param number the map's place among the tiles, from 1
 /// @param clip what drawing may touch
-void add_pack_tile(
+void add_map_tile(
     Building& building,
-    const ActivePack& pack,
+    const ActiveMap& map,
     const kit::Rect& tile,
-    std::size_t& number,
+    std::size_t number,
     const kit::Rect& clip
 ) {
     const kit::Metrics& metrics = *building.metrics;
@@ -2461,84 +2877,97 @@ void add_pack_tile(
     const int32_t inner_left = tile.x + inset;
     const int32_t inner_top = tile.y + inset;
     if (side > 0)
-        add_badge_of(
-            building, picture_of(pack.badge), pack.name, {inner_left, inner_top, side, side}, clip
-        );
+        add_fitted_preview(building, map.preview, {inner_left, inner_top, side, side}, clip);
     const int32_t text_left = inner_left + side + metrics.list_row_gap;
     const int32_t text_width = std::max(tile.x + tile.width - inset - text_left, int32_t{0});
-    const int32_t header = std::max(side, metrics.regular_line);
-    if (text_width > 0 && !pack.name.empty()) {
-        const std::string drawn = cut(building, kit::FontRole::regular, pack.name, text_width);
-        if (width_of(building, kit::FontRole::regular, drawn) <= text_width)
-            add_text(
-                building,
-                kit::FontRole::regular,
-                drawn,
-                {text_left, inner_top, text_width, metrics.regular_line},
-                kit::Align::left,
-                kit::colour::text,
-                clip
-            );
-    }
-    // The maps' names, players and sizes in three columns of this tile,
-    // each as wide as its widest words, the players and the sizes no more
-    // than a quarter of the text each and the names taking what is left.
-    int32_t name_width = 0;
-    int32_t players_width = 0;
-    int32_t size_width = 0;
-    for (const ActiveMap& map : pack.maps) {
-        name_width = std::max(name_width, width_of(building, kit::FontRole::small, map.name));
-        players_width =
-            std::max(players_width, width_of(building, kit::FontRole::small, map.players));
-        size_width = std::max(size_width, width_of(building, kit::FontRole::small, map.size));
-    }
-    players_width = std::min(players_width, text_width / 4);
-    size_width = std::min(size_width, text_width / 4);
-    name_width = std::max(
-        std::min(name_width, text_width - players_width - size_width - 2 * metrics.label_gap),
-        int32_t{0}
+    if (text_width <= 0)
+        return;
+    int32_t row = inner_top;
+    const std::string title = cut(building, kit::FontRole::regular, map.name, text_width);
+    if (!title.empty() && width_of(building, kit::FontRole::regular, title) <= text_width)
+        add_text(
+            building,
+            kit::FontRole::regular,
+            title,
+            {text_left, row, text_width, metrics.regular_line},
+            kit::Align::left,
+            kit::colour::text,
+            clip
+        );
+    if (number <= controls::most_active_maps)
+        add_label(
+            building.detail,
+            controls::first_active_map + static_cast<kit::ControlId>(number - 1),
+            kit::intersect({text_left, row, text_width, metrics.regular_line}, clip),
+            unique_name(building, named("active.map." + std::to_string(number))),
+            map.line,
+            clip,
+            controls::details_group
+        );
+    row += metrics.regular_line;
+    const std::string meta = filled(
+        building.library->text,
+        words::map_players_size,
+        {{"players", map.players}, {"size", map.size}}
     );
-    const int32_t players_left = text_left + name_width + metrics.label_gap;
-    const int32_t size_left = players_left + players_width + metrics.label_gap;
-    int32_t row = inner_top + header + (pack.maps.empty() ? 0 : metrics.hint_gap);
-    for (const ActiveMap& map : pack.maps) {
-        ++number;
-        const auto column = [&](const std::string& words_shown,
-                                int32_t column_left,
-                                int32_t column_width,
-                                kit::Align align,
-                                kit::Colour ink) {
-            if (column_width <= 0 || words_shown.empty())
-                return;
-            const std::string drawn =
-                cut(building, kit::FontRole::small, words_shown, column_width);
-            if (width_of(building, kit::FontRole::small, drawn) > column_width)
-                return;
+    const std::string meta_drawn = cut(building, kit::FontRole::small, meta, text_width);
+    if (!meta_drawn.empty() && width_of(building, kit::FontRole::small, meta_drawn) <= text_width)
+        add_text(
+            building,
+            kit::FontRole::small,
+            meta_drawn,
+            {text_left, row, text_width, metrics.small_line},
+            kit::Align::left,
+            kit::colour::hint,
+            clip
+        );
+    row += metrics.small_line;
+    if (!map.description.empty()) {
+        const std::string described =
+            cut(building, kit::FontRole::small, map.description, text_width);
+        if (!described.empty() && width_of(building, kit::FontRole::small, described) <= text_width)
             add_text(
                 building,
                 kit::FontRole::small,
-                drawn,
-                {column_left, row, column_width, metrics.small_line},
-                align,
-                ink,
+                described,
+                {text_left, row, text_width, metrics.small_line},
+                kit::Align::left,
+                kit::colour::list_text,
                 clip
-            );
-        };
-        column(map.name, text_left, name_width, kit::Align::left, kit::colour::list_text);
-        column(map.players, players_left, players_width, kit::Align::right, kit::colour::hint);
-        column(map.size, size_left, size_width, kit::Align::right, kit::colour::hint);
-        if (number <= controls::most_active_maps)
-            add_label(
-                building.detail,
-                controls::first_active_map + static_cast<kit::ControlId>(number - 1),
-                kit::intersect({text_left, row, text_width, metrics.small_line}, clip),
-                unique_name(building, named("active.map." + std::to_string(number))),
-                map.line,
-                clip,
-                controls::details_group
             );
         row += metrics.small_line;
     }
+    if (number > controls::most_active_maps || map.from.empty())
+        return;
+    kit::LinkLook link;
+    link.caption = cut(building, kit::FontRole::small, map.from, text_width);
+    if (link.caption.empty() || width_of(building, kit::FontRole::small, link.caption) > text_width)
+        return;
+    const kit::ControlId id = controls::first_active_from + static_cast<kit::ControlId>(number - 1);
+    link.hovered = hovered(building, id) || building.state->interaction.pressed == id;
+    const int32_t link_width = std::min(kit::link_width(*building.fonts, link), text_width);
+    const kit::Rect link_rect =
+        kit::intersect({text_left, row, link_width, metrics.small_line}, clip);
+    // A link scrolled out of the area is left out: a zero-wide caption would
+    // not fit its box, and an off-screen stop would fail the arrow check.
+    if (link_rect.width <= 0 || link_rect.height <= 0)
+        return;
+    const std::size_t before = building.list.controls.size();
+    kit::add_link(
+        building.list,
+        link_rect,
+        link,
+        id,
+        unique_name(building, named("active.from." + std::to_string(number)))
+    );
+    building.list.items.back().clip = clip;
+    move_controls(building.list, before, building.detail);
+    kit::Control& control = building.detail.back();
+    control.clip = clip;
+    control.group = controls::details_group;
+    control.focusable = true;
+    control.enabled = true;
+    tab_stop(building, control);
 }
 
 int32_t add_active_heading(
@@ -2551,7 +2980,7 @@ int32_t add_active_heading(
 );
 
 /// Appends the map tiles: one column, or two at Large when more than one
-/// pack is installed. A window with none shows that in one tile.
+/// map is installed. A window with none shows that in one tile.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
@@ -2573,7 +3002,7 @@ int32_t add_map_tiles(
     top = add_active_heading(
         building, shown(library.text, words::active_heading_maps), left, top, width, clip
     );
-    if (setup.packs.empty()) {
+    if (setup.maps.empty()) {
         const int32_t inset = metrics.card_inset;
         const int32_t inner = std::max(width - 2 * inset, int32_t{0});
         const int32_t height = metrics.small_line + 2 * inset;
@@ -2596,7 +3025,7 @@ int32_t add_map_tiles(
         return top + height;
     }
     const int32_t columns =
-        building.size_class == kit::SizeClass::large && setup.packs.size() > 1 ? 2 : 1;
+        building.size_class == kit::SizeClass::large && setup.maps.size() > 1 ? 2 : 1;
     const int32_t gap = metrics.card_gap;
     const int32_t left_width = columns == 1 ? width : std::max((width - gap) / 2, int32_t{0});
     const auto tile_width = [&](std::size_t place) {
@@ -2609,30 +3038,32 @@ int32_t add_map_tiles(
             return left;
         return left + left_width + gap;
     };
-    std::size_t number = 0;
+    std::size_t number = 1;
     std::size_t index = 0;
-    while (index < setup.packs.size()) {
+    while (index < setup.maps.size()) {
         const std::size_t row_count =
-            std::min(static_cast<std::size_t>(columns), setup.packs.size() - index);
-        int32_t row_height = 0;
+            std::min(static_cast<std::size_t>(columns), setup.maps.size() - index);
+        int32_t tiles_height = 0;
         for (std::size_t place = 0; place < row_count; ++place) {
-            const ActivePack& pack = setup.packs[index + place];
+            const ActiveMap& map = setup.maps[index + place];
             const int32_t across = tile_width(index + place);
             const int32_t side = std::min(
                 active_badge_side(metrics), std::max(across - 2 * metrics.card_inset, int32_t{0})
             );
-            row_height = std::max(row_height, pack_tile_height(metrics, side, pack.maps.size()));
+            tiles_height =
+                std::max(tiles_height, map_tile_height(metrics, side, !map.description.empty()));
         }
         for (std::size_t place = 0; place < row_count; ++place) {
-            const ActivePack& pack = setup.packs[index + place];
+            const ActiveMap& map = setup.maps[index + place];
             const int32_t across = tile_width(index + place);
-            add_pack_tile(
-                building, pack, {tile_left(index + place), top, across, row_height}, number, clip
+            add_map_tile(
+                building, map, {tile_left(index + place), top, across, tiles_height}, number, clip
             );
+            ++number;
         }
         index += row_count;
-        top += row_height;
-        if (index < setup.packs.size())
+        top += tiles_height;
+        if (index < setup.maps.size())
             top += gap;
     }
     return top;
@@ -2665,12 +3096,13 @@ int32_t add_active_heading(
 
 /// Appends the Active tab's tiles, scrolled up by an offset. Under a
 /// heading each: the mod being played, or the base game, and the language
-/// in use, side by side from Regular on; then one tile per installed map
-/// pack, in two columns at Large when more than one pack is installed.
-/// The mod's and the language's labels are the part of the tile that
-/// shows, the mod's ending above UNLOAD MOD, and each map's is the part of
-/// its line that shows, empty while that part is scrolled out of the area.
-/// The labels take no press. UNLOAD MOD does, while a mod is played.
+/// in use, side by side from Regular on; then one tile per installed map,
+/// in two columns at Large when more than one map is installed. The mod's
+/// and the language's labels are the part of the tile that shows, the
+/// mod's ending above UNLOAD MOD, and each map's is the part of its line
+/// that shows, empty while that part is scrolled out of the area. The
+/// labels take no press. UNLOAD MOD does, while a mod is played, and so
+/// does a map's From link while its line shows.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
@@ -4083,6 +4515,7 @@ kit::DisplayList details_page_layout(
             top = add_lines(into, summary, view.x, top, width, kit::colour::list_text, view) +
                   metrics.paragraph_gap;
         }
+        top = add_map_previews(into, *entry, view.x, top, width, view);
         top = add_facts(into, *entry, {view.x, top, width, 0}, false, compact_fact_lines, view) +
               metrics.paragraph_gap;
         static_cast<void>(add_note(into, view.x, top, width, view, controls::details_group));

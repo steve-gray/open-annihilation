@@ -53,9 +53,16 @@ struct Drag {
 
 /// What the Library's screen keeps between its inputs, beside the model.
 struct ScreenState {
-    kit::Interaction interaction{};  ///< the hover, the press and the focus
-    int32_t list_scroll{};           ///< how far the list is scrolled, in points
-    int32_t details_scroll{};        ///< how far the details are scrolled, in points
+    kit::Interaction interaction{}; ///< the hover, the press and the focus
+    /// How far the list is scrolled, in points. The layout writes it when
+    /// reveal_row names a row to bring into view.
+    mutable int32_t list_scroll{};
+    int32_t details_scroll{}; ///< how far the details are scrolled, in points
+    /// A row of the list to bring into view on the next layout, its place
+    /// among the visible entries from 0. The layout scrolls to it and clears
+    /// this. -1 leaves the scroll as it is. A From link sets it so the pack
+    /// it names is in view once the Maps tab is laid out.
+    mutable int32_t reveal_row{-1};
     kit::WheelCarry list_wheel{};    ///< the wheel's turn the list has not scrolled yet
     kit::WheelCarry details_wheel{}; ///< the wheel's turn the details have not scrolled yet
     /// The search field's text and caret. Its text is the model's query: the

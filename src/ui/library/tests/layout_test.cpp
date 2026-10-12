@@ -188,7 +188,8 @@ std::vector<std::string> meeting_controls(const kit::DisplayList& list) {
 
 /// Returns the place a control's name gives it in the declared order: the
 /// tabs, the search, the filters, UPDATE ALL over the list and the list,
-/// the details' actions, the Registries tab's rows, then the footer's buttons.
+/// the details' actions and a map's From link, the Registries tab's rows,
+/// then the footer's buttons.
 ///
 /// @param name the name
 /// @return the place, or -1 for a name of none
@@ -203,7 +204,7 @@ int declared_place(std::string_view name) {
     if (name == "library.action.update-all" || name == "library.list")
         return 3;
     if (name == "library.action" || starts(name, "library.action.") || name == "library.back" ||
-        name == "library.active.unload")
+        name == "library.active.unload" || starts(name, "library.active.from."))
         return 4;
     if (starts(name, "library.registry."))
         return 5;
@@ -288,7 +289,7 @@ bool designed_name(const std::string& name) {
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
         "details|back|refresh|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|unload|map\\.[1-9][0-9]*)|"
+        "active\\.(mod|language|unload|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -333,7 +334,9 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
             problems.push_back(std::string(name) + " takes a press, a key or Tab");
     }
     for (const kit::Control& control : list.controls)
-        if (control.name != "library.active.unload" && starts(control.name, "library.active.") &&
+        if (control.name != "library.active.unload" &&
+            !starts(control.name, "library.active.from.") &&
+            starts(control.name, "library.active.") &&
             (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
             problems.push_back(control.name + " takes a press, a key or Tab");
     return problems;
@@ -602,7 +605,8 @@ void check_frame(const fixture::NamedFrame& named) {
     );
 
     // The Active tab: first, no search, no filters and no list. Its lines
-    // are labels. Tab reaches the tabs, UNLOAD MOD and the footer's buttons.
+    // are labels. Tab reaches the tabs, UNLOAD MOD, each map's From link
+    // while that link shows, and the footer's buttons.
     lib::Library active = with_ridge();
     lib::set_tab(active, lib::Tab::active);
     const kit::DisplayList active_list = laid_out(active, state, frame);
@@ -628,17 +632,18 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(
             stop != nullptr &&
             (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
-             stop->name == "library.active.unload")
+             stop->name == "library.active.unload" || starts(stop->name, "library.active.from."))
         );
     }
     const kit::Control* mod_line = fixture::named(active_list, "library.active.mod");
     OA_CHECK(mod_line != nullptr && mod_line->text == "Highland 0.4.0");
     const kit::Control* language_line = fixture::named(active_list, "library.active.language");
     OA_CHECK(language_line != nullptr && language_line->text == "Polski 1.0");
+    // Folded title, then pack: Atoll, Ridgeline, Twin Rivers.
     const kit::Control* first_map = fixture::named(active_list, "library.active.map.1");
-    OA_CHECK(first_map != nullptr && first_map->text == "Ridgeline · 4 players · 16x16");
+    OA_CHECK(first_map != nullptr && first_map->text == "Atoll · 6 players · 20x20");
     const kit::Control* last_map = fixture::named(active_list, "library.active.map.3");
-    OA_CHECK(last_map != nullptr && last_map->text == "Atoll · 6 players · 20x20");
+    OA_CHECK(last_map != nullptr && last_map->text == "Twin Rivers · 2 players · 12x12");
     OA_CHECK(fixture::named(active_list, "library.active.map.4") == nullptr);
     // The three tiles: the kit's card face, the mod's facts, and the language's.
     if (mod_line != nullptr) {
@@ -674,20 +679,26 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_CHECK(text_item(active_list, "Polish") != nullptr);
     OA_CHECK(text_item(active_list, "1.0 (rev 2)") != nullptr);
     OA_CHECK(text_item(active_list, "Coverage 92%") != nullptr);
-    const kit::Item* core_pack = text_item(active_list, "Core Map Pack");
-    const kit::Item* island_pack = text_item(active_list, "Island Hopping");
-    OA_CHECK(core_pack != nullptr && island_pack != nullptr);
-    if (core_pack != nullptr && island_pack != nullptr) {
+    const kit::Item* atoll = text_item(active_list, "Atoll");
+    const kit::Item* ridgeline = text_item(active_list, "Ridgeline");
+    OA_CHECK(atoll != nullptr && ridgeline != nullptr);
+    if (atoll != nullptr && ridgeline != nullptr) {
         if (frame.size_class == kit::SizeClass::large) {
-            OA_CHECK(
-                core_pack->rect.y == island_pack->rect.y && core_pack->rect.x < island_pack->rect.x
-            );
+            OA_CHECK(atoll->rect.y == ridgeline->rect.y && atoll->rect.x < ridgeline->rect.x);
         } else {
-            OA_CHECK(
-                core_pack->rect.y < island_pack->rect.y && core_pack->rect.x == island_pack->rect.x
-            );
+            OA_CHECK(atoll->rect.y < ridgeline->rect.y && atoll->rect.x == ridgeline->rect.x);
         }
     }
+    const kit::Control* from_atoll = fixture::named(active_list, "library.active.from.1");
+    const kit::Control* from_ridge = fixture::named(active_list, "library.active.from.2");
+    if (from_atoll != nullptr) {
+        OA_CHECK(from_atoll->kind == kit::ControlKind::link);
+        OA_CHECK(from_atoll->text == "From Island Hopping");
+        if (first_map != nullptr)
+            OA_CHECK(from_atoll->rect.y > first_map->rect.y);
+    }
+    if (from_ridge != nullptr)
+        OA_CHECK(from_ridge->text == "From Core Map Pack");
     if (mod_line != nullptr && language_line != nullptr) {
         if (compact) {
             OA_CHECK(
@@ -701,7 +712,6 @@ void check_frame(const fixture::NamedFrame& named) {
             );
         }
     }
-    OA_CHECK(first_map != nullptr && core_pack != nullptr && first_map->rect.y > core_pack->rect.y);
 }
 
 /// Checks every frame.
@@ -2408,6 +2418,405 @@ void maker_marks_follow_the_registry() {
     OA_CHECK(fixture::named(cards, "library.registry.fixture-core.mark") == nullptr);
 }
 
+/// Returns a solid minimap. It is wider than it is tall, so a fitted badge
+/// letterboxes it instead of stretching it.
+///
+/// @param red red
+/// @param green green
+/// @param blue blue
+/// @return an 8 by 2 picture
+lib::MapPicture solid_minimap(uint8_t red, uint8_t green, uint8_t blue) {
+    lib::MapPicture picture;
+    picture.width = 8;
+    picture.height = 2;
+    picture.rgba.assign(8U * 2U * 4U, 0);
+    for (std::size_t index = 0; index + 3 < picture.rgba.size(); index += 4) {
+        picture.rgba[index] = red;
+        picture.rgba[index + 1] = green;
+        picture.rgba[index + 2] = blue;
+        picture.rgba[index + 3] = 255;
+    }
+    return picture;
+}
+
+/// Checks that a fitted minimap is the box's pixel size, keeps the source
+/// colour in the middle, and fills the letterbox with the list's well colour.
+///
+/// @param picture the fitted picture
+/// @param red the source's red
+/// @param green the source's green
+/// @param blue the source's blue
+void expect_letterboxed(
+    const renderer::RgbaPicture& picture, uint8_t red, uint8_t green, uint8_t blue
+) {
+    OA_CHECK(picture.width >= 4 && picture.height >= 4);
+    OA_CHECK(picture.width == picture.height);
+    OA_CHECK(pixel_is(
+        pixel_at(picture, 0, 0),
+        kit::colour::well.r,
+        kit::colour::well.g,
+        kit::colour::well.b,
+        kit::colour::well.a
+    ));
+    OA_CHECK(
+        pixel_is(pixel_at(picture, picture.width / 2, picture.height / 2), red, green, blue, 255)
+    );
+}
+
+/// Checks that a row's minimap was drawn at the badge square's pixel size.
+///
+/// @param look the row
+/// @param row the row's control
+/// @param scale the frame's scale, in percent
+void expect_badge_pixels(const kit::ListRowLook& look, const kit::Rect& row, int32_t scale) {
+    const kit::Rect pixels = kit::to_canvas(test_row_badge(row), scale);
+    OA_CHECK(look.badge.width == static_cast<uint32_t>(pixels.width));
+    OA_CHECK(look.badge.height == static_cast<uint32_t>(pixels.height));
+}
+
+/// Returns the widest picture whose centre is one colour.
+///
+/// @param list the display list
+/// @param red red
+/// @param green green
+/// @param blue blue
+/// @return the picture's item; null when none is that colour
+const kit::Item*
+widest_picture(const kit::DisplayList& list, uint8_t red, uint8_t green, uint8_t blue) {
+    const kit::Item* found = nullptr;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::picture)
+            continue;
+        const auto* look = std::get_if<kit::PictureLook>(&item.look);
+        if (look == nullptr || look->picture.width < 4 || look->picture.height < 4)
+            continue;
+        if (!pixel_is(
+                pixel_at(look->picture, look->picture.width / 2, look->picture.height / 2),
+                red,
+                green,
+                blue,
+                255
+            ))
+            continue;
+        if (found == nullptr || item.rect.width > found->rect.width)
+            found = &item;
+    }
+    return found;
+}
+
+/// A one-map pack wears its minimap, fitted, on Maps and on Updates. A pack
+/// of several keeps its badge, or the first map's minimap on the Maps tab
+/// when it has none. The details show one large picture or a grid. A
+/// minimap that has not arrived yet is a dashed placeholder, then the picture.
+void map_previews_fit_their_boxes() {
+    const lib::MapPicture red = solid_minimap(255, 0, 0);
+    const lib::MapPicture blue = solid_minimap(0, 0, 255);
+    const lib::MapPicture green = solid_minimap(0, 255, 0);
+    const std::string shore_note(800, 'x');
+    lib::Inputs inputs = fixture::fixture_inputs();
+    for (lib::Listing& listing : inputs.listings) {
+        if (listing.key == "core-maps" && !listing.maps.empty())
+            listing.maps[0].preview = red;
+        else if (listing.key == "desert-pack" && listing.maps.size() == 2) {
+            listing.maps[0].preview = blue;
+            listing.maps[0].description = "Dry and flat.";
+            listing.maps[1].preview = green;
+            listing.maps[1].description = "A table of stone.";
+        }
+    }
+    lib::Listing shore = fixture::listing(
+        fixture::core,
+        lib::Kind::map_pack,
+        "shore",
+        "Shore Pack",
+        "1.0",
+        fixture::mib,
+        "One cove",
+        {}
+    );
+    lib::MapLine cove;
+    cove.name = "Cove";
+    cove.players = 3;
+    cove.size = "10x10";
+    cove.description = "A long cove.";
+    cove.stem = "cove";
+    cove.preview_url = "https://example.test/cove.png";
+    shore.maps.push_back(std::move(cove));
+    inputs.listings.push_back(std::move(shore));
+    inputs.map_packs[1].maps[0].preview = red;
+    inputs.map_packs[1].maps[0].description = shore_note;
+
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::set_tab(library, lib::Tab::maps);
+    lib::set_query(library, "shore");
+    const kit::DisplayList waiting = laid_out(library, {}, compact);
+    const kit::ListRowLook* placeholder = row_look_named(waiting, "library.row.fixture-core.shore");
+    OA_CHECK(placeholder != nullptr);
+    if (placeholder != nullptr) {
+        OA_CHECK(!renderer::picture_drawable(placeholder->badge));
+        OA_CHECK(placeholder->badge_text.empty());
+    }
+
+    for (lib::Listing& listing : library.inputs.listings) {
+        if (listing.key == "shore" && !listing.maps.empty())
+            listing.maps[0].preview = red;
+    }
+    lib::refresh(library, std::move(library.inputs));
+    lib::set_tab(library, lib::Tab::maps);
+    lib::set_query(library, "shore");
+    const kit::DisplayList shore_rows = laid_out(library, {}, compact);
+    const kit::Control* shore_row = fixture::named(shore_rows, "library.row.fixture-core.shore");
+    const kit::ListRowLook* shore_look =
+        row_look_named(shore_rows, "library.row.fixture-core.shore");
+    OA_CHECK(shore_row != nullptr && shore_look != nullptr);
+    if (shore_row != nullptr && shore_look != nullptr) {
+        expect_letterboxed(shore_look->badge, 255, 0, 0);
+        expect_badge_pixels(*shore_look, shore_row->rect, compact.scale_percent);
+    }
+
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::all);
+    lib::set_query(library, "shore");
+    const kit::DisplayList shore_updates = laid_out(library, {}, compact);
+    const kit::Control* shore_update =
+        fixture::named(shore_updates, "library.row.fixture-core.shore");
+    const kit::ListRowLook* shore_update_look =
+        row_look_named(shore_updates, "library.row.fixture-core.shore");
+    OA_CHECK(shore_update != nullptr && shore_update_look != nullptr);
+    if (shore_update != nullptr && shore_update_look != nullptr) {
+        expect_letterboxed(shore_update_look->badge, 255, 0, 0);
+        expect_badge_pixels(*shore_update_look, shore_update->rect, compact.scale_percent);
+    }
+
+    lib::set_tab(library, lib::Tab::maps);
+    lib::set_query(library, "core map");
+    const kit::DisplayList core_rows = laid_out(library, {}, compact);
+    const kit::ListRowLook* core_look =
+        row_look_named(core_rows, "library.row.fixture-core.core-maps");
+    OA_CHECK(core_look != nullptr && core_look->badge.width == 16 && core_look->badge.height == 16);
+    if (core_look != nullptr && core_look->badge.width == 16)
+        OA_CHECK(pixel_is(pixel_at(core_look->badge, 0, 0), 0x40, 0x80, 0xc0, 255));
+
+    lib::set_query(library, "desert pack");
+    const kit::DisplayList desert_rows = laid_out(library, {}, compact);
+    const kit::Control* desert_row =
+        fixture::named(desert_rows, "library.row.example-mods.desert-pack");
+    const kit::ListRowLook* desert_look =
+        row_look_named(desert_rows, "library.row.example-mods.desert-pack");
+    OA_CHECK(desert_row != nullptr && desert_look != nullptr);
+    if (desert_row != nullptr && desert_look != nullptr) {
+        expect_letterboxed(desert_look->badge, 0, 0, 255);
+        expect_badge_pixels(*desert_look, desert_row->rect, compact.scale_percent);
+    }
+
+    lib::set_tab(library, lib::Tab::updates);
+    lib::set_filter(library, lib::Filter::all);
+    lib::set_query(library, "desert pack");
+    const kit::ListRowLook* desert_updates =
+        row_look_named(laid_out(library, {}, compact), "library.row.example-mods.desert-pack");
+    OA_CHECK(desert_updates != nullptr);
+    if (desert_updates != nullptr) {
+        OA_CHECK(!renderer::picture_drawable(desert_updates->badge));
+        OA_CHECK(desert_updates->badge_text == "DP");
+    }
+    lib::set_query(library, "core map");
+    const kit::ListRowLook* core_updates =
+        row_look_named(laid_out(library, {}, compact), "library.row.fixture-core.core-maps");
+    OA_CHECK(core_updates != nullptr && core_updates->badge.width == 16);
+
+    const kit::Frame large = fixture::frames()[2].frame;
+    lib::set_tab(library, lib::Tab::maps);
+    lib::set_filter(library, lib::Filter::all);
+    lib::set_query(library, "");
+    lib::select(library, {std::string(fixture::core), lib::Kind::map_pack, "shore"});
+    const kit::DisplayList one = laid_out(library, {}, large);
+    const kit::Item* one_large = widest_picture(one, 255, 0, 0);
+    OA_CHECK(one_large != nullptr && one_large->rect.width == 160 && one_large->rect.height == 160);
+    if (one_large != nullptr) {
+        const auto* drawn = std::get_if<kit::PictureLook>(&one_large->look);
+        OA_CHECK(drawn != nullptr);
+        if (drawn != nullptr)
+            expect_letterboxed(drawn->picture, 255, 0, 0);
+    }
+    int header_squares = 0;
+    for (const kit::Item& item : one.items) {
+        if (item.role == kit::Role::picture && item.rect.width == 40 && item.rect.height == 40)
+            ++header_squares;
+    }
+    OA_CHECK(header_squares == 1);
+    OA_CHECK(text_item(one, "Cove") != nullptr);
+    OA_CHECK(text_item(one, "3 players · 10x10") != nullptr);
+    OA_CHECK(text_item(one, "A long cove.") != nullptr);
+
+    lib::select(library, {std::string(fixture::added), lib::Kind::map_pack, "desert-pack"});
+    const kit::DisplayList grid = laid_out(library, {}, large);
+    int cells = 0;
+    bool saw_blue = false;
+    bool saw_green = false;
+    for (const kit::Item& item : grid.items) {
+        if (item.role != kit::Role::picture || item.rect.width != 72 || item.rect.height != 72)
+            continue;
+        ++cells;
+        const auto* drawn = std::get_if<kit::PictureLook>(&item.look);
+        if (drawn == nullptr || drawn->picture.width < 4)
+            continue;
+        OA_CHECK(pixel_is(
+            pixel_at(drawn->picture, 0, 0),
+            kit::colour::well.r,
+            kit::colour::well.g,
+            kit::colour::well.b,
+            kit::colour::well.a
+        ));
+        const uint8_t* mid =
+            pixel_at(drawn->picture, drawn->picture.width / 2, drawn->picture.height / 2);
+        if (pixel_is(mid, 0, 0, 255, 255))
+            saw_blue = true;
+        if (pixel_is(mid, 0, 255, 0, 255))
+            saw_green = true;
+    }
+    OA_CHECK(cells == 2);
+    OA_CHECK(saw_blue && saw_green);
+    OA_CHECK(text_item(grid, "Dry Lake") != nullptr);
+    OA_CHECK(text_item(grid, "Mesa") != nullptr);
+    OA_CHECK(text_item(grid, "2 players · 8x8") != nullptr);
+    OA_CHECK(text_item(grid, "4 players · 16x16") != nullptr);
+    OA_CHECK(text_item(grid, "Dry and flat.") != nullptr);
+    OA_CHECK(text_item(grid, "A table of stone.") != nullptr);
+    OA_CHECK(text_item(grid, "DP") != nullptr);
+
+    lib::set_tab(library, lib::Tab::active);
+    const kit::DisplayList active = laid_out(library, {}, large);
+    const kit::Control* atoll = fixture::named(active, "library.active.map.1");
+    const kit::Control* from = fixture::named(active, "library.active.from.1");
+    OA_CHECK(atoll != nullptr && atoll->text == "Atoll · 6 players · 20x20");
+    OA_CHECK(
+        from != nullptr && from->kind == kit::ControlKind::link &&
+        from->text == "From Island Hopping"
+    );
+    if (atoll != nullptr && from != nullptr)
+        OA_CHECK(from->rect.y > atoll->rect.y);
+    const kit::Item* tile_picture = nullptr;
+    if (atoll != nullptr) {
+        for (const kit::Item& item : active.items) {
+            if (item.role != kit::Role::picture || item.rect.y != atoll->rect.y ||
+                item.rect.x >= atoll->rect.x)
+                continue;
+            tile_picture = &item;
+            break;
+        }
+    }
+    OA_CHECK(tile_picture != nullptr);
+    if (tile_picture != nullptr) {
+        const auto* drawn = std::get_if<kit::PictureLook>(&tile_picture->look);
+        OA_CHECK(drawn != nullptr);
+        if (drawn != nullptr)
+            expect_letterboxed(drawn->picture, 255, 0, 0);
+    }
+    OA_CHECK(text_item(active, shore_note) == nullptr);
+    bool cut_note = false;
+    for (const kit::Item& item : active.items) {
+        if (item.role != kit::Role::text || item.text.size() >= shore_note.size())
+            continue;
+        if (item.text.size() < 3 || item.text.front() != 'x')
+            continue;
+        if (item.text.compare(item.text.size() - 3, 3, "...") != 0)
+            continue;
+        cut_note = item.rect.height == kit::compact_metrics.small_line;
+    }
+    OA_CHECK(cut_note);
+    OA_CHECK(text_item(active, "6 players · 20x20") != nullptr);
+}
+
+/// Returns the fixture plus Desert Pack installed as a map, and enough other
+/// map packs that Desert Pack's row starts below the list.
+///
+/// @return the inputs
+lib::Inputs packs_past_the_fold() {
+    lib::Inputs inputs = fixture::fixture_inputs();
+    inputs.map_packs.push_back({"Desert Pack", {{"Dry Lake", 2, "8x8"}}});
+    for (int32_t index = 1; index <= 30; ++index) {
+        const std::string number = (index < 10 ? "0" : "") + std::to_string(index);
+        inputs.listings.push_back(
+            fixture::listing(
+                fixture::added,
+                lib::Kind::map_pack,
+                "aaa-" + number,
+                "Aaa " + number,
+                "1.0",
+                fixture::mib,
+                "A filler map pack",
+                {}
+            )
+        );
+    }
+    return inputs;
+}
+
+/// Checks that following Desert Pack's From link opens Maps with that pack
+/// selected and its row in view.
+///
+/// @param library the model, just switched
+/// @param state the screen's state
+/// @param frame the frame
+void expect_desert_in_view(
+    lib::Library& library, lib::ScreenState& state, const kit::Frame& frame
+) {
+    OA_CHECK(library.tab == lib::Tab::maps);
+    OA_CHECK(
+        library.selected && library.selected->key == "desert-pack" &&
+        library.selected->registry == fixture::added
+    );
+    OA_CHECK(state.reveal_row >= 0);
+    const kit::DisplayList list = laid_out(library, state, frame);
+    OA_CHECK(state.reveal_row == -1);
+    const kit::Control* row = fixture::named(list, "library.row.example-mods.desert-pack");
+    const kit::Control* pane = fixture::named(list, "library.list");
+    OA_CHECK(row != nullptr && pane != nullptr);
+    if (row != nullptr && pane != nullptr) {
+        OA_CHECK(row->rect.y >= pane->rect.y);
+        OA_CHECK(row->rect.y + row->rect.height <= pane->rect.y + pane->rect.height);
+    }
+}
+
+/// A click, Enter or Space on a map's From link opens the Maps tab on that pack.
+void from_link_opens_the_pack() {
+    const kit::Frame large = fixture::frames()[2].frame;
+    lib::Library clicked;
+    lib::refresh(clicked, packs_past_the_fold());
+    lib::set_tab(clicked, lib::Tab::active);
+    lib::ScreenState state;
+    kit::DisplayList list = laid_out(clicked, state, large);
+    const kit::Control* from = fixture::named(list, "library.active.from.2");
+    OA_CHECK(from != nullptr && from->text == "From Desert Pack" && from->enabled);
+    if (from == nullptr)
+        return;
+    const lib::ScreenResult pressed = click(clicked, state, list, "library.active.from.2");
+    OA_CHECK(!pressed.action);
+    expect_desert_in_view(clicked, state, large);
+
+    for (const kit::Key key : {kit::Key::enter, kit::Key::space}) {
+        lib::Library library;
+        lib::refresh(library, packs_past_the_fold());
+        lib::set_tab(library, lib::Tab::active);
+        lib::ScreenState keyed_state;
+        const kit::DisplayList active = laid_out(library, keyed_state, large);
+        const kit::Control* link = fixture::named(active, "library.active.from.2");
+        OA_CHECK(link != nullptr);
+        if (link == nullptr)
+            continue;
+        keyed_state.interaction.focus_shown = true;
+        keyed_state.interaction.focused = link->id;
+        const lib::ScreenResult keyed = lib::library_key(library, keyed_state, active, key);
+        OA_CHECK(!keyed.action);
+        expect_desert_in_view(library, keyed_state, large);
+        const kit::DisplayList maps = laid_out(library, keyed_state, large);
+        const kit::Control* pane = fixture::named(maps, "library.list");
+        OA_CHECK(pane != nullptr && keyed_state.interaction.focused == pane->id);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -2433,6 +2842,8 @@ int main() {
     unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();
     maker_marks_follow_the_registry();
+    map_previews_fit_their_boxes();
+    from_link_opens_the_pack();
     a_finished_refresh_shows_the_check_then_the_arrow();
     more_holds_the_rest();
     details_page_keeps_its_entry();
