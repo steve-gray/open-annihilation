@@ -629,7 +629,7 @@ check and the install-ID switch can still change.
 
 ## System
 
-![The System section: Your files showing the Open Annihilation folder with its SAVES, SCREENSHOTS and MODS buttons. This picture is from before macOS listed a switch for each file type.](images/settings/system.png)
+![The System section: the Open Annihilation folder's path, then File Type Registration with a switch for mod packages, map packs, language packs and registry files.](images/settings/system.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.

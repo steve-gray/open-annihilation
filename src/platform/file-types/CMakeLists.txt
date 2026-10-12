@@ -18,7 +18,7 @@ elseif(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     OBJCXX_STANDARD 20
     OBJCXX_STANDARD_REQUIRED ON)
   target_link_libraries(oa-platform-file-types PRIVATE
-    "-framework AppKit" "-framework CoreServices" "-framework UniformTypeIdentifiers")
+    "-framework Foundation" "-framework CoreServices")
 else()
   add_library(oa-platform-file-types src/file_types.cpp src/file_types_xdg.cpp)
 endif()

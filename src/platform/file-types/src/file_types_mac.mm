@@ -2,24 +2,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // macOS: whether this copy is the default opener of each file type, and making it so, or
-// handing the type back. macOS 12 and later names an application by its file URL. Before
-// that, the same questions take a bundle identifier. The bundle's declaration is left as
-// it is.
+// handing the type back. Both questions use Launch Services on every version. The calls are
+// deprecated and still present; this file is the only place that warning is accepted. The
+// bundle's declaration is left as it is. After a change the opener is read back, and a
+// change the read does not show is reported.
 
 #include "apple_handlers.hpp"
 
-#import <AppKit/AppKit.h>
 #import <CoreServices/CoreServices.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <Foundation/Foundation.h>
 
-#include <chrono>
 #include <string>
+
+// LSCopyDefaultRoleHandlerForContentType and LSSetDefaultRoleHandlerForContentType are
+// deprecated from macOS 12 and are the calls that answer at once. The replacement that
+// takes a completion handler does not finish when the opener would change.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 namespace oa::platform::file_types {
 namespace {
-
-/// How long a default-opener change may take to answer.
-constexpr std::chrono::seconds kAnswerLimit{5};
 
 /// A content type as Foundation holds a string that may not end in a zero.
 NSString* text_of(std::string_view text) {
@@ -36,118 +38,44 @@ std::string utf8_of(NSString* text) {
     return bytes == nullptr ? std::string{} : std::string(bytes);
 }
 
-/// The bundle identifier of the program at `url`.
-std::string bundle_id_of(NSURL* url) {
-    if (url == nil)
-        return {};
-    return utf8_of([NSBundle bundleWithURL:url].bundleIdentifier);
+/// Reports whether two bundle identifiers name the same program, ignoring ASCII case.
+bool same_bundle(std::string_view left, std::string_view right) noexcept {
+    if (left.size() != right.size())
+        return false;
+    const auto lower = [](unsigned char letter) noexcept {
+        return letter >= 'A' && letter <= 'Z' ? static_cast<char>(letter - 'A' + 'a')
+                                              : static_cast<char>(letter);
+    };
+    for (std::size_t index = 0; index < left.size(); ++index)
+        if (lower(static_cast<unsigned char>(left[index])) !=
+            lower(static_cast<unsigned char>(right[index])))
+            return false;
+    return true;
 }
 
-/// The default opener of `content_type`, on macOS 12 and later.
-API_AVAILABLE(macos(12.0))
-
-Handler opener_now(std::string_view content_type, std::string& failure) {
-    UTType* type = [UTType typeWithIdentifier:text_of(content_type)];
-    if (type == nil) {
-        failure = "unknown content type " + std::string(content_type);
-        return {};
-    }
-    NSURL* url = [[NSWorkspace sharedWorkspace] URLForApplicationToOpenContentType:type];
-    if (url == nil)
-        return {};
-    Handler handler;
-    handler.bundle_id = bundle_id_of(url);
-    handler.application_url = utf8_of(url.absoluteString);
-    return handler;
-}
-
-/// The default opener of `content_type`, before macOS 12.
-Handler opener_before(std::string_view content_type, std::string& failure) {
+/// The default opener of `content_type`. An empty handler with an empty `failure` means
+/// nothing is the opener.
+Handler opener_of(std::string_view content_type, std::string& failure) {
     NSString* identifier = text_of(content_type);
     if (identifier == nil) {
         failure = "unknown content type " + std::string(content_type);
         return {};
     }
-    Handler handler;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     CFStringRef owner =
         LSCopyDefaultRoleHandlerForContentType((__bridge CFStringRef)identifier, kLSRolesAll);
-#pragma clang diagnostic pop
     if (owner == nullptr)
         return {};
+    Handler handler;
     handler.bundle_id = utf8_of(CFBridgingRelease(owner));
     return handler;
 }
 
-/// Waits for `gate`, pumping the run loop when this is the main thread, so a completion
-/// that comes back there can run. Sets `failure` when the wait runs out.
-bool wait_for(dispatch_semaphore_t gate, std::string& failure) {
-    const auto deadline = std::chrono::steady_clock::now() + kAnswerLimit;
-    if ([NSThread isMainThread]) {
-        while (dispatch_semaphore_wait(gate, DISPATCH_TIME_NOW) != 0) {
-            if (std::chrono::steady_clock::now() >= deadline) {
-                failure = "the system did not answer";
-                return false;
-            }
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
-        }
-        return true;
-    }
-    const auto left = deadline - std::chrono::steady_clock::now();
-    const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(left).count();
-    if (nanoseconds <= 0 ||
-        dispatch_semaphore_wait(gate, dispatch_time(DISPATCH_TIME_NOW, nanoseconds)) != 0) {
-        failure = "the system did not answer";
-        return false;
-    }
-    return true;
+Handler read_handler(void* /*context*/, std::string_view content_type, std::string& failure) {
+    return opener_of(content_type, failure);
 }
 
-/// Makes `handler` the default opener of `content_type` on macOS 12 and later.
-API_AVAILABLE(macos(12.0))
-
-bool set_opener_now(std::string_view content_type, const Handler& handler, std::string& failure) {
-    UTType* type = [UTType typeWithIdentifier:text_of(content_type)];
-    if (type == nil) {
-        failure = "unknown content type " + std::string(content_type);
-        return false;
-    }
-    NSURL* url = nil;
-    if (!handler.application_url.empty())
-        url = [NSURL URLWithString:text_of(handler.application_url)];
-    if (url == nil && !handler.bundle_id.empty()) {
-        url = [[NSWorkspace sharedWorkspace]
-            URLForApplicationWithBundleIdentifier:text_of(handler.bundle_id)];
-    }
-    if (url == nil) {
-        failure = "no program opens " + std::string(content_type);
-        return false;
-    }
-    __block NSString* message = nil;
-    dispatch_semaphore_t gate = dispatch_semaphore_create(0);
-    [[NSWorkspace sharedWorkspace] setDefaultApplicationAtURL:url
-                                            toOpenContentType:type
-                                            completionHandler:^(NSError* problem) {
-                                                if (problem != nil)
-                                                    message = problem.localizedDescription;
-                                                dispatch_semaphore_signal(gate);
-                                            }];
-    if (!wait_for(gate, failure))
-        return false;
-    if (message != nil) {
-        failure = utf8_of(message);
-        if (failure.empty())
-            failure = "the system refused";
-        return false;
-    }
-    return true;
-}
-
-/// Makes `handler` the default opener of `content_type` before macOS 12.
-bool set_opener_before(
-    std::string_view content_type, const Handler& handler, std::string& failure
+bool write_handler(
+    void* /*context*/, std::string_view content_type, const Handler& handler, std::string& failure
 ) {
     if (handler.bundle_id.empty()) {
         failure = "no program opens " + std::string(content_type);
@@ -159,31 +87,23 @@ bool set_opener_before(
         failure = "unknown content type " + std::string(content_type);
         return false;
     }
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     const OSStatus status = LSSetDefaultRoleHandlerForContentType(
         (__bridge CFStringRef)identifier, kLSRolesAll, (__bridge CFStringRef)owner
     );
-#pragma clang diagnostic pop
     if (status != noErr) {
         failure = "the system refused (" + std::to_string(static_cast<int>(status)) + ")";
         return false;
     }
+    // The call answers at once. The opener afterwards is what a read reports, and a set
+    // the read does not show did not take.
+    const Handler now = opener_of(content_type, failure);
+    if (!failure.empty())
+        return false;
+    if (!same_bundle(now.bundle_id, handler.bundle_id)) {
+        failure = "the change did not take";
+        return false;
+    }
     return true;
-}
-
-Handler read_handler(void* /*context*/, std::string_view content_type, std::string& failure) {
-    if (@available(macOS 12.0, *))
-        return opener_now(content_type, failure);
-    return opener_before(content_type, failure);
-}
-
-bool write_handler(
-    void* /*context*/, std::string_view content_type, const Handler& handler, std::string& failure
-) {
-    if (@available(macOS 12.0, *))
-        return set_opener_now(content_type, handler, failure);
-    return set_opener_before(content_type, handler, failure);
 }
 
 } // namespace
@@ -212,3 +132,5 @@ Handler apple_running_application() {
 }
 
 } // namespace oa::platform::file_types
+
+#pragma clang diagnostic pop

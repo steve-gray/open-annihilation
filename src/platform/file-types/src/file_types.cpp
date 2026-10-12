@@ -343,30 +343,36 @@ Registration apply_opener_changes(
             continue;
         }
         const std::string extension(type->extension);
-        if (change.open) {
+        // A set is kept only when the opener read afterwards is the one asked for. The
+        // switch is drawn from that read, and a change that did not take is logged.
+        const auto kept = [&](const Handler& asked, std::string success) {
             std::string failure;
-            if (!calls.set_handler(calls.context, type->content_type, application, failure)) {
+            if (!calls.set_handler(calls.context, type->content_type, asked, failure)) {
                 add_failure(done.error, extension + ": " + failure);
-                continue;
+                return;
+            }
+            const Handler now = calls.default_handler(calls.context, type->content_type, failure);
+            if (!failure.empty() || !same_bundle(now.bundle_id, asked.bundle_id)) {
+                add_failure(done.error, extension + ": the change did not take");
+                return;
             }
             done.changed = true;
-            done.lines.emplace_back("open " + extension);
+            done.lines.emplace_back(std::move(success));
+        };
+        if (change.open) {
+            kept(application, "open " + extension);
             continue;
         }
-        std::string failure;
-        const Handler handed = calls.default_handler(calls.context, type->hands_back_to, failure);
-        if (!failure.empty() || handler_name(handed).empty()) {
-            if (failure.empty())
-                failure = "nothing opens " + std::string(type->hands_back_to);
-            add_failure(done.error, extension + ": " + failure);
+        std::string parent_failure;
+        const Handler handed =
+            calls.default_handler(calls.context, type->hands_back_to, parent_failure);
+        if (!parent_failure.empty() || handler_name(handed).empty()) {
+            if (parent_failure.empty())
+                parent_failure = "nothing opens " + std::string(type->hands_back_to);
+            add_failure(done.error, extension + ": " + parent_failure);
             continue;
         }
-        if (!calls.set_handler(calls.context, type->content_type, handed, failure)) {
-            add_failure(done.error, extension + ": " + failure);
-            continue;
-        }
-        done.changed = true;
-        done.lines.emplace_back("hand back " + extension + " to " + handler_name(handed));
+        kept(handed, "hand back " + extension + " to " + handler_name(handed));
     }
     return done;
 }

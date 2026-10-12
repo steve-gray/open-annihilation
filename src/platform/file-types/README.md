@@ -155,14 +155,15 @@ remove one. It chooses the default opener.
 | `.oamod`, `.oalang`, `.oamap` | this copy opens that exported type | the default opener of `public.zip-archive` |
 | `.oareg` | this copy opens that exported type | the default opener of `public.plain-text` |
 
-On macOS 12 and later the change is
-`setDefaultApplicationAtURL:toOpenContentType:completionHandler:`, and the
-opener handed back is the one
-`URLForApplicationToOpenContentType:` names. Before that, both questions
-use `LSSetDefaultRoleHandlerForContentType` and
-`LSCopyDefaultRoleHandlerForContentType`. A switch shows on when the
-default opener's bundle identifier is this copy's. A question that fails
-is logged, that switch is left as it was, and the others are still asked.
+On every macOS version both questions use
+`LSSetDefaultRoleHandlerForContentType` and
+`LSCopyDefaultRoleHandlerForContentType`. Those calls are deprecated and
+still answer at once; the deprecation warning is accepted only in
+`file_types_mac.mm`. After a change the opener is read back. A change that
+read does not show is logged (`the change did not take`) and is not
+counted as done. A switch shows on when the default opener's bundle
+identifier is this copy's. A question that fails is logged, that switch
+is left as it was, and the others are still asked.
 Nothing here runs at start: a choice made in Finder stays until a switch
 moves and OK is pressed. A copy that is not an application bundle asks
 nothing. iOS has no such questions, and System keeps the text row.
@@ -171,10 +172,12 @@ nothing. iOS has no such questions, and System keeps the text row.
 
 `platform-file-types` checks the texts on every system, and the
 default-opener questions against a stand-in: a switch that is on asks for
-this copy and does not look up a zip or text opener, a switch that is off
-asks for that opener and sets it on the exported type, a type that did not
-move is not asked, a failed question is reported and does not stop the
-others, and a system with no questions skips. Elsewhere than on
+this copy and does not look up a zip or text opener, then reads the opener
+back; a switch that is off asks for that opener, sets it on the exported
+type and reads it back; a set the read does not show is logged and is not
+counted; a type that did not move is not asked, a failed question is
+reported and does not stop the others, and a system with no questions
+skips. Elsewhere than on
 Windows it registers into a scratch data folder, with three recording
 scripts standing in for the tools on a scratch `PATH`, given two minutes
 each so that a loaded machine never stops them: the five icon files, the

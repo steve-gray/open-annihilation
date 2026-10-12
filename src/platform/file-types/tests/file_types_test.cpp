@@ -865,6 +865,7 @@ struct FakeLaunchServices {
     std::map<std::string, file_types::Handler> handlers{};
     std::string fail_read{};  ///< a content type whose question fails
     std::string fail_write{}; ///< a content type whose change fails
+    bool store_writes = true; ///< a change that answers and leaves the opener as it was
     std::vector<std::string> reads{};
     std::vector<std::pair<std::string, std::string>> writes{};
 };
@@ -895,8 +896,9 @@ bool fake_write(
         failure = "sandbox";
         return false;
     }
-    fake->handlers[type] = handler;
     fake->writes.emplace_back(type, handler.bundle_id);
+    if (fake->store_writes)
+        fake->handlers[type] = handler;
     return true;
 }
 
@@ -961,9 +963,12 @@ void test_opener_changes() {
     OA_CHECK(handed.lines.size() == 2);
     OA_CHECK(handed.lines[0] == "hand back oamod to com.example.archive");
     OA_CHECK(handed.lines[1] == "hand back oareg to com.example.editor");
-    OA_CHECK(fake.reads.size() == 2);
+    // Each type asks for the opener it hands back to, then reads its own opener afterwards.
+    OA_CHECK(fake.reads.size() == 4);
     OA_CHECK(fake.reads[0] == "public.zip-archive");
-    OA_CHECK(fake.reads[1] == "public.plain-text");
+    OA_CHECK(fake.reads[1] == "net.coreprime.open-annihilation.oamod");
+    OA_CHECK(fake.reads[2] == "public.plain-text");
+    OA_CHECK(fake.reads[3] == "net.coreprime.open-annihilation.oareg");
     OA_CHECK(
         fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == "com.example.archive"
     );
@@ -985,7 +990,9 @@ void test_opener_changes() {
         file_types::apply_opener_changes(fake_calls(fake), application, on);
     OA_CHECK(taken.changed && taken.error.empty());
     OA_CHECK(taken.lines.size() == 1 && taken.lines[0] == "open oamod");
-    OA_CHECK(fake.reads.empty());
+    // On does not look up a zip or text opener. It reads this type back after the set.
+    OA_CHECK(fake.reads.size() == 1);
+    OA_CHECK(fake.reads[0] == "net.coreprime.open-annihilation.oamod");
     OA_CHECK(
         fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == application.bundle_id
     );
@@ -1011,6 +1018,17 @@ void test_opener_changes() {
         file_types::apply_opener_changes(fake_calls(fake), application, on);
     OA_CHECK(!refused.changed);
     OA_CHECK(refused.error.find("oamod: sandbox") != std::string::npos);
+    fake.fail_write.clear();
+
+    // A set that answers and leaves another opener is logged and is not counted.
+    fake.handlers["net.coreprime.open-annihilation.oamod"] = archive;
+    fake.store_writes = false;
+    const file_types::Registration ignored =
+        file_types::apply_opener_changes(fake_calls(fake), application, on);
+    OA_CHECK(!ignored.changed && ignored.lines.empty());
+    OA_CHECK(ignored.error.find("oamod: the change did not take") != std::string::npos);
+    OA_CHECK(fake.handlers["net.coreprime.open-annihilation.oamod"].bundle_id == archive.bundle_id);
+    fake.store_writes = true;
 
     const file_types::OpenerChange unknown[] = {{"zip", true}};
     const file_types::Registration other =
