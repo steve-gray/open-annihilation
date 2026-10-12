@@ -406,6 +406,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::registry_refresh);
     case Action::uninstall:
         return shown(text, words::action_uninstall);
+    case Action::use_now:
+        return shown(text, words::action_use_now);
     }
     return {};
 }

@@ -684,7 +684,9 @@ shows the app icon under its key, the plates filtered down, or the drawn
 plate when no icon has been given. The Languages picture, on that drawing
 only, sets the fixture language pack Portugues (Brasil) to author
 "OA team" and adds an installed copy, so the row shows that mark
-under its check.
+under its check. The built-in languages lead that list, each marked
+Built in. `library-languages-zh-compact.png` is the same window with
+简体中文 installed and in use, on its details page.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`,
@@ -692,7 +694,7 @@ under its check.
 `library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
-`library-registries-large.png`, `library-languages-compact.png`,
+`library-registries-large.png`, `library-languages-compact.png`, `library-languages-zh-compact.png`,
 `library-maps-one-large.png` and `library-maps-several-large.png`
 for review.
 

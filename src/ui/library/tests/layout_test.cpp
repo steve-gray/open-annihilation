@@ -449,6 +449,8 @@ std::string_view word_of(lib::Action action) {
         return "open-folder";
     case lib::Action::homepage:
         return "homepage";
+    case lib::Action::use_now:
+        return "use-now";
     default:
         return "other";
     }
@@ -831,6 +833,60 @@ void larger_classes_show_more() {
         updates != nullptr &&
         updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
     );
+}
+
+/// Languages lists each built-in language ahead of the packs. A built-in
+/// row's chip says "Built in", and the language in use says "In use".
+/// USE NOW is in the tab order; a pack that is not installed has GET only.
+void built_in_languages_show_on_the_list() {
+    lib::Library library = fixture::fixture_library();
+    lib::set_tab(library, lib::Tab::languages);
+    const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
+    bool deutsch = false;
+    for (const kit::Item& item : list.items) {
+        const auto* row = std::get_if<kit::ListRowLook>(&item.look);
+        if (row == nullptr || row->title != "Deutsch")
+            continue;
+        bool german = false;
+        for (const std::string& line : row->lines)
+            german = german || line == "German";
+        deutsch = row->chip.has_value() && row->chip->text == "Built in" &&
+                  !row->chip->icon.has_value() && german;
+    }
+    OA_CHECK(deutsch);
+    const kit::Control* deutsch_row = fixture::named(list, "library.row.language-de");
+    OA_CHECK(deutsch_row != nullptr && deutsch_row->text == "Deutsch");
+
+    lib::select(library, lib::built_in_language_id("de"));
+    const kit::DisplayList details = laid_out(library, {}, fixture::frames()[1].frame);
+    const kit::Control* use_now = fixture::named(details, "library.action.use-now");
+    OA_CHECK(use_now != nullptr && use_now->text == "USE NOW" && use_now->enabled);
+    if (use_now != nullptr)
+        OA_CHECK(
+            std::find(details.tab_order.begin(), details.tab_order.end(), use_now->id) !=
+            details.tab_order.end()
+        );
+    bool told = false;
+    for (const kit::Item& item : details.items)
+        told = told || (item.role == kit::Role::text && item.text == "Built into the game");
+    OA_CHECK(told);
+    OA_CHECK(fixture::named(details, "library.action.get") == nullptr);
+    OA_CHECK(fixture::named(details, "library.action.uninstall") == nullptr);
+
+    lib::select(library, {std::string(fixture::added), lib::Kind::language, "pl"});
+    const kit::DisplayList in_use = laid_out(library, {}, fixture::frames()[1].frame);
+    bool marked = false;
+    for (const kit::Item& item : in_use.items) {
+        const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+        marked = marked || (chip != nullptr && chip->text == "In use" && !chip->icon.has_value());
+    }
+    OA_CHECK(marked);
+    OA_CHECK(fixture::named(in_use, "library.action.use-now") == nullptr);
+
+    lib::select(library, {std::string(fixture::core), lib::Kind::language, "pt-BR"});
+    const kit::DisplayList listed = laid_out(library, {}, fixture::frames()[1].frame);
+    OA_CHECK(fixture::named(listed, "library.action.get") != nullptr);
+    OA_CHECK(fixture::named(listed, "library.action.use-now") == nullptr);
 }
 
 /// A row reads its entry's name, and a row's chip says its state.
@@ -3117,6 +3173,7 @@ void active_maps_fill_scroll_and_filter() {
 int main() {
     every_frame_holds_its_invariants();
     larger_classes_show_more();
+    built_in_languages_show_on_the_list();
     rows_name_their_entries();
     empty_and_offline_lists_say_why();
     an_own_mods_details_show_its_description();

@@ -149,6 +149,8 @@ std::string_view action_word(Action action) {
         return "refresh-registry";
     case Action::uninstall:
         return "uninstall";
+    case Action::use_now:
+        return "use-now";
     }
     return "action";
 }
@@ -609,6 +611,24 @@ kit::StateIcon icon_of(State state) {
 /// @return the chip
 kit::ChipLook entry_chip(const Library& library, const Entry& entry) {
     kit::ChipLook chip;
+    // A built-in language shows its words, not a download icon. The one in
+    // use says so in place of USE NOW.
+    if (is_built_in_language(entry.id)) {
+        const bool in_use = entry.state == State::playing;
+        chip.text = std::string(
+            shown(library.text, in_use ? words::chip_in_use : words::registry_built_in)
+        );
+        chip.state = in_use ? kit::ChipState::playing : kit::ChipState::installed;
+        return chip;
+    }
+    // An installed language pack in use says so too, unless an update is
+    // waiting: that arrow stays, and USE NOW is still withheld.
+    if (entry.id.kind == Kind::language && entry.installed != nullptr && entry.installed->in_use &&
+        entry.state != State::get && entry.state != State::update) {
+        chip.text = std::string(shown(library.text, words::chip_in_use));
+        chip.state = kit::ChipState::playing;
+        return chip;
+    }
     chip.text = std::string(state_text(entry.state, library.text));
     chip.state = chip_state_of(entry.state);
     chip.disabled = !entry.can_act;
@@ -726,12 +746,17 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     const std::string size = entry_size(library, entry);
     if (form == RowForm::compact) {
         std::string line = version;
-        if (!version.empty() && !size.empty())
+        if (is_built_in_language(entry.id)) {
+            const std::string_view english = entry_summary(entry);
+            if (!english.empty())
+                line = std::string(english);
+        } else if (!version.empty() && !size.empty()) {
             line = filled(
                 library.text, words::row_version_size, {{"version", version}, {"size", size}}
             );
-        else if (version.empty())
+        } else if (version.empty()) {
             line = size;
+        }
         if (entry.not_reviewed && !entry.registry_name.empty())
             line = filled(
                 library.text,
@@ -744,7 +769,7 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.by = byline(entry, library.text);
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
-    else if (is_base_game(entry.id)) {
+    else if (is_base_game(entry.id) || is_built_in_language(entry.id)) {
         const std::string_view about = entry_summary(entry);
         if (!about.empty())
             look.lines.push_back(std::string(about));

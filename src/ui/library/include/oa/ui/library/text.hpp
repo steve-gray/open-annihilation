@@ -50,6 +50,8 @@ inline constexpr std::string_view state_get = "GET";
 inline constexpr std::string_view state_installed = "INSTALLED";
 inline constexpr std::string_view state_update = "UPDATE";
 inline constexpr std::string_view state_playing = "PLAYING";
+/// The chip on the language the game is showing, in place of USE NOW.
+inline constexpr std::string_view chip_in_use = "In use";
 
 // Buttons.
 inline constexpr std::string_view action_get = "GET";
@@ -59,6 +61,9 @@ inline constexpr std::string_view action_cancel = "CANCEL";
 inline constexpr std::string_view action_retry = "RETRY";
 inline constexpr std::string_view action_roll_back = "ROLL BACK";
 inline constexpr std::string_view action_play_now = "PLAY NOW";
+/// On a built-in language, or an installed language pack, that is not the
+/// one the game shows. It switches as Settings › Language does.
+inline constexpr std::string_view action_use_now = "USE NOW";
 inline constexpr std::string_view action_switch_off = "SWITCH OFF";
 /// UNLOAD MOD on the Active tab. It asks what SWITCH OFF asks.
 inline constexpr std::string_view action_unload_mod = "UNLOAD MOD";
@@ -360,6 +365,8 @@ inline constexpr std::string_view active_language_built_in = "{language} · buil
 inline constexpr std::string_view active_coverage = "Coverage {percent}%";
 /// The language the game shows with no language chosen.
 inline constexpr std::string_view language_english = "English";
+/// A built-in language's details, under its name: it is not a package.
+inline constexpr std::string_view status_built_in_language = "Built into the game";
 /// How many players a map is for: one, and every other count.
 inline constexpr std::string_view active_players_one = "{count} player";
 inline constexpr std::string_view active_players_many = "{count} players";
