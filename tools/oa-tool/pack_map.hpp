@@ -25,9 +25,13 @@ struct PackMapRequest {
 ///
 /// Reads the folder's oamap.yaml header, fills each map's index from its OTA
 /// and TNT, writes a palette preview from the game at game_dir, and packs the
-/// manifest, the maps' files and the previews. Prints each map's name, what
-/// it needs from the game, the files left out, and the package's size and
-/// SHA-256.
+/// manifest, the maps' files and the previews. `players` is the largest whole
+/// number in the OTA's numplayers when every number is from 2 to 10, and
+/// otherwise the most start positions of a Network schema. The folder may set
+/// a map's name, description or players; size, preview and files are computed.
+/// Prints each map's name, a line when numplayers is not used or lists more
+/// players than the start positions, what the map needs from the game, the
+/// files left out, and the package's size and SHA-256.
 ///
 /// @param request the folder, the output, whether to replace it, and the game
 /// @param[in,out] output receives the summary, and diagnostics on failure

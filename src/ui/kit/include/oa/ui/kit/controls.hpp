@@ -136,6 +136,48 @@ void add_chip(
     DisplayList& list, const Rect& rect, const ChipLook& look, ControlId id, std::string name
 );
 
+// ---- Pills ----
+
+/// Returns a pill's width: its text in the small font, with enough padding
+/// that the text starts where the straight section does, and at least the
+/// pill's height so the ends stay semicircles.
+///
+/// @param fonts the fonts
+/// @param look the pill
+/// @return the width, in points
+[[nodiscard]] int32_t pill_width(const Fonts& fonts, const PillLook& look);
+
+/// Returns a pill's height: chip_height.
+///
+/// @return the height, in points
+[[nodiscard]] constexpr int32_t pill_height() noexcept {
+    return compact_metrics.chip_height;
+}
+
+/// Draws a pill: a small-font word centred on a fully rounded ground about
+/// chip_height high. Playing is filled with the accent under on_accent text.
+/// Neutral is a muted ground (control_hover) under the text colour. Installed,
+/// update and problem use that muted ground, with an outline and text in the
+/// colour the chips' states use (the accent, the lock colour, the danger
+/// colour). The corner is stepped at scale 1 and smooth on the 150% form.
+///
+/// @param canvas where it is drawn
+/// @param rect the pill
+/// @param look its text and state
+void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look);
+
+/// Appends a pill: one item and, with a control number, one control of kind
+/// button that does not take steps. With no_control only the item is added.
+///
+/// @param[in,out] list the display list
+/// @param rect the pill
+/// @param look its look
+/// @param id the control's number, or no_control for the item alone
+/// @param name the control's automation name
+void add_pill(
+    DisplayList& list, const Rect& rect, const PillLook& look, ControlId id, std::string name
+);
+
 // ---- Text and search fields ----
 
 /// Returns the rectangle a field's text is drawn in: inside field_inset,

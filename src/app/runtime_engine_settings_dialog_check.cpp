@@ -121,7 +121,8 @@ struct WindowLayout {
 };
 
 /// The class and scale each of kWindowSizes gives, in its order: the
-/// design's table of windows.
+/// design's table of windows. The check's preferences file leaves the
+/// modern fonts Off, so Auto keeps whole steps.
 constexpr std::array<WindowLayout, 5> kWindowLayouts{{
     {oa::ui::kit::SizeClass::compact, 1},
     {oa::ui::kit::SizeClass::regular, 1},
@@ -151,7 +152,8 @@ struct InterfaceSizeStep {
 
 /// The Interface sizes chosen in turn: 100% is Large at 1x; 400% is
 /// Compact at 3x, as 4x does not fit Compact's 480 by 324 points in 1080
-/// rows and 3x (1440 by 972) does; Auto is the window's own Regular at 2x.
+/// rows and 3x (1440 by 972) does; Auto, with the modern fonts Off, is the
+/// window's own Regular at 2x.
 constexpr std::array<InterfaceSizeStep, 3> kInterfaceSizeSteps{{
     {settings::InterfaceSize::size_100, "100%", oa::ui::kit::SizeClass::large, 1},
     {settings::InterfaceSize::size_400, "400%", oa::ui::kit::SizeClass::compact, 3},
@@ -2358,6 +2360,27 @@ void Runtime::check_engine_settings_window_sizes() {
             fraction_dialog->chosen.modern_fonts,
             "a click on Use modern fonts for game text's On did not turn them on" + on
         );
+        // Auto is still the size in effect. On this 1920x1080 window, with
+        // the modern fonts on, it draws Large at 150%.
+        require(
+            engine_settings().interface_size == settings::InterfaceSize::automatic &&
+                oa_layer().screen_class() == oa::ui::kit::SizeClass::large &&
+                oa_layer().screen_scale_percent() == oa::ui::kit::fractional_scale_percent &&
+                fraction_dialog->size_class == oa::ui::kit::SizeClass::large,
+            "Auto with the modern fonts On is not Large at 150%" + on
+        );
+        {
+            // Large's 960 by 600 points at 1.5x: 1440 by 900 pixels, centred.
+            const LayerPlacement at = placed();
+            require(
+                at.shown.x == 240 && at.shown.y == 90 && at.shown.width == 1440 &&
+                    at.shown.height == 900,
+                "Auto with the modern fonts On does not show the dialog at 1440x900 at (240, 90)" +
+                    on
+            );
+        }
+        std::cout << "engine settings check: Interface size Auto with the modern fonts On on the "
+                  << size << " window is Large, 1.5x\n";
         open_sizes(*fraction_dialog);
         click_control(settings::no_control, "150%", "Interface size's 150%");
         require(

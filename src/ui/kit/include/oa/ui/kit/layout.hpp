@@ -120,17 +120,25 @@ struct Insets {
 /// The window height, in canvas pixels, that the Auto scale counts as one step.
 inline constexpr int32_t auto_scale_height = 720;
 
-/// Returns the Auto scale of a window: the canvas height over 720, rounded to
-/// the nearest whole number and never below 1, and never below the display's
-/// density, so a point is never smaller than a window point.
+/// Returns the Auto scale of a window, as a percentage.
 ///
-/// A half rounds away from zero. The height is the canvas, in pixels, not the
-/// window's points.
+/// The canvas height over 720, and never below the display's density, so a
+/// point is never smaller than a window point. The height is the canvas, in
+/// pixels, not the window's points.
+///
+/// While offer_fractional is false the scale is the nearest whole step, a
+/// half away from zero, and at least 1: 1x below 1080 lines, 2x from 1080,
+/// 3x from 1800. While it is true, 150% is among the steps, the nearest of
+/// 1x, 150%, 2x, 3x, 4x and above, and a tie takes the larger: 1x below 900
+/// lines, 150% from 900, 2x from 1260 and 3x from 1800. The density floor is
+/// still a whole step, so a density of 2 or more is never 150%.
 ///
 /// @param canvas_height the canvas height, in pixels
 /// @param density the canvas pixels per window point
-/// @return the scale, a whole number of canvas pixels a point
-[[nodiscard]] int32_t auto_scale(int32_t canvas_height, float density) noexcept;
+/// @param offer_fractional whether 150% is among the steps Auto may choose
+/// @return the scale, as a percentage: 100, 150, 200, 300 and so on
+[[nodiscard]] int32_t
+auto_scale(int32_t canvas_height, float density, bool offer_fractional = false) noexcept;
 
 /// How much room a layout has, from the points left after the scale.
 enum class SizeClass : uint8_t {
@@ -202,26 +210,32 @@ struct Frame {
 /// half, drawn on the canvas's smooth form in the modern fonts.
 inline constexpr int32_t fractional_scale_percent = 150;
 
+/// Chosen percent that means Auto with 150% among its steps (auto_scale with
+/// offer_fractional). Any other percent of 0 or less is Auto on whole steps
+/// alone. A chosen size, 150% included, is never this value.
+inline constexpr int32_t auto_with_fraction_percent = -1;
+
 /// Returns the viewport OA's own screens are laid out on, at the scale an
 /// Interface size chooses for a canvas.
 ///
 /// The chosen step is the chosen percent's whole steps, or for Auto (0 or
-/// less) the canvas's Auto scale (auto_scale of the canvas height and
-/// density). A chosen step replaces Auto's rule, the density floor
-/// included, on a touch canvas as on a desktop one. The scale is the
-/// largest whole step, no larger than the chosen one, at which Compact's
-/// dialog (compact_metrics' dialog_width by dialog_height points) fits the
-/// room, the canvas less its safe insets, and at least 1. 150%
-/// (fractional_scale_percent) is held the same way: it is used where
-/// Compact's dialog fits the room at one and a half, and otherwise 1.
-/// frame_of of the result gives the size class of the room's points at
-/// that scale.
+/// less, other than auto_with_fraction_percent) the canvas's Auto scale on
+/// whole steps. auto_with_fraction_percent is Auto with 150% among the steps.
+/// A chosen step replaces Auto's rule, the density floor included, on a
+/// touch canvas as on a desktop one. The scale is the largest whole step, no
+/// larger than the chosen one, at which Compact's dialog (compact_metrics'
+/// dialog_width by dialog_height points) fits the room, the canvas less its
+/// safe insets, and at least 1. 150%, whether chosen or what Auto picked, is
+/// held the same way: it is used where Compact's dialog fits the room at one
+/// and a half, and otherwise 1. frame_of of the result gives the size class
+/// of the room's points at that scale.
 ///
 /// @param canvas the canvas: its pixels, density and safe insets; its
 ///     scale_percent is not read
 /// @param chosen_percent the Interface size in percent, 100 a step: 100,
-///     150, 200, 300 or 400; 0 for Auto. Any other percent between two
-///     steps takes the step below it.
+///     150, 200, 300 or 400; 0 for Auto on whole steps;
+///     auto_with_fraction_percent for Auto with 150% among the steps. Any
+///     other percent between two steps takes the step below it.
 /// @return the canvas with scale_percent set to that scale: 150, or a
 ///     whole step times 100
 [[nodiscard]] Viewport layer_viewport(const Viewport& canvas, int32_t chosen_percent) noexcept;
@@ -447,6 +461,7 @@ enum class Role : uint8_t {
     progress_busy,  ///< a busy bar: the track striped, with no fraction
     backdrop,       ///< the dimming behind a sheet; no press reaches a part under it
     sheet,          ///< a sheet over a backdrop: a panel with a shadow
+    pill,           ///< a pill; the item's PillLook
 };
 
 /// Every role, in the order Role declares them. A role appended to Role is
@@ -481,6 +496,7 @@ inline constexpr std::array all_roles{
     Role::button_danger, Role::progress_track,
     Role::progress_fill, Role::progress_busy,
     Role::backdrop,      Role::sheet,
+    Role::pill,
 };
 
 /// Tells whether the kit's canvas draws a role (paint, in either form): it
@@ -526,6 +542,7 @@ inline constexpr std::array all_roles{
     case Role::hover_card:
     case Role::link:
     case Role::progress:
+    case Role::pill:
         return true;
     case Role::header_bar:
     case Role::badge:
@@ -561,9 +578,9 @@ inline constexpr std::array all_roles{
 }
 
 // The last role is named here: a role appended to Role is appended to
-// all_roles and named here in sheet's place.
+// all_roles and named here in pill's place.
 static_assert(
-    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::sheet) + 1,
+    all_roles_in_order() && all_roles.size() == static_cast<std::size_t>(Role::pill) + 1,
     "all_roles names every role of Role once, in its order"
 );
 

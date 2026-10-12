@@ -646,6 +646,94 @@ void draw_chip(const Canvas& canvas, const Rect& rect, const ChipLook& look) {
     line(clipped(canvas, rect), FontRole::small, look.text, rect, Align::centre, colours.text);
 }
 
+// ---- Pills ----
+
+namespace {
+
+/// A pill's ground, its text, and its outline when the state draws one.
+struct PillColours {
+    Colour ground{};                 ///< the rounded ground
+    Colour text{};                   ///< the words
+    std::optional<Colour> outline{}; ///< the outline; none when the ground is the whole pill
+};
+
+/// Returns a pill's colours. Playing is the accent filled, with on_accent
+/// text and no separate outline. Neutral is the muted ground under the text
+/// colour. Installed, update and problem use that ground with an outline and
+/// text in the colour a chip of that state uses.
+///
+/// @param state the pill
+/// @return its colours
+PillColours pill_colours(PillState state) noexcept {
+    switch (state) {
+    case PillState::playing:
+        return {colour::accent, colour::on_accent, std::nullopt};
+    case PillState::neutral:
+        return {colour::control_hover, colour::text, std::nullopt};
+    case PillState::installed:
+        return {colour::control_hover, colour::accent, colour::accent};
+    case PillState::update:
+        return {colour::control_hover, colour::lock, colour::lock};
+    case PillState::problem:
+        return {colour::control_hover, colour::danger, colour::danger};
+    }
+    return {colour::control_hover, colour::text, std::nullopt};
+}
+
+/// Returns the padding either side of a pill's text: half its height, and
+/// at least chip_padding, so the words start on the straight section.
+///
+/// @return the padding, in points
+int32_t pill_padding() noexcept {
+    return std::max(kMetrics.chip_padding, kMetrics.chip_height / 2);
+}
+
+} // namespace
+
+int32_t pill_width(const Fonts& fonts, const PillLook& look) {
+    return std::max(
+        text_width(fonts, FontRole::small, look.text) + 2 * pill_padding(), kMetrics.chip_height
+    );
+}
+
+void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look) {
+    if (!drawable(canvas) || rect.width <= 0 || rect.height <= 0)
+        return;
+    const int32_t radius = std::min(rect.width, rect.height) / 2;
+    const PillColours colours = pill_colours(look.state);
+    if (colours.outline.has_value()) {
+        // The outline is the whole capsule, and the ground is the capsule
+        // one point in, so a partial pixel is one colour or the other.
+        fill_round_rect(canvas, rect, radius, *colours.outline);
+        if (rect.width > 2 && rect.height > 2) {
+            const Rect inner{rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2};
+            fill_round_rect(canvas, inner, std::max(radius - 1, int32_t{0}), colours.ground);
+        }
+    } else {
+        fill_round_rect(canvas, rect, radius, colours.ground);
+    }
+    // box_text, not line: line draws nothing on the smooth form when the
+    // game's fonts are absent, and a pill's words are part of the shape.
+    box_text(clipped(canvas, rect), FontRole::small, look.text, rect, Align::centre, colours.text);
+}
+
+void add_pill(
+    DisplayList& list, const Rect& rect, const PillLook& look, ControlId id, std::string name
+) {
+    Item item;
+    item.role = Role::pill;
+    item.rect = rect;
+    item.control = id;
+    item.text = look.text;
+    item.look = look;
+    list.items.push_back(std::move(item));
+    if (id == no_control)
+        return;
+    add_control(
+        list, rect, id, std::move(name), ControlKind::button, false, false, look.text, true
+    );
+}
+
 void add_chip(
     DisplayList& list, const Rect& rect, const ChipLook& look, ControlId id, std::string name
 ) {

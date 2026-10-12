@@ -79,12 +79,16 @@ change, as the engine's own screens do.
 
 The kit lays out in points. One point is one pixel of the game's 640x480
 picture, and the engine draws a point as `scale` pixels of the window. The
-Auto scale is the window's height over 720, rounded, never below 1 and
-never below the display's own density; it is then held to the largest
-scale at which Compact's 480 by 324 point dialog fits the window. The
-points left over choose the size class: Compact below 960 by 540 points,
-Regular from 960 by 540, Large from 1280 by 720 (`SizeClass`,
-`size_class_of` in [layout.hpp][layout]). At some common windows:
+Auto scale is the window's height over 720, the nearest step, never below 1
+and never below the display's own density; it is then held to the largest
+scale at which Compact's 480 by 324 point dialog fits the window. While the
+modern fonts are on and opened, 150% is one of the steps and a tie takes
+the larger: 1x below 900 lines, 150% from 900, 2x from 1260 and 3x from
+1800. While they are off, or they did not open, the steps are whole: 1x
+below 1080 lines, 2x from 1080, 3x from 1800. The points left over choose
+the size class: Compact below 960 by 540 points, Regular from 960 by 540,
+Large from 1280 by 720 (`SizeClass`, `size_class_of` in
+[layout.hpp][layout]). At some common windows, with 150% not offered:
 
 | Window | Auto scale | Points | Size class |
 |---|---|---|---|
@@ -95,6 +99,10 @@ Regular from 960 by 540, Large from 1280 by 720 (`SizeClass`,
 | 2560x1440 | 2x | 1280 by 720 | Large |
 | 3840x2160 | 3x | 1280 by 720 | Large |
 | a phone, 852 by 393 points at 3 pixels a point | 3x | 852 by 393 | Compact |
+
+With the modern fonts on, 1920x1080 is 1.5x instead: 1280 by 720 points,
+Large. A window a few lines short of 1080, such as 1914x1077, is 1.5x and
+Regular. 2560x1440 stays 2x.
 
 The player's Interface size (Settings › Graphics) replaces Auto with 100%,
 150%, 200%, 300% or 400%, held the same way. 150% is offered only while the
@@ -648,7 +656,8 @@ The UI kit gallery shows every component of the kit, once working on its
 own model and once in each state (idle, hovered, pressed, focused,
 disabled, and locked where a component has a lock), at the scale and size
 class of the window. These pictures are the gallery's own, as its check,
-`native-kit-gallery`, takes them on the main menu with `--snapshot`.
+`native-kit-gallery`, takes them on the main menu with `--snapshot`. They
+were taken before the pill samples, so they do not show the PILLS section.
 
 Compact at 1x, on a 640x480 window: one column, scrolling between the
 header and the footer.

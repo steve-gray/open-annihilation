@@ -454,10 +454,15 @@ applies when you press OK.
   are a person, the battle room's player cards and the UI kit gallery. The
   3.1c screens keep Menu scaling, the game's text keeps Text size and the
   side panel and bars keep HUD scaling.
-  - **Auto** draws them at the window's height in pixels divided by 720,
-    rounded: 1x below 1080 lines, 2x at 1080 and 1440, 3x at 2160, and
-    never below the display's own pixel density, so a phone keeps the
-    smallest layout.
+  - **Auto** draws them at the nearest size to the window's height in
+    pixels divided by 720, and a tie takes the larger size. While Use
+    modern fonts for game text is On and those fonts opened, Auto chooses
+    among 1x, 150%, 2x, 3x, 4x and so on: 1x below 900 lines, 150% from
+    900, 2x from 1260 and 3x from 1800. While the modern fonts are Off, or
+    they did not open, Auto keeps whole steps: 1x below 1080 lines, 2x
+    from 1080 and 3x from 1800. Either way it is never below the display's
+    own pixel density, so a phone keeps the smallest layout, and never
+    larger than lets the smallest layout fit the window.
   - **A size you choose** is used as far as the smallest layout still fits
     the window, so 400% on a 1920x1080 window draws at 3x. 150% is offered
     only while Use modern fonts for game text is On, because the game's
@@ -467,12 +472,16 @@ applies when you press OK.
   At that size each screen lays itself out for the room the window leaves
   it: the Compact layout, the 480x324 dialog of earlier versions, while
   fewer than 960x540 points are left; Regular, 720x486, from 960x540; and
-  Large, 960x600, from 1280x720. So at 1920x1080 Auto draws Regular at 2x,
-  and at 2560x1440 Large at 2x. A 640x480 window draws exactly as earlier
-  versions did. In a match the settings sit beside the side column, at no
-  more than its scale, and take their layout from the room beside it: a
-  1920x1080 match shows Compact at 2x where the menus show Regular. It
-  takes effect as you choose it, so the open dialog and every OA screen
+  Large, 960x600, from 1280x720. So at 1920x1080 Auto draws Large at 150%
+  while the modern fonts are on, and Regular at 2x while they are off. A
+  window a few lines short of that, 1914x1077, draws Regular at 150% with
+  the modern fonts on. At 2560x1440 Auto draws Large at 2x. A 640x480
+  window draws exactly as earlier versions did. In a match the settings
+  sit beside the side column, at no more than its scale, and take their
+  layout from the room beside it. With HUD scaling On, a 1920x1080 match
+  shows Compact at 2x with the modern fonts off, where the menus show
+  Regular, and Regular at 150% with them on, where the menus show Large.
+  It takes effect as you choose it, so the open dialog and every OA screen
   redraw at the new size at once, and is never locked. Cancel puts back
   the size the dialog opened with; OK keeps the size you chose. Choose a
   larger size if OA's screens are small to read on a large display, or a

@@ -329,6 +329,51 @@ void chips_take_every_state() {
     }
 }
 
+// ---- Pills ----
+
+/// A pill's corner at 1x is a step, its cap and its straight edge are the
+/// ground, and an outlined state keeps that ground inside its colour.
+void pills_are_rounded_and_stepped_at_1x() {
+    OA_CHECK(kit::pill_width(fonts(), {"GET"}) == 22);
+    OA_CHECK(kit::pill_width(fonts(), {""}) == 12);
+    OA_CHECK(kit::pill_height() == 12);
+
+    const kit::Rect pill{10, 10, 40, 12};
+    renderer::Surface playing = black(60, 32);
+    kit::draw_pill(canvas_on(playing), pill, {"", kit::PillState::playing});
+    expect(playing, 10, 10, kBlack);
+    expect(playing, 10, 16, kit::colour::accent);
+    expect(playing, 30, 10, kit::colour::accent);
+    expect(playing, 30, 16, kit::colour::accent);
+
+    renderer::Surface installed = black(60, 32);
+    kit::draw_pill(canvas_on(installed), pill, {"", kit::PillState::installed});
+    expect(installed, 10, 10, kBlack);
+    expect(installed, 10, 16, kit::colour::accent);
+    expect(installed, 30, 10, kit::colour::accent);
+    expect(installed, 30, 16, kit::colour::control_hover);
+
+    renderer::Surface neutral = black(60, 32);
+    kit::draw_pill(canvas_on(neutral), pill, {"", kit::PillState::neutral});
+    expect(neutral, 10, 10, kBlack);
+    expect(neutral, 30, 16, kit::colour::control_hover);
+
+    renderer::Surface update = black(60, 32);
+    kit::draw_pill(canvas_on(update), pill, {"", kit::PillState::update});
+    expect(update, 10, 16, kit::colour::lock);
+    expect(update, 30, 16, kit::colour::control_hover);
+
+    renderer::Surface problem = black(60, 32);
+    kit::draw_pill(canvas_on(problem), pill, {"", kit::PillState::problem});
+    expect(problem, 10, 16, kit::colour::danger);
+    expect(problem, 30, 16, kit::colour::control_hover);
+
+    // A chip of the same words stays a rectangle: its corner is its outline.
+    renderer::Surface chip = black(60, 32);
+    kit::draw_chip(canvas_on(chip), pill, {"", kit::ChipState::playing});
+    expect(chip, 10, 10, kit::colour::accent);
+}
+
 // ---- State icons ----
 
 /// Tells whether a surface holds black everywhere outside a rectangle.
@@ -1182,6 +1227,7 @@ int main() {
     a_full_row_cuts_its_summary_before_the_aside();
     a_blank_badge_and_tags();
     chips_take_every_state();
+    pills_are_rounded_and_stepped_at_1x();
     state_icons_are_drawn_at_their_own_pixels();
     chips_show_state_icons();
     the_aside_keeps_a_whole_version();

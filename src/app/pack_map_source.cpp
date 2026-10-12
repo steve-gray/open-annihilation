@@ -62,6 +62,7 @@ oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime) {
         out->name = map.name.c_str();
         out->description = map.description.c_str();
         out->size = map.size.c_str();
+        out->title = map.title.c_str();
         const uint64_t bytes = map.terrain_bytes;
         const auto clamped = bytes > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())
                                  ? std::numeric_limits<int32_t>::max()

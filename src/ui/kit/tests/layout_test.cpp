@@ -96,22 +96,103 @@ void a_point_lies_inside_and_not_on_the_far_edges() {
 }
 
 /// Checks the Auto scale at density 1, and where the density raises it.
+/// 150% is not offered: the scale is a whole step, as a percentage.
 void the_scale_follows_the_canvas_and_the_density() {
     constexpr int32_t heights[] = {480, 720, 768, 1079, 1080, 1440, 1800, 2160};
     constexpr int32_t scales[] = {1, 1, 1, 1, 2, 2, 3, 3};
     for (std::size_t index = 0; index < 8; ++index)
-        OA_CHECK(kit::auto_scale(heights[index], 1.0F) == scales[index]);
+        OA_CHECK(kit::auto_scale(heights[index], 1.0F) == scales[index] * 100);
     // A 786-row canvas rounds to 1 from its height, and a 1179-row canvas to 2.
-    OA_CHECK(kit::auto_scale(786, 2.0F) == 2);
-    OA_CHECK(kit::auto_scale(786, 3.0F) == 3);
-    OA_CHECK(kit::auto_scale(1179, 2.0F) == 2);
-    OA_CHECK(kit::auto_scale(1179, 3.0F) == 3);
+    OA_CHECK(kit::auto_scale(786, 2.0F) == 200);
+    OA_CHECK(kit::auto_scale(786, 3.0F) == 300);
+    OA_CHECK(kit::auto_scale(1179, 2.0F) == 200);
+    OA_CHECK(kit::auto_scale(1179, 3.0F) == 300);
+}
+
+/// Returns a canvas at one canvas pixel a window point, with no insets.
+///
+/// @param width canvas pixels
+/// @param height canvas pixels
+/// @return the canvas
+kit::Viewport desktop_canvas(int32_t width, int32_t height);
+
+/// One canvas height and the Auto scale it gives, as a percentage, with 150%
+/// not offered and with it offered.
+struct AutoHeight {
+    int32_t height{};     ///< canvas rows
+    int32_t whole{};      ///< the scale with 150% not offered
+    int32_t fractional{}; ///< the scale with 150% offered
+};
+
+/// Checks Auto's steps with 150% offered and not, the density floor, and a
+/// room too small for Compact at 150%.
+void auto_chooses_one_and_a_half_where_it_is_offered() {
+    constexpr AutoHeight rows[] = {
+        {720, 100, 100},
+        {899, 100, 100},
+        {900, 100, 150},
+        {1077, 100, 150},
+        {1080, 200, 150},
+        {1259, 200, 150},
+        {1260, 200, 200},
+        {1440, 200, 200},
+        {1799, 200, 200},
+        {1800, 300, 300},
+        {2160, 300, 300},
+    };
+    for (const AutoHeight& row : rows) {
+        OA_CHECK(kit::auto_scale(row.height, 1.0F, false) == row.whole);
+        OA_CHECK(kit::auto_scale(row.height, 1.0F, true) == row.fractional);
+    }
+    // The density floor is a whole step, so 2 and 3 never leave 150% in place.
+    for (const int32_t floor_percent : {200, 300}) {
+        const float density = static_cast<float>(floor_percent / 100);
+        for (const AutoHeight& row : rows) {
+            const int32_t whole = row.whole > floor_percent ? row.whole : floor_percent;
+            const int32_t fractional =
+                row.fractional > floor_percent ? row.fractional : floor_percent;
+            OA_CHECK(kit::auto_scale(row.height, density, false) == whole);
+            OA_CHECK(kit::auto_scale(row.height, density, true) == fractional);
+        }
+    }
+    // 4x from the tie at 3.5, which is 2520 lines.
+    OA_CHECK(kit::auto_scale(2519, 1.0F, true) == 300);
+    OA_CHECK(kit::auto_scale(2520, 1.0F, true) == 400);
+
+    // 1077 lines would be 150%. 719 columns do not hold Compact's 720 at one
+    // and a half, so Auto draws 1x; 720 columns do.
+    OA_CHECK(
+        kit::layer_viewport(desktop_canvas(719, 1077), kit::auto_with_fraction_percent)
+            .scale_percent == 100
+    );
+    OA_CHECK(
+        kit::layer_viewport(desktop_canvas(720, 1077), kit::auto_with_fraction_percent)
+            .scale_percent == 150
+    );
+    // 1920 by 1080 is Large at 150%. 1914 by 1077, a few lines short, is
+    // Regular at 150%. Without 150% offered, 1080 is Regular at 2x.
+    const kit::Viewport full_hd =
+        kit::layer_viewport(desktop_canvas(1920, 1080), kit::auto_with_fraction_percent);
+    OA_CHECK(full_hd.scale_percent == 150);
+    OA_CHECK(kit::frame_of(full_hd).size_class == kit::SizeClass::large);
+    const kit::Viewport short_hd =
+        kit::layer_viewport(desktop_canvas(1914, 1077), kit::auto_with_fraction_percent);
+    OA_CHECK(short_hd.scale_percent == 150);
+    OA_CHECK(kit::frame_of(short_hd).size_class == kit::SizeClass::regular);
+    OA_CHECK(kit::layer_viewport(desktop_canvas(1920, 1080), 0).scale_percent == 200);
+    // A phone at density 2 stays at 2x: the density floor is above 150%.
+    kit::Viewport phone;
+    phone.width = 1704;
+    phone.height = 786;
+    phone.density = 2.0F;
+    phone.safe = {118, 0, 118, 42};
+    OA_CHECK(kit::layer_viewport(phone, kit::auto_with_fraction_percent).scale_percent == 200);
 }
 
 /// Checks each window of the design's table, and a phone whose insets come off first.
 void the_frame_matches_the_window_table() {
     for (const Window& window : windows) {
-        OA_CHECK(kit::auto_scale(window.height, 1.0F) == window.scale);
+        OA_CHECK(kit::auto_scale(window.height, 1.0F) == window.scale * 100);
         kit::Viewport viewport;
         viewport.width = window.width;
         viewport.height = window.height;
@@ -129,7 +210,7 @@ void the_frame_matches_the_window_table() {
     OA_CHECK(kit::size_class_of(960, 539) == kit::SizeClass::compact);
 
     // 2880 by 1800 at density 2: the height rounds to 3, above the density.
-    OA_CHECK(kit::auto_scale(1800, 2.0F) == 3);
+    OA_CHECK(kit::auto_scale(1800, 2.0F) == 300);
     kit::Viewport hidpi;
     hidpi.width = 2880;
     hidpi.height = 1800;
@@ -142,7 +223,7 @@ void the_frame_matches_the_window_table() {
     // A 1704 by 786 canvas at 2 canvas pixels a window point. The insets are
     // 118, 0, 118 and 42 canvas pixels: 59 points at each side and 21 at the
     // bottom, times 2.
-    OA_CHECK(kit::auto_scale(786, 2.0F) == 2);
+    OA_CHECK(kit::auto_scale(786, 2.0F) == 200);
     kit::Viewport phone;
     phone.width = 1704;
     phone.height = 786;
@@ -176,11 +257,6 @@ constexpr Chosen chosen_sizes[] = {
     {3840, 2160, 0, 3, kit::SizeClass::large},
 };
 
-/// Returns a canvas at one canvas pixel a window point, with no insets.
-///
-/// @param width canvas pixels
-/// @param height canvas pixels
-/// @return the canvas
 kit::Viewport desktop_canvas(int32_t width, int32_t height) {
     kit::Viewport canvas;
     canvas.width = width;
@@ -867,6 +943,7 @@ void parts_list_their_controls() {
 int main() {
     a_point_lies_inside_and_not_on_the_far_edges();
     the_scale_follows_the_canvas_and_the_density();
+    auto_chooses_one_and_a_half_where_it_is_offered();
     the_frame_matches_the_window_table();
     an_interface_size_takes_the_largest_step_that_fits_compact();
     each_class_gives_its_metrics();

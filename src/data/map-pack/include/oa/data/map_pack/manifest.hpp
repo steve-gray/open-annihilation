@@ -89,7 +89,9 @@ struct Manifest {
 
 /// Whether the manifest is a source an author is writing or a packed index.
 enum class ManifestUse : uint8_t {
-    source,  ///< an entry may hold only its stem; anything else is read and later rewritten
+    /// A folder may leave `maps` out. A listed entry names its stem and may
+    /// set name, description and players; the packer rewrites every other field.
+    source,
     package, ///< every map entry is complete, including its files
 };
 
