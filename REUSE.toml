@@ -151,3 +151,17 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = "Steve Gray"
 SPDX-License-Identifier = "LicenseRef-OpenAnnihilation-Branding"
+
+# The LZMA SDK decoder, public domain, kept unchanged (see ATTRIBUTIONS.md).
+# These files sit under a vendor directory, which the header check leaves to
+# its authors, so the annotation is the record of their terms.
+[[annotations]]
+path = "src/formats/lzma/vendor/**"
+SPDX-FileCopyrightText = "Igor Pavlov"
+SPDX-License-Identifier = "LZMA-SDK-9.22"
+
+# The small streams the LZMA tests decode, written by xz.
+[[annotations]]
+path = "src/formats/lzma/tests/data/**"
+SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
+SPDX-License-Identifier = "GPL-3.0-only"
