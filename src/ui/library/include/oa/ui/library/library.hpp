@@ -475,8 +475,9 @@ void close_details(Library& library);
 
 /// Counts what a tab lists under All, before the tag and the search, whichever tab is open.
 ///
-/// Mods, Maps and Languages hold their kind and Updates every kind. Active
-/// holds none. Registries counts the registries listed, not the packages.
+/// Mods, Maps and Languages count their kind. Updates counts the updates
+/// that can be installed (update_count). Active counts none. Registries
+/// counts the registries listed, not the packages.
 ///
 /// @param library the Library
 /// @param tab the tab

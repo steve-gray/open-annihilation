@@ -96,9 +96,10 @@ updated and played.
 The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
 and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout). Each
 tab after Active shows how many it lists under All, before a search or a
-tag: "Mods 11", "Maps 2", "Languages 2", "Updates 15", "Registries 2", and
-the short names keep the count ("Upd 15"). Updates' count is every package
-on that tab, and its digits stay amber while the count is above 0.
+tag: "Mods 11", "Maps 2", "Languages 2", "Updates 2", "Registries 2", and
+the short names keep the count ("Upd 2"). Updates counts the updates you
+can install, as the OA button's dot does, and its digits stay amber while
+the count is above 0.
 Registries counts the registries listed. Registries is last, and it is
 where registries are added, checked and turned off
 ([the Registries tab](#the-registries-tab)).

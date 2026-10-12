@@ -1871,7 +1871,7 @@ void test_tab_counts() {
     OA_CHECK(lib::tab_count(library, lib::Tab::mods) == 2);
     OA_CHECK(lib::tab_count(library, lib::Tab::maps) == 1);
     OA_CHECK(lib::tab_count(library, lib::Tab::languages) == 1);
-    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == 4);
+    OA_CHECK(lib::tab_count(library, lib::Tab::updates) == lib::update_count(library));
     OA_CHECK(lib::tab_count(library, lib::Tab::registries) == 2);
 }
 

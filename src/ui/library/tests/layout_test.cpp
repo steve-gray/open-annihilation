@@ -555,7 +555,12 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_EXPECT_NONE(name_problems(updates_list), named.name + " updates");
     OA_EXPECT_NONE(fixture::texts_not_fitting(updates_list, fonts()), named.name + " updates");
     const kit::Control* updates_tab = fixture::named(updates_list, "library.tab.updates");
-    OA_CHECK(updates_tab != nullptr && updates_tab->text == (compact ? "Upd 15" : "Updates 15"));
+    // Updates counts the updates that can be installed.
+    const std::string updates_count = std::to_string(lib::update_count(library));
+    OA_CHECK(
+        updates_tab != nullptr &&
+        updates_tab->text == (compact ? "Upd " : "Updates ") + updates_count
+    );
 
     // The Active tab: first, no search, no filters and no list; its lines
     // are labels, and Tab reaches only the tabs and the footer's buttons.
@@ -629,7 +634,9 @@ void larger_classes_show_more() {
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
     OA_CHECK(languages != nullptr && languages->text == "Lang 2");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
-    OA_CHECK(updates != nullptr && updates->text == "Upd 15");
+    OA_CHECK(
+        updates != nullptr && updates->text == "Upd " + std::to_string(lib::update_count(library))
+    );
 }
 
 /// A row reads its entry's name, and a row's chip says its state.
