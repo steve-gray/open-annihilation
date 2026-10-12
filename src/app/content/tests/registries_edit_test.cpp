@@ -64,10 +64,19 @@ bool resolve_loopback(const char* host, uint8_t ip[4]) {
     return true;
 }
 
+/// How long a check may run. One address check may open a connection, wait for
+/// a byte, fetch a descriptor and fetch a catalogue. The last term is a margin
+/// for the worker to store the outcome after the fetch returns.
+constexpr uint32_t check_wait_ms =
+    content::registry_check_connect_ms + content::registry_check_idle_ms +
+    content::registry_check_descriptor_ms + content::registry_check_catalogue_ms +
+    content::registry_check_connect_ms / 5;
+
 /// Waits until a check has an outcome.
 std::optional<content::RegistryCheck> await(content::Service& service, uint64_t request) {
     const auto start = std::chrono::steady_clock::now();
-    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(8)) {
+    const auto limit = std::chrono::milliseconds(check_wait_ms);
+    while (std::chrono::steady_clock::now() - start < limit) {
         if (std::optional<content::RegistryCheck> check = service.registry_check(request))
             return check;
         threads::sleep_ms(20);
