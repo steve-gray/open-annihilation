@@ -656,7 +656,7 @@ bool preview_read_file(
         return false;
     std::error_code size_error;
     const auto size = std::filesystem::file_size(file, size_error);
-    if (size_error || size == 0 || size > static_cast<std::uintmax_t>(content::max_picture_bytes))
+    if (size_error || size == 0 || size > static_cast<uintmax_t>(content::max_picture_bytes))
         return false;
     std::ifstream input{file, std::ios::binary};
     if (!input)
@@ -955,15 +955,15 @@ void Runtime::LibraryHost::request_pictures(const kit::DisplayList& list) {
 void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::DisplayList& list) {
     if (previews == nullptr)
         return;
-    MapPreviewState& state = *previews;
-    if (!state.palette_tried) {
-        state.palette_tried = true;
+    MapPreviewState& preview = *previews;
+    if (!preview.palette_tried) {
+        preview.palette_tried = true;
         try {
             const std::vector<uint8_t> bytes = runtime.assets_.read("palettes/palette.pal").bytes;
             if (bytes.size() == oa::PaletteBytes{}.size()) {
                 oa::PaletteBytes palette{};
                 std::copy(bytes.begin(), bytes.end(), palette.begin());
-                state.palette = palette;
+                preview.palette = palette;
             }
         } catch (const std::exception&) {
         }
@@ -972,8 +972,8 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
     std::vector<PreviewJob> jobs;
     const auto want = [&](oa::ui::map_previews::PreviewRequest request,
                           std::filesystem::path terrain) {
-        if (request.key.empty() || state.pictures.count(request.key) != 0 ||
-            state.cache.failed(request.key))
+        if (request.key.empty() || preview.pictures.count(request.key) != 0 ||
+            preview.cache.failed(request.key))
             return;
         for (const PreviewJob& job : jobs)
             if (job.request.key == request.key)
@@ -1000,7 +1000,7 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
                 request.source = oa::ui::map_previews::PreviewSource::pack;
                 request.file = map.preview;
                 want(std::move(request), {});
-            } else if (state.palette) {
+            } else if (preview.palette) {
                 request.source = oa::ui::map_previews::PreviewSource::base;
                 request.map = map.stem;
                 want(std::move(request), terrain_file(map));
@@ -1012,7 +1012,8 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
                 continue;
             if (entry.listing != nullptr) {
                 for (const library::MapLine& line : entry.listing->maps) {
-                    if (line.preview_url.empty() || state.online_bytes.count(line.preview_url) == 0)
+                    if (line.preview_url.empty() ||
+                        preview.online_bytes.count(line.preview_url) == 0)
                         continue;
                     oa::ui::map_previews::PreviewRequest request;
                     request.key = line.preview_url;
@@ -1043,7 +1044,7 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
                     request.source = oa::ui::map_previews::PreviewSource::pack;
                     request.file = map.preview;
                     want(std::move(request), {});
-                } else if (state.palette) {
+                } else if (preview.palette) {
                     request.source = oa::ui::map_previews::PreviewSource::base;
                     request.map = map.stem;
                     want(std::move(request), terrain_file(map));
@@ -1052,13 +1053,13 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
         }
     }
 
-    state.cache.new_frame();
+    preview.cache.new_frame();
     oa::ui::map_previews::PreviewHost reader;
     reader.context = &state;
     reader.read_map = preview_read_map;
     reader.read_file = preview_read_file;
     reader.online_bytes = preview_online_bytes;
-    reader.palette = state.palette ? &*state.palette : nullptr;
+    reader.palette = preview.palette ? &*preview.palette : nullptr;
 
     const PreviewJob* base_job = nullptr;
     for (const PreviewJob& job : jobs) {
@@ -1068,22 +1069,22 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
         }
     }
     if (base_job != nullptr) {
-        state.terrain = base_job->terrain;
-        state.cache.ask(base_job->request);
-        state.cache.pump(reader, 1);
+        preview.terrain = base_job->terrain;
+        preview.cache.ask(base_job->request);
+        preview.cache.pump(reader, 1);
     } else {
-        state.terrain.clear();
+        preview.terrain.clear();
         for (const PreviewJob& job : jobs)
-            state.cache.ask(job.request);
-        state.cache.pump(reader, 4);
+            preview.cache.ask(job.request);
+        preview.cache.pump(reader, 4);
     }
 
     bool stored = false;
     const auto take_job = [&](const PreviewJob& job) {
-        if (store_ready_preview(state, job.request))
+        if (store_ready_preview(preview, job.request))
             stored = true;
-        else if (state.cache.failed(job.request.key))
-            state.online_bytes.erase(job.request.key);
+        else if (preview.cache.failed(job.request.key))
+            preview.online_bytes.erase(job.request.key);
     };
     if (base_job != nullptr)
         take_job(*base_job);
@@ -1091,7 +1092,7 @@ void Runtime::LibraryHost::pump_map_previews(Runtime& runtime, const kit::Displa
         for (const PreviewJob& job : jobs)
             take_job(job);
     if (stored)
-        ++state.generation;
+        ++preview.generation;
 }
 
 void Runtime::destroy_library_host(LibraryHost* host) noexcept {
