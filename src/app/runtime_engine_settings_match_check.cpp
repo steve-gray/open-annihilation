@@ -106,10 +106,10 @@ constexpr std::array<std::pair<int, int>, 6> kPlacedWindows{{
     {1920, 1080},
 }};
 
-/// The section whose rows a game locks: Common Tweaks.
+/// The section whose rows a game locks: Engine Limits.
 constexpr std::array<settings::Page, 1> kLockedPages{settings::Page::common_tweaks};
 
-/// Common Tweaks' rows a game locks: the unit limit and the pathfinding cycles.
+/// Engine Limits' rows a game locks: the unit limit and the pathfinding cycles.
 constexpr std::array<int32_t, 2> kLockedRows{
     settings::first_row_control, settings::first_row_control + 1
 };
@@ -131,7 +131,7 @@ constexpr std::array<std::pair<SDL_Keycode, SDL_Keymod>, 4> kFocusKeys{{
 
 /// Returns the name a section's snapshots carry.
 ///
-/// @param page Common Tweaks
+/// @param page Engine Limits
 /// @return a short name
 std::string_view locked_page_slug(settings::Page page) {
     return page == settings::Page::common_tweaks ? "tweaks" : "page";

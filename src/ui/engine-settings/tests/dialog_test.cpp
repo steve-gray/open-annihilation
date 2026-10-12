@@ -593,7 +593,7 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::controls)[2] == Setting::max_zoom_in);
     CHECK(settings::page_settings(Page::controls)[3] == Setting::view_past_map_edge);
     CHECK(settings::page_settings(Page::controls)[4] == Setting::switch_alt);
-    // Common Tweaks: the unit limit, then pathfinding.
+    // Engine Limits: the unit limit, then pathfinding.
     CHECK(settings::page_settings(Page::common_tweaks).size() == 2);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);
     CHECK(settings::page_settings(Page::common_tweaks)[1] == Setting::path_search);
@@ -661,7 +661,7 @@ void each_section_shows_its_rows() {
           "SETTINGS",
           "v0.2.0",
           "Controls",
-          "Common Tweaks",
+          "Engine Limits",
           "Language & Text",
           "Graphics",
           "User Interface",
@@ -708,9 +708,9 @@ void each_section_shows_its_rows() {
         const auto* entry = find_part(parts, {}, settings::page_control(page));
         CHECK(entry != nullptr && entry->rect.y == geometry::list_item(page).y);
     }
-    // Common Tweaks shows its heading and its rows' labels in order.
+    // Engine Limits shows its heading and its rows' labels in order.
     parts = settings::dialog_layout(opened(Page::common_tweaks));
-    CHECK(find_part(parts, "COMMON TWEAKS", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "ENGINE LIMITS", settings::no_control) != nullptr);
     const auto tweaks = geometry::place_rows(Page::common_tweaks, {});
     CHECK(tweaks.rows.size() == 2);
     CHECK(tweaks.rows[0].label.y < tweaks.rows[1].label.y);
@@ -826,7 +826,7 @@ void language_and_text_shows_a_language_five_switches_and_a_size() {
                       geometry::kind_of(setting) != geometry::RowKind::slider &&
                       geometry::kind_of(setting) != geometry::RowKind::choice
         );
-    // Its entry comes after Common Tweaks and before Graphics, over the line
+    // Its entry comes after Engine Limits and before Graphics, over the line
     // above Developer.
     const auto entry = geometry::list_item(Page::language);
     CHECK(settings::page_control(Page::language) == 2);
@@ -1793,7 +1793,7 @@ void every_stop_maps_to_its_value_and_back() {
 }
 
 void sliders_follow_the_pointer_and_the_arrows() {
-    // Pathfinding cycles, Common Tweaks' second row.
+    // Pathfinding cycles, Engine Limits' second row.
     settings::Dialog dialog = opened(Page::common_tweaks);
     const auto track = geometry::place_rows(Page::common_tweaks, {}).rows[1].control_area;
     const int32_t row = track.y + track.height / 2;
@@ -1835,7 +1835,7 @@ void sliders_follow_the_pointer_and_the_arrows() {
     CHECK(graphics.chosen.max_frame_rate == 115);
     CHECK(find_part(settings::dialog_layout(graphics), "115 fps", settings::no_control) != nullptr);
 
-    // The unit limit, Common Tweaks' first row.
+    // The unit limit, Engine Limits' first row.
     settings::Dialog gameplay = opened(Page::common_tweaks);
     CHECK(settings::dialog_key(gameplay, DialogKey::down) == DialogAction::redraw);
     CHECK(gameplay.focused == settings::first_row_control);
@@ -2354,7 +2354,7 @@ void the_view_and_the_scroll_bar_keep_their_places() {
 
 void sections_that_fit_do_not_scroll() {
     // Each section's content: its rows, and the end gap under the last.
-    // Common Tweaks' unit limit and pathfinding sliders are 151,
+    // Engine Limits' unit limit and pathfinding sliders are 151,
     // and fit; Controls' two switches, the zoom's two drop-downs and View
     // past the map's edge's strip are 320, Graphics' nine rows are 572,
     // Language's drop-down, five switches and slider 424, and User
@@ -4642,15 +4642,15 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // is printed, so that a change meant to move these parts can pin them
     // again.
     const std::array<std::pair<Page, uint64_t>, 9> kBefore{{
-        {Page::controls, 0x5d0b61eabe97a9c4},
-        {Page::common_tweaks, 0x2e59aebcf3c27257},
-        {Page::language, 0x16f3932bdb276260},
-        {Page::graphics, 0x86867fd390c9ad90},
-        {Page::user_interface, 0xde9c9da61fb16fd1},
-        {Page::touch, 0x3ca7859262b6f51a},
-        {Page::controller, 0x650f38edb7863a3e},
-        {Page::game_files, 0x6764da0d00237161},
-        {Page::downloads, 0x68dbb3872ba73945},
+        {Page::controls, 0x6a28b782ac519012},
+        {Page::common_tweaks, 0x149760fae781c603},
+        {Page::language, 0xb05e2e5201dce696},
+        {Page::graphics, 0x0ace5806c5962412},
+        {Page::user_interface, 0xc88952a06c3ef09b},
+        {Page::touch, 0x28fd78164e4dff94},
+        {Page::controller, 0x5eeffaeb14744f70},
+        {Page::game_files, 0xd8c530e47b0dfae3},
+        {Page::downloads, 0xd192c20b02832143},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -8382,7 +8382,7 @@ void the_arrows_move_by_geometry() {
     CHECK(controls.focused == settings::cancel_control);
 
     // Game files: MANAGE… takes no steps, so Left goes to the entry at its
-    // height, Common Tweaks', and Right comes back.
+    // height, Engine Limits', and Right comes back.
     settings::Dialog files = opened_with_game_files(Page::game_files);
     CHECK(settings::dialog_key(files, DialogKey::tab) == DialogAction::redraw);
     CHECK(files.focused == settings::first_row_control);

@@ -130,7 +130,7 @@ std::string_view page_slug(Page page) {
     case Page::controls:
         return "controls";
     case Page::common_tweaks:
-        return "common-tweaks";
+        return "engine-limits";
     case Page::language:
         return "language";
     case Page::graphics:
@@ -375,7 +375,7 @@ std::vector<Picture> scenes(const DialogFonts& fonts, const Icon& icon) {
         add(pictures, "dialog/controls-focus", drawn_dialog(controls, fonts, no_icon, 1));
 
         add(pictures,
-            "dialog/common-tweaks-locked",
+            "dialog/engine-limits-locked",
             drawn_dialog(engine_dialog(Page::common_tweaks, game), fonts, no_icon, 1));
         add(pictures,
             "dialog/graphics-locked",

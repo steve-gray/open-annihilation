@@ -61,7 +61,7 @@ inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop
 /// each kind lists alone.
 enum class Page : uint8_t {
     controls,      ///< Controls
-    common_tweaks, ///< Common Tweaks: the unit limit and pathfinding
+    common_tweaks, ///< Engine Limits: the unit limit and pathfinding
     language,      ///< Language & Text: the language and how game text is drawn
     graphics,      ///< Graphics
     /// User Interface: menu scaling, the window's frame, HUD scaling,
@@ -151,7 +151,8 @@ enum class DialogKind : uint8_t {
 
 /// Returns a section's word: its name in kebab case, the same in every
 /// language, as automation names its entry (`oa.settings.nav.<word>`) and a
-/// stage file may name the section ("language", "user-interface").
+/// stage file may name the section ("language", "user-interface",
+/// "engine-limits").
 ///
 /// @param page the section
 /// @return the word
