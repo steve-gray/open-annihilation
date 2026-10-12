@@ -64,6 +64,9 @@ struct Descriptor {
     std::string title{}; ///< the card's heading; name when empty; at most 96 characters
     std::string
         description{}; ///< a paragraph on the card; empty when absent; at most 400 characters
+    /// Who publishes the registry, 1 to 64 bytes when present. Empty when
+    /// absent. A built-in registry shows a maker's mark from this name.
+    std::string author{};
     std::optional<formats::url::Url> homepage{}; ///< a page opened in a browser; absent when unset
     formats::url::Url catalogue{};               ///< the catalogue, http, with no query
     std::vector<formats::url::Url> mirrors{};    ///< other copies of the catalogue, at most 8
@@ -101,12 +104,13 @@ struct Descriptor {
 /// Reads a registry descriptor.
 ///
 /// registry must be 1. id, name, catalogue and downloads are required.
-/// homepage, mirrors, keys, title and description are optional. Absent
+/// homepage, mirrors, keys, title, description and author are optional. Absent
 /// mirrors and keys read as empty, and empty keys are an unsigned registry.
 /// An absent title or description reads as empty: the card then heads with
 /// name and shows no paragraph. A present title is 1 to 96 characters and a
 /// present description is 1 to 400. A character is one Unicode scalar value;
-/// name stays a byte count. A catalogue, mirror or
+/// name stays a byte count. A present author is 1 to 64 bytes with no
+/// control character, the same rule as name. A catalogue, mirror or
 /// download API is an http or https address with no query. A homepage is an
 /// http or https address. downloads.mode is direct or tokens. direct refuses an API
 /// and refuses install-id required, and defaults install-id to none. tokens

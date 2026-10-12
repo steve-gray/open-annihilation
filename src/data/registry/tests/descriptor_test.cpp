@@ -71,9 +71,10 @@ void refuse(std::string_view yaml, std::string_view needle) {
 
 bool same_descriptor(const registry::Descriptor& left, const registry::Descriptor& right) {
     if (left.id != right.id || left.name != right.name || left.title != right.title ||
-        left.description != right.description || left.catalogue != right.catalogue ||
-        left.mode != right.mode || left.install_id != right.install_id ||
-        left.homepage != right.homepage || left.api != right.api || left.mirrors != right.mirrors ||
+        left.description != right.description || left.author != right.author ||
+        left.catalogue != right.catalogue || left.mode != right.mode ||
+        left.install_id != right.install_id || left.homepage != right.homepage ||
+        left.api != right.api || left.mirrors != right.mirrors ||
         left.keys.size() != right.keys.size())
         return false;
     for (std::size_t index = 0; index < left.keys.size(); ++index) {
@@ -179,6 +180,7 @@ bool same_player(const registry::PlayerRegistries& left, const registry::PlayerR
 void title_and_description_read_and_round_trip() {
     const std::string title = "Example Maps - Sample packages";
     const std::string description = "A sample registry of maps, including the made-up set Ridge.";
+    const std::string author = "Open Annihilation";
     const std::string yaml = "registry: 1\n"
                              "id: example-maps\n"
                              "name: Example Maps\n"
@@ -186,16 +188,21 @@ void title_and_description_read_and_round_trip() {
                              title +
                              "\"\n"
                              "description: \"" +
-                             description + "\"\n" + direct_tail();
+                             description +
+                             "\"\n"
+                             "author: \"" +
+                             author + "\"\n" + direct_tail();
     registry::Descriptor out;
     std::string error;
     OA_CHECK(registry::read_descriptor(bytes_of(yaml), out, &error));
     OA_CHECK(out.name == "Example Maps");
     OA_CHECK(out.title == title);
     OA_CHECK(out.description == description);
+    OA_CHECK(out.author == author);
     const std::string written = registry::descriptor_text(out);
     OA_CHECK(written.find("title:") != std::string::npos);
     OA_CHECK(written.find("description:") != std::string::npos);
+    OA_CHECK(written.find("author:") != std::string::npos);
     registry::Descriptor again;
     OA_CHECK(registry::read_descriptor(bytes_of(written), again, &error));
     OA_CHECK(same_descriptor(out, again));
@@ -210,9 +217,11 @@ void title_and_description_read_and_round_trip() {
     );
     OA_CHECK(bare.title.empty());
     OA_CHECK(bare.description.empty());
+    OA_CHECK(bare.author.empty());
     const std::string bare_text = registry::descriptor_text(bare);
     OA_CHECK(bare_text.find("title:") == std::string::npos);
     OA_CHECK(bare_text.find("description:") == std::string::npos);
+    OA_CHECK(bare_text.find("author:") == std::string::npos);
 
     const std::string title_96(96, 'a');
     const std::string title_97(97, 'a');
@@ -257,6 +266,28 @@ void title_and_description_read_and_round_trip() {
         "registry: 1\nid: example-maps\nname: Example Maps\ndescription: \"\"\n" + direct_tail(),
         "description"
     );
+    const std::string author_64(64, 'c');
+    const std::string author_65(65, 'c');
+    OA_CHECK(
+        registry::read_descriptor(
+            bytes_of(
+                "registry: 1\nid: example-maps\nname: Example Maps\nauthor: \"" + author_64 +
+                "\"\n" + direct_tail()
+            ),
+            out,
+            &error
+        )
+    );
+    OA_CHECK(out.author == author_64);
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\nauthor: \"" + author_65 + "\"\n" +
+            direct_tail(),
+        "1 to 64"
+    );
+    refuse(
+        "registry: 1\nid: example-maps\nname: Example Maps\nauthor: \"\"\n" + direct_tail(),
+        "author"
+    );
     refuse(
         "registry: 1\nid: example-maps\nname: Example Maps\ntitle: \"a\\nb\"\n" + direct_tail(),
         "title"
@@ -295,6 +326,9 @@ void title_and_description_read_and_round_trip() {
                                     "    description: \"" +
                                     description +
                                     "\"\n"
+                                    "    author: \"" +
+                                    author +
+                                    "\"\n"
                                     "    catalogue: http://maps.example.org/oa/v1/catalogue.json\n"
                                     "    trusted-keys: []\n"
                                     "    downloads: {mode: direct}\n"
@@ -306,10 +340,12 @@ void title_and_description_read_and_round_trip() {
         OA_CHECK(player.registries[0].descriptor.name == "Example Maps");
         OA_CHECK(player.registries[0].descriptor.title == title);
         OA_CHECK(player.registries[0].descriptor.description == description);
+        OA_CHECK(player.registries[0].descriptor.author == author);
     }
     const std::string written_player = registry::player_registries_text(player);
     OA_CHECK(written_player.find("title:") != std::string::npos);
     OA_CHECK(written_player.find("description:") != std::string::npos);
+    OA_CHECK(written_player.find("author:") != std::string::npos);
     registry::PlayerRegistries player_again;
     OA_CHECK(registry::read_player_registries(bytes_of(written_player), player_again, &error));
     OA_CHECK(same_player(player, player_again));

@@ -68,6 +68,9 @@ bool read_added(
                     max_description_characters
                 ))
                 return false;
+        } else if (key == "author") {
+            if (!take_name(entry, read.descriptor.author, error, field_path(where, "author")))
+                return false;
         } else if (key == "url") {
             formats::url::Url parsed;
             if (!take_web_url(entry, parsed, error, field_path(where, "url")))
@@ -247,6 +250,8 @@ std::string player_registries_text(const PlayerRegistries& registries) {
                 append_line(out, "title", entry.descriptor.title);
             if (!entry.descriptor.description.empty())
                 append_line(out, "description", entry.descriptor.description);
+            if (!entry.descriptor.author.empty())
+                append_line(out, "author", entry.descriptor.author);
             if (!entry.url.empty())
                 append_line(out, "url", entry.url);
             if (entry.descriptor.homepage)

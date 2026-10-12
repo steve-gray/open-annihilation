@@ -9,12 +9,16 @@
 // colour, and every pixel of the window is drawn. In the game's fonts every
 // text fits and every part lies in the window. The same holds for the
 // Active tab at Compact, Regular and Large, the Updates tab at Compact and
-// Large, and the Registries tab at Compact, Regular and Large. The Registries
-// pictures dress the fixture's built-in registry as Core Prime on that copy
-// only. The characters the game's fonts lack are drawn in the modern fonts
-// beside the test, as the game draws them. Given --frames DIR, it writes
+// Large, the Registries tab at Compact, Regular and Large, and Languages at
+// Compact. The Registries pictures dress the fixture's built-in registry as
+// Core Prime on that copy only. The Languages picture gives the fixture's
+// Portugues (Brasil) pack the author "OA team" and an installed copy, on
+// that drawing only, so the row shows the OA mark under its check. The
+// characters the game's fonts lack are drawn in the modern fonts beside the
+// test, as the game draws them. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
-// library-updates-<class>.png and library-registries-<class>.png there.
+// library-updates-<class>.png, library-registries-<class>.png and
+// library-languages-compact.png there.
 //
 //   oa-ui-library-draw-test --data [--frames DIR]
 
@@ -127,9 +131,34 @@ struct Drawing {
     kit::Point window{};         ///< the window's size, in points
 };
 
+/// Dresses the Languages picture: the fixture's built-in language pack names
+/// its author, and an installed copy of it is added, on this drawing only.
+/// The row then shows the OA mark under its check. The fixture's own inputs
+/// stay as they were.
+///
+/// @param[in,out] library the scene's library
+void dress_languages(lib::Library& library) {
+    for (lib::Listing& listing : library.inputs.listings) {
+        if (listing.registry == fixture::core && listing.key == "pt-BR")
+            listing.author = "OA team";
+    }
+    lib::Installed pack;
+    pack.kind = lib::Kind::language;
+    pack.key = "pt-BR";
+    pack.folder = "pt-BR";
+    pack.name = "Portugues (Brasil)";
+    pack.version = "1.0";
+    pack.revision = 1;
+    pack.author = "OA team";
+    pack.registry = std::string(fixture::core);
+    pack.release = 1;
+    library.inputs.installed.push_back(std::move(pack));
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Dresses the Registries pictures: the built-in card carries Core Prime's
-/// short name, title and description, and the added card a sample of its own.
-/// The fixture itself stays Fixture Core. Other tabs are not dressed.
+/// short name, title, description and author, and the added card a sample of
+/// its own. The fixture itself stays Fixture Core. Other tabs are not dressed.
 ///
 /// @param[in,out] library the scene's library
 void dress_registries(lib::Library& library) {
@@ -142,6 +171,7 @@ void dress_registries(lib::Library& library) {
                 "Annihilation team, and checked for compatibility, as well as official releases "
                 "from some leading mods.";
             registry.address = "http://downloads.coreprime.net/v1/catalogue.json";
+            registry.author = "Open Annihilation";
             registry.packages = 1;
             registry.checked_ago = 300;
             lib::SigningKey signing_key;
@@ -167,6 +197,8 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
     lib::Library library = fixture::fixture_library();
     if (scene.tab == lib::Tab::registries)
         dress_registries(library);
+    else if (scene.tab == lib::Tab::languages)
+        dress_languages(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
     lib::ScreenState state;
@@ -354,6 +386,7 @@ int main(int argc, char** argv) {
         {"registries-compact", window_of(640, 480, 100), false, lib::Tab::registries},
         {"registries-regular", window_of(1920, 1080, 200), false, lib::Tab::registries},
         {"registries-large", window_of(2560, 1440, 200), false, lib::Tab::registries},
+        {"languages-compact", window_of(640, 480, 100), false, lib::Tab::languages},
     };
     for (const Scene& scene : scenes) {
         const Drawing first = draw_scene(scene, fonts);

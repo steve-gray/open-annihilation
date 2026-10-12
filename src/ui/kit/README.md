@@ -97,8 +97,10 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
 - `looks.hpp`: how a control looks. A look owns its texts. A text field's
   state, `TextField`, is its text and its caret. A picture item draws its
   `PictureLook`'s picture, such as a mod's badge, or else the canvas's icon.
-  `StateIcon` names the three state icons: a circled check, a circled
-  up-arrow and a download arrow.
+  `StateIcon` names the state icons: a circled check, a circled up-arrow,
+  a download arrow, a key, and the two maker's marks (the OA badge and
+  the bone). `MakerMark` on a list row draws one of those marks under the
+  row's state icon.
 - `canvas.hpp`: the canvas the components draw on, `Canvas`, in its two
   forms, and the primitives every draw function draws through: `fill_rect`,
   `blend_rect`, `outline_rect`, `bevel_rect`, `rule_rect`, `box_text`,
@@ -108,13 +110,17 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   (a colour blended through a map of one byte a pixel).
 - `components.hpp`: the controls, drawn through the canvas's primitives on
   either form. One button, five looks. `draw_state_icon` draws a state
-  icon in one colour, filling a square of a rectangle's shorter side: its
-  ring and strokes, from a design of 24 units (the ring 2 units wide, its
+  icon, filling a square of a rectangle's shorter side. A circled check,
+  a circled up-arrow, a download arrow and a key are one colour: their
+  rings and strokes, from a design of 24 units (the ring 2 units wide, its
   outer edge a unit in, every stroke 2.5 units wide with round ends), are
   worked out at the canvas's own pixels, each pixel's share counted from
   16 samples in integers, and drawn through `blend_coverage`, so the icon
   keeps its edges at 1x, 2x, 3x and 150% alike and never scales a picture
-  or a one-bit mark. `paint` draws a display list. The
+  or a one-bit mark. The OA badge and the bone are filled shapes sampled
+  the same way, in their own colours, and ignore the colour passed in:
+  the badge is a rounded plate with the letters in the lock colour, and
+  the bone is off-white with a dark outline. `paint` draws a display list. The
   OA button (`draw_oa_button`, `OaButtonLook`) may wear the kit's attention
   dot, as the main menu's does while updates wait: a disc
   `oa_button_dot_side` (7) points across in the warning token
@@ -584,12 +590,10 @@ own followers and test extensions in the same change; from 0.8.0 on, any
 change to a kit header raises the version.
 
 The gallery's stored pictures were taken before the pill samples, so they
-do not show the PILLS section. The gallery shows chips with their words
-only: a chip with a state icon
-is drawn by the same chip role, and showing it there would move the
-gallery's golden frames, so the icons are reviewed in the Library's
-pictures (`oa-ui-library-draw-test --frames`) until the gallery takes a
-sample of them.
+do not show the PILLS section. The Chips section shows the two maker's
+marks, the OA badge and the bone, as chips with no control. The other
+state icons are reviewed in the Library's pictures
+(`oa-ui-library-draw-test --frames`).
 
 Text is laid out and drawn left to right, one character after another, in
 the order it is stored: the kit has no right-to-left or bidirectional
