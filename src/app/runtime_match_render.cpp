@@ -2160,8 +2160,8 @@ void Runtime::render_match_surface() {
     paint_on(PaintLayer::hud);
     blit_match_minimap();
     draw_shared_camera_rectangles();
-    if (selected_match_unit_ == 0 && !match_paused_)
-        fill_source_rect(0, 128, 128, 352, 10);
+    // Nothing selected leaves the side's idle page in the well: its panel
+    // art is the emblem under the minimap, already on the HUD.
     paint_on(PaintLayer::battlefield);
     // The bars shrink as the view zooms out, and keep the game's size at
     // zoom 1 and in.

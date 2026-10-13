@@ -294,6 +294,9 @@ int Runtime::side_column_page_rows() {
         const std::string prefix(field, strnlen(field, sizeof field));
         hud::format_general_page_name(name, sizeof name, prefix.c_str());
         measure(name);
+        // The page shown when nothing is selected, whose art fills the well.
+        hud::format_idle_page_name(name, sizeof name, prefix.c_str());
+        measure(name);
         std::snprintf(name, sizeof name, "%sDL", prefix.c_str());
         measure(name);
     }

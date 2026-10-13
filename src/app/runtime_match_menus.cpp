@@ -1901,21 +1901,34 @@ void Runtime::show_match_orders_page() {
     auto& game = match_->state().game;
     auto state = hud::order_panel_load(game);
     const auto summary = summarize_order_panel(state);
-    const oa::Unit* unit = summary.count == 1 ? summary.first : nullptr;
-    const auto table = order_panel_table();
     const auto previous = match_hud_panel_;
     match_hud_panel_.clear();
-    hud::load_general_page(
-        state,
-        unit,
-        unit != nullptr ? hud::unit_def(table, *unit) : nullptr,
-        prefix.c_str(),
-        order_panel_controls(),
-        order_panel_loader()
-    );
-    if (match_hud_panel_.empty()) {
-        match_hud_panel_ = previous;
-        return;
+    // Nothing selected shows the side's idle page: its panel art is the
+    // emblem under the minimap. A selection keeps the general order page.
+    if (summary.count == 0) {
+        char name[256];
+        hud::format_idle_page_name(name, sizeof name, prefix.c_str());
+        if (!load_match_hud_layout(oa::data::defs::gui_path(name), hud::SidePage::unit)) {
+            match_hud_panel_ = previous;
+            return;
+        }
+        state.unit_id = 0;
+        state.unit_type = 0;
+    } else {
+        const oa::Unit* unit = summary.count == 1 ? summary.first : nullptr;
+        const auto table = order_panel_table();
+        hud::load_general_page(
+            state,
+            unit,
+            unit != nullptr ? hud::unit_def(table, *unit) : nullptr,
+            prefix.c_str(),
+            order_panel_controls(),
+            order_panel_loader()
+        );
+        if (match_hud_panel_.empty()) {
+            match_hud_panel_ = previous;
+            return;
+        }
     }
     hud::order_panel_store(game, state);
     match_build_page_ = 0;
