@@ -467,7 +467,10 @@ void add_label(
 /// @param[in,out] building the layout
 /// @param[in,out] control the control; its focus is cleared when none shows
 void tab_stop(Building& building, kit::Control& control) {
-    if (control.clip.width > 0 && control.clip.height > 0) {
+    // A tab scrolled off the strip stays in Tab's order. Its clip hides the
+    // press; the arrows still move to it, and the strip follows.
+    if (control.kind != kit::ControlKind::tab && control.clip.width > 0 &&
+        control.clip.height > 0) {
         const kit::Rect shown = kit::intersect(control.rect, control.clip);
         if (shown.width <= 0 || shown.height <= 0)
             control.focusable = false;
@@ -1046,10 +1049,9 @@ void add_library_header(
 ///
 /// @param library the model
 /// @param tab the tab
-/// @param short_name the short title
 /// @return the title, such as "Mods (13)" or "Active"
-std::string tab_caption(const Library& library, Tab tab, bool short_name) {
-    const std::string title(tab_text(tab, short_name, library.text));
+std::string tab_caption(const Library& library, Tab tab) {
+    const std::string title(tab_text(tab, false, library.text));
     if (tab == Tab::active)
         return title;
     return filled(
@@ -1061,35 +1063,26 @@ std::string tab_caption(const Library& library, Tab tab, bool short_name) {
 
 /// Appends the strip of tabs. Each tab after Active shows its count in
 /// brackets after its title, in that title's font and colour. Active has
-/// no count. A strip too narrow for the full titles takes the short names,
-/// with the counts the same way. The counts the kit would draw beside a
-/// caption stay unset, so the brackets are the only digits.
+/// no count. The names are always the full ones. When they do not fit, the
+/// strip scrolls sideways and an arrow at an end moves it by one tab. The
+/// counts the kit would draw beside a caption stay unset, so the brackets
+/// are the only digits. The scroll is written back so the open tab stays
+/// wholly in view.
 ///
 /// @param[in,out] building the layout
 /// @param strip the strip
-/// @param compact the tabs take their short names, as they also do when the
-///     full names and counts do not fit the strip
-void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
+void add_tabs(Building& building, const kit::Rect& strip) {
     const Library& library = *building.library;
-    // A strip too narrow for the full names and their counts takes the short
-    // names, as Compact's does.
-    if (!compact && building.fonts != nullptr) {
-        kit::TabsLook full;
-        full.count_style = kit::TabCountStyle::words;
-        for (const Tab tab : tab_order) {
-            full.captions.push_back(tab_caption(library, tab, false));
-            full.counts.push_back(-1);
-        }
-        const std::vector<kit::Rect> rects = kit::tab_rects(*building.fonts, strip, full);
-        compact = !rects.empty() && rects.back().x + rects.back().width > strip.x + strip.width;
-    }
     kit::TabsLook look;
     look.count_style = kit::TabCountStyle::words;
+    look.scroll = building.state->tab_scroll;
+    look.left_arrow_hovered = hovered(building, controls::tab_scroll_left);
+    look.right_arrow_hovered = hovered(building, controls::tab_scroll_right);
     std::array<kit::ControlId, tab_order.size()> ids{};
     std::array<std::string, tab_order.size()> names{};
     for (std::size_t index = 0; index < tab_order.size(); ++index) {
         const Tab tab = tab_order[index];
-        const std::string caption = tab_caption(library, tab, compact);
+        const std::string caption = tab_caption(library, tab);
         look.captions.push_back(caption);
         look.counts.push_back(-1);
         look.count_amber.push_back(0);
@@ -1104,11 +1097,32 @@ void add_tabs(Building& building, const kit::Rect& strip, bool compact) {
         if (hovered(building, ids[index]))
             look.hovered = index;
     }
+    const std::string left_name = unique_name(building, named("tab.scroll-left"));
+    const std::string right_name = unique_name(building, named("tab.scroll-right"));
     const std::size_t before = building.list.controls.size();
-    kit::add_tabs(building.list, *building.fonts, strip, look, ids, names);
+    const std::size_t top_before = building.top.size();
+    kit::add_tabs(
+        building.list,
+        *building.fonts,
+        strip,
+        look,
+        ids,
+        names,
+        controls::tab_scroll_left,
+        left_name,
+        controls::tab_scroll_right,
+        right_name
+    );
+    for (auto cursor = building.list.items.rbegin(); cursor != building.list.items.rend();
+         ++cursor) {
+        if (cursor->role != kit::Role::tabs)
+            continue;
+        if (const auto* stored = std::get_if<kit::TabsLook>(&cursor->look))
+            building.state->tab_scroll = stored->scroll;
+        break;
+    }
     move_controls(building.list, before, building.top);
-    for (std::size_t index = building.top.size() - tab_order.size(); index < building.top.size();
-         ++index)
+    for (std::size_t index = top_before; index < building.top.size(); ++index)
         tab_stop(building, building.top[index]);
 }
 
@@ -4462,11 +4476,30 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
         const int32_t title_width = title_right - text_left;
         const std::string_view heading = registry.title.empty() ? std::string_view{registry.name}
                                                                 : std::string_view{registry.title};
+        // A built-in registry's pill sits on the title's line, at its right,
+        // as the Active tab's Language tile places Built in. The heading
+        // keeps clear of it.
+        kit::PillLook built_in_pill;
+        int32_t built_in_width = 0;
+        bool show_built_in = false;
+        int32_t heading_limit = std::max(title_width, int32_t{1});
+        int32_t first_box = std::max(title_width, int32_t{0});
+        if (registry.built_in && title_width > 0) {
+            built_in_pill.text = std::string(shown(library.text, words::registry_built_in));
+            built_in_pill.state = kit::PillState::neutral;
+            built_in_width = kit::pill_width(*building.fonts, built_in_pill);
+            const int32_t reserved = built_in_width + metrics.list_row_gap;
+            if (built_in_width > 0 && built_in_width <= title_width) {
+                show_built_in = true;
+                const int32_t kept =
+                    reserved <= title_width ? title_width - reserved : title_width - built_in_width;
+                heading_limit = std::max(kept, int32_t{1});
+                first_box = std::max(kept, int32_t{0});
+            }
+        }
         std::vector<std::string> heading_lines;
         if (title_width > 0)
-            heading_lines = wrapped(
-                building, kit::FontRole::regular, heading, std::max(title_width, int32_t{1}), 0
-            );
+            heading_lines = wrapped(building, kit::FontRole::regular, heading, heading_limit, 0);
         const int32_t heading_height =
             static_cast<int32_t>(std::max(heading_lines.size(), std::size_t{1})) *
             metrics.regular_line;
@@ -4504,17 +4537,30 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             );
         }
         int32_t heading_top = band_top;
-        for (const std::string& heading_line : heading_lines) {
+        for (std::size_t line = 0; line < heading_lines.size(); ++line) {
+            const int32_t box_width =
+                line == 0 && show_built_in ? first_box : std::max(title_width, int32_t{0});
             add_text(
                 building,
                 kit::FontRole::regular,
-                heading_line,
-                {text_left, heading_top, std::max(title_width, int32_t{0}), metrics.regular_line},
+                heading_lines[line],
+                {text_left, heading_top, box_width, metrics.regular_line},
                 kit::Align::left,
                 kit::colour::text,
                 view
             );
             heading_top += metrics.regular_line;
+        }
+        if (show_built_in) {
+            const int32_t pill_height = kit::pill_height();
+            const kit::Rect pill_rect{
+                text_left + title_width - built_in_width,
+                band_top + (metrics.regular_line - pill_height) / 2,
+                built_in_width,
+                pill_height,
+            };
+            kit::add_pill(building.list, pill_rect, built_in_pill, kit::no_control, {});
+            building.list.items.back().clip = view;
         }
         std::string fingerprints;
         for (const SigningKey& signing_key : registry.keys) {
@@ -4694,22 +4740,6 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
                 );
             }
             bottom = buttons_top + metrics.button_height;
-        } else {
-            kit::PillLook pill;
-            pill.text = std::string(shown(library.text, words::registry_built_in));
-            pill.state = kit::PillState::neutral;
-            const int32_t pill_w = kit::pill_width(*building.fonts, pill);
-            const int32_t pill_top = bottom + metrics.hint_gap;
-            const int32_t pill_right = toggle.x + toggle.width;
-            kit::add_pill(
-                building.list,
-                {pill_right - pill_w, pill_top, pill_w, kit::pill_height()},
-                pill,
-                kit::no_control,
-                {}
-            );
-            building.list.items.back().clip = view;
-            bottom = pill_top + kit::pill_height();
         }
         const kit::Rect card{left, card_top, width, bottom + inset - card_top};
         const std::size_t drawn = building.list.items.size();
@@ -4881,7 +4911,7 @@ void add_registry_bar(Building& building, const Window& window, int32_t& top) {
 ///
 /// @param[in,out] building the layout
 /// @param window the window
-/// @param compact the class is Compact: one queue line with its bar, and DETAILS
+/// @param compact the class is Compact: the queue's short line, and DETAILS
 void add_list_footer(Building& building, const Window& window, bool compact) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
@@ -4935,70 +4965,59 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
 
     const QueueLines lines = queue_lines(library);
     const int32_t queue_width = std::max(queue_right - window.left, int32_t{0});
-    if (compact) {
-        if (lines.compact.empty())
-            return;
-        // A downloading item's bar under its line: the line, a hint's gap and the bar, centred.
-        const QueueItem* downloading = nullptr;
-        for (const QueueItem& item : library.inputs.queue)
-            if (item.phase == QueueItem::Phase::downloading) {
-                downloading = &item;
-                break;
-            }
-        const int32_t bar_height =
-            downloading != nullptr ? metrics.hint_gap + metrics.progress_bar_height : 0;
-        const int32_t line_top =
-            window.footer_top + (metrics.footer_height - metrics.small_line - bar_height) / 2;
-        const std::string line = cut(building, kit::FontRole::small, lines.compact, queue_width);
-        const kit::Rect box{window.left, line_top, queue_width, metrics.small_line};
-        add_text(
-            building, kit::FontRole::small, line, box, kit::Align::left, kit::colour::text, {}
-        );
-        add_label(
-            building.footer,
-            controls::queue,
-            box,
-            unique_name(building, named("queue")),
-            line,
-            {},
-            -1
-        );
-        if (downloading != nullptr) {
-            int32_t done = 0;
-            if (downloading->total_bytes != 0)
-                done = static_cast<int32_t>(
-                    std::min(downloading->done_bytes, downloading->total_bytes) *
-                    static_cast<uint64_t>(progress_whole) / downloading->total_bytes
-                );
-            kit::add_progress(
-                building.list,
-                {window.left,
-                 box.y + box.height + metrics.hint_gap,
-                 queue_width,
-                 metrics.progress_bar_height},
-                done,
-                progress_whole
-            );
+    // Compact keeps the one short line. Regular and Large keep the two lines.
+    // While a download runs, the same 8-point bar sits under the first line.
+    const std::string primary = compact ? lines.compact : lines.first;
+    if (primary.empty())
+        return;
+    const bool second_line = !compact && !lines.second.empty();
+    const QueueItem* downloading = nullptr;
+    for (const QueueItem& item : library.inputs.queue)
+        if (item.phase == QueueItem::Phase::downloading) {
+            downloading = &item;
+            break;
         }
-        return;
+    const bool bar = downloading != nullptr;
+    const int32_t line_count = second_line ? 2 : 1;
+    int32_t gap = bar ? metrics.hint_gap : 0;
+    int32_t block = line_count * metrics.small_line + (bar ? gap + metrics.progress_bar_height : 0);
+    if (bar && block > metrics.footer_height) {
+        gap = std::max(
+            metrics.footer_height - line_count * metrics.small_line - metrics.progress_bar_height,
+            int32_t{0}
+        );
+        block = line_count * metrics.small_line + gap + metrics.progress_bar_height;
     }
-    if (lines.first.empty())
-        return;
-    const int32_t line_count = lines.second.empty() ? 1 : 2;
-    const int32_t line_top =
-        window.footer_top + (metrics.footer_height - line_count * metrics.small_line) / 2;
-    const std::string first = cut(building, kit::FontRole::small, lines.first, queue_width);
+    const int32_t line_top = window.footer_top + (metrics.footer_height - block) / 2;
+    const std::string first = cut(building, kit::FontRole::small, primary, queue_width);
     const kit::Rect box{window.left, line_top, queue_width, metrics.small_line};
     add_text(building, kit::FontRole::small, first, box, kit::Align::left, kit::colour::text, {});
     add_label(
         building.footer, controls::queue, box, unique_name(building, named("queue")), first, {}, -1
     );
-    if (line_count == 2)
+    if (bar) {
+        int32_t done = 0;
+        if (downloading->total_bytes != 0)
+            done = static_cast<int32_t>(
+                std::min(downloading->done_bytes, downloading->total_bytes) *
+                static_cast<uint64_t>(progress_whole) / downloading->total_bytes
+            );
+        kit::add_progress(
+            building.list,
+            {window.left, box.y + box.height + gap, queue_width, metrics.progress_bar_height},
+            done,
+            progress_whole
+        );
+    }
+    if (second_line)
         add_text(
             building,
             kit::FontRole::small,
             cut(building, kit::FontRole::small, lines.second, queue_width),
-            {window.left, line_top + metrics.small_line, queue_width, metrics.small_line},
+            {window.left,
+             line_top + metrics.small_line + (bar ? gap + metrics.progress_bar_height : 0),
+             queue_width,
+             metrics.small_line},
             kit::Align::left,
             kit::colour::hint,
             {}
@@ -5022,6 +5041,11 @@ void add_focus_ring(Building& building) {
         for (const kit::Control& control : *group) {
             if (control.id != interaction.focused || !control.focusable)
                 continue;
+            if (control.clip.width > 0 && control.clip.height > 0) {
+                const kit::Rect shown = kit::intersect(control.rect, control.clip);
+                if (shown.width <= 0 || shown.height <= 0)
+                    return;
+            }
             const bool on_edge =
                 control.kind == kit::ControlKind::tab || control.kind == kit::ControlKind::list;
             add_item(building.list, kit::Role::focus_ring, control.rect, control.clip).look =
@@ -5802,7 +5826,7 @@ kit::DisplayList library_layout(
         };
     };
     if (compact) {
-        add_tabs(building, {window.left, top, content_width, metrics.tab_height}, true);
+        add_tabs(building, {window.left, top, content_width, metrics.tab_height});
         top += metrics.tab_height + window.gap;
         if (active)
             add_active(building, body_of(top));
@@ -5827,11 +5851,11 @@ kit::DisplayList library_layout(
         }
     } else {
         // Active and Registries draw no search, so the tabs take the whole
-        // row and the full names fit. A catalogue tab keeps room for the
-        // search, and takes the short names when the full ones do not fit.
+        // row. A catalogue tab keeps room for the search. The names stay
+        // whole; a strip they do not fit scrolls.
         const int32_t tab_width =
             catalogue ? content_width - wide_search_width - window.padding : content_width;
-        add_tabs(building, {window.left, top, tab_width, metrics.tab_height}, false);
+        add_tabs(building, {window.left, top, tab_width, metrics.tab_height});
         if (catalogue)
             add_search(
                 building,

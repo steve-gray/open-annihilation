@@ -58,6 +58,9 @@ struct ScreenState {
     /// How far the list is scrolled, in points. The layout writes it when
     /// reveal_row names a row to bring into view.
     mutable int32_t list_scroll{};
+    /// How far the tab strip is scrolled, in points from the first tab. The
+    /// layout writes it so the open tab stays wholly in view.
+    mutable int32_t tab_scroll{};
     int32_t details_scroll{}; ///< how far the details are scrolled, in points
     /// A row of the list to bring into view on the next layout, its place
     /// among the visible entries from 0. The layout scrolls to it and clears

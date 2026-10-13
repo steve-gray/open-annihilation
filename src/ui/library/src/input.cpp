@@ -8,6 +8,7 @@
 #include "oa/ui/library/screen.hpp"
 
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/controls.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/looks.hpp"
@@ -820,6 +821,11 @@ ScreenResult activate(
     if (menu_item_control(id))
         return choose_item(library, state, list, id - controls::first_menu_item);
     state.menu = id == field_of(state.menu) ? state.menu : MenuKind::none;
+    if (id == controls::tab_scroll_left || id == controls::tab_scroll_right) {
+        const int32_t steps = id == controls::tab_scroll_right ? 1 : -1;
+        state.tab_scroll = kit::tab_scroll_step(list, steps);
+        return redrawn();
+    }
     if (id >= controls::first_tab && id < controls::first_tab + tab_controls)
         return show_tab(library, state, list, static_cast<Tab>(id - controls::first_tab));
     if (id >= controls::first_filter && id < controls::first_filter + filter_controls) {
@@ -1641,6 +1647,20 @@ ScreenResult library_wheel(
             state.menu_first = first;
             return redrawn();
         }
+    }
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::tabs || !kit::contains(item.rect, at))
+            continue;
+        if (!std::isfinite(notches))
+            return {};
+        const int32_t steps = -static_cast<int32_t>(std::lround(notches));
+        if (steps == 0)
+            return {};
+        const int32_t next = kit::tab_scroll_step(list, steps);
+        if (next == state.tab_scroll)
+            return {};
+        state.tab_scroll = next;
+        return redrawn();
     }
     return turn_pane(library, state, list, pane_at(library, state, list, at), notches);
 }

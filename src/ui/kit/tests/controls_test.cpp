@@ -852,6 +852,69 @@ void tabs_in_words_keep_a_count_of_zero() {
     OA_CHECK(updates != nullptr && updates->text == "Updates 4");
 }
 
+/// A strip the tabs fit draws no arrows and does not shift them. A narrow
+/// one keeps the open tab in view, shows an arrow only toward hidden tabs,
+/// and moves one tab at a time.
+void a_narrow_strip_scrolls_one_tab_at_a_time() {
+    kit::TabsLook look;
+    look.captions = {"MODS", "MAPS", "UPDATES", "MODS", "MAPS", "UPDATES"};
+    look.counts = {0, 0, 2, 0, 0, 2};
+    look.selected = 2;
+    const kit::Rect wide{10, 10, 800, kit::compact_metrics.tab_height};
+    const kit::TabStrip fitting = kit::place_tabs(fonts(), wide, look);
+    const std::vector<kit::Rect> plain = kit::tab_rects(fonts(), wide, look);
+    OA_CHECK(!fitting.overflows);
+    OA_CHECK(fitting.scroll == 0);
+    OA_CHECK(fitting.left_arrow.width == 0 && fitting.right_arrow.width == 0);
+    OA_CHECK(fitting.tabs.size() == plain.size());
+    for (std::size_t index = 0; index < fitting.tabs.size(); ++index)
+        OA_CHECK(
+            fitting.tabs[index].x == plain[index].x &&
+            fitting.tabs[index].width == plain[index].width
+        );
+
+    const kit::Rect strip{10, 10, 160, kit::compact_metrics.tab_height};
+    const kit::TabStrip placed = kit::place_tabs(fonts(), strip, look);
+    OA_CHECK(placed.overflows);
+    OA_CHECK(placed.selected < placed.tabs.size());
+    OA_CHECK(kit::wholly_in(placed.tabs[placed.selected], placed.view));
+    OA_CHECK((placed.scroll > 0) == (placed.left_arrow.width > 0));
+    const int32_t total = plain.back().x + plain.back().width - wide.x;
+    OA_CHECK((placed.right_arrow.width > 0) == (placed.scroll + placed.view.width < total));
+
+    kit::DisplayList list;
+    const std::array<kit::ControlId, 6> ids{1, 2, 3, 4, 5, 6};
+    const std::array<std::string, 6> names{"a", "b", "c", "d", "e", "f"};
+    kit::add_tabs(list, fonts(), strip, look, ids, names, 7, "scroll-left", 8, "scroll-right");
+    const int32_t forward = kit::tab_scroll_step(list, 1);
+    const int32_t back = kit::tab_scroll_step(list, -1);
+    OA_CHECK(forward != placed.scroll || back != placed.scroll);
+    kit::TabsLook moved = look;
+    moved.scroll = forward;
+    const kit::TabStrip after = kit::place_tabs(fonts(), strip, moved);
+    OA_CHECK(kit::wholly_in(after.tabs[after.selected], after.view));
+    moved.scroll = back;
+    const kit::TabStrip before = kit::place_tabs(fonts(), strip, moved);
+    OA_CHECK(kit::wholly_in(before.tabs[before.selected], before.view));
+
+    look.selected = 0;
+    look.scroll = 0;
+    const kit::TabStrip start = kit::place_tabs(fonts(), strip, look);
+    OA_CHECK(start.scroll == 0 && start.left_arrow.width == 0 && start.right_arrow.width > 0);
+    look.selected = look.captions.size() - 1;
+    const kit::TabStrip end = kit::place_tabs(fonts(), strip, look);
+    OA_CHECK(end.scroll > 0 && end.left_arrow.width > 0 && end.right_arrow.width == 0);
+    OA_CHECK(kit::wholly_in(end.tabs.back(), end.view));
+
+    renderer::Surface surface = black(200, 40);
+    kit::draw_tabs(canvas_on(surface), strip, look);
+    OA_CHECK(end.left_arrow.width > 0);
+    const int32_t mark_x = end.left_arrow.x + 4;
+    const int32_t mark_y = end.left_arrow.y + 7;
+    expect(surface, mark_x, mark_y, kit::colour::hint);
+    expect(surface, 20, 13, kBlack);
+}
+
 // ---- Cards ----
 
 /// Checks a cell's place and size.
@@ -1465,6 +1528,7 @@ int main() {
     typing_moves_the_caret_drawn();
     tabs_draw_with_a_count_and_with_none();
     tabs_in_words_keep_a_count_of_zero();
+    a_narrow_strip_scrolls_one_tab_at_a_time();
     cards_lie_in_a_grid();
     a_card_shows_its_placeholder_chips_and_lines();
     a_greyed_card_fades_into_the_panel();
