@@ -309,10 +309,12 @@ void Runtime::select_side_commander() {
     // The camera has no glide target and moves at once.
     hooks.center_camera = [](void* context, const FixedVec3& position, bool) {
         Runtime& runtime = *static_cast<Finder*>(context)->runtime;
-        runtime.match_camera_x_ =
-            oa::present::world_renderer::world_screen_x(position) - runtime.visible_map_width() / 2;
-        runtime.match_camera_z_ = oa::present::world_renderer::world_screen_y(position) -
-                                  runtime.visible_map_height() / 2;
+        runtime.set_camera_position(
+            oa::present::world_renderer::world_screen_x(position) - runtime.visible_map_width() / 2,
+            oa::present::world_renderer::world_screen_y(position) -
+                runtime.visible_map_height() / 2,
+            runtime.match_camera_flags_
+        );
     };
     hooks.reset_command = [](void* context) {
         static_cast<Finder*>(context)->runtime->reset_match_command();

@@ -901,6 +901,115 @@ void Runtime::check_library() {
         }
         snapshot("active-" + size);
 
+        // An expansion the fixture registry offers shows the download arrow.
+        // The copy turns the pill on. Closing must not mount that choice:
+        // the check has not installed the expansion's files.
+        if (width == kCanvasWidth) {
+            library::DownloadableExpansion units;
+            units.id = "cavedog-units";
+            units.registry = std::string(kBuiltIn);
+            units.name = "Cavedog units";
+            units.extends = {"totala"};
+            fixture.inputs.downloadable_expansions.push_back(std::move(units));
+            ++fixture.generation;
+            run_frame(running);
+            require(running, "a frame ended the run");
+            const std::optional<AutomationControl> arrow =
+                named("oa.library.active.expansion.cavedog-units.get");
+            const std::optional<AutomationControl> tactics =
+                named("oa.library.active.expansion.battle-tactics");
+            require(
+                arrow.has_value() && arrow->text == "GET" && arrow->enabled,
+                "the offered expansion shows no download arrow" + on
+            );
+            require(
+                tactics.has_value() && tactics->text.find("ADD FROM") != std::string::npos,
+                "an expansion no registry offers does not read ADD FROM" + on
+            );
+            const std::size_t asked = fixture.enqueued.size();
+            click_named("oa.library.active.expansion.cavedog-units.get");
+            require(
+                fixture.enqueued.size() == asked + 1 &&
+                    fixture.enqueued.back().registry == kBuiltIn &&
+                    fixture.enqueued.back().key == "cavedog-units" &&
+                    fixture.enqueued.back().reason == content::DownloadReason::install &&
+                    !soft_restart_requested(),
+                "the expansion's download arrow did not ask the feed to install it" + on
+            );
+            library::QueueItem fetching;
+            fetching.registry = std::string(kBuiltIn);
+            fetching.kind = library::Kind::mod;
+            fetching.expansion = true;
+            fetching.key = "cavedog-units";
+            fetching.name = "Cavedog units";
+            fetching.phase = library::QueueItem::Phase::downloading;
+            fetching.done_bytes = 1024;
+            fetching.total_bytes = 4096;
+            fixture.inputs.queue.push_back(std::move(fetching));
+            ++fixture.generation;
+            run_frame(running);
+            require(running, "a frame ended the run");
+            const std::optional<AutomationControl> cancel =
+                named("oa.library.active.expansion.cavedog-units.cancel");
+            const std::optional<AutomationControl> queue = named("oa.library.queue");
+            require(
+                cancel.has_value() && cancel->enabled &&
+                    library::active_content(host.model).hint.find("Downloading") !=
+                        std::string::npos &&
+                    queue.has_value() && queue->text.find("Cavedog units") != std::string::npos,
+                "the expansion's download does not show its progress" + on
+            );
+            const std::size_t cancelled = fixture.cancelled.size();
+            click_named("oa.library.active.expansion.cavedog-units.cancel");
+            require(
+                fixture.cancelled.size() == cancelled + 1 &&
+                    fixture.cancelled.back().registry == kBuiltIn &&
+                    fixture.cancelled.back().key == "cavedog-units",
+                "CANCEL on the expansion's arrow did not reach the feed" + on
+            );
+            std::vector<library::QueueItem>& queued_items = fixture.inputs.queue;
+            queued_items.erase(
+                std::remove_if(
+                    queued_items.begin(),
+                    queued_items.end(),
+                    [](const library::QueueItem& queued_item) {
+                        return queued_item.expansion && queued_item.key == "cavedog-units";
+                    }
+                ),
+                queued_items.end()
+            );
+            ++fixture.generation;
+            run_frame(running);
+            require(running, "a frame ended the run");
+            require(
+                named("oa.library.active.expansion.cavedog-units.get").has_value(),
+                "cancelling the expansion's download did not bring the arrow back" + on
+            );
+            click_named("oa.library.active.expansion.cavedog-units.get");
+            library::QueueItem installed;
+            installed.registry = std::string(kBuiltIn);
+            installed.kind = library::Kind::mod;
+            installed.expansion = true;
+            installed.key = "cavedog-units";
+            installed.name = "Cavedog units";
+            installed.phase = library::QueueItem::Phase::installed;
+            fixture.inputs.queue.push_back(std::move(installed));
+            fixture.inputs.content.copied = {"campaign", "core-contingency", "cavedog-units"};
+            ++fixture.generation;
+            run_frame(running);
+            require(running, "a frame ended the run");
+            const std::optional<AutomationControl> pill =
+                named("oa.library.active.expansion.cavedog-units");
+            require(
+                pill.has_value() && pill->checked &&
+                    pill->text.find("ADD FROM") == std::string::npos && host.model.content.edited &&
+                    !host.model.content.applied && !soft_restart_requested(),
+                "the expansion's pill did not turn on without mounting" + on
+            );
+            host.model.content.edited = false;
+            host.model.content.downloads.clear();
+        }
+
         // 3. CLOSE goes back to the main menu.
         click_named("oa.library.close");
         require(

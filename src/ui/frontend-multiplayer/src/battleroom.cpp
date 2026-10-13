@@ -3,8 +3,10 @@
 
 // Battleroom (LOUNGE2.GUI): slot rules, rows, options, start checks.
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include "oa/base/game_loop.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include "oa/data/mod_profile.hpp"
 #include "oa/data/mod_profile/overrides.hpp"
 #include "oa/netgame/player_slots.hpp"
@@ -1862,6 +1864,9 @@ void lobby_cycle_resolution(Lobby& lobby, bool backwards) noexcept {
         lobby_send_player_info(lobby);
         lobby_screen_width(*lobby.game) = modes[next].width;
         lobby_screen_height(*lobby.game) = modes[next].height;
+        // The same preference the settings store, applied at once: RES has
+        // no OK of its own.
+        multiplayer_choose_screen_size(modes[next].width, modes[next].height);
         return;
     }
 }
@@ -1918,8 +1923,14 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
                     name = host_map.c_str();
                 }
             }
-            const bool changed =
-                control_text(*map_label) != std::string_view(name != nullptr ? name : "");
+            // The label shows the map's own name. The key on the wire stays
+            // name@package, including the name a joiner is missing.
+            const std::string_view carried(name != nullptr ? name : "");
+            const bool packaged = oa::data::map_pack::split_pack_map_name(carried).has_value();
+            const std::string own =
+                packaged ? multiplayer_shown_map_name(name) : std::string(carried);
+            const char* shown = own.c_str();
+            const bool changed = control_text(*map_label) != std::string_view(shown);
             if (!lobby_has_host_map(lobby)) {
                 map_label->color = ((now(lobby) / 30) & 1U) != 0 ? kWarningColor : 0;
                 if (changed) {
@@ -1936,7 +1947,7 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
                 map_label->color = 0;
                 panel_set_grayed(panel, "MAP", false);
             }
-            set_control_text(*map_label, name);
+            set_control_text(*map_label, shown);
         }
     }
 

@@ -281,13 +281,13 @@ void Runtime::check_frontend_controls() {
 
     // VISUALS' Screen Size: the display's sizes from the smallest to the
     // largest at the slider's ends (the made-up monitor's with
-    // --display-modes), each shown as VIDVAL's "WIDTH X HEIGHT"; it opens on
+    // --display-modes), each shown as VIDVAL's "WIDTH x HEIGHT"; it opens on
     // the window's size, or on Custom where the display offers no such
     // size. With `pictures`, the largest is written as
     // <stem>-options-VISUALS-largest.ppm.
     const auto offered = EngineSettingsState::offered_screen_sizes(*this);
     const auto size_text = [](oa::ui::engine_settings::ScreenSize size) {
-        return std::to_string(size.width) + " X " + std::to_string(size.height);
+        return std::to_string(size.width) + " x " + std::to_string(size.height);
     };
     const char* const custom_shown = oa::data::languages::installed_translation(nullptr, "Custom");
     const std::string custom_text = custom_shown != nullptr ? custom_shown : "Custom";
@@ -1438,6 +1438,86 @@ void Runtime::check_frontend_controls() {
     );
     key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE, SDL_KMOD_NONE, false);
     expect(!chat_composing_, "Escape did not close the chat line");
+
+    // The in-match Options' Visuals draws the same Screen Size. Choosing one
+    // and OK (PREV) stores it and applies it: the window and the match take
+    // the size. The pause menu then closes, so the checks below see the match.
+    {
+        int options_width = 0;
+        int options_height = 0;
+        (void)SDL_GetWindowSize(sdl_.window, &options_width, &options_height);
+        const bool options_full_screen = full_screen();
+        if (options_full_screen)
+            alt_enter(SDLK_RETURN, 0);
+        const auto shown_size = EngineSettingsState::screen_size_now(*this);
+        auto picked_size = offered.front();
+        for (const auto size : offered)
+            if (size != shown_size) {
+                picked_size = size;
+                break;
+            }
+        const auto chosen_words = size_text(picked_size);
+        const auto chosen_stored =
+            std::to_string(picked_size.width) + 'x' + std::to_string(picked_size.height);
+        show_match_pause_menu();
+        activate_pause_gadget("PREFS");
+        activate_pause_gadget("VISUALS");
+        const auto hud_label = [this](std::string_view name) {
+            std::string text;
+            if (!match_hud_)
+                return text;
+            for (const auto& gadget : match_hud_->layout.gadgets) {
+                if (gadget.common.name != name)
+                    continue;
+                if (const auto* label =
+                        std::get_if<oa::ui::gui_layout::LabelFields>(&gadget.fields))
+                    text = label->text;
+            }
+            return text;
+        };
+        const auto hud_shows = [this](std::string_view name) {
+            if (!match_hud_)
+                return false;
+            for (const auto& gadget : match_hud_->layout.gadgets)
+                if (gadget.common.name == name && gadget.common.active != 0)
+                    return true;
+            return false;
+        };
+        require(
+            hud_shows("VIDSLDR") && hud_shows("VIDVAL"), "the in-match Visuals draw no Screen Size"
+        );
+        drag_check_knob("VIDSLDR", -400);
+        for (int options_step = 0; options_step < 400 && hud_label("VIDVAL") != chosen_words;
+             ++options_step)
+            click_check_arrow("VIDSLDR", true);
+        expect(
+            hud_label("VIDVAL") == chosen_words,
+            "the in-match Screen Size shows " + hud_label("VIDVAL") + ", not " + chosen_words
+        );
+        activate_pause_gadget("PREV");
+        settle_window();
+        expect(
+            stored_size() == chosen_stored &&
+                engine_settings_state().current.screen_size == picked_size &&
+                match_layout_.width == picked_size.width &&
+                match_layout_.height == picked_size.height && window_points() == chosen_stored,
+            "OK on the in-match Screen Size left the setting at " + stored_size() +
+                ", the window at " + window_points() + " and the match at " +
+                std::to_string(match_layout_.width) + 'x' + std::to_string(match_layout_.height)
+        );
+        std::cout << "frontend controls check: the in-match Options' Screen Size applies "
+                  << chosen_words << '\n';
+        EngineSettingsState::choose_screen_size(
+            *this, oa::ui::engine_settings::desktop_screen_size
+        );
+        save_preferences();
+        require(SDL_SetWindowSize(sdl_.window, options_width, options_height), SDL_GetError());
+        settle_window();
+        if (match_paused_)
+            resume_match_pause();
+        if (options_full_screen)
+            alt_enter(SDLK_RETURN, 0);
+    }
 
     // A Screen size applied in a match: the window takes it at once and the
     // match is laid out at it. In full screen on the display's desktop mode

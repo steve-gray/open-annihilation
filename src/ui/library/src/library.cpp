@@ -720,6 +720,10 @@ bool update_already_in_place(const Library& library, const UpdateNote& update) {
 
 } // namespace
 
+std::string queue_status_text(const QueueItem& item, const TextHooks& text) {
+    return queue_status(item, text);
+}
+
 PackageMaker package_maker(std::string_view author) noexcept {
     author = trimmed_author(author);
     if (author_is(author, "openannihilation") || author_is(author, "open annihilation") ||
@@ -770,6 +774,10 @@ void refresh(Library& library, Inputs inputs) {
             entry.update = &update;
     }
     for (const QueueItem& item : in.queue) {
+        // An expansion is drawn on the Active tab, not on a package row that
+        // happens to share its key.
+        if (item.expansion)
+            continue;
         const auto found = by_id.find({item.registry, item.kind, item.key});
         if (found != by_id.end())
             library.entries[found->second].queued = &item;
@@ -791,6 +799,7 @@ void refresh(Library& library, Inputs inputs) {
         }
     }
     note_content(library);
+    adopt_downloaded_expansions(library);
     if (library.inputs.content.expansion_cleared)
         library.expansion_note = true;
     ensure_base_game(library);

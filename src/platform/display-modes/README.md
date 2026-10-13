@@ -35,6 +35,8 @@ modes.
   then at the desktop's refresh rate, then the highest rate.
 - `nearest_offered(sizes, size)` finds a size in a list, or the last one
   listed before it.
+- `listed_size_text(size)` is a size as the screen-size controls show it,
+  "1920 x 1080". `size_text` is the form a setting stores, "1920x1080".
 - `report_from_text(text)` reads a made-up monitor, as the game's
   `--display-modes` names one for its checks: modes separated by commas,
   each `WIDTHxHEIGHT`, optionally followed by `@RATE` and `/DENSITY`, the
@@ -53,14 +55,21 @@ full-screen modes (`SDL_GetFullscreenDisplayModes`) and desktop mode, and
 full screen to `mode_for`'s. SDL lists each mode of every platform the game
 runs on, Windows XP's included, from the system's own list: Windows' display
 settings, macOS's display modes (with the low-density duplicates of each
-scaled size), XRandR's on X11, and on Wayland the desktop's mode and the
-standard sizes below it that the compositor scales.
+scaled size), XRandR's on X11, and on Wayland the desktop's logical size
+and, where the compositor can scale a frame, the panel's own pixel size as
+a full-screen mode. SDL cannot change the compositor's output mode. A
+window lists the sizes that fit the logical desktop; full screen lists
+every reported mode, so a 1920x1080 panel whose desktop is the logical
+1536x864 offers 1920x1080 in full screen and not in a window. Alt+Enter
+stays on the desktop's mode; choosing another size draws at that size and
+the picture is scaled.
 
 The module reads and writes no game state. `platform-display-modes` tests
 the rules over made-up monitors: a 4K monitor on Windows, a 14-inch Retina
 MacBook Pro's display, a 1280x1024 monitor of Windows XP's time, a 3440x1440
-ultrawide, a portrait monitor, one that reports more sizes than a list holds
-and one that reports nothing, for full screen and for a window, the floor a
-mod raises, the mode each size switches to and the made-up monitors' text.
+ultrawide, a portrait monitor, a Wayland laptop whose desktop is a scaled
+1920x1080, one that reports more sizes than a list holds, and one that
+reports nothing, for full screen and for a window, the floor a mod raises,
+the mode each size switches to and the made-up monitors' text.
 `platform-display-modes-sdl` runs them over SDL's dummy video driver, which
 reports no full-screen mode and a 1024x768 desktop.

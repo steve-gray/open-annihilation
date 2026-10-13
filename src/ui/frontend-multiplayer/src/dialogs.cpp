@@ -7,6 +7,7 @@
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include "oa/base/game_loop.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/tnt.hpp"
 #include "oa/present/model/mesh_raster.hpp"
 #include "oa/present/surface.hpp"
@@ -411,11 +412,22 @@ std::vector<uint8_t> fit_map_picture(
 void map_summary_update(Lobby& lobby, Panel& panel) noexcept {
     const data::campaign::CampaignFile* map =
         lobby.maps.map_context != nullptr ? lobby.maps.map_context(lobby.maps.context) : nullptr;
-    const char* name = map != nullptr               ? data::campaign::campaign_localized_name(map)
-                       : lobby.maps.name != nullptr ? lobby.maps.name(lobby.maps.context)
-                                                    : "";
+    const char* stored = lobby.maps.name != nullptr ? lobby.maps.name(lobby.maps.context) : "";
+    const char* localized = map != nullptr ? data::campaign::campaign_localized_name(map) : stored;
+    // A title or a translation is shown as it is. A name@package key is not:
+    // the label uses the same words as the map list.
+    const bool packaged =
+        oa::data::map_pack::split_pack_map_name(localized != nullptr ? localized : "") ||
+        oa::data::map_pack::split_pack_map_name(stored != nullptr ? stored : "");
+    const bool titled = localized != nullptr && localized[0] != '\0' &&
+                        !oa::data::map_pack::split_pack_map_name(localized);
+    const std::string shown = packaged && !titled
+                                  ? multiplayer_shown_map_name(
+                                        stored != nullptr && stored[0] != '\0' ? stored : localized
+                                    )
+                                  : std::string(localized != nullptr ? localized : "");
     if (panel_find(panel, "MAPNAME") != kNoControl)
-        panel_set_text(panel, "MAPNAME", name != nullptr ? name : "");
+        panel_set_text(panel, "MAPNAME", shown.c_str());
     if (map != nullptr) {
         char size[100];
         std::snprintf(
@@ -494,8 +506,12 @@ bool viewmap_follow_host(Lobby& lobby, Panel& panel, std::string_view host_map) 
         map_summary_update(lobby, panel);
         return true;
     }
-    if (panel_find(panel, "MAPNAME") != kNoControl)
-        panel_set_text(panel, "MAPNAME", wanted);
+    if (panel_find(panel, "MAPNAME") != kNoControl) {
+        const std::string shown = oa::data::map_pack::split_pack_map_name(wanted)
+                                      ? multiplayer_shown_map_name(wanted.c_str())
+                                      : wanted;
+        panel_set_text(panel, "MAPNAME", shown.c_str());
+    }
     if (auto* picture = panel_control(panel, "MAPPIC")) {
         picture->picture.clear();
         picture->picture_width = picture->picture_height = 0;
@@ -544,7 +560,11 @@ void mapselect_preview(Lobby& lobby, MapSelect& select, Panel& panel) noexcept {
                         lobby.maps.select(lobby.maps.context, name);
     if (!chosen) {
         if (const char* reason = highlighted_refusal(lobby, name)) {
-            panel_set_text(panel, "MAPNAME", name);
+            const std::string shown =
+                name != nullptr && oa::data::map_pack::split_pack_map_name(name)
+                    ? multiplayer_shown_map_name(name)
+                    : std::string(name != nullptr ? name : "");
+            panel_set_text(panel, "MAPNAME", shown.c_str());
             panel_set_text(panel, "DESCRIPTION", unfit_sentence(lobby, reason));
             panel_set_text(panel, "SIZE", "");
             panel_set_active(panel, "MAPPIC", false);

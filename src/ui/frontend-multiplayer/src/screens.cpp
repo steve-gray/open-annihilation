@@ -10,6 +10,7 @@
 
 #include "oa/base/game_loop.hpp"
 #include "oa/data/campaign/campaign_assets.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/defs/unit_header.hpp"
 #include "oa/data/languages/unit_texts.hpp"
@@ -446,24 +447,9 @@ void service_free_picture(void*, oa_ref32 picture) {
 }
 
 int32_t service_display_modes(void*, DisplayMode* out, int32_t capacity) {
-    if (g_display_modes.modes != nullptr && capacity > 0) {
-        const int32_t written =
-            std::clamp(g_display_modes.modes(g_display_modes.context, out, capacity), 0, capacity);
-        if (written > 0)
-            return written;
-    }
-    constexpr DisplayMode kModes[] = {
-        {640, 480, 8},
-        {800, 600, 8},
-        {1024, 768, 8},
-        {1152, 864, 8},
-        {1280, 1024, 8},
-        {1600, 1200, 8}
-    };
-    const auto count = std::min<int32_t>(capacity, static_cast<int32_t>(std::size(kModes)));
-    for (int32_t index = 0; index < count; ++index)
-        out[index] = kModes[index];
-    return count;
+    if (g_display_modes.modes == nullptr || out == nullptr || capacity <= 0)
+        return 0;
+    return std::clamp(g_display_modes.modes(g_display_modes.context, out, capacity), 0, capacity);
 }
 
 data::campaign::CampaignFiles map_files() {
@@ -4248,6 +4234,8 @@ std::vector<std::string> multiplayer_map_texts(std::span<const std::string> name
         });
         MapListFact fact;
         fact.key = key;
+        if (found == maps.end() && oa::data::map_pack::split_pack_map_name(key))
+            fact.pack = true;
         if (found != maps.end()) {
             fact.title = found->title;
             fact.file_title = found->file_title;
@@ -4261,6 +4249,28 @@ std::vector<std::string> multiplayer_map_texts(std::span<const std::string> name
     if (texts.size() != names.size())
         texts.assign(names.begin(), names.end());
     return texts;
+}
+
+std::string multiplayer_shown_map_name(const char* key) {
+    if (key == nullptr)
+        return {};
+    load_maps();
+    const std::string wanted(key);
+    std::vector<std::string> names;
+    names.reserve(ui().maps.size() + 1);
+    bool listed = false;
+    for (const MapInfo& info : ui().maps) {
+        names.push_back(info.name);
+        if (info.name == wanted)
+            listed = true;
+    }
+    if (!listed)
+        names.push_back(wanted);
+    const std::vector<std::string> texts = multiplayer_map_texts(names);
+    for (std::size_t index = 0; index < names.size() && index < texts.size(); ++index)
+        if (names[index] == wanted)
+            return texts[index];
+    return wanted;
 }
 
 void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names) {
@@ -4455,6 +4465,11 @@ void multiplayer_bind_clock(const LobbyClock& clock) noexcept {
 
 void multiplayer_bind_display_modes(const LobbyDisplayModes& display_modes) noexcept {
     g_display_modes = display_modes;
+}
+
+void multiplayer_choose_screen_size(int32_t width, int32_t height) noexcept {
+    if (g_display_modes.choose != nullptr)
+        g_display_modes.choose(g_display_modes.context, width, height);
 }
 
 void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {

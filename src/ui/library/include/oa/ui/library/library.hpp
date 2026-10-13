@@ -235,6 +235,9 @@ struct QueueItem {
 
     std::string registry{};
     Kind kind{Kind::mod};
+    /// An expansion's download. The footer lists it with the other packages.
+    /// It is not attached to a package row.
+    bool expansion{false};
     std::string key{};
     std::string name{};    ///< the name a player sees
     std::string version{}; ///< as written; empty when the kind has none
@@ -330,8 +333,8 @@ struct InstalledMaps {
 
 /// An expansion a registry offers for download.
 ///
-/// The Library does not list it as a package row. A later screen draws the
-/// download from this.
+/// The Library does not list it as a package row. The Active tab draws a
+/// download arrow beside that expansion's pill.
 struct DownloadableExpansion {
     std::string id{};              ///< the expansion's id
     std::string registry{};        ///< the registry that offers it
@@ -621,6 +624,10 @@ struct ContentDraft {
     std::string unloaded_for{};
     /// The host has already applied this draft. A second close does nothing.
     bool applied{};
+    /// Expansion ids the player asked to download. The pill turns on once the
+    /// copy is in the game's folder. The ask does not edit the choice, so
+    /// closing the Library before the copy arrives mounts nothing.
+    std::vector<std::string> downloads{};
 };
 
 /// How one base game is shown in the chooser.
@@ -981,8 +988,15 @@ struct ActiveSetup {
 /// How one expansion pill is drawn.
 enum class ExpansionFace : uint8_t {
     on,  ///< on in the pending choice
-    off, ///< copied, and off in the pending choice
-    add, ///< not copied: ADD FROM…
+    off, ///< copied and off, or not copied and a registry offers it
+    add, ///< not copied, and no registry offers it: ADD FROM…
+};
+
+/// The download arrow beside an expansion pill.
+enum class ExpansionArrow : uint8_t {
+    get,    ///< not copied, and not in the queue
+    cancel, ///< the download is in the queue
+    retry,  ///< the download failed and can be tried again
 };
 
 /// One expansion of the base game, as the Active tab's pill shows it.
@@ -990,8 +1004,19 @@ struct ExpansionPill {
     std::string id{};   ///< the bundle id
     std::string text{}; ///< the name, or the name and ADD FROM…
     ExpansionFace face{ExpansionFace::off};
-    /// A press does something. Off during a match and while `--content` locked the run.
+    /// A press does something. Off during a match and while `--content` locked the run,
+    /// except while the arrow is CANCEL: that press still stops the download.
     bool enabled{true};
+    /// The registry the download arrow uses. Empty when no registry offers it.
+    std::string download_registry{};
+    /// GET, CANCEL or RETRY beside the pill. Unset when the pill has no arrow.
+    std::optional<ExpansionArrow> arrow{};
+    /// The arrow takes a press. Off while that registry's downloads are off,
+    /// during a match, and while `--content` locked the run. CANCEL stays on.
+    bool arrow_enabled{true};
+    /// Why the arrow is off, in the player's words. Empty when it takes a press
+    /// or there is no arrow.
+    std::string blocked{};
 };
 
 /// What the Active tab shows of the base game and its expansions.
@@ -1029,31 +1054,55 @@ struct ActiveContent {
 
 /// What pressing an expansion pill did.
 enum class ContentPressKind : uint8_t {
-    none,   ///< refused, or the choice already said this
-    redraw, ///< the pending choice changed
-    ask,    ///< a playing mod needs the expansion; the question is waiting
-    add,    ///< the expansion is not copied
+    none,            ///< refused, or the choice already said this
+    redraw,          ///< the pending choice changed
+    ask,             ///< a playing mod needs the expansion; the question is waiting
+    add,             ///< the expansion is not copied, and no registry offers it
+    download,        ///< the expansion is not copied, and a registry offers it
+    cancel_download, ///< the download is in the queue, or the player just asked
+    retry_download,  ///< the download failed and can be tried again
 };
 
-/// The result of pressing an expansion pill.
+/// The result of pressing an expansion pill or its download arrow.
 struct ContentPress {
     ContentPressKind kind{ContentPressKind::none};
-    /// The expansion, when `kind` is `ask` or `add`.
+    /// The expansion, when `kind` is `ask`, `add`, or a download.
     std::string expansion{};
+    /// The registry a download uses. Empty otherwise.
+    std::string registry{};
 };
 
-/// Presses one expansion pill.
+/// Presses one expansion pill, or the download arrow beside it.
 ///
 /// A copied expansion is turned on or off by turn_content_expansion, and the
 /// result is kept on the pending draft. It is not written to the preferences.
 /// Turning one off that a playing mod needs does not change the draft: it
-/// stores the choice G04 returned and waits for accept_expansion_off. An
-/// expansion that is not copied is `add` and is not turned on.
+/// stores the choice returned and waits for accept_expansion_off. An expansion
+/// that is not copied and that no registry offers is `add` and is not turned
+/// on. One a registry offers is downloaded: the ask is remembered, and the
+/// pill turns on once the copy is in the game's folder, still only on the
+/// pending draft. CANCEL stops that download even during a match.
 ///
 /// @param[in,out] library the Library
 /// @param id the expansion
 /// @return what the press did
 [[nodiscard]] ContentPress press_expansion(Library& library, std::string_view id);
+
+/// Forgets an expansion download the feed refused, so the arrow is GET again.
+///
+/// @param[in,out] library the Library
+/// @param id the expansion
+void drop_expansion_download(Library& library, std::string_view id);
+
+/// Turns on each expansion the player asked to download, once it is copied.
+///
+/// The choice stays on the pending draft. Nothing is written and nothing is
+/// mounted. An expansion whose needs are not copied is left off, and that ask
+/// is dropped. Nothing happens during a match, while `--content` locked the
+/// run, or while the expansion-off question is waiting.
+///
+/// @param[in,out] library the Library
+void adopt_downloaded_expansions(Library& library);
 
 /// Keeps the choice the expansion-off question proposed, on the pending draft.
 ///
@@ -1190,6 +1239,22 @@ enum class Action : uint8_t {
     /// when the Library closes.
     turn_on,
 };
+
+/// Returns the action an expansion's download arrow asks for.
+///
+/// @param arrow the arrow
+/// @return GET, CANCEL or RETRY
+[[nodiscard]] constexpr Action action_of(ExpansionArrow arrow) noexcept {
+    switch (arrow) {
+    case ExpansionArrow::get:
+        return Action::get;
+    case ExpansionArrow::cancel:
+        return Action::cancel;
+    case ExpansionArrow::retry:
+        return Action::retry;
+    }
+    return Action::get;
+}
 
 /// One button of an entry's details.
 struct ActionButton {
@@ -1389,6 +1454,15 @@ struct Fact {
 /// @param library the Library
 /// @return the note; empty when nothing is selected, or when it has none
 [[nodiscard]] std::string playing_note(const Library& library);
+
+/// Writes the line under a package's name while its download has not finished.
+///
+/// An expansion's hint uses the same words as a package row.
+///
+/// @param item the queue item
+/// @param text how texts are looked up
+/// @return the line; empty once the item is installed
+[[nodiscard]] std::string queue_status_text(const QueueItem& item, const TextHooks& text);
 
 /// The download queue as the footer shows it.
 struct QueueLines {

@@ -2294,8 +2294,9 @@ hosts them on the OA layer.
   [display modes](../platform/display-modes/README.md)), which the options'
   Screen Size, the settings' Screen size after Desktop and the battle room's
   RES column list (`multiplayer_bind_display_modes`), from what SDL reports
-  of the display the window is on, its modes in full screen where full
-  screen switches modes and the sizes that fit its desktop otherwise, up to
+  of the display the window is on: in full screen, the display's modes,
+  including where the desktop scales the frame and cannot switch the
+  output's mode; in a window, the sizes that fit the desktop; up to
   the longest side the setting keeps, or the made-up monitor
   `--display-modes` names for a check on SDL's dummy video driver; the
   table of SDL's calls that apply a size (`sdl_screen_hooks`); and Hardware
@@ -2307,7 +2308,8 @@ hosts them on the OA layer.
   (`report_window_size`).
 - `screen_mode.hpp`, `screen_mode.cpp`, `runtime_screen_size.cpp`: the
   Screen size applied at once, when the options or the settings close with
-  OK, on the menus and in a match, which carries on as it was
+  OK, and when the battle room's RES column steps to one, on the menus and
+  in a match, which carries on as it was
   (`Runtime::apply_screen_size`, `EngineSettingsState::take_screen_size`).
   How full screen shows a size depends on the window system
   (`full_screen_method`): Windows, Windows XP's build among them, and X11
@@ -2342,11 +2344,14 @@ hosts them on the OA layer.
   on the desktop's, a mode missing or refused, and Desktop.
   `--check-frontend-controls` drags the window to a size the display does
   not offer, which the options' Screen Size shows as Custom, and OK on
-  1280x720 snaps it to it; in a match it applies 1280x720, switches to full
-  screen, where the dummy driver keeps the desktop's mode and the match is
+  1280x720 snaps it to it; in a match the Options' Visuals Screen Size
+  chooses a listed size and OK stores it and applies it to the window and
+  the match, then the check applies 1280x720, switches to full screen,
+  where the dummy driver keeps the desktop's mode and the match is
   drawn at 1280x720 and letterboxed, the pointer in the bars resting on the
   frame's edge, applies 800x600 there, which the window takes as it leaves,
-  and Desktop. `--check-engine-settings` chooses 1280x720 in the settings,
+  and Desktop. Alt+Enter does not change the size the game draws at.
+  `--check-engine-settings` chooses 1280x720 in the settings,
   which the window takes on OK and not before, in the menus and in a game,
   whose tick and world stay as they were.
 - `render_host.hpp`, `render_host.cpp` (`oa-app-render-host`, with
@@ -3969,8 +3974,9 @@ recorded games (`.tad`, `src/formats/tad` and `src/session/demo`) through
 `--net-loopback-check N`, which hosts and joins a match in one process
 over 127.0.0.1 and compares both worlds after N ticks,
 `--check-recording-hook` and `--check-host-not-found`, and `--host` and
-`--join ADDRESS` (with `--player-name`, `--game-name` and
-`--game-password`), which have the multiplayer screens host or join a
+`--join ADDRESS` (with `--player-name`, `--game-name`,
+`--game-password` and `--dplay-guid`), which have the multiplayer screens
+host or join a
 TCP/IP game at once, each screen doing what a player would
 (`multiplayer_bind_direct_game`), and print the battle room's progress;
 `--check-multiplayer-menu` runs its check of the multiplayer screens.

@@ -161,8 +161,9 @@ Each of these takes effect at once.
   battlefield's centre.
 - **View past the map's edge**, Off, 25% or 50%, 50% by default, as far
   as the view has always gone. How much of the battlefield the view may
-  show past the map's edges, by a scroll, the minimap, a finger's drag and
-  a zoom, at any zoom. 50% lets the map's edge reach the middle of the
+  show past the map's edges, from the first view of a match and by a
+  scroll, the minimap, a finger's drag, a zoom and a jump to a point, at
+  any zoom. 50% lets the map's edge reach the middle of the
   battlefield, or, with more than the whole map in view, the map's centre
   reach the view's edge; a zoom keeps the ground under the pointer under
   it wherever that takes the view. 25% lets a quarter of the battlefield
@@ -301,14 +302,20 @@ the game draws its text and how the modern fonts draw it.
   up, such as 2560x1440 or 3840x2160 on a 4K monitor and 3440x1440 on an
   ultrawide, Desktop by default. It applies when you press OK, on the menus
   and during a game, which carries on as it was. The sizes are those of
-  the display the game's window is on. In full screen on Windows, and on
-  Linux with an X server of its own, they are the display's full-screen
-  modes; otherwise those that fit the desktop, with 640x480, 800x600,
-  1024x768, 1280x1024 and 1600x1200 where they fit it. Sizes are listed
-  once each, whatever their refresh rates, the narrower first, up to 8192
-  on a side. On a high-density display, such as a Mac's Retina display,
-  they are in the desktop's points, as the system lists them, so that each
-  one fits the screen.
+  the display the game's window is on. In full screen they are the
+  display's modes from 640x480 up, including on a desktop that scales the
+  frame and cannot switch the output's mode. In a window they are the
+  modes that fit the desktop, with 640x480, 800x600, 1024x768, 1280x1024
+  and 1600x1200 where they fit it. Sizes are listed once each, whatever
+  their refresh rates, the narrower first, up to 8192 on a side. On a
+  high-density display, such as a Mac's Retina display, they are in the
+  desktop's points, as the system lists them, so that each one fits the
+  screen. On Linux under Wayland the desktop size is that logical size:
+  a 1920x1080 panel at 125% reports 1536x864. The game cannot change that
+  output mode. Where the compositor can scale a frame, the panel's own
+  pixel size is one of the full-screen modes, and full screen lists it.
+  Choosing it draws at that size and scales the picture. Alt+Enter leaves
+  the game on the desktop's mode.
   - In a window, the window takes the size at once, moved back onto the
     display where the new size would take it off. Resize the window by its
     edges and it keeps the size you give it: the setting then shows that
@@ -332,10 +339,14 @@ the game draws its text and how the modern fonts draw it.
   A size the display no longer offers, as when another monitor is
   connected, starts at Desktop; the setting keeps it for when the display
   offers it again. The options' Screen Size, under Visuals, lists the same
-  sizes, shows Custom for a window sized by hand, and applies the size
-  chosen when the options close with OK; their Restore Default sets it back
-  to its default. Choose a size for the period look, for an old monitor, or
-  so that a slow computer has fewer pixels to draw.
+  sizes in the same words, outside a match and in one: the in-match column
+  draws the control under the shadows. It shows Custom for a window sized
+  by hand, and applies the size chosen when the options close with OK.
+  Their Restore Default sets it back to its default. The battle room's RES
+  column lists the same sizes and applies one as soon as you step to it.
+  Desktop is a stop on this setting only. Choose a size for the period
+  look, for an old monitor, or so that a slow computer has fewer pixels to
+  draw.
 - **Hardware acceleration**, Off, Basic or Full, Full by default. It says
   how much of the drawing the graphics card does:
   - **Off**: the processor draws and scales every frame, as the game always

@@ -734,10 +734,11 @@ Runtime::EngineSettingsState::offered_screen_sizes(const Runtime& runtime) {
     SDL_DisplayID display = SDL_GetDisplayForWindow(runtime.sdl_.window);
     if (display == 0)
         display = SDL_GetPrimaryDisplay();
+    // Full screen lists the display's modes, whether or not the output can
+    // switch to one of them. A window lists the sizes that fit the desktop.
     const bool full_screen = (SDL_GetWindowFlags(runtime.sdl_.window) & SDL_WINDOW_FULLSCREEN) != 0;
-    const auto use = full_screen && run_full_screen_method() == FullScreenMethod::switch_mode
-                         ? oa::platform::display_modes::Use::full_screen
-                         : oa::platform::display_modes::Use::window;
+    const auto use = full_screen ? oa::platform::display_modes::Use::full_screen
+                                 : oa::platform::display_modes::Use::window;
     return oa::app::offered_screen_sizes(runtime.options_, display, use, minimum_height);
 }
 
@@ -1015,6 +1016,16 @@ void Runtime::load_engine_settings() {
                  runtime, EngineSettingsState::offered_screen_sizes(runtime)
              );
              return mp::DisplayMode{size.width, size.height, game_bits};
+         },
+         [](void* context, int32_t width, int32_t height) {
+             // A screen size keeps each side in 16 bits.
+             constexpr int32_t widest = std::numeric_limits<uint16_t>::max();
+             if (width <= 0 || height <= 0 || width > widest || height > widest)
+                 return;
+             EngineSettingsState::take_screen_size(
+                 *static_cast<Runtime*>(context),
+                 {static_cast<uint16_t>(width), static_cast<uint16_t>(height)}
+             );
          }}
     );
 }

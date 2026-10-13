@@ -141,6 +141,15 @@ offered_sizes(const DisplayReport& report, Use use, int32_t minimum_height = sma
 /// @return the text
 [[nodiscard]] std::string size_text(Size size);
 
+/// Returns a size as the screen-size controls show it: width and height in
+/// decimal with a space either side of an "x", as "1920 x 1080". The
+/// settings' Screen size, after Desktop, and the options' Screen Size use
+/// these words, in the order offered_sizes lists the sizes.
+///
+/// @param size the size
+/// @return the text
+[[nodiscard]] std::string listed_size_text(Size size);
+
 /// Reads a display report from text, as a check names a made-up monitor:
 /// modes separated by commas, each "WIDTHxHEIGHT", optionally followed by
 /// "@RATE" (frames a second) and "/DENSITY" (pixels to a unit), as

@@ -27,6 +27,10 @@ struct NetConnection {
     /// The socket configuration every LobbyNet::open starts from; a blank
     /// address enumerates at its enum_target.
     sock::HostConfig host_config{};
+    /// Application GUID every session of this connection hosts under and
+    /// searches for. net_connection_create fills it from the configuration,
+    /// or with Total Annihilation's own GUID when none was named.
+    dplay::Guid application{};
     session::Session session{};
     bool opened{};
     /// Opened with an address that resolved to nothing; enumeration fails.
@@ -61,12 +65,17 @@ struct NetConnection {
 struct SessionLobbyConfig {
     sock::HostConfig host{};    // ports, bind and enumeration addresses
     int32_t sends_per_second{}; // frame pacing (0 = 200 ms, 2..30 per second)
+    /// When set, `application` is the GUID to host under and to search for,
+    /// including an all-zero GUID. When clear, that GUID is Total
+    /// Annihilation's own.
+    bool application_named{};
+    dplay::Guid application{};
 };
 
 /// Allocates the connection's socket host and packet queue; no socket is opened until LobbyNet::open.
 ///
 /// @param[out] connection Connection to create; on failure it is left destroyed.
-/// @param config Socket host configuration and frame pacing.
+/// @param config Socket host configuration, frame pacing and application GUID.
 /// @return False when either allocation fails.
 [[nodiscard]] bool
 net_connection_create(NetConnection* connection, const SessionLobbyConfig& config) noexcept;

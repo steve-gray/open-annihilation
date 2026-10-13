@@ -27,6 +27,9 @@ std::string plain_text(const MapListFact& row) {
         return std::string(row.title);
     if (!row.file_title.empty())
         return std::string(row.file_title);
+    // The key stays name@package for selection. Players see the map's own name.
+    if (const auto split = oa::data::map_pack::split_pack_map_name(row.key))
+        return std::string(split->stem);
     return std::string(row.key);
 }
 

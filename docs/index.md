@@ -45,6 +45,9 @@ Every document in the repository, by what you want to do.
   an iPhone or a touch screen: the gestures, the tablet and phone layouts,
   QUEUE, ADD and x5, the order wheel, building, the Touch settings, the
   keyboard's Cmd keys and the Pencil.
+- [controls.md](controls.md): group keys, and a second recall of the
+  group that is already selected, which centres the view and does not
+  follow it.
 - [controllers.md](controllers.md): playing with a gamepad: the Steam
   Deck's pad pointer (the right trackpad as the mouse, the grips as QUEUE,
   ADD, FORCE and the groups, the order and build rings), sticks only for
@@ -76,6 +79,10 @@ Every document in the repository, by what you want to do.
   presence record behind them, hosting a TCP/IP game with `--host` or
   joining one with `--join ADDRESS`, with `--player-name`, `--game-name`
   and `--game-password`, and what the game prints as it goes.
+  [command-line.md](command-line.md) is `--dplay-guid`, the application
+  GUID a game is hosted under and looked for.
+- [multiplayer/application-guid.md](multiplayer/application-guid.md):
+  which games a search lists, and a launcher's per-mod GUID.
 - [Demo Recorder](../README.md#demo-recorder) in the README: playing back a
   recorded game (`.tad`) from the command line with `--play-demo`, what a
   recording needs to play, and recording network games.

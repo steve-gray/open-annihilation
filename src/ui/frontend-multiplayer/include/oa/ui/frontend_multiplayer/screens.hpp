@@ -67,19 +67,30 @@ struct LobbyClock {
 void multiplayer_bind_clock(const LobbyClock& clock) noexcept;
 
 /// The screen sizes the battle room's RES column offers, and the size it
-/// starts at.
+/// starts at. The sizes are the display's, the same list the settings' Screen
+/// size offers after Desktop. There is no second list.
 struct LobbyDisplayModes {
     void* context{};
     /// Writes the sizes the display offers, the narrower first and of two
     /// as wide the shorter, at most `capacity` of them, and returns how many
-    /// it wrote; null, or none written, offers 640x480, 800x600, 1024x768,
-    /// 1152x864, 1280x1024 and 1600x1200.
+    /// it wrote. Null, or none written, offers no size.
     int32_t (*modes)(void* context, DisplayMode* out, int32_t capacity){};
     /// Returns the size the game plays at, one of those `modes` writes, which
     /// the local player's column starts at; null, or a size of 0 by 0,
     /// starts it at 640x480.
     DisplayMode (*screen_size)(void* context){};
+    /// Stores and applies a size the RES column stepped to, as choosing it
+    /// in the settings does. Null only announces the size to the other
+    /// players.
+    void (*choose)(void* context, int32_t width, int32_t height){};
 };
+
+/// Stores and applies a screen size the battle room's RES column stepped to,
+/// when multiplayer_bind_display_modes supplied a choose function.
+///
+/// @param width the size's width, in the window system's units
+/// @param height the size's height
+void multiplayer_choose_screen_size(int32_t width, int32_t height) noexcept;
 
 /// Binds the screen sizes the battle room's RES column offers and starts at.
 ///
@@ -599,13 +610,25 @@ void multiplayer_reload_maps();
 /// The words a map list shows for each name, in the same order.
 ///
 /// A pack map shows the title its index gives, or the map file's title when
-/// the source already holds one, and a shared title adds the pack's name in
-/// brackets. A base map's row is its file name. A name the list does not
-/// hold is shown as itself.
+/// the source already holds one, or its own name when neither is known. A
+/// shared title adds the pack's name in brackets. The `name@package` key is
+/// not shown. A base map's row is its file name. A name the list does not
+/// hold is shown as its own name when it is a pack map, and as itself
+/// otherwise.
 ///
 /// @param names the maps' names, in list order
 /// @return one string per name
 [[nodiscard]] std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names);
+
+/// The words a screen shows for one map.
+///
+/// A pack map uses the same words as its row in the map list, so the name
+/// has no `@`. A base map's name is returned as given. The key the game
+/// stores is unchanged.
+///
+/// @param key the map's name, as selection and the battle room carry it
+/// @return the words to show; empty when `key` is null
+[[nodiscard]] std::string multiplayer_shown_map_name(const char* key);
 
 /// Fills MAPNAMES with the words `multiplayer_map_texts` gives `names`, and
 /// keeps `names` as the rows' keys.

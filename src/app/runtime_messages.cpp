@@ -148,8 +148,11 @@ messages::Hooks Runtime::message_hooks() {
     // Camera centring moves the camera at once.
     hooks.center_camera = [](void* context, int32_t x, int32_t y, int32_t) {
         auto& runtime = *static_cast<Runtime*>(context);
-        runtime.match_camera_x_ = x - runtime.visible_map_width() / 2;
-        runtime.match_camera_z_ = y - runtime.visible_map_height() / 2;
+        runtime.set_camera_position(
+            x - runtime.visible_map_width() / 2,
+            y - runtime.visible_map_height() / 2,
+            runtime.match_camera_flags_
+        );
     };
     // The log's choices, such as the elimination taunt, draw from a stream
     // of its own: a line posted never changes the game.
