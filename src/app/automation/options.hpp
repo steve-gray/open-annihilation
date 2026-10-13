@@ -57,6 +57,18 @@ struct EndpointOptions {
     bool status_stdout{};                             ///< --status-stdout was given
     std::optional<std::filesystem::path> status_file; ///< --status-file as given
     QuitAfter quit_after{QuitAfter::none};            ///< --quit-after-game
+    /// --status-stdout was on the command line, so a launch file does not
+    /// replace standard output.
+    bool status_stdout_on_command{};
+    /// --status-file was on the command line, so a launch file does not
+    /// replace the file.
+    bool status_file_on_command{};
+    /// --quit-after-game was on the command line, so a launch file does not
+    /// replace when the run leaves.
+    bool quit_after_on_command{};
+    /// The file --launch names, as given. "-" is standard input, which this
+    /// extension does not read. Nothing when --launch was not seen.
+    std::optional<std::string> launch_file{};
 };
 
 /// Reads a listen address: 127.0.0.1:PORT or [::1]:PORT, PORT from 0 to 65535.

@@ -106,7 +106,14 @@ from 1 through 5, or `none`. The host and a player who joins both take
 the seat. `random` and `none` leave the side and the team for the battle
 room to choose.
 
-`status` is read and kept. It does not change how this game ends.
+`status` turns on the status stream ([status.md](status.md)).
+`stdout: true` is `--status-stdout`. `file` is `--status-file`.
+`quit-after-game: true` is `--quit-after-game`, and `after-score` is
+`--quit-after-game=after-score`. `false` leaves that part off.
+`--status-stdout`, `--status-file` and `--quit-after-game` beside the
+file replace the field they name. `--launch -` reads the game, the map
+and the rules from standard input. The status block of that stream is
+not applied.
 
 | Key | Values |
 |---|---|
