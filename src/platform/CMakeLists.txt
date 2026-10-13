@@ -4,7 +4,8 @@
 # Host services: token locks, clock, threads, heap, performance counters,
 # file/log streams, the log folder, the machine the game runs on and the
 # system's memory.
-add_library(oa-platform-shims src/allocator.cpp src/crash.cpp src/files.cpp src/lock.cpp src/log_files.cpp
+add_library(oa-platform-shims src/allocator.cpp src/crash.cpp src/files.cpp src/file_clone.cpp
+  src/lock.cpp src/log_files.cpp
   src/machine.cpp src/memory_status.cpp src/perf.cpp src/system.cpp src/system_memory.cpp)
 add_library(oa::platform::shims ALIAS oa-platform-shims)
 target_include_directories(oa-platform-shims PUBLIC include)

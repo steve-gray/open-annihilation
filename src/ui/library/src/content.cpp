@@ -7,7 +7,7 @@
 #include "oa/ui/library/library.hpp"
 
 #include "oa/data/content_bundles.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/ui/library/text.hpp"
 
 #include <algorithm>

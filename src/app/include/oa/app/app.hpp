@@ -476,6 +476,9 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens the locator on --game-dir's parent, moves onto that folder with
+    // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
+    bool check_folder_chooser = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;
@@ -509,6 +512,9 @@ struct Options {
     bool touch_controls = false;
     /// --check-game-files: the Game files screen driven through a route by scripted hooks.
     bool check_game_files = false;
+    /// --check-content-copy PATH: copies a small fixture into PATH, standing in
+    /// for Documents, and checks that copy. The run does nothing else.
+    fs::path check_content_copy{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.
     bool no_game_files_screen = false;

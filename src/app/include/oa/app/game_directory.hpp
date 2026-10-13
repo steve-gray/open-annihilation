@@ -16,7 +16,7 @@
 
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/mod_profile_loader.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/platform/game_installs.hpp"
 #include "oa/platform/preferences.hpp"
 #include <cstdint>
@@ -303,14 +303,14 @@ struct GameDirectory {
 /// the stored folder while it is still usable (neither when `choose`), else
 /// the one usable folder found on this machine (request.found) when no stored
 /// folder has gone, else the folder dialog until the user picks a usable
-/// folder. Where the in-engine chooser is offered (request.chooser_offered,
-/// with `needed`), it opens instead (`needed` says so, with the usable
-/// folders found) for several usable folders found, for a stored folder that
-/// has gone while a usable one was found, for a start with no usable folder
-/// in Steam's Game Mode (request.chooser_first, which --choose-game-dir
-/// follows too) or with no dialog in the build, and when the dialog cannot
-/// open (with its reason); otherwise a desktop whose dialog works resolves
-/// as without the chooser. An unattended run
+/// folder. Where the in-engine locator is offered (request.chooser_offered,
+/// with `needed`), it opens instead of the dialog (`needed` says so, with the
+/// usable folders found). On the desktop the system's dialog stays available
+/// as a button (dialog_offered). In Steam's Game Mode (request.chooser_first)
+/// that button is absent, and the dialog is not opened. A build with no
+/// dialog offers none. Where the locator is not offered, a desktop whose
+/// dialog works resolves as before, including when the dialog cannot open.
+/// An unattended run
 /// never opens the dialog: without --game-dir it takes a usable platform
 /// default, else a usable stored folder. --game-dir is inspected too, unless
 /// --archive names the archives, and refused when it names no folder or one

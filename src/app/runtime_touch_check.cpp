@@ -1834,7 +1834,7 @@ struct TouchCheckAccess {
 
         constexpr std::array<Titles, 3> languages{{
             {"en", "Place Metal Extractor", "PATROL armed"},
-            {"de", "Place Metallextraktor", "PATROL armed"},
+            {"de", "Metallextraktor platzieren", "PATROUILLIEREN bereit"},
             {"zh-Hans", "放置金属采集器", "巡逻已启用"},
         }};
 

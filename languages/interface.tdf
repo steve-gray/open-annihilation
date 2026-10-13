@@ -5,6 +5,8 @@
 // keyed by the engine's English. The game reads this file the same way
 // it reads a language pack's interface.tdf.
 
+
+
 [,]
 	{
 	de=,;
@@ -147,6 +149,14 @@
 	fr=5–10;
 	es=5–10;
 	it=5–10;
+	}
+
+[A]
+	{
+	de=A;
+	fr=A;
+	es=A;
+	it=A;
 	}
 
 [A dark backdrop under each chat line.]
@@ -431,7 +441,7 @@
 
 [ARM ORDER]
 	{
-	de=BEFEHL SCHÄRFEN;
+	de=BEFEHL WÄHLEN;
 	fr=ARMER L'ORDRE;
 	es=ARMAR ORDEN;
 	it=ARMA ORDINE;
@@ -463,7 +473,7 @@
 
 [ATTACK: tap to arm it, then tap the unit or ground to fire at.]
 	{
-	de=ANGREIFEN: tippe, um den Befehl zu schärfen, dann tippe die Einheit oder den Boden, auf die gefeuert wird.;
+	de=ANGREIFEN: tippe, um den Befehl zu wählen, dann tippe die Einheit oder den Boden, auf die gefeuert wird.;
 	fr=ATTAQUER : touche pour armer l'ordre, puis touche l'unité ou le sol à prendre pour cible.;
 	es=ATACAR: toca para armar la orden, luego toca la unidad o el suelo al que disparar.;
 	it=ATTACCA: tocca per armare l'ordine, poi tocca l'unità o il terreno a cui sparare.;
@@ -661,6 +671,14 @@
 	it=Un'altra copia di Open Annihilation sta modificando la tua cartella dei mod. Riprova quando ha finito.;
 	}
 
+[Applications]
+	{
+	de=Programme;
+	fr=Applications;
+	es=Aplicaciones;
+	it=Applicazioni;
+	}
+
 [Applies at next match]
 	{
 	de=Gilt ab dem nächsten Gefecht;
@@ -789,6 +807,14 @@
 	it=Pausa automatica: solo l'host può riprendere;
 	}
 
+[B]
+	{
+	de=B;
+	fr=B;
+	es=B;
+	it=B;
+	}
+
 [BACK]
 	{
 	de=ZURÜCK;
@@ -875,6 +901,22 @@
 	fr=Base;
 	es=Base;
 	it=Base;
+	}
+
+[Base Game]
+	{
+	de=Grundspiel;
+	fr=Jeu de base;
+	es=Juego base;
+	it=Gioco di base;
+	}
+
+[Base Game (Disable Mods)]
+	{
+	de=Grundspiel (Mods ausschalten);
+	fr=Jeu de base (désactiver les mods);
+	es=Juego base (desactivar mods);
+	it=Gioco di base (disattiva i mod);
 	}
 
 [Base game]
@@ -997,6 +1039,14 @@
 	it=Sala di battaglia · Nessun mod;
 	}
 
+[Battle room · Total Annihilation 3.1c]
+	{
+	de=Gefechtsraum · Total Annihilation 3.1c;
+	fr=Salle de bataille · Total Annihilation 3.1c;
+	es=Sala de batalla · Total Annihilation 3.1c;
+	it=Sala di battaglia · Total Annihilation 3.1c;
+	}
+
 [Battle room · playing {mod}]
 	{
 	de=Gefechtsraum · spielt {mod};
@@ -1019,6 +1069,14 @@
 	fr=Les deux;
 	es=Ambos;
 	it=Entrambi;
+	}
+
+[Bottles]
+	{
+	de=Bottles;
+	fr=Bottles;
+	es=Bottles;
+	it=Bottles;
 	}
 
 [Box]
@@ -1151,7 +1209,7 @@
 
 [CAPTURE: tap to arm it, then tap the unit to capture.]
 	{
-	de=EROBERN: tippe, um den Befehl zu schärfen, dann tippe die Einheit, die erobert wird.;
+	de=EROBERN: tippe, um den Befehl zu wählen, dann tippe die Einheit, die erobert wird.;
 	fr=CAPTURER : touche pour armer l'ordre, puis touche l'unité à capturer.;
 	es=CAPTURAR: toca para armar la orden, luego toca la unidad que capturar.;
 	it=CATTURA: tocca per armare l'ordine, poi tocca l'unità da catturare.;
@@ -1303,7 +1361,7 @@
 
 [CLEAR: takes back the armed order or the building being placed, else clears the selection.]
 	{
-	de=LEEREN: nimmt den geschärften Befehl oder das platzierte Gebäude zurück, sonst leert es die Auswahl.;
+	de=LEEREN: nimmt den gewählten Befehl oder das platzierte Gebäude zurück, sonst leert es die Auswahl.;
 	fr=EFFACER : retire l'ordre armé ou le bâtiment en cours de placement, sinon efface la sélection.;
 	es=BORRAR: retira la orden armada o el edificio que se coloca, si no, borra la selección.;
 	it=AZZERA: ritira l'ordine armato o l'edificio in posizionamento, altrimenti azzera la selezione.;
@@ -1381,6 +1439,14 @@
 	it=Condivisione della camera;
 	}
 
+[Campaign]
+	{
+	de=Kampagne;
+	fr=Campagne;
+	es=Campaña;
+	it=Campagna;
+	}
+
 [Campaign complete. This game includes no further missions.]
 	{
 	de=Kampagne abgeschlossen. Dieses Spiel enthält keine weiteren Missionen.;
@@ -1403,6 +1469,22 @@
 	fr=Annuler le téléchargement;
 	es=Cancelar la descarga;
 	it=Annulla il download;
+	}
+
+[Cavedog tilesets]
+	{
+	de=Cavedog-Tilesets;
+	fr=Tilesets Cavedog;
+	es=Tilesets de Cavedog;
+	it=Tileset Cavedog;
+	}
+
+[Cavedog units]
+	{
+	de=Cavedog-Einheiten;
+	fr=Unités Cavedog;
+	es=Unidades de Cavedog;
+	it=Unità Cavedog;
 	}
 
 [Cells a metal extractor snaps to metal.]
@@ -1951,7 +2033,7 @@
 
 [D-GUN: tap to arm it, then tap where the commander fires it.]
 	{
-	de=D-GUN: tippe, um den Befehl zu schärfen, dann tippe dorthin, wo der Kommandant feuert.;
+	de=D-GUN: tippe, um den Befehl zu wählen, dann tippe dorthin, wo der Kommandant feuert.;
 	fr=D-GUN : touche pour armer l'ordre, puis touche l'endroit où le commandant tire.;
 	es=D-GUN: toca para armar la orden, luego toca donde dispara el comandante.;
 	it=D-GUN: tocca per armare l'ordine, poi tocca dove spara il comandante.;
@@ -2123,6 +2205,14 @@
 	fr=Modes d'affichage;
 	es=Modos de pantalla;
 	it=Modalità di schermo;
+	}
+
+[Documents]
+	{
+	de=Dokumente;
+	fr=Documents;
+	es=Documentos;
+	it=Documenti;
 	}
 
 [Doesn't fit]
@@ -2605,6 +2695,14 @@
 	it=FORZA: Ctrl per ordini e selezione finché è tenuto, così un clic forza il fuoco sul terreno o su un alleato.;
 	}
 
+[FOUND]
+	{
+	de=GEFUNDEN;
+	fr=TROUVÉS;
+	es=ENCONTRADOS;
+	it=TROVATI;
+	}
+
 [Factory Tick Filter]
 	{
 	de=Fabrik-Tickfilter;
@@ -2651,6 +2749,14 @@
 	fr=Les fichiers ajoutés à son dossier, ou modifiés, depuis son installation sont remplacés ou retirés.;
 	es=Los archivos añadidos a su carpeta, o cambiados, desde que se instaló se reemplazan o se quitan.;
 	it=I file aggiunti alla sua cartella, o modificati, da quando è stato installato vengono sostituiti o rimossi.;
+	}
+
+[Filter]
+	{
+	de=Filter;
+	fr=Filtrer;
+	es=Filtrar;
+	it=Filtra;
 	}
 
 [Finder's Get Info › Open with]
@@ -2869,6 +2975,22 @@
 	it=MENU DI GIOCO;
 	}
 
+[GAMES]
+	{
+	de=SPIELE;
+	fr=JEUX;
+	es=JUEGOS;
+	it=GIOCHI;
+	}
+
+[GAMES ON THIS DECK]
+	{
+	de=SPIELE AUF DIESEM DECK;
+	fr=JEUX SUR CE DECK;
+	es=JUEGOS EN ESTE DECK;
+	it=GIOCHI SU QUESTO DECK;
+	}
+
 [GATHER THEM]
 	{
 	de=ZUSAMMENFÜHREN;
@@ -2909,6 +3031,54 @@
 	it=DAI;
 	}
 
+[GOG installer (Windows)]
+	{
+	de=GOG-Installer (Windows);
+	fr=Installateur GOG (Windows);
+	es=Instalador de GOG (Windows);
+	it=Installer GOG (Windows);
+	}
+
+[GOG installer (macOS)]
+	{
+	de=GOG-Installer (macOS);
+	fr=Installateur GOG (macOS);
+	es=Instalador de GOG (macOS);
+	it=Installer GOG (macOS);
+	}
+
+[GOG installer (older Macs)]
+	{
+	de=GOG-Installer (ältere Macs);
+	fr=Installateur GOG (anciens Mac);
+	es=Instalador de GOG (Mac antiguos);
+	it=Installer GOG (Mac meno recenti);
+	}
+
+[GOG installer for Windows]
+	{
+	de=GOG-Installer für Windows;
+	fr=Installateur GOG pour Windows;
+	es=Instalador de GOG para Windows;
+	it=Installer GOG per Windows;
+	}
+
+[GOG installer for macOS]
+	{
+	de=GOG-Installer für macOS;
+	fr=Installateur GOG pour macOS;
+	es=Instalador de GOG para macOS;
+	it=Installer GOG per macOS;
+	}
+
+[GOG installer for older Macs]
+	{
+	de=GOG-Installer für ältere Macs;
+	fr=Installateur GOG pour anciens Mac;
+	es=Instalador de GOG para Mac antiguos;
+	it=Installer GOG per Mac meno recenti;
+	}
+
 [GRAPHICS]
 	{
 	de=GRAFIK;
@@ -2927,7 +3097,7 @@
 
 [GUARD: tap to arm it, then tap the unit to guard.]
 	{
-	de=BEWACHEN: tippe, um den Befehl zu schärfen, dann tippe die Einheit, die bewacht wird.;
+	de=BEWACHEN: tippe, um den Befehl zu wählen, dann tippe die Einheit, die bewacht wird.;
 	fr=GARDER : touche pour armer l'ordre, puis touche l'unité à garder.;
 	es=PROTEGER: toca para armar la orden, luego toca la unidad que proteger.;
 	it=PROTEGGI: tocca per armare l'ordine, poi tocca l'unità da proteggere.;
@@ -3165,6 +3335,14 @@
 	it=Qui la vista è disegnata come quando è spento.;
 	}
 
+[Heroic]
+	{
+	de=Heroic;
+	fr=Heroic;
+	es=Heroic;
+	it=Heroic;
+	}
+
 [Hidden in play]
 	{
 	de=Im Spiel verborgen;
@@ -3211,6 +3389,22 @@
 	fr=Maintenir pour s'autodétruire;
 	es=Mantener para autodestruirse;
 	it=Tieni premuto per autodistruggerti;
+	}
+
+[Holds {bundles}.]
+	{
+	de=Enthält {bundles}.;
+	fr=Contient {bundles}.;
+	es=Contiene {bundles}.;
+	it=Contiene {bundles}.;
+	}
+
+[Home]
+	{
+	de=Benutzerordner;
+	fr=Dossier personnel;
+	es=Carpeta personal;
+	it=Inizio;
 	}
 
 [Host Stays as Watcher]
@@ -4135,7 +4329,7 @@
 
 [LOAD: tap to arm it, then tap the unit to load.]
 	{
-	de=VERLADEN: tippe, um ihn zu schärfen, dann tippe die Einheit zum Verladen.;
+	de=VERLADEN: tippe, um ihn zu wählen, dann tippe die Einheit zum Verladen.;
 	fr=EMBARQUER : touche pour l'armer, puis touche l'unité à embarquer.;
 	es=CARGAR: toca para armarla, luego toca la unidad a cargar.;
 	it=CARICA: tocca per armarlo, poi tocca l'unità da caricare.;
@@ -4301,6 +4495,14 @@
 	it=Caricamento anteprima;
 	}
 
+[Locate the game]
+	{
+	de=Spiel finden;
+	fr=Localiser le jeu;
+	es=Localizar el juego;
+	it=Individua il gioco;
+	}
+
 [Locked during a game]
 	{
 	de=Während einer Partie gesperrt;
@@ -4371,6 +4573,14 @@
 	fr=Baisse-le pour économiser l'énergie.;
 	es=Bájalo para ahorrar energía.;
 	it=Abbassalo per risparmiare energia.;
+	}
+
+[Lutris]
+	{
+	de=Lutris;
+	fr=Lutris;
+	es=Lutris;
+	it=Lutris;
 	}
 
 [M]
@@ -4559,7 +4769,7 @@
 
 [MOVE: tap to arm it, then tap where the selection goes.]
 	{
-	de=BEWEGEN: tippe, um ihn zu schärfen, dann tippe, wohin die Auswahl geht.;
+	de=BEWEGEN: tippe, um ihn zu wählen, dann tippe, wohin die Auswahl geht.;
 	fr=DÉPLACER : touche pour l'armer, puis touche où va la sélection.;
 	es=MOVER: toca para armarla, luego toca adónde va la selección.;
 	it=MUOVI: tocca per armarlo, poi tocca dove va la selezione.;
@@ -4821,6 +5031,14 @@
 	it=N/D;
 	}
 
+[NAME]
+	{
+	de=NAME;
+	fr=NOM;
+	es=NOMBRE;
+	it=NOME;
+	}
+
 [NEXT PAGE]
 	{
 	de=NÄCHSTE SEITE;
@@ -5059,6 +5277,14 @@
 	fr=Aucun pack de cartes n'est installé.;
 	es=No hay paquetes de mapas instalados.;
 	it=Non ci sono pacchetti di mappe installati.;
+	}
+
+[No mod: the game as it was made]
+	{
+	de=Kein Mod: das Spiel, wie es gemacht wurde;
+	fr=Aucun mod : le jeu tel qu'il a été fait;
+	es=Sin mod: el juego tal como se hizo;
+	it=Nessun mod: il gioco come è stato fatto;
 	}
 
 [No oamod.yaml present]
@@ -5573,6 +5799,14 @@
 	it=Solo quando apro la Biblioteca;
 	}
 
+[Open]
+	{
+	de=Öffnen;
+	fr=Ouvrir;
+	es=Abrir;
+	it=Apri;
+	}
+
 [Open Annihilation]
 	{
 	de=Open Annihilation;
@@ -5695,7 +5929,7 @@
 
 [Order: tap to arm it, then tap where it goes; tap again to take it back.]
 	{
-	de=Befehl: tippe, um ihn zu schärfen, dann tippe, wohin er geht. Tippe noch einmal, um ihn zurückzunehmen.;
+	de=Befehl: tippe, um ihn zu wählen, dann tippe, wohin er geht. Tippe noch einmal, um ihn zurückzunehmen.;
 	fr=Ordre : touche pour l'armer, puis touche où il va. Touche encore pour le reprendre.;
 	es=Orden: toca para armarla, luego toca adónde va. Toca otra vez para retirarla.;
 	it=Ordine: tocca per armarlo, poi tocca dove va. Tocca di nuovo per riprenderlo.;
@@ -5783,7 +6017,7 @@
 
 [PATROL: tap to arm it, then tap the points to patrol between.]
 	{
-	de=PATROUILLIEREN: tippe, um ihn zu schärfen, dann tippe die Punkte, zwischen denen patrouilliert wird.;
+	de=PATROUILLIEREN: tippe, um ihn zu wählen, dann tippe die Punkte, zwischen denen patrouilliert wird.;
 	fr=PATROUILLER : touche pour l'armer, puis touche les points à patrouiller.;
 	es=PATRULLAR: toca para armarla, luego toca los puntos entre los que patrullar.;
 	it=PATTUGLIA: tocca per armarlo, poi tocca i punti da pattugliare.;
@@ -5827,6 +6061,14 @@
 	fr=PLACER;
 	es=COLOCAR;
 	it=POSIZIONA;
+	}
+
+[PLACES]
+	{
+	de=ORTE;
+	fr=EMPLACEMENTS;
+	es=LUGARES;
+	it=POSIZIONI;
 	}
 
 [PLAY]
@@ -6021,6 +6263,14 @@
 	it=Precedente;
 	}
 
+[Program Files]
+	{
+	de=Program Files;
+	fr=Program Files;
+	es=Program Files;
+	it=Program Files;
+	}
+
 [Putting the files in place...]
 	{
 	de=Die Dateien werden abgelegt...;
@@ -6079,7 +6329,7 @@
 
 [RECLAIM: tap to arm it, then tap the wreck or unit to reclaim.]
 	{
-	de=RECYCELN: tippe, um ihn zu schärfen, dann tippe das Wrack oder die Einheit zum Recyceln.;
+	de=RECYCELN: tippe, um ihn zu wählen, dann tippe das Wrack oder die Einheit zum Recyceln.;
 	fr=RÉCUPÉRER : touche pour l'armer, puis touche l'épave ou l'unité à récupérer.;
 	es=RECUPERAR: toca para armarla, luego toca el resto o la unidad a recuperar.;
 	it=RECUPERA: tocca per armarlo, poi tocca il relitto o l'unità da recuperare.;
@@ -6183,7 +6433,7 @@
 
 [REPAIR: tap to arm it, then tap the unit to repair or help build.]
 	{
-	de=REPARIEREN: tippe, um ihn zu schärfen, dann tippe die Einheit zum Reparieren oder zum Mitbauen.;
+	de=REPARIEREN: tippe, um ihn zu wählen, dann tippe die Einheit zum Reparieren oder zum Mitbauen.;
 	fr=RÉPARER : touche pour l'armer, puis touche l'unité à réparer ou à aider à construire.;
 	es=REPARAR: toca para armarla, luego toca la unidad a reparar o a ayudar a construir.;
 	it=RIPARA: tocca per armarlo, poi tocca l'unità da riparare o da aiutare a costruire.;
@@ -6709,6 +6959,14 @@
 	it=SELEZIONA: seleziona tutte le unità, i costruttori, le fabbriche, gli aerei, le unità sullo schermo, il comandante o lo stesso tipo.;
 	}
 
+[SELECTED]
+	{
+	de=AUSGEWÄHLT;
+	fr=SÉLECTION;
+	es=SELECCIONADO;
+	it=SELEZIONATO;
+	}
+
 [SELF-DESTRUCT]
 	{
 	de=SELBSTZERSTÖRUNG;
@@ -6989,6 +7247,14 @@
 	it=Seleziona;
 	}
 
+[Select a folder or an installer.]
+	{
+	de=Wähle einen Ordner oder einen Installer.;
+	fr=Choisis un dossier ou un installateur.;
+	es=Elige una carpeta o un instalador.;
+	it=Scegli una cartella o un installer.;
+	}
+
 [Select groups without Alt]
 	{
 	de=Gruppen ohne Alt wählen;
@@ -7213,6 +7479,14 @@
 	it=Schermaglia · Nessun mod;
 	}
 
+[Skirmish · Total Annihilation 3.1c]
+	{
+	de=Gefecht · Total Annihilation 3.1c;
+	fr=Escarmouche · Total Annihilation 3.1c;
+	es=Escaramuza · Total Annihilation 3.1c;
+	it=Schermaglia · Total Annihilation 3.1c;
+	}
+
 [Skirmish · playing {mod}]
 	{
 	de=Gefecht · spielt {mod};
@@ -7389,6 +7663,14 @@
 	it=Steam Input è attivo: i trackpad e le impugnature posteriori arrivano al gioco come mouse e tasti di Steam. Disattiva Steam Input per Open Annihilation nelle impostazioni controller di Steam per usarli qui.;
 	}
 
+[Steam · Proton]
+	{
+	de=Steam · Proton;
+	fr=Steam · Proton;
+	es=Steam · Proton;
+	it=Steam · Proton;
+	}
+
 [Sticks]
 	{
 	de=Sticks;
@@ -7459,6 +7741,14 @@
 	fr=TA 3.1c;
 	es=TA 3.1c;
 	it=TA 3.1c;
+	}
+
+[TA demo installer]
+	{
+	de=TA-Demo-Installer;
+	fr=Installateur de la démo de TA;
+	es=Instalador de la demo de TA;
+	it=Installer della demo di TA;
 	}
 
 [TAGS]
@@ -7567,7 +7857,7 @@
 
 [Takes back the armed order.]
 	{
-	de=Nimmt den geschärften Befehl zurück.;
+	de=Nimmt den gewählten Befehl zurück.;
 	fr=Reprend l'ordre armé.;
 	es=Retira la orden armada.;
 	it=Riprende l'ordine armato.;
@@ -7987,6 +8277,14 @@
 	fr=La version de l'hôte de {pack} n'est plus offerte par {registry}.;
 	es=La versión del anfitrión de {pack} ya no la ofrece {registry}.;
 	it=La versione dell'host di {pack} non è più offerta da {registry}.;
+	}
+
+[The installer of the Total Annihilation demo (1997).]
+	{
+	de=Der Installer der Demo von Total Annihilation (1997).;
+	fr=L'installateur de la démo de Total Annihilation (1997).;
+	es=El instalador de la demo de Total Annihilation (1997).;
+	it=L'installer della demo di Total Annihilation (1997).;
 	}
 
 [The largest whole-number scale that fits:]
@@ -8477,6 +8775,30 @@
 	it=Total Annihilation 3.1c;
 	}
 
+[Total Annihilation 3.1c as it was made, with no mod]
+	{
+	de=Total Annihilation 3.1c, wie es gemacht wurde, ohne Mod;
+	fr=Total Annihilation 3.1c tel qu'il a été fait, sans mod;
+	es=Total Annihilation 3.1c tal como se hizo, sin mod;
+	it=Total Annihilation 3.1c come è stato fatto, senza mod;
+	}
+
+[Total Annihilation demo]
+	{
+	de=Demo von Total Annihilation;
+	fr=Démo de Total Annihilation;
+	es=Demo de Total Annihilation;
+	it=Demo di Total Annihilation;
+	}
+
+[Total Annihilation demo (1997)]
+	{
+	de=Demo von Total Annihilation (1997);
+	fr=Démo de Total Annihilation (1997);
+	es=Demo de Total Annihilation (1997);
+	it=Demo di Total Annihilation (1997);
+	}
+
 [Total Annihilation is on this computer in more than one place. Choose the one to play.]
 	{
 	de=Total Annihilation liegt auf diesem Computer an mehr als einem Ort. Wähl den, der gespielt wird.;
@@ -8491,6 +8813,14 @@
 	fr=Total Annihilation a été trouvé sur cet ordinateur. Joue-le, ou choisis un autre dossier.;
 	es=Se encontró Total Annihilation en este ordenador. Juega, o elige otra carpeta.;
 	it=Total Annihilation è stato trovato su questo computer. Giocalo, o scegli un'altra cartella.;
+	}
+
+[Total Annihilation: Commander Pack. Recognised by its size. The game is read out of it; nothing is installed.]
+	{
+	de=Total Annihilation: Commander Pack. An seiner Größe erkannt. Das Spiel wird daraus gelesen, nichts wird installiert.;
+	fr=Total Annihilation: Commander Pack. Reconnu à sa taille. Le jeu y est lu directement, rien n'est installé.;
+	es=Total Annihilation: Commander Pack. Reconocido por su tamaño. El juego se lee de él, no se instala nada.;
+	it=Total Annihilation: Commander Pack. Riconosciuto dalla dimensione. Il gioco viene letto da lì, non si installa nulla.;
 	}
 
 [Touch]
@@ -8615,7 +8945,7 @@
 
 [UNLOAD: tap to arm it, then tap where the transport unloads.]
 	{
-	de=ABLADEN: tippe, um ihn zu schärfen, dann tippe, wohin der Transporter ablädt.;
+	de=ABLADEN: tippe, um ihn zu wählen, dann tippe, wohin der Transporter ablädt.;
 	fr=DÉCHARGER : touche pour l'armer, puis touche où le transport décharge.;
 	es=DESCARGAR: toca para armarla, luego toca dónde descarga el transporte.;
 	it=SCARICA: tocca per armarlo, poi tocca dove il trasporto scarica.;
@@ -8821,6 +9151,14 @@
 	it=Estrazione di {title} {version}...;
 	}
 
+[Up]
+	{
+	de=Nach oben;
+	fr=Remonter;
+	es=Subir;
+	it=Su;
+	}
+
 [Up and down zoom about the pointer; a flick left]
 	{
 	de=Hoch und runter zoomt um den Zeiger. Ein Schnipsen nach links;
@@ -8925,6 +9263,30 @@
 	it=Usa la finestra delle cartelle della scrivania;
 	}
 
+[Use the system picker…]
+	{
+	de=Systemauswahl verwenden…;
+	fr=Utiliser le sélecteur du système…;
+	es=Usar el selector del sistema…;
+	it=Usa il selettore di sistema…;
+	}
+
+[Use this folder]
+	{
+	de=Diesen Ordner verwenden;
+	fr=Utiliser ce dossier;
+	es=Usar esta carpeta;
+	it=Usa questa cartella;
+	}
+
+[Use this installer]
+	{
+	de=Diesen Installer verwenden;
+	fr=Utiliser cet installateur;
+	es=Usar este instalador;
+	it=Usa questo installer;
+	}
+
 [User Interface]
 	{
 	de=Benutzeroberfläche;
@@ -8947,6 +9309,14 @@
 	fr=Utilise {size} sur ce {device}.;
 	es=Usa {size} en este {device}.;
 	it=Usa {size} su questo {device}.;
+	}
+
+[VOLUMES]
+	{
+	de=LAUFWERKE;
+	fr=VOLUMES;
+	es=VOLÚMENES;
+	it=VOLUMI;
 	}
 
 [Verifying]
@@ -9075,6 +9445,14 @@
 	fr=BIENVENUE;
 	es=BIENVENIDO;
 	it=BENVENUTO;
+	}
+
+[WHAT IT IS]
+	{
+	de=WAS ES IST;
+	fr=CE QUE C'EST;
+	es=QUÉ ES;
+	it=COS'È;
 	}
 
 [WHY]
@@ -9259,6 +9637,22 @@
 	fr=Rayon d'aimantation des épaves;
 	es=Radio de ajuste de restos;
 	it=Raggio di aggancio dei relitti;
+	}
+
+[X]
+	{
+	de=X;
+	fr=X;
+	es=X;
+	it=X;
+	}
+
+[Y]
+	{
+	de=Y;
+	fr=Y;
+	es=Y;
+	it=Y;
 	}
 
 [You are playing {name}. Switch it off first with SWITCH OFF, then uninstall it.]
@@ -9557,6 +9951,14 @@
 	it=ovunque arrivi il selettore di file;
 	}
 
+[archive]
+	{
+	de=Archiv;
+	fr=archive;
+	es=archivo comprimido;
+	it=archivio;
+	}
+
 [are drawn. Auto suits the window's height.]
 	{
 	de=werden gezeichnet. Auto passt zur Höhe des Fensters.;
@@ -9757,6 +10159,22 @@
 	it=non riuscito;
 	}
 
+[file]
+	{
+	de=Datei;
+	fr=fichier;
+	es=archivo;
+	it=file;
+	}
+
+[folder]
+	{
+	de=Ordner;
+	fr=dossier;
+	es=carpeta;
+	it=cartella;
+	}
+
 [for smoother edges.]
 	{
 	de=für glattere Kanten.;
@@ -9917,6 +10335,14 @@
 	it=elenco di {age};
 	}
 
+[macOS asks once before an app reads Desktop, Documents or Downloads.]
+	{
+	de=macOS fragt einmal, bevor eine App Schreibtisch, Dokumente oder Downloads liest.;
+	fr=macOS demande une fois avant qu'une app lise Bureau, Documents ou Téléchargements.;
+	es=macOS pregunta una vez antes de que una app lea Escritorio, Documentos o Descargas.;
+	it=macOS chiede una volta prima che un'app legga Scrivania, Documenti o Download.;
+	}
+
 [macOS kept Open Annihilation as the opener of {types}. To choose another, select a {types} file in Finder, then File › Get Info › Open with › Change All.]
 	{
 	de=macOS hat Open Annihilation als Programm zum Öffnen von {types} behalten. Um ein anderes zu wählen, wähl eine {types}-Datei im Finder, dann Ablage › Informationen › Öffnen mit › Alle ändern.;
@@ -9939,6 +10365,14 @@
 	fr=bords de la carte, quel que soit le mouvement de la vue.;
 	es=bordes del mapa, se mueva como se mueva la vista.;
 	it=bordi della mappa, comunque si muova la vista.;
+	}
+
+[microSD card]
+	{
+	de=microSD-Karte;
+	fr=carte microSD;
+	es=tarjeta microSD;
+	it=scheda microSD;
 	}
 
 [mods]
@@ -11327,7 +11761,7 @@
 
 [{order} armed]
 	{
-	de={order} geschärft;
+	de={order} bereit;
 	fr={order} armé;
 	es={order} armada;
 	it={order} armato;

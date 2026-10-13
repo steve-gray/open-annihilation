@@ -25,7 +25,12 @@ checks. It does not repeat the installer's size, hash or resource.
 - `match_file` finds a file by a source path and its size, without regard
   to ASCII case. `known_hash` checks a SHA-256 against the file's known
   values.
-- `oa/data/content_choice.hpp` is the player's choice. `present_bundles`
+- `oa/data/content_bundles/content_needs.hpp` reads `supportedGames` and
+  `requiredExpansions` from the three package manifests. An id is a
+  built-in base game or expansion. An omitted `supportedGames` means
+  `totala` for a mod or a map pack, and every base game for a language
+  pack, unless `requires.base` is `ta-3.1c`, which then reads as `[totala]`.
+- `oa/data/content_bundles/content_choice.hpp` is the player's choice. `present_bundles`
   says which bundles a set of files contains. `resolve_content_choice`
   reads a stored base game and expansion list, or `--content`.
   `turn_content_expansion` and `choose_content_base_game` apply the on/off

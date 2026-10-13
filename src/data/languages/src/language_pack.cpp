@@ -4,7 +4,7 @@
 #include "oa/data/languages/language_pack.hpp"
 
 #include "oa/formats/oamod.hpp"
-#include "oa/formats/oamod/content_needs.hpp"
+#include "oa/data/content_bundles/content_needs.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 #include "oa/formats/tdf.hpp"
 
@@ -488,10 +488,14 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
                 read.homepage = std::move(keys.homepage);
                 read.tags = std::move(keys.tags);
                 read.requires_engine = std::move(keys.requires_engine);
-                oamod::ContentNeeds needs;
+                oa::data::content_bundles::ContentNeeds needs;
                 std::vector<oamod::KeyProblem> need_problems;
-                oamod::read_content_needs(
-                    root, requires_block, oamod::GamesWhenOmitted::every_game, needs, need_problems
+                oa::data::content_bundles::read_content_needs(
+                    root,
+                    requires_block,
+                    oa::data::content_bundles::GamesWhenOmitted::every_game,
+                    needs,
+                    need_problems
                 );
                 if (!need_problems.empty())
                     failure = need_problems.front().path + ": " + need_problems.front().message;
