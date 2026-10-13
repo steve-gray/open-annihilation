@@ -3,6 +3,7 @@
 
 // Battleroom (LOUNGE2.GUI): slot rules, rows, options, start checks.
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
+#include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include "oa/base/game_loop.hpp"
 #include "oa/data/mod_profile.hpp"
@@ -1862,6 +1863,9 @@ void lobby_cycle_resolution(Lobby& lobby, bool backwards) noexcept {
         lobby_send_player_info(lobby);
         lobby_screen_width(*lobby.game) = modes[next].width;
         lobby_screen_height(*lobby.game) = modes[next].height;
+        // The same preference the settings store, applied at once: RES has
+        // no OK of its own.
+        multiplayer_choose_screen_size(modes[next].width, modes[next].height);
         return;
     }
 }

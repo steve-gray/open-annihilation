@@ -10,7 +10,10 @@
 
 #include "oa/netgame/wire.hpp"
 
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <string_view>
 
 namespace oa::netgame {
 
@@ -152,6 +155,63 @@ inline constexpr uint8_t application_guid[16] = {
     0x96,
     0xc8,
 };
+
+/// Reads an application GUID from the text a player types.
+///
+/// The text is eight, four, four, four and twelve hexadecimal digits,
+/// separated by hyphens, in any case, with or without a pair of braces.
+/// The first three groups are stored little-endian, which is how a session
+/// description carries the GUID.
+///
+/// @param guid_text the GUID, with or without braces
+/// @param[out] bytes sixteen bytes, written only when the text is a GUID
+/// @return true when the text is a GUID
+[[nodiscard]] inline bool
+parse_application_guid(std::string_view guid_text, uint8_t bytes[16]) noexcept {
+    if (bytes == nullptr)
+        return false;
+    if (guid_text.size() >= 2 && guid_text.front() == '{' && guid_text.back() == '}') {
+        guid_text.remove_prefix(1);
+        guid_text.remove_suffix(1);
+    }
+    if (guid_text.size() != 36 || guid_text[8] != '-' || guid_text[13] != '-' ||
+        guid_text[18] != '-' || guid_text[23] != '-')
+        return false;
+    const auto hex_digit = [](char letter) -> int {
+        if (letter >= '0' && letter <= '9')
+            return letter - '0';
+        if (letter >= 'a' && letter <= 'f')
+            return letter - 'a' + 10;
+        if (letter >= 'A' && letter <= 'F')
+            return letter - 'A' + 10;
+        return -1;
+    };
+    uint8_t printed[16]{};
+    std::size_t at = 0;
+    for (std::size_t index = 0; index < 16; ++index) {
+        if (at == 8 || at == 13 || at == 18 || at == 23)
+            ++at;
+        const int high = hex_digit(guid_text[at]);
+        const int low = hex_digit(guid_text[at + 1]);
+        if (high < 0 || low < 0)
+            return false;
+        printed[index] = static_cast<uint8_t>((high << 4) | low);
+        at += 2;
+    }
+    uint8_t wire[16]{};
+    wire[0] = printed[3];
+    wire[1] = printed[2];
+    wire[2] = printed[1];
+    wire[3] = printed[0];
+    wire[4] = printed[5];
+    wire[5] = printed[4];
+    wire[6] = printed[7];
+    wire[7] = printed[6];
+    for (std::size_t index = 8; index < 16; ++index)
+        wire[index] = printed[index];
+    std::memcpy(bytes, wire, 16);
+    return true;
+}
 
 /// Encodes a session description as its 0x50-byte little-endian layout.
 ///

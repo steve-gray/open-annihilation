@@ -5,7 +5,7 @@
 # the Windows DLL copy and the packaged notices attach to it.
 add_library(oa-tool-commands STATIC commands.cpp arguments.cpp files.cpp archive_commands.cpp
   pack.cpp pack_map.cpp check.cpp check_map.cpp catalogue.cpp passphrase.cpp registry.cpp
-  interface_words.cpp)
+  expansion.cpp interface_words.cpp)
 add_library(oa::tool::commands ALIAS oa-tool-commands)
 target_include_directories(oa-tool-commands PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # The interface-word lists are headers in the modules that look the texts up.
@@ -108,6 +108,14 @@ if(BUILD_TESTING)
   add_test(NAME tools-oa-tool-interface-catalogue COMMAND oa-tool-interface-catalogue-test
     ${CMAKE_SOURCE_DIR}/languages/interface.tdf)
   set_tests_properties(tools-oa-tool-interface-catalogue PROPERTIES TIMEOUT 60)
+
+  # An expansion packed and checked against the test table, and refused by
+  # the commands, which use the built-in table.
+  add_executable(oa-tool-expansion-test tests/expansion_test.cpp)
+  target_link_libraries(oa-tool-expansion-test PRIVATE oa-tool-commands oa-data-content-bundles
+    oa-formats-zip oa-base-sha256 oa-test-support oa-options)
+  add_test(NAME tools-oa-tool-expansion COMMAND oa-tool-expansion-test)
+  set_tests_properties(tools-oa-tool-expansion PROPERTIES TIMEOUT 30)
   if(WIN32)
     add_custom_command(TARGET oa-tool-registry-test POST_BUILD
       COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:oa-tool-registry-test>"

@@ -1294,6 +1294,109 @@ void abandoned_frame_decays_away() {
     CHECK(f.match->state().game.players[0].losses == losses);
 }
 
+// An unfinished building waits 300 ticks, then 30, before it loses build
+// progress, and then loses a step every 11 ticks. One step of this fixture is
+// 11 / 200 of the build. A builder ordered back onto it, still waiting to
+// turn into its build stance, does not stop the loss. The tick that applies
+// build progress does: the loss stays off for 30 ticks after the last such
+// tick, then starts again.
+void unfinished_building_waits_and_a_builder_stops_the_decay() {
+    constexpr uint32_t opening_wait = 300;
+    constexpr uint32_t progress_grace = 30;
+    constexpr uint32_t decay_period = 11;
+    constexpr int build_ticks = 15;
+    constexpr float half = 0.5F;
+
+    Fixture f;
+    std::array<uint8_t, 10> allies{};
+    allies[0] = 1;
+    f.match->configure_outcomes(0, allies, false);
+
+    // The builder is the earlier slot, so its work lands before the frame's
+    // own order runs on the same tick.
+    auto& builder = f.spawn(0, builder_type, 40, 40);
+    auto& frame = f.spawn(0, factory_type, 80, 80, false);
+    CHECK(builder.unit_index < frame.unit_index);
+    frame.record.build_remaining = half;
+    frame.record.health = 500;
+    auto& waiting = f.order(frame.unit_index, get_built_kind);
+
+    const auto advance = [&] {
+        ++f.match->state().game.tick;
+        f.match->tick();
+    };
+    const auto rose_one_step = [](float before, float after) {
+        const auto rose = after - before;
+        return rose > 0.054F && rose < 0.056F;
+    };
+
+    advance();
+    CHECK(waiting.phase == 1);
+    CHECK(waiting.wake_tick == f.tick() + opening_wait);
+    CHECK(frame.record.build_remaining == half);
+    const auto opening_due = waiting.wake_tick;
+    const auto first_decay = opening_due + progress_grace;
+    while (f.tick() < first_decay) {
+        advance();
+        if (f.tick() == opening_due) {
+            CHECK(waiting.phase == 2);
+            CHECK(waiting.wake_tick == f.tick() + progress_grace);
+        }
+        if (f.tick() < first_decay)
+            CHECK(frame.record.build_remaining == half);
+    }
+    CHECK(f.tick() == first_decay);
+    CHECK(rose_one_step(half, frame.record.build_remaining));
+    CHECK(waiting.phase == 2);
+    CHECK(waiting.wake_tick == f.tick() + decay_period);
+    CHECK(!(frame.record.flags & OA_UNIT_FLAG_DEATH_PENDING));
+
+    // Ordered, and still turning: the loss keeps its 11-tick pace.
+    auto& help = f.match->issue_help_build(builder.unit_index, frame.unit_index, false);
+    help.phase = 2;
+    help.wait_events = 0;
+    help.wake_tick = 0xffffffffu;
+    builder.record.build_flags = static_cast<uint8_t>(
+        builder.record.build_flags & static_cast<uint8_t>(~OA_UNIT_BUILD_IN_BUILD_STANCE)
+    );
+    const auto while_turning = frame.record.build_remaining;
+    for (uint32_t waited = 1; waited < decay_period; ++waited) {
+        advance();
+        CHECK(frame.record.build_remaining == while_turning);
+        CHECK(help.phase == 2);
+    }
+    advance();
+    CHECK(rose_one_step(while_turning, frame.record.build_remaining));
+    CHECK(waiting.wake_tick == f.tick() + decay_period);
+
+    // The stance is reached, so the next ticks apply build progress.
+    builder.record.build_flags =
+        static_cast<uint8_t>(builder.record.build_flags | OA_UNIT_BUILD_IN_BUILD_STANCE);
+    help.wait_events = 0;
+    help.wake_tick = 0xffffffffu;
+    float previous = frame.record.build_remaining;
+    for (int built = 0; built < build_ticks; ++built) {
+        advance();
+        CHECK(help.phase == 3);
+        CHECK(frame.record.build_remaining < previous);
+        CHECK(waiting.wake_tick == f.tick() + progress_grace);
+        CHECK(waiting.phase == 2);
+        previous = frame.record.build_remaining;
+    }
+
+    f.match->stop_orders(builder.unit_index);
+    const auto held = frame.record.build_remaining;
+    const auto resumes = f.tick() + progress_grace;
+    while (f.tick() < resumes) {
+        advance();
+        if (f.tick() < resumes)
+            CHECK(frame.record.build_remaining == held);
+    }
+    CHECK(f.tick() == resumes);
+    CHECK(rose_one_step(held, frame.record.build_remaining));
+    CHECK(waiting.wake_tick == f.tick() + decay_period);
+}
+
 int main() {
     try {
         stop_and_state_orders();
@@ -1303,6 +1406,7 @@ int main() {
         construction_orders();
         factory_orders();
         abandoned_frame_decays_away();
+        unfinished_building_waits_and_a_builder_stops_the_decay();
         factory_queue_counts();
         queued_order_cancels_its_match();
         built_factory_produces();
